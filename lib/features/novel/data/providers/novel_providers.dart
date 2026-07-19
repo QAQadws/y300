@@ -100,7 +100,9 @@ final novelSyncRequestGovernorProvider = Provider<NovelSyncRequestGovernor>((
 
 final novelReaderPreferencesLegacySourceProvider =
     Provider<NovelReaderPreferencesLegacySource>((ref) {
-      return SqliteNovelReaderPreferencesLegacySource(ComicLocalDb.open());
+      return SqliteNovelReaderPreferencesLegacySource(
+        () => ComicLocalDb.open(),
+      );
     });
 
 final novelReaderPreferencesRepositoryProvider =
@@ -113,7 +115,9 @@ final novelReaderPreferencesRepositoryProvider =
 
 final novelInteractionPreferencesLegacySourceProvider =
     Provider<NovelInteractionPreferencesLegacySource>((ref) {
-      return SqliteNovelInteractionPreferencesLegacySource(ComicLocalDb.open());
+      return SqliteNovelInteractionPreferencesLegacySource(
+        () => ComicLocalDb.open(),
+      );
     });
 
 final novelInteractionPreferencesRepositoryProvider =

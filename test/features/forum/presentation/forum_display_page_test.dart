@@ -674,7 +674,9 @@ void main() {
         );
       });
 
-      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpWidget(
+        _buildTestApp(repository, threadRepository: _FakeThreadRepository()),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
       final palette = ForumDisplayThemePalette.resolve(

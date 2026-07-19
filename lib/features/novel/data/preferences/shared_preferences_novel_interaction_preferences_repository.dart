@@ -39,7 +39,7 @@ final class SharedPreferencesNovelInteractionPreferencesRepository
     NovelChapterOpenMode? legacy;
     try {
       legacy = await _legacySource.loadChapterOpenMode();
-    } on Exception {
+    } catch (_) {
       legacy = null;
     }
     final migrated = legacy ?? NovelChapterOpenMode.reader;

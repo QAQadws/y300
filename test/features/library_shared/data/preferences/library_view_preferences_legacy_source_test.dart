@@ -17,7 +17,7 @@ void main() {
     await deleteDatabase(dbName);
     final dbFuture = ComicLocalDb.open(databaseName: dbName);
     db = await dbFuture;
-    source = SqliteLibraryViewPreferencesLegacySource(dbFuture);
+    source = SqliteLibraryViewPreferencesLegacySource(() => dbFuture);
     await db.update(
       ComicLocalDb.settingsTable,
       <String, Object>{'value': '5'},

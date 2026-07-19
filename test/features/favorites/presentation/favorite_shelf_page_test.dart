@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
@@ -29,6 +30,11 @@ import 'package:y300/features/library_shared/presentation/selection/shelf_select
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
   testWidgets('FavoriteShelfPage builds unified shelf in list mode', (tester) async {
     final bootstrapper = _RecordingFavoriteShelfBootstrapper();
     final authRepository = _FakeAuthRepository(isLoggedIn: true);

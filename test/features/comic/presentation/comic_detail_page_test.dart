@@ -8,10 +8,12 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
@@ -49,6 +51,9 @@ void main() {
             ),
             comicReaderServiceProvider.overrideWith(
               (ref) async => _FakeComicReaderService(),
+            ),
+            comicCommentLoaderProvider.overrideWithValue(
+              _EmptyComicCommentLoader(),
             ),
             imageCacheServiceProvider.overrideWithValue(
               _FakeImageCacheService(),
@@ -110,6 +115,9 @@ void main() {
           comicReaderServiceProvider.overrideWith(
             (ref) async => _FakeComicReaderService(),
           ),
+          comicCommentLoaderProvider.overrideWithValue(
+            _EmptyComicCommentLoader(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
@@ -128,7 +136,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
+    expect(find.byKey(const Key('comic-reader-engine')), findsOneWidget);
   });
 
   testWidgets('ComicDetailPage does not reopen reader on normal reader exit', (
@@ -153,6 +161,9 @@ void main() {
           comicReaderServiceProvider.overrideWith(
             (ref) async => _FakeComicReaderService(),
           ),
+          comicCommentLoaderProvider.overrideWithValue(
+            _EmptyComicCommentLoader(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
@@ -174,7 +185,7 @@ void main() {
     expect(observer.pushCount, 2);
 
     Navigator.of(
-      tester.element(find.byKey(const Key('comic-reader-image-list'))),
+      tester.element(find.byKey(const Key('comic-reader-engine'))),
     ).pop(
       const ComicReaderExitResult(
         comicId: 'comic:1',
@@ -212,6 +223,9 @@ void main() {
             comicReaderServiceProvider.overrideWith(
               (ref) async => _FakeComicReaderService(),
             ),
+            comicCommentLoaderProvider.overrideWithValue(
+              _EmptyComicCommentLoader(),
+            ),
             imageCacheServiceProvider.overrideWithValue(
               _FakeImageCacheService(),
             ),
@@ -237,7 +251,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       final readerElement = tester.element(
-        find.byKey(const Key('comic-reader-image-list')),
+        find.byKey(const Key('comic-reader-engine')),
       );
       final readerProviderContainer = ProviderScope.containerOf(readerElement);
       const readerArgs = ComicReaderArgs(
@@ -293,6 +307,22 @@ class _CountingNavigatorObserver extends NavigatorObserver {
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     pushCount++;
     super.didPush(route, previousRoute);
+  }
+}
+
+class _EmptyComicCommentLoader implements ComicCommentLoader {
+  @override
+  Future<ComicCommentLoadResult> loadAll({
+    required String sourceTid,
+    ComicCommentCancellationToken? cancellationToken,
+  }) async {
+    return ComicCommentLoadResult(
+      sourceTid: sourceTid,
+      status: ComicCommentLoadStatus.empty,
+      items: const <ComicCommentItem>[],
+      loadedPages: const <int>{},
+      expectedPages: 1,
+    );
   }
 }
 

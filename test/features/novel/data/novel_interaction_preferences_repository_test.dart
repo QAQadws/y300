@@ -39,7 +39,7 @@ void main() {
     return SharedPreferencesNovelInteractionPreferencesRepository(
       preferencesStore: SharedPreferencesStore(),
       legacySource: SqliteNovelInteractionPreferencesLegacySource(
-        Future<Database>.value(db),
+        () => Future<Database>.value(db),
       ),
     );
   }

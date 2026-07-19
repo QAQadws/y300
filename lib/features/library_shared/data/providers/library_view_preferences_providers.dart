@@ -7,7 +7,9 @@ import 'package:y300/features/library_shared/domain/contracts/library_view_prefe
 
 final libraryViewPreferencesLegacySourceProvider =
     Provider<LibraryViewPreferencesLegacySource>((ref) {
-      return SqliteLibraryViewPreferencesLegacySource(ComicLocalDb.open());
+      return SqliteLibraryViewPreferencesLegacySource(
+        () => ComicLocalDb.open(),
+      );
     });
 
 final libraryViewPreferencesRepositoryProvider =

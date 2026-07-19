@@ -10,14 +10,14 @@ abstract interface class NovelReaderPreferencesLegacySource {
 /// Read-only compatibility bridge for the former global novel SQLite row.
 final class SqliteNovelReaderPreferencesLegacySource
     implements NovelReaderPreferencesLegacySource {
-  SqliteNovelReaderPreferencesLegacySource(this._dbFuture);
+  SqliteNovelReaderPreferencesLegacySource(this._dbFutureFactory);
 
-  final Future<Database> _dbFuture;
+  final Future<Database> Function() _dbFutureFactory;
 
   @override
   Future<NovelReaderPreferences?> load() async {
     try {
-      final db = await _dbFuture;
+      final db = await _dbFutureFactory();
       final rows = await db.query(
         ComicLocalDb.readerPreferencesTable,
         where: 'content_type = ?',
@@ -51,7 +51,7 @@ final class SqliteNovelReaderPreferencesLegacySource
           defaults.conversionMode,
         ),
       );
-    } on DatabaseException {
+    } catch (_) {
       return null;
     }
   }

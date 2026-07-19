@@ -44,7 +44,7 @@ final class SharedPreferencesNovelReaderPreferencesRepository
     NovelReaderPreferences? legacy;
     try {
       legacy = await _legacySource.load();
-    } on Exception {
+    } catch (_) {
       legacy = null;
     }
     final migrated = _codec.normalize(

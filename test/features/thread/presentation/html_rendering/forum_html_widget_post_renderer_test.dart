@@ -194,8 +194,8 @@ void main() {
     final defaultSpan = _findTextSpanContaining(tester, '默认');
     final sizeThreeSpan = _findTextSpanContaining(tester, '三号');
 
-    expect(defaultSpan?.style?.fontSize, 20);
-    expect(sizeThreeSpan?.style?.fontSize, 20);
+    expect(defaultSpan?.style?.fontSize, 23);
+    expect(sizeThreeSpan?.style?.fontSize, 23);
   });
 
   testWidgets('preserves Discuz font size ordering around the base size', (
@@ -224,7 +224,7 @@ void main() {
     final sizeTwo = _findTextSpanContaining(tester, '二号')?.style?.fontSize;
     final sizeFour = _findTextSpanContaining(tester, '四号')?.style?.fontSize;
 
-    expect(defaultSize, 20);
+    expect(defaultSize, 23);
     expect(sizeTwo, lessThan(defaultSize!));
     expect(sizeFour, greaterThan(defaultSize));
   });
@@ -258,10 +258,10 @@ void main() {
 
     expect(editStatus.data, '本帖最后由 INCSKY16 于 2026-7-3 13:56 编辑');
     expect(editStatus.style?.fontStyle, FontStyle.italic);
-    expect(editStatus.style?.fontSize, lessThan(20));
+    expect(editStatus.style?.fontSize, lessThan(23));
     expect(editStatus.style?.color?.a, lessThan(bodyColor.a));
     expect(ordinaryItalic?.style?.fontStyle, FontStyle.italic);
-    expect(ordinaryItalic?.style?.fontSize, 20);
+    expect(ordinaryItalic?.style?.fontSize, 23);
     expect(ordinaryItalic?.style?.color?.a, bodyColor.a);
   });
 

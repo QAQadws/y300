@@ -21,7 +21,7 @@ void main() {
     dbPath = p.join(temp.path, 'reader.db');
     db = await ComicLocalDb.open(databaseName: dbPath);
     source = SqliteNovelReaderPreferencesLegacySource(
-      Future<Database>.value(db),
+      () => Future<Database>.value(db),
     );
   });
 

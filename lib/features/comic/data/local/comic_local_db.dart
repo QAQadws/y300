@@ -41,25 +41,30 @@ class ComicLocalDb {
       'novel_episode_sync_staging';
 
   static Future<Database> open({String? databaseName}) {
-    final targetDbName = databaseName ?? dbName;
-    return openDatabase(
-      targetDbName,
-      version: dbVersion,
-      onConfigure: (db) async {
-        // 多个阶段的清理逻辑都依赖 schema 上声明的级联关系，这里显式打开
-        // SQLite 外键约束，避免“表上写了 ON DELETE CASCADE，但运行时不生效”。
-        await db.execute('PRAGMA foreign_keys = ON');
-      },
-      onCreate: (db, version) async {
-        await _createTables(db);
-      },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        await _upgradeSchema(db, oldVersion, newVersion);
-      },
-      onDowngrade: (db, oldVersion, newVersion) async {
-        await _rebuildLatestSchema(db);
-      },
-    );
+    // Keep database initialization behind the Future boundary. This makes
+    // provider construction safe when a platform database factory is not yet
+    // installed; callers can handle the failed open during their async load.
+    return Future<Database>.sync(() {
+      final targetDbName = databaseName ?? dbName;
+      return openDatabase(
+        targetDbName,
+        version: dbVersion,
+        onConfigure: (db) async {
+          // 多个阶段的清理逻辑都依赖 schema 上声明的级联关系，这里显式打开
+          // SQLite 外键约束，避免“表上写了 ON DELETE CASCADE，但运行时不生效”。
+          await db.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: (db, version) async {
+          await _createTables(db);
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          await _upgradeSchema(db, oldVersion, newVersion);
+        },
+        onDowngrade: (db, oldVersion, newVersion) async {
+          await _rebuildLatestSchema(db);
+        },
+      );
+    });
   }
 
   static Future<void> _upgradeSchema(

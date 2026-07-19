@@ -42,13 +42,20 @@ abstract class ImageCacheRepository implements ProtectedCoverCacheStore {
 }
 
 class LocalImageCacheRepository implements ImageCacheRepository {
-  LocalImageCacheRepository(this._dbFuture);
+  LocalImageCacheRepository(Future<Database> dbFuture)
+    : _dbFutureFactory = (() => dbFuture);
 
-  final Future<Database> _dbFuture;
+  LocalImageCacheRepository.lazy(Future<Database> Function() dbFutureFactory)
+    : _dbFutureFactory = dbFutureFactory;
+
+  final Future<Database> Function() _dbFutureFactory;
+  Future<Database>? _dbFuture;
+
+  Future<Database> get _db => _dbFuture ??= _dbFutureFactory();
 
   @override
   Future<CachedImageRecord?> getByKey(String cacheKey) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.query(
       ComicLocalDb.cachedImagesTable,
       where: 'cache_key = ?',
@@ -63,7 +70,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<void> upsert(CachedImageRecord record) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final existing = await getByKey(record.cacheKey);
     final createdAt = existing?.createdAt ?? record.createdAt;
     final retentionClass = _effectiveRetentionClass(record);
@@ -90,7 +97,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<void> touch(String cacheKey, DateTime accessedAt) async {
-    final db = await _dbFuture;
+    final db = await _db;
     await db.update(
       ComicLocalDb.cachedImagesTable,
       <String, Object?>{
@@ -112,7 +119,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
     if (cacheKey.trim().isEmpty || width <= 0 || height <= 0) {
       return;
     }
-    final db = await _dbFuture;
+    final db = await _db;
     await db.update(
       ComicLocalDb.cachedImagesTable,
       <String, Object?>{
@@ -131,7 +138,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
     required String ownerType,
     required String ownerId,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.query(
       ComicLocalDb.cachedImagesTable,
       where: 'owner_type = ? AND owner_id = ?',
@@ -143,7 +150,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<int> calculateUsageBytes({required bool includeProtected}) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.rawQuery('''
       SELECT COALESCE(SUM(bytes), 0) AS total
       FROM ${ComicLocalDb.cachedImagesTable}
@@ -154,7 +161,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<List<ImageCacheUsageGroup>> calculateUsageGroups() async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.rawQuery('''
       SELECT owner_type, role, retention_class, protected, COALESCE(SUM(bytes), 0) AS total
       FROM ${ComicLocalDb.cachedImagesTable}
@@ -176,7 +183,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<List<CachedImageRecord>> listUnprotectedByAccessTime() async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.query(
       ComicLocalDb.cachedImagesTable,
       where: 'protected = 0',
@@ -192,7 +199,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
     if (roles.isEmpty) {
       return const <CachedImageRecord>[];
     }
-    final db = await _dbFuture;
+    final db = await _db;
     final placeholders = List<String>.filled(roles.length, '?').join(', ');
     final rows = await db.query(
       ComicLocalDb.cachedImagesTable,
@@ -205,7 +212,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<List<CachedImageRecord>> listProtectedCovers() async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.query(
       ComicLocalDb.cachedImagesTable,
       where: 'protected = 1 AND role IN (?, ?)',
@@ -220,7 +227,7 @@ class LocalImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<void> deleteByKey(String cacheKey) async {
-    final db = await _dbFuture;
+    final db = await _db;
     await db.delete(
       ComicLocalDb.cachedImagesTable,
       where: 'cache_key = ?',

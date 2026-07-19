@@ -8,23 +8,36 @@ import 'package:y300/features/comic/data/local/comic_local_db.dart';
 
 class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
   LocalParsedSnapshotCacheService(
-    this._dbFuture, {
+    Future<Database> dbFuture, {
     CacheDiagnosticRecorder diagnosticRecorder =
         const NoopCacheDiagnosticRecorder(),
     DateTime Function()? now,
-  }) : _diagnosticRecorder = diagnosticRecorder,
+  }) : _dbFutureFactory = (() => dbFuture),
+       _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
-  final Future<Database> _dbFuture;
+  LocalParsedSnapshotCacheService.lazy(
+    Future<Database> Function() dbFutureFactory, {
+    CacheDiagnosticRecorder diagnosticRecorder =
+        const NoopCacheDiagnosticRecorder(),
+    DateTime Function()? now,
+  }) : _dbFutureFactory = dbFutureFactory,
+       _diagnosticRecorder = diagnosticRecorder,
+       _now = now ?? DateTime.now;
+
+  final Future<Database> Function() _dbFutureFactory;
+  Future<Database>? _dbFuture;
   final CacheDiagnosticRecorder _diagnosticRecorder;
   final DateTime Function() _now;
+
+  Future<Database> get _db => _dbFuture ??= _dbFutureFactory();
 
   @override
   Future<CachedSnapshot<T>?> get<T>(
     SnapshotCacheDescriptor descriptor,
     SnapshotCodec<T> codec,
   ) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.query(
       ComicLocalDb.cachedSnapshotsTable,
       where: 'cache_key = ?',
@@ -110,7 +123,7 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
     SnapshotCodec<T> codec, {
     required SnapshotCachePolicy policy,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final existing = await _getRawByKey(db, descriptor.cacheKey);
     final now = _now();
     final createdAt =
@@ -155,7 +168,7 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
 
   @override
   Future<void> touch(String cacheKey, DateTime accessedAt) async {
-    final db = await _dbFuture;
+    final db = await _db;
     await db.update(
       ComicLocalDb.cachedSnapshotsTable,
       <String, Object?>{'last_accessed_at': accessedAt.millisecondsSinceEpoch},
@@ -169,7 +182,7 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
     required CacheOwnerType ownerType,
     required String ownerId,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final deleted = await db.delete(
       ComicLocalDb.cachedSnapshotsTable,
       where: 'owner_type = ? AND owner_id = ?',
@@ -194,7 +207,7 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
     required CacheOwnerType ownerType,
     required String ownerIdPrefix,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final deleted = await db.delete(
       ComicLocalDb.cachedSnapshotsTable,
       where: 'owner_type = ? AND owner_id LIKE ?',
@@ -216,7 +229,7 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
 
   @override
   Future<int> deleteExpired(DateTime now) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final deleted = await db.delete(
       ComicLocalDb.cachedSnapshotsTable,
       where: 'expires_at IS NOT NULL AND expires_at <= ?',
@@ -239,7 +252,7 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
 
   @override
   Future<StorageUsageSection> calculateUsage() async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.rawQuery('''
       SELECT snapshot_type, COUNT(*) AS count, COALESCE(SUM(payload_bytes), 0) AS total
       FROM ${ComicLocalDb.cachedSnapshotsTable}

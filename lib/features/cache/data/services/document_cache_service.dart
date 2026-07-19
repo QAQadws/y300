@@ -8,17 +8,28 @@ import 'package:y300/features/comic/data/local/comic_local_db.dart';
 
 class LocalDocumentCacheService implements DocumentCacheService {
   LocalDocumentCacheService(
-    this._dbFuture, {
+    Future<Database> dbFuture, {
     CacheDiagnosticRecorder diagnosticRecorder =
         const NoopCacheDiagnosticRecorder(),
-  }) : _diagnosticRecorder = diagnosticRecorder;
+  }) : _dbFutureFactory = (() => dbFuture),
+       _diagnosticRecorder = diagnosticRecorder;
 
-  final Future<Database> _dbFuture;
+  LocalDocumentCacheService.lazy(
+    Future<Database> Function() dbFutureFactory, {
+    CacheDiagnosticRecorder diagnosticRecorder =
+        const NoopCacheDiagnosticRecorder(),
+  }) : _dbFutureFactory = dbFutureFactory,
+       _diagnosticRecorder = diagnosticRecorder;
+
+  final Future<Database> Function() _dbFutureFactory;
+  Future<Database>? _dbFuture;
   final CacheDiagnosticRecorder _diagnosticRecorder;
+
+  Future<Database> get _db => _dbFuture ??= _dbFutureFactory();
 
   @override
   Future<CachedDocument?> getByKey(String cacheKey) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.query(
       ComicLocalDb.cachedDocumentsTable,
       where: 'cache_key = ?',
@@ -49,7 +60,7 @@ class LocalDocumentCacheService implements DocumentCacheService {
 
   @override
   Future<void> put(CachedDocument document) async {
-    final db = await _dbFuture;
+    final db = await _db;
     await db.insert(
       ComicLocalDb.cachedDocumentsTable,
       <String, Object?>{
@@ -84,7 +95,7 @@ class LocalDocumentCacheService implements DocumentCacheService {
 
   @override
   Future<void> touch(String cacheKey, DateTime accessedAt) async {
-    final db = await _dbFuture;
+    final db = await _db;
     await db.update(
       ComicLocalDb.cachedDocumentsTable,
       <String, Object?>{'last_accessed_at': accessedAt.millisecondsSinceEpoch},
@@ -98,7 +109,7 @@ class LocalDocumentCacheService implements DocumentCacheService {
     required CacheOwnerType ownerType,
     required String ownerId,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final deleted = await db.delete(
       ComicLocalDb.cachedDocumentsTable,
       where: 'owner_type = ? AND owner_id = ?',
@@ -119,7 +130,7 @@ class LocalDocumentCacheService implements DocumentCacheService {
     required CacheOwnerType ownerType,
     required String ownerIdPrefix,
   }) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final deleted = await db.delete(
       ComicLocalDb.cachedDocumentsTable,
       where: 'owner_type = ? AND owner_id LIKE ?',
@@ -137,7 +148,7 @@ class LocalDocumentCacheService implements DocumentCacheService {
 
   @override
   Future<int> deleteOlderThan(DateTime cutoff) async {
-    final db = await _dbFuture;
+    final db = await _db;
     final deleted = await db.delete(
       ComicLocalDb.cachedDocumentsTable,
       where: 'updated_at < ?',
@@ -156,7 +167,7 @@ class LocalDocumentCacheService implements DocumentCacheService {
 
   @override
   Future<StorageUsageSection> calculateUsage() async {
-    final db = await _dbFuture;
+    final db = await _db;
     final rows = await db.rawQuery('''
       SELECT owner_type, namespace, COUNT(*) AS count, COALESCE(SUM(body_bytes), 0) AS total
       FROM ${ComicLocalDb.cachedDocumentsTable}

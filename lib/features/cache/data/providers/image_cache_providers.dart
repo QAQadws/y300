@@ -51,20 +51,24 @@ final imageCacheManagerProvider = FutureProvider<BaseCacheManager>((ref) async {
 });
 
 final imageCacheRepositoryProvider = Provider<ImageCacheRepository>((ref) {
-  return LocalImageCacheRepository(ComicLocalDb.open());
+  return LocalImageCacheRepository.lazy(() => ComicLocalDb.open());
 });
 
 final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
-  return LocalDocumentCacheService(
-    ComicLocalDb.open(),
+  return LocalDocumentCacheService.lazy(
+    // The thread repository can be created by a widget test before the
+    // platform database factory is installed. Open the database on first use.
+    // The service memoizes the resulting Future, so this remains one DB
+    // session rather than a new open attempt per cache operation.
+    () => ComicLocalDb.open(),
     diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
   );
 });
 
 final parsedSnapshotCacheServiceProvider = Provider<ParsedSnapshotCacheService>(
   (ref) {
-    return LocalParsedSnapshotCacheService(
-      ComicLocalDb.open(),
+    return LocalParsedSnapshotCacheService.lazy(
+      () => ComicLocalDb.open(),
       diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
     );
   },

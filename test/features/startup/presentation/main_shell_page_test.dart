@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
@@ -47,6 +48,11 @@ import 'package:y300/features/startup/presentation/main_shell_page.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
   testWidgets('MainShellPage can switch across all six lazy tabs', (
     tester,
   ) async {
@@ -144,17 +150,17 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.text('收藏').last);
-    await tester.pumpAndSettle();
+    await _pumpShellTab(tester);
     expect(find.text('收藏'), findsWidgets);
     expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
 
     await tester.tap(find.text('漫画').last);
-    await tester.pumpAndSettle();
+    await _pumpShellTab(tester);
     expect(find.byType(AppBar), findsOneWidget);
     expect(find.byIcon(Icons.search), findsOneWidget);
 
     await tester.tap(find.text('小说').last);
-    await tester.pumpAndSettle();
+    await _pumpShellTab(tester);
     expect(find.byType(AppBar), findsOneWidget);
     expect(
       find.byKey(const Key('unified-shelf-category-indicator')),
@@ -162,12 +168,12 @@ void main() {
     );
 
     await tester.tap(find.text('记录').last);
-    await tester.pumpAndSettle();
+    await _pumpShellTab(tester);
     expect(find.byKey(const Key('history-page')), findsOneWidget);
     expect(find.byKey(const Key('history-empty')), findsOneWidget);
 
     await tester.tap(find.text('更多'));
-    await tester.pumpAndSettle();
+    await _pumpShellTab(tester);
     expect(find.text('更多'), findsWidgets);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
     final fullyBuiltStack = tester.widget<IndexedStack>(
@@ -229,7 +235,7 @@ void main() {
     expect(find.byIcon(Icons.local_library), findsNothing);
 
     await tester.tap(find.text('小说'));
-    await tester.pumpAndSettle();
+    await _pumpShellTab(tester);
 
     expect(find.byIcon(Icons.local_library_outlined), findsNothing);
     expect(find.byIcon(Icons.local_library), findsOneWidget);
@@ -715,6 +721,14 @@ void main() {
     expect(runCount, 1);
     expect(selectionHost.isActive, isFalse);
   });
+}
+
+Future<void> _pumpShellTab(WidgetTester tester) async {
+  // Shelf tabs can legitimately keep an indeterminate loading indicator
+  // alive while their first async load is in flight. The test only needs a
+  // bounded frame window for the tab transition, not global quiescence.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 ShelfSelectionHostDelegate _selectionDelegate({

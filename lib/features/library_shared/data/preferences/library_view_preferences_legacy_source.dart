@@ -27,9 +27,9 @@ abstract interface class LibraryViewPreferencesLegacySource {
 /// that row is absent.
 final class SqliteLibraryViewPreferencesLegacySource
     implements LibraryViewPreferencesLegacySource {
-  SqliteLibraryViewPreferencesLegacySource(this._dbFuture);
+  SqliteLibraryViewPreferencesLegacySource(this._dbFutureFactory);
 
-  final Future<Database> _dbFuture;
+  final Future<Database> Function() _dbFutureFactory;
 
   @override
   Future<LegacyLibraryDisplayPreferences?> loadDisplayPreferences({
@@ -37,7 +37,7 @@ final class SqliteLibraryViewPreferencesLegacySource
     required LibraryDisplayMode defaultDisplayMode,
     required int defaultGridColumnCount,
   }) async {
-    final db = await _dbFuture;
+    final db = await _dbFutureFactory();
     final shared = await _loadSharedDisplayRow(
       db,
       moduleKey: moduleKey,

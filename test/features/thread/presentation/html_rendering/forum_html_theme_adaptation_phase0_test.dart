@@ -97,7 +97,9 @@ void main() {
     test('novel light, dark, and sepia use their reader palettes', () {
       const resolver = NovelReaderThemeResolver();
       final light = resolver.resolve(
-        preferences: NovelReaderPreferences.defaults(),
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          themePreset: NovelReaderThemePreset.light,
+        ),
         theme: AppTheme.light(),
         platformBrightness: Brightness.light,
       );

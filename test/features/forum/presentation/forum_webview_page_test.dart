@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -50,6 +51,11 @@ Matcher containsCssSelector(String selector) {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
   testWidgets(
     'ForumWebViewPage waits for bootstrap config without skeleton page',
     (tester) async {
@@ -1266,11 +1272,18 @@ void main() {
     await tester.tap(
       find.byKey(const Key('forum-webview-thread-reply-button')),
     );
-    await tester.pumpAndSettle();
+    await _pumpRouteWithoutSettlingEditor(
+      tester,
+      readyWhen: find.byKey(const Key('reply-composer-source-button')),
+      requireEnabled: true,
+    );
 
     expect(find.text('回复帖子'), findsOneWidget);
     await tester.tap(find.byKey(const Key('reply-composer-source-button')));
-    await tester.pumpAndSettle();
+    await _pumpRouteWithoutSettlingEditor(
+      tester,
+      readyWhen: find.byKey(const Key('reply-composer-message-input')),
+    );
     await tester.enterText(
       find.byKey(const Key('reply-composer-message-input')),
       '来自 WebView 的回复',
@@ -1303,7 +1316,11 @@ void main() {
         '&fid=55&tid=123&repquote=41554317'
         '&extra=page%3D1&page=1&mobile=2',
       );
-      await tester.pumpAndSettle();
+      await _pumpRouteWithoutSettlingEditor(
+        tester,
+        readyWhen: find.byKey(const Key('reply-composer-source-button')),
+        requireEnabled: true,
+      );
 
       expect(decision, ForumWebViewNavigationDecision.prevent);
       expect(find.text('回复楼层'), findsOneWidget);
@@ -1313,7 +1330,10 @@ void main() {
         findsOneWidget,
       );
       await tester.tap(find.byKey(const Key('reply-composer-source-button')));
-      await tester.pumpAndSettle();
+      await _pumpRouteWithoutSettlingEditor(
+        tester,
+        readyWhen: find.byKey(const Key('reply-composer-message-input')),
+      );
       await tester.enterText(
         find.byKey(const Key('reply-composer-message-input')),
         '来自 WebView 的楼层回复',
@@ -1367,7 +1387,11 @@ void main() {
         'https://bbs.yamibo.com/forum.php?mod=post&amp;action=newthread'
         '&amp;fid=33&amp;mobile=2',
       );
-      await tester.pumpAndSettle();
+      await _pumpRouteWithoutSettlingEditor(
+        tester,
+        readyWhen: find.byKey(const Key('posting-composer-source-button')),
+        requireEnabled: true,
+      );
 
       expect(decision, ForumWebViewNavigationDecision.prevent);
       expect(find.text('发帖 — 日常版'), findsOneWidget);
@@ -1378,7 +1402,10 @@ void main() {
         '来自 WebView 的标题',
       );
       await tester.tap(find.byKey(const Key('posting-composer-source-button')));
-      await tester.pumpAndSettle();
+      await _pumpRouteWithoutSettlingEditor(
+        tester,
+        readyWhen: find.byKey(const Key('posting-composer-message-input')),
+      );
       await tester.enterText(
         find.byKey(const Key('posting-composer-message-input')),
         '来自 WebView 的正文',
@@ -1876,6 +1903,55 @@ void main() {
       expect(find.byKey(const Key('open-forum-webview-page')), findsOneWidget);
     },
   );
+}
+
+Future<void> _pumpRouteWithoutSettlingEditor(
+  WidgetTester tester, {
+  Finder? readyWhen,
+  bool requireEnabled = false,
+}) async {
+  // The composer intentionally keeps a caret animation alive. Waiting for
+  // the route and its async controller to expose a real widget is sufficient;
+  // pumpAndSettle would never converge while the editor caret is active.
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.pump(const Duration(milliseconds: 50));
+    if (readyWhen == null ||
+        _isVisibleAndReady(tester, readyWhen, requireEnabled: requireEnabled)) {
+      return;
+    }
+  }
+  if (readyWhen != null) {
+    expect(readyWhen, findsOneWidget);
+  }
+}
+
+bool _isVisibleAndReady(
+  WidgetTester tester,
+  Finder finder, {
+  required bool requireEnabled,
+}) {
+  final elements = finder.evaluate().toList(growable: false);
+  if (elements.isEmpty) {
+    return false;
+  }
+  if (requireEnabled &&
+      elements.every(
+        (element) =>
+            element.widget is IconButton &&
+            (element.widget as IconButton).onPressed == null,
+      )) {
+    return false;
+  }
+  final rect = tester.getRect(finder);
+  final renderViews = tester.binding.renderViews;
+  if (renderViews.isEmpty) {
+    return false;
+  }
+  final viewport = Offset.zero & renderViews.first.size;
+  return rect.left >= viewport.left &&
+      rect.top >= viewport.top &&
+      rect.right <= viewport.right &&
+      rect.bottom <= viewport.bottom;
 }
 
 Widget _buildTestApp({

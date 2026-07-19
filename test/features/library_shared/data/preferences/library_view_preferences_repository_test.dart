@@ -125,10 +125,30 @@ void main() {
     expect(loaded, defaults);
     expect(legacySource.callCount, 0);
   });
+
+  test(
+    'legacy source errors fall back to defaults and complete migration',
+    () async {
+      legacySource.error = StateError('database factory is unavailable');
+
+      final loaded = await repository.load(defaults: defaults);
+      final preferences = await SharedPreferences.getInstance();
+
+      expect(loaded, defaults);
+      expect(legacySource.callCount, 1);
+      expect(
+        preferences.getInt(
+          PreferenceKeys.libraryShelfComicMigrationVersion.name,
+        ),
+        1,
+      );
+    },
+  );
 }
 
 final class _FakeLegacySource implements LibraryViewPreferencesLegacySource {
   LegacyLibraryDisplayPreferences? value;
+  Object? error;
   int callCount = 0;
 
   @override
@@ -138,6 +158,9 @@ final class _FakeLegacySource implements LibraryViewPreferencesLegacySource {
     required int defaultGridColumnCount,
   }) async {
     callCount += 1;
+    if (error != null) {
+      throw error!;
+    }
     return value;
   }
 }

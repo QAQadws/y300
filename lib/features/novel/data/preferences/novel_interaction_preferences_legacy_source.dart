@@ -8,16 +8,16 @@ abstract interface class NovelInteractionPreferencesLegacySource {
 
 final class SqliteNovelInteractionPreferencesLegacySource
     implements NovelInteractionPreferencesLegacySource {
-  SqliteNovelInteractionPreferencesLegacySource(this._dbFuture);
+  SqliteNovelInteractionPreferencesLegacySource(this._dbFutureFactory);
 
   static const String chapterOpenModeKey = 'novel_chapter_open_mode';
 
-  final Future<Database> _dbFuture;
+  final Future<Database> Function() _dbFutureFactory;
 
   @override
   Future<NovelChapterOpenMode?> loadChapterOpenMode() async {
     try {
-      final db = await _dbFuture;
+      final db = await _dbFutureFactory();
       final rows = await db.query(
         ComicLocalDb.settingsTable,
         columns: const <String>['value'],
@@ -36,7 +36,7 @@ final class SqliteNovelInteractionPreferencesLegacySource
         return NovelChapterOpenMode.sourcePost;
       }
       return NovelChapterOpenMode.reader;
-    } on DatabaseException {
+    } catch (_) {
       return null;
     }
   }

@@ -49,7 +49,7 @@ final class SharedPreferencesLibraryViewPreferencesRepository
         defaultDisplayMode: defaults.displayMode,
         defaultGridColumnCount: defaults.gridColumnCount,
       );
-    } on Exception {
+    } catch (_) {
       // Legacy data must never prevent the shelf from opening. Persisting the
       // normalized defaults also prevents repeated reads of a broken source.
       legacy = null;

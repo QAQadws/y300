@@ -106,6 +106,20 @@ void main() {
     expect(legacySource.callCount, 0);
   });
 
+  test('legacy source errors fall back to the novel defaults', () async {
+    legacySource.error = StateError('database factory is unavailable');
+
+    final loaded = await repository.load();
+    final preferences = await SharedPreferences.getInstance();
+
+    expect(loaded, NovelReaderPreferences.defaults());
+    expect(legacySource.callCount, 1);
+    expect(
+      preferences.getInt(PreferenceKeys.novelReaderMigrationVersion.name),
+      1,
+    );
+  });
+
   test('codec rejects invalid values field by field', () {
     const codec = NovelReaderPreferencesSnapshotCodec();
 
@@ -128,11 +142,15 @@ void main() {
 
 final class _FakeLegacySource implements NovelReaderPreferencesLegacySource {
   NovelReaderPreferences? value;
+  Object? error;
   int callCount = 0;
 
   @override
   Future<NovelReaderPreferences?> load() async {
     callCount += 1;
+    if (error != null) {
+      throw error!;
+    }
     return value;
   }
 }

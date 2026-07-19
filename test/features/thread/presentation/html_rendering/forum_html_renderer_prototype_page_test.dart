@@ -85,7 +85,7 @@ void main() {
     expect(find.textContaining('正文 fragment：'), findsOneWidget);
     expect(find.textContaining('转换模式：原文'), findsOneWidget);
     expect(find.textContaining('转换文本节点：0 个'), findsOneWidget);
-    expect(find.textContaining('字号 100%'), findsOneWidget);
+    expect(find.textContaining('字号 115%'), findsOneWidget);
     expect(find.textContaining('主题适配：始终启用 / 作者字号保留'), findsOneWidget);
     expect(
       find.byKey(const Key('forum-html-prototype-theme-preview-selector')),
