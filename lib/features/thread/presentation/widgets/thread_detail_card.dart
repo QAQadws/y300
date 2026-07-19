@@ -479,7 +479,7 @@ class ThreadPostCard extends StatelessWidget {
     required this.state,
     this.highlighted = false,
     required this.imageHeaderBuilder,
-    required this.onOpenAuthorProfile,
+    this.onOpenAuthorProfile,
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
     required this.onOpenPostImages,
@@ -494,7 +494,7 @@ class ThreadPostCard extends StatelessWidget {
   final ThreadDetailPageState state;
   final bool highlighted;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
-  final ValueChanged<ThreadPost> onOpenAuthorProfile;
+  final ValueChanged<ThreadPost>? onOpenAuthorProfile;
   final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
@@ -510,6 +510,7 @@ class ThreadPostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final plan = const ThreadPostBodyRenderPlanner().plan(post.message);
+    final authorProfileCallback = onOpenAuthorProfile;
     final card = Container(
       key: Key('thread-post-card-${post.pid}'),
       margin: const EdgeInsets.only(bottom: 10),
@@ -534,9 +535,11 @@ class ThreadPostCard extends StatelessWidget {
                 avatarUrl: post.avatarUrl,
                 palette: palette,
                 imageHeaderBuilder: imageHeaderBuilder,
-                onTap: post.authorId.trim().isEmpty
+                onTap:
+                    post.authorId.trim().isEmpty ||
+                        authorProfileCallback == null
                     ? null
-                    : () => onOpenAuthorProfile(post),
+                    : () => authorProfileCallback(post),
               ),
               const SizedBox(width: 9),
               Expanded(
@@ -545,9 +548,11 @@ class ThreadPostCard extends StatelessWidget {
                   palette: palette,
                   viewsLabel: post.isFirst ? state.views.toString() : null,
                   repliesLabel: post.isFirst ? state.replies.toString() : null,
-                  onOpenAuthorProfile: post.authorId.trim().isEmpty
+                  onOpenAuthorProfile:
+                      post.authorId.trim().isEmpty ||
+                          authorProfileCallback == null
                       ? null
-                      : () => onOpenAuthorProfile(post),
+                      : () => authorProfileCallback(post),
                 ),
               ),
             ],
