@@ -1,5 +1,21 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- open_filex declares broad media permissions for its generic file
+         opener. Y300 only opens a private verified APK and does not need them. -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_AUDIO"
+        tools:node="remove" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
@@ -10,6 +26,19 @@
         android:label="Y300"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- open_filex owns the Intent bridge, but its default root-path is
+             replaced here with the smallest verified-update-only scope. -->
+        <provider
+            android:name="com.crazecoder.openfile.FileProvider"
+            android:authorities="${applicationId}.fileProvider.com.crazecoder.openfile"
+            android:exported="false"
+            android:grantUriPermissions="true"
+            tools:replace="android:authorities,android:exported,android:grantUriPermissions">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/app_update_filepaths"
+                tools:replace="android:resource" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"

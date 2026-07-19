@@ -15,6 +15,8 @@ void main() {
     );
     final firstDio = container.read(appUpdateDioProvider);
     final secondDio = container.read(appUpdateDioProvider);
+    final firstInstaller = container.read(appUpdateInstallerProvider);
+    final secondInstaller = container.read(appUpdateInstallerProvider);
     final headerNames = firstDio.options.headers.keys
         .map((key) => key.toLowerCase())
         .toSet();
@@ -24,6 +26,7 @@ void main() {
 
     expect(identical(firstCoordinator, secondCoordinator), isTrue);
     expect(identical(firstDio, secondDio), isTrue);
+    expect(identical(firstInstaller, secondInstaller), isTrue);
     expect(headerNames, isNot(contains('cookie')));
     expect(headerNames, isNot(contains('authorization')));
     expect(

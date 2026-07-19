@@ -7,11 +7,15 @@ import 'package:y300/features/app_update/data/gitee/dio_gitee_checksum_repositor
 import 'package:y300/features/app_update/data/gitee/dio_gitee_latest_release_repository.dart';
 import 'package:y300/features/app_update/data/local/local_app_update_file_store.dart';
 import 'package:y300/features/app_update/data/platform/dio_app_update_binary_downloader.dart';
+import 'package:y300/features/app_update/data/platform/open_filex_app_update_installer.dart';
+import 'package:y300/features/app_update/data/platform/permission_handler_app_update_install_permission.dart';
 import 'package:y300/features/app_update/data/platform/url_launcher_app_update_launcher.dart';
 import 'package:y300/features/app_update/domain/repositories/gitee_latest_release_repository.dart';
 import 'package:y300/features/app_update/domain/repositories/app_update_checksum_repository.dart';
 import 'package:y300/features/app_update/domain/services/app_update_binary_downloader.dart';
 import 'package:y300/features/app_update/domain/services/app_update_file_store.dart';
+import 'package:y300/features/app_update/domain/services/app_update_install_permission_gateway.dart';
+import 'package:y300/features/app_update/domain/services/app_update_installer.dart';
 import 'package:y300/features/app_update/domain/services/app_update_launcher.dart';
 import 'package:y300/features/app_update/presentation/controllers/app_update_prompt_coordinator.dart';
 
@@ -51,6 +55,18 @@ final appUpdateBinaryDownloaderProvider = Provider<AppUpdateBinaryDownloader>((
   );
   ref.onDispose(() => unawaited(downloader.dispose()));
   return downloader;
+});
+
+final appUpdateInstallPermissionProvider =
+    Provider<AppUpdateInstallPermissionGateway>((ref) {
+      return const PermissionHandlerAppUpdateInstallPermission();
+    });
+
+final appUpdateInstallerProvider = Provider<AppUpdateInstaller>((ref) {
+  return OpenFilexAppUpdateInstaller(
+    fileStore: ref.watch(appUpdateFileStoreProvider),
+    permissionGateway: ref.watch(appUpdateInstallPermissionProvider),
+  );
 });
 
 final appUpdateLauncherProvider = Provider<AppUpdateLauncher>((ref) {
