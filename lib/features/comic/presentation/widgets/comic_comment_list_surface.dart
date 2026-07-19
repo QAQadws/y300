@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
+import 'package:y300/features/comic/presentation/widgets/comic_comment_surface.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 
@@ -22,11 +24,15 @@ class ComicCommentListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ComicCommentCard(
-      comment: comment,
-      sourceTid: sourceTid,
-      imageHeaderBuilder: imageHeaderBuilder,
-      renderContext: renderContext,
+    return Semantics(
+      container: true,
+      sortKey: OrdinalSortKey(comment.floorNumber.toDouble()),
+      child: ComicCommentCard(
+        comment: comment,
+        sourceTid: sourceTid,
+        imageHeaderBuilder: imageHeaderBuilder,
+        renderContext: renderContext,
+      ),
     );
   }
 }
@@ -69,24 +75,41 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
   Widget build(BuildContext context) {
     final renderContext = widget.renderContext ?? _ensureRenderContext(context);
     if (widget.isLoading) {
-      return const _CommentLoadingState();
+      return const ComicCommentFeedbackSurface(
+        key: Key('comic-comment-loading'),
+        kind: ComicCommentFeedbackKind.loading,
+      );
     }
 
     final loadResult = widget.result;
     if (loadResult == null ||
         loadResult.status == ComicCommentLoadStatus.empty) {
-      return const _CommentEmptyState();
+      return const ComicCommentFeedbackSurface(
+        key: Key('comic-comment-empty'),
+        kind: ComicCommentFeedbackKind.empty,
+      );
     }
     if (loadResult.status == ComicCommentLoadStatus.failure ||
         loadResult.status == ComicCommentLoadStatus.cancelled) {
-      return _CommentFailureState(onRetry: widget.onRetry);
+      return ComicCommentFeedbackSurface(
+        key: const Key('comic-comment-failure-state'),
+        kind: ComicCommentFeedbackKind.unavailable,
+        onAction: widget.onRetry,
+      );
     }
     if (loadResult.items.isEmpty &&
         loadResult.status != ComicCommentLoadStatus.partialFailure) {
-      return const _CommentEmptyState();
+      return const ComicCommentFeedbackSurface(
+        key: Key('comic-comment-empty'),
+        kind: ComicCommentFeedbackKind.empty,
+      );
     }
     if (loadResult.items.isEmpty) {
-      return _CommentFailureState(onRetry: widget.onRetry);
+      return ComicCommentFeedbackSurface(
+        key: const Key('comic-comment-failure-state'),
+        kind: ComicCommentFeedbackKind.unavailable,
+        onAction: widget.onRetry,
+      );
     }
 
     // The planner is shared by all visible cards. Keep only the current
@@ -103,21 +126,18 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
       itemCount: itemCount,
       itemBuilder: (context, index) {
         if (index >= loadResult.items.length) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: _CommentFailureState(onRetry: widget.onRetry, compact: true),
+          return ComicCommentFeedbackSurface(
+            key: const Key('comic-comment-failure-state'),
+            kind: ComicCommentFeedbackKind.unavailable,
+            onAction: widget.onRetry,
+            compact: true,
           );
         }
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: index == loadResult.items.length - 1 ? 0 : 10,
-          ),
-          child: ComicCommentListItem(
-            comment: loadResult.items[index],
-            sourceTid: widget.sourceTid,
-            imageHeaderBuilder: widget.imageHeaderBuilder,
-            renderContext: renderContext,
-          ),
+        return ComicCommentListItem(
+          comment: loadResult.items[index],
+          sourceTid: widget.sourceTid,
+          imageHeaderBuilder: widget.imageHeaderBuilder,
+          renderContext: renderContext,
         );
       },
     );
@@ -144,66 +164,5 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
       );
     }
     return _ownedRenderContext!;
-  }
-}
-
-class _CommentLoadingState extends StatelessWidget {
-  const _CommentLoadingState();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      key: Key('comic-comment-loading'),
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: CircularProgressIndicator(),
-      ),
-    );
-  }
-}
-
-class _CommentEmptyState extends StatelessWidget {
-  const _CommentEmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      key: const Key('comic-comment-empty'),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text('暂无评论', style: Theme.of(context).textTheme.bodyMedium),
-      ),
-    );
-  }
-}
-
-class _CommentFailureState extends StatelessWidget {
-  const _CommentFailureState({this.onRetry, this.compact = false});
-
-  final VoidCallback? onRetry;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final content = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: Text(
-            '评论暂不可用',
-            key: const Key('comic-comment-failure'),
-            textAlign: TextAlign.center,
-          ),
-        ),
-        if (onRetry != null) ...[
-          const SizedBox(width: 8),
-          TextButton(onPressed: onRetry, child: const Text('重试')),
-        ],
-      ],
-    );
-    return Center(
-      key: const Key('comic-comment-failure-state'),
-      child: Padding(padding: EdgeInsets.all(compact ? 4 : 24), child: content),
-    );
   }
 }

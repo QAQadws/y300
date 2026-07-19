@@ -6,6 +6,7 @@ import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_list_surface.dart';
+import 'package:y300/features/comic/presentation/widgets/comic_comment_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
@@ -59,7 +60,7 @@ class ComicCommentTailSurface extends ChangeNotifier
   String get id => 'comic-comments-${_session.key.id}';
 
   @override
-  String get indicatorLabel => '评论';
+  String get indicatorLabel => ComicCommentCopy.indicator;
 
   @override
   bool get hasAdvance => _hasNextEpisode && _onAdvanceEpisode != null;
@@ -95,7 +96,10 @@ class ComicCommentTailSurface extends ChangeNotifier
     final state = sessionState;
     final result = state.result;
     if (state.isLoading || result == null) {
-      return const _CommentTailLoading();
+      return const ComicCommentFeedbackSurface(
+        key: Key('comic-comment-tail-loading'),
+        kind: ComicCommentFeedbackKind.loading,
+      );
     }
     final list = ComicCommentListSurface(
       sourceTid: _session.key.sourceTid,
@@ -110,9 +114,9 @@ class ComicCommentTailSurface extends ChangeNotifier
     return Column(
       children: [
         Expanded(child: list),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 8, 20, 32),
-          child: Text('已是最后一章'),
+        const ComicCommentFeedbackSurface(
+          kind: ComicCommentFeedbackKind.lastChapter,
+          compact: true,
         ),
       ],
     );
@@ -120,7 +124,11 @@ class ComicCommentTailSurface extends ChangeNotifier
 
   @override
   Widget buildAdvance(BuildContext context, ReaderTailActions actions) {
-    return _CommentAdvance(nextEpisodeTitle: _nextEpisodeTitle);
+    return ComicCommentFeedbackSurface(
+      key: const Key('comic-comment-tail-advance'),
+      kind: ComicCommentFeedbackKind.advance,
+      nextEpisodeTitle: _nextEpisodeTitle,
+    );
   }
 
   @override
@@ -155,16 +163,18 @@ class ComicCommentTailSurface extends ChangeNotifier
         );
       }
       if (loadedResult.status == ComicCommentLoadStatus.partialFailure) {
-        return _CommentTailFailure(
+        return ComicCommentFeedbackSurface(
           key: const Key('comic-comment-tail-partial-failure'),
-          message: loadedResult.errorMessage,
-          onRetry: () => unawaited(_handleVerticalRequest(context)),
+          kind: ComicCommentFeedbackKind.unavailable,
+          onAction: () => unawaited(_handleVerticalRequest(context)),
           compact: true,
         );
       }
       if (!_hasNextEpisode && index == loadedResult.items.length) {
-        return const _CommentLastChapter(
+        return const ComicCommentFeedbackSurface(
           key: Key('comic-comment-tail-last-chapter'),
+          kind: ComicCommentFeedbackKind.lastChapter,
+          compact: true,
         );
       }
     }
@@ -195,30 +205,39 @@ class ComicCommentTailSurface extends ChangeNotifier
     ComicCommentLoadResult? result,
   ) {
     if (state.isLoading) {
-      return const _CommentTailLoading();
+      return const ComicCommentFeedbackSurface(
+        key: Key('comic-comment-tail-loading'),
+        kind: ComicCommentFeedbackKind.loading,
+      );
     }
     if (result == null) {
-      return _CommentTailAction(
-        title: '查看评论',
-        onPressed: () => unawaited(_handleVerticalRequest(context)),
+      return ComicCommentFeedbackSurface(
+        actionKey: const Key('comic-comment-tail-load-button'),
+        kind: ComicCommentFeedbackKind.open,
+        onAction: () => unawaited(_handleVerticalRequest(context)),
       );
     }
     switch (result.status) {
       case ComicCommentLoadStatus.empty:
-        return const _CommentTailEmpty();
+        return const ComicCommentFeedbackSurface(
+          key: Key('comic-comment-tail-empty'),
+          kind: ComicCommentFeedbackKind.empty,
+        );
       case ComicCommentLoadStatus.failure:
       case ComicCommentLoadStatus.cancelled:
-        return _CommentTailFailure(
-          message: result.errorMessage,
-          onRetry: () => unawaited(_handleVerticalRequest(context)),
+        return ComicCommentFeedbackSurface(
+          key: const Key('comic-comment-tail-failure'),
+          kind: ComicCommentFeedbackKind.unavailable,
+          onAction: () => unawaited(_handleVerticalRequest(context)),
         );
       case ComicCommentLoadStatus.success:
         return const SizedBox.shrink();
       case ComicCommentLoadStatus.partialFailure:
         return result.items.isEmpty
-            ? _CommentTailFailure(
-                message: result.errorMessage,
-                onRetry: () => unawaited(_handleVerticalRequest(context)),
+            ? ComicCommentFeedbackSurface(
+                key: const Key('comic-comment-tail-failure'),
+                kind: ComicCommentFeedbackKind.unavailable,
+                onAction: () => unawaited(_handleVerticalRequest(context)),
               )
             : const SizedBox.shrink();
     }
@@ -240,7 +259,7 @@ class ComicCommentTailSurface extends ChangeNotifier
     }
     if (next.status == ComicCommentLoadStatus.failure ||
         next.status == ComicCommentLoadStatus.cancelled) {
-      showTransientSnackBar(context, '无法查看评论');
+      showTransientSnackBar(context, ComicCommentCopy.snackbarUnavailable);
     }
   }
 
@@ -285,124 +304,5 @@ class ComicCommentTailSurface extends ChangeNotifier
     _disposed = true;
     _session.removeListener(_onSessionChanged);
     super.dispose();
-  }
-}
-
-class _CommentTailAction extends StatelessWidget {
-  const _CommentTailAction({required this.title, required this.onPressed});
-
-  final String title;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 56),
-      child: Center(
-        child: OutlinedButton.icon(
-          key: const Key('comic-comment-tail-load-button'),
-          onPressed: onPressed,
-          icon: const Icon(Icons.forum_outlined),
-          label: Text(title),
-        ),
-      ),
-    );
-  }
-}
-
-class _CommentTailLoading extends StatelessWidget {
-  const _CommentTailLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      key: Key('comic-comment-tail-loading'),
-      padding: EdgeInsets.all(28),
-      child: Center(child: Text('评论加载中')),
-    );
-  }
-}
-
-class _CommentTailEmpty extends StatelessWidget {
-  const _CommentTailEmpty();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      key: Key('comic-comment-tail-empty'),
-      padding: EdgeInsets.fromLTRB(20, 28, 20, 56),
-      child: Center(child: Text('暂无评论')),
-    );
-  }
-}
-
-class _CommentTailFailure extends StatelessWidget {
-  const _CommentTailFailure({
-    super.key,
-    this.message,
-    required this.onRetry,
-    this.compact = false,
-  });
-
-  final String? message;
-  final VoidCallback onRetry;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, compact ? 6 : 28, 20, compact ? 10 : 56),
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(child: Text(message ?? '评论暂不可用')),
-            const SizedBox(width: 8),
-            TextButton(onPressed: onRetry, child: const Text('重试')),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CommentAdvance extends StatelessWidget {
-  const _CommentAdvance({this.nextEpisodeTitle});
-
-  final String? nextEpisodeTitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      key: const Key('comic-comment-tail-advance'),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.swipe_outlined),
-            const SizedBox(height: 12),
-            Text(
-              nextEpisodeTitle == null || nextEpisodeTitle!.trim().isEmpty
-                  ? '继续滑动进入下一章'
-                  : '继续滑动进入：$nextEpisodeTitle',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CommentLastChapter extends StatelessWidget {
-  const _CommentLastChapter({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 40),
-      child: Center(child: Text('已是最后一章')),
-    );
   }
 }
