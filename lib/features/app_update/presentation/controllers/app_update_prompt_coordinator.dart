@@ -11,6 +11,8 @@ import 'package:y300/features/app_update/domain/models/gitee_release_lookup_resu
 import 'package:y300/features/app_update/domain/repositories/gitee_latest_release_repository.dart';
 import 'package:y300/features/app_update/domain/services/app_update_download_service.dart';
 import 'package:y300/features/app_update/domain/services/app_update_launcher.dart';
+import 'package:y300/features/app_update/presentation/app_update_messages.dart';
+import 'package:y300/features/app_update/presentation/app_update_upgrader.dart';
 
 final class AppUpdatePromptCoordinator {
   AppUpdatePromptCoordinator({
@@ -31,12 +33,37 @@ final class AppUpdatePromptCoordinator {
   final AppUpdateDownloadService? _downloadService;
   final GiteeLatestReleaseRepository _repository;
   final Upgrader upgrader;
+  final StreamController<void> _promptRequestController =
+      StreamController<void>.broadcast();
 
   Future<AppUpdateCheckResult>? _checkInFlight;
   Future<AppUpdateLaunchResult>? _launchInFlight;
   bool _disposed = false;
 
   bool get supportsInAppDownload => _downloadService != null;
+
+  /// Requests that the single app-level [UpgradeAlert] evaluates its state.
+  ///
+  /// The coordinator deliberately exposes an event rather than a widget key
+  /// or BuildContext so manual checks can reuse the startup prompt without
+  /// coupling the domain-facing service to Flutter presentation details.
+  Stream<void> get promptRequestStream => _promptRequestController.stream;
+
+  void requestPrompt() {
+    if (_disposed || _promptRequestController.isClosed) {
+      return;
+    }
+    if (upgrader is AppUpdateManualPromptGate) {
+      (upgrader as AppUpdateManualPromptGate).prepareManualPrompt();
+    }
+    _promptRequestController.add(null);
+  }
+
+  void cancelPendingPrompt() {
+    if (upgrader is AppUpdateManualPromptGate) {
+      (upgrader as AppUpdateManualPromptGate).cancelManualPrompt();
+    }
+  }
 
   String? get installedVersion {
     final value =
@@ -247,6 +274,7 @@ final class AppUpdatePromptCoordinator {
       return;
     }
     _disposed = true;
+    unawaited(_promptRequestController.close());
     upgrader.dispose();
   }
 
@@ -258,8 +286,9 @@ final class AppUpdatePromptCoordinator {
       repository: repository,
       onFailure: onFailure,
     );
-    return Upgrader(
+    return Y300Upgrader(
       durationUntilAlertAgain: alertAgainAfter,
+      messages: Y300UpgraderMessages(),
       storeController: UpgraderStoreController(
         onAndroid: () => store,
         onFuchsia: null,

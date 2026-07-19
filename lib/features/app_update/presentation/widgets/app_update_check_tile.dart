@@ -1,11 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/app_update/data/providers/app_update_providers.dart';
 import 'package:y300/features/app_update/domain/models/app_update_check_result.dart';
-import 'package:y300/features/app_update/domain/models/app_update_download_request_result.dart';
-import 'package:y300/features/app_update/domain/models/app_update_launch_result.dart';
 import 'package:y300/features/app_update/presentation/app_update_feedback_messages.dart';
 import 'package:y300/features/app_update/presentation/controllers/app_update_prompt_coordinator.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
@@ -64,45 +60,9 @@ class _AppUpdateCheckTileState extends ConsumerState<AppUpdateCheckTile> {
         );
       case AppUpdateCheckUpToDate():
         showTransientSnackBar(context, '已是最新版本');
-      case AppUpdateCheckAvailable(suppression: null):
-        // updateVersionInfo already notified the single root UpgradeAlert.
+      case AppUpdateCheckAvailable():
+        coordinator.requestPrompt();
         return;
-      case AppUpdateCheckAvailable(:final version, :final suppression?):
-        final message = switch (suppression) {
-          AppUpdatePromptSuppression.ignored => '发现新版本 v$version，你已忽略此版本',
-          AppUpdatePromptSuppression.reminderInterval =>
-            '发现新版本 v$version，仍在稍后提醒间隔内',
-        };
-        showTransientSnackBar(
-          context,
-          message,
-          action: SnackBarAction(
-            label: '立即下载',
-            onPressed: () => unawaited(_openUpdate(coordinator)),
-          ),
-        );
     }
-  }
-
-  Future<void> _openUpdate(AppUpdatePromptCoordinator coordinator) async {
-    if (coordinator.supportsInAppDownload) {
-      final result = await coordinator.startCurrentDownload();
-      if (!mounted || result is AppUpdateDownloadRequestAccepted) {
-        return;
-      }
-      showTransientSnackBar(
-        context,
-        appUpdateDownloadRequestFailureMessage(
-          (result as AppUpdateDownloadRequestFailure).failure.code,
-        ),
-      );
-      return;
-    }
-    final result = await coordinator.openCurrentUpdate();
-    if (!mounted || result is AppUpdateLaunchSuccess) {
-      return;
-    }
-    final failure = (result as AppUpdateLaunchFailure).failure;
-    showTransientSnackBar(context, appUpdateLaunchFailureMessage(failure.code));
   }
 }

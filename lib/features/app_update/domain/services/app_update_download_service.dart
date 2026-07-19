@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:version/version.dart';
 import 'package:y300/features/app_update/domain/models/app_update_artifact.dart';
+import 'package:y300/features/app_update/domain/models/app_update_artifact_identity.dart';
 import 'package:y300/features/app_update/domain/models/app_update_background_task.dart';
+import 'package:y300/features/app_update/domain/models/app_update_background_notification_tap.dart';
 import 'package:y300/features/app_update/domain/models/app_update_binary_event.dart';
 import 'package:y300/features/app_update/domain/models/app_update_download_state.dart';
 import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
@@ -32,7 +34,12 @@ final class AppUpdateDownloadService {
        _binaryDownloader = binaryDownloader,
        _verifier = verifier,
        _fileStore = fileStore,
-       _installer = installer;
+       _installer = installer {
+    if (binaryDownloader is AppUpdateBackgroundBinaryDownloader) {
+      _notificationTapSubscription = binaryDownloader.notificationTapStream
+          .listen((tap) => unawaited(_restoreForNotificationTap(tap)));
+    }
+  }
 
   final AppUpdateChecksumRepository _checksumRepository;
   final AppUpdateBinaryDownloader _binaryDownloader;
@@ -45,22 +52,46 @@ final class AppUpdateDownloadService {
   AppUpdateDownloadState _state = const AppUpdateIdle();
   Future<AppUpdateDownloadState>? _downloadInFlight;
   Future<AppUpdateDownloadState>? _installInFlight;
+  Future<void>? _restoreInFlight;
+  StreamSubscription<AppUpdateBackgroundNotificationTap>?
+  _notificationTapSubscription;
   AppUpdateArtifact? _lastArtifact;
+  AppUpdateReadyToInstall? _lastReadyToInstall;
   bool _disposed = false;
 
   AppUpdateDownloadState get state => _state;
 
   Stream<AppUpdateDownloadState> get stateStream => _stateController.stream;
 
-  bool get supportsPauseResume {
-    final background = _binaryDownloader;
-    return background is AppUpdateBackgroundBinaryDownloader &&
-        background.supportsPauseResume;
-  }
-
   /// Reconnects the in-memory state machine to a task owned by the background
   /// downloader database. No APK bytes or duplicate task records are created.
-  Future<void> restoreBackground({String? installedVersion}) async {
+  Future<void> restoreBackground({
+    String? installedVersion,
+    AppUpdateArtifactIdentity? identity,
+  }) {
+    final inFlight = _restoreInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+    final operation = _restoreBackground(
+      installedVersion: installedVersion,
+      identity: identity,
+    );
+    _restoreInFlight = operation;
+    unawaited(
+      operation.whenComplete(() {
+        if (identical(_restoreInFlight, operation)) {
+          _restoreInFlight = null;
+        }
+      }),
+    );
+    return operation;
+  }
+
+  Future<void> _restoreBackground({
+    String? installedVersion,
+    AppUpdateArtifactIdentity? identity,
+  }) async {
     final background = _binaryDownloader;
     if (background is! AppUpdateBackgroundBinaryDownloader) {
       return;
@@ -73,7 +104,17 @@ final class AppUpdateDownloadService {
         return;
       }
       snapshots.sort(_recoveryPriority);
-      final snapshot = snapshots.first;
+      final snapshot = identity == null
+          ? snapshots.first
+          : snapshots
+                .where(
+                  (candidate) =>
+                      candidate.identity.stableKey == identity.stableKey,
+                )
+                .firstOrNull;
+      if (snapshot == null) {
+        return;
+      }
       final alreadyPresented =
           _lastArtifact?.identityKey == snapshot.artifact.identityKey &&
           (_state is AppUpdateReadyToInstall ||
@@ -89,7 +130,6 @@ final class AppUpdateDownloadService {
       }
       switch (snapshot.status) {
         case AppUpdateBackgroundTaskStatus.failed:
-        case AppUpdateBackgroundTaskStatus.canceled:
         case AppUpdateBackgroundTaskStatus.notFound:
           _emit(
             AppUpdateFailed(
@@ -102,11 +142,17 @@ final class AppUpdateDownloadService {
                   ),
             ),
           );
+        case AppUpdateBackgroundTaskStatus.canceled:
+          await _invalidateDownloadedArtifact(snapshot.artifact);
+          _lastArtifact = null;
+          _emit(const AppUpdateIdle());
         case AppUpdateBackgroundTaskStatus.enqueued:
         case AppUpdateBackgroundTaskStatus.running:
-        case AppUpdateBackgroundTaskStatus.paused:
         case AppUpdateBackgroundTaskStatus.waitingToRetry:
         case AppUpdateBackgroundTaskStatus.complete:
+          await start(snapshot.artifact);
+        case AppUpdateBackgroundTaskStatus.paused:
+          await _invalidateDownloadedArtifact(snapshot.artifact);
           await start(snapshot.artifact);
       }
     } on Object {
@@ -153,6 +199,7 @@ final class AppUpdateDownloadService {
     }
 
     _lastArtifact = artifact;
+    _lastReadyToInstall = null;
     final operation = _runDownload(artifact);
     _downloadInFlight = operation;
     unawaited(
@@ -170,6 +217,14 @@ final class AppUpdateDownloadService {
     if (artifact == null) {
       return Future<AppUpdateDownloadState>.value(_state);
     }
+    if (_state case AppUpdateFailed(:final recoveryAction)) {
+      if (recoveryAction == AppUpdateRecoveryAction.retryInstall) {
+        return installReady();
+      }
+      if (recoveryAction == AppUpdateRecoveryAction.retryDownload) {
+        return _retryDownload(artifact);
+      }
+    }
     final inFlight = _downloadInFlight;
     if (inFlight != null &&
         _state is AppUpdateFailed &&
@@ -179,29 +234,31 @@ final class AppUpdateDownloadService {
     return start(artifact);
   }
 
+  Future<AppUpdateDownloadState> _retryDownload(
+    AppUpdateArtifact artifact,
+  ) async {
+    final inFlight = _downloadInFlight;
+    if (inFlight != null) {
+      await inFlight;
+    }
+    await _invalidateDownloadedArtifact(artifact);
+    return start(artifact);
+  }
+
   Future<void> cancel() async {
     if (_downloadInFlight == null) {
       return;
     }
+    final inFlight = _downloadInFlight!;
     await _binaryDownloader.cancel();
-  }
-
-  Future<bool> pause() async {
-    final background = _binaryDownloader;
-    if (background is! AppUpdateBackgroundBinaryDownloader ||
-        !background.supportsPauseResume) {
-      return false;
+    await inFlight;
+    if (_state case AppUpdateFailed(
+      failure: AppUpdateFailure(
+        code: AppUpdateFailureCode.apkDownloadCancelled,
+      ),
+    )) {
+      await _clearArtifact();
     }
-    return background.pause();
-  }
-
-  Future<bool> resume() async {
-    final background = _binaryDownloader;
-    if (background is! AppUpdateBackgroundBinaryDownloader ||
-        !background.supportsPauseResume) {
-      return false;
-    }
-    return background.resume();
   }
 
   /// Removes an update artifact after Android has installed an equal or
@@ -232,7 +289,13 @@ final class AppUpdateDownloadService {
   /// Opens the Android installer for the last verified APK.
   Future<AppUpdateDownloadState> installReady() {
     final current = _state;
-    if (current is! AppUpdateReadyToInstall) {
+    final ready = switch (current) {
+      AppUpdateReadyToInstall() => current,
+      AppUpdateFailed(recoveryAction: AppUpdateRecoveryAction.retryInstall) =>
+        _lastReadyToInstall,
+      _ => null,
+    };
+    if (ready == null) {
       return Future<AppUpdateDownloadState>.value(current);
     }
     final inFlight = _installInFlight;
@@ -240,7 +303,7 @@ final class AppUpdateDownloadService {
       return inFlight;
     }
 
-    final operation = _install(current);
+    final operation = _install(ready);
     _installInFlight = operation;
     unawaited(
       operation.whenComplete(() {
@@ -271,6 +334,10 @@ final class AppUpdateDownloadService {
   /// Hides the panel while retaining a verified APK that the system installer
   /// may still be reading. A later update attempt will replace it safely.
   Future<void> dismiss() async {
+    if (_state is AppUpdateInstalling) {
+      _emit(const AppUpdateIdle());
+      return;
+    }
     if (_isBusyState(_state)) {
       return;
     }
@@ -282,6 +349,7 @@ final class AppUpdateDownloadService {
       return;
     }
     _disposed = true;
+    await _notificationTapSubscription?.cancel();
     if (_binaryDownloader is! AppUpdateBackgroundBinaryDownloader) {
       await cancel();
     }
@@ -370,27 +438,10 @@ final class AppUpdateDownloadService {
                 totalBytes: event.totalBytes,
               ),
             );
-          case AppUpdateBinaryEventType.resumed:
-            _emit(
-              AppUpdateDownloading(
-                artifact: artifact,
-                progress: event.progress,
-                receivedBytes: event.receivedBytes,
-                totalBytes: event.totalBytes,
-              ),
-            );
-          case AppUpdateBinaryEventType.paused:
-            _emit(
-              AppUpdatePaused(
-                artifact: artifact,
-                progress: event.progress,
-                receivedBytes: event.receivedBytes,
-                totalBytes: event.totalBytes,
-              ),
-            );
           case AppUpdateBinaryEventType.completed:
             completed = true;
           case AppUpdateBinaryEventType.cancelled:
+            await _invalidateDownloadedArtifact(artifact);
             return _failed(
               artifact,
               event.failure ??
@@ -411,6 +462,7 @@ final class AppUpdateDownloadService {
         }
       }
     } on Object {
+      await _invalidateDownloadedArtifact(artifact);
       return _failed(
         artifact,
         const AppUpdateFailure(
@@ -439,6 +491,7 @@ final class AppUpdateDownloadService {
         apkPath: stagingPath,
       );
     } on Object {
+      await _invalidateDownloadedArtifact(artifact);
       return _failed(
         artifact,
         const AppUpdateFailure(
@@ -448,6 +501,7 @@ final class AppUpdateDownloadService {
       );
     }
     if (verification case AppUpdateVerificationFailure(:final failure)) {
+      await _invalidateDownloadedArtifact(artifact);
       return _failed(artifact, failure);
     }
 
@@ -472,8 +526,8 @@ final class AppUpdateDownloadService {
       artifact: artifact,
       apkPath: verifiedPath,
     );
-    _emit(ready);
-    return ready;
+    _lastReadyToInstall = ready;
+    return _install(ready);
   }
 
   Future<AppUpdateDownloadState> _install(AppUpdateReadyToInstall ready) async {
@@ -487,12 +541,14 @@ final class AppUpdateDownloadService {
         artifact: ready.artifact,
       );
     } on Object {
+      _lastReadyToInstall = ready;
       return _failed(
         ready.artifact,
         const AppUpdateFailure(
           code: AppUpdateFailureCode.installerLaunchFailed,
           message: 'The Android installer could not be opened.',
         ),
+        recoveryAction: AppUpdateRecoveryAction.retryInstall,
       );
     }
     switch (result) {
@@ -512,6 +568,7 @@ final class AppUpdateDownloadService {
                 ? 'Allow Y300 to install unknown apps in Android settings.'
                 : 'Allow Y300 to install this update, then retry.',
           ),
+          recoveryAction: AppUpdateRecoveryAction.retryInstall,
         );
       case AppUpdateInstallUnavailable():
         return _failed(
@@ -520,9 +577,14 @@ final class AppUpdateDownloadService {
             code: AppUpdateFailureCode.installerUnavailable,
             message: 'No Android installer is available for this APK.',
           ),
+          recoveryAction: AppUpdateRecoveryAction.retryInstall,
         );
       case AppUpdateInstallFailure(:final failure):
-        return _failed(ready.artifact, failure);
+        return _failed(
+          ready.artifact,
+          failure,
+          recoveryAction: AppUpdateRecoveryAction.retryInstall,
+        );
     }
   }
 
@@ -530,8 +592,13 @@ final class AppUpdateDownloadService {
     AppUpdateArtifact artifact,
     AppUpdateFailure failure, {
     bool emit = true,
+    AppUpdateRecoveryAction? recoveryAction,
   }) {
-    final failed = AppUpdateFailed(artifact: artifact, failure: failure);
+    final failed = AppUpdateFailed(
+      artifact: artifact,
+      failure: failure,
+      recoveryAction: recoveryAction ?? AppUpdateRecoveryAction.retryDownload,
+    );
     if (emit) {
       _emit(failed);
     }
@@ -561,6 +628,7 @@ final class AppUpdateDownloadService {
     }
     await _fileStore.deleteArtifact(artifact.identity);
     _lastArtifact = null;
+    _lastReadyToInstall = null;
     _emit(const AppUpdateIdle());
   }
 
@@ -631,15 +699,28 @@ final class AppUpdateDownloadService {
       );
     }
     if (verification case AppUpdateVerificationFailure(:final failure)) {
-      await _invalidateVerifiedArtifact(artifact);
+      await _invalidateDownloadedArtifact(artifact);
       return _failed(artifact, failure);
     }
     final ready = AppUpdateReadyToInstall(
       artifact: artifact,
       apkPath: verifiedPath,
     );
-    _emit(ready);
-    return ready;
+    _lastReadyToInstall = ready;
+    return _install(ready);
+  }
+
+  Future<void> _invalidateDownloadedArtifact(AppUpdateArtifact artifact) async {
+    if (_lastReadyToInstall?.artifact.identityKey == artifact.identityKey) {
+      _lastReadyToInstall = null;
+    }
+    await _invalidateVerifiedArtifact(artifact);
+  }
+
+  Future<void> _restoreForNotificationTap(
+    AppUpdateBackgroundNotificationTap tap,
+  ) async {
+    await restoreBackground(identity: tap.identity);
   }
 
   Future<void> _invalidateVerifiedArtifact(AppUpdateArtifact artifact) async {

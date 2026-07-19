@@ -34,7 +34,7 @@ void main() {
     expect(repository.forceRefreshValues, <bool>[true]);
   });
 
-  testWidgets('offers direct download when the version is ignored', (
+  testWidgets('requests the root prompt when the version is ignored', (
     tester,
   ) async {
     final launcher = _FakeLauncher();
@@ -44,18 +44,19 @@ void main() {
       upgrader: _TileUpgrader(updateAvailable: true, ignored: true),
     );
     addTearDown(coordinator.dispose);
+    final promptRequested = expectLater(
+      coordinator.promptRequestStream,
+      emits(isNull),
+    );
 
     await _pumpTile(tester, coordinator);
     await tester.tap(find.byKey(const Key('more-check-update-entry')));
     await tester.pumpAndSettle();
+    await promptRequested;
 
-    expect(find.text('发现新版本 v0.0.2，你已忽略此版本'), findsOneWidget);
-    expect(find.text('立即下载'), findsOneWidget);
-
-    await tester.tap(find.text('立即下载'));
-    await tester.pumpAndSettle();
-
-    expect(launcher.openedUris, <Uri>[_validApkUri]);
+    expect(find.textContaining('仍在稍后提醒间隔内'), findsNothing);
+    expect(find.text('立即下载'), findsNothing);
+    expect(launcher.openedUris, isEmpty);
   });
 }
 

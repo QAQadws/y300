@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:version/version.dart';
-import 'package:y300/features/app_update/domain/models/app_update_check_result.dart';
 import 'package:y300/features/app_update/data/providers/app_update_providers.dart';
 import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
 import 'package:y300/features/app_update/domain/models/app_update_launch_result.dart';
@@ -12,7 +11,9 @@ import 'package:y300/features/app_update/domain/models/gitee_release_candidate.d
 import 'package:y300/features/app_update/domain/repositories/gitee_latest_release_repository.dart';
 import 'package:y300/features/app_update/domain/services/app_update_launcher.dart';
 import 'package:y300/features/app_update/presentation/controllers/app_update_prompt_coordinator.dart';
+import 'package:y300/features/app_update/presentation/app_update_upgrader.dart';
 import 'package:y300/features/app_update/presentation/widgets/app_update_alert_host.dart';
+import 'package:y300/features/app_update/presentation/widgets/app_update_check_tile.dart';
 
 void main() {
   testWidgets(
@@ -106,36 +107,62 @@ void main() {
     );
     addTearDown(coordinator.dispose);
 
-    await _pumpHost(tester, coordinator);
+    await _pumpHost(
+      tester,
+      coordinator,
+      child: const Scaffold(body: AppUpdateCheckTile()),
+    );
     expect(find.byKey(const Key('upgrader_alert_dialog')), findsNothing);
 
-    final result = await coordinator.checkNow();
-    expect(upgrader.state.versionInfo, isNotNull);
-    final alertState = tester.state<UpgradeAlertState>(
-      find.byType(UpgradeAlert),
-    );
-    alertState.checkVersion(context: tester.element(find.text('content')));
+    await tester.tap(find.byKey(const Key('more-check-update-entry')));
     await tester.pumpAndSettle();
 
-    expect(result, isA<AppUpdateCheckAvailable>());
-    expect((result as AppUpdateCheckAvailable).suppression, isNull);
+    expect(upgrader.state.versionInfo, isNotNull);
     expect(find.byKey(const Key('upgrader_alert_dialog')), findsOneWidget);
     expect(upgrader.defaultStoreLaunchCalls, 0);
+  });
+
+  testWidgets('manual check bypasses the reminder interval', (tester) async {
+    final upgrader = _DisplayUpgrader(
+      displayUpgrade: false,
+      updateAvailable: true,
+      reminderInterval: true,
+      versionInfoOnUpdate: _versionInfo(),
+    );
+    final coordinator = AppUpdatePromptCoordinator(
+      repository: _ResultRepository(_successLookup()),
+      launcher: _FakeLauncher(const AppUpdateLaunchSuccess()),
+      upgrader: upgrader,
+    );
+    addTearDown(coordinator.dispose);
+
+    await _pumpHost(
+      tester,
+      coordinator,
+      child: const Scaffold(body: AppUpdateCheckTile()),
+    );
+    expect(find.byKey(const Key('upgrader_alert_dialog')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('more-check-update-entry')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('upgrader_alert_dialog')), findsOneWidget);
   });
 }
 
 Future<void> _pumpHost(
   WidgetTester tester,
-  AppUpdatePromptCoordinator coordinator,
-) async {
+  AppUpdatePromptCoordinator coordinator, {
+  Widget child = const Scaffold(body: Text('content')),
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         appUpdatePromptCoordinatorProvider.overrideWithValue(coordinator),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
         locale: Locale('en'),
-        home: AppUpdateAlertHost(child: Scaffold(body: Text('content'))),
+        home: AppUpdateAlertHost(child: child),
       ),
     ),
   );
@@ -161,15 +188,18 @@ final Uri _validApkUri = Uri.parse(
   'v0.0.2/y300-v0.0.2-android-arm64-v8a-release.apk',
 );
 
-final class _DisplayUpgrader extends Upgrader {
+final class _DisplayUpgrader extends Upgrader
+    implements AppUpdateManualPromptGate {
   _DisplayUpgrader({
     this.displayUpgrade = true,
     this.updateAvailable = false,
+    this.reminderInterval = false,
     this.versionInfoOnUpdate,
   });
 
   final bool displayUpgrade;
   final bool updateAvailable;
+  final bool reminderInterval;
   final UpgraderVersionInfo? versionInfoOnUpdate;
   int initializeCalls = 0;
   int defaultStoreLaunchCalls = 0;
@@ -196,7 +226,28 @@ final class _DisplayUpgrader extends Upgrader {
   bool isUpdateAvailable() => updateAvailable;
 
   @override
-  bool shouldDisplayUpgrade() => displayUpgrade;
+  bool shouldDisplayUpgrade() {
+    if (_manualPromptPending) {
+      _manualPromptPending = false;
+      return updateAvailable;
+    }
+    return displayUpgrade;
+  }
+
+  bool _manualPromptPending = false;
+
+  @override
+  bool isTooSoon() => reminderInterval;
+
+  @override
+  void prepareManualPrompt() {
+    _manualPromptPending = true;
+  }
+
+  @override
+  void cancelManualPrompt() {
+    _manualPromptPending = false;
+  }
 
   @override
   Future<void> sendUserToAppStore() async {

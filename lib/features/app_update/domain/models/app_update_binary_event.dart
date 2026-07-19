@@ -4,8 +4,6 @@ import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
 enum AppUpdateBinaryEventType {
   started,
   progress,
-  paused,
-  resumed,
   completed,
   cancelled,
   failed,
@@ -42,36 +40,6 @@ final class AppUpdateBinaryEvent {
     return AppUpdateBinaryEvent(
       identity: identity,
       type: AppUpdateBinaryEventType.progress,
-      receivedBytes: receivedBytes,
-      totalBytes: totalBytes,
-      progress: _progress(receivedBytes, totalBytes, reportedProgress),
-    );
-  }
-
-  factory AppUpdateBinaryEvent.paused({
-    required AppUpdateArtifactIdentity identity,
-    required int receivedBytes,
-    required int? totalBytes,
-    double? reportedProgress,
-  }) {
-    return AppUpdateBinaryEvent(
-      identity: identity,
-      type: AppUpdateBinaryEventType.paused,
-      receivedBytes: receivedBytes,
-      totalBytes: totalBytes,
-      progress: _progress(receivedBytes, totalBytes, reportedProgress),
-    );
-  }
-
-  factory AppUpdateBinaryEvent.resumed({
-    required AppUpdateArtifactIdentity identity,
-    required int receivedBytes,
-    required int? totalBytes,
-    double? reportedProgress,
-  }) {
-    return AppUpdateBinaryEvent(
-      identity: identity,
-      type: AppUpdateBinaryEventType.resumed,
       receivedBytes: receivedBytes,
       totalBytes: totalBytes,
       progress: _progress(receivedBytes, totalBytes, reportedProgress),

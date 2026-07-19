@@ -5,6 +5,8 @@ sealed class AppUpdateDownloadState {
   const AppUpdateDownloadState();
 }
 
+enum AppUpdateRecoveryAction { retryDownload, retryInstall, dismiss }
+
 final class AppUpdateIdle extends AppUpdateDownloadState {
   const AppUpdateIdle();
 }
@@ -35,20 +37,6 @@ final class AppUpdateVerifying extends AppUpdateDownloadState {
   final AppUpdateArtifact artifact;
 }
 
-final class AppUpdatePaused extends AppUpdateDownloadState {
-  const AppUpdatePaused({
-    required this.artifact,
-    required this.progress,
-    required this.receivedBytes,
-    required this.totalBytes,
-  });
-
-  final AppUpdateArtifact artifact;
-  final double progress;
-  final int receivedBytes;
-  final int? totalBytes;
-}
-
 final class AppUpdateReadyToInstall extends AppUpdateDownloadState {
   const AppUpdateReadyToInstall({
     required this.artifact,
@@ -69,8 +57,13 @@ final class AppUpdateInstalling extends AppUpdateDownloadState {
 }
 
 final class AppUpdateFailed extends AppUpdateDownloadState {
-  const AppUpdateFailed({this.artifact, required this.failure});
+  const AppUpdateFailed({
+    this.artifact,
+    required this.failure,
+    this.recoveryAction = AppUpdateRecoveryAction.retryDownload,
+  });
 
   final AppUpdateArtifact? artifact;
   final AppUpdateFailure failure;
+  final AppUpdateRecoveryAction recoveryAction;
 }

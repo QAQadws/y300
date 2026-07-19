@@ -8,7 +8,6 @@ import 'package:y300/features/app_update/domain/models/app_update_download_reque
 import 'package:y300/features/app_update/domain/models/app_update_launch_result.dart';
 import 'package:y300/features/app_update/presentation/app_update_feedback_messages.dart';
 import 'package:y300/features/app_update/presentation/controllers/app_update_prompt_coordinator.dart';
-import 'package:y300/features/app_update/presentation/widgets/app_update_download_host.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 
 class AppUpdateAlertHost extends ConsumerStatefulWidget {
@@ -22,10 +21,17 @@ class AppUpdateAlertHost extends ConsumerStatefulWidget {
 
 class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost>
     with WidgetsBindingObserver {
+  final GlobalKey<UpgradeAlertState> _alertKey = GlobalKey<UpgradeAlertState>();
+  StreamSubscription<void>? _promptRequestSubscription;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _promptRequestSubscription = ref
+        .read(appUpdatePromptCoordinatorProvider)
+        .promptRequestStream
+        .listen((_) => _schedulePromptEvaluation());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         unawaited(_reconcileInstalledUpdate());
@@ -35,6 +41,7 @@ class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost>
 
   @override
   void dispose() {
+    unawaited(_promptRequestSubscription?.cancel());
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -49,10 +56,8 @@ class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost>
   @override
   Widget build(BuildContext context) {
     final coordinator = ref.watch(appUpdatePromptCoordinatorProvider);
-    final child = coordinator.supportsInAppDownload
-        ? AppUpdateDownloadHost(child: widget.child)
-        : widget.child;
     return UpgradeAlert(
+      key: _alertKey,
       upgrader: coordinator.upgrader,
       barrierDismissible: false,
       showIgnore: true,
@@ -62,8 +67,27 @@ class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost>
         unawaited(_startOrOpenUpdate(coordinator));
         return false;
       },
-      child: child,
+      // Download progress belongs to the Android notification. Do not mount
+      // a route-wide barrier or panel that blocks the rest of the app.
+      child: widget.child,
     );
+  }
+
+  void _schedulePromptEvaluation() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final alertState = _alertKey.currentState;
+      if (alertState == null) {
+        return;
+      }
+      if (alertState.displayed) {
+        ref.read(appUpdatePromptCoordinatorProvider).cancelPendingPrompt();
+        return;
+      }
+      alertState.checkVersion(context: context);
+    });
   }
 
   Future<void> _reconcileInstalledUpdate() {

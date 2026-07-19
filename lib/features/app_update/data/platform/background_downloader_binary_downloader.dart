@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:version/version.dart';
 import 'package:y300/features/app_update/domain/models/app_update_artifact.dart';
 import 'package:y300/features/app_update/domain/models/app_update_artifact_identity.dart';
+import 'package:y300/features/app_update/domain/models/app_update_background_notification_tap.dart';
 import 'package:y300/features/app_update/domain/models/app_update_background_task.dart';
 import 'package:y300/features/app_update/domain/models/app_update_binary_event.dart';
 import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
@@ -37,11 +38,15 @@ final class BackgroundDownloaderBinaryDownloader
       <String, _BackgroundDownloadOperation>{};
   final Map<String, _ProgressSnapshot> _progress =
       <String, _ProgressSnapshot>{};
+  final StreamController<AppUpdateBackgroundNotificationTap>
+  _notificationTapController =
+      StreamController<AppUpdateBackgroundNotificationTap>.broadcast();
   Future<void>? _initializeInFlight;
   bool _disposed = false;
 
   @override
-  bool get supportsPauseResume => true;
+  Stream<AppUpdateBackgroundNotificationTap> get notificationTapStream =>
+      _notificationTapController.stream;
 
   @override
   Stream<AppUpdateBinaryEvent> download(
@@ -71,26 +76,6 @@ final class BackgroundDownloaderBinaryDownloader
     }
     await initialize();
     await _downloader.cancelTaskWithId(taskId);
-  }
-
-  @override
-  Future<bool> pause() async {
-    final task = await _activeDownloadTask();
-    if (task == null) {
-      return false;
-    }
-    await initialize();
-    return _downloader.pause(task);
-  }
-
-  @override
-  Future<bool> resume() async {
-    final task = await _activeDownloadTask();
-    if (task == null) {
-      return false;
-    }
-    await initialize();
-    return _downloader.resume(task);
   }
 
   @override
@@ -128,9 +113,10 @@ final class BackgroundDownloaderBinaryDownloader
     switch (record.status) {
       case TaskStatus.enqueued:
       case TaskStatus.running:
-      case TaskStatus.paused:
       case TaskStatus.waitingToRetry:
         return true;
+      case TaskStatus.paused:
+        return false;
       case TaskStatus.complete:
         try {
           return File(await record.task.filePath()).existsSync();
@@ -186,6 +172,7 @@ final class BackgroundDownloaderBinaryDownloader
   Future<void> dispose() async {
     _disposed = true;
     _instances.remove(this);
+    await _notificationTapController.close();
   }
 
   Future<void> _initialize() async {
@@ -218,13 +205,34 @@ final class BackgroundDownloaderBinaryDownloader
       running: const TaskNotification('Y300 更新', '正在下载 {progress}'),
       complete: const TaskNotification('Y300 更新', '下载完成，返回应用继续校验'),
       error: const TaskNotification('Y300 更新', '下载失败，可返回应用重试'),
-      paused: const TaskNotification('Y300 更新', '下载已暂停'),
       canceled: const TaskNotification('Y300 更新', '下载已取消'),
       progressBar: true,
       tapOpensFile: false,
     );
+    downloader.registerCallbacks(
+      group: taskGroup,
+      taskNotificationTapCallback: _handleNotificationTap,
+    );
+    await downloader.configure(
+      androidConfig: const <(String, dynamic)>[
+        (Config.runInForeground, Config.always),
+      ],
+    );
     await _requestNotificationPermissionBestEffort(downloader);
     await downloader.start(autoCleanDatabase: true);
+  }
+
+  void _handleNotificationTap(Task task, NotificationType _) {
+    if (_disposed || task.group != taskGroup) {
+      return;
+    }
+    final artifact = _artifactFromMetadata(task.metaData);
+    if (artifact == null || _notificationTapController.isClosed) {
+      return;
+    }
+    _notificationTapController.add(
+      AppUpdateBackgroundNotificationTap(identity: artifact.identity),
+    );
   }
 
   Future<void> _requestNotificationPermissionBestEffort(
@@ -280,7 +288,6 @@ final class BackgroundDownloaderBinaryDownloader
             (canReuseCompletedTask ||
                 record.status == TaskStatus.enqueued ||
                 record.status == TaskStatus.running ||
-                record.status == TaskStatus.paused ||
                 record.status == TaskStatus.waitingToRetry)) {
           await _emitRecord(operation, record);
           return;
@@ -297,7 +304,7 @@ final class BackgroundDownloaderBinaryDownloader
         group: taskGroup,
         updates: Updates.statusAndProgress,
         retries: 2,
-        allowPause: true,
+        allowPause: false,
         metaData: jsonEncode(_metadataFor(artifact)),
         displayName: 'Y300 v${artifact.version}',
       );
@@ -343,19 +350,6 @@ final class BackgroundDownloaderBinaryDownloader
     return record?.task is DownloadTask ? record!.task as DownloadTask : null;
   }
 
-  Future<DownloadTask?> _activeDownloadTask() async {
-    final taskId = _operations.keys.firstOrNull;
-    if (taskId == null) {
-      return null;
-    }
-    final task = await _downloader.taskForId(taskId);
-    if (task is DownloadTask) {
-      return task;
-    }
-    final record = await _downloader.database.recordForId(taskId);
-    return record?.task is DownloadTask ? record!.task as DownloadTask : null;
-  }
-
   Future<void> _emitRecord(
     _BackgroundDownloadOperation operation,
     TaskRecord record,
@@ -365,15 +359,7 @@ final class BackgroundDownloaderBinaryDownloader
       case TaskStatus.enqueued:
       case TaskStatus.running:
       case TaskStatus.waitingToRetry:
-        final event = operation.wasPaused
-            ? AppUpdateBinaryEvent.resumed(
-                identity: operation.identity,
-                receivedBytes: snapshot.receivedBytes,
-                totalBytes: snapshot.totalBytes,
-                reportedProgress: snapshot.progress,
-              )
-            : AppUpdateBinaryEvent.started(operation.identity);
-        operation.emit(event);
+        operation.emit(AppUpdateBinaryEvent.started(operation.identity));
         if (snapshot.progress > 0 || snapshot.receivedBytes > 0) {
           operation.emit(
             AppUpdateBinaryEvent.progress(
@@ -385,12 +371,11 @@ final class BackgroundDownloaderBinaryDownloader
           );
         }
       case TaskStatus.paused:
-        operation.emit(
-          AppUpdateBinaryEvent.paused(
-            identity: operation.identity,
-            receivedBytes: snapshot.receivedBytes,
-            totalBytes: snapshot.totalBytes,
-            reportedProgress: snapshot.progress,
+        _finishWithFailure(
+          operation,
+          const AppUpdateFailure(
+            code: AppUpdateFailureCode.apkDownloadFailed,
+            message: 'The legacy paused update task must be restarted.',
           ),
         );
       case TaskStatus.complete:
@@ -455,22 +440,13 @@ final class BackgroundDownloaderBinaryDownloader
         case TaskStatus.enqueued:
         case TaskStatus.running:
         case TaskStatus.waitingToRetry:
-          final event = operation.wasPaused
-              ? AppUpdateBinaryEvent.resumed(
-                  identity: operation.identity,
-                  receivedBytes: snapshot.receivedBytes,
-                  totalBytes: snapshot.totalBytes,
-                  reportedProgress: snapshot.progress,
-                )
-              : AppUpdateBinaryEvent.started(operation.identity);
-          operation.emit(event);
+          operation.emit(AppUpdateBinaryEvent.started(operation.identity));
         case TaskStatus.paused:
-          operation.emit(
-            AppUpdateBinaryEvent.paused(
-              identity: operation.identity,
-              receivedBytes: snapshot.receivedBytes,
-              totalBytes: snapshot.totalBytes,
-              reportedProgress: snapshot.progress,
+          _finishWithFailure(
+            operation,
+            const AppUpdateFailure(
+              code: AppUpdateFailureCode.apkDownloadFailed,
+              message: 'The legacy paused update task must be restarted.',
             ),
           );
         case TaskStatus.complete:
@@ -654,17 +630,11 @@ final class _BackgroundDownloadOperation {
   final StreamController<AppUpdateBinaryEvent> _controller;
   Stream<AppUpdateBinaryEvent>? _stream;
   bool _finished = false;
-  bool wasPaused = false;
 
   Stream<AppUpdateBinaryEvent> get stream => _stream ??= _controller.stream;
 
   void emit(AppUpdateBinaryEvent event) {
     if (!_finished && !_controller.isClosed) {
-      if (event.type == AppUpdateBinaryEventType.paused) {
-        wasPaused = true;
-      } else if (event.type == AppUpdateBinaryEventType.resumed) {
-        wasPaused = false;
-      }
       _controller.add(event);
     }
   }
