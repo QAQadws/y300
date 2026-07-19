@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:version/version.dart';
 import 'package:y300/features/app_update/domain/models/app_update_artifact.dart';
 import 'package:y300/features/app_update/domain/models/app_update_background_task.dart';
 import 'package:y300/features/app_update/domain/models/app_update_binary_event.dart';
@@ -191,6 +192,30 @@ final class AppUpdateDownloadService {
     return background.resume();
   }
 
+  /// Removes an update artifact after Android has installed an equal or
+  /// newer version. The installed version is read by the presentation
+  /// boundary through Upgrader, so this service remains platform-agnostic.
+  Future<void> reconcileInstalledVersion(String? installedVersion) async {
+    final artifact = _lastArtifact;
+    if (artifact == null || _downloadInFlight != null) {
+      return;
+    }
+    final rawVersion = installedVersion?.trim();
+    if (rawVersion == null || rawVersion.isEmpty) {
+      return;
+    }
+    late final Version currentVersion;
+    try {
+      currentVersion = Version.parse(rawVersion);
+    } on Object {
+      return;
+    }
+    if (currentVersion < artifact.version) {
+      return;
+    }
+    await _clearArtifact();
+  }
+
   /// Opens the Android installer for the last verified APK.
   Future<AppUpdateDownloadState> installReady() {
     final current = _state;
@@ -216,7 +241,6 @@ final class AppUpdateDownloadService {
 
   /// Hides the panel and removes this service's update artifact.
   Future<void> reset() async {
-    final artifact = _lastArtifact;
     if (_isBusyState(_state)) {
       return;
     }
@@ -228,19 +252,7 @@ final class AppUpdateDownloadService {
     if (installInFlight != null) {
       await installInFlight;
     }
-    if (artifact != null) {
-      final background = _binaryDownloader;
-      if (background is AppUpdateBackgroundBinaryDownloader) {
-        try {
-          await background.discard(artifact.identity);
-        } on Object {
-          // File cleanup remains useful even when the plugin record is stale.
-        }
-      }
-      await _fileStore.deleteArtifact(artifact.identity);
-    }
-    _lastArtifact = null;
-    _emit(const AppUpdateIdle());
+    await _clearArtifact();
   }
 
   /// Hides the panel while retaining a verified APK that the system installer
@@ -518,6 +530,25 @@ final class AppUpdateDownloadService {
     if (!_stateController.isClosed) {
       _stateController.add(state);
     }
+  }
+
+  Future<void> _clearArtifact() async {
+    final artifact = _lastArtifact;
+    if (artifact == null) {
+      _emit(const AppUpdateIdle());
+      return;
+    }
+    final background = _binaryDownloader;
+    if (background is AppUpdateBackgroundBinaryDownloader) {
+      try {
+        await background.discard(artifact.identity);
+      } on Object {
+        // File cleanup remains useful even when the plugin record is stale.
+      }
+    }
+    await _fileStore.deleteArtifact(artifact.identity);
+    _lastArtifact = null;
+    _emit(const AppUpdateIdle());
   }
 
   bool _isBusyState(AppUpdateDownloadState state) {

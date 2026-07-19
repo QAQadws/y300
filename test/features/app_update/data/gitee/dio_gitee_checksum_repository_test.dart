@@ -57,22 +57,25 @@ void main() {
     expect(await second, isA<AppUpdateChecksumLookupSuccess>());
   });
 
-  test('maps a non-200 response to a stable checksum failure', () async {
+  test('maps checksum HTTP failures to stable codes', () async {
     final artifact = await _fixtureArtifact();
-    final adapter = _RecordingAdapter(
-      (_) async => ResponseBody.fromString('', 503),
-    );
-    final repository = DioGiteeChecksumRepository(
-      dio: Dio()..httpClientAdapter = adapter,
-    );
+    for (final entry in <(int, AppUpdateFailureCode)>[
+      (404, AppUpdateFailureCode.checksumAssetMissing),
+      (429, AppUpdateFailureCode.rateLimited),
+      (503, AppUpdateFailureCode.remoteUnavailable),
+    ]) {
+      final adapter = _RecordingAdapter(
+        (_) async => ResponseBody.fromString('', entry.$1),
+      );
+      final repository = DioGiteeChecksumRepository(
+        dio: Dio()..httpClientAdapter = adapter,
+      );
 
-    final result = await repository.fetchChecksum(artifact);
+      final result = await repository.fetchChecksum(artifact);
 
-    expect(result, isA<AppUpdateChecksumLookupFailure>());
-    expect(
-      (result as AppUpdateChecksumLookupFailure).failure.code,
-      AppUpdateFailureCode.checksumRequestFailed,
-    );
+      expect(result, isA<AppUpdateChecksumLookupFailure>());
+      expect((result as AppUpdateChecksumLookupFailure).failure.code, entry.$2);
+    }
   });
 }
 

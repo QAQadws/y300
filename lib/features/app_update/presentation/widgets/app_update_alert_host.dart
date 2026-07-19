@@ -20,7 +20,32 @@ class AppUpdateAlertHost extends ConsumerStatefulWidget {
   ConsumerState<AppUpdateAlertHost> createState() => _AppUpdateAlertHostState();
 }
 
-class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost> {
+class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_reconcileInstalledUpdate());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_reconcileInstalledUpdate());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final coordinator = ref.watch(appUpdatePromptCoordinatorProvider);
@@ -39,6 +64,12 @@ class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost> {
       },
       child: child,
     );
+  }
+
+  Future<void> _reconcileInstalledUpdate() {
+    return ref
+        .read(appUpdatePromptCoordinatorProvider)
+        .reconcileInstalledUpdate();
   }
 
   Future<void> _startOrOpenUpdate(

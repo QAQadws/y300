@@ -76,9 +76,10 @@ final class DioGiteeChecksumRepository implements AppUpdateChecksumRepository {
           )
           .timeout(requestTimeout);
       if (response.statusCode != 200) {
+        final statusCode = response.statusCode;
         return AppUpdateChecksumLookupFailure(
           AppUpdateFailure(
-            code: AppUpdateFailureCode.checksumRequestFailed,
+            code: _failureCodeForStatus(statusCode ?? 0),
             message:
                 'The Gitee checksum request returned HTTP ${response.statusCode ?? 'unknown'}.',
           ),
@@ -119,6 +120,13 @@ final class DioGiteeChecksumRepository implements AppUpdateChecksumRepository {
   }
 
   AppUpdateFailure _mapDioFailure(DioException error) {
+    final statusCode = error.response?.statusCode;
+    if (statusCode != null) {
+      return AppUpdateFailure(
+        code: _failureCodeForStatus(statusCode),
+        message: 'The Gitee checksum request returned HTTP $statusCode.',
+      );
+    }
     return switch (error.type) {
       DioExceptionType.connectionTimeout ||
       DioExceptionType.sendTimeout ||
@@ -134,6 +142,15 @@ final class DioGiteeChecksumRepository implements AppUpdateChecksumRepository {
         code: AppUpdateFailureCode.checksumRequestFailed,
         message: 'The Gitee checksum request failed.',
       ),
+    };
+  }
+
+  AppUpdateFailureCode _failureCodeForStatus(int statusCode) {
+    return switch (statusCode) {
+      404 => AppUpdateFailureCode.checksumAssetMissing,
+      429 => AppUpdateFailureCode.rateLimited,
+      >= 500 && <= 599 => AppUpdateFailureCode.remoteUnavailable,
+      _ => AppUpdateFailureCode.checksumRequestFailed,
     };
   }
 }

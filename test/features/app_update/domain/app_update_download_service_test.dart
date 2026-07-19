@@ -187,6 +187,22 @@ void main() {
 
     expect(downloader.discarded, isTrue);
   });
+
+  test(
+    'cleans the verified artifact after the installed version advances',
+    () async {
+      final downloader = _FakeBackgroundDownloader();
+      final service = _service(log: <String>[], downloader: downloader);
+      addTearDown(service.dispose);
+
+      await service.start(_artifact());
+      await service.installReady();
+      await service.reconcileInstalledVersion('0.0.3');
+
+      expect(service.state, isA<AppUpdateIdle>());
+      expect(downloader.discarded, isTrue);
+    },
+  );
 }
 
 AppUpdateDownloadService _service({

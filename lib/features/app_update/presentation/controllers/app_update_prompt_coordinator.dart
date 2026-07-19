@@ -196,6 +196,24 @@ final class AppUpdatePromptCoordinator {
     return AppUpdateDownloadRequestAccepted(artifact);
   }
 
+  /// Reconciles a retained verified artifact with the version currently
+  /// installed on the device. Upgrader owns package information; the
+  /// download service only decides whether its private artifact can be
+  /// discarded.
+  Future<void> reconcileInstalledUpdate() async {
+    final service = _downloadService;
+    if (_disposed || service == null) {
+      return;
+    }
+    try {
+      await upgrader.initialize();
+      await service.reconcileInstalledVersion(installedVersion);
+    } on Object {
+      // Installation reconciliation is best effort and must not block the
+      // application when package metadata is temporarily unavailable.
+    }
+  }
+
   Future<AppUpdateLaunchResult> _openCurrentUpdate() {
     if (_disposed) {
       return Future<AppUpdateLaunchResult>.value(

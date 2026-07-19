@@ -200,6 +200,25 @@ final class DioAppUpdateBinaryDownloader implements AppUpdateBinaryDownloader {
       );
     }
     if (error is DioException) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 404) {
+        return const AppUpdateFailure(
+          code: AppUpdateFailureCode.assetMissing,
+          message: 'The Gitee update APK was not found.',
+        );
+      }
+      if (statusCode == 429) {
+        return const AppUpdateFailure(
+          code: AppUpdateFailureCode.rateLimited,
+          message: 'The Gitee update APK request was rate limited.',
+        );
+      }
+      if (statusCode != null && statusCode >= 500 && statusCode <= 599) {
+        return const AppUpdateFailure(
+          code: AppUpdateFailureCode.remoteUnavailable,
+          message: 'The Gitee update APK server is temporarily unavailable.',
+        );
+      }
       if (error.type == DioExceptionType.connectionTimeout ||
           error.type == DioExceptionType.sendTimeout ||
           error.type == DioExceptionType.receiveTimeout) {
