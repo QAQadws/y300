@@ -12,8 +12,8 @@ void main() {
     repository = SharedPrefsForumModeSettingsRepository();
   });
 
-  test('loadMode defaults to webview when nothing stored', () async {
-    expect(await repository.loadMode(), ForumShellMode.webview);
+  test('loadMode defaults to parser mode when nothing is stored', () async {
+    expect(await repository.loadMode(), ForumShellMode.defaultMode);
   });
 
   test('loadMode reads persisted webview and native values', () async {
@@ -28,12 +28,12 @@ void main() {
     expect(await repository.loadMode(), ForumShellMode.webview);
   });
 
-  test('loadMode falls back to webview for invalid value', () async {
+  test('loadMode falls back to parser mode for invalid value', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       AppStorageKeys.forumShellMode: 'broken',
     });
     repository = SharedPrefsForumModeSettingsRepository();
 
-    expect(await repository.loadMode(), ForumShellMode.webview);
+    expect(await repository.loadMode(), ForumShellMode.defaultMode);
   });
 }

@@ -25,7 +25,7 @@ class ForumShellModeController extends AsyncNotifier<ForumShellMode> {
   }
 
   Future<void> setMode(ForumShellMode mode) async {
-    final previous = state.value ?? ForumShellMode.webview;
+    final previous = state.value ?? ForumShellMode.defaultMode;
     if (previous == mode) {
       return;
     }

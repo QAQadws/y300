@@ -33,6 +33,6 @@ class SharedPrefsForumModeSettingsRepository
         return mode;
       }
     }
-    return ForumShellMode.webview;
+    return ForumShellMode.defaultMode;
   }
 }

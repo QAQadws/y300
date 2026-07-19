@@ -33,7 +33,7 @@ class _MorePageState extends ConsumerState<MorePage> {
         const AuthSessionViewState.signedOut();
     final forumMode =
         ref.watch(forumShellModeControllerProvider).asData?.value ??
-        ForumShellMode.webview;
+        ForumShellMode.defaultMode;
     final appearanceSettings =
         ref.watch(appAppearanceControllerProvider).asData?.value ??
         AppAppearanceSettings.defaults();
@@ -146,7 +146,7 @@ class _MorePageState extends ConsumerState<MorePage> {
               ListTile(
                 key: const Key('more-forum-mode-option-native'),
                 leading: const Icon(Icons.forum_outlined),
-                title: const Text('原生模式'),
+                title: const Text('解析模式'),
                 trailing: currentMode == ForumShellMode.native
                     ? const Icon(Icons.check)
                     : null,

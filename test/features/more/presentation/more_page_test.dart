@@ -238,12 +238,13 @@ void main() {
       find.byKey(const Key('more-forum-mode-option-native')),
       findsOneWidget,
     );
+    expect(find.text('解析模式'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('more-forum-mode-option-native')));
     await tester.pumpAndSettle();
 
     expect(modeRepository.mode, ForumShellMode.native);
-    expect(find.text('当前：原生模式'), findsOneWidget);
+    expect(find.text('当前：解析模式'), findsOneWidget);
   });
 
   testWidgets('MorePage login entry navigates to the WebView login page', (
