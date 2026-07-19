@@ -16,6 +16,7 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_capabilit
 import 'package:y300/features/reader_shared/presentation/engine/reader_display_settings_sheet.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_page_indicator_overlay.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_position_state.dart';
+import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_vertical_position_driver.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
@@ -61,6 +62,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   ScrollHoldController? _pagedZoomScrollHold;
 
   int _lastKnownIndex = 0;
+  ReaderSequencePosition _pagedPosition = const ReaderSequencePosition.image(0);
+  final Set<String> _reportedTailSurfaceKeys = <String>{};
+  final Set<String> _reportedAdvanceSurfaceKeys = <String>{};
 
   // 滑块拖动会话 + commit 锁状态机（迁移自 ComicReaderPage）。
   int? _sliderPreviewIndex;
@@ -108,6 +112,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   ScrollPosition? _observedScrollPosition;
 
   ReaderCapability get _capability => widget.capability;
+
+  ReaderTailSurface? get _tailSurface => _capability.tailSurface;
 
   @override
   void initState() {
@@ -159,6 +165,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _verticalPositionDriver.dispose();
     _sessionPreloadCoordinator.dispose();
     _imageSessionStore.dispose();
+    _disposeTailSurface();
     super.dispose();
   }
   // ENGINE_BODY_PLACEHOLDER
@@ -223,6 +230,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
             highlighted: _isPageIndicatorHighlighted,
             currentPage: (_sliderPreviewIndex ?? _lastKnownIndex) + 1,
             totalPages: total,
+            positionLabel: _sequencePositionLabel(),
           ),
         ],
       ),
@@ -262,9 +270,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         slotKeyPrefix: widget.slotKeyPrefix,
         verticalItemAnchorKeyBuilder: (item, _) =>
             _verticalItemAnchors[item.id]!,
-        verticalTrailingBuilder: _capability.verticalTrailingBuilder(
-          engineContext,
-        ),
+        verticalTrailingBuilder: _buildVerticalTrailingBuilder(engineContext),
         itemBuilder: (context, item, index, {required paged}) {
           return _buildImage(item, index, preferences, paged: false);
         },
@@ -281,6 +287,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   Widget _buildPaged(ReaderContent content, ReaderPreferences preferences) {
     final items = content.items;
+    final tail = _tailSurface;
     _latestItems = items;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -300,6 +307,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         horizontalPagePadding: EdgeInsets.all(
           preferences.pageSpacing.clamp(0.0, 48.0).toDouble(),
         ),
+        horizontalTrailingBuilder: tail == null
+            ? null
+            : (context) => _buildPagedTail(context, tail),
+        horizontalAdvanceBuilder: tail == null || !tail.hasAdvance
+            ? null
+            : (context) => _buildPagedAdvance(context, tail),
         layoutResolver: _layoutResolver,
         onExtentResolved: _recordExtent,
         itemBuilder: (context, item, index, {required paged}) {
@@ -360,6 +373,119 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         () => GlobalKey(debugLabel: 'reader-vertical-anchor-${item.id}'),
       );
     }
+  }
+
+  WidgetBuilder? _buildVerticalTrailingBuilder(
+    ReaderEngineContext engineContext,
+  ) {
+    final tail = _tailSurface;
+    final legacyTrailing = _capability.verticalTrailingBuilder(engineContext);
+    if (tail == null && legacyTrailing == null) {
+      return null;
+    }
+    return (context) {
+      final children = <Widget>[
+        if (tail != null) _buildVerticalTail(context, tail),
+        if (legacyTrailing != null) legacyTrailing(context),
+      ];
+      if (children.length == 1) {
+        return children.single;
+      }
+      return Column(
+        key: const Key('reader-composed-vertical-trailing'),
+        mainAxisSize: MainAxisSize.min,
+        children: children,
+      );
+    };
+  }
+
+  Widget _buildPagedTail(BuildContext context, ReaderTailSurface tail) {
+    return KeyedSubtree(
+      key: Key('reader-tail-${tail.id}'),
+      child: tail.buildPaged(context, _tailActions(tail)),
+    );
+  }
+
+  Widget _buildPagedAdvance(BuildContext context, ReaderTailSurface tail) {
+    return KeyedSubtree(
+      key: Key('reader-tail-advance-${tail.id}'),
+      child: tail.buildAdvance(context, _tailActions(tail)),
+    );
+  }
+
+  Widget _buildVerticalTail(BuildContext context, ReaderTailSurface tail) {
+    _scheduleTailVisible(tail);
+    return KeyedSubtree(
+      key: Key('reader-tail-vertical-${tail.id}'),
+      child: tail.buildVertical(context, _tailActions(tail)),
+    );
+  }
+
+  ReaderTailActions _tailActions(ReaderTailSurface tail) {
+    return ReaderTailActions(
+      onRetry: () => _invokeTailCallback(tail, tail.onRetry),
+      onAdvance: () => _invokeTailCallback(tail, tail.onAdvance),
+    );
+  }
+
+  void _scheduleTailVisible(ReaderTailSurface tail) {
+    final key = '${_lastOwnerId ?? '-'}:${tail.id}';
+    if (!_reportedTailSurfaceKeys.add(key)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isCurrentTail(tail)) {
+        return;
+      }
+      _invokeTailCallback(tail, tail.onVisible);
+    });
+  }
+
+  void _invokeTailCallback(
+    ReaderTailSurface tail,
+    FutureOr<void> Function() callback,
+  ) {
+    if (!_isCurrentTail(tail)) {
+      return;
+    }
+    unawaited(
+      Future<void>.sync(callback).catchError((Object error, StackTrace stack) {
+        _recordReaderDiagnostic(
+          type: ContinuousImageDiagnosticEventType.seekFailed,
+          status: 'tailCallbackFailed',
+          result: error.runtimeType.toString(),
+          message: stack.toString().split('\n').first,
+        );
+      }),
+    );
+  }
+
+  bool _isCurrentTail(ReaderTailSurface tail) {
+    return mounted && identical(_tailSurface, tail);
+  }
+
+  void _disposeTailSurface() {
+    final tail = _tailSurface;
+    if (tail == null) {
+      return;
+    }
+    try {
+      tail.dispose();
+    } catch (_) {
+      // A tail is optional chrome; disposal must never block reader teardown.
+    }
+  }
+
+  String? _sequencePositionLabel() {
+    final tail = _tailSurface;
+    final position = _pagedPosition;
+    if (tail == null || position.isImage) {
+      return null;
+    }
+    if (position.isAdvance) {
+      return '继续';
+    }
+    return tail.indicatorLabel;
   }
 
   double? _estimateVerticalOffset(int targetIndex) {
@@ -497,6 +623,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _latestItems = const <ContinuousImageItem>[];
     _pendingScrollCompensationDelta = 0;
     _reportedVisibleImageIndexes.clear();
+    _reportedTailSurfaceKeys.clear();
+    _reportedAdvanceSurfaceKeys.clear();
+    _pagedPosition = ReaderSequencePosition.image(initialIndex);
     _setZoomGate(false, paged: false);
     _activePagedIndex.value = initialIndex;
     _lastKnownIndex = initialIndex;
@@ -1025,6 +1154,35 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   // --- paged turning + page change ---
 
   Future<void> _onPageChanged(int pageIndex) async {
+    final content = _capability.content;
+    final position = _pagedPositionForPage(pageIndex, content.length);
+    if (!position.isImage) {
+      _hideReaderMenuForContentMotion();
+      _pulsePageIndicator();
+      _pagedPosition = position;
+      if (position.isTail) {
+        final tail = _tailSurface;
+        if (tail != null) {
+          final key = '${_lastOwnerId ?? '-'}:${tail.id}';
+          if (_reportedTailSurfaceKeys.add(key)) {
+            _invokeTailCallback(tail, tail.onVisible);
+          }
+        }
+      } else {
+        final tail = _tailSurface;
+        if (tail != null) {
+          final key = '${_lastOwnerId ?? '-'}:${tail.id}';
+          if (_reportedAdvanceSurfaceKeys.add(key)) {
+            _invokeTailCallback(tail, tail.onAdvance);
+          }
+        }
+      }
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
+    _pagedPosition = position;
     if (pageIndex == _lastKnownIndex) {
       return;
     }
@@ -1065,20 +1223,63 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (pageController == null || !pageController.hasClients) {
       return;
     }
-    final current = pageController.page?.round() ?? _lastKnownIndex;
+    final current =
+        pageController.page?.round() ??
+        _pagedPageForPosition(_pagedPosition, total);
     final isRtl = mode == ReaderModePreference.rtl;
     final isPreviousAction = isRtl ? !isLeftTap : isLeftTap;
     final delta = isPreviousAction ? -1 : 1;
-    final target = (current + delta).clamp(0, total - 1).toInt();
+    final target = (current + delta)
+        .clamp(0, _pagedPageCount(total) - 1)
+        .toInt();
     if (target == current) {
       return;
     }
-    _promoteSessionSeekTarget(target);
+    if (target < total) {
+      _promoteSessionSeekTarget(target);
+    }
     pageController.animateToPage(
       target,
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
     );
+  }
+
+  int _pagedPageCount(int imageCount) {
+    final tail = _tailSurface;
+    if (tail == null) {
+      return imageCount;
+    }
+    return imageCount + 1 + (tail.hasAdvance ? 1 : 0);
+  }
+
+  int _pagedPageForPosition(ReaderSequencePosition position, int imageCount) {
+    if (position.isImage) {
+      return (position.index ?? 0).clamp(0, imageCount - 1).toInt();
+    }
+    if (position.isTail) {
+      return imageCount;
+    }
+    return imageCount + 1;
+  }
+
+  ReaderSequencePosition _pagedPositionForPage(int pageIndex, int imageCount) {
+    if (pageIndex < imageCount) {
+      return ReaderSequencePosition.image(pageIndex);
+    }
+    final tail = _tailSurface;
+    if (tail == null) {
+      return ReaderSequencePosition.image(
+        pageIndex.clamp(0, imageCount - 1).toInt(),
+      );
+    }
+    if (pageIndex == imageCount) {
+      return ReaderSequencePosition.tail(tail.id);
+    }
+    if (tail.hasAdvance && pageIndex == imageCount + 1) {
+      return ReaderSequencePosition.advance('${tail.id}:advance');
+    }
+    return ReaderSequencePosition.tail(tail.id);
   }
 
   // --- slider commit state machine ---

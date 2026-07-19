@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 
 /// A read-only reply surface built from the parser-mode post card.
 ///
@@ -18,11 +18,13 @@ class ComicCommentCard extends StatefulWidget {
     required this.comment,
     required this.sourceTid,
     this.imageHeaderBuilder,
+    this.renderContext,
   });
 
   final ComicCommentItem comment;
   final String sourceTid;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ThreadPostRenderContext? renderContext;
 
   @override
   State<ComicCommentCard> createState() => _ComicCommentCardState();
@@ -30,23 +32,22 @@ class ComicCommentCard extends StatefulWidget {
 
 class _ComicCommentCardState extends State<ComicCommentCard>
     with AutomaticKeepAliveClientMixin {
+  ThreadPostRenderContext? _ownedRenderContext;
+  Object? _ownedRenderContextIdentity;
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final post = _postForComment();
+    final renderContext = widget.renderContext ?? _ensureRenderContext(context);
     return ThreadPostCard(
       key: Key('comic-comment-card-${widget.comment.pid}'),
       post: post,
-      state: _stateForComment(),
+      state: null,
       imageHeaderBuilder: widget.imageHeaderBuilder,
-      onCopyActionUrl: (_, _) {},
-      onOpenPostLink: (_) {},
-      onOpenPostImages: null,
-      onTogglePollOption: (_, _) {},
-      onSubmitPollVote: (_) {},
       palette: ThreadDetailNativePalette.resolve(Theme.of(context)),
-      onOpenCommentAuthorProfile: null,
-      onOpenPostActions: null,
+      interactionPolicy: const ThreadPostCardInteractionPolicy.readOnly(),
+      renderContext: renderContext,
     );
   }
 
@@ -69,23 +70,26 @@ class _ComicCommentCardState extends State<ComicCommentCard>
     );
   }
 
-  ThreadDetailPageState _stateForComment() {
-    return ThreadDetailPageState.initial(
-      // ThreadPostHtmlFirstBody uses state.tid as the image-cache owner. A
-      // per-comment owner prevents image index zero in different replies from
-      // sharing the same cache key.
-      tid: _renderOwnerId(),
-      subject: '',
+  ThreadPostRenderContext _ensureRenderContext(BuildContext context) {
+    final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    final identity = (
+      sourceTid: widget.sourceTid.trim(),
+      imageHeaderBuilder: widget.imageHeaderBuilder,
+      brightness: Theme.of(context).brightness,
+      palette: palette.card.toARGB32(),
     );
-  }
-
-  String _renderOwnerId() {
-    final tid = widget.sourceTid.trim().isEmpty
-        ? 'unknown-thread'
-        : widget.sourceTid.trim();
-    final pid = widget.comment.pid.trim().isEmpty
-        ? 'unknown-post'
-        : widget.comment.pid.trim();
-    return 'comic-comment-$tid-$pid';
+    if (_ownedRenderContextIdentity != identity ||
+        _ownedRenderContext == null) {
+      _ownedRenderContextIdentity = identity;
+      _ownedRenderContext = ThreadPostRenderContext(
+        palette: palette,
+        imageHeaderBuilder: widget.imageHeaderBuilder,
+        renderOwnerFor: (post) => ThreadPostRenderContext.commentRenderOwner(
+          sourceTid: widget.sourceTid,
+          pid: post.pid,
+        ),
+      );
+    }
+    return _ownedRenderContext!;
   }
 }

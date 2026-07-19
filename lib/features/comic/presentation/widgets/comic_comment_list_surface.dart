@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 
 /// A standalone, lazy comment list.
 ///
 /// The reader-tail integration is deliberately outside this widget. Keeping
 /// this surface scrollable on its own makes the Phase 2 component testable and
 /// prevents a second reader-specific pagination or lifecycle state machine.
-class ComicCommentListSurface extends StatelessWidget {
+class ComicCommentListSurface extends StatefulWidget {
   const ComicCommentListSurface({
     super.key,
     required this.sourceTid,
@@ -17,6 +19,7 @@ class ComicCommentListSurface extends StatelessWidget {
     this.imageHeaderBuilder,
     this.onRetry,
     this.padding = const EdgeInsets.fromLTRB(12, 12, 12, 24),
+    this.renderContext,
   });
 
   final String sourceTid;
@@ -25,21 +28,32 @@ class ComicCommentListSurface extends StatelessWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final VoidCallback? onRetry;
   final EdgeInsetsGeometry padding;
+  final ThreadPostRenderContext? renderContext;
+
+  @override
+  State<ComicCommentListSurface> createState() =>
+      _ComicCommentListSurfaceState();
+}
+
+class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
+  ThreadPostRenderContext? _ownedRenderContext;
+  Object? _ownedRenderContextIdentity;
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
+    final renderContext = widget.renderContext ?? _ensureRenderContext(context);
+    if (widget.isLoading) {
       return const _CommentLoadingState();
     }
 
-    final loadResult = result;
+    final loadResult = widget.result;
     if (loadResult == null ||
         loadResult.status == ComicCommentLoadStatus.empty) {
       return const _CommentEmptyState();
     }
     if (loadResult.status == ComicCommentLoadStatus.failure ||
         loadResult.status == ComicCommentLoadStatus.cancelled) {
-      return _CommentFailureState(onRetry: onRetry);
+      return _CommentFailureState(onRetry: widget.onRetry);
     }
     if (loadResult.items.isEmpty) {
       return const _CommentEmptyState();
@@ -50,13 +64,13 @@ class ComicCommentListSurface extends StatelessWidget {
     final itemCount = loadResult.items.length + (hasPartialFailure ? 1 : 0);
     return ListView.builder(
       key: const Key('comic-comment-list'),
-      padding: padding,
+      padding: widget.padding,
       itemCount: itemCount,
       itemBuilder: (context, index) {
         if (index >= loadResult.items.length) {
           return Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: _CommentFailureState(onRetry: onRetry, compact: true),
+            child: _CommentFailureState(onRetry: widget.onRetry, compact: true),
           );
         }
         return Padding(
@@ -65,12 +79,36 @@ class ComicCommentListSurface extends StatelessWidget {
           ),
           child: ComicCommentCard(
             comment: loadResult.items[index],
-            sourceTid: sourceTid,
-            imageHeaderBuilder: imageHeaderBuilder,
+            sourceTid: widget.sourceTid,
+            imageHeaderBuilder: widget.imageHeaderBuilder,
+            renderContext: renderContext,
           ),
         );
       },
     );
+  }
+
+  ThreadPostRenderContext _ensureRenderContext(BuildContext context) {
+    final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    final identity = (
+      sourceTid: widget.sourceTid.trim(),
+      imageHeaderBuilder: widget.imageHeaderBuilder,
+      brightness: Theme.of(context).brightness,
+      palette: palette.card.toARGB32(),
+    );
+    if (_ownedRenderContextIdentity != identity ||
+        _ownedRenderContext == null) {
+      _ownedRenderContextIdentity = identity;
+      _ownedRenderContext = ThreadPostRenderContext(
+        palette: palette,
+        imageHeaderBuilder: widget.imageHeaderBuilder,
+        renderOwnerFor: (post) => ThreadPostRenderContext.commentRenderOwner(
+          sourceTid: widget.sourceTid,
+          pid: post.pid,
+        ),
+      );
+    }
+    return _ownedRenderContext!;
   }
 }
 

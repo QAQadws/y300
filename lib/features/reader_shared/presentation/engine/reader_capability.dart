@@ -7,6 +7,7 @@ import 'package:y300/features/reader_shared/domain/continuous_image/continuous_i
 import 'package:y300/features/reader_shared/domain/export/reader_image_export.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_reader_view.dart';
+import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
 
 enum ReaderKind { generic, thread, comic }
@@ -171,6 +172,10 @@ abstract class ReaderCapability {
 
   /// 垂直模式列表尾部过场组件（漫画：下一章过场卡；帖子图片：null）。
   WidgetBuilder? verticalTrailingBuilder(ReaderEngineContext context) => null;
+
+  /// Optional neutral content after the image sequence. Returning null keeps
+  /// the engine's legacy image-only behavior byte-for-byte at the UI level.
+  ReaderTailSurface? get tailSurface => null;
 
   /// 内容区顶部提示条（漫画：离线/错误提示；帖子图片：null）。
   String? topHint(ReaderEngineContext context) => null;

@@ -29,6 +29,8 @@ class ContinuousImageReaderView extends StatelessWidget {
     this.onPageChanged,
     this.horizontalPhysics,
     this.verticalTrailingBuilder,
+    this.horizontalTrailingBuilder,
+    this.horizontalAdvanceBuilder,
     this.horizontalPagePadding = EdgeInsets.zero,
     this.verticalListKey = const Key('continuous-image-reader-list'),
     this.horizontalPageKey = const Key('continuous-image-reader-page-view'),
@@ -48,6 +50,8 @@ class ContinuousImageReaderView extends StatelessWidget {
   final ValueChanged<int>? onPageChanged;
   final ScrollPhysics? horizontalPhysics;
   final WidgetBuilder? verticalTrailingBuilder;
+  final WidgetBuilder? horizontalTrailingBuilder;
+  final WidgetBuilder? horizontalAdvanceBuilder;
   final EdgeInsetsGeometry horizontalPagePadding;
   final Key verticalListKey;
   final Key horizontalPageKey;
@@ -96,6 +100,10 @@ class ContinuousImageReaderView extends StatelessWidget {
   }
 
   Widget _buildHorizontal(BuildContext context) {
+    final hasTail = horizontalTrailingBuilder != null;
+    final hasAdvance = horizontalAdvanceBuilder != null;
+    final tailIndex = items.length;
+    final advanceIndex = tailIndex + (hasTail ? 1 : 0);
     return PageView.builder(
       key: horizontalPageKey,
       controller: pageController,
@@ -103,8 +111,14 @@ class ContinuousImageReaderView extends StatelessWidget {
       reverse: reverse,
       allowImplicitScrolling: true,
       onPageChanged: onPageChanged,
-      itemCount: items.length,
+      itemCount: items.length + (hasTail ? 1 : 0) + (hasAdvance ? 1 : 0),
       itemBuilder: (context, index) {
+        if (hasTail && index == tailIndex) {
+          return horizontalTrailingBuilder!(context);
+        }
+        if (hasAdvance && index == advanceIndex) {
+          return horizontalAdvanceBuilder!(context);
+        }
         final item = items[index];
         return Padding(
           padding: horizontalPagePadding,

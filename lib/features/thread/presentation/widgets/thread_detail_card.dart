@@ -476,53 +476,94 @@ class ThreadPostCard extends StatelessWidget {
   const ThreadPostCard({
     super.key,
     required this.post,
-    required this.state,
+    this.state,
     this.highlighted = false,
     required this.imageHeaderBuilder,
     this.onOpenAuthorProfile,
-    required this.onCopyActionUrl,
-    required this.onOpenPostLink,
-    required this.onOpenPostImages,
-    required this.onTogglePollOption,
-    required this.onSubmitPollVote,
+    this.onCopyActionUrl,
+    this.onOpenPostLink,
+    this.onOpenPostImages,
+    this.onTogglePollOption,
+    this.onSubmitPollVote,
     required this.palette,
     this.onOpenCommentAuthorProfile,
     this.onOpenPostActions,
+    this.interactionPolicy = const ThreadPostCardInteractionPolicy.full(),
+    this.renderContext,
   });
 
   final ThreadPost post;
-  final ThreadDetailPageState state;
+  final ThreadDetailPageState? state;
   final bool highlighted;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<ThreadPost>? onOpenAuthorProfile;
-  final void Function(String label, String url) onCopyActionUrl;
-  final ValueChanged<String> onOpenPostLink;
+  final void Function(String label, String url)? onCopyActionUrl;
+  final ValueChanged<String>? onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImages;
-  final void Function(ThreadPoll poll, ThreadPollOption option)
+  final void Function(ThreadPoll poll, ThreadPollOption option)?
   onTogglePollOption;
-  final ValueChanged<ThreadPoll> onSubmitPollVote;
+  final ValueChanged<ThreadPoll>? onSubmitPollVote;
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPostCommentEntry>? onOpenCommentAuthorProfile;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)?
   onOpenPostActions;
+  final ThreadPostCardInteractionPolicy interactionPolicy;
+  final ThreadPostRenderContext? renderContext;
 
   @override
   Widget build(BuildContext context) {
-    final plan = const ThreadPostBodyRenderPlanner().plan(post.message);
-    final authorProfileCallback = onOpenAuthorProfile;
+    final renderContext = this.renderContext;
+    final detailState = state;
+    final resolvedPalette = renderContext?.palette ?? palette;
+    final renderOwner = renderContext?.renderOwnerFor(post) ?? detailState?.tid;
+    final threadId = renderOwner == null || renderOwner.trim().isEmpty
+        ? post.pid
+        : renderOwner;
+    final imageReferer =
+        renderContext?.imageRefererFor(post) ?? detailState?.desktopUrl ?? '';
+    final resolvedImageHeaderBuilder =
+        renderContext?.imageHeaderBuilder ?? imageHeaderBuilder;
+    final plan =
+        renderContext?.planFor(post) ??
+        const ThreadPostBodyRenderPlanner().plan(post.message);
+    final authorProfileCallback = interactionPolicy.allowAuthorProfile
+        ? onOpenAuthorProfile
+        : null;
+    final postActionCallback = interactionPolicy.allowPostActions
+        ? onOpenPostActions
+        : null;
+    final commentAuthorProfileCallback =
+        interactionPolicy.allowCommentAuthorProfile
+        ? onOpenCommentAuthorProfile
+        : null;
+    final imageOpenCallback = interactionPolicy.allowImageOpen
+        ? onOpenPostImages
+        : null;
+    final linkCallback = interactionPolicy.allowPostLinks
+        ? (onOpenPostLink ?? _ignoreLink)
+        : _ignoreLink;
+    ThreadPostHtmlFirstImageFallback? imageFallback;
+    if (interactionPolicy.allowImageFallbackCopy && onCopyActionUrl != null) {
+      imageFallback = (post, request) {
+        onCopyActionUrl?.call('${post.number}# 图片', request.url);
+      };
+    }
     final card = Container(
       key: Key('thread-post-card-${post.pid}'),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 11),
       decoration: highlighted
-          ? _highlightedCardDecoration(palette)
-          : _cardDecoration(palette),
+          ? _highlightedCardDecoration(resolvedPalette)
+          : _cardDecoration(resolvedPalette),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (post.isFirst) ...[
-            _FirstPostThreadSummary(state: state, palette: palette),
+          if (post.isFirst && detailState != null) ...[
+            _FirstPostThreadSummary(
+              state: detailState,
+              palette: resolvedPalette,
+            ),
             const SizedBox(height: 11),
           ],
           Row(
@@ -533,8 +574,8 @@ class ThreadPostCard extends StatelessWidget {
                 author: post.author,
                 authorId: post.authorId,
                 avatarUrl: post.avatarUrl,
-                palette: palette,
-                imageHeaderBuilder: imageHeaderBuilder,
+                palette: resolvedPalette,
+                imageHeaderBuilder: resolvedImageHeaderBuilder,
                 onTap:
                     post.authorId.trim().isEmpty ||
                         authorProfileCallback == null
@@ -545,9 +586,13 @@ class ThreadPostCard extends StatelessWidget {
               Expanded(
                 child: _PostHeader(
                   post: post,
-                  palette: palette,
-                  viewsLabel: post.isFirst ? state.views.toString() : null,
-                  repliesLabel: post.isFirst ? state.replies.toString() : null,
+                  palette: resolvedPalette,
+                  viewsLabel: post.isFirst && detailState != null
+                      ? detailState.views.toString()
+                      : null,
+                  repliesLabel: post.isFirst && detailState != null
+                      ? detailState.replies.toString()
+                      : null,
                   onOpenAuthorProfile:
                       post.authorId.trim().isEmpty ||
                           authorProfileCallback == null
@@ -566,55 +611,74 @@ class ThreadPostCard extends StatelessWidget {
             child: ThreadPostHtmlBody(
               key: Key('thread-post-${post.pid}'),
               post: post,
-              threadId: state.tid,
-              imageReferer: state.desktopUrl ?? '',
+              threadId: threadId,
+              imageReferer: imageReferer,
               plan: plan,
-              imageHeaderBuilder: imageHeaderBuilder,
-              onOpenPostLink: onOpenPostLink,
-              onOpenPostImage: onOpenPostImages,
+              imageHeaderBuilder: resolvedImageHeaderBuilder,
+              onOpenPostLink: linkCallback,
+              onOpenPostImage: imageOpenCallback,
               theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
-                palette: palette,
+                palette: resolvedPalette,
                 brightness: Theme.of(context).brightness,
               ),
-              onImageFallback: (post, request) {
-                onCopyActionUrl('${post.number}# 图片', request.url);
-              },
+              onImageFallback: imageFallback,
+              onImageDiagnostics: renderContext?.onImageDiagnostics,
+              onImageLayoutShift: renderContext?.onImageLayoutShift,
+              imageFallbackAspectRatioFor:
+                  renderContext?.imageFallbackAspectRatioFor == null
+                  ? null
+                  : (spec, request) =>
+                        renderContext!.imageFallbackAspectRatioFor!(
+                          post,
+                          spec,
+                          request,
+                        ),
+              onBlockImageResolved: renderContext?.onBlockImageResolved == null
+                  ? null
+                  : (spec, request, size) =>
+                        renderContext!.onBlockImageResolved!(
+                          post,
+                          spec,
+                          request,
+                          size,
+                        ),
             ),
           ),
-          if (post.poll != null) ...[
+          if (post.poll != null && interactionPolicy.showPoll) ...[
             const SizedBox(height: 10),
             ThreadPollCard(
               poll: post.poll!,
-              selectedOptionIds: state.selectedPollOptionIds,
-              isSubmitting: state.isPollVoteSubmitting,
-              hint: state.pollVoteHint,
+              selectedOptionIds:
+                  detailState?.selectedPollOptionIds ?? const <String>{},
+              isSubmitting: detailState?.isPollVoteSubmitting ?? false,
+              hint: detailState?.pollVoteHint,
               onToggleOption: (option) =>
-                  onTogglePollOption(post.poll!, option),
-              onSubmit: () => onSubmitPollVote(post.poll!),
-              palette: palette,
+                  onTogglePollOption?.call(post.poll!, option),
+              onSubmit: () => onSubmitPollVote?.call(post.poll!),
+              palette: resolvedPalette,
             ),
           ],
-          if (post.comments.isNotEmpty) ...[
+          if (post.comments.isNotEmpty && interactionPolicy.showComments) ...[
             const SizedBox(height: 10),
             ThreadPostCommentSection(
               comments: post.comments,
-              imageHeaderBuilder: imageHeaderBuilder,
-              palette: palette,
-              onOpenAuthorProfile: onOpenCommentAuthorProfile,
+              imageHeaderBuilder: resolvedImageHeaderBuilder,
+              palette: resolvedPalette,
+              onOpenAuthorProfile: commentAuthorProfileCallback,
             ),
           ],
-          if (post.ratingSummary != null) ...[
+          if (post.ratingSummary != null && interactionPolicy.showRating) ...[
             const SizedBox(height: 10),
             ThreadPostRatingSection(
               summary: post.ratingSummary!,
-              palette: palette,
-              onCopyActionUrl: onCopyActionUrl,
+              palette: resolvedPalette,
+              onCopyActionUrl: onCopyActionUrl ?? (_, _) {},
             ),
           ],
         ],
       ),
     );
-    final openActions = onOpenPostActions;
+    final openActions = postActionCallback;
     if (openActions == null) {
       return card;
     }
@@ -624,6 +688,8 @@ class ThreadPostCard extends StatelessWidget {
       child: card,
     );
   }
+
+  static void _ignoreLink(String _) {}
 }
 
 class _FirstPostThreadSummary extends StatelessWidget {

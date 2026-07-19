@@ -8,19 +8,23 @@ class ReaderPageIndicatorOverlay extends StatelessWidget {
     required this.currentPage,
     required this.totalPages,
     this.highlighted = false,
+    this.positionLabel,
   });
 
   final bool visible;
   final int currentPage;
   final int totalPages;
   final bool highlighted;
+  final String? positionLabel;
 
   @override
   Widget build(BuildContext context) {
-    final palette =
-        const ReaderChromePaletteResolver().resolve(Theme.of(context));
+    final palette = const ReaderChromePaletteResolver().resolve(
+      Theme.of(context),
+    );
     final safeTotal = totalPages < 1 ? 1 : totalPages;
     final current = currentPage.clamp(1, safeTotal).toInt();
+    final label = positionLabel?.trim();
     return IgnorePointer(
       child: AnimatedOpacity(
         key: const Key('comic-reader-page-indicator-overlay'),
@@ -38,13 +42,18 @@ class ReaderPageIndicatorOverlay extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
                   child: Text(
-                    '$current / $safeTotal',
+                    label == null || label.isEmpty
+                        ? '$current / $safeTotal'
+                        : label,
                     key: const Key('comic-reader-page-indicator-text'),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.white,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.white),
                   ),
                 ),
               ),

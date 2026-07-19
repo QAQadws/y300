@@ -65,6 +65,72 @@ void main() {
     );
     expect(find.byKey(const ValueKey<String>('page-0-true')), findsOneWidget);
   });
+
+  testWidgets('ContinuousImageReaderView appends horizontal tail and advance', (
+    tester,
+  ) async {
+    final controller = PageController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ContinuousImageReaderView(
+          items: _items,
+          mode: ContinuousImageReaderMode.horizontal,
+          pageController: controller,
+          onExtentResolved: (_) {},
+          horizontalTrailingBuilder: (context) => const ColoredBox(
+            key: Key('reader-test-tail'),
+            color: Colors.blue,
+          ),
+          horizontalAdvanceBuilder: (context) => const ColoredBox(
+            key: Key('reader-test-advance'),
+            color: Colors.green,
+          ),
+          itemBuilder: (context, item, index, {required paged}) {
+            return ColoredBox(
+              key: ValueKey<String>('page-${item.index}-$paged'),
+              color: Colors.black,
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    controller.jumpToPage(2);
+    await tester.pump();
+    expect(find.byKey(const Key('reader-test-tail')), findsOneWidget);
+
+    controller.jumpToPage(3);
+    await tester.pump();
+    expect(find.byKey(const Key('reader-test-advance')), findsOneWidget);
+  });
+
+  testWidgets('ContinuousImageReaderView appends vertical trailing content', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ContinuousImageReaderView(
+          items: _items,
+          mode: ContinuousImageReaderMode.vertical,
+          onExtentResolved: (_) {},
+          verticalTrailingBuilder: (context) =>
+              const SizedBox(key: Key('reader-test-vertical-tail'), height: 80),
+          itemBuilder: (context, item, index, {required paged}) {
+            return const SizedBox(height: 32, width: double.infinity);
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final list = tester.widget<ListView>(
+      find.byKey(const Key('continuous-image-reader-list')),
+    );
+    final delegate = list.childrenDelegate as SliverChildBuilderDelegate;
+    expect(delegate.childCount, _items.length + 1);
+  });
 }
 
 const _items = <ContinuousImageItem>[
