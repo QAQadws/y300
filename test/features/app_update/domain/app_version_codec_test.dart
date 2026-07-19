@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pub_semver/pub_semver.dart';
+import 'package:version/version.dart';
 import 'package:y300/features/app_update/domain/services/app_version_codec.dart';
 
 void main() {

@@ -1,4 +1,4 @@
-import 'package:pub_semver/pub_semver.dart';
+import 'package:version/version.dart';
 
 final class AppVersionCodec {
   const AppVersionCodec();

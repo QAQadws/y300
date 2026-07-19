@@ -1,7 +1,7 @@
+import 'package:characters/characters.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pub_semver/pub_semver.dart';
+import 'package:version/version.dart';
 import 'package:y300/features/app_update/data/gitee/gitee_release_parser.dart';
-import 'package:y300/features/app_update/domain/models/app_release.dart';
 import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
 
 import '../../test_support/gitee_release_phase0_fixture.dart';
@@ -34,28 +34,22 @@ void main() {
       final result = parser.parse(await loadGiteeLatestReleaseV001Fixture());
 
       expect(result, isA<GiteeReleaseParseSuccess>());
-      final release = (result as GiteeReleaseParseSuccess).release;
-      expect(release.tag, 'v0.0.1');
-      expect(release.versionName, '0.0.1');
-      expect(release.semanticVersion, Version(0, 0, 1));
-      expect(release.title, 'v0.0.1');
-      expect(release.releaseNotes, contains('Y300试发行'));
-      expect(release.releasedAt, DateTime.utc(2026, 7, 18, 12, 53, 49));
+      final candidate = (result as GiteeReleaseParseSuccess).candidate;
+      expect(candidate.tag, 'v0.0.1');
+      expect(candidate.version, Version(0, 0, 1));
+      expect(candidate.releaseNotes, contains('Y300试发行'));
       expect(
-        release.releasePageUrl.toString(),
-        'https://gitee.com/QAQadws/y300-releases/releases',
+        candidate.apkUri.pathSegments.last,
+        'y300-v0.0.1-android-arm64-v8a-release.apk',
       );
-      expect(release.apk.name, 'y300-v0.0.1-android-arm64-v8a-release.apk');
-      expect(release.apk.abi, AppReleaseAbi.androidArm64V8a);
-      expect(release.apk.sizeBytes, isNull);
-      expect(release.apk.downloadUrl.scheme, 'https');
-      expect(release.apk.downloadUrl.host, 'gitee.com');
+      expect(candidate.apkUri.scheme, 'https');
+      expect(candidate.apkUri.host, 'gitee.com');
       expect(
-        release.apk.checksum.name,
+        candidate.checksumUri.pathSegments.last,
         'y300-v0.0.1-android-arm64-v8a-release.apk.sha256',
       );
-      expect(release.apk.checksum.downloadUrl.scheme, 'https');
-      expect(release.apk.checksum.downloadUrl.host, 'gitee.com');
+      expect(candidate.checksumUri.scheme, 'https');
+      expect(candidate.checksumUri.host, 'gitee.com');
     });
 
     test('ignores source archives and unknown supplier fields', () async {
@@ -66,7 +60,7 @@ void main() {
 
       expect(result, isA<GiteeReleaseParseSuccess>());
       expect(
-        (result as GiteeReleaseParseSuccess).release.apk.name,
+        (result as GiteeReleaseParseSuccess).candidate.apkUri.pathSegments.last,
         endsWith('-android-arm64-v8a-release.apk'),
       );
     });
@@ -80,10 +74,26 @@ void main() {
       final result = parser.parse(payload);
 
       expect(result, isA<GiteeReleaseParseSuccess>());
-      final release = (result as GiteeReleaseParseSuccess).release;
-      expect(release.title, 'v0.0.1');
-      expect(release.releaseNotes, isEmpty);
-      expect(release.releasedAt, isNull);
+      final candidate = (result as GiteeReleaseParseSuccess).candidate;
+      expect(candidate.releaseNotes, isNull);
+    });
+
+    test('caps release notes without splitting Unicode characters', () async {
+      final payload = await loadGiteeLatestReleaseV001Fixture();
+      payload['body'] = List<String>.filled(
+        GiteeReleaseParser.maxReleaseNotesCharacters + 1,
+        '读',
+      ).join();
+
+      final result = parser.parse(payload);
+
+      expect(result, isA<GiteeReleaseParseSuccess>());
+      final notes =
+          (result as GiteeReleaseParseSuccess).candidate.releaseNotes!;
+      expect(
+        notes.characters.length,
+        GiteeReleaseParser.maxReleaseNotesCharacters,
+      );
     });
   });
 
@@ -158,6 +168,33 @@ void main() {
         AppUpdateFailureCode.invalidAssetUrl,
       );
     });
+
+    test('rejects an APK URL hosted outside Gitee', () async {
+      final payload = await loadGiteeLatestReleaseV001Fixture();
+      final apk = (payload['assets'] as List).first as Map;
+      apk['browser_download_url'] =
+          'https://example.com/y300-v0.0.1-android-arm64-v8a-release.apk';
+
+      expect(
+        _failureCode(parser.parse(payload)),
+        AppUpdateFailureCode.invalidAssetUrl,
+      );
+    });
+
+    test(
+      'rejects an APK URL whose path does not match the asset name',
+      () async {
+        final payload = await loadGiteeLatestReleaseV001Fixture();
+        final apk = (payload['assets'] as List).first as Map;
+        apk['browser_download_url'] =
+            'https://gitee.com/example/not-the-release-apk.apk';
+
+        expect(
+          _failureCode(parser.parse(payload)),
+          AppUpdateFailureCode.invalidAssetUrl,
+        );
+      },
+    );
 
     test('rejects a missing checksum asset', () async {
       final payload = await loadGiteeLatestReleaseV001Fixture();

@@ -10,10 +10,11 @@ enum AppUpdateFailureCode {
   checksumAssetMissing,
   checksumAssetAmbiguous,
   invalidChecksumAssetUrl,
-  checksumMalformed,
-  checksumFileNameMismatch,
-  checksumMismatch,
-  invalidLocalVersion,
+  networkUnavailable,
+  requestTimeout,
+  rateLimited,
+  releaseNotFound,
+  remoteUnavailable,
 }
 
 final class AppUpdateFailure {

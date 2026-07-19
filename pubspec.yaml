@@ -58,7 +58,8 @@ dependencies:
   flutter_cache_manager: ^3.4.1
   file: ^7.0.1
   petitparser: ^7.0.2
-  pub_semver: ^2.2.0
+  upgrader: 13.5.0
+  version: ^3.0.2
   flutter_local_notifications: ^21.0.0
   permission_handler: ^12.0.2
   webview_flutter: ^4.13.1
