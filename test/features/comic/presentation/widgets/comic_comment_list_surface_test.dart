@@ -85,7 +85,7 @@ void main() {
     tester,
   ) async {
     final items = List<ComicCommentItem>.generate(
-      40,
+      1000,
       (index) => _comment(pid: 'p$index', authorName: '用户$index'),
     );
     await tester.pumpWidget(

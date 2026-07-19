@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart'
@@ -8,6 +9,7 @@ import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
+import 'package:y300/features/comic/domain/services/comic_comment_diagnostics.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
@@ -50,8 +52,16 @@ final comicReaderFeatureFlagsProvider = Provider<ComicReaderFeatureFlags>((
 final comicCommentLoaderProvider = Provider<ComicCommentLoader>((ref) {
   return DefaultComicCommentLoader(
     repository: ref.watch(threadReplyPageRepositoryProvider),
+    diagnosticRecorder: ref.watch(comicCommentDiagnosticRecorderProvider),
   );
 });
+
+final comicCommentDiagnosticRecorderProvider =
+    Provider<ComicCommentDiagnosticRecorder>((ref) {
+      return kReleaseMode
+          ? const NoopComicCommentDiagnosticRecorder()
+          : const DeveloperComicCommentDiagnosticRecorder();
+    });
 
 final comicShelfCategoryAssignUseCaseProvider =
     Provider<ShelfCategoryAssignUseCase>((ref) {

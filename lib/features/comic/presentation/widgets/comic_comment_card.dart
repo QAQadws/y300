@@ -26,36 +26,11 @@ class ComicCommentCard extends StatefulWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ThreadPostRenderContext? renderContext;
 
-  @override
-  State<ComicCommentCard> createState() => _ComicCommentCardState();
-}
-
-class _ComicCommentCardState extends State<ComicCommentCard>
-    with AutomaticKeepAliveClientMixin {
-  ThreadPostRenderContext? _ownedRenderContext;
-  Object? _ownedRenderContextIdentity;
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    final post = _postForComment();
-    final renderContext = widget.renderContext ?? _ensureRenderContext(context);
-    return ThreadPostCard(
-      key: Key('comic-comment-card-${widget.comment.pid}'),
-      post: post,
-      state: null,
-      imageHeaderBuilder: widget.imageHeaderBuilder,
-      palette: ThreadDetailNativePalette.resolve(Theme.of(context)),
-      interactionPolicy: const ThreadPostCardInteractionPolicy.readOnly(),
-      renderContext: renderContext,
-    );
-  }
-
-  @override
-  bool get wantKeepAlive => true;
-
-  ThreadPost _postForComment() {
-    final comment = widget.comment;
+  /// Converts a comment to the existing parser-mode post-card input.
+  ///
+  /// Keeping this adapter public lets list surfaces prune the shared render
+  /// plan cache without duplicating the post mapping rules.
+  static ThreadPost toThreadPost(ComicCommentItem comment) {
     return ThreadPost(
       pid: comment.pid,
       author: comment.authorName,
@@ -69,6 +44,31 @@ class _ComicCommentCardState extends State<ComicCommentCard>
       avatarUrl: comment.avatarUrl,
     );
   }
+
+  @override
+  State<ComicCommentCard> createState() => _ComicCommentCardState();
+}
+
+class _ComicCommentCardState extends State<ComicCommentCard> {
+  ThreadPostRenderContext? _ownedRenderContext;
+  Object? _ownedRenderContextIdentity;
+
+  @override
+  Widget build(BuildContext context) {
+    final post = _postForComment();
+    final renderContext = widget.renderContext ?? _ensureRenderContext(context);
+    return ThreadPostCard(
+      key: Key('comic-comment-card-${widget.comment.pid}'),
+      post: post,
+      state: null,
+      imageHeaderBuilder: widget.imageHeaderBuilder,
+      palette: ThreadDetailNativePalette.resolve(Theme.of(context)),
+      interactionPolicy: const ThreadPostCardInteractionPolicy.readOnly(),
+      renderContext: renderContext,
+    );
+  }
+
+  ThreadPost _postForComment() => ComicCommentCard.toThreadPost(widget.comment);
 
   ThreadPostRenderContext _ensureRenderContext(BuildContext context) {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));

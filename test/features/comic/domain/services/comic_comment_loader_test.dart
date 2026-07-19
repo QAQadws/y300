@@ -92,7 +92,7 @@ void main() {
     expect(result.status, ComicCommentLoadStatus.partialFailure);
     expect(result.isComplete, isFalse);
     expect(result.items, hasLength(19));
-    expect(result.errorCode, ComicCommentLoadErrorCode.pageUnavailable);
+    expect(result.errorCode, ComicCommentLoadErrorCode.pageTimeout);
     expect(result.loadedPages, <int>{1});
   });
 
@@ -195,6 +195,86 @@ void main() {
     expect(result.status, ComicCommentLoadStatus.partialFailure);
     expect(result.errorCode, ComicCommentLoadErrorCode.maxPageRequestsReached);
     expect(result.expectedPages, 1);
+  });
+
+  test('reuses complete results within the short memory TTL', () async {
+    var now = DateTime(2026, 7, 19, 12);
+    final repository = _FakeReplyPageRepository(
+      <int, ApiResult<ThreadReplyPage>>{
+        1: ApiSuccess(_fixturePage(1)),
+        2: ApiSuccess(_fixturePage(2)),
+      },
+    );
+    final loader = DefaultComicCommentLoader(
+      repository: repository,
+      cacheTtl: const Duration(minutes: 2),
+      now: () => now,
+    );
+
+    await loader.loadAll(sourceTid: '570140');
+    await loader.loadAll(sourceTid: '570140');
+    expect(repository.calls, <String>['570140:1', '570140:2']);
+
+    now = now.add(const Duration(minutes: 3));
+    await loader.loadAll(sourceTid: '570140');
+    expect(repository.calls, <String>[
+      '570140:1',
+      '570140:2',
+      '570140:1',
+      '570140:2',
+    ]);
+  });
+
+  test('invalidate removes a complete result before the next load', () async {
+    final repository = _FakeReplyPageRepository(
+      <int, ApiResult<ThreadReplyPage>>{
+        1: ApiSuccess(_fixturePage(1)),
+        2: ApiSuccess(_fixturePage(2)),
+      },
+    );
+    final loader = DefaultComicCommentLoader(repository: repository);
+
+    await loader.loadAll(sourceTid: '570140');
+    loader.invalidate('570140');
+    await loader.loadAll(sourceTid: '570140');
+
+    expect(repository.calls, <String>[
+      '570140:1',
+      '570140:2',
+      '570140:1',
+      '570140:2',
+    ]);
+  });
+
+  test('maps rate limiting to a stable error code', () async {
+    final repository = _FakeReplyPageRepository(
+      <int, ApiResult<ThreadReplyPage>>{
+        1: const ApiFailure<ThreadReplyPage>(
+          ApiError(type: ApiErrorType.server, statusCode: 429, message: 'busy'),
+        ),
+      },
+    );
+
+    final result = await DefaultComicCommentLoader(
+      repository: repository,
+    ).loadAll(sourceTid: '570140');
+
+    expect(result.errorCode, ComicCommentLoadErrorCode.rateLimited);
+    expect(result.errorMessage, '请求过于频繁，请稍后重试');
+  });
+
+  test('times out a slow page without blocking the reader forever', () async {
+    final repository = _FakeReplyPageRepository(
+      <int, ApiResult<ThreadReplyPage>>{1: ApiSuccess(_fixturePage(1))},
+      delay: const Duration(milliseconds: 20),
+    );
+
+    final result = await DefaultComicCommentLoader(
+      repository: repository,
+      pageRequestTimeout: const Duration(milliseconds: 1),
+    ).loadAll(sourceTid: '570140');
+
+    expect(result.errorCode, ComicCommentLoadErrorCode.pageTimeout);
   });
 }
 

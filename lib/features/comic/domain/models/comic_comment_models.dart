@@ -12,7 +12,11 @@ enum ComicCommentLoadErrorCode {
   invalidSourceTid,
   firstPageUnavailable,
   pageUnavailable,
+  pageTimeout,
+  rateLimited,
+  unauthorized,
   invalidPageResponse,
+  emptyPageResponse,
   maxPageRequestsReached,
 }
 

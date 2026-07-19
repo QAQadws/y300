@@ -79,6 +79,9 @@ class ComicCommentSessionController extends ChangeNotifier {
     if (!force && _state.result != null) {
       return;
     }
+    if (force && _loader is ComicCommentLoaderCache) {
+      (_loader as ComicCommentLoaderCache).invalidate(_key.sourceTid);
+    }
 
     final generation = ++_generation;
     _activeToken?.cancel();

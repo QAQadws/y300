@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
+import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_list_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -49,6 +50,7 @@ class ComicCommentTailSurface extends ChangeNotifier
 
   ThreadPostRenderContext? _renderContext;
   Object? _renderContextIdentity;
+  Object? _prunedResult;
   bool _disposed = false;
 
   ComicCommentSessionState get sessionState => _session.state;
@@ -63,7 +65,12 @@ class ComicCommentTailSurface extends ChangeNotifier
   bool get hasAdvance => _hasNextEpisode && _onAdvanceEpisode != null;
 
   @override
-  bool get isAdjacentPreloadReady => sessionState.result != null;
+  bool get isAdjacentPreloadReady {
+    final status = sessionState.result?.status;
+    return status == ComicCommentLoadStatus.success ||
+        status == ComicCommentLoadStatus.empty ||
+        status == ComicCommentLoadStatus.partialFailure;
+  }
 
   @override
   int get verticalItemCount {
@@ -255,6 +262,11 @@ class ComicCommentTailSurface extends ChangeNotifier
           pid: post.pid,
         ),
       );
+    }
+    final result = sessionState.result;
+    if (result != null && !identical(_prunedResult, result)) {
+      _renderContext!.prune(result.items.map(ComicCommentCard.toThreadPost));
+      _prunedResult = result;
     }
     return _renderContext!;
   }

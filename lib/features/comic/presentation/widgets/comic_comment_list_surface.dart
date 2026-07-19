@@ -89,6 +89,11 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
       return _CommentFailureState(onRetry: widget.onRetry);
     }
 
+    // The planner is shared by all visible cards. Keep only the current
+    // result's keys so revisiting a recycled long-list item cannot retain
+    // render plans from an older chapter/session.
+    renderContext.prune(loadResult.items.map(ComicCommentCard.toThreadPost));
+
     final hasPartialFailure =
         loadResult.status == ComicCommentLoadStatus.partialFailure;
     final itemCount = loadResult.items.length + (hasPartialFailure ? 1 : 0);
