@@ -1,9 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/app_update/data/gitee/dio_gitee_checksum_repository.dart';
 import 'package:y300/features/app_update/data/gitee/dio_gitee_latest_release_repository.dart';
 import 'package:y300/features/app_update/data/platform/url_launcher_app_update_launcher.dart';
 import 'package:y300/features/app_update/domain/repositories/gitee_latest_release_repository.dart';
+import 'package:y300/features/app_update/domain/repositories/app_update_checksum_repository.dart';
 import 'package:y300/features/app_update/domain/services/app_update_launcher.dart';
 import 'package:y300/features/app_update/presentation/controllers/app_update_prompt_coordinator.dart';
 
@@ -24,6 +26,11 @@ final giteeLatestReleaseRepositoryProvider =
       return DioGiteeLatestReleaseRepository(
         dio: ref.watch(appUpdateDioProvider),
       );
+    });
+
+final appUpdateChecksumRepositoryProvider =
+    Provider<AppUpdateChecksumRepository>((ref) {
+      return DioGiteeChecksumRepository(dio: ref.watch(appUpdateDioProvider));
     });
 
 final appUpdateLauncherProvider = Provider<AppUpdateLauncher>((ref) {
