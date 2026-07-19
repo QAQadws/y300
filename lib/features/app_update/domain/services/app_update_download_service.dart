@@ -60,7 +60,7 @@ final class AppUpdateDownloadService {
 
   /// Reconnects the in-memory state machine to a task owned by the background
   /// downloader database. No APK bytes or duplicate task records are created.
-  Future<void> restoreBackground() async {
+  Future<void> restoreBackground({String? installedVersion}) async {
     final background = _binaryDownloader;
     if (background is! AppUpdateBackgroundBinaryDownloader) {
       return;
@@ -74,7 +74,19 @@ final class AppUpdateDownloadService {
       }
       snapshots.sort(_recoveryPriority);
       final snapshot = snapshots.first;
+      final alreadyPresented =
+          _lastArtifact?.identityKey == snapshot.artifact.identityKey &&
+          (_state is AppUpdateReadyToInstall ||
+              _state is AppUpdateInstalling ||
+              _state is AppUpdateIdle);
       _lastArtifact = snapshot.artifact;
+      if (_isInstalledVersionAtLeast(installedVersion, snapshot.artifact)) {
+        await _clearArtifact();
+        return;
+      }
+      if (alreadyPresented) {
+        return;
+      }
       switch (snapshot.status) {
         case AppUpdateBackgroundTaskStatus.failed:
         case AppUpdateBackgroundTaskStatus.canceled:
@@ -204,13 +216,14 @@ final class AppUpdateDownloadService {
     if (rawVersion == null || rawVersion.isEmpty) {
       return;
     }
-    late final Version currentVersion;
-    try {
-      currentVersion = Version.parse(rawVersion);
-    } on Object {
+    final currentVersion = _parseVersion(rawVersion);
+    if (currentVersion == null) {
       return;
     }
     if (currentVersion < artifact.version) {
+      if (_state is AppUpdateInstalling) {
+        _emit(const AppUpdateIdle());
+      }
       return;
     }
     await _clearArtifact();
@@ -556,6 +569,26 @@ final class AppUpdateDownloadService {
         state is AppUpdateDownloading ||
         state is AppUpdateVerifying ||
         state is AppUpdateInstalling;
+  }
+
+  bool _isInstalledVersionAtLeast(
+    String? installedVersion,
+    AppUpdateArtifact artifact,
+  ) {
+    final rawVersion = installedVersion?.trim();
+    if (rawVersion == null || rawVersion.isEmpty) {
+      return false;
+    }
+    final currentVersion = _parseVersion(rawVersion);
+    return currentVersion != null && currentVersion >= artifact.version;
+  }
+
+  Version? _parseVersion(String rawVersion) {
+    try {
+      return Version.parse(rawVersion);
+    } on Object {
+      return null;
+    }
   }
 
   Future<AppUpdateDownloadState> _restoreVerifiedArtifact(

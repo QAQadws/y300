@@ -80,7 +80,6 @@ final appUpdateDownloadServiceProvider = Provider<AppUpdateDownloadService>((
     fileStore: ref.watch(appUpdateFileStoreProvider),
     installer: ref.watch(appUpdateInstallerProvider),
   );
-  unawaited(service.restoreBackground());
   ref.onDispose(() => unawaited(service.dispose()));
   return service;
 });

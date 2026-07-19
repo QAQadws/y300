@@ -21,7 +21,9 @@ final class CryptoAppUpdateArtifactVerifier
     required AppUpdateChecksum checksum,
     required String apkPath,
   }) async {
-    if (checksum.fileName != artifact.checksumFileName) {
+    // The sha256sum line names the APK being hashed, not the .sha256 asset
+    // that carried the line.
+    if (checksum.fileName != artifact.fileName) {
       return const AppUpdateVerificationFailure(
         AppUpdateFailure(
           code: AppUpdateFailureCode.checksumFileNameMismatch,

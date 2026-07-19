@@ -177,6 +177,76 @@ void main() {
     },
   );
 
+  test(
+    'discards a completed task when its version is already installed',
+    () async {
+      final log = <String>[];
+      final artifact = _artifact();
+      final downloader = _FakeBackgroundDownloader(
+        snapshots: <AppUpdateBackgroundTaskSnapshot>[
+          AppUpdateBackgroundTaskSnapshot(
+            taskId: 'y300-update-test',
+            artifact: artifact,
+            status: AppUpdateBackgroundTaskStatus.complete,
+            receivedBytes: 100,
+            totalBytes: 100,
+            progress: 1,
+          ),
+        ],
+      );
+      final service = _service(
+        log: log,
+        downloader: downloader,
+        fileStore: _FakeFileStore(log, verifiedExists: true),
+      );
+      addTearDown(service.dispose);
+
+      await service.restoreBackground(installedVersion: '0.0.2');
+
+      expect(service.state, isA<AppUpdateIdle>());
+      expect(downloader.discarded, isTrue);
+      expect(log, isNot(contains('checksum')));
+      expect(log, isNot(contains('verify')));
+    },
+  );
+
+  test(
+    'does not present the same completed task again after installer return',
+    () async {
+      final log = <String>[];
+      final artifact = _artifact();
+      final downloader = _FakeBackgroundDownloader(
+        snapshots: <AppUpdateBackgroundTaskSnapshot>[
+          AppUpdateBackgroundTaskSnapshot(
+            taskId: 'y300-update-test',
+            artifact: artifact,
+            status: AppUpdateBackgroundTaskStatus.complete,
+            receivedBytes: 100,
+            totalBytes: 100,
+            progress: 1,
+          ),
+        ],
+      );
+      final service = _service(
+        log: log,
+        downloader: downloader,
+        fileStore: _FakeFileStore(log, verifiedExists: true),
+      );
+      addTearDown(service.dispose);
+
+      await service.restoreBackground(installedVersion: '0.0.1');
+      await service.installReady();
+      log.clear();
+      await service.restoreBackground(installedVersion: '0.0.1');
+      await service.reconcileInstalledVersion('0.0.1');
+
+      expect(service.state, isA<AppUpdateIdle>());
+      expect(log, isNot(contains('checksum')));
+      expect(log, isNot(contains('verify')));
+      expect(downloader.discarded, isFalse);
+    },
+  );
+
   test('reset discards the background task record', () async {
     final downloader = _FakeBackgroundDownloader();
     final service = _service(log: <String>[], downloader: downloader);

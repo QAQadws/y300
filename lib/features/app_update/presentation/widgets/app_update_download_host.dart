@@ -357,6 +357,20 @@ class _FailedContent extends StatelessWidget {
         Text('更新失败', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Text(_failureMessage(failure.code)),
+        const SizedBox(height: 10),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: SelectableText(
+              _failureDetails(failure),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
@@ -382,14 +396,34 @@ String _failureMessage(AppUpdateFailureCode code) {
     AppUpdateFailureCode.apkDownloadCancelled => '下载已取消，可以重新尝试。',
     AppUpdateFailureCode.networkUnavailable => '网络不可用，请检查网络后重试。',
     AppUpdateFailureCode.requestTimeout => '更新下载超时，请稍后重试。',
-    AppUpdateFailureCode.checksumRequestFailed ||
+    AppUpdateFailureCode.checksumAssetMissing => '这个 Release 没有找到 checksum 附件。',
+    AppUpdateFailureCode.checksumAssetAmbiguous =>
+      '这个 Release 有多个 checksum 附件，无法判断使用哪一个。',
+    AppUpdateFailureCode.invalidChecksumAssetUrl =>
+      'checksum 附件地址不符合 Gitee Release 规则。',
+    AppUpdateFailureCode.checksumRequestFailed =>
+      '无法读取 checksum 文件，请检查网络或稍后重试。',
     AppUpdateFailureCode.checksumMalformed ||
-    AppUpdateFailureCode.checksumFileNameMismatch => '更新校验文件无效，请稍后重试。',
+    AppUpdateFailureCode.checksumContentTooLarge =>
+      '已读取 checksum 文件，但它的格式不符合要求。',
+    AppUpdateFailureCode.checksumFileNameMismatch =>
+      'checksum 文件中的 APK 文件名与当前 Release 不一致。',
+    AppUpdateFailureCode.rateLimited => 'Gitee 暂时限制了请求，请稍后重试。',
+    AppUpdateFailureCode.remoteUnavailable => 'Gitee 暂时不可用，请稍后重试。',
+    AppUpdateFailureCode.assetMissing => '这个 Release 没有找到 APK 附件。',
     AppUpdateFailureCode.apkHashMismatch => '下载文件校验失败，已阻止安装。',
+    AppUpdateFailureCode.apkFileMissing => '下载文件不存在，请重新下载。',
+    AppUpdateFailureCode.apkSizeExceeded => '下载的 APK 超过允许的大小。',
     AppUpdateFailureCode.installPermissionRequired => '请允许安装未知来源应用后重试。',
     AppUpdateFailureCode.installerUnavailable => '设备上没有可用的 APK 安装器。',
     _ => '更新处理失败，请稍后重试。',
   };
+}
+
+String _failureDetails(AppUpdateFailure failure) {
+  final field = failure.field;
+  final fieldDetails = field == null || field.isEmpty ? '' : '\n字段：$field';
+  return '错误代码：${failure.code.name}\n详情：${failure.message}$fieldDetails';
 }
 
 String _formatBytes(int bytes) {

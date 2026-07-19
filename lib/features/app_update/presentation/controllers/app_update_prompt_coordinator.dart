@@ -207,6 +207,7 @@ final class AppUpdatePromptCoordinator {
     }
     try {
       await upgrader.initialize();
+      await service.restoreBackground(installedVersion: installedVersion);
       await service.reconcileInstalledVersion(installedVersion);
     } on Object {
       // Installation reconciliation is best effort and must not block the

@@ -87,10 +87,12 @@ final class DioGiteeChecksumRepository implements AppUpdateChecksumRepository {
       }
       final raw = response.data;
       if (raw is! String) {
-        return const AppUpdateChecksumLookupFailure(
+        return AppUpdateChecksumLookupFailure(
           AppUpdateFailure(
             code: AppUpdateFailureCode.checksumMalformed,
-            message: 'The Gitee checksum response is not plain text.',
+            message:
+                'The Gitee checksum response is not plain text '
+                '(${raw.runtimeType}).',
           ),
         );
       }
@@ -138,9 +140,9 @@ final class DioGiteeChecksumRepository implements AppUpdateChecksumRepository {
         code: AppUpdateFailureCode.networkUnavailable,
         message: 'The Gitee checksum could not be reached.',
       ),
-      _ => const AppUpdateFailure(
+      _ => AppUpdateFailure(
         code: AppUpdateFailureCode.checksumRequestFailed,
-        message: 'The Gitee checksum request failed.',
+        message: 'The Gitee checksum request failed (${error.type.name}).',
       ),
     };
   }

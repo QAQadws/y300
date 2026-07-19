@@ -40,7 +40,7 @@ void main() {
       artifact: artifact,
       checksum: AppUpdateChecksum(
         sha256: sha256.convert(bytes).toString(),
-        fileName: artifact.checksumFileName,
+        fileName: artifact.fileName,
       ),
       apkPath: path,
     );
@@ -54,7 +54,7 @@ void main() {
       artifact: artifact,
       checksum: AppUpdateChecksum(
         sha256: _zeroHash,
-        fileName: artifact.checksumFileName,
+        fileName: artifact.fileName,
       ),
       apkPath: path,
     );
@@ -68,9 +68,9 @@ void main() {
   test('rejects a missing file and an oversized file', () async {
     final missing = await CryptoAppUpdateArtifactVerifier().verify(
       artifact: artifact,
-      checksum: const AppUpdateChecksum(
+      checksum: AppUpdateChecksum(
         sha256: _zeroHash,
-        fileName: 'y300-v0.0.1-android-arm64-v8a-release.apk.sha256',
+        fileName: artifact.fileName,
       ),
       apkPath: '${directory.path}${Platform.pathSeparator}missing.apk',
     );
@@ -78,9 +78,9 @@ void main() {
     final oversized = await CryptoAppUpdateArtifactVerifier(maxApkBytes: 3)
         .verify(
           artifact: artifact,
-          checksum: const AppUpdateChecksum(
+          checksum: AppUpdateChecksum(
             sha256: _zeroHash,
-            fileName: 'y300-v0.0.1-android-arm64-v8a-release.apk.sha256',
+            fileName: artifact.fileName,
           ),
           apkPath: path,
         );
