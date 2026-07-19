@@ -2,6 +2,7 @@ import 'package:characters/characters.dart';
 import 'package:y300/features/app_update/data/gitee/gitee_release_dto.dart';
 import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
 import 'package:y300/features/app_update/domain/models/gitee_release_candidate.dart';
+import 'package:y300/features/app_update/domain/services/app_update_apk_uri_policy.dart';
 import 'package:y300/features/app_update/domain/services/app_version_codec.dart';
 
 sealed class GiteeReleaseParseResult {
@@ -23,14 +24,16 @@ final class GiteeReleaseParseFailure extends GiteeReleaseParseResult {
 final class GiteeReleaseParser {
   const GiteeReleaseParser({
     AppVersionCodec versionCodec = const AppVersionCodec(),
-  }) : _versionCodec = versionCodec;
+    AppUpdateApkUriPolicy uriPolicy = const AppUpdateApkUriPolicy(),
+  }) : _versionCodec = versionCodec,
+       _uriPolicy = uriPolicy;
 
   static const int maxReleaseNotesCharacters = 8192;
-  static const String allowedAssetHost = 'gitee.com';
   static const String _assetPrefix = 'y300-v';
   static const String _assetSuffix = '-android-arm64-v8a-release.apk';
 
   final AppVersionCodec _versionCodec;
+  final AppUpdateApkUriPolicy _uriPolicy;
 
   GiteeReleaseParseResult parse(Object? payload) {
     final dtoResult = _parseDto(payload);
@@ -95,7 +98,10 @@ final class GiteeReleaseParser {
 
     final assetDto = matchingAssets.single;
     final downloadUrl = Uri.tryParse(assetDto.browserDownloadUrl);
-    if (!_isAllowedAssetUrl(downloadUrl, expectedName: expectedAssetName)) {
+    if (!_uriPolicy.isAllowedReleaseAsset(
+      downloadUrl,
+      expectedName: expectedAssetName,
+    )) {
       return _failure(
         AppUpdateFailureCode.invalidAssetUrl,
         'The matching APK must have an absolute HTTPS download URL.',
@@ -106,7 +112,7 @@ final class GiteeReleaseParser {
     final checksumDownloadUrl = Uri.tryParse(
       checksumAssetDto.browserDownloadUrl,
     );
-    if (!_isAllowedAssetUrl(
+    if (!_uriPolicy.isAllowedReleaseAsset(
       checksumDownloadUrl,
       expectedName: expectedChecksumAssetName,
     )) {
@@ -131,14 +137,6 @@ final class GiteeReleaseParser {
         releaseNotes: releaseNotes.isEmpty ? null : releaseNotes,
       ),
     );
-  }
-
-  bool _isAllowedAssetUrl(Uri? uri, {required String expectedName}) {
-    return uri != null &&
-        uri.scheme == 'https' &&
-        uri.host.toLowerCase() == allowedAssetHost &&
-        uri.pathSegments.isNotEmpty &&
-        uri.pathSegments.last == expectedName;
   }
 
   _GiteeDtoParseResult _parseDto(Object? payload) {

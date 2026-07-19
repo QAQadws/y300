@@ -14,22 +14,31 @@ import 'package:y300/app/y300_app.dart';
 import 'package:y300/features/forum/presentation/webview/theme/forum_webview_theme_palette_resolver.dart';
 
 void main() {
-  test('AppTheme.light exposes the expected scaffold, app bar, and navigation bar colors', () {
-    final theme = AppTheme.light();
-    final palette = AppThemePalette.light();
+  test(
+    'AppTheme.light exposes the expected scaffold, app bar, and navigation bar colors',
+    () {
+      final theme = AppTheme.light();
+      final palette = AppThemePalette.light();
 
-    expect(theme.useMaterial3, isTrue);
-    expect(theme.scaffoldBackgroundColor, AppThemeTokens.scaffoldBackground);
-    expect(theme.appBarTheme.backgroundColor, AppThemeTokens.appBarBackground);
-    expect(theme.appBarTheme.foregroundColor, AppThemeTokens.appBarForeground);
-    expect(
-      theme.navigationBarTheme.backgroundColor,
-      AppThemeTokens.navigationBarBackground,
-    );
-    _expectColorSchemeMatchesPalette(theme.colorScheme, palette);
-    _expectComponentThemesMatchScheme(theme);
-    expect(theme.extension<Y300ThemeExtension>(), isNotNull);
-  });
+      expect(theme.useMaterial3, isTrue);
+      expect(theme.scaffoldBackgroundColor, AppThemeTokens.scaffoldBackground);
+      expect(
+        theme.appBarTheme.backgroundColor,
+        AppThemeTokens.appBarBackground,
+      );
+      expect(
+        theme.appBarTheme.foregroundColor,
+        AppThemeTokens.appBarForeground,
+      );
+      expect(
+        theme.navigationBarTheme.backgroundColor,
+        AppThemeTokens.navigationBarBackground,
+      );
+      _expectColorSchemeMatchesPalette(theme.colorScheme, palette);
+      _expectComponentThemesMatchScheme(theme);
+      expect(theme.extension<Y300ThemeExtension>(), isNotNull);
+    },
+  );
 
   test('AppTheme.dark exposes a valid dark Material theme', () {
     final theme = AppTheme.dark();
@@ -38,8 +47,14 @@ void main() {
     expect(theme.useMaterial3, isTrue);
     expect(theme.colorScheme.brightness, Brightness.dark);
     expect(theme.brightness, Brightness.dark);
-    expect(theme.scaffoldBackgroundColor, isNot(AppThemeTokens.scaffoldBackground));
-    expect(theme.appBarTheme.backgroundColor, isNot(AppThemeTokens.appBarBackground));
+    expect(
+      theme.scaffoldBackgroundColor,
+      isNot(AppThemeTokens.scaffoldBackground),
+    );
+    expect(
+      theme.appBarTheme.backgroundColor,
+      isNot(AppThemeTokens.appBarBackground),
+    );
     expect(
       theme.navigationBarTheme.backgroundColor,
       isNot(AppThemeTokens.navigationBarBackground),
@@ -67,7 +82,10 @@ void main() {
     final palette = AppThemePalette.dark();
 
     expect(palette.brightness, Brightness.dark);
-    expect(palette.scaffoldBackground, isNot(AppThemeTokens.scaffoldBackground));
+    expect(
+      palette.scaffoldBackground,
+      isNot(AppThemeTokens.scaffoldBackground),
+    );
     expect(palette.appBarBackground, isNot(AppThemeTokens.appBarBackground));
     expect(
       palette.navigationBarBackground,
@@ -80,33 +98,43 @@ void main() {
     final dark = Y300ThemeExtension.dark(AppThemePalette.dark());
     const replacement = Color(0xFF123456);
 
-    final copied = light.copyWith(
-      readerProgressTrackBackground: replacement,
-    );
+    final copied = light.copyWith(readerProgressTrackBackground: replacement);
 
     expect(copied.readerProgressTrackBackground, replacement);
     expect(copied.readerChromeBackground, light.readerChromeBackground);
-    expect(light.lerp(dark, 0).readerChromeBackground, light.readerChromeBackground);
-    expect(light.lerp(dark, 1).readerChromeBackground, dark.readerChromeBackground);
+    expect(
+      light.lerp(dark, 0).readerChromeBackground,
+      light.readerChromeBackground,
+    );
+    expect(
+      light.lerp(dark, 1).readerChromeBackground,
+      dark.readerChromeBackground,
+    );
   });
 
-  test('Y300ThemeExtension exposes shelf semantic colors for light and dark themes', () {
-    final light = Y300ThemeExtension.light(AppThemePalette.light());
-    final dark = Y300ThemeExtension.dark(AppThemePalette.dark());
+  test(
+    'Y300ThemeExtension exposes shelf semantic colors for light and dark themes',
+    () {
+      final light = Y300ThemeExtension.light(AppThemePalette.light());
+      final dark = Y300ThemeExtension.dark(AppThemePalette.dark());
 
-    expect(light.shelfCategoryBarBackground, isNot(Colors.transparent));
-    expect(light.shelfCategorySelectedBackground, isNot(Colors.transparent));
-    expect(light.coverPlaceholderBackground, isNot(Colors.transparent));
-    expect(dark.shelfCategoryBarBackground, isNot(Colors.white));
-    expect(dark.coverPlaceholderBackground, isNot(Colors.white));
-  });
+      expect(light.shelfCategoryBarBackground, isNot(Colors.transparent));
+      expect(light.shelfCategorySelectedBackground, isNot(Colors.transparent));
+      expect(light.coverPlaceholderBackground, isNot(Colors.transparent));
+      expect(dark.shelfCategoryBarBackground, isNot(Colors.white));
+      expect(dark.coverPlaceholderBackground, isNot(Colors.white));
+    },
+  );
 
   test('AppTheme.dark component themes avoid light default surfaces', () {
     final theme = AppTheme.dark();
     final scheme = theme.colorScheme;
 
     expect(theme.popupMenuTheme.color, scheme.surfaceContainer);
-    expect(theme.bottomSheetTheme.modalBackgroundColor, scheme.surfaceContainer);
+    expect(
+      theme.bottomSheetTheme.modalBackgroundColor,
+      scheme.surfaceContainer,
+    );
     expect(
       theme.sliderTheme.inactiveTrackColor,
       scheme.surfaceContainerHighest,
@@ -148,7 +176,10 @@ void main() {
             ),
           ),
         ],
-        child: const Y300App(home: SizedBox.shrink()),
+        child: const Y300App(
+          home: SizedBox.shrink(),
+          enableAppUpdatePrompt: false,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -164,10 +195,7 @@ void main() {
       AppThemeTokens.navigationBarBackground,
     );
     expect(materialApp.darkTheme!.colorScheme.brightness, Brightness.dark);
-    expect(
-      materialApp.darkTheme!.extension<Y300ThemeExtension>(),
-      isNotNull,
-    );
+    expect(materialApp.darkTheme!.extension<Y300ThemeExtension>(), isNotNull);
   });
 
   testWidgets('AppTheme.dark builds common Material controls', (tester) async {
@@ -179,10 +207,7 @@ void main() {
             children: [
               PopupMenuButton<String>(
                 itemBuilder: (context) => const [
-                  PopupMenuItem<String>(
-                    value: 'refresh',
-                    child: Text('刷新'),
-                  ),
+                  PopupMenuItem<String>(value: 'refresh', child: Text('刷新')),
                 ],
               ),
               SegmentedButton<int>(
@@ -193,13 +218,8 @@ void main() {
                 selected: const {0},
                 onSelectionChanged: (_) {},
               ),
-              Slider(
-                value: 0.5,
-                onChanged: (_) {},
-              ),
-              const TextField(
-                decoration: InputDecoration(labelText: '搜索'),
-              ),
+              Slider(value: 0.5, onChanged: (_) {}),
+              const TextField(decoration: InputDecoration(labelText: '搜索')),
             ],
           ),
         ),
@@ -212,7 +232,9 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
   });
 
-  testWidgets('Y300App falls back to light while settings load', (tester) async {
+  testWidgets('Y300App falls back to light while settings load', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -220,7 +242,10 @@ void main() {
             () => _LoadingAppAppearanceController(),
           ),
         ],
-        child: const Y300App(home: SizedBox.shrink()),
+        child: const Y300App(
+          home: SizedBox.shrink(),
+          enableAppUpdatePrompt: false,
+        ),
       ),
     );
 
@@ -238,7 +263,10 @@ void main() {
             () => _FailingAppAppearanceController(),
           ),
         ],
-        child: const Y300App(home: SizedBox.shrink()),
+        child: const Y300App(
+          home: SizedBox.shrink(),
+          enableAppUpdatePrompt: false,
+        ),
       ),
     );
     await tester.pump();

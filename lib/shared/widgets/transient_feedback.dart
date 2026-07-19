@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
 /// Shows short-lived user feedback without adding a persistent layout region.
-void showTransientSnackBar(BuildContext context, String message) {
+void showTransientSnackBar(
+  BuildContext context,
+  String message, {
+  SnackBarAction? action,
+}) {
   final trimmed = message.trim();
   if (trimmed.isEmpty) {
     return;
@@ -12,5 +16,5 @@ void showTransientSnackBar(BuildContext context, String message) {
   }
   messenger
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(trimmed)));
+    ..showSnackBar(SnackBar(content: Text(trimmed), action: action));
 }

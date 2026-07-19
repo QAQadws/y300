@@ -32,10 +32,12 @@ final class GiteeUpgraderStore extends UpgraderStore {
           installedVersion: installedVersion,
           releaseNotes: candidate.releaseNotes,
         ),
-        GiteeReleaseLookupFailure(:final failure) => _emptyVersionInfo(
-          installedVersion,
-          failure,
-        ),
+        GiteeReleaseLookupFailure(:final failure, :final source) =>
+          _emptyVersionInfo(
+            installedVersion,
+            failure,
+            reportFailure: source == GiteeReleaseLookupSource.network,
+          ),
       };
     } on Object {
       return _emptyVersionInfo(
@@ -50,9 +52,12 @@ final class GiteeUpgraderStore extends UpgraderStore {
 
   UpgraderVersionInfo _emptyVersionInfo(
     Version installedVersion,
-    AppUpdateFailure failure,
-  ) {
-    _onFailure?.call(failure);
+    AppUpdateFailure failure, {
+    bool reportFailure = true,
+  }) {
+    if (reportFailure) {
+      _onFailure?.call(failure);
+    }
     return UpgraderVersionInfo(installedVersion: installedVersion);
   }
 }

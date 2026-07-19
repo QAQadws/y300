@@ -510,4 +510,18 @@ Phase 1 已于 2026-07-19 完成：
 - 33 项 `test/features/app_update` 测试通过，`flutter analyze` 无问题。
 - 未增加 provider、Widget、Android 权限、Kotlin 文件或生产网络入口。
 
-Phase 2 可以在该内核上接入单例生命周期 coordinator、`UpgradeAlert` 和外部 APK launcher。Phase 2 仍不得承担下载任务或安装权限。
+Phase 2 已于 2026-07-19 完成：
+
+- 单一 Riverpod coordinator/provider 生命周期已接入应用根节点；`UpgradeAlert` 异步初始化且保留 Upgrader 的忽略、稍后和 3 天再次提醒状态。
+- 更新网络使用独立、无论坛 Cookie/Authorization 的 Dio client；Store 缓存失败不重复记录，自动检查失败和受抑制状态保持静默。
+- `UpgradeAlert.onUpdate` 返回 `false`，由独立 launcher 使用 `LaunchMode.externalApplication` 打开经过二次策略校验的 Gitee HTTPS arm64 APK URL；无 URL、无法启动和异步异常通过稳定失败与公共 Snackbar 收敛。
+- 46 项更新模块测试和 12 项应用根主题测试通过；全仓 analyzer 结果记录在配套实施方案。Android 真机浏览器下载与覆盖安装仍需 Phase 4 使用正式签名 APK 验收。
+- Phase 2 没有承担下载任务、安装权限、FileProvider 或更新专用 Kotlin/MethodChannel。Phase 3 可在同一 coordinator 上增加“更多”页手动检查，不得创建第二个 Upgrader 或版本状态机。
+
+Phase 3 已于 2026-07-19 完成：
+
+- “更多”页新增更新模块自有的检查 tile；当前版本仅从 coordinator 的 Upgrader 状态读取，页面没有直接依赖 `package_info_plus`、Gitee repository 或版本比较类型。
+- coordinator 使用 typed result 编排一次强制刷新与一次缓存读取，重复点击和自动初始化共享在途请求；是否存在新版仍由 `Upgrader.isUpdateAvailable()` 唯一判断。
+- 未受抑制的新版继续使用根节点唯一 `UpgradeAlert`。已忽略或仍在提醒间隔内时，仅通过带“立即下载”的 Snackbar 允许本次显式下载；不调用 `clearSavedSettings()`，不重置忽略版本和提醒时间。
+- 53 项更新模块测试、11 项“更多”页测试和 12 项应用根主题测试通过，`flutter analyze` 无问题。
+- Phase 3 没有新增下载状态、APK 文件管理、安装权限或第二套持久化。Phase 4 只负责手工 Release 与真机发布演练，不应重新引入客户端更新内核。

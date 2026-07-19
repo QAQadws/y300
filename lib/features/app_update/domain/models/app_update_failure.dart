@@ -15,6 +15,9 @@ enum AppUpdateFailureCode {
   rateLimited,
   releaseNotFound,
   remoteUnavailable,
+  installedVersionUnavailable,
+  externalLaunchUnavailable,
+  externalLaunchFailed,
 }
 
 final class AppUpdateFailure {

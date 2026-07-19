@@ -10,6 +10,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_controlle
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
+import 'package:y300/features/app_update/presentation/widgets/app_update_check_tile.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
@@ -95,6 +96,7 @@ class _MorePageState extends ConsumerState<MorePage> {
             subtitle: Text('后续阶段接入阅读器细项配置'),
           ),
           ..._debugTools.buildTiles(context, ref),
+          const AppUpdateCheckTile(),
           ListTile(
             key: const Key('more-about-placeholder'),
             leading: const Icon(Icons.info_outline),

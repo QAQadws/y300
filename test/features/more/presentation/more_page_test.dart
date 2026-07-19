@@ -83,6 +83,12 @@ void main() {
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
     expect(find.text('管理图片缓存与下载位置'), findsOneWidget);
+    await _scrollUntilVisibleIfNeeded(
+      tester,
+      find.byKey(const Key('more-check-update-entry')),
+    );
+    expect(find.byKey(const Key('more-check-update-entry')), findsOneWidget);
+    expect(find.text('检查更新'), findsOneWidget);
     expect(
       find.byKey(const Key('more-reader-settings-placeholder')),
       findsOneWidget,
@@ -332,6 +338,8 @@ void main() {
 
     final aboutTile = find.byKey(const Key('more-about-placeholder'));
     await _scrollUntilVisibleIfNeeded(tester, aboutTile);
+    await tester.drag(find.byType(ListView), const Offset(0, -80));
+    await tester.pumpAndSettle();
     for (var i = 0; i < 5; i++) {
       await tester.tap(aboutTile);
       await tester.pump(const Duration(milliseconds: 100));

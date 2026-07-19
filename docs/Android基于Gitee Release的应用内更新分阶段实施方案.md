@@ -816,6 +816,8 @@ Android 14/15
 
 ### Phase 2：自动提示与外部 APK 打开
 
+实施状态：已于 2026-07-19 完成代码接入与自动化验证。Android 真机的浏览器下载和系统安装链路保留到 Phase 4 发布演练验收。
+
 任务：
 
 - 建立 Riverpod providers 和单例生命周期 coordinator。
@@ -830,6 +832,17 @@ Android 14/15
 - 确认不新增 `REQUEST_INSTALL_PACKAGES`、FileProvider 或 Kotlin bridge。
 - 更新 `docs/开发文档.md`。
 
+实现记录：
+
+- `AppUpdatePromptCoordinator`、更新专用 providers 和独立无认证 Dio client 已接入；同一 ProviderScope 内只创建一个 coordinator、Upgrader 和 Store，销毁时释放 Upgrader 与 Dio。
+- `Y300App` 在 MaterialApp 首页根部挂载唯一 `AppUpdateAlertHost`；测试/预览可显式关闭宿主，生产默认启用。
+- `UpgradeAlert` 保留 release notes、忽略、稍后和 3 天提醒间隔；无更新或受 Upgrader 规则抑制时保持静默。
+- `onUpdate` 返回 `false`，并由 `UrlLauncherAppUpdateLauncher` 使用 `LaunchMode.externalApplication` 打开 URL，确保不会回落到 Upgrader 的默认商店启动器。
+- parser 与 launcher 复用 `AppUpdateApkUriPolicy`，在外部启动前再次要求 HTTPS、`gitee.com`、无 userinfo/fragment 和 canonical arm64 APK 文件名。
+- 无 URL、无可用外部应用和启动异常均返回稳定失败并通过公共 Snackbar 呈现；重复点击外部启动会合并为一个在途 Future。
+- Store 的缓存失败不会在每次前台刷新时重复上报；真实网络失败和意外异常仍保留稳定诊断码。
+- 未增加更新专用 Android 权限、FileProvider、Kotlin bridge、MethodChannel 或 App 内下载状态。
+
 验收：
 
 - fake 高版本可触发 UpgradeAlert。
@@ -839,7 +852,16 @@ Android 14/15
 - 页面 rebuild 不重复创建 Upgrader 或重复弹窗。
 - 自动检查不影响其它功能。
 
+自动化结果：
+
+- `flutter test test/features/app_update`：46 项通过。
+- `flutter test test/app/app_theme_test.dart`：12 项通过。
+- `flutter analyze`：通过，`No issues found`。
+- 真机浏览器下载、通知进度和覆盖安装不由 Widget 测试模拟，必须在 Phase 4 使用正式签名 APK 验收。
+
 ### Phase 3：“更多”页手动检查与单一提示入口
+
+实施状态：已于 2026-07-19 完成代码接入与自动化验证。正式 Gitee Release 的真机交互仍随 Phase 4 发布演练验收。
 
 任务：
 
@@ -852,12 +874,30 @@ Android 14/15
 - 已忽略或仍在提醒间隔内的版本通过带操作的 Snackbar 明确说明，并允许用户显式下载。
 - 更新 `docs/开发文档.md`。
 
+实现记录：
+
+- “更多”页只挂载更新模块提供的 `AppUpdateCheckTile`；当前版本来自 coordinator 持有的 Upgrader 状态，页面不直接导入 `package_info_plus`、repository 或版本类型。
+- coordinator 新增 typed `AppUpdateCheckResult`：稳定区分检查失败、已是最新和发现新版，并保留 Upgrader 给出的 ignored/reminder interval 抑制原因。
+- `checkNow()` 先执行一次 `forceRefresh`，再让同一个 Upgrader 调用 `updateVersionInfo()` 读取刚写入的 repository cache；自动初始化与重复点击均受 repository/coordinator 两层 in-flight 合并保护，不产生第二次 HTTP 请求。
+- 版本是否可更新只调用 `Upgrader.isUpdateAvailable()`；检查过程不实现第二套 SemVer 比较，不读取或修改 Upgrader 私有 SharedPreferences。
+- 未受抑制的新版由根节点已经挂载的唯一 `UpgradeAlert` 响应；手动入口不创建 dialog、sheet 或第二个 Upgrader。
+- 已忽略或仍在提醒间隔内时显示带“立即下载”的 Snackbar。该一次性操作直接复用当前 launcher，不调用 `clearSavedSettings()`，因此不会取消用户忽略或改变后续自动提醒时间。
+- 检查按钮在请求期间禁用并显示紧凑进度；失败、已是最新以及外部启动失败均使用公共 transient Snackbar。
+
 验收：
 
 - 三种手动结果明确且不会重复请求。
 - 主动检查不会创建第二个 Upgrader 实例。
 - 手动检查不增加第二个弹窗状态机，不重新实现 SemVer 比较或持久化。
 - 不出现下载进度、安装权限和任务恢复 UI。
+
+自动化结果：
+
+- `flutter test test/features/app_update`：53 项通过。
+- `flutter test test/features/more/presentation/more_page_test.dart`：11 项通过。
+- `flutter test test/app/app_theme_test.dart`：12 项通过。
+- `flutter analyze`：通过，`No issues found`。
+- 真机上的 Gitee 高版本提示、忽略/稍后状态和外部浏览器打开仍需 Phase 4 使用正式签名 APK 验收。
 
 ### Phase 4：手工发布演练与发布硬化
 

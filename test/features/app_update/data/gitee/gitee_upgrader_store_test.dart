@@ -69,6 +69,33 @@ void main() {
       expect(reported, <AppUpdateFailure>[failure]);
     });
 
+    test('does not repeatedly report a cached failure', () async {
+      const failure = AppUpdateFailure(
+        code: AppUpdateFailureCode.rateLimited,
+        message: 'rate limited',
+      );
+      final reported = <AppUpdateFailure>[];
+      final store = GiteeUpgraderStore(
+        repository: _FakeRepository(
+          const GiteeReleaseLookupFailure(
+            failure: failure,
+            source: GiteeReleaseLookupSource.cache,
+          ),
+        ),
+        onFailure: reported.add,
+      );
+
+      final info = await store.getVersionInfo(
+        state: Upgrader().state,
+        installedVersion: Version(1, 0, 0),
+        country: null,
+        language: null,
+      );
+
+      expect(info.appStoreVersion, isNull);
+      expect(reported, isEmpty);
+    });
+
     test('contains unexpected repository exceptions', () async {
       final reported = <AppUpdateFailure>[];
       final store = GiteeUpgraderStore(
