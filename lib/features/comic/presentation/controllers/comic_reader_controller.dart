@@ -100,6 +100,18 @@ class ComicReaderImageState {
   }
 }
 
+/// Repository data needed to prepare the next episode lookahead. This model
+/// intentionally carries no reader widgets or preload implementation details.
+class ComicAdjacentEpisodePreload {
+  const ComicAdjacentEpisodePreload({
+    required this.episodeId,
+    required this.images,
+  });
+
+  final String episodeId;
+  final List<ComicEpisodeImageItem> images;
+}
+
 class ComicReaderCacheSummary {
   const ComicReaderCacheSummary({
     required this.totalCount,
@@ -981,6 +993,34 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return null;
     }
     return episodes[currentIndex + 1].episodeId;
+  }
+
+  /// Resolves only the next episode's image metadata for reader lookahead.
+  ///
+  /// It may populate the normal episode-image table when the next chapter has
+  /// not been discovered yet, but it never changes reading progress, read
+  /// state, bookmark state, or explicit download state.
+  Future<ComicAdjacentEpisodePreload?> prepareNextEpisodePreload() async {
+    final activeEpisodeId = _activeEpisodeId;
+    final episodes = await _repository.getComicEpisodes(
+      comicId: _args.comicId,
+      descending: false,
+    );
+    final currentIndex = episodes.indexWhere(
+      (episode) => episode.episodeId == activeEpisodeId,
+    );
+    if (currentIndex < 0 || currentIndex + 1 >= episodes.length) {
+      return null;
+    }
+    final nextEpisode = episodes[currentIndex + 1];
+    final images = await _ensureEpisodeImages(nextEpisode);
+    if (!ref.mounted || _activeEpisodeId != activeEpisodeId || images.isEmpty) {
+      return null;
+    }
+    return ComicAdjacentEpisodePreload(
+      episodeId: nextEpisode.episodeId,
+      images: List<ComicEpisodeImageItem>.unmodifiable(images),
+    );
   }
 
   Future<ComicReaderViewState> _loadState({required String episodeId}) async {

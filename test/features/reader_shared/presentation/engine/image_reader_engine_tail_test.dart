@@ -77,13 +77,59 @@ void main() {
       expect(tail.visibleCount, 1);
     },
   );
+
+  testWidgets(
+    'ready tail submits adjacent lookahead through shared coordinator',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const <String, Object>{
+        'reader_pref_mode': 'ltr',
+      });
+      final tail = _RecordingTailSurface()..adjacentReady = true;
+      final service = _RecordingForumImagePrecacheService();
+      await tester.pumpWidget(
+        _host(tail, precacheService: service, adjacentPlan: _adjacentPlan()),
+      );
+      await tester.pump();
+
+      final page = find.byKey(const Key('tail-test-page'));
+      await tester.drag(page, const Offset(-700, 0));
+      await tester.pumpAndSettle();
+      await tester.drag(page, const Offset(-700, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('reader-tail-tail')), findsOneWidget);
+      final adjacentDecoded = service.decodedSpecs.where(
+        (spec) => spec.episodeId == 'next-episode',
+      );
+      final adjacentDisk = service.diskSpecs.where(
+        (spec) => spec.episodeId == 'next-episode',
+      );
+      expect(adjacentDecoded.map((spec) => spec.imageIndex), <int>[0, 1]);
+      expect(adjacentDisk.map((spec) => spec.imageIndex), <int>[2, 3]);
+      expect(
+        service.allSpecs
+            .where((spec) {
+              return spec.episodeId == 'next-episode';
+            })
+            .every((spec) {
+              return spec.kind == ForumImageKind.comicReaderPage &&
+                  spec.episodeId == 'next-episode';
+            }),
+        isTrue,
+      );
+    },
+  );
 }
 
-Widget _host(_RecordingTailSurface tail) {
+Widget _host(
+  _RecordingTailSurface tail, {
+  ForumImagePrecacheService? precacheService,
+  ReaderAdjacentPreloadPlan? adjacentPlan,
+}) {
   return ProviderScope(
     overrides: [
       forumImagePrecacheServiceProvider.overrideWithValue(
-        _NoopForumImagePrecacheService(),
+        precacheService ?? _NoopForumImagePrecacheService(),
       ),
     ],
     child: MaterialApp(
@@ -91,16 +137,22 @@ Widget _host(_RecordingTailSurface tail) {
         key: const Key('tail-test-engine'),
         pageKey: const Key('tail-test-page'),
         listKey: const Key('tail-test-list'),
-        capability: _TailCapability(tail),
+        capability: _TailCapability(tail, adjacentPlan: adjacentPlan),
       ),
     ),
   );
 }
 
 class _TailCapability extends ReaderCapability {
-  _TailCapability(this._tail);
+  _TailCapability(this._tail, {this.adjacentPlan});
 
   final _RecordingTailSurface _tail;
+  final ReaderAdjacentPreloadPlan? adjacentPlan;
+
+  @override
+  Future<ReaderAdjacentPreloadPlan?> buildAdjacentPreloadPlan() async {
+    return adjacentPlan;
+  }
 
   @override
   ReaderContent get content => ReaderContent(
@@ -154,6 +206,7 @@ class _RecordingTailSurface implements ReaderTailSurface {
   int visibleCount = 0;
   int retryCount = 0;
   int advanceCount = 0;
+  bool adjacentReady = false;
 
   @override
   String get id => 'tail';
@@ -166,6 +219,9 @@ class _RecordingTailSurface implements ReaderTailSurface {
 
   @override
   bool get hasAdvance => true;
+
+  @override
+  bool get isAdjacentPreloadReady => adjacentReady;
 
   @override
   Widget buildPaged(BuildContext context, ReaderTailActions actions) {
@@ -230,5 +286,62 @@ class _NoopForumImagePrecacheService implements ForumImagePrecacheService {
     Size? expectedDisplaySize,
   }) async {
     return const ForumImagePrecacheResult(success: true, decoded: true);
+  }
+}
+
+ReaderAdjacentPreloadPlan _adjacentPlan() {
+  return ReaderAdjacentPreloadPlan(
+    ownerId: 'next-episode',
+    images: List<ReaderAdjacentPreloadImage>.generate(4, (index) {
+      return ReaderAdjacentPreloadImage(
+        itemId: 'next-episode:$index',
+        imageIndex: index,
+        spec: ForumImageLoadSpec(
+          kind: ForumImageKind.comicReaderPage,
+          url: Uri.parse('https://img.test/next-$index.jpg'),
+          ownerId: 'comic-1',
+          ownerType: ImageCacheOwnerType.comic,
+          episodeId: 'next-episode',
+          imageIndex: index,
+          cacheKey: 'next-cache-$index',
+        ),
+      );
+    }),
+  );
+}
+
+class _RecordingForumImagePrecacheService implements ForumImagePrecacheService {
+  final decodedSpecs = <ForumImageLoadSpec>[];
+  final diskSpecs = <ForumImageLoadSpec>[];
+
+  Iterable<ForumImageLoadSpec> get allSpecs sync* {
+    yield* decodedSpecs;
+    yield* diskSpecs;
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> ensureDiskCached(
+    ForumImageLoadSpec spec,
+  ) async {
+    diskSpecs.add(spec);
+    return ForumImagePrecacheResult(
+      success: true,
+      decoded: false,
+      cacheKey: spec.cacheKey,
+    );
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecoded({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    Size? expectedDisplaySize,
+  }) async {
+    decodedSpecs.add(spec);
+    return ForumImagePrecacheResult(
+      success: true,
+      decoded: true,
+      cacheKey: spec.cacheKey,
+    );
   }
 }

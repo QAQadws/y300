@@ -5,6 +5,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/services/comic_reader_continuous_image_adapter.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
@@ -183,6 +184,36 @@ class ComicReaderCapability extends ReaderCapability {
   }
 
   @override
+  Future<ReaderAdjacentPreloadPlan?> buildAdjacentPreloadPlan() async {
+    final adjacent = await controller.prepareNextEpisodePreload();
+    if (adjacent == null) {
+      return null;
+    }
+    final images = <ReaderAdjacentPreloadImage>[];
+    for (final image in adjacent.images) {
+      final spec = _adjacentImageLoadSpec(image);
+      if (spec == null) {
+        continue;
+      }
+      final cacheKey = spec.cacheKey ?? spec.sourceUrl;
+      images.add(
+        ReaderAdjacentPreloadImage(
+          itemId: '${adjacent.episodeId}:${image.imageIndex}:$cacheKey',
+          imageIndex: image.imageIndex,
+          spec: spec,
+        ),
+      );
+    }
+    if (images.isEmpty) {
+      return null;
+    }
+    return ReaderAdjacentPreloadPlan(
+      ownerId: adjacent.episodeId,
+      images: List<ReaderAdjacentPreloadImage>.unmodifiable(images),
+    );
+  }
+
+  @override
   void onImageVisible(int index) {
     unawaited(controller.onImageVisible(index));
     if (preferences.readerMode != ReaderModePreference.vertical &&
@@ -249,6 +280,34 @@ class ComicReaderCapability extends ReaderCapability {
       retentionClass: ImageRetentionClass.recentReader,
       htmlWidth: item.knownWidth?.toDouble(),
       htmlHeight: item.knownHeight?.toDouble(),
+      allowReaderOpen: true,
+    );
+  }
+
+  ForumImageLoadSpec? _adjacentImageLoadSpec(ComicEpisodeImageItem image) {
+    final sourceUrl = image.effectiveSourceUrl.trim();
+    final uri = Uri.tryParse(sourceUrl);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      return null;
+    }
+    final cacheKey = image.stableCacheKey?.trim();
+    return ForumImageLoadSpec(
+      kind: ForumImageKind.comicReaderPage,
+      url: uri,
+      ownerId: viewState.comicId,
+      ownerType: ImageCacheOwnerType.comic,
+      episodeId: image.episodeId,
+      imageIndex: image.imageIndex,
+      cacheKey: cacheKey == null || cacheKey.isEmpty
+          ? ImageCacheKeys.comicPage(
+              comicId: viewState.comicId,
+              episodeId: image.episodeId,
+              imageIndex: image.imageIndex,
+            )
+          : cacheKey,
+      retentionClass: ImageRetentionClass.recentReader,
+      htmlWidth: image.width?.toDouble(),
+      htmlHeight: image.height?.toDouble(),
       allowReaderOpen: true,
     );
   }

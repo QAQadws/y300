@@ -22,6 +22,11 @@ abstract interface class ReaderTailSurface {
 
   bool get hasAdvance => false;
 
+  /// Whether the current tail state has enough information to start adjacent
+  /// lookahead. Vertical tails can keep this false until the user explicitly
+  /// expands them; paged tails usually become ready after their first load.
+  bool get isAdjacentPreloadReady => false;
+
   /// Number of lazily-built items contributed to the vertical reader stream.
   /// A regular tail is one item; a large tail can expose a sliver-like item
   /// sequence without nesting another scrollable viewport.

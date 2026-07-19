@@ -20,13 +20,33 @@ class ComicCommentTailSurface extends ChangeNotifier
   ComicCommentTailSurface({
     required ComicCommentSessionController session,
     required ImageRequestHeaderBuilder? imageHeaderBuilder,
+    bool hasNextEpisode = false,
+    String? nextEpisodeTitle,
+    FutureOr<void> Function()? onAdvanceEpisode,
   }) : _session = session,
-       _imageHeaderBuilder = imageHeaderBuilder {
+       _imageHeaderBuilder = imageHeaderBuilder,
+       _hasNextEpisode = hasNextEpisode,
+       _nextEpisodeTitle = nextEpisodeTitle,
+       _onAdvanceEpisode = onAdvanceEpisode {
     _session.addListener(_onSessionChanged);
   }
 
   final ComicCommentSessionController _session;
   final ImageRequestHeaderBuilder? _imageHeaderBuilder;
+  bool _hasNextEpisode;
+  String? _nextEpisodeTitle;
+  FutureOr<void> Function()? _onAdvanceEpisode;
+
+  void updateNavigation({
+    required bool hasNextEpisode,
+    required String? nextEpisodeTitle,
+    required FutureOr<void> Function()? onAdvanceEpisode,
+  }) {
+    _hasNextEpisode = hasNextEpisode;
+    _nextEpisodeTitle = nextEpisodeTitle;
+    _onAdvanceEpisode = onAdvanceEpisode;
+  }
+
   ThreadPostRenderContext? _renderContext;
   Object? _renderContextIdentity;
   bool _disposed = false;
@@ -40,7 +60,10 @@ class ComicCommentTailSurface extends ChangeNotifier
   String get indicatorLabel => '评论';
 
   @override
-  bool get hasAdvance => false;
+  bool get hasAdvance => _hasNextEpisode && _onAdvanceEpisode != null;
+
+  @override
+  bool get isAdjacentPreloadReady => sessionState.result != null;
 
   @override
   int get verticalItemCount {
@@ -51,7 +74,7 @@ class ComicCommentTailSurface extends ChangeNotifier
     }
     if (result.status == ComicCommentLoadStatus.success &&
         result.items.isNotEmpty) {
-      return result.items.length;
+      return result.items.length + (_hasNextEpisode ? 0 : 1);
     }
     if (result.status == ComicCommentLoadStatus.partialFailure &&
         result.items.isNotEmpty) {
@@ -67,18 +90,30 @@ class ComicCommentTailSurface extends ChangeNotifier
     if (state.isLoading || result == null) {
       return const _CommentTailLoading();
     }
-    return ComicCommentListSurface(
+    final list = ComicCommentListSurface(
       sourceTid: _session.key.sourceTid,
       result: result,
       imageHeaderBuilder: _imageHeaderBuilder,
       onRetry: actions.onRetry,
       renderContext: _renderContextFor(context),
     );
+    if (_hasNextEpisode) {
+      return list;
+    }
+    return Column(
+      children: [
+        Expanded(child: list),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 8, 20, 32),
+          child: Text('已是最后一章'),
+        ),
+      ],
+    );
   }
 
   @override
   Widget buildAdvance(BuildContext context, ReaderTailActions actions) {
-    return const SizedBox.shrink();
+    return _CommentAdvance(nextEpisodeTitle: _nextEpisodeTitle);
   }
 
   @override
@@ -94,29 +129,37 @@ class ComicCommentTailSurface extends ChangeNotifier
   ) {
     final state = sessionState;
     final result = state.result;
-    if (result != null &&
-        (result.status == ComicCommentLoadStatus.success ||
-            result.status == ComicCommentLoadStatus.partialFailure)) {
-      if (index < result.items.length) {
+    final loadedResult = result;
+    if (loadedResult != null &&
+        (loadedResult.status == ComicCommentLoadStatus.success ||
+            loadedResult.status == ComicCommentLoadStatus.partialFailure)) {
+      if (index < loadedResult.items.length) {
         return Padding(
           key: ValueKey<String>(
-            'comic-comment-tail-item-${result.items[index].pid}',
+            'comic-comment-tail-item-${loadedResult.items[index].pid}',
           ),
           padding: EdgeInsets.fromLTRB(12, index == 0 ? 12 : 0, 12, 10),
           child: ComicCommentListItem(
-            comment: result.items[index],
+            comment: loadedResult.items[index],
             sourceTid: _session.key.sourceTid,
             imageHeaderBuilder: _imageHeaderBuilder,
             renderContext: _renderContextFor(context),
           ),
         );
       }
-      return _CommentTailFailure(
-        key: const Key('comic-comment-tail-partial-failure'),
-        message: result.errorMessage,
-        onRetry: () => unawaited(_handleVerticalRequest(context)),
-        compact: true,
-      );
+      if (loadedResult.status == ComicCommentLoadStatus.partialFailure) {
+        return _CommentTailFailure(
+          key: const Key('comic-comment-tail-partial-failure'),
+          message: loadedResult.errorMessage,
+          onRetry: () => unawaited(_handleVerticalRequest(context)),
+          compact: true,
+        );
+      }
+      if (!_hasNextEpisode && index == loadedResult.items.length) {
+        return const _CommentLastChapter(
+          key: Key('comic-comment-tail-last-chapter'),
+        );
+      }
     }
     return _buildStatus(context, state, result);
   }
@@ -132,7 +175,12 @@ class ComicCommentTailSurface extends ChangeNotifier
       _session.state.result == null ? _session.load() : _session.retry();
 
   @override
-  Future<void> onAdvance() async {}
+  Future<void> onAdvance() async {
+    final callback = _onAdvanceEpisode;
+    if (callback != null) {
+      await callback();
+    }
+  }
 
   Widget _buildStatus(
     BuildContext context,
@@ -302,6 +350,47 @@ class _CommentTailFailure extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CommentAdvance extends StatelessWidget {
+  const _CommentAdvance({this.nextEpisodeTitle});
+
+  final String? nextEpisodeTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      key: const Key('comic-comment-tail-advance'),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.swipe_outlined),
+            const SizedBox(height: 12),
+            Text(
+              nextEpisodeTitle == null || nextEpisodeTitle!.trim().isEmpty
+                  ? '继续滑动进入下一章'
+                  : '继续滑动进入：$nextEpisodeTitle',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CommentLastChapter extends StatelessWidget {
+  const _CommentLastChapter({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 40),
+      child: Center(child: Text('已是最后一章')),
     );
   }
 }

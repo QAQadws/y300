@@ -65,6 +65,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   ReaderSequencePosition _pagedPosition = const ReaderSequencePosition.image(0);
   final Set<String> _reportedTailSurfaceKeys = <String>{};
   final Set<String> _reportedAdvanceSurfaceKeys = <String>{};
+  final Set<String> _reportedAdjacentPreloadKeys = <String>{};
 
   // 滑块拖动会话 + commit 锁状态机（迁移自 ComicReaderPage）。
   int? _sliderPreviewIndex;
@@ -399,6 +400,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   }
 
   Widget _buildPagedTail(BuildContext context, ReaderTailSurface tail) {
+    _scheduleAdjacentPreloadIfReady(tail);
     return KeyedSubtree(
       key: Key('reader-tail-${tail.id}'),
       child: tail.buildPaged(context, _tailActions(tail)),
@@ -420,6 +422,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (index == 0) {
       _scheduleTailVisible(tail);
     }
+    _scheduleAdjacentPreloadIfReady(tail);
     return KeyedSubtree(
       key: Key('reader-tail-vertical-${tail.id}-$index'),
       child: tail.buildVerticalItem(context, _tailActions(tail), index),
@@ -444,6 +447,49 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       }
       _invokeTailCallback(tail, tail.onVerticalVisible);
     });
+  }
+
+  void _scheduleAdjacentPreloadIfReady(ReaderTailSurface tail) {
+    if (!tail.isAdjacentPreloadReady) {
+      return;
+    }
+    final ownerId = _lastOwnerId;
+    if (ownerId == null) {
+      return;
+    }
+    final key = '$ownerId:${tail.id}';
+    if (!_reportedAdjacentPreloadKeys.add(key)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isCurrentTail(tail)) {
+        return;
+      }
+      unawaited(_prepareAdjacentPreload(tail, key));
+    });
+  }
+
+  Future<void> _prepareAdjacentPreload(
+    ReaderTailSurface tail,
+    String key,
+  ) async {
+    final plan = await _capability.buildAdjacentPreloadPlan();
+    if (!mounted || !_isCurrentTail(tail)) {
+      return;
+    }
+    final ownerId = _lastOwnerId;
+    if (ownerId == null || !_reportedAdjacentPreloadKeys.contains(key)) {
+      return;
+    }
+    if (plan == null || plan.images.isEmpty) {
+      return;
+    }
+    _sessionPreloadCoordinator.submitAdjacentWindow(
+      context: context,
+      plan: plan,
+      precacheService: ref.read(forumImagePrecacheServiceProvider),
+      expectedDisplaySize: _expectedPreloadDisplaySize(),
+    );
   }
 
   void _invokeTailCallback(
@@ -630,6 +676,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _reportedVisibleImageIndexes.clear();
     _reportedTailSurfaceKeys.clear();
     _reportedAdvanceSurfaceKeys.clear();
+    _reportedAdjacentPreloadKeys.clear();
     _pagedPosition = ReaderSequencePosition.image(initialIndex);
     _setZoomGate(false, paged: false);
     _activePagedIndex.value = initialIndex;

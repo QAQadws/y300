@@ -228,6 +228,63 @@ class ReaderImageSessionPreloadCoordinator {
     _pump();
   }
 
+  /// Schedules the shared lookahead window for content owned by the next
+  /// reader sequence.
+  ///
+  /// Adjacent content is intentionally not attached to the current
+  /// [ReaderImageSessionStore]. Its decoded image providers and disk cache
+  /// entries remain reusable when the next reader session is created, while
+  /// generation checks prevent late work from mutating the current session.
+  void submitAdjacentWindow({
+    required BuildContext context,
+    required ReaderAdjacentPreloadPlan plan,
+    required ForumImagePrecacheService precacheService,
+    Size? expectedDisplaySize,
+  }) {
+    if (_disposed || plan.images.isEmpty) {
+      return;
+    }
+    final generation = _generation;
+    _removePendingWhere(
+      (task) =>
+          task.generation == generation &&
+          task.role == _ReaderImagePreparationRole.adjacent,
+    );
+
+    final window = plan.images.take(_policy.diskRadius + 1);
+    var index = 0;
+    for (final image in window) {
+      final request = ReaderImageSessionPreloadRequest(
+        readerOwnerId: plan.ownerId,
+        itemId: image.itemId,
+        index: image.imageIndex,
+        spec: image.spec,
+        kind: index <= _policy.decodedRadius
+            ? ReaderImageSessionPreloadKind.decoded
+            : ReaderImageSessionPreloadKind.disk,
+      );
+      _enqueue(
+        _ReaderImagePreparationTask(
+          request: request,
+          generation: generation,
+          role: _ReaderImagePreparationRole.adjacent,
+          priority: request.kind == ReaderImageSessionPreloadKind.decoded
+              ? _ReaderImagePreparationPriority.adjacentDecoded
+              : _ReaderImagePreparationPriority.adjacentDisk,
+          sequence: _sequence++,
+          context: context,
+          precacheService: precacheService,
+          expectedDisplaySize: expectedDisplaySize,
+          // The current chapter sink must not receive metadata for the next
+          // chapter. The shared cache service remains the source of reuse.
+          preparationSink: null,
+        ),
+      );
+      index++;
+    }
+    _pump();
+  }
+
   /// Promotes the latest explicit seek target ahead of ordinary window work.
   /// A newer pending seek supersedes an older one; already-running work remains
   /// bounded by [ReaderImageSessionPreloadPolicy.maxConcurrentTasks].
@@ -653,9 +710,16 @@ class ReaderImageSessionPreloadRequest {
   final ReaderImageSessionPreloadKind kind;
 }
 
-enum _ReaderImagePreparationRole { window, seek, retry }
+enum _ReaderImagePreparationRole { window, seek, retry, adjacent }
 
-enum _ReaderImagePreparationPriority { retry, seek, windowDecoded, windowDisk }
+enum _ReaderImagePreparationPriority {
+  retry,
+  seek,
+  windowDecoded,
+  windowDisk,
+  adjacentDecoded,
+  adjacentDisk,
+}
 
 class _ReaderImagePreparationTask {
   const _ReaderImagePreparationTask({

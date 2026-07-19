@@ -60,7 +60,7 @@ void main() {
       find.byKey(const ValueKey<String>('comic-comment-tail-item-p2')),
       findsOneWidget,
     );
-    expect(tail.verticalItemCount, 1);
+    expect(tail.verticalItemCount, 2);
   });
 
   test('success results expose one lazy vertical item per comment', () async {
@@ -78,9 +78,37 @@ void main() {
 
     await session.load();
 
-    expect(tail.verticalItemCount, 1);
+    expect(tail.verticalItemCount, 2);
     expect(tail.hasAdvance, isFalse);
   });
+
+  test(
+    'exposes a swipe advance surface only when the next episode exists',
+    () async {
+      final loader = _TailFakeLoader();
+      var advances = 0;
+      final session = ComicCommentSessionController(
+        key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
+        loader: loader,
+      );
+      final tail = ComicCommentTailSurface(
+        session: session,
+        imageHeaderBuilder: null,
+        hasNextEpisode: true,
+        nextEpisodeTitle: '第 2 话',
+        onAdvanceEpisode: () => advances++,
+      );
+      addTearDown(tail.dispose);
+      addTearDown(session.dispose);
+
+      await session.load();
+
+      expect(tail.hasAdvance, isTrue);
+      await tail.onAdvance();
+      expect(advances, 1);
+      expect(tail.isAdjacentPreloadReady, isTrue);
+    },
+  );
 }
 
 class _TailFakeLoader implements ComicCommentLoader {

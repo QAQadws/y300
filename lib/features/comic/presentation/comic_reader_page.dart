@@ -78,6 +78,13 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
           final commentSession = ref.watch(
             comicCommentSessionControllerProvider(commentSessionKey),
           );
+          commentTail.updateNavigation(
+            hasNextEpisode: viewState.hasNextEpisode,
+            nextEpisodeTitle: viewState.nextChapter?.title,
+            onAdvanceEpisode: viewState.hasNextEpisode
+                ? () => _openAdjacentEpisode(viewState, previous: false)
+                : null,
+          );
           return AnimatedBuilder(
             animation: commentTail,
             builder: (context, _) => ImageReaderEngine(

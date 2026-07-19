@@ -97,6 +97,38 @@ class ReaderEngineContext {
   final ReaderEngineActions actions;
 }
 
+/// One image that belongs to an adjacent reader owner.
+///
+/// This is deliberately a load specification rather than a business image
+/// model. The shared engine can schedule it without knowing whether the next
+/// owner is a comic episode, a thread, or another image sequence.
+class ReaderAdjacentPreloadImage {
+  const ReaderAdjacentPreloadImage({
+    required this.itemId,
+    required this.imageIndex,
+    required this.spec,
+  });
+
+  final String itemId;
+  final int imageIndex;
+  final ForumImageLoadSpec spec;
+}
+
+/// A bounded lookahead plan for the next reader owner.
+///
+/// The preload coordinator applies the shared decoded/disk window policy to
+/// this list. The producing capability remains responsible for resolving the
+/// next owner and mapping its images to cache specifications.
+class ReaderAdjacentPreloadPlan {
+  const ReaderAdjacentPreloadPlan({
+    required this.ownerId,
+    required this.images,
+  });
+
+  final String ownerId;
+  final List<ReaderAdjacentPreloadImage> images;
+}
+
 /// 引擎构造单张图片时透传给能力的参数。
 ///
 /// 缩放包装与高度槽由引擎统一负责，能力只产出"图片内容本体"（缓存图片 +
@@ -176,6 +208,13 @@ abstract class ReaderCapability {
   /// Optional neutral content after the image sequence. Returning null keeps
   /// the engine's legacy image-only behavior byte-for-byte at the UI level.
   ReaderTailSurface? get tailSurface => null;
+
+  /// Builds a lookahead plan for content after [tailSurface].
+  ///
+  /// The shared reader schedules the returned specs through its existing
+  /// session preload coordinator. A capability may do asynchronous repository
+  /// work here, but it must not mutate reader position or download state.
+  Future<ReaderAdjacentPreloadPlan?> buildAdjacentPreloadPlan() async => null;
 
   /// 内容区顶部提示条（漫画：离线/错误提示；帖子图片：null）。
   String? topHint(ReaderEngineContext context) => null;

@@ -130,6 +130,116 @@ void main() {
       expect(metrics.snapshot.providerMismatchCount, 0);
     });
 
+    testWidgets('submits the shared lookahead window for an adjacent owner', (
+      tester,
+    ) async {
+      final service = _RecordingPrecacheService();
+      final scheduled = <ReaderImageSessionPreloadScheduled>[];
+      final coordinator = ReaderImageSessionPreloadCoordinator(
+        onScheduled: scheduled.add,
+      );
+      final plan = ReaderAdjacentPreloadPlan(
+        ownerId: 'next-episode',
+        images: List<ReaderAdjacentPreloadImage>.generate(6, (index) {
+          return ReaderAdjacentPreloadImage(
+            itemId: 'next-episode:$index',
+            imageIndex: index,
+            spec: ForumImageLoadSpec(
+              kind: ForumImageKind.comicReaderPage,
+              url: Uri.parse('https://img.test/next-$index.jpg'),
+              ownerId: 'comic-1',
+              ownerType: ImageCacheOwnerType.comic,
+              episodeId: 'next-episode',
+              imageIndex: index,
+              cacheKey: 'next-cache-$index',
+              retentionClass: ImageRetentionClass.recentReader,
+            ),
+          );
+        }),
+      );
+
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            coordinator.submitAdjacentWindow(
+              context: context,
+              plan: plan,
+              precacheService: service,
+              expectedDisplaySize: const Size(300, 500),
+            );
+            return const SizedBox.shrink();
+          },
+        ),
+      );
+      await tester.pump();
+
+      expect(service.decodedSpecs.map((spec) => spec.imageIndex), <int>[0, 1]);
+      expect(service.diskSpecs.map((spec) => spec.imageIndex), <int>[2, 3]);
+      expect(scheduled, hasLength(4));
+      expect(scheduled.map((event) => event.readerOwnerId).toSet(), <String>{
+        'next-episode',
+      });
+      expect(scheduled.map((event) => event.kind).toSet(), {
+        ReaderImageSessionPreloadKind.decoded,
+        ReaderImageSessionPreloadKind.disk,
+      });
+    });
+
+    testWidgets('submits the shared lookahead window for an adjacent owner', (
+      tester,
+    ) async {
+      final service = _RecordingPrecacheService();
+      final scheduled = <ReaderImageSessionPreloadScheduled>[];
+      final coordinator = ReaderImageSessionPreloadCoordinator(
+        onScheduled: scheduled.add,
+      );
+      final plan = ReaderAdjacentPreloadPlan(
+        ownerId: 'next-episode',
+        images: List<ReaderAdjacentPreloadImage>.generate(6, (index) {
+          return ReaderAdjacentPreloadImage(
+            itemId: 'next-episode:$index',
+            imageIndex: index,
+            spec: ForumImageLoadSpec(
+              kind: ForumImageKind.comicReaderPage,
+              url: Uri.parse('https://img.test/next-$index.jpg'),
+              ownerId: 'comic-1',
+              ownerType: ImageCacheOwnerType.comic,
+              episodeId: 'next-episode',
+              imageIndex: index,
+              cacheKey: 'next-cache-$index',
+              retentionClass: ImageRetentionClass.recentReader,
+            ),
+          );
+        }),
+      );
+
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            coordinator.submitAdjacentWindow(
+              context: context,
+              plan: plan,
+              precacheService: service,
+              expectedDisplaySize: const Size(300, 500),
+            );
+            return const SizedBox.shrink();
+          },
+        ),
+      );
+      await tester.pump();
+
+      expect(service.decodedSpecs.map((spec) => spec.imageIndex), <int>[0, 1]);
+      expect(service.diskSpecs.map((spec) => spec.imageIndex), <int>[2, 3]);
+      expect(scheduled, hasLength(4));
+      expect(scheduled.map((event) => event.readerOwnerId).toSet(), <String>{
+        'next-episode',
+      });
+      expect(scheduled.map((event) => event.kind).toSet(), {
+        ReaderImageSessionPreloadKind.decoded,
+        ReaderImageSessionPreloadKind.disk,
+      });
+    });
+
     testWidgets('upgrades pending disk work to decoded without stale work', (
       tester,
     ) async {
