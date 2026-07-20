@@ -299,6 +299,46 @@ void main() {
   });
 
   test(
+    'preloaded last image resolution does not complete an unseen episode',
+    () async {
+      final repository = _ReaderRepoForControllerTest();
+      final service = _ReaderServiceSpy();
+      final writer = _ReadingStateWriterSpy(repository);
+      final container = ProviderContainer(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(repository),
+          comicReadingStateWriterProvider.overrideWithValue(writer),
+          comicReaderServiceProvider.overrideWith((ref) async => service),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      const args = ComicReaderArgs(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:101',
+      );
+      await container.read(comicReaderControllerProvider(args).future);
+
+      final notifier = container.read(
+        comicReaderControllerProvider(args).notifier,
+      );
+      await notifier.onImageResolved(
+        imageIndex: 4,
+        imageUrl: 'https://img.test/101-5.jpg',
+        width: 900,
+        height: 1600,
+      );
+
+      expect(writer.completedEpisodeIds, isEmpty);
+      expect(repository.progressWrites, isEmpty);
+    },
+  );
+
+  test(
     'last page visibility waits for image resolution before completion',
     () async {
       final repository = _ReaderRepoForControllerTest();

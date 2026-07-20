@@ -133,7 +133,12 @@ void main() {
               _NoopForumImagePrecacheService(),
             ),
           ],
-          child: const MaterialApp(home: _OwnerSwitchHarness()),
+          child: MaterialApp(
+            home: PageStorage(
+              bucket: PageStorageBucket(),
+              child: const _OwnerSwitchHarness(),
+            ),
+          ),
         ),
       );
       await tester.pump();
@@ -155,6 +160,37 @@ void main() {
             .data,
         '1 / 2',
       );
+    },
+  );
+
+  testWidgets(
+    'paged image cache construction does not report a cached page as visible',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const <String, Object>{
+        'reader_pref_mode': 'ltr',
+      });
+      final tail = _RecordingTailSurface();
+      final capability = _TailCapability(tail, imageCount: 4);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumImagePrecacheServiceProvider.overrideWithValue(
+              _NoopForumImagePrecacheService(),
+            ),
+          ],
+          child: MaterialApp(
+            home: ImageReaderEngine(
+              key: const Key('visibility-test-engine'),
+              pageKey: const Key('visibility-test-page'),
+              capability: capability,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(capability.visibleIndexes, <int>[0]);
     },
   );
 }
@@ -182,11 +218,18 @@ Widget _host(
 }
 
 class _TailCapability extends ReaderCapability {
-  _TailCapability(this._tail, {this.adjacentPlan, this.ownerId = 'tail-owner'});
+  _TailCapability(
+    this._tail, {
+    this.adjacentPlan,
+    this.ownerId = 'tail-owner',
+    this.imageCount = 2,
+  });
 
   final _RecordingTailSurface _tail;
   final ReaderAdjacentPreloadPlan? adjacentPlan;
   final String ownerId;
+  final int imageCount;
+  final List<int> visibleIndexes = <int>[];
 
   @override
   Future<ReaderAdjacentPreloadPlan?> buildAdjacentPreloadPlan() async {
@@ -196,7 +239,7 @@ class _TailCapability extends ReaderCapability {
   @override
   ReaderContent get content => ReaderContent(
     ownerId: ownerId,
-    items: List<ContinuousImageItem>.generate(2, (index) {
+    items: List<ContinuousImageItem>.generate(imageCount, (index) {
       return ContinuousImageItem(
         ownerId: ownerId,
         id: '$ownerId-image-$index',
@@ -227,6 +270,11 @@ class _TailCapability extends ReaderCapability {
       color: Colors.black,
       child: Center(child: Text('$ownerId:${spec.index}')),
     );
+  }
+
+  @override
+  void onImageVisible(int index) {
+    visibleIndexes.add(index);
   }
 
   @override

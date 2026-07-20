@@ -676,6 +676,10 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       source: ComicReaderProgressSource.initialVisible,
       checkCompletion: false,
     );
+    final latest = state.value;
+    if (latest != null && latest.episodeId == current.episodeId) {
+      state = AsyncData(latest.copyWith(currentImageIndex: clampedIndex));
+    }
     await _markEpisodeCompletedIfNeeded(
       currentIndex: clampedIndex,
       scrollOffset: current.lastScrollOffset,
@@ -721,11 +725,13 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         image.height == height &&
         !image.failed &&
         image.cacheStatus != 'failed') {
-      await _markEpisodeCompletedIfNeeded(
-        currentIndex: clampedIndex,
-        scrollOffset: current.lastScrollOffset,
-        source: ComicReaderProgressSource.initialVisible,
-      );
+      if (_visibleImageIndexes.contains(clampedIndex)) {
+        await _markEpisodeCompletedIfNeeded(
+          currentIndex: clampedIndex,
+          scrollOffset: current.lastScrollOffset,
+          source: ComicReaderProgressSource.initialVisible,
+        );
+      }
       return;
     }
 
@@ -773,11 +779,13 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         cacheSummary: _buildCacheSummary(updatedImages),
       ),
     );
-    await _markEpisodeCompletedIfNeeded(
-      currentIndex: clampedIndex,
-      scrollOffset: latest.lastScrollOffset,
-      source: ComicReaderProgressSource.initialVisible,
-    );
+    if (_visibleImageIndexes.contains(clampedIndex)) {
+      await _markEpisodeCompletedIfNeeded(
+        currentIndex: clampedIndex,
+        scrollOffset: latest.lastScrollOffset,
+        source: ComicReaderProgressSource.initialVisible,
+      );
+    }
   }
 
   Future<void> onImageDisplayFailed({
@@ -954,6 +962,11 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (currentIndex < lastIndex) {
       return;
     }
+    // Image resolution may be caused by a preload task. Completion is a
+    // reading event and therefore requires an actual viewport hit first.
+    if (!_visibleImageIndexes.contains(lastIndex)) {
+      return;
+    }
     final episodeId = current.episodeId;
     if (_completedEpisodeIds.contains(episodeId)) {
       return;
@@ -968,9 +981,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (_featureFlags.readerStrictCompleteRead) {
       // Strict rollout mode requires a real viewport hit and decode callback.
       // This keeps preload/cache metadata from marking an unread chapter read.
-      if (!_visibleImageIndexes.contains(lastIndex)) {
-        return;
-      }
       if (!_isImageResolvedInCurrentSession(lastIndex)) {
         return;
       }

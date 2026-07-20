@@ -87,6 +87,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   // These counters are diagnostic-only. Position and preload behavior must
   // remain independent from observability state.
   int _readerSessionGeneration = 0;
+  int _verticalViewportPrimedGeneration = -1;
   int _restoreGeneration = 0;
   int _seekGeneration = 0;
   ReaderModePreference _diagnosticMode = ReaderModePreference.vertical;
@@ -255,6 +256,15 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _syncScrollPositionActivityListener();
+        if (_verticalViewportPrimedGeneration != _readerSessionGeneration) {
+          // A ListView may build cached rows without scrolling. Resolve the
+          // initial viewport here so only the actual reading position is
+          // reported to the business capability. This is once per owner;
+          // running it on every rebuild can create a persistent UI loop while
+          // image extents are settling.
+          _verticalViewportPrimedGeneration = _readerSessionGeneration;
+          _onVerticalScroll();
+        }
         _submitSessionPreloadWindow(
           focusIndex: _lastKnownIndex,
           scrollDirection: ContinuousImageScrollDirection.idle,
@@ -297,6 +307,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   Widget _buildPaged(ReaderContent content, ReaderPreferences preferences) {
     final items = content.items;
     final tail = _tailSurface;
+    final pageController = _pageController;
     _latestItems = items;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -309,10 +320,16 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         key: ValueKey<String>('reader-paged-owner-${content.ownerId}'),
         items: items,
         mode: ContinuousImageReaderMode.horizontal,
-        pageController: _pageController,
+        pageController: pageController,
         horizontalPhysics: const PageScrollPhysics(),
         reverse: preferences.readerMode == ReaderModePreference.rtl,
-        onPageChanged: _onPageChanged,
+        onPageChanged: pageController == null
+            ? null
+            : (pageIndex) => _onPageChanged(
+                pageIndex,
+                ownerId: content.ownerId,
+                pageController: pageController,
+              ),
         horizontalPageKey: widget.pageKey,
         horizontalPagePadding: EdgeInsets.all(
           preferences.pageSpacing.clamp(0.0, 48.0).toDouble(),
@@ -338,7 +355,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     ReaderPreferences preferences, {
     required bool paged,
   }) {
-    _notifyCurrentImageVisible(index);
     final sessionBinding = _imageSessionStore.bindingFor(
       item,
       initialLocalPath: _capability.initialLocalPathFor(item),
@@ -703,6 +719,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       items: content.items,
     );
     _readerSessionGeneration += 1;
+    _verticalViewportPrimedGeneration = -1;
     _restoreGeneration = 0;
     _seekGeneration = 0;
     _recordReaderDiagnostic(
@@ -738,7 +755,13 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final expectedInitialPage = initialIndex.clamp(0, 1 << 20).toInt();
     final controller = _pageController;
     if (controller == null || _pageControllerOwnerId != ownerId) {
-      _pageController = PageController(initialPage: expectedInitialPage);
+      // The page controller belongs to one reader owner. Persisting its
+      // scroll offset would restore a previous chapter's tail/sentinel page
+      // and clamp it to the new chapter's last image.
+      _pageController = PageController(
+        initialPage: expectedInitialPage,
+        keepPage: false,
+      );
       _pageControllerOwnerId = ownerId;
       if (controller != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -922,6 +945,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
     positionState.consumeInitialRestore();
     _commitLogicalIndex(targetPage);
+    _reportActualImageVisible(
+      index: targetPage,
+      ownerId: content.ownerId,
+      sessionGeneration: _readerSessionGeneration,
+    );
     _recordInitialRestoreCompleted(
       index: targetPage,
       mode: readerMode,
@@ -1069,9 +1097,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (total == 0) {
       return;
     }
-    final ratio = (position.pixels / position.maxScrollExtent)
-        .clamp(0.0, 1.0)
-        .toDouble();
+    final ratio = position.maxScrollExtent <= 0
+        ? 0.0
+        : (position.pixels / position.maxScrollExtent)
+              .clamp(0.0, 1.0)
+              .toDouble();
     final viewport = _viewportTracker.resolve(
       items: items,
       extentRegistry: _extentRegistry,
@@ -1085,6 +1115,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         viewport.lastVisibleIndex ??
         viewport.firstVisibleIndex ??
         ((total - 1) * ratio).round();
+    _reportActualImageVisible(
+      index: index,
+      ownerId: _lastOwnerId ?? _capability.content.ownerId,
+      sessionGeneration: _readerSessionGeneration,
+    );
     if (index != _lastKnownIndex) {
       _commitLogicalIndex(index);
       _capability.onScrollProgress(index: index, offset: position.pixels);
@@ -1200,29 +1235,48 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
   }
 
-  void _notifyCurrentImageVisible(int imageIndex) {
-    if (_reportedVisibleImageIndexes.contains(imageIndex)) {
+  void _reportActualImageVisible({
+    required int index,
+    required String ownerId,
+    required int sessionGeneration,
+  }) {
+    final content = _capability.content;
+    if (index < 0 ||
+        index >= content.length ||
+        _lastOwnerId != ownerId ||
+        _readerSessionGeneration != sessionGeneration ||
+        content.ownerId != ownerId ||
+        !_reportedVisibleImageIndexes.add(index)) {
       return;
     }
-    final ownerId = _capability.content.ownerId;
-    final sessionGeneration = _readerSessionGeneration;
-    _reportedVisibleImageIndexes.add(imageIndex);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           _lastOwnerId != ownerId ||
           _readerSessionGeneration != sessionGeneration ||
-          _capability.content.ownerId != ownerId) {
+          _capability.content.ownerId != ownerId ||
+          index < 0 ||
+          index >= _capability.content.length) {
         return;
       }
-      _capability.onImageVisible(imageIndex);
+      _capability.onImageVisible(index);
     });
   }
 
   // --- paged turning + page change ---
 
-  Future<void> _onPageChanged(int pageIndex) async {
+  Future<void> _onPageChanged(
+    int pageIndex, {
+    required String ownerId,
+    required PageController pageController,
+  }) async {
+    if (!mounted ||
+        _lastOwnerId != ownerId ||
+        _capability.content.ownerId != ownerId ||
+        !identical(_pageController, pageController)) {
+      return;
+    }
     final content = _capability.content;
-    final page = _pageController?.page;
+    final page = pageController.page;
     if (page != null && (page - pageIndex).abs() > 0.5) {
       return;
     }
@@ -1260,6 +1314,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       return;
     }
     _pagedPosition = position;
+    _reportActualImageVisible(
+      index: pageIndex,
+      ownerId: ownerId,
+      sessionGeneration: _readerSessionGeneration,
+    );
     if (pageIndex == _lastKnownIndex) {
       return;
     }
@@ -1275,7 +1334,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       status: 'arrived',
       result: 'pageChanged',
     );
-    _reportedVisibleImageIndexes.add(pageIndex);
     _capability.onScrollProgress(index: pageIndex, offset: 0);
     _submitSessionPreloadWindow(
       focusIndex: pageIndex,
