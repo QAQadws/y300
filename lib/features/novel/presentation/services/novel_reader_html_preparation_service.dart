@@ -1,4 +1,5 @@
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
@@ -15,6 +16,7 @@ abstract interface class NovelReaderHtmlPreparationService {
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
+    NovelReaderDocument? semanticDocument,
   });
 }
 
@@ -37,6 +39,7 @@ final class DefaultNovelReaderHtmlPreparationService
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
+    NovelReaderDocument? semanticDocument,
   }) async {
     final prepared = await preparer.prepare(
       rawHtml: rawHtml,
@@ -49,6 +52,7 @@ final class DefaultNovelReaderHtmlPreparationService
     final flowUnits = flowUnitExtractor.extract(
       episodeId: episode.episodeId,
       renderDocument: prepared.document,
+      semanticDocument: semanticDocument,
     );
     return NovelReaderPreparedChapter(
       episodeId: episode.episodeId,

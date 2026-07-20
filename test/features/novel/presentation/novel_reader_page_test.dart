@@ -711,6 +711,37 @@ void main() {
     expect(find.textContaining('${savedIndex! + 1} /'), findsOneWidget);
   });
 
+  testWidgets(
+    'NovelReaderPage exposes paged semantics and mounts nearby pages only',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        ),
+        firstParagraphs: List<String>.generate(
+          40,
+          (index) => '语义分页段落 $index ${List<String>.filled(120, '正文').join()}',
+        ),
+      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
+      await tester.pumpAndSettle();
+
+      final semantics = tester.getSemantics(
+        find.byKey(const Key('novel-reader-paged-semantics')),
+      );
+      expect(semantics.label, contains('第 1 页'));
+      final mountedPages = find
+          .byWidgetPredicate((widget) {
+            final key = widget.key;
+            return key is ValueKey<String> &&
+                key.value.startsWith('novel-reader-paged-page-');
+          })
+          .evaluate()
+          .length;
+      expect(mountedPages, lessThan(6));
+    },
+  );
+
   testWidgets('NovelReaderPage vertical mode does not bind paged view', (
     tester,
   ) async {
@@ -1018,6 +1049,44 @@ void main() {
       expect(_readerText('关键词在这里'), findsOneWidget);
     },
   );
+
+  testWidgets('NovelReaderPage maps search results to a paged anchor', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+      firstParagraphs: List<String>.generate(
+        18,
+        (index) => index == 8
+            ? '分页目标关键词 ${List<String>.filled(100, '正文').join()}'
+            : '分页段落 $index ${List<String>.filled(100, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-top-action-search')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('novel-reader-search-field')),
+      '分页目标关键词',
+    );
+    await tester.pumpAndSettle();
+
+    final result = find.byKey(
+      const Key('novel-reader-search-result-novel:49:100:5001:node-8:0'),
+    );
+    expect(result, findsOneWidget);
+    await tester.tap(result);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 260));
+
+    expect(repository.readingProgress?.pageIndex, greaterThan(0));
+    expect(repository.readingProgress?.anchorNodeId, 'node-8');
+  });
 
   testWidgets('NovelReaderPage toggles episode bookmark', (tester) async {
     final repository = _FakeNovelRepository.threeEpisodes();

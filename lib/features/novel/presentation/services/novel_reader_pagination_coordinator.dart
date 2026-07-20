@@ -13,6 +13,8 @@ abstract interface class NovelReaderPaginationCoordinator {
     required NovelReaderPaginationKey key,
   });
 
+  bool isCached(NovelReaderPaginationKey key);
+
   void clear();
 
   void clearEpisode(String episodeId);
@@ -72,6 +74,9 @@ final class DefaultNovelReaderPaginationCoordinator
     );
     return future;
   }
+
+  @override
+  bool isCached(NovelReaderPaginationKey key) => cache.contains(key);
 
   Future<NovelReaderPaginationPlan> _build({
     required NovelReaderPreparedChapter chapter,

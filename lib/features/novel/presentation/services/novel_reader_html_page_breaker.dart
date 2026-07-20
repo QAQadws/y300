@@ -22,15 +22,17 @@ abstract interface class NovelReaderPageBreaker {
 final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   NovelReaderHtmlPageBreaker({
     required NovelReaderPaginationMeasureAdapter measureAdapter,
-    this.maxMeasurements = 512,
+    this.maxMeasurements = 4096,
     this.maxPages = 5000,
     this.maxSplitSearchIterations = 12,
+    this.cooperativeYieldInterval = 32,
   }) : _measureAdapter = measureAdapter;
 
   final NovelReaderPaginationMeasureAdapter _measureAdapter;
   final int maxMeasurements;
   final int maxPages;
   final int maxSplitSearchIterations;
+  final int cooperativeYieldInterval;
 
   late NovelReaderPreparedChapter _chapter;
   late NovelReaderPaginationKey _key;
@@ -86,6 +88,12 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
       throw const NovelReaderPaginationException(
         code: 'invalidBudget',
         message: 'Pagination budgets must be positive.',
+      );
+    }
+    if (cooperativeYieldInterval <= 0) {
+      throw const NovelReaderPaginationException(
+        code: 'invalidBudget',
+        message: 'Pagination cooperative yield interval must be positive.',
       );
     }
   }
@@ -182,6 +190,18 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   }
 
   Future<bool> _fits(_PagePiece piece) async {
+    _measurementCount += 1;
+    if (_measurementCount > maxMeasurements) {
+      throw const NovelReaderPaginationException(
+        code: 'candidateLimitExceeded',
+        message: 'Pagination candidate measurement budget was exceeded.',
+      );
+    }
+    if (_measurementCount % cooperativeYieldInterval == 0) {
+      // Keep large chapters responsive when the injected measurement adapter
+      // completes synchronously in tests or on a cached renderer path.
+      await Future<void>.delayed(Duration.zero);
+    }
     final candidate = '${_buffer?.html ?? ''}${piece.html}';
     final result = await _measureAdapter.measure(
       NovelReaderPaginationMeasureRequest(
@@ -190,13 +210,6 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
         key: _key,
       ),
     );
-    _measurementCount += 1;
-    if (_measurementCount > maxMeasurements) {
-      throw const NovelReaderPaginationException(
-        code: 'candidateLimitExceeded',
-        message: 'Pagination candidate measurement budget was exceeded.',
-      );
-    }
     if (!result.height.isFinite || result.height < 0) {
       throw const NovelReaderPaginationException(
         code: 'invalidMeasurement',

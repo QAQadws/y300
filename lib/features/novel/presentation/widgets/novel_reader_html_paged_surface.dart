@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -7,6 +8,8 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_diagnostics.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
@@ -49,18 +52,23 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     required this.theme,
     required this.imageReferer,
     required this.progressSnapshot,
+    this.semanticDocument,
+    this.navigationRequest,
     this.imageHeaderBuilder,
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
     this.onFallbackToVertical,
     this.onPositionChanged,
+    this.onNavigationUnavailable,
     this.preferencesAdapter = const NovelHtmlReaderPreferencesAdapter(),
     this.preparer = const NovelHtmlChapterRenderPreparer(),
     this.preparationService,
     this.imageReaderBridge = const NovelHtmlImageReaderBridge(),
     this.coordinatorBuilder,
     this.restorePolicy = const NovelReaderPaginationRestorePolicy(),
+    this.paginationCache,
+    this.diagnosticsSink = const NovelReaderDebugPaginationDiagnosticsSink(),
     this.bottomChromeReserveFraction = 0.18,
   });
 
@@ -71,18 +79,24 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final ForumHtmlThemeContext theme;
   final String imageReferer;
   final NovelReaderProgressSnapshot progressSnapshot;
+  final NovelReaderDocument? semanticDocument;
+  final NovelReaderAnchorNavigationRequest? navigationRequest;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
   final VoidCallback? onFallbackToVertical;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
+  final ValueChanged<NovelReaderAnchorNavigationRequest>?
+  onNavigationUnavailable;
   final NovelHtmlReaderPreferencesAdapter preferencesAdapter;
   final NovelHtmlChapterPreparer preparer;
   final NovelReaderHtmlPreparationService? preparationService;
   final NovelHtmlImageReaderBridge imageReaderBridge;
   final NovelReaderPaginationCoordinatorBuilder? coordinatorBuilder;
   final NovelReaderPaginationRestorePolicy restorePolicy;
+  final NovelReaderPaginationCache? paginationCache;
+  final NovelReaderPaginationDiagnosticsSink diagnosticsSink;
   final double bottomChromeReserveFraction;
 
   @override
@@ -98,6 +112,9 @@ class _NovelReaderHtmlPagedSurfaceState
   Object? _coordinatorSignature;
   Future<NovelReaderPaginationPlan>? _planFuture;
   NovelReaderPaginationKey? _planKey;
+  NovelReaderPaginationCache? _ownedCache;
+  int _layoutGeneration = 0;
+  String? _lastUnavailableNavigationKey;
 
   @override
   void initState() {
@@ -216,6 +233,11 @@ class _NovelReaderHtmlPagedSurfaceState
                       message: '本章没有可显示的正文',
                     );
                   }
+                  final requestedPage = _requestedPageFor(plan);
+                  _scheduleUnavailableNavigationIfNeeded(
+                    plan: plan,
+                    requestedPage: requestedPage,
+                  );
                   return Padding(
                     key: const Key('novel-reader-paged-surface'),
                     padding: EdgeInsets.fromLTRB(
@@ -231,10 +253,14 @@ class _NovelReaderHtmlPagedSurfaceState
                         child: _NovelReaderPagedPageView(
                           key: ValueKey<String>(plan.key.cacheIdentity),
                           plan: plan,
-                          initialPage: widget.restorePolicy.resolveInitialPage(
-                            plan: plan,
-                            snapshot: widget.progressSnapshot,
-                          ),
+                          initialPage:
+                              requestedPage ??
+                              widget.restorePolicy.resolveInitialPage(
+                                plan: plan,
+                                snapshot: widget.progressSnapshot,
+                              ),
+                          navigationRequest: widget.navigationRequest,
+                          targetPage: requestedPage,
                           reverse:
                               widget.preferences.flowMode ==
                               NovelReaderFlowMode.pagedRtl,
@@ -305,7 +331,47 @@ class _NovelReaderHtmlPagedSurfaceState
           );
     }
     _planKey = key;
-    _planFuture = _coordinator!.paginate(chapter: prepared, key: key);
+    _layoutGeneration += 1;
+    final cacheHit = _coordinator!.isCached(key);
+    final stopwatch = Stopwatch()..start();
+    final planFuture = _coordinator!.paginate(chapter: prepared, key: key);
+    _planFuture = planFuture;
+    unawaited(
+      planFuture.then<void>(
+        (plan) {
+          stopwatch.stop();
+          if (!mounted || _planKey != key) {
+            return;
+          }
+          widget.diagnosticsSink.record(
+            NovelReaderPaginationDiagnostics(
+              episodeId: plan.episodeId,
+              paginationKey: key.layoutFingerprint,
+              pageCount: plan.pageCount,
+              layoutDuration: stopwatch.elapsed,
+              reflowCount: _layoutGeneration - 1,
+              unknownImageDimensionCount: prepared
+                  .renderDocument
+                  .sequence
+                  .entries
+                  .where(
+                    (entry) =>
+                        entry.htmlWidth == null || entry.htmlHeight == null,
+                  )
+                  .length,
+              overflowPageCount: plan.pages
+                  .where((page) => page.hasOverflow)
+                  .length,
+              cacheHit: cacheHit,
+              flowUnitCount: prepared.flowUnits.length,
+            ),
+          );
+        },
+        onError: (Object error, StackTrace stack) {
+          stopwatch.stop();
+        },
+      ),
+    );
     return _planFuture!;
   }
 
@@ -325,7 +391,9 @@ class _NovelReaderHtmlPagedSurfaceState
           imageHeaderBuilder: widget.imageHeaderBuilder,
         ),
       ),
-      cache: NovelReaderPaginationCache(),
+      cache:
+          widget.paginationCache ??
+          (_ownedCache ??= NovelReaderPaginationCache()),
     );
   }
 
@@ -335,6 +403,7 @@ class _NovelReaderHtmlPagedSurfaceState
       rawHtml: widget.rawHtml,
       episodeId: widget.episode.episodeId,
       sourceTid: widget.episode.sourceTid,
+      semanticDocumentHash: widget.semanticDocument?.rawHtmlHash,
       preferences: htmlPreferences,
       themeSignature: widget.theme.signature,
       preparationService: widget.preparationService,
@@ -357,6 +426,7 @@ class _NovelReaderHtmlPagedSurfaceState
               sourceId: widget.episode.episodeId,
               threadId: widget.episode.sourceTid,
               imageCacheOwnerId: widget.episode.sourceTid,
+              semanticDocument: widget.semanticDocument,
             );
     _coordinator = null;
     _coordinatorSignature = null;
@@ -407,6 +477,36 @@ class _NovelReaderHtmlPagedSurfaceState
       _planKey = null;
     });
   }
+
+  int? _requestedPageFor(NovelReaderPaginationPlan plan) {
+    final request = widget.navigationRequest;
+    if (request == null || request.anchor.episodeId != plan.episodeId) {
+      return null;
+    }
+    return plan.pageIndexForAnchor(request.anchor);
+  }
+
+  void _scheduleUnavailableNavigationIfNeeded({
+    required NovelReaderPaginationPlan plan,
+    required int? requestedPage,
+  }) {
+    final request = widget.navigationRequest;
+    if (request == null ||
+        request.anchor.episodeId != plan.episodeId ||
+        requestedPage != null) {
+      return;
+    }
+    final requestKey = '${request.requestId}|${plan.key.layoutFingerprint}';
+    if (_lastUnavailableNavigationKey == requestKey) {
+      return;
+    }
+    _lastUnavailableNavigationKey = requestKey;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _planKey == plan.key) {
+        widget.onNavigationUnavailable?.call(request);
+      }
+    });
+  }
 }
 
 class _NovelReaderPagedPageView extends StatefulWidget {
@@ -414,6 +514,8 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     super.key,
     required this.plan,
     required this.initialPage,
+    this.navigationRequest,
+    this.targetPage,
     required this.reverse,
     required this.showProgressIndicator,
     required this.theme,
@@ -432,6 +534,8 @@ class _NovelReaderPagedPageView extends StatefulWidget {
 
   final NovelReaderPaginationPlan plan;
   final int initialPage;
+  final NovelReaderAnchorNavigationRequest? navigationRequest;
+  final int? targetPage;
   final bool reverse;
   final bool showProgressIndicator;
   final ForumHtmlThemeContext theme;
@@ -474,6 +578,23 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   }
 
   @override
+  void didUpdateWidget(covariant _NovelReaderPagedPageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldRequestId = oldWidget.navigationRequest?.requestId;
+    final newRequestId = widget.navigationRequest?.requestId;
+    if (oldRequestId == newRequestId || widget.targetPage == null) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.targetPage == null) {
+        return;
+      }
+      _pageController.jumpToPage(widget.targetPage!);
+      _emitPosition(widget.targetPage!);
+    });
+  }
+
+  @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
@@ -482,58 +603,93 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   @override
   Widget build(BuildContext context) {
     final pageCount = widget.plan.pageCount;
-    return Stack(
-      key: const Key('novel-reader-paged-page-session'),
-      fit: StackFit.expand,
-      children: [
-        PageView.builder(
-          key: const Key('novel-reader-paged-page-view'),
-          controller: _pageController,
-          reverse: widget.reverse,
-          itemCount: pageCount,
-          onPageChanged: _onPageChanged,
-          itemBuilder: (context, index) {
-            final page = widget.plan.pages[index];
-            return _NovelReaderPagedPage(
-              page: page,
-              plan: widget.plan,
-              theme: widget.theme,
-              htmlPreferences: widget.htmlPreferences,
-              typography: widget.typography,
-              renderDocument: widget.renderDocument,
-              episode: widget.episode,
-              imageReferer: widget.imageReferer,
-              imageHeaderBuilder: widget.imageHeaderBuilder,
-              onLinkTap: widget.onLinkTap,
-              onOpenImage: widget.onOpenImage,
-              onImageFallback: widget.onImageFallback,
-              imageReaderBridge: widget.imageReaderBridge,
-            );
-          },
-        ),
-        if (widget.showProgressIndicator)
-          Positioned(
-            key: const Key('novel-reader-page-indicator'),
-            right: 8,
-            bottom: 8,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surface.withValues(alpha: 0.78),
-                borderRadius: const BorderRadius.all(Radius.circular(8)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Text(
-                  '${_currentPage + 1} / $pageCount',
-                  key: const Key('novel-reader-page-indicator-text'),
+    return Semantics(
+      key: const Key('novel-reader-paged-semantics'),
+      container: true,
+      explicitChildNodes: true,
+      liveRegion: true,
+      label:
+          '${widget.episode.episodeTitle}，第 ${_currentPage + 1} 页，共 $pageCount 页',
+      value: '第 ${_currentPage + 1} 页，共 $pageCount 页',
+      increasedValue: _currentPage + 1 < pageCount
+          ? '下一页，第 ${_currentPage + 2} 页'
+          : null,
+      decreasedValue: _currentPage > 0 ? '上一页，第 $_currentPage 页' : null,
+      onIncrease: _currentPage + 1 < pageCount
+          ? () => _jumpToPage(_currentPage + 1)
+          : null,
+      onDecrease: _currentPage > 0 ? () => _jumpToPage(_currentPage - 1) : null,
+      child: Stack(
+        key: const Key('novel-reader-paged-page-session'),
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            key: const Key('novel-reader-paged-page-view'),
+            controller: _pageController,
+            reverse: widget.reverse,
+            allowImplicitScrolling: false,
+            itemCount: pageCount,
+            onPageChanged: _onPageChanged,
+            itemBuilder: (context, index) {
+              final page = widget.plan.pages[index];
+              return _NovelReaderPagedPage(
+                key: ValueKey<String>('novel-reader-paged-page-${page.index}'),
+                page: page,
+                plan: widget.plan,
+                theme: widget.theme,
+                htmlPreferences: widget.htmlPreferences,
+                typography: widget.typography,
+                renderDocument: widget.renderDocument,
+                episode: widget.episode,
+                imageReferer: widget.imageReferer,
+                imageHeaderBuilder: widget.imageHeaderBuilder,
+                onLinkTap: widget.onLinkTap,
+                onOpenImage: widget.onOpenImage,
+                onImageFallback: widget.onImageFallback,
+                imageReaderBridge: widget.imageReaderBridge,
+              );
+            },
+          ),
+          if (widget.showProgressIndicator)
+            Positioned(
+              key: const Key('novel-reader-page-indicator'),
+              right: 8,
+              bottom: 8,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surface.withValues(alpha: 0.78),
+                  borderRadius: const BorderRadius.all(Radius.circular(8)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Text(
+                    '${_currentPage + 1} / $pageCount',
+                    key: const Key('novel-reader-page-indicator-text'),
+                  ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
+  }
+
+  void _jumpToPage(int index) {
+    if (!mounted || index < 0 || index >= widget.plan.pageCount) {
+      return;
+    }
+    _pageController.jumpToPage(index);
+    if (_currentPage != index) {
+      setState(() {
+        _currentPage = index;
+      });
+    }
+    _emitPosition(index);
   }
 
   void _onPageChanged(int index) {
@@ -568,6 +724,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
 
 class _NovelReaderPagedPage extends StatelessWidget {
   const _NovelReaderPagedPage({
+    super.key,
     required this.page,
     required this.plan,
     required this.theme,

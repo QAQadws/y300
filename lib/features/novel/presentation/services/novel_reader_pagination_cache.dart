@@ -19,6 +19,8 @@ final class NovelReaderPaginationCache {
 
   int get length => _entries.length;
 
+  bool contains(NovelReaderPaginationKey key) => _entries.containsKey(key);
+
   NovelReaderPaginationPlan? get(NovelReaderPaginationKey key) {
     final plan = _entries.remove(key);
     if (plan == null) {

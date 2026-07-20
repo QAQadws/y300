@@ -14,7 +14,9 @@ import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
@@ -61,6 +63,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _isProgrammaticScrollChange = false;
   bool _allowPopAfterProgressFlush = false;
   bool _isHandlingPop = false;
+  final NovelReaderPaginationCache _paginationCache =
+      NovelReaderPaginationCache();
+  int _anchorNavigationSerial = 0;
+  NovelReaderAnchorNavigationRequest? _pendingAnchorNavigationRequest;
 
   NovelReaderArgs get _args => NovelReaderArgs(
     novelId: widget.novelId,
@@ -84,6 +90,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
+    _paginationCache.clear();
     super.dispose();
   }
 
@@ -235,7 +242,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           icon: viewState.hasCurrentEpisodeBookmark
               ? Icons.bookmark
               : Icons.bookmark_border,
-          label: '书签',
+          label: viewState.hasCurrentEpisodeBookmark ? '移除章节书签' : '添加章节书签',
           onPressed: () => _toggleEpisodeBookmark(viewState),
         ),
         ReaderToolbarAction(
@@ -305,6 +312,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         theme: htmlTheme,
         imageReferer: _imageRefererFor(viewState),
         progressSnapshot: viewState.progressSnapshot,
+        semanticDocument: viewState.document,
+        navigationRequest: _pendingAnchorNavigationRequest,
+        paginationCache: _paginationCache,
         imageHeaderBuilder: imageHeaderBuilder,
         onLinkTap: (link) => _openReaderLink(link, externalLauncher),
         onOpenImage: _openHtmlReaderImage,
@@ -317,6 +327,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           ref
               .read(novelReaderControllerProvider(_args).notifier)
               .onPagedPositionChanged(position);
+        },
+        onNavigationUnavailable: (_) {
+          _showReaderSnackBar('位置已变化，已保留当前页');
         },
       );
     }
@@ -750,7 +763,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       }
     }
     final latest = ref.read(novelReaderControllerProvider(_args)).value;
-    if (latest == null) {
+    if (latest == null || latest.currentEpisode.episodeId != anchor.episodeId) {
+      return;
+    }
+    if (latest.preferences.flowMode != NovelReaderFlowMode.vertical) {
+      setState(() {
+        _pendingAnchorNavigationRequest = NovelReaderAnchorNavigationRequest(
+          requestId: ++_anchorNavigationSerial,
+          anchor: anchor.copyWith(episodeId: latest.currentEpisode.episodeId),
+        );
+      });
+      _overlayController.hideMenu();
       return;
     }
     if (_scrollController.hasClients) {

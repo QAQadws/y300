@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 
@@ -10,6 +12,7 @@ abstract interface class NovelReaderHtmlFlowUnitExtractor {
   List<NovelReaderFlowUnit> extract({
     required String episodeId,
     required ForumHtmlPreparedRenderDocument renderDocument,
+    NovelReaderDocument? semanticDocument,
   });
 }
 
@@ -56,23 +59,34 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
   List<NovelReaderFlowUnit> extract({
     required String episodeId,
     required ForumHtmlPreparedRenderDocument renderDocument,
+    NovelReaderDocument? semanticDocument,
   }) {
     final fragment = html_parser.parseFragment(renderDocument.preparedHtml);
     final occurrences = <String, int>{};
     final units = <NovelReaderFlowUnit>[];
+    var semanticIndex = 0;
 
     for (final node in fragment.nodes) {
       if (!_isMeaningful(node)) {
         continue;
       }
+      final semanticMatch = _matchSemanticAnchor(
+        node,
+        semanticDocument,
+        startIndex: semanticIndex,
+      );
       final descriptor = _describeNode(
         node,
         episodeId: episodeId,
         occurrences: occurrences,
         renderDocument: renderDocument,
+        semanticAnchor: semanticMatch?.$1,
       );
       if (descriptor != null) {
         units.add(descriptor);
+        if (semanticMatch != null && semanticMatch.$2 >= semanticIndex) {
+          semanticIndex = semanticMatch.$2 + 1;
+        }
       }
     }
 
@@ -100,6 +114,7 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
     required String episodeId,
     required Map<String, int> occurrences,
     required ForumHtmlPreparedRenderDocument renderDocument,
+    required NovelReaderTextAnchor? semanticAnchor,
   }) {
     final html = _serializeNode(node);
     if (html.trim().isEmpty) {
@@ -114,14 +129,15 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
     );
     final anchorId = _anchorId(identity, occurrence);
     final textLength = _readableText(node).runes.length;
+    final semanticNodeId = semanticAnchor?.nodeId;
     final startAnchor = NovelReaderTextAnchor(
       episodeId: episodeId,
-      nodeId: anchorId,
+      nodeId: semanticNodeId ?? anchorId,
       textOffset: 0,
     );
     final endAnchor = NovelReaderTextAnchor(
       episodeId: episodeId,
-      nodeId: anchorId,
+      nodeId: semanticNodeId ?? anchorId,
       textOffset: textLength,
     );
 
@@ -133,6 +149,43 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
       breakability: _breakability(element, node),
       imageIndices: _imageIndices(node, renderDocument),
     );
+  }
+
+  (NovelReaderTextAnchor, int)? _matchSemanticAnchor(
+    html_dom.Node node,
+    NovelReaderDocument? semanticDocument, {
+    required int startIndex,
+  }) {
+    if (semanticDocument == null) {
+      return null;
+    }
+    final text = _normalizeComparableText(_readableText(node));
+    if (text.isEmpty) {
+      return null;
+    }
+    final blocks = semanticDocument.blocks;
+    for (var index = startIndex; index < blocks.length; index += 1) {
+      final blockText = _normalizeComparableText(blocks[index].novelPlainText);
+      if (blockText.isEmpty) {
+        continue;
+      }
+      if (blockText == text ||
+          blockText.contains(text) ||
+          text.contains(blockText)) {
+        return (
+          NovelReaderTextAnchor(
+            episodeId: semanticDocument.episodeId,
+            nodeId: blocks[index].anchorId,
+          ),
+          index,
+        );
+      }
+    }
+    return null;
+  }
+
+  String _normalizeComparableText(String value) {
+    return value.replaceAll(RegExp(r'\s+'), '').trim();
   }
 
   bool _isMeaningful(html_dom.Node node) {
