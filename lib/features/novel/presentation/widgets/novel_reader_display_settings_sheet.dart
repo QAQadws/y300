@@ -133,6 +133,15 @@ class _NovelReaderDisplaySettingsSheetState
               _SettingsSection(
                 title: '阅读',
                 children: [
+                  ReaderSegmentControl<NovelReaderFlowMode>(
+                    key: const Key('novel-reader-flow-mode-control'),
+                    label: '阅读模式',
+                    value: _draft.flowMode,
+                    values: NovelReaderFlowMode.values,
+                    labelBuilder: _flowModeLabel,
+                    onChanged: (value) =>
+                        _applyPreferences(_draft.copyWith(flowMode: value)),
+                  ),
                   ReaderSegmentControl<NovelReaderConversionMode>(
                     key: const Key('novel-reader-conversion-mode-control'),
                     label: '简繁',
@@ -174,6 +183,17 @@ class _NovelReaderDisplaySettingsSheetState
         return '简体';
       case NovelReaderConversionMode.toTraditional:
         return '繁体';
+    }
+  }
+
+  String _flowModeLabel(NovelReaderFlowMode value) {
+    switch (value) {
+      case NovelReaderFlowMode.vertical:
+        return '滚动';
+      case NovelReaderFlowMode.pagedLtr:
+        return '分页 LTR';
+      case NovelReaderFlowMode.pagedRtl:
+        return '分页 RTL';
     }
   }
 }

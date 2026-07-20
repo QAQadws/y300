@@ -470,7 +470,7 @@ void main() {
       );
       expect(
         find.byKey(const Key('novel-reader-flow-mode-control')),
-        findsNothing,
+        findsOneWidget,
       );
       expect(
         find.byKey(const Key('novel-reader-content-width-slider')),
@@ -528,7 +528,7 @@ void main() {
     },
   );
 
-  testWidgets('NovelReaderPage display sheet omits obsolete paged mode', (
+  testWidgets('NovelReaderPage display sheet exposes paged modes', (
     tester,
   ) async {
     final repository = _FakeNovelRepository();
@@ -543,15 +543,15 @@ void main() {
 
     expect(
       find.byKey(const Key('novel-reader-flow-mode-control')),
-      findsNothing,
+      findsOneWidget,
     );
-    expect(find.text('HTML-first 正文暂只支持竖向阅读，分页模式后续重建。'), findsNothing);
     expect(
       find.byKey(const Key('novel-reader-conversion-mode-control')),
       findsOneWidget,
     );
-    expect(find.text('分页'), findsNothing);
-    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
+    expect(find.text('分页 LTR'), findsOneWidget);
+    expect(find.text('分页 RTL'), findsOneWidget);
+    expect(find.byKey(const Key('novel-reader-paged-page-view')), findsNothing);
     expect(
       find.byKey(const Key('novel-reader-paragraph-list')),
       findsOneWidget,
@@ -629,7 +629,10 @@ void main() {
         find.byKey(const Key('novel-reader-display-settings-sheet')),
         findsNothing,
       );
-      expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
+      expect(
+        find.byKey(const Key('novel-reader-paged-page-view')),
+        findsNothing,
+      );
       expect(
         find.byKey(const Key('novel-reader-paragraph-list')),
         findsOneWidget,
@@ -642,32 +645,36 @@ void main() {
     },
   );
 
-  testWidgets(
-    'NovelReaderPage falls back to vertical for saved paged preference',
-    (tester) async {
-      final repository = _FakeNovelRepository(
-        preferences: NovelReaderPreferences.defaults().copyWith(
-          flowMode: NovelReaderFlowMode.pagedLtr,
-        ),
-        firstParagraphs: List<String>.generate(
-          12,
-          (index) => '首屏分页段落 $index ${List<String>.filled(60, '正文').join()}',
-        ),
-      );
-      await tester.pumpWidget(_buildReaderApp(repository: repository));
-      await tester.pumpAndSettle();
+  testWidgets('NovelReaderPage renders the saved paged preference', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+      firstParagraphs: List<String>.generate(
+        12,
+        (index) => '首屏分页段落 $index ${List<String>.filled(60, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const Key('novel-reader-paragraph-list')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('novel-reader-html-document-view')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-    },
-  );
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsNothing);
+    expect(
+      find.byKey(const Key('novel-reader-html-document-view')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('novel-reader-paged-surface')), findsOneWidget);
+    expect(
+      find.byKey(const Key('novel-reader-paged-page-view')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('novel-reader-page-indicator-text')),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('NovelReaderPage vertical mode does not bind paged view', (
     tester,
@@ -685,12 +692,34 @@ void main() {
       find.byKey(const Key('novel-reader-paragraph-list')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
+    expect(find.byKey(const Key('novel-reader-paged-page-view')), findsNothing);
 
     await tester.tapAt(const Offset(720, 300));
     await tester.pumpAndSettle();
 
     expect(repository.readingProgress?.pageIndex ?? 0, 0);
+  });
+
+  testWidgets('NovelReaderPage keeps logical first page in RTL mode', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedRtl,
+      ),
+      firstParagraphs: List<String>.generate(
+        8,
+        (index) => 'RTL 分页段落 $index ${List<String>.filled(48, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    final pageView = tester.widget<PageView>(
+      find.byKey(const Key('novel-reader-paged-page-view')),
+    );
+    expect(pageView.reverse, isTrue);
+    expect(find.textContaining('1 /'), findsOneWidget);
   });
 
   testWidgets('NovelReaderPage constrains wide content column', (tester) async {

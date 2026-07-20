@@ -79,7 +79,7 @@ void main() {
   });
 
   test(
-    'NovelReaderController keeps legacy paged preference but exposes vertical baseline',
+    'NovelReaderController exposes the persisted paged preference as effective mode',
     () async {
       final repository = _ControllerNovelRepository(
         preferences: NovelReaderPreferences.defaults().copyWith(
@@ -100,8 +100,8 @@ void main() {
       );
 
       expect(state.persistedPreferences.flowMode, NovelReaderFlowMode.pagedRtl);
-      expect(state.effectivePreferences.flowMode, NovelReaderFlowMode.vertical);
-      expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.vertical);
+      expect(state.effectivePreferences.flowMode, NovelReaderFlowMode.pagedRtl);
+      expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.pagedRtl);
     },
   );
 
@@ -129,11 +129,8 @@ void main() {
       final state = container.read(provider).value!;
 
       expect(state.persistedPreferences, initial.persistedPreferences);
-      expect(
-        state.effectivePreferences,
-        next.copyWith(flowMode: NovelReaderFlowMode.vertical),
-      );
-      expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.vertical);
+      expect(state.effectivePreferences, next);
+      expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.pagedLtr);
       expect(repository.latestPreferences, isNull);
       expect(repository.upsertPreferencesCallCount, 0);
     },

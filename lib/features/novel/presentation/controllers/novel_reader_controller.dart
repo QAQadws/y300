@@ -194,7 +194,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null) {
       return;
     }
-    final effectiveNext = _htmlFirstEffectivePreferences(next);
+    final effectiveNext = next;
     final diff = _preferenceImpactAnalyzer.compare(
       current.effectivePreferences,
       effectiveNext,
@@ -222,9 +222,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       next,
     );
     if (!persistedDiff.hasChanges) {
-      final persistedEffective = _htmlFirstEffectivePreferences(
-        current.persistedPreferences,
-      );
+      final persistedEffective = current.persistedPreferences;
       if (current.effectivePreferences == persistedEffective) {
         return;
       }
@@ -244,11 +242,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return;
     }
     final latest = state.value ?? current;
-    final effectivePreferences = _htmlFirstEffectivePreferences(
-      latest.effectivePreferences == current.effectivePreferences
-          ? next
-          : latest.effectivePreferences,
-    );
+    final effectivePreferences =
+        latest.effectivePreferences == current.effectivePreferences
+        ? next
+        : latest.effectivePreferences;
     state = AsyncData(
       latest.copyWith(
         persistedPreferences: next,
@@ -268,15 +265,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     )) {
       await _rebuildCurrentEpisodeDocument(commitSerial);
     }
-  }
-
-  NovelReaderPreferences _htmlFirstEffectivePreferences(
-    NovelReaderPreferences preferences,
-  ) {
-    if (preferences.flowMode == NovelReaderFlowMode.vertical) {
-      return preferences;
-    }
-    return preferences.copyWith(flowMode: NovelReaderFlowMode.vertical);
   }
 
   /// Reloads the current episode document so preference-driven content
@@ -309,9 +297,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null) {
       return;
     }
-    final persistedEffective = _htmlFirstEffectivePreferences(
-      current.persistedPreferences,
-    );
+    final persistedEffective = current.persistedPreferences;
     if (current.effectivePreferences == persistedEffective) {
       return;
     }

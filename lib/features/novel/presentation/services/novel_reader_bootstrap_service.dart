@@ -93,9 +93,7 @@ class DefaultNovelReaderBootstrapService
     // Load preferences before building so traditional/simplified conversion is
     // applied to the document at build time (and re-applied on episode change).
     final persistedPreferences = await _preferencesRepository.load();
-    final effectivePreferences = persistedPreferences.copyWith(
-      flowMode: NovelReaderFlowMode.vertical,
-    );
+    final effectivePreferences = persistedPreferences;
     final converter = resolveTextConverter(
       effectivePreferences.sharedConversionMode,
     );

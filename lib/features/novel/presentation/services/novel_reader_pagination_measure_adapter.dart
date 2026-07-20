@@ -67,6 +67,9 @@ final class NovelReaderHtmlPaginationMeasureAdapter
         message: 'No overlay is available for HTML pagination measurement.',
       );
     }
+    // The coordinator can be started while a FutureBuilder is building.
+    // Wait until that frame is complete before mutating the overlay.
+    await WidgetsBinding.instance.endOfFrame;
 
     final completer = Completer<NovelReaderPaginationMeasureResult>();
     var removed = false;

@@ -53,6 +53,7 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump();
     final result = await future;
 
     expect(result.height, greaterThan(0));

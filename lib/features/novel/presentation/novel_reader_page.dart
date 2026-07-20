@@ -18,6 +18,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_display_r
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -133,10 +134,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               color: palette.background,
               child: Builder(
                 builder: (context) {
-                  _restoreOffsetIfNeeded(
-                    episodeId: viewState.currentEpisode.episodeId,
-                    offset: viewState.currentOffset,
-                  );
+                  if (viewState.preferences.flowMode ==
+                      NovelReaderFlowMode.vertical) {
+                    _restoreOffsetIfNeeded(
+                      episodeId: viewState.currentEpisode.episodeId,
+                      offset: viewState.currentOffset,
+                    );
+                  }
                   final reader = ReaderOverlayScaffold(
                     controller: _overlayController,
                     topBar: _buildTopBarConfig(viewState),
@@ -284,6 +288,24 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     ImageRequestHeaderBuilder imageHeaderBuilder,
     ForumWebViewExternalLauncher externalLauncher,
   ) {
+    if (viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
+      return NovelReaderHtmlPagedSurface(
+        rawHtml: viewState.currentContent.rawHtml,
+        episode: viewState.currentEpisode,
+        preferences: viewState.preferences,
+        typography: typography,
+        theme: htmlTheme,
+        imageReferer: _imageRefererFor(viewState),
+        imageHeaderBuilder: imageHeaderBuilder,
+        onLinkTap: (link) => _openReaderLink(link, externalLauncher),
+        onOpenImage: _openHtmlReaderImage,
+        onImageFallback: (request) => _copyNovelImageUrl(request.url),
+        onFallbackToVertical: () => _fallbackToVertical(
+          ref.read(novelReaderControllerProvider(_args).notifier),
+        ),
+        onPageChanged: (_) => _overlayController.hideMenu(),
+      );
+    }
     final children = <Widget>[
       NovelReaderHtmlDocumentView(
         rawHtml: viewState.currentContent.rawHtml,
@@ -428,7 +450,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   Future<void> _saveVisibleProgressNow() async {
     final viewState = ref.read(novelReaderControllerProvider(_args)).value;
-    if (viewState == null) {
+    if (viewState == null ||
+        viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
       return;
     }
     final controller = ref.read(novelReaderControllerProvider(_args).notifier);
@@ -446,6 +469,26 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         maxScrollExtent: maxScrollExtent,
       ),
     );
+  }
+
+  Future<void> _fallbackToVertical(NovelReaderController controller) async {
+    final current = ref.read(novelReaderControllerProvider(_args)).value;
+    if (current == null ||
+        current.preferences.flowMode == NovelReaderFlowMode.vertical) {
+      return;
+    }
+    final next = current.persistedPreferences.copyWith(
+      flowMode: NovelReaderFlowMode.vertical,
+    );
+    controller.previewPreferences(next);
+    try {
+      await controller.commitPreferences(next);
+    } catch (_) {
+      controller.revertPreferencePreview();
+      if (mounted) {
+        _showReaderSnackBar('切回滚动模式失败');
+      }
+    }
   }
 
   Future<T> _runWithReaderSemanticsSuspended<T>(
