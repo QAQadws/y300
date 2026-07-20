@@ -1,6 +1,6 @@
 # 小说阅读器 HTML-first 混合分页分阶段实施方案
 
-> 状态：方案设计，尚未实施
+> 状态：Phase 0/1 已完成（2026-07-21）；Phase 2-6 待实施
 >
 > 编写日期：2026-07-20
 >
@@ -728,6 +728,9 @@ final class NovelReaderPaginationProgress {
 验收：能明确回答 100 秒中有多少时间来自 HTML probe、DOM slice、图片和 Flutter frame；fixture 不包含 Cookie、auth 或完整请求头。
 
 ### Phase 1：安全文字子集和共享 style resolver
+
+> 实施状态：已完成（2026-07-21）。共享 resolver、保守 classifier 和
+> text-run extractor 已落地；尚未接管生产分页，接入留给 Phase 4。
 
 目标：在不改变最终 HTML renderer 的前提下生成 TextPainter runs。
 
