@@ -10,6 +10,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_extractor.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 
 abstract interface class NovelReaderPageBreaker {
@@ -19,26 +20,49 @@ abstract interface class NovelReaderPageBreaker {
   );
 }
 
+/// Allows a coordinator to isolate mutable breaker state per request.
+abstract interface class NovelReaderIsolatedPageBreakerFactory {
+  NovelReaderPageBreaker createIsolated();
+}
+
+/// Optional cancellation port for breakers that can check between expensive
+/// measurement operations. Legacy injected breakers remain supported.
+abstract interface class NovelReaderCancellablePageBreaker {
+  Future<NovelReaderPaginationPlan> paginateCancellable(
+    NovelReaderPreparedChapter chapter,
+    NovelReaderPaginationKey key,
+    NovelReaderPaginationCancellationToken cancellationToken,
+  );
+}
+
 /// Builds pages from Phase 1 flow units and validates candidate heights using
 /// an injected presentation adapter. It has no Widget or progress state.
-final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
+final class NovelReaderHtmlPageBreaker
+    implements
+        NovelReaderPageBreaker,
+        NovelReaderIsolatedPageBreakerFactory,
+        NovelReaderCancellablePageBreaker {
   NovelReaderHtmlPageBreaker({
     required NovelReaderPaginationMeasureAdapter measureAdapter,
     this.atomExtractor = const NovelReaderPaginationAtomExtractor(),
     NovelReaderPaginationMeasureSessionFactory? measureSessionFactory,
     this.measureCacheCapacity = 512,
+    this.measureCache,
     this.maxMeasurements = 4096,
     this.maxPages = 5000,
     this.maxSplitSearchIterations = 12,
     this.cooperativeYieldInterval = 32,
-  }) : _measureSessionFactory =
+  }) : _measureAdapter = measureAdapter,
+       _measureSessionFactory =
            measureSessionFactory ??
            (measureAdapter is NovelReaderPaginationMeasureSessionFactory
                ? measureAdapter as NovelReaderPaginationMeasureSessionFactory
                : NovelReaderAdapterMeasureSessionFactory(measureAdapter));
 
+  final NovelReaderPaginationMeasureAdapter _measureAdapter;
   final NovelReaderPaginationMeasureSessionFactory _measureSessionFactory;
   final int measureCacheCapacity;
+  final NovelReaderPaginationMeasureCache? measureCache;
   final NovelReaderPaginationAtomExtractor atomExtractor;
   final int maxMeasurements;
   final int maxPages;
@@ -47,6 +71,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
 
   late NovelReaderPreparedChapter _chapter;
   late NovelReaderPaginationKey _key;
+  NovelReaderPaginationCancellationToken? _cancellationToken;
   int _measurementCount = 0;
   int _measurementCacheHitCount = 0;
   Duration _measurementDuration = Duration.zero;
@@ -60,26 +85,41 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   Future<NovelReaderPaginationPlan> paginate(
     NovelReaderPreparedChapter chapter,
     NovelReaderPaginationKey key,
-  ) async {
+  ) => _paginate(chapter, key);
+
+  Future<NovelReaderPaginationPlan> _paginate(
+    NovelReaderPreparedChapter chapter,
+    NovelReaderPaginationKey key, {
+    NovelReaderPaginationCancellationToken? cancellationToken,
+  }) async {
     _validateInput(chapter, key);
     _chapter = chapter;
     _key = key;
+    _cancellationToken = cancellationToken;
     _measurementCount = 0;
     _measurementCacheHitCount = 0;
     _measurementDuration = Duration.zero;
     _measurementSamples = <NovelReaderPaginationMeasurementSample>[];
     _buffer = null;
     _pages = <NovelReaderPageFragment>[];
+    final atomizationStopwatch = Stopwatch()..start();
     final atoms = atomExtractor.extract(chapter);
+    atomizationStopwatch.stop();
     final atomKindCounts = <NovelReaderPaginationAtomKind, int>{};
+    final sessionStopwatch = Stopwatch()..start();
     final session = NovelReaderCachingPaginationMeasureSession(
       delegate: _measureSessionFactory.create(chapter: chapter, key: key),
-      cache: NovelReaderPaginationMeasureCache(capacity: measureCacheCapacity),
+      cache:
+          measureCache ??
+          NovelReaderPaginationMeasureCache(capacity: measureCacheCapacity),
     );
+    sessionStopwatch.stop();
     _measureSession = session;
+    cancellationToken?.throwIfCancelled();
 
     try {
       for (final atom in atoms) {
+        cancellationToken?.throwIfCancelled();
         atomKindCounts.update(
           atom.kind,
           (value) => value + 1,
@@ -96,13 +136,39 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
         measurementCount: _measurementCount,
         measurementCacheHitCount: _measurementCacheHitCount,
         measurementDuration: _measurementDuration,
+        atomizationDuration: atomizationStopwatch.elapsed,
+        measureSessionCreateDuration: sessionStopwatch.elapsed,
+        rendererValidationCount: _measurementCount - _measurementCacheHitCount,
         atomKindCounts: atomKindCounts,
         measurementSamples: _measurementSamples,
       );
     } finally {
       await session.dispose();
+      _cancellationToken = null;
     }
   }
+
+  @override
+  NovelReaderPageBreaker createIsolated() {
+    return NovelReaderHtmlPageBreaker(
+      measureAdapter: _measureAdapter,
+      atomExtractor: atomExtractor,
+      measureSessionFactory: _measureSessionFactory,
+      measureCacheCapacity: measureCacheCapacity,
+      measureCache: measureCache,
+      maxMeasurements: maxMeasurements,
+      maxPages: maxPages,
+      maxSplitSearchIterations: maxSplitSearchIterations,
+      cooperativeYieldInterval: cooperativeYieldInterval,
+    );
+  }
+
+  @override
+  Future<NovelReaderPaginationPlan> paginateCancellable(
+    NovelReaderPreparedChapter chapter,
+    NovelReaderPaginationKey key,
+    NovelReaderPaginationCancellationToken cancellationToken,
+  ) => _paginate(chapter, key, cancellationToken: cancellationToken);
 
   void _validateInput(
     NovelReaderPreparedChapter chapter,
@@ -139,6 +205,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   }
 
   Future<void> _appendAtom(NovelReaderPaginationAtom atom) async {
+    _cancellationToken?.throwIfCancelled();
     if (atom.isIsolatedImage) {
       await _appendIsolatedImage(atom);
       return;
@@ -187,6 +254,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   ) async {
     var offset = 0;
     while (offset < textLength) {
+      _cancellationToken?.throwIfCancelled();
       final result = await _largestFittingEnd(atom, offset, textLength);
       if (result.end > offset) {
         _appendPiece(
@@ -233,6 +301,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
     var bestHeight = 0.0;
     var iterations = 0;
     while (low <= high && iterations < maxSplitSearchIterations) {
+      _cancellationToken?.throwIfCancelled();
       iterations += 1;
       final candidateEnd = (low + high) ~/ 2;
       final piece = _pieceFor(
@@ -254,6 +323,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   }
 
   Future<NovelReaderPaginationMeasureResult> _measure(_PagePiece piece) async {
+    _cancellationToken?.throwIfCancelled();
     _measurementCount += 1;
     if (_measurementCount > maxMeasurements) {
       throw const NovelReaderPaginationException(
@@ -278,6 +348,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
         endOffset: piece.endOffset,
       ),
     );
+    _cancellationToken?.throwIfCancelled();
     stopwatch.stop();
     _measurementDuration += stopwatch.elapsed;
     if (result.fromCache) {

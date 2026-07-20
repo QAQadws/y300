@@ -23,6 +23,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_html_prep
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
@@ -69,6 +70,8 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.coordinatorBuilder,
     this.restorePolicy = const NovelReaderPaginationRestorePolicy(),
     this.paginationCache,
+    this.paginationMeasureCache,
+    this.preparedChapterCache,
     this.diagnosticsSink = const NovelReaderNoopPaginationDiagnosticsSink(),
     this.chromeInsets = const ReaderChromeInsets.zero(),
   });
@@ -97,6 +100,8 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final NovelReaderPaginationCoordinatorBuilder? coordinatorBuilder;
   final NovelReaderPaginationRestorePolicy restorePolicy;
   final NovelReaderPaginationCache? paginationCache;
+  final NovelReaderPaginationMeasureCache? paginationMeasureCache;
+  final NovelReaderPreparedChapterCache? preparedChapterCache;
   final NovelReaderPaginationDiagnosticsSink diagnosticsSink;
   final ReaderChromeInsets chromeInsets;
 
@@ -114,6 +119,9 @@ class _NovelReaderHtmlPagedSurfaceState
   Future<NovelReaderPaginationPlan>? _planFuture;
   NovelReaderPaginationKey? _planKey;
   NovelReaderPaginationCache? _ownedCache;
+  NovelReaderPaginationMeasureCache? _ownedMeasureCache;
+  NovelReaderPreparedChapterCache? _ownedPreparedCache;
+  Duration _preparationDuration = Duration.zero;
   int _layoutGeneration = 0;
   String? _lastUnavailableNavigationKey;
 
@@ -127,6 +135,12 @@ class _NovelReaderHtmlPagedSurfaceState
   void didUpdateWidget(covariant NovelReaderHtmlPagedSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     _ensurePreparationFuture();
+  }
+
+  @override
+  void dispose() {
+    _coordinator?.cancelPending();
+    super.dispose();
   }
 
   @override
@@ -313,6 +327,9 @@ class _NovelReaderHtmlPagedSurfaceState
     if (_planKey == key && _planFuture != null) {
       return _planFuture!;
     }
+    if (_planKey != null && _planKey != key) {
+      _coordinator?.cancelPending();
+    }
     final coordinatorSignature = (
       theme: widget.theme.signature,
       preferences: htmlPreferences,
@@ -323,6 +340,7 @@ class _NovelReaderHtmlPagedSurfaceState
       builder: widget.coordinatorBuilder,
     );
     if (_coordinator == null || _coordinatorSignature != coordinatorSignature) {
+      _coordinator?.cancelPending();
       _coordinatorSignature = coordinatorSignature;
       _coordinator =
           widget.coordinatorBuilder?.call(
@@ -377,6 +395,13 @@ class _NovelReaderHtmlPagedSurfaceState
               measurementCount: plan.measurementCount,
               measurementCacheHitCount: plan.measurementCacheHitCount,
               measurementDuration: plan.measurementDuration,
+              preparationDuration: _preparationDuration,
+              atomizationDuration: plan.atomizationDuration,
+              measureSessionCreateDuration: plan.measureSessionCreateDuration,
+              textFastPathCount: plan.textFastPathCount,
+              rendererValidationCount: plan.rendererValidationCount,
+              rendererValidationMismatchCount:
+                  plan.rendererValidationMismatchCount,
               availableHeight: key.viewportHeightPx.toDouble(),
               averageTextPageFullness: plan.averageTextPageFullness,
               lowFullnessPageCount: plan.lowFullnessPageCount,
@@ -409,6 +434,9 @@ class _NovelReaderHtmlPagedSurfaceState
           imageCacheOwnerId: widget.episode.sourceTid,
           imageHeaderBuilder: widget.imageHeaderBuilder,
         ),
+        measureCache:
+            widget.paginationMeasureCache ??
+            (_ownedMeasureCache ??= NovelReaderPaginationMeasureCache()),
       ),
       cache:
           widget.paginationCache ??
@@ -432,21 +460,40 @@ class _NovelReaderHtmlPagedSurfaceState
       return;
     }
     _prepareSignature = signature;
-    _prepareFuture =
-        (widget.preparationService ??
-                DefaultNovelReaderHtmlPreparationService(
-                  preparer: widget.preparer,
-                ))
-            .prepare(
-              rawHtml: widget.rawHtml,
-              episode: widget.episode,
-              preferences: htmlPreferences,
-              theme: widget.theme,
-              sourceId: widget.episode.episodeId,
-              threadId: widget.episode.sourceTid,
-              imageCacheOwnerId: widget.episode.sourceTid,
-              semanticDocument: widget.semanticDocument,
-            );
+    _coordinator?.cancelPending();
+    final preparationService = NovelReaderCachingHtmlPreparationService(
+      delegate:
+          widget.preparationService ??
+          DefaultNovelReaderHtmlPreparationService(preparer: widget.preparer),
+      cache:
+          widget.preparedChapterCache ??
+          (_ownedPreparedCache ??= NovelReaderPreparedChapterCache()),
+    );
+    final stopwatch = Stopwatch()..start();
+    final future = preparationService.prepare(
+      rawHtml: widget.rawHtml,
+      episode: widget.episode,
+      preferences: htmlPreferences,
+      theme: widget.theme,
+      sourceId: widget.episode.episodeId,
+      threadId: widget.episode.sourceTid,
+      imageCacheOwnerId: widget.episode.sourceTid,
+      semanticDocument: widget.semanticDocument,
+    );
+    _prepareFuture = future;
+    unawaited(
+      future.then<void>(
+        (_) {
+          stopwatch.stop();
+          if (identical(_prepareFuture, future)) {
+            _preparationDuration = stopwatch.elapsed;
+          }
+        },
+        onError: (Object error, StackTrace stack) {
+          stopwatch.stop();
+        },
+      ),
+    );
     _coordinator = null;
     _coordinatorSignature = null;
     _planFuture = null;
@@ -479,6 +526,7 @@ class _NovelReaderHtmlPagedSurfaceState
     if (!mounted) {
       return;
     }
+    _coordinator?.cancelPending();
     setState(() {
       _prepareFuture = null;
       _prepareSignature = null;
@@ -491,6 +539,7 @@ class _NovelReaderHtmlPagedSurfaceState
     if (!mounted) {
       return;
     }
+    _coordinator?.clear();
     setState(() {
       _planFuture = null;
       _planKey = null;

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 
 void main() {
   const service = DefaultNovelReaderHtmlPreparationService();
@@ -73,6 +77,79 @@ void main() {
       );
     },
   );
+
+  test(
+    'reuses prepared chapters and coalesces concurrent preparation',
+    () async {
+      final delegate = _CountingPreparationService();
+      final service = NovelReaderCachingHtmlPreparationService(
+        delegate: delegate,
+        cache: NovelReaderPreparedChapterCache(capacity: 1),
+      );
+      final preferences = adapter.map(NovelReaderPreferences.defaults());
+
+      final first = service.prepare(
+        rawHtml: '<p>缓存正文</p>',
+        episode: _episode,
+        preferences: preferences,
+        theme: _theme,
+        sourceId: _episode.episodeId,
+        threadId: _episode.sourceTid,
+        imageCacheOwnerId: _episode.sourceTid,
+      );
+      final second = service.prepare(
+        rawHtml: '<p>缓存正文</p>',
+        episode: _episode,
+        preferences: preferences,
+        theme: _theme,
+        sourceId: _episode.episodeId,
+        threadId: _episode.sourceTid,
+        imageCacheOwnerId: _episode.sourceTid,
+      );
+
+      expect(identical(first, second), isTrue);
+      expect(await first, isA<NovelReaderPreparedChapter>());
+      expect(delegate.calls, 1);
+
+      await service.prepare(
+        rawHtml: '<p>缓存正文</p>',
+        episode: _episode,
+        preferences: preferences,
+        theme: _theme,
+        sourceId: _episode.episodeId,
+        threadId: _episode.sourceTid,
+        imageCacheOwnerId: _episode.sourceTid,
+      );
+      expect(delegate.calls, 1);
+    },
+  );
+}
+
+class _CountingPreparationService implements NovelReaderHtmlPreparationService {
+  int calls = 0;
+
+  @override
+  Future<NovelReaderPreparedChapter> prepare({
+    required String rawHtml,
+    required NovelEpisodeItem episode,
+    required ForumHtmlReaderPreferences preferences,
+    required ForumHtmlThemeContext theme,
+    required String sourceId,
+    required String? threadId,
+    required String? imageCacheOwnerId,
+    NovelReaderDocument? semanticDocument,
+  }) async {
+    calls += 1;
+    return await const DefaultNovelReaderHtmlPreparationService().prepare(
+      rawHtml: '<p>缓存正文</p>',
+      episode: _episode,
+      preferences: ForumHtmlReaderPreferences.defaults(),
+      theme: _theme,
+      sourceId: 'episode-1',
+      threadId: '100',
+      imageCacheOwnerId: '100',
+    );
+  }
 }
 
 const _episode = NovelEpisodeItem(

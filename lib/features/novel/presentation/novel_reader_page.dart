@@ -17,6 +17,8 @@ import 'package:y300/features/novel/presentation/controllers/novel_reader_contro
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
@@ -65,6 +67,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _isHandlingPop = false;
   final NovelReaderPaginationCache _paginationCache =
       NovelReaderPaginationCache();
+  final NovelReaderPaginationMeasureCache _paginationMeasureCache =
+      NovelReaderPaginationMeasureCache();
+  final NovelReaderPreparedChapterCache _preparedChapterCache =
+      NovelReaderPreparedChapterCache();
   int _anchorNavigationSerial = 0;
   NovelReaderAnchorNavigationRequest? _pendingAnchorNavigationRequest;
 
@@ -91,6 +97,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       ..removeListener(_onScroll)
       ..dispose();
     _paginationCache.clear();
+    _paginationMeasureCache.clear();
+    _preparedChapterCache.clear();
     super.dispose();
   }
 
@@ -320,6 +328,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         semanticDocument: viewState.document,
         navigationRequest: _pendingAnchorNavigationRequest,
         paginationCache: _paginationCache,
+        paginationMeasureCache: _paginationMeasureCache,
+        preparedChapterCache: _preparedChapterCache,
         imageHeaderBuilder: imageHeaderBuilder,
         onLinkTap: (link) => _openReaderLink(link, externalLauncher),
         onOpenImage: _openHtmlReaderImage,

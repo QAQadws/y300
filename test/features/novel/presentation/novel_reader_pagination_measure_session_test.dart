@@ -62,6 +62,31 @@ void main() {
     await session.dispose();
   });
 
+  test('shares exact metrics across isolated measurement sessions', () async {
+    final cache = NovelReaderPaginationMeasureCache(capacity: 4);
+    final firstDelegate = _CountingMeasureSession();
+    final firstSession = NovelReaderCachingPaginationMeasureSession(
+      delegate: firstDelegate,
+      cache: cache,
+    );
+    final request = _request(html: '<p>shared</p>');
+
+    expect((await firstSession.measure(request)).fromCache, isFalse);
+    await firstSession.dispose();
+
+    final secondDelegate = _CountingMeasureSession();
+    final secondSession = NovelReaderCachingPaginationMeasureSession(
+      delegate: secondDelegate,
+      cache: cache,
+    );
+    final result = await secondSession.measure(request);
+
+    expect(result.fromCache, isTrue);
+    expect(firstDelegate.calls, 1);
+    expect(secondDelegate.calls, 0);
+    await secondSession.dispose();
+  });
+
   testWidgets('reuses one HTML probe for sequential candidates', (
     tester,
   ) async {

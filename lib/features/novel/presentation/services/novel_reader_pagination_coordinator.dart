@@ -5,6 +5,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_page_breaker.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 
 abstract interface class NovelReaderPaginationCoordinator {
@@ -16,6 +17,9 @@ abstract interface class NovelReaderPaginationCoordinator {
   bool isCached(NovelReaderPaginationKey key);
 
   void clear();
+
+  /// Cancels active work without evicting reusable plan cache entries.
+  void cancelPending();
 
   void clearEpisode(String episodeId);
 }
@@ -32,6 +36,9 @@ final class DefaultNovelReaderPaginationCoordinator
   final NovelReaderPaginationCache cache;
   final Map<NovelReaderPaginationKey, Future<NovelReaderPaginationPlan>>
   _inFlight = <NovelReaderPaginationKey, Future<NovelReaderPaginationPlan>>{};
+  final Map<NovelReaderPaginationKey, NovelReaderPaginationCancellationToken>
+  _cancellationTokens =
+      <NovelReaderPaginationKey, NovelReaderPaginationCancellationToken>{};
   int _generation = 0;
 
   @override
@@ -59,10 +66,13 @@ final class DefaultNovelReaderPaginationCoordinator
     }
 
     final requestGeneration = _generation;
+    final cancellationToken = NovelReaderPaginationCancellationToken();
+    _cancellationTokens[key] = cancellationToken;
     final future = _build(
       chapter: chapter,
       key: key,
       requestGeneration: requestGeneration,
+      cancellationToken: cancellationToken,
     );
     _inFlight[key] = future;
     unawaited(
@@ -82,8 +92,27 @@ final class DefaultNovelReaderPaginationCoordinator
     required NovelReaderPreparedChapter chapter,
     required NovelReaderPaginationKey key,
     required int requestGeneration,
+    required NovelReaderPaginationCancellationToken cancellationToken,
   }) async {
-    final plan = await _pageBreaker.paginate(chapter, key);
+    final breaker = _pageBreaker is NovelReaderIsolatedPageBreakerFactory
+        ? (_pageBreaker as NovelReaderIsolatedPageBreakerFactory)
+              .createIsolated()
+        : _pageBreaker;
+    late final NovelReaderPaginationPlan plan;
+    final supportsCancellation = breaker is NovelReaderCancellablePageBreaker;
+    if (supportsCancellation) {
+      final cancellableBreaker = breaker as NovelReaderCancellablePageBreaker;
+      plan = await cancellableBreaker.paginateCancellable(
+        chapter,
+        key,
+        cancellationToken,
+      );
+    } else {
+      plan = await breaker.paginate(chapter, key);
+    }
+    if (supportsCancellation) {
+      cancellationToken.throwIfCancelled();
+    }
     if (requestGeneration != _generation) {
       throw const NovelReaderPaginationException(
         code: 'staleRequest',
@@ -100,19 +129,35 @@ final class DefaultNovelReaderPaginationCoordinator
   ) {
     if (identical(_inFlight[key], future)) {
       _inFlight.remove(key);
+      _cancellationTokens.remove(key);
     }
   }
 
   @override
   void clear() {
-    _generation += 1;
-    _inFlight.clear();
+    cancelPending();
     cache.clear();
+  }
+
+  @override
+  void cancelPending() {
+    _generation += 1;
+    for (final token in _cancellationTokens.values) {
+      token.cancel();
+    }
+    _cancellationTokens.clear();
+    _inFlight.clear();
   }
 
   @override
   void clearEpisode(String episodeId) {
     _generation += 1;
+    for (final entry in _cancellationTokens.entries) {
+      if (entry.key.episodeId == episodeId) {
+        entry.value.cancel();
+      }
+    }
+    _cancellationTokens.removeWhere((key, _) => key.episodeId == episodeId);
     _inFlight.removeWhere((key, _) => key.episodeId == episodeId);
     cache.evictEpisode(episodeId);
   }

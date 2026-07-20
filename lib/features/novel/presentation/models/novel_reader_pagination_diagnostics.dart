@@ -18,6 +18,12 @@ class NovelReaderPaginationDiagnostics {
     this.measurementCount = 0,
     this.measurementCacheHitCount = 0,
     this.measurementDuration = Duration.zero,
+    this.preparationDuration = Duration.zero,
+    this.atomizationDuration = Duration.zero,
+    this.measureSessionCreateDuration = Duration.zero,
+    this.textFastPathCount = 0,
+    this.rendererValidationCount = 0,
+    this.rendererValidationMismatchCount = 0,
     this.availableHeight = 0,
     this.averageTextPageFullness = 0,
     this.lowFullnessPageCount = 0,
@@ -51,6 +57,12 @@ class NovelReaderPaginationDiagnostics {
   final int measurementCount;
   final int measurementCacheHitCount;
   final Duration measurementDuration;
+  final Duration preparationDuration;
+  final Duration atomizationDuration;
+  final Duration measureSessionCreateDuration;
+  final int textFastPathCount;
+  final int rendererValidationCount;
+  final int rendererValidationMismatchCount;
   final double availableHeight;
   final double averageTextPageFullness;
   final int lowFullnessPageCount;
@@ -70,6 +82,11 @@ class NovelReaderPaginationDiagnostics {
         '$measurementCacheHitCount, measurementMs='
         '${measurementDuration.inMilliseconds}, averageTextFullness='
         '${averageTextPageFullness.toStringAsFixed(2)}, '
+        'prepareMs=${preparationDuration.inMilliseconds}, '
+        'atomizationMs=${atomizationDuration.inMilliseconds}, '
+        'sessionCreateMs=${measureSessionCreateDuration.inMilliseconds}, '
+        'rendererValidations=$rendererValidationCount, '
+        'rendererMismatches=$rendererValidationMismatchCount, '
         'lowFullnessPages=$lowFullnessPageCount, gapReasons='
         '$gapReasonCounts, atomKinds=$atomKindCounts)';
   }

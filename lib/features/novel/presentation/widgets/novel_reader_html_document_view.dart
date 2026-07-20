@@ -9,6 +9,7 @@ import 'package:y300/features/novel/presentation/services/novel_html_reader_pref
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -31,6 +32,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
     this.preferencesAdapter = const NovelHtmlReaderPreferencesAdapter(),
     this.preparer = const NovelHtmlChapterRenderPreparer(),
     this.preparationService,
+    this.preparedChapterCache,
     this.imageReaderBridge = const NovelHtmlImageReaderBridge(),
   });
 
@@ -47,6 +49,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   final NovelHtmlReaderPreferencesAdapter preferencesAdapter;
   final NovelHtmlChapterPreparer preparer;
   final NovelReaderHtmlPreparationService? preparationService;
+  final NovelReaderPreparedChapterCache? preparedChapterCache;
   final NovelHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -58,6 +61,7 @@ class _NovelReaderHtmlDocumentViewState
     extends ConsumerState<NovelReaderHtmlDocumentView> {
   Future<NovelReaderPreparedChapter>? _future;
   Object? _signature;
+  NovelReaderPreparedChapterCache? _ownedPreparedCache;
 
   @override
   void initState() {
@@ -133,9 +137,14 @@ class _NovelReaderHtmlDocumentViewState
       return;
     }
     _signature = signature;
-    final preparationService =
-        widget.preparationService ??
-        DefaultNovelReaderHtmlPreparationService(preparer: widget.preparer);
+    final preparationService = NovelReaderCachingHtmlPreparationService(
+      delegate:
+          widget.preparationService ??
+          DefaultNovelReaderHtmlPreparationService(preparer: widget.preparer),
+      cache:
+          widget.preparedChapterCache ??
+          (_ownedPreparedCache ??= NovelReaderPreparedChapterCache()),
+    );
     _future = preparationService.prepare(
       rawHtml: widget.rawHtml,
       episode: widget.episode,

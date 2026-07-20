@@ -31,6 +31,11 @@ class NovelReaderPaginationPlan {
     this.measurementCount = 0,
     this.measurementCacheHitCount = 0,
     this.measurementDuration = Duration.zero,
+    this.atomizationDuration = Duration.zero,
+    this.measureSessionCreateDuration = Duration.zero,
+    this.textFastPathCount = 0,
+    this.rendererValidationCount = 0,
+    this.rendererValidationMismatchCount = 0,
     Map<NovelReaderPaginationAtomKind, int> atomKindCounts =
         const <NovelReaderPaginationAtomKind, int>{},
     List<NovelReaderPaginationMeasurementSample> measurementSamples =
@@ -51,6 +56,11 @@ class NovelReaderPaginationPlan {
   final int measurementCount;
   final int measurementCacheHitCount;
   final Duration measurementDuration;
+  final Duration atomizationDuration;
+  final Duration measureSessionCreateDuration;
+  final int textFastPathCount;
+  final int rendererValidationCount;
+  final int rendererValidationMismatchCount;
   final Map<NovelReaderPaginationAtomKind, int> atomKindCounts;
   final List<NovelReaderPaginationMeasurementSample> measurementSamples;
 

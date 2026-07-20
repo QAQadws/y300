@@ -7,6 +7,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_page_breaker.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
@@ -55,6 +56,37 @@ void main() {
     );
     expect(coordinator.cache.length, 0);
   });
+
+  test(
+    'cancels an active cancellable breaker when the generation is cleared',
+    () async {
+      final breaker = _CancellableDelayedBreaker();
+      final coordinator = DefaultNovelReaderPaginationCoordinator(
+        pageBreaker: breaker,
+      );
+      final future = coordinator.paginate(
+        chapter: _prepared('episode'),
+        key: _key('episode'),
+      );
+
+      expect(breaker.token, isNotNull);
+      coordinator.clear();
+      expect(breaker.token!.isCancelled, isTrue);
+      breaker.complete(_plan('episode'));
+
+      await expectLater(
+        future,
+        throwsA(
+          isA<NovelReaderPaginationException>().having(
+            (error) => error.code,
+            'code',
+            'paginationCancelled',
+          ),
+        ),
+      );
+      expect(coordinator.cache.length, 0);
+    },
+  );
 }
 
 NovelReaderPreparedChapter _prepared(String episodeId) {
@@ -120,6 +152,31 @@ class _DelayedBreaker implements NovelReaderPageBreaker {
     NovelReaderPaginationKey key,
   ) {
     calls += 1;
+    return completer.future;
+  }
+
+  void complete(NovelReaderPaginationPlan plan) => completer.complete(plan);
+}
+
+class _CancellableDelayedBreaker
+    implements NovelReaderPageBreaker, NovelReaderCancellablePageBreaker {
+  final Completer<NovelReaderPaginationPlan> completer =
+      Completer<NovelReaderPaginationPlan>();
+  NovelReaderPaginationCancellationToken? token;
+
+  @override
+  Future<NovelReaderPaginationPlan> paginate(
+    NovelReaderPreparedChapter chapter,
+    NovelReaderPaginationKey key,
+  ) => completer.future;
+
+  @override
+  Future<NovelReaderPaginationPlan> paginateCancellable(
+    NovelReaderPreparedChapter chapter,
+    NovelReaderPaginationKey key,
+    NovelReaderPaginationCancellationToken cancellationToken,
+  ) {
+    token = cancellationToken;
     return completer.future;
   }
 
