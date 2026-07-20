@@ -7,6 +7,8 @@ import 'package:y300/features/novel/presentation/services/novel_html_chapter_ren
 import 'package:y300/features/novel/presentation/services/novel_html_image_reader_bridge.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -28,6 +30,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
     this.onImageFallback,
     this.preferencesAdapter = const NovelHtmlReaderPreferencesAdapter(),
     this.preparer = const NovelHtmlChapterRenderPreparer(),
+    this.preparationService,
     this.imageReaderBridge = const NovelHtmlImageReaderBridge(),
   });
 
@@ -43,6 +46,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
   final NovelHtmlReaderPreferencesAdapter preferencesAdapter;
   final NovelHtmlChapterPreparer preparer;
+  final NovelReaderHtmlPreparationService? preparationService;
   final NovelHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -52,7 +56,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
 
 class _NovelReaderHtmlDocumentViewState
     extends ConsumerState<NovelReaderHtmlDocumentView> {
-  Future<NovelHtmlPreparedChapter>? _future;
+  Future<NovelReaderPreparedChapter>? _future;
   Object? _signature;
 
   @override
@@ -74,12 +78,13 @@ class _NovelReaderHtmlDocumentViewState
       key: const Key('novel-reader-html-document-view'),
       child: DefaultTextStyle.merge(
         style: widget.typography.body,
-        child: FutureBuilder<NovelHtmlPreparedChapter>(
+        child: FutureBuilder<NovelReaderPreparedChapter>(
           future: _future,
           builder: (context, snapshot) {
             final prepared = snapshot.data;
             if (prepared == null ||
-                prepared.document.themeSignature != widget.theme.signature) {
+                prepared.renderDocument.themeSignature !=
+                    widget.theme.signature) {
               return const SizedBox(
                 key: Key('novel-reader-html-loading'),
                 height: 96,
@@ -90,7 +95,7 @@ class _NovelReaderHtmlDocumentViewState
               key: const Key('novel-reader-html-renderer'),
               html: prepared.html,
               theme: widget.theme,
-              preparedDocument: prepared.document,
+              preparedDocument: prepared.renderDocument,
               preferences: preferences,
               sourceId: widget.episode.episodeId,
               threadId: widget.episode.sourceTid,
@@ -103,7 +108,7 @@ class _NovelReaderHtmlDocumentViewState
                 },
                 onTapImage: (request) => _handleImageTap(
                   request: request,
-                  sequence: prepared.document.sequence,
+                  sequence: prepared.renderDocument.sequence,
                 ),
               ),
             );
@@ -121,13 +126,19 @@ class _NovelReaderHtmlDocumentViewState
       sourceTid: widget.episode.sourceTid,
       preferences: preferences,
       themeSignature: widget.theme.signature,
+      preparationService: widget.preparationService,
+      preparer: widget.preparer,
     );
     if (_signature == signature) {
       return;
     }
     _signature = signature;
-    _future = widget.preparer.prepare(
+    final preparationService =
+        widget.preparationService ??
+        DefaultNovelReaderHtmlPreparationService(preparer: widget.preparer);
+    _future = preparationService.prepare(
       rawHtml: widget.rawHtml,
+      episode: widget.episode,
       preferences: preferences,
       theme: widget.theme,
       sourceId: widget.episode.episodeId,
