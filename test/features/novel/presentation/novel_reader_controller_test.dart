@@ -18,6 +18,7 @@ import 'package:y300/features/novel/domain/repositories/novel_reader_preferences
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
@@ -301,6 +302,55 @@ void main() {
     },
   );
 
+  test(
+    'NovelReaderController persists only the reported paged position',
+    () async {
+      final repository = _ControllerNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        ),
+      );
+      final progressCommitter = _FakeNovelReaderProgressCommitter();
+      final container = _buildContainer(
+        repository: repository,
+        progressCommitter: progressCommitter,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      final provider = novelReaderControllerProvider(args);
+      await container.read(provider.future);
+      container
+          .read(provider.notifier)
+          .onPagedPositionChanged(
+            const NovelReaderPaginationPosition(
+              episodeId: 'novel:49:100:5001',
+              paginationKey: 'layout-v1',
+              pageIndex: 2,
+              pageCount: 5,
+              anchor: NovelReaderTextAnchor(
+                episodeId: 'novel:49:100:5001',
+                nodeId: 'node-2',
+                textOffset: 14,
+              ),
+            ),
+          );
+
+      final state = container.read(provider).value!;
+      expect(state.progressSnapshot.pageIndex, 2);
+      expect(state.progressSnapshot.paginationKey, 'layout-v1');
+      expect(state.progressSnapshot.anchorNodeId, 'node-2');
+      expect(state.progressSnapshot.anchorTextOffset, 14);
+      expect(state.progressSnapshot.progressPercent, 0.5);
+      expect(progressCommitter.scheduleCallCount, 1);
+    },
+  );
+
   test('NovelReaderController dispose cancels progress committer', () async {
     final repository = _ControllerNovelRepository();
     final progressCommitter = _FakeNovelReaderProgressCommitter();
@@ -355,6 +405,51 @@ void main() {
       expect(state.currentEpisode.episodeId, 'novel:49:100:5002');
       expect(state.currentOffset, 88);
       expect(repository.savedProgressEpisodeIds, contains('novel:49:100:5001'));
+    },
+  );
+
+  test(
+    'chapter transition never inherits the source pagination page',
+    () async {
+      final repository = _ControllerNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        ),
+      );
+      final container = _buildContainer(repository: repository);
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      await container.read(provider.future);
+      final controller = container.read(provider.notifier);
+      controller.onPagedPositionChanged(
+        const NovelReaderPaginationPosition(
+          episodeId: 'novel:49:100:5001',
+          paginationKey: 'source-layout',
+          pageIndex: 4,
+          pageCount: 6,
+          anchor: NovelReaderTextAnchor(
+            episodeId: 'novel:49:100:5001',
+            nodeId: 'source-node',
+          ),
+        ),
+      );
+      await controller.saveCurrentProgressNow(
+        container.read(provider).value!.progressSnapshot,
+      );
+
+      await controller.openEpisodeFromCatalog('novel:49:100:5002');
+      final target = container.read(provider).value!;
+      expect(target.currentEpisode.episodeId, 'novel:49:100:5002');
+      expect(target.progressSnapshot.pageIndex, 0);
+      expect(target.progressSnapshot.paginationKey, isNull);
+      expect(target.progressSnapshot.anchorNodeId, isNull);
     },
   );
 
@@ -1070,6 +1165,8 @@ class _ControllerNovelRepository implements NovelRepository {
     NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
     int pageIndex = 0,
     String? anchorNodeId,
+    int anchorTextOffset = 0,
+    String? paginationKey,
     double progressPercent = 0,
   }) async {
     savedProgressEpisodeIds.add(episodeId);
@@ -1081,6 +1178,8 @@ class _ControllerNovelRepository implements NovelRepository {
       flowMode: flowMode,
       pageIndex: pageIndex,
       anchorNodeId: anchorNodeId,
+      anchorTextOffset: anchorTextOffset,
+      paginationKey: paginationKey,
       progressPercent: progressPercent,
     );
   }

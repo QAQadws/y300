@@ -57,6 +57,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   int _displayPersistSerial = 0;
   int _readerSemanticsSuspendCount = 0;
   bool _hasRestoredOffset = false;
+  String? _verticalRestoreOwner;
   bool _isProgrammaticScrollChange = false;
   bool _allowPopAfterProgressFlush = false;
   bool _isHandlingPop = false;
@@ -119,6 +120,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             onOpenThread: () => _openFallbackSourceThread(),
           ),
           data: (viewState) {
+            final restoreOwner =
+                '${viewState.currentEpisode.episodeId}|'
+                '${viewState.preferences.flowMode.name}';
+            if (_verticalRestoreOwner != restoreOwner) {
+              _verticalRestoreOwner = restoreOwner;
+              _hasRestoredOffset = false;
+            }
             final theme = Theme.of(context);
             final palette = _themeResolver.resolve(
               preferences: viewState.preferences,
@@ -138,7 +146,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                       NovelReaderFlowMode.vertical) {
                     _restoreOffsetIfNeeded(
                       episodeId: viewState.currentEpisode.episodeId,
-                      offset: viewState.currentOffset,
+                      snapshot: viewState.progressSnapshot,
                     );
                   }
                   final reader = ReaderOverlayScaffold(
@@ -296,6 +304,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         typography: typography,
         theme: htmlTheme,
         imageReferer: _imageRefererFor(viewState),
+        progressSnapshot: viewState.progressSnapshot,
         imageHeaderBuilder: imageHeaderBuilder,
         onLinkTap: (link) => _openReaderLink(link, externalLauncher),
         onOpenImage: _openHtmlReaderImage,
@@ -303,7 +312,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         onFallbackToVertical: () => _fallbackToVertical(
           ref.read(novelReaderControllerProvider(_args).notifier),
         ),
-        onPageChanged: (_) => _overlayController.hideMenu(),
+        onPositionChanged: (position) {
+          _overlayController.hideMenu();
+          ref
+              .read(novelReaderControllerProvider(_args).notifier)
+              .onPagedPositionChanged(position);
+        },
       );
     }
     final children = <Widget>[
@@ -375,12 +389,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   void _restoreOffsetIfNeeded({
     required String episodeId,
-    required double offset,
+    required NovelReaderProgressSnapshot snapshot,
   }) {
     if (_hasRestoredOffset) {
       return;
     }
-    if (offset <= 0) {
+    if (snapshot.scrollOffset <= 0 &&
+        snapshot.progressPercent <= 0 &&
+        snapshot.paginationKey == null) {
       _hasRestoredOffset = true;
       return;
     }
@@ -398,6 +414,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         return;
       }
       final max = _scrollController.position.maxScrollExtent;
+      final offset = _progressPolicy.restoreScrollOffset(
+        snapshot,
+        maxScrollExtent: max,
+      );
       _isProgrammaticScrollChange = true;
       try {
         _scrollController.jumpTo(offset.clamp(0.0, max).toDouble());
@@ -450,11 +470,18 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   Future<void> _saveVisibleProgressNow() async {
     final viewState = ref.read(novelReaderControllerProvider(_args)).value;
-    if (viewState == null ||
-        viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
+    if (viewState == null) {
       return;
     }
     final controller = ref.read(novelReaderControllerProvider(_args).notifier);
+    if (viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
+      await controller.saveCurrentProgressNow(viewState.progressSnapshot);
+      return;
+    }
+    if (!_scrollController.hasClients || !_hasRestoredOffset) {
+      await controller.saveCurrentProgressNow(viewState.progressSnapshot);
+      return;
+    }
     final offset = _scrollController.hasClients
         ? _scrollController.offset
         : 0.0;

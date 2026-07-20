@@ -676,6 +676,41 @@ void main() {
     );
   });
 
+  testWidgets('NovelReaderPage restores a visible page for the same layout', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+      firstParagraphs: List<String>.generate(
+        36,
+        (index) => '持久化分页段落 $index ${List<String>.filled(120, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    final pageViewFinder = find.byKey(
+      const Key('novel-reader-paged-page-view'),
+    );
+    await tester.drag(pageViewFinder, const Offset(-700, 0));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 260));
+
+    final savedIndex = repository.readingProgress?.pageIndex;
+    expect(savedIndex, greaterThan(0));
+    expect(repository.readingProgress?.paginationKey, isNotNull);
+    expect(repository.readingProgress?.anchorNodeId, isNotNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('${savedIndex! + 1} /'), findsOneWidget);
+  });
+
   testWidgets('NovelReaderPage vertical mode does not bind paged view', (
     tester,
   ) async {
@@ -1706,6 +1741,8 @@ class _FakeNovelRepository implements NovelRepository {
     NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
     int pageIndex = 0,
     String? anchorNodeId,
+    int anchorTextOffset = 0,
+    String? paginationKey,
     double progressPercent = 0,
   }) async {
     savedProgressEpisodeIds.add(episodeId);
@@ -1718,6 +1755,8 @@ class _FakeNovelRepository implements NovelRepository {
       flowMode: flowMode,
       pageIndex: pageIndex,
       anchorNodeId: anchorNodeId,
+      anchorTextOffset: anchorTextOffset,
+      paginationKey: paginationKey,
       progressPercent: progressPercent,
     );
   }

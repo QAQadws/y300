@@ -53,6 +53,8 @@ abstract class NovelRepository {
     NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
     int pageIndex = 0,
     String? anchorNodeId,
+    int anchorTextOffset = 0,
+    String? paginationKey,
     double progressPercent = 0,
   });
 

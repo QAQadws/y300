@@ -6,11 +6,13 @@
 >
 > 对应方案：`docs/小说阅读器全新分页阅读模式分阶段实施方案.md`
 
+> 后续状态：Phase 3 已解除运行时强制纵向降级并启用 HTML-first 分页；Phase 4 已按 ADR-004 完成 v34 阅读位置身份持久化。本文件保留 Phase 0 的历史边界，后续实现以各阶段实际交付记录为准。
+
 ## 1. Phase 0 结论
 
 小说阅读器旧分页实现已经退出生产和测试边界。后续分页必须从当前 HTML-first 正文准备结果重新实现，不允许重新接回旧 `NovelReaderDocumentView`、旧估算 paginator 或旧 layout service。
 
-当前阶段的有效阅读行为固定为：
+Phase 0 当时的有效阅读行为固定为（已由 Phase 3/4 的实际交付取代）：
 
 - 正文视觉入口：`NovelReaderHtmlDocumentView`。
 - HTML 准备入口：`NovelHtmlChapterRenderPreparer`。
@@ -88,7 +90,9 @@ Phase 0 删除以下旧分页实现：
 - 后续 Phase 1/2 必须建立全新的 HTML flow unit、page fragment 和 pagination key。
 - 新分页测试不能复用旧 layout service 测试替身。
 
-## 6. ADR-003：旧分页偏好可读，运行时明确降级
+## 6. ADR-003：旧分页偏好可读，运行时明确降级（历史决策）
+
+> 已被 Phase 3 的 HTML-first 分页 surface 取代。以下内容保留用于解释为什么 Phase 0 不直接启用旧分页。
 
 ### 决策
 
@@ -108,11 +112,11 @@ persisted flowMode = pagedLtr / pagedRtl
 - 让旧值直接驱动已删除的 PageView 会恢复错误布局。
 - `persisted/effective` 双层已经是现有 controller 的偏好预览边界，可以表达该降级而不新增状态机。
 
-## 7. ADR-004：未来增加可空 pagination key
+## 7. ADR-004：增加可空 pagination key
 
 ### 决策
 
-新分页进入进度持久化阶段时，推荐为 `novel_reading_progress` 增加可空的 `pagination_key`（或语义等价的 `layout_fingerprint`）。Phase 0 不执行数据库 migration，也不写入该字段。
+新分页进入进度持久化阶段时，为 `novel_reading_progress` 增加可空的 `pagination_key`，并增加 `anchor_text_offset` 保存节点内位置。该决策已在 Phase 4 通过数据库 v34 实现；Phase 0 本身不执行 migration，也不写入该字段。
 
 ### 原因
 
@@ -133,6 +137,7 @@ persisted flowMode = pagedLtr / pagedRtl
 ### 数据边界
 
 - pagination key 只属于阅读进度。
+- `anchor_text_offset` 只属于阅读进度的稳定正文锚点，不与章节书签的独立位置记录混用。
 - 不把页片 HTML、图片字节或分页缓存写入 SQLite。
 - 不修改 `novel_episode_content` 的正文唯一来源语义。
 

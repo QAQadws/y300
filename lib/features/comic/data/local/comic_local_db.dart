@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 33;
+  static const int dbVersion = 34;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -97,6 +97,9 @@ class ComicLocalDb {
     if (oldVersion < 33 && newVersion >= 33) {
       await _upgradeFrom32To33(db);
     }
+    if (oldVersion < 34 && newVersion >= 34) {
+      await _upgradeFrom33To34(db);
+    }
   }
 
   static Future<void> _upgradeFrom27To28(Database db) async {
@@ -187,6 +190,21 @@ class ComicLocalDb {
         AND detail_state = 'pending'
     ''');
     await _createFavoriteDetailStateIndex(db);
+  }
+
+  static Future<void> _upgradeFrom33To34(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: novelReadingProgressTable,
+      column: 'pagination_key',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: novelReadingProgressTable,
+      column: 'anchor_text_offset',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
   }
 
   static Future<void> _addColumnIfMissing(
@@ -461,6 +479,8 @@ class ComicLocalDb {
         flow_mode TEXT,
         page_index INTEGER,
         anchor_node_id TEXT,
+        anchor_text_offset INTEGER NOT NULL DEFAULT 0,
+        pagination_key TEXT,
         progress_percent REAL,
         updated_at INTEGER NOT NULL
       )

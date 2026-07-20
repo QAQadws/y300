@@ -4,6 +4,24 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 enum NovelReaderPageOverflowState { none, atomicWidget, minimumTextFragment }
 
 @immutable
+class NovelReaderPageAnchorRange {
+  const NovelReaderPageAnchorRange({required this.start, required this.end});
+
+  final NovelReaderTextAnchor start;
+  final NovelReaderTextAnchor end;
+
+  @override
+  bool operator ==(Object other) {
+    return other is NovelReaderPageAnchorRange &&
+        other.start == start &&
+        other.end == end;
+  }
+
+  @override
+  int get hashCode => Object.hash(start, end);
+}
+
+@immutable
 class NovelReaderPageFragment {
   const NovelReaderPageFragment({
     required this.index,
@@ -11,6 +29,7 @@ class NovelReaderPageFragment {
     required this.startAnchor,
     required this.endAnchor,
     required this.imageIndices,
+    this.anchorRanges = const <NovelReaderPageAnchorRange>[],
     this.overflowState = NovelReaderPageOverflowState.none,
     this.requiresInnerScroll = false,
   });
@@ -19,6 +38,10 @@ class NovelReaderPageFragment {
   final String html;
   final NovelReaderTextAnchor startAnchor;
   final NovelReaderTextAnchor endAnchor;
+
+  /// Includes anchors for units fully contained between the page edges. The
+  /// edge anchors remain available for compatibility with older plans.
+  final List<NovelReaderPageAnchorRange> anchorRanges;
 
   /// These are the indexes from the prepared chapter's whole-document image
   /// sequence. They must never be renumbered when a page is created.
@@ -38,6 +61,7 @@ class NovelReaderPageFragment {
         other.html == html &&
         other.startAnchor == startAnchor &&
         other.endAnchor == endAnchor &&
+        listEquals(other.anchorRanges, anchorRanges) &&
         listEquals(other.imageIndices, imageIndices) &&
         other.overflowState == overflowState &&
         other.requiresInnerScroll == requiresInnerScroll;
@@ -49,6 +73,7 @@ class NovelReaderPageFragment {
     html,
     startAnchor,
     endAnchor,
+    Object.hashAll(anchorRanges),
     Object.hashAll(imageIndices),
     overflowState,
     requiresInnerScroll,

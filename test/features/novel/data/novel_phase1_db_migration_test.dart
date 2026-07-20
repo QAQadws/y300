@@ -52,7 +52,11 @@ void main() {
       expect(after.shelfItem, before.shelfItem);
       expect(after.workState, before.workState);
       expect(after.episodeState, before.episodeState);
-      expect(after.readingProgress, before.readingProgress);
+      for (final entry in before.readingProgress.entries) {
+        expect(after.readingProgress[entry.key], entry.value);
+      }
+      expect(after.readingProgress['anchor_text_offset'], 0);
+      expect(after.readingProgress['pagination_key'], isNull);
       expect(after.bookmark, before.bookmark);
 
       final workColumns = (await db.rawQuery(

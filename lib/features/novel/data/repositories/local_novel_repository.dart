@@ -1033,6 +1033,8 @@ class LocalNovelRepository
     NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
     int pageIndex = 0,
     String? anchorNodeId,
+    int anchorTextOffset = 0,
+    String? paginationKey,
     double progressPercent = 0,
   }) async {
     final db = await _dbFuture;
@@ -1045,6 +1047,8 @@ class LocalNovelRepository
         'flow_mode': flowMode.storageValue,
         'page_index': pageIndex < 0 ? 0 : pageIndex,
         'anchor_node_id': _normalizeNullable(anchorNodeId),
+        'anchor_text_offset': anchorTextOffset.clamp(0, 1 << 30).toInt(),
+        'pagination_key': _normalizeNullable(paginationKey),
         'progress_percent': progressPercent.clamp(0.0, 1.0).toDouble(),
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
@@ -1087,6 +1091,10 @@ class LocalNovelRepository
           .clamp(0, 1 << 30)
           .toInt(),
       anchorNodeId: _normalizeNullable(row['anchor_node_id'] as String?),
+      anchorTextOffset: ((row['anchor_text_offset'] as num?)?.toInt() ?? 0)
+          .clamp(0, 1 << 30)
+          .toInt(),
+      paginationKey: _normalizeNullable(row['pagination_key'] as String?),
       progressPercent: ((row['progress_percent'] as num?)?.toDouble() ?? 0)
           .clamp(0.0, 1.0)
           .toDouble(),

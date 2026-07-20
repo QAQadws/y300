@@ -50,6 +50,8 @@ void main() {
       expect(progressColumnNames.contains('flow_mode'), isTrue);
       expect(progressColumnNames.contains('page_index'), isTrue);
       expect(progressColumnNames.contains('anchor_node_id'), isTrue);
+      expect(progressColumnNames.contains('anchor_text_offset'), isTrue);
+      expect(progressColumnNames.contains('pagination_key'), isTrue);
       expect(progressColumnNames.contains('progress_percent'), isTrue);
 
       await db.close();

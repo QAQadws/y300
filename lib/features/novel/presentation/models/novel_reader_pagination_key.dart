@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 /// Identity of one HTML-first pagination layout.
@@ -27,8 +30,8 @@ class NovelReaderPaginationKey {
   final int imageDimensionRevision;
   final int rendererRevision;
 
-  /// A stable, opaque cache identity. It is not a persistence or business ID.
-  String get cacheIdentity => <Object?>[
+  /// A stable cache identity. It is not a persistence or business ID.
+  String get cacheIdentity => jsonEncode(<Object?>[
     episodeId,
     contentHash,
     viewportWidthPx,
@@ -37,7 +40,12 @@ class NovelReaderPaginationKey {
     themeSignature,
     imageDimensionRevision,
     rendererRevision,
-  ].join('|');
+  ]);
+
+  /// A compact identity persisted with reading progress. It deliberately
+  /// excludes the physical PageController and any generated page HTML.
+  String get layoutFingerprint =>
+      sha256.convert(utf8.encode(cacheIdentity)).toString();
 
   static int logicalPixels(double value) {
     if (!value.isFinite || value <= 0) {

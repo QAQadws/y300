@@ -132,6 +132,8 @@ void main() {
         flowMode: NovelReaderFlowMode.pagedLtr,
         pageIndex: 3,
         anchorNodeId: 'node-3',
+        anchorTextOffset: 17,
+        paginationKey: 'layout-key-3',
         progressPercent: 0.42,
       );
 
@@ -145,6 +147,8 @@ void main() {
       expect(progress.flowMode, NovelReaderFlowMode.pagedLtr);
       expect(progress.pageIndex, 3);
       expect(progress.anchorNodeId, 'node-3');
+      expect(progress.anchorTextOffset, 17);
+      expect(progress.paginationKey, 'layout-key-3');
       expect(progress.progressPercent, 0.42);
     });
 
@@ -167,6 +171,8 @@ void main() {
       expect(progress.flowMode, NovelReaderFlowMode.vertical);
       expect(progress.pageIndex, 0);
       expect(progress.anchorNodeId, isNull);
+      expect(progress.anchorTextOffset, 0);
+      expect(progress.paginationKey, isNull);
       expect(progress.progressPercent, 0);
     });
 

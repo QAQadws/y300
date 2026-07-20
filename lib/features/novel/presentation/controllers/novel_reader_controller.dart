@@ -9,6 +9,7 @@ import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_preference_impact_analyzer.dart';
 
@@ -366,6 +367,29 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       episodeId: current.currentEpisode.episodeId,
       scrollOffset: offset,
       maxScrollExtent: maxScrollExtent,
+    );
+    _applyProgressSnapshot(snapshot);
+    ref.read(novelReaderProgressCommitterProvider).schedule(snapshot);
+  }
+
+  void onPagedPositionChanged(NovelReaderPaginationPosition position) {
+    final current = state.value;
+    if (current == null ||
+        current.currentEpisode.episodeId != position.episodeId ||
+        current.preferences.flowMode == NovelReaderFlowMode.vertical ||
+        position.pageCount <= 0 ||
+        position.paginationKey.trim().isEmpty) {
+      return;
+    }
+    final snapshot = _progressPolicy.pagedSnapshot(
+      novelId: _args.novelId,
+      episodeId: position.episodeId,
+      flowMode: current.preferences.flowMode,
+      pageIndex: position.pageIndex,
+      pageCount: position.pageCount,
+      paginationKey: position.paginationKey,
+      anchorNodeId: position.anchor.nodeId,
+      anchorTextOffset: position.anchor.textOffset,
     );
     _applyProgressSnapshot(snapshot);
     ref.read(novelReaderProgressCommitterProvider).schedule(snapshot);
@@ -843,6 +867,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       flowMode: snapshot.flowMode,
       pageIndex: snapshot.pageIndex,
       anchorNodeId: snapshot.anchorNodeId,
+      anchorTextOffset: snapshot.anchorTextOffset,
+      paginationKey: snapshot.paginationKey,
       progressPercent: snapshot.progressPercent,
     );
   }

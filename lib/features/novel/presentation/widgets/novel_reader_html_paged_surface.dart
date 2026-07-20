@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_image_reader_bridge.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
@@ -18,6 +20,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_html_prep
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -45,17 +48,19 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     required this.typography,
     required this.theme,
     required this.imageReferer,
+    required this.progressSnapshot,
     this.imageHeaderBuilder,
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
     this.onFallbackToVertical,
-    this.onPageChanged,
+    this.onPositionChanged,
     this.preferencesAdapter = const NovelHtmlReaderPreferencesAdapter(),
     this.preparer = const NovelHtmlChapterRenderPreparer(),
     this.preparationService,
     this.imageReaderBridge = const NovelHtmlImageReaderBridge(),
     this.coordinatorBuilder,
+    this.restorePolicy = const NovelReaderPaginationRestorePolicy(),
     this.bottomChromeReserveFraction = 0.18,
   });
 
@@ -65,17 +70,19 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final NovelReaderTypography typography;
   final ForumHtmlThemeContext theme;
   final String imageReferer;
+  final NovelReaderProgressSnapshot progressSnapshot;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
   final VoidCallback? onFallbackToVertical;
-  final ValueChanged<int>? onPageChanged;
+  final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final NovelHtmlReaderPreferencesAdapter preferencesAdapter;
   final NovelHtmlChapterPreparer preparer;
   final NovelReaderHtmlPreparationService? preparationService;
   final NovelHtmlImageReaderBridge imageReaderBridge;
   final NovelReaderPaginationCoordinatorBuilder? coordinatorBuilder;
+  final NovelReaderPaginationRestorePolicy restorePolicy;
   final double bottomChromeReserveFraction;
 
   @override
@@ -138,6 +145,7 @@ class _NovelReaderHtmlPagedSurfaceState
           }
 
           return FutureBuilder<NovelReaderPreparedChapter>(
+            key: ValueKey<Object?>(_prepareSignature),
             future: _prepareFuture,
             builder: (context, snapshot) {
               final prepared = snapshot.data;
@@ -182,6 +190,7 @@ class _NovelReaderHtmlPagedSurfaceState
                 htmlPreferences: htmlPreferences,
               );
               return FutureBuilder<NovelReaderPaginationPlan>(
+                key: ValueKey<NovelReaderPaginationKey>(key),
                 future: planFuture,
                 builder: (context, planSnapshot) {
                   final plan = planSnapshot.data;
@@ -222,6 +231,10 @@ class _NovelReaderHtmlPagedSurfaceState
                         child: _NovelReaderPagedPageView(
                           key: ValueKey<String>(plan.key.cacheIdentity),
                           plan: plan,
+                          initialPage: widget.restorePolicy.resolveInitialPage(
+                            plan: plan,
+                            snapshot: widget.progressSnapshot,
+                          ),
                           reverse:
                               widget.preferences.flowMode ==
                               NovelReaderFlowMode.pagedRtl,
@@ -238,7 +251,11 @@ class _NovelReaderHtmlPagedSurfaceState
                           onOpenImage: widget.onOpenImage,
                           onImageFallback: widget.onImageFallback,
                           imageReaderBridge: widget.imageReaderBridge,
-                          onPageChanged: widget.onPageChanged,
+                          onPositionChanged: (position) {
+                            if (mounted && _planKey == plan.key) {
+                              widget.onPositionChanged?.call(position);
+                            }
+                          },
                         ),
                       ),
                     ),
@@ -396,6 +413,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   const _NovelReaderPagedPageView({
     super.key,
     required this.plan,
+    required this.initialPage,
     required this.reverse,
     required this.showProgressIndicator,
     required this.theme,
@@ -409,10 +427,11 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
-    this.onPageChanged,
+    this.onPositionChanged,
   });
 
   final NovelReaderPaginationPlan plan;
+  final int initialPage;
   final bool reverse;
   final bool showProgressIndicator;
   final ForumHtmlThemeContext theme;
@@ -426,7 +445,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
   final NovelHtmlImageReaderBridge imageReaderBridge;
-  final ValueChanged<int>? onPageChanged;
+  final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
 
   @override
   State<_NovelReaderPagedPageView> createState() =>
@@ -441,11 +460,15 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: 0, keepPage: false);
+    _currentPage = widget.initialPage;
+    _pageController = PageController(
+      initialPage: widget.initialPage,
+      keepPage: false,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_reportedInitialPage && widget.plan.pageCount > 0) {
         _reportedInitialPage = true;
-        widget.onPageChanged?.call(0);
+        _emitPosition(widget.initialPage);
       }
     });
   }
@@ -520,7 +543,26 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     setState(() {
       _currentPage = index;
     });
-    widget.onPageChanged?.call(index);
+    _emitPosition(index);
+  }
+
+  void _emitPosition(int index) {
+    if (!mounted || index < 0 || index >= widget.plan.pageCount) {
+      return;
+    }
+    final page = widget.plan.pageAt(index);
+    if (page == null) {
+      return;
+    }
+    widget.onPositionChanged?.call(
+      NovelReaderPaginationPosition(
+        episodeId: widget.plan.episodeId,
+        paginationKey: widget.plan.key.layoutFingerprint,
+        pageIndex: index,
+        pageCount: widget.plan.pageCount,
+        anchor: page.startAnchor.copyWith(pageIndex: index),
+      ),
+    );
   }
 }
 

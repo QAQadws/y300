@@ -31,13 +31,23 @@ class NovelReaderPaginationPlan {
       return null;
     }
     for (final page in pages) {
-      if (_contains(
-        page.startAnchor,
-        page.endAnchor,
-        anchor,
-        isLastPage: page.index == pages.length - 1,
-      )) {
-        return page.index;
+      final ranges = page.anchorRanges.isEmpty
+          ? <NovelReaderPageAnchorRange>[
+              NovelReaderPageAnchorRange(
+                start: page.startAnchor,
+                end: page.endAnchor,
+              ),
+            ]
+          : page.anchorRanges;
+      for (final range in ranges) {
+        if (_contains(
+          range.start,
+          range.end,
+          anchor,
+          isLastPage: page.index == pages.length - 1,
+        )) {
+          return page.index;
+        }
       }
     }
     return null;

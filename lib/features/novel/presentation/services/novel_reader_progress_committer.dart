@@ -58,27 +58,27 @@ class DefaultNovelReaderProgressCommitter
       _pendingSnapshot = null;
       return;
     }
-    _inFlightCommit = _inFlightCommit
-        .catchError((_) {})
-        .then((_) async {
-          if (_lastCommittedSnapshot == snapshot) {
-            _pendingSnapshot = null;
-            return;
-          }
-          await _repository.saveReadingProgress(
-            novelId: snapshot.novelId,
-            episodeId: snapshot.episodeId,
-            scrollOffset: snapshot.scrollOffset,
-            flowMode: snapshot.flowMode,
-            pageIndex: snapshot.pageIndex,
-            anchorNodeId: snapshot.anchorNodeId,
-            progressPercent: snapshot.progressPercent,
-          );
-          _lastCommittedSnapshot = snapshot;
-          if (_pendingSnapshot == snapshot) {
-            _pendingSnapshot = null;
-          }
-        });
+    _inFlightCommit = _inFlightCommit.catchError((_) {}).then((_) async {
+      if (_lastCommittedSnapshot == snapshot) {
+        _pendingSnapshot = null;
+        return;
+      }
+      await _repository.saveReadingProgress(
+        novelId: snapshot.novelId,
+        episodeId: snapshot.episodeId,
+        scrollOffset: snapshot.scrollOffset,
+        flowMode: snapshot.flowMode,
+        pageIndex: snapshot.pageIndex,
+        anchorNodeId: snapshot.anchorNodeId,
+        anchorTextOffset: snapshot.anchorTextOffset,
+        paginationKey: snapshot.paginationKey,
+        progressPercent: snapshot.progressPercent,
+      );
+      _lastCommittedSnapshot = snapshot;
+      if (_pendingSnapshot == snapshot) {
+        _pendingSnapshot = null;
+      }
+    });
     await _inFlightCommit;
   }
 }

@@ -108,6 +108,8 @@ class NovelReadingProgress {
     this.flowMode = NovelReaderFlowMode.vertical,
     this.pageIndex = 0,
     this.anchorNodeId,
+    this.anchorTextOffset = 0,
+    this.paginationKey,
     this.progressPercent = 0,
   });
 
@@ -118,6 +120,8 @@ class NovelReadingProgress {
   final NovelReaderFlowMode flowMode;
   final int pageIndex;
   final String? anchorNodeId;
+  final int anchorTextOffset;
+  final String? paginationKey;
   final double progressPercent;
 }
 

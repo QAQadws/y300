@@ -10,6 +10,8 @@ class NovelReaderProgressSnapshot {
     required this.scrollOffset,
     required this.pageIndex,
     this.anchorNodeId,
+    this.anchorTextOffset = 0,
+    this.paginationKey,
     required this.progressPercent,
   });
 
@@ -19,6 +21,8 @@ class NovelReaderProgressSnapshot {
   final double scrollOffset;
   final int pageIndex;
   final String? anchorNodeId;
+  final int anchorTextOffset;
+  final String? paginationKey;
   final double progressPercent;
 
   bool get isPaged => flowMode != NovelReaderFlowMode.vertical;
@@ -35,6 +39,8 @@ class NovelReaderProgressSnapshot {
         other.scrollOffset == scrollOffset &&
         other.pageIndex == pageIndex &&
         other.anchorNodeId == anchorNodeId &&
+        other.anchorTextOffset == anchorTextOffset &&
+        other.paginationKey == paginationKey &&
         other.progressPercent == progressPercent;
   }
 
@@ -46,6 +52,8 @@ class NovelReaderProgressSnapshot {
     scrollOffset,
     pageIndex,
     anchorNodeId,
+    anchorTextOffset,
+    paginationKey,
     progressPercent,
   );
 
@@ -55,6 +63,9 @@ class NovelReaderProgressSnapshot {
     int? pageIndex,
     String? anchorNodeId,
     bool clearAnchorNodeId = false,
+    int? anchorTextOffset,
+    String? paginationKey,
+    bool clearPaginationKey = false,
     double? progressPercent,
   }) {
     return NovelReaderProgressSnapshot(
@@ -66,6 +77,10 @@ class NovelReaderProgressSnapshot {
       anchorNodeId: clearAnchorNodeId
           ? null
           : (anchorNodeId ?? this.anchorNodeId),
+      anchorTextOffset: anchorTextOffset ?? this.anchorTextOffset,
+      paginationKey: clearPaginationKey
+          ? null
+          : (paginationKey ?? this.paginationKey),
       progressPercent: progressPercent ?? this.progressPercent,
     );
   }
@@ -109,6 +124,8 @@ class NovelReaderProgressPolicy {
       scrollOffset: math.max(0.0, progress.scrollOffset),
       pageIndex: progress.pageIndex < 0 ? 0 : progress.pageIndex,
       anchorNodeId: _normalizeAnchor(progress.anchorNodeId),
+      anchorTextOffset: math.max(0, progress.anchorTextOffset).toInt(),
+      paginationKey: _normalizeAnchor(progress.paginationKey),
       progressPercent: _clampPercent(progress.progressPercent),
     );
   }
@@ -119,6 +136,7 @@ class NovelReaderProgressPolicy {
     required double scrollOffset,
     double maxScrollExtent = 0,
     String? anchorNodeId,
+    int anchorTextOffset = 0,
   }) {
     return NovelReaderProgressSnapshot(
       novelId: novelId,
@@ -127,7 +145,50 @@ class NovelReaderProgressPolicy {
       scrollOffset: math.max(0.0, scrollOffset),
       pageIndex: 0,
       anchorNodeId: _normalizeAnchor(anchorNodeId),
+      anchorTextOffset: math.max(0, anchorTextOffset).toInt(),
       progressPercent: _percentFromOffset(scrollOffset, maxScrollExtent),
+    );
+  }
+
+  NovelReaderProgressSnapshot pagedSnapshot({
+    required String novelId,
+    required String episodeId,
+    required NovelReaderFlowMode flowMode,
+    required int pageIndex,
+    required int pageCount,
+    required String paginationKey,
+    String? anchorNodeId,
+    int anchorTextOffset = 0,
+  }) {
+    if (flowMode == NovelReaderFlowMode.vertical) {
+      throw ArgumentError.value(
+        flowMode,
+        'flowMode',
+        'must be a paged flow mode',
+      );
+    }
+    final safePageCount = math.max(1, pageCount);
+    final safePageIndex = pageIndex.clamp(0, safePageCount - 1).toInt();
+    final normalizedKey = _normalizeAnchor(paginationKey);
+    if (normalizedKey == null) {
+      throw ArgumentError.value(
+        paginationKey,
+        'paginationKey',
+        'must not be empty',
+      );
+    }
+    return NovelReaderProgressSnapshot(
+      novelId: novelId,
+      episodeId: episodeId,
+      flowMode: flowMode,
+      scrollOffset: 0,
+      pageIndex: safePageIndex,
+      anchorNodeId: _normalizeAnchor(anchorNodeId),
+      anchorTextOffset: math.max(0, anchorTextOffset).toInt(),
+      paginationKey: normalizedKey,
+      progressPercent: safePageCount <= 1
+          ? 0
+          : safePageIndex / (safePageCount - 1),
     );
   }
 
@@ -135,9 +196,12 @@ class NovelReaderProgressPolicy {
     NovelReaderProgressSnapshot snapshot, {
     required double maxScrollExtent,
   }) {
-    return snapshot.scrollOffset
-        .clamp(0.0, math.max(0.0, maxScrollExtent))
-        .toDouble();
+    final safeMax = math.max(0.0, maxScrollExtent);
+    if ((snapshot.paginationKey != null || snapshot.pageIndex > 0) &&
+        snapshot.progressPercent > 0) {
+      return _clampPercent(snapshot.progressPercent) * safeMax;
+    }
+    return snapshot.scrollOffset.clamp(0.0, safeMax).toDouble();
   }
 
   double _percentFromOffset(double offset, double maxScrollExtent) {

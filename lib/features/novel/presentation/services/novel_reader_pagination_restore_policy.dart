@@ -1,0 +1,65 @@
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+
+/// Resolves a persisted location without allowing a stale page index to jump
+/// to the end of a newly reflowed chapter.
+final class NovelReaderPaginationRestorePolicy {
+  const NovelReaderPaginationRestorePolicy();
+
+  int resolveInitialPage({
+    required NovelReaderPaginationPlan plan,
+    required NovelReaderProgressSnapshot snapshot,
+  }) {
+    final pageCount = plan.pageCount;
+    if (pageCount <= 0 || snapshot.episodeId != plan.episodeId) {
+      return 0;
+    }
+
+    if (snapshot.paginationKey == plan.key.layoutFingerprint &&
+        _isValidPage(snapshot.pageIndex, pageCount)) {
+      return snapshot.pageIndex;
+    }
+
+    final anchor = _anchorFromSnapshot(snapshot);
+    if (anchor != null) {
+      final anchoredPage = plan.pageIndexForAnchor(anchor);
+      if (anchoredPage != null && _isValidPage(anchoredPage, pageCount)) {
+        return anchoredPage;
+      }
+    }
+
+    if (snapshot.progressPercent.isFinite && snapshot.progressPercent > 0) {
+      return (snapshot.progressPercent.clamp(0.0, 1.0) * (pageCount - 1))
+          .round()
+          .clamp(0, pageCount - 1)
+          .toInt();
+    }
+
+    // This is only a compatibility fallback for old rows or rows whose
+    // layout identity was invalidated. Never clamp an oversized old page to
+    // the last page; an uncertain location is safer at the beginning.
+    if (_isValidPage(snapshot.pageIndex, pageCount)) {
+      return snapshot.pageIndex;
+    }
+    return 0;
+  }
+
+  NovelReaderTextAnchor? _anchorFromSnapshot(
+    NovelReaderProgressSnapshot snapshot,
+  ) {
+    final nodeId = snapshot.anchorNodeId?.trim();
+    if (nodeId == null || nodeId.isEmpty) {
+      return null;
+    }
+    return NovelReaderTextAnchor(
+      episodeId: snapshot.episodeId,
+      nodeId: nodeId,
+      textOffset: snapshot.anchorTextOffset,
+    );
+  }
+
+  bool _isValidPage(int index, int pageCount) {
+    return index >= 0 && index < pageCount;
+  }
+}

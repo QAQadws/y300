@@ -268,6 +268,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
         startAnchor: buffer.startAnchor!,
         endAnchor: buffer.endAnchor!,
         imageIndices: buffer.imageIndices,
+        anchorRanges: buffer.anchorRanges,
         overflowState: buffer.overflowState,
         requiresInnerScroll:
             buffer.overflowState != NovelReaderPageOverflowState.none,
@@ -403,6 +404,8 @@ class _PagePiece {
 class _PageBuffer {
   final StringBuffer _html = StringBuffer();
   final Set<int> _imageIndices = <int>{};
+  final List<NovelReaderPageAnchorRange> _anchorRanges =
+      <NovelReaderPageAnchorRange>[];
   NovelReaderTextAnchor? startAnchor;
   NovelReaderTextAnchor? endAnchor;
   NovelReaderPageOverflowState overflowState =
@@ -415,9 +418,18 @@ class _PageBuffer {
     return List<int>.unmodifiable(result);
   }
 
+  List<NovelReaderPageAnchorRange> get anchorRanges =>
+      List<NovelReaderPageAnchorRange>.unmodifiable(_anchorRanges);
+
   void append(_PagePiece piece) {
     startAnchor ??= piece.startAnchor;
     endAnchor = piece.endAnchor;
+    _anchorRanges.add(
+      NovelReaderPageAnchorRange(
+        start: piece.startAnchor,
+        end: piece.endAnchor,
+      ),
+    );
     _html.write(piece.html);
     _imageIndices.addAll(piece.imageIndices);
     if (piece.overflowState != NovelReaderPageOverflowState.none) {

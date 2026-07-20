@@ -47,6 +47,16 @@ void main() {
     expect(plan.pages.every((page) => page.index >= 0), isTrue);
   });
 
+  test('maps an anchor from a unit in the middle of a page', () async {
+    final chapter = await _prepare('<p>第一段</p><p>第二段</p>');
+    final plan = await NovelReaderHtmlPageBreaker(
+      measureAdapter: const _TextHeightMeasureAdapter(),
+    ).paginate(chapter, _key(chapter, height: 8));
+
+    expect(plan.pageCount, 1);
+    expect(plan.pageIndexForAnchor(chapter.flowUnits[1].startAnchor), 0);
+  });
+
   test(
     'marks an unbreakable oversized widget instead of creating empty pages',
     () async {
