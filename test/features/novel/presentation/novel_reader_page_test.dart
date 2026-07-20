@@ -27,14 +27,10 @@ import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
-import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_layout_key.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_layout_request.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_layout_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
@@ -647,7 +643,7 @@ void main() {
   );
 
   testWidgets(
-    'NovelReaderPage saved paged mode displays vertical HTML-first body',
+    'NovelReaderPage falls back to vertical for saved paged preference',
     (tester) async {
       final repository = _FakeNovelRepository(
         preferences: NovelReaderPreferences.defaults().copyWith(
@@ -658,12 +654,7 @@ void main() {
           (index) => '首屏分页段落 $index ${List<String>.filled(60, '正文').join()}',
         ),
       );
-      final layoutService = _ControlledNovelReaderLayoutService(
-        contentsByEpisodeId: repository.contentsByEpisodeId,
-      );
-      await tester.pumpWidget(
-        _buildReaderApp(repository: repository, layoutService: layoutService),
-      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
       await tester.pumpAndSettle();
 
       expect(
@@ -675,305 +666,8 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-      expect(
-        find.byKey(const Key('novel-reader-paged-layout-loading')),
-        findsNothing,
-      );
-      expect(layoutService.requestCountByEpisodeId, isEmpty);
     },
   );
-
-  testWidgets(
-    'NovelReaderPage saved paged mode preference preview stays vertical',
-    (tester) async {
-      final repository = _FakeNovelRepository(
-        preferences: NovelReaderPreferences.defaults().copyWith(
-          flowMode: NovelReaderFlowMode.pagedLtr,
-        ),
-        firstParagraphs: List<String>.generate(
-          14,
-          (index) => '重排分页段落 $index ${List<String>.filled(70, '正文').join()}',
-        ),
-      );
-      final layoutService = _ControlledNovelReaderLayoutService(
-        contentsByEpisodeId: repository.contentsByEpisodeId,
-      );
-      await tester.pumpWidget(
-        _buildReaderApp(repository: repository, layoutService: layoutService),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        find.byKey(const Key('novel-reader-paragraph-list')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-      expect(layoutService.requestCountByEpisodeId, isEmpty);
-
-      await _showReaderMenu(tester);
-      await tester.tap(
-        find.byKey(const Key('shared-reader-bottom-action-display')),
-      );
-      await tester.pumpAndSettle();
-      await tester.drag(
-        find.descendant(
-          of: find.byKey(const Key('novel-reader-font-size-slider')),
-          matching: find.byType(Slider),
-        ),
-        const Offset(120, 0),
-      );
-      await tester.pump();
-
-      expect(
-        find.byKey(const Key('novel-reader-paragraph-list')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-      expect(
-        find.byKey(const Key('novel-reader-paged-reflow-mask')),
-        findsNothing,
-      );
-      expect(layoutService.requestCountByEpisodeId, isEmpty);
-
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pumpAndSettle();
-    },
-  );
-
-  testWidgets(
-    'NovelReaderPage paged mode bookmark rebuild does not request new layout',
-    (tester) async {
-      final repository = _FakeNovelRepository(
-        preferences: NovelReaderPreferences.defaults().copyWith(
-          flowMode: NovelReaderFlowMode.pagedLtr,
-        ),
-      );
-      final layoutService = _ControlledNovelReaderLayoutService(
-        contentsByEpisodeId: repository.contentsByEpisodeId,
-      );
-      await tester.pumpWidget(
-        _buildReaderApp(repository: repository, layoutService: layoutService),
-      );
-      await tester.pumpAndSettle();
-
-      expect(layoutService.requestCountByEpisodeId, isEmpty);
-      await _showReaderMenu(tester);
-      await tester.tap(
-        find.byKey(const Key('shared-reader-top-action-bookmark')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(layoutService.requestCountByEpisodeId, isEmpty);
-    },
-  );
-
-  testWidgets(
-    'NovelReaderPage chapter switch with saved paged mode stays vertical',
-    (tester) async {
-      final repository = _FakeNovelRepository.threeEpisodes(
-        chapterLoadDelay: const Duration(milliseconds: 120),
-        readingProgress: NovelReadingProgress(
-          novelId: 'novel:49:100',
-          episodeId: 'novel:49:100:5001',
-          scrollOffset: 0,
-          updatedAt: DateTime(2026, 6, 1),
-          flowMode: NovelReaderFlowMode.pagedLtr,
-          pageIndex: 0,
-        ),
-      );
-      repository.preferences = repository.preferences.copyWith(
-        flowMode: NovelReaderFlowMode.pagedLtr,
-      );
-      final layoutService = _ControlledNovelReaderLayoutService(
-        contentsByEpisodeId: repository.contentsByEpisodeId,
-      );
-      await tester.pumpWidget(
-        _buildReaderApp(repository: repository, layoutService: layoutService),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-      expect(_readerText('第一段。'), findsOneWidget);
-      await _showReaderMenu(tester);
-      await tester.tap(
-        find.byKey(const Key('shared-reader-bottom-action-catalog')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const Key('novel-reader-chapter-novel:49:100:5002')),
-      );
-      await tester.pump();
-
-      expect(
-        find.byKey(const Key('novel-reader-transition-mask')),
-        findsOneWidget,
-      );
-      expect(_readerText('第一段。'), findsOneWidget);
-
-      await tester.pump(const Duration(milliseconds: 140));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.byKey(const Key('novel-reader-transition-mask')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const Key('novel-reader-paged-layout-loading')),
-        findsNothing,
-      );
-      expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-      expect(
-        find.byKey(const Key('novel-reader-paragraph-list')),
-        findsOneWidget,
-      );
-      expect(_readerText('第三段。'), findsOneWidget);
-      expect(_readerText('第一段。'), findsNothing);
-      expect(layoutService.requestCountByEpisodeId, isEmpty);
-    },
-  );
-
-  testWidgets('NovelReaderPage saved paged mode exits with vertical progress', (
-    tester,
-  ) async {
-    final repository = _FakeNovelRepository(
-      preferences: NovelReaderPreferences.defaults().copyWith(
-        flowMode: NovelReaderFlowMode.pagedLtr,
-      ),
-      firstParagraphs: List<String>.generate(
-        18,
-        (index) => '分页段落 $index ${List<String>.filled(70, '正文').join()}',
-      ),
-    );
-    final layoutService = _ControlledNovelReaderLayoutService(
-      contentsByEpisodeId: repository.contentsByEpisodeId,
-    );
-    await tester.pumpWidget(
-      _buildReaderApp(repository: repository, layoutService: layoutService),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-    expect(
-      find.byKey(const Key('novel-reader-paragraph-list')),
-      findsOneWidget,
-    );
-    expect(layoutService.requestCountByEpisodeId, isEmpty);
-
-    await _showReaderMenu(tester);
-    await tester.tap(
-      find.byKey(const Key('shared-reader-bottom-action-catalog')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('novel-reader-chapter-novel:49:100:5002')),
-    );
-    await tester.pumpAndSettle();
-
-    await _showReaderMenu(tester);
-    await tester.tap(find.byKey(const Key('shared-reader-top-back-button')));
-    await tester.pumpAndSettle();
-
-    expect(repository.readingProgress?.flowMode, NovelReaderFlowMode.vertical);
-    expect(repository.readingProgress?.pageIndex, 0);
-  });
-
-  testWidgets('NovelReaderPage ignores saved paged page at runtime', (
-    tester,
-  ) async {
-    final repository = _FakeNovelRepository(
-      preferences: NovelReaderPreferences.defaults().copyWith(
-        flowMode: NovelReaderFlowMode.pagedLtr,
-      ),
-      firstParagraphs: List<String>.generate(
-        18,
-        (index) => '恢复分页段落 $index ${List<String>.filled(70, '正文').join()}',
-      ),
-      readingProgress: NovelReadingProgress(
-        novelId: 'novel:49:100',
-        episodeId: 'novel:49:100:5001',
-        scrollOffset: 0,
-        updatedAt: DateTime(2026, 6, 1),
-        flowMode: NovelReaderFlowMode.pagedLtr,
-        pageIndex: 1,
-      ),
-    );
-    final layoutService = _ControlledNovelReaderLayoutService(
-      contentsByEpisodeId: repository.contentsByEpisodeId,
-    );
-    await tester.pumpWidget(
-      _buildReaderApp(repository: repository, layoutService: layoutService),
-    );
-    await tester.pumpAndSettle();
-
-    await _showReaderMenu(tester);
-    expect(find.byKey(const Key('shared-reader-current-label')), findsNothing);
-    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-    expect(layoutService.requestCountByEpisodeId, isEmpty);
-  });
-
-  testWidgets('NovelReaderPage right tap in saved paged LTR does not page', (
-    tester,
-  ) async {
-    final repository = _FakeNovelRepository(
-      preferences: NovelReaderPreferences.defaults().copyWith(
-        flowMode: NovelReaderFlowMode.pagedLtr,
-      ),
-      firstParagraphs: List<String>.generate(
-        18,
-        (index) => '右翻分页段落 $index ${List<String>.filled(70, '正文').join()}',
-      ),
-    );
-    final layoutService = _ControlledNovelReaderLayoutService(
-      contentsByEpisodeId: repository.contentsByEpisodeId,
-    );
-    await tester.pumpWidget(
-      _buildReaderApp(repository: repository, layoutService: layoutService),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tapAt(const Offset(720, 300));
-    await tester.pump(const Duration(milliseconds: 420));
-    await tester.pumpAndSettle();
-    expect(
-      repository.readingProgress?.flowMode,
-      isNot(NovelReaderFlowMode.pagedLtr),
-    );
-    expect(repository.readingProgress?.pageIndex ?? 0, 0);
-    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-    expect(layoutService.requestCountByEpisodeId, isEmpty);
-  });
-
-  testWidgets('NovelReaderPage left tap in saved paged RTL does not page', (
-    tester,
-  ) async {
-    final repository = _FakeNovelRepository(
-      preferences: NovelReaderPreferences.defaults().copyWith(
-        flowMode: NovelReaderFlowMode.pagedRtl,
-      ),
-      firstParagraphs: List<String>.generate(
-        18,
-        (index) => '左翻分页段落 $index ${List<String>.filled(70, '正文').join()}',
-      ),
-    );
-    final layoutService = _ControlledNovelReaderLayoutService(
-      contentsByEpisodeId: repository.contentsByEpisodeId,
-    );
-    await tester.pumpWidget(
-      _buildReaderApp(repository: repository, layoutService: layoutService),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tapAt(const Offset(80, 300));
-    await tester.pump(const Duration(milliseconds: 420));
-    await tester.pumpAndSettle();
-    expect(
-      repository.readingProgress?.flowMode,
-      isNot(NovelReaderFlowMode.pagedRtl),
-    );
-    expect(repository.readingProgress?.pageIndex ?? 0, 0);
-    expect(find.byKey(const Key('novel-reader-paged-view')), findsNothing);
-    expect(layoutService.requestCountByEpisodeId, isEmpty);
-  });
 
   testWidgets('NovelReaderPage vertical mode does not bind paged view', (
     tester,
@@ -1471,7 +1165,6 @@ Widget _buildReaderApp({
   required _FakeNovelRepository repository,
   LibraryStateRepository? stateRepository,
   ThreadRepository? threadRepository,
-  NovelReaderLayoutService? layoutService,
   NovelReaderDocumentBuildService? documentBuildService,
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
   NovelChapterUpdateService? chapterUpdateService,
@@ -1494,8 +1187,6 @@ Widget _buildReaderApp({
         const _StaticImageHeaderBuilder(),
       ),
       imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
-      if (layoutService != null)
-        novelReaderLayoutServiceProvider.overrideWithValue(layoutService),
       if (documentBuildService != null)
         novelReaderDocumentBuildServiceProvider.overrideWithValue(
           documentBuildService,
@@ -2155,147 +1846,6 @@ class _FakeNovelReaderPreferencesRepository
     repository.upsertPreferencesCallCount += 1;
     repository.latestPreferences = preferences;
     repository.preferences = preferences;
-  }
-}
-
-class _ControlledNovelReaderLayoutService implements NovelReaderLayoutService {
-  _ControlledNovelReaderLayoutService({
-    required Map<String, NovelChapterContent> contentsByEpisodeId,
-  }) : _contentsByEpisodeId = contentsByEpisodeId;
-
-  final Map<String, NovelChapterContent> _contentsByEpisodeId;
-  final Map<String, int> requestCountByEpisodeId = <String, int>{};
-  final Map<String, NovelReaderLayoutRequest> latestRequestByEpisodeId =
-      <String, NovelReaderLayoutRequest>{};
-  final Map<String, int> _pendingCompletionPagesByEpisodeId = <String, int>{};
-  final Map<NovelReaderLayoutKey, Completer<NovelReaderPageLayout>>
-  _completers = <NovelReaderLayoutKey, Completer<NovelReaderPageLayout>>{};
-  final Map<NovelReaderLayoutKey, NovelReaderPageLayout> _resolvedLayouts =
-      <NovelReaderLayoutKey, NovelReaderPageLayout>{};
-
-  @override
-  Future<NovelReaderPageLayout> resolve(NovelReaderLayoutRequest request) {
-    final episodeId = request.episodeId;
-    final key = request.key;
-    requestCountByEpisodeId.update(
-      episodeId,
-      (value) => value + 1,
-      ifAbsent: () => 1,
-    );
-    latestRequestByEpisodeId[episodeId] = request;
-    final cached = _resolvedLayouts[key];
-    if (cached != null) {
-      return Future<NovelReaderPageLayout>.value(cached);
-    }
-    final completer = _completers.putIfAbsent(
-      key,
-      Completer<NovelReaderPageLayout>.new,
-    );
-    final pendingPages = _pendingCompletionPagesByEpisodeId.remove(episodeId);
-    if (pendingPages != null) {
-      _completeRequest(request, pages: pendingPages);
-    }
-    return completer.future;
-  }
-
-  @override
-  void evictEpisode(String episodeId) {
-    _resolvedLayouts.removeWhere((key, _) => key.episodeId == episodeId);
-    _completers.removeWhere((key, _) => key.episodeId == episodeId);
-    latestRequestByEpisodeId.remove(episodeId);
-    _pendingCompletionPagesByEpisodeId.remove(episodeId);
-  }
-
-  @override
-  void clear() {
-    _resolvedLayouts.clear();
-    _completers.clear();
-    latestRequestByEpisodeId.clear();
-    _pendingCompletionPagesByEpisodeId.clear();
-  }
-
-  void completeEpisode(String episodeId, {int pages = 3}) {
-    final request = latestRequestByEpisodeId[episodeId];
-    if (request == null) {
-      _pendingCompletionPagesByEpisodeId[episodeId] = pages;
-      return;
-    }
-    _completeRequest(request, pages: pages);
-  }
-
-  void _completeRequest(
-    NovelReaderLayoutRequest request, {
-    required int pages,
-  }) {
-    final layout = _buildLayout(
-      request: request,
-      content: _contentsByEpisodeId[request.episodeId]!,
-      pages: pages,
-    );
-    final key = request.key;
-    _resolvedLayouts[key] = layout;
-    final completer = _completers.putIfAbsent(
-      key,
-      Completer<NovelReaderPageLayout>.new,
-    );
-    if (!completer.isCompleted) {
-      completer.complete(layout);
-    }
-  }
-
-  NovelReaderPageLayout _buildLayout({
-    required NovelReaderLayoutRequest request,
-    required NovelChapterContent content,
-    required int pages,
-  }) {
-    final sourceBlocks = request.document.blocks;
-    final resolvedBlocks = sourceBlocks.isEmpty
-        ? <RichBlock>[
-            RichTextBlock(
-              anchorId: '${request.episodeId}-node-0',
-              runs: <RichRun>[
-                RichRun(
-                  text: content.paragraphs.isEmpty
-                      ? content.plainText
-                      : content.paragraphs.first,
-                ),
-              ],
-            ),
-          ]
-        : sourceBlocks;
-    final resolvedPages = List<NovelReaderPageSlice>.generate(pages, (index) {
-      final block = index < resolvedBlocks.length
-          ? resolvedBlocks[index]
-          : RichTextBlock(
-              anchorId: '${request.episodeId}-node-$index',
-              runs: <RichRun>[
-                RichRun(
-                  text: content.paragraphs.isEmpty
-                      ? '${content.plainText} 第${index + 1}页'
-                      : content.paragraphs[index % content.paragraphs.length],
-                ),
-              ],
-            );
-      return NovelReaderPageSlice(
-        index: index,
-        blocks: <RichBlock>[block],
-        anchorNodeId: block.anchorId,
-      );
-    });
-    return NovelReaderPageLayout(
-      document: NovelReaderDocument(
-        episodeId: request.document.episodeId,
-        rawHtmlHash: request.document.rawHtmlHash,
-        body: RichDocument(
-          blocks: resolvedPages
-              .expand((page) => page.blocks)
-              .toList(growable: false),
-        ),
-        plainText: content.plainText,
-        wordCount: content.plainText.length,
-      ),
-      pages: resolvedPages,
-    );
   }
 }
 

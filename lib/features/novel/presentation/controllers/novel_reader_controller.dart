@@ -403,25 +403,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     _syncPersistedReadingProgress(snapshot);
   }
 
-  Future<void> onPagedPageChanged(
-    int pageIndex,
-    NovelReaderPageLayout layout,
-  ) async {
-    final current = state.value;
-    if (current == null) {
-      return;
-    }
-    final snapshot = _progressPolicy.pagedSnapshot(
-      novelId: _args.novelId,
-      episodeId: current.currentEpisode.episodeId,
-      flowMode: current.effectivePreferences.flowMode,
-      pageIndex: pageIndex,
-      layout: layout,
-    );
-    _applyProgressSnapshot(snapshot);
-    ref.read(novelReaderProgressCommitterProvider).schedule(snapshot);
-  }
-
   void searchInCurrentChapter(String keyword) {
     final current = state.value;
     if (current == null) {

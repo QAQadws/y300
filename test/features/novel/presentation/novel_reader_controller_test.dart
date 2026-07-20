@@ -79,6 +79,33 @@ void main() {
   });
 
   test(
+    'NovelReaderController keeps legacy paged preference but exposes vertical baseline',
+    () async {
+      final repository = _ControllerNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedRtl,
+        ),
+      );
+      final container = _buildContainer(repository: repository);
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      final state = await container.read(
+        novelReaderControllerProvider(args).future,
+      );
+
+      expect(state.persistedPreferences.flowMode, NovelReaderFlowMode.pagedRtl);
+      expect(state.effectivePreferences.flowMode, NovelReaderFlowMode.vertical);
+      expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.vertical);
+    },
+  );
+
+  test(
     'NovelReaderController previewPreferences only updates effective state',
     () async {
       final repository = _ControllerNovelRepository();
@@ -202,60 +229,6 @@ void main() {
       expect(state.persistedPreferences, initial.persistedPreferences);
       expect(state.effectivePreferences, initial.effectivePreferences);
       expect(repository.upsertPreferencesCallCount, 0);
-    },
-  );
-
-  test(
-    'NovelReaderController schedules paged page progress without immediate persistence',
-    () async {
-      final repository = _ControllerNovelRepository(
-        preferences: NovelReaderPreferences.defaults().copyWith(
-          flowMode: NovelReaderFlowMode.pagedLtr,
-        ),
-      );
-      final progressCommitter = _FakeNovelReaderProgressCommitter();
-      final container = _buildContainer(
-        repository: repository,
-        progressCommitter: progressCommitter,
-      );
-      addTearDown(container.dispose);
-      const args = NovelReaderArgs(
-        novelId: 'novel:49:100',
-        episodeId: 'novel:49:100:5001',
-      );
-      final provider = novelReaderControllerProvider(args);
-      final subscription = _keepReaderAlive(container, args);
-      addTearDown(subscription.close);
-
-      await container.read(provider.future);
-      final layout = NovelReaderPageLayout(
-        document: _document('novel:49:100:5001'),
-        pages: const <NovelReaderPageSlice>[
-          NovelReaderPageSlice(
-            index: 0,
-            blocks: <RichBlock>[],
-            anchorNodeId: 'a',
-          ),
-          NovelReaderPageSlice(
-            index: 1,
-            blocks: <RichBlock>[],
-            anchorNodeId: 'b',
-          ),
-        ],
-      );
-      await container.read(provider.notifier).onPagedPageChanged(1, layout);
-
-      final state = await container.read(provider.future);
-      expect(state.progressSnapshot.pageIndex, 1);
-      expect(state.progressSnapshot.anchorNodeId, 'b');
-      expect(progressCommitter.scheduleCallCount, 1);
-      expect(progressCommitter.flushCallCount, 0);
-      expect(
-        progressCommitter.latestScheduledSnapshot?.flowMode,
-        NovelReaderFlowMode.pagedLtr,
-      );
-      expect(progressCommitter.latestScheduledSnapshot?.pageIndex, 1);
-      expect(repository.readingProgress, isNull);
     },
   );
 

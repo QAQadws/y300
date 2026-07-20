@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
@@ -110,22 +111,54 @@ void main() {
       expect(preparer.calls, hasLength(2));
     },
   );
+
+  testWidgets('forwards links through the HTML-first reader callback', (
+    tester,
+  ) async {
+    final tappedLinks = <NovelReaderLink>[];
+
+    await tester.pumpWidget(
+      _host(
+        theme: _lightTheme,
+        preparer: const NovelHtmlChapterRenderPreparer(),
+        rawHtml: '<a href="forum.php?mod=viewthread&tid=101">章节链接</a>',
+        onLinkTap: tappedLinks.add,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final renderer = tester.widget<HtmlWidget>(
+      find.byKey(const Key('forum-html-renderer-episode-1')),
+    );
+    await renderer.onTapUrl?.call(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101',
+    );
+
+    expect(tappedLinks, hasLength(1));
+    expect(
+      tappedLinks.single.url,
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101',
+    );
+  });
 }
 
 Widget _host({
   required ForumHtmlThemeContext theme,
   required NovelHtmlChapterPreparer preparer,
   NovelReaderPreferences? preferences,
+  String rawHtml = '<p>待准备正文</p>',
+  ValueChanged<NovelReaderLink>? onLinkTap,
 }) {
   return ProviderScope(
     child: MaterialApp(
       home: NovelReaderHtmlDocumentView(
-        rawHtml: '<p>待准备正文</p>',
+        rawHtml: rawHtml,
         episode: _episode,
         preferences: preferences ?? NovelReaderPreferences.defaults(),
         typography: _typography,
         theme: theme,
         imageReferer: 'https://bbs.yamibo.com/thread-100-1-1.html',
+        onLinkTap: onLinkTap,
         preparer: preparer,
       ),
     ),

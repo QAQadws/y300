@@ -18,7 +18,6 @@ import 'package:y300/features/novel/presentation/services/novel_reader_display_r
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
-import 'package:y300/features/novel/presentation/widgets/novel_reader_paged_surface.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -42,7 +41,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     with WidgetsBindingObserver {
   late final ScrollController _scrollController;
   late final ReaderOverlayController _overlayController;
-  late final NovelReaderPagedSurfaceController _pagedSurfaceController;
   final NovelReaderThemeResolver _themeResolver =
       const NovelReaderThemeResolver();
   final NovelReaderTypographyResolver _typographyResolver =
@@ -72,7 +70,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _overlayController = ReaderOverlayController();
-    _pagedSurfaceController = NovelReaderPagedSurfaceController();
     _scrollController = ScrollController()..addListener(_onScroll);
   }
 
@@ -80,7 +77,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _overlayController.dispose();
-    _pagedSurfaceController.dispose();
     _displayPreviewThrottle?.cancel();
     _displayPersistDebounce?.cancel();
     _scrollController
@@ -137,7 +133,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               color: palette.background,
               child: Builder(
                 builder: (context) {
-                  _pagedSurfaceController.reset();
                   _restoreOffsetIfNeeded(
                     episodeId: viewState.currentEpisode.episodeId,
                     offset: viewState.currentOffset,
@@ -278,12 +273,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         icon: Icons.tune,
         label: '显示',
         onPressed: () => _showDisplaySettingsSheet(viewState, controller),
-      ),
-      ReaderToolbarAction(
-        id: 'mode',
-        icon: Icons.view_stream_outlined,
-        label: '模式',
-        onPressed: () => _showReaderSnackBar('阅读模式将在后续阶段接入'),
       ),
     ];
   }
@@ -443,32 +432,20 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     final controller = ref.read(novelReaderControllerProvider(_args).notifier);
-    if (!_isPagedMode(viewState.preferences.flowMode)) {
-      final offset = _scrollController.hasClients
-          ? _scrollController.offset
-          : 0.0;
-      final maxScrollExtent = _scrollController.hasClients
-          ? _scrollController.position.maxScrollExtent
-          : 0.0;
-      await controller.saveCurrentProgressNow(
-        _progressPolicy.verticalSnapshot(
-          novelId: widget.novelId,
-          episodeId: viewState.currentEpisode.episodeId,
-          scrollOffset: offset,
-          maxScrollExtent: maxScrollExtent,
-        ),
-      );
-      return;
-    }
-    final snapshot = _pagedSurfaceController.buildVisibleProgressSnapshot(
-      novelId: widget.novelId,
-      episodeId: viewState.currentEpisode.episodeId,
-      flowMode: viewState.preferences.flowMode,
+    final offset = _scrollController.hasClients
+        ? _scrollController.offset
+        : 0.0;
+    final maxScrollExtent = _scrollController.hasClients
+        ? _scrollController.position.maxScrollExtent
+        : 0.0;
+    await controller.saveCurrentProgressNow(
+      _progressPolicy.verticalSnapshot(
+        novelId: widget.novelId,
+        episodeId: viewState.currentEpisode.episodeId,
+        scrollOffset: offset,
+        maxScrollExtent: maxScrollExtent,
+      ),
     );
-    if (snapshot == null) {
-      return;
-    }
-    await controller.saveCurrentProgressNow(snapshot);
   }
 
   Future<T> _runWithReaderSemanticsSuspended<T>(
@@ -706,10 +683,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (latest == null) {
       return;
     }
-    if (_isPagedMode(latest.preferences.flowMode)) {
-      await _pagedSurfaceController.jumpToAnchor(anchor);
-      return;
-    }
     if (_scrollController.hasClients) {
       final max = _scrollController.position.maxScrollExtent;
       _scrollController.jumpTo(anchor.scrollOffset.clamp(0.0, max).toDouble());
@@ -872,10 +845,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return tid.isEmpty ? null : tid;
     }
     return null;
-  }
-
-  bool _isPagedMode(NovelReaderFlowMode flowMode) {
-    return false;
   }
 
   double _safeContentMaxWidth(NovelReaderTypography typography) {

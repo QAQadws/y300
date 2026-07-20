@@ -42,7 +42,6 @@ import 'package:y300/features/novel/domain/services/novel_source_metadata_recove
 import 'package:y300/features/novel/domain/services/novel_sync_request_governor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_layout_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
@@ -223,12 +222,6 @@ final novelReaderBootstrapServiceProvider =
         ),
       );
     });
-
-final novelReaderLayoutServiceProvider = Provider<NovelReaderLayoutService>((
-  ref,
-) {
-  return CachedNovelReaderLayoutService();
-});
 
 final novelReaderProgressCommitterProvider =
     Provider<NovelReaderProgressCommitter>((ref) {
