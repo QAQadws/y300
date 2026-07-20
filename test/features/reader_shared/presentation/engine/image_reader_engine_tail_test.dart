@@ -119,6 +119,44 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'owner switch from the tail settles on the next owner first image',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const <String, Object>{
+        'reader_pref_mode': 'ltr',
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumImagePrecacheServiceProvider.overrideWithValue(
+              _NoopForumImagePrecacheService(),
+            ),
+          ],
+          child: const MaterialApp(home: _OwnerSwitchHarness()),
+        ),
+      );
+      await tester.pump();
+
+      final page = find.byKey(const Key('owner-switch-page'));
+      await tester.drag(page, const Offset(-700, 0));
+      await tester.pumpAndSettle();
+      await tester.drag(page, const Offset(-700, 0));
+      await tester.pumpAndSettle();
+      await tester.drag(page, const Offset(-700, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('chapter-2:0'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const Key('comic-reader-page-indicator-text')),
+            )
+            .data,
+        '1 / 2',
+      );
+    },
+  );
 }
 
 Widget _host(
@@ -144,10 +182,11 @@ Widget _host(
 }
 
 class _TailCapability extends ReaderCapability {
-  _TailCapability(this._tail, {this.adjacentPlan});
+  _TailCapability(this._tail, {this.adjacentPlan, this.ownerId = 'tail-owner'});
 
   final _RecordingTailSurface _tail;
   final ReaderAdjacentPreloadPlan? adjacentPlan;
+  final String ownerId;
 
   @override
   Future<ReaderAdjacentPreloadPlan?> buildAdjacentPreloadPlan() async {
@@ -156,13 +195,13 @@ class _TailCapability extends ReaderCapability {
 
   @override
   ReaderContent get content => ReaderContent(
-    ownerId: 'tail-owner',
+    ownerId: ownerId,
     items: List<ContinuousImageItem>.generate(2, (index) {
       return ContinuousImageItem(
-        ownerId: 'tail-owner',
-        id: 'tail-image-$index',
-        url: 'https://img.test/$index.jpg',
-        cacheKey: 'tail-image-$index',
+        ownerId: ownerId,
+        id: '$ownerId-image-$index',
+        url: 'https://img.test/$ownerId/$index.jpg',
+        cacheKey: '$ownerId-image-$index',
         index: index,
         sourceKind: ContinuousImageSourceKind.threadImageReader,
         knownWidth: 100,
@@ -186,7 +225,7 @@ class _TailCapability extends ReaderCapability {
   Widget buildImageContent(BuildContext context, ReaderImageBuildSpec spec) {
     return ColoredBox(
       color: Colors.black,
-      child: Center(child: Text('${spec.index}')),
+      child: Center(child: Text('$ownerId:${spec.index}')),
     );
   }
 
@@ -203,6 +242,9 @@ class _TailCapability extends ReaderCapability {
 }
 
 class _RecordingTailSurface implements ReaderTailSurface {
+  _RecordingTailSurface({this.onAdvanceCallback});
+
+  final VoidCallback? onAdvanceCallback;
   int visibleCount = 0;
   int retryCount = 0;
   int advanceCount = 0;
@@ -265,10 +307,47 @@ class _RecordingTailSurface implements ReaderTailSurface {
   Future<void> onRetry() async => retryCount++;
 
   @override
-  Future<void> onAdvance() async => advanceCount++;
+  Future<void> onAdvance() async {
+    advanceCount++;
+    onAdvanceCallback?.call();
+  }
 
   @override
   void dispose() {}
+}
+
+class _OwnerSwitchHarness extends StatefulWidget {
+  const _OwnerSwitchHarness();
+
+  @override
+  State<_OwnerSwitchHarness> createState() => _OwnerSwitchHarnessState();
+}
+
+class _OwnerSwitchHarnessState extends State<_OwnerSwitchHarness> {
+  late final _RecordingTailSurface _tail;
+  String _ownerId = 'chapter-1';
+
+  @override
+  void initState() {
+    super.initState();
+    _tail = _RecordingTailSurface(
+      onAdvanceCallback: () {
+        if (mounted) {
+          setState(() => _ownerId = 'chapter-2');
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ImageReaderEngine(
+      key: const Key('owner-switch-engine'),
+      pageKey: const Key('owner-switch-page'),
+      listKey: const Key('owner-switch-list'),
+      capability: _TailCapability(_tail, ownerId: _ownerId),
+    );
+  }
 }
 
 class _NoopForumImagePrecacheService implements ForumImagePrecacheService {

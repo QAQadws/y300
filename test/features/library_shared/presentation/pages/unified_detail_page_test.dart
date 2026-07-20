@@ -1203,6 +1203,49 @@ void main() {
     );
   });
 
+  testWidgets('UnifiedDetailPage resets reading for the selected chapter', (
+    tester,
+  ) async {
+    final adapter = _FakeDetailAdapter()..isRead = true;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('重置本章阅读'), findsOneWidget);
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>(
+          'unified-detail-chapter-reset-reading-action-e1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(adapter.lastResetEpisodeId, 'e1');
+    expect(adapter.isRead, isFalse);
+  });
+
   testWidgets('UnifiedDetailPage keeps download action without status badge', (
     tester,
   ) async {
@@ -1650,6 +1693,7 @@ class _FakeDetailAdapter
   int loadChaptersCallCount = 0;
   int refreshWorkCallCount = 0;
   String? lastBookmarkEpisodeId;
+  String? lastResetEpisodeId;
   String? lastDownloadedEpisodeId;
   String? lastDeletedDownloadEpisodeId;
   LibraryFilterSet lastFilters = LibraryFilterSet.defaults;
@@ -1671,7 +1715,11 @@ class _FakeDetailAdapter
   final bool secondIsRead;
 
   @override
-  Future<void> clearAllReadState({required String workId}) async {
+  Future<void> resetChapterReadingState({
+    required String workId,
+    required String episodeId,
+  }) async {
+    lastResetEpisodeId = episodeId;
     isRead = false;
   }
 

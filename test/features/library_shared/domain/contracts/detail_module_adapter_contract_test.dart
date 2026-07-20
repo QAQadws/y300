@@ -28,7 +28,10 @@ class _FakeDetailModuleAdapter
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
 
   @override
-  Future<void> clearAllReadState({required String workId}) async {}
+  Future<void> resetChapterReadingState({
+    required String workId,
+    required String episodeId,
+  }) async {}
 
   @override
   Future<void> deleteChapterDownload({

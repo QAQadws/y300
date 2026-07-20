@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
 import 'package:y300/features/comic/presentation/comic_reader_capability.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
@@ -80,46 +81,64 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
           );
           commentTail.updateNavigation(
             hasNextEpisode: viewState.hasNextEpisode,
-            nextEpisodeTitle: viewState.nextChapter?.title,
-            onAdvanceEpisode: viewState.hasNextEpisode
-                ? () => _openAdjacentEpisode(viewState, previous: false)
-                : null,
+            onAdvanceEpisode: viewState.nextChapter == null
+                ? null
+                : () => _openAdjacentEpisode(
+                    sourceEpisodeId: viewState.episodeId,
+                    direction: ComicEpisodeDirection.next,
+                  ),
           );
           return AnimatedBuilder(
             animation: commentTail,
-            builder: (context, _) => ImageReaderEngine(
-              key: const Key('comic-reader-engine'),
-              listKey: const Key('comic-reader-image-list'),
-              pageKey: const Key('comic-reader-page-view'),
-              slotKeyPrefix: 'comic-reader-image-slot',
-              capability: ComicReaderCapability(
-                viewState: viewState,
-                preferences: preferences,
-                imageHeaderBuilder: imageHeaderBuilder,
-                controller: controller,
-                diagnosticRecorder: widget.diagnosticRecorder,
-                exitResult: _exitResultFor(viewState),
-                commentTailSurface: commentTail,
-                onLastImageVisible: () => unawaited(commentSession.load()),
-                onToggleBookmark: () => unawaited(_toggleBookmark()),
-                onOpenSourceThread: () => _openSourceThread(viewState),
-                onShowMoreActions: () =>
-                    unawaited(_showMoreActionSheet(viewState)),
-                onShowChapterList: () =>
-                    unawaited(_showChapterListSheet(viewState)),
-                onOpenAdjacentEpisode: ({required bool previous}) => unawaited(
-                  _openAdjacentEpisode(viewState, previous: previous),
-                ),
-                buildNextChapterTransition: (context) =>
-                    _ReaderNextChapterTransition(
-                      nextChapter: viewState.nextChapter,
-                      isSwitchingEpisode: viewState.isSwitchingEpisode,
-                      onOpenNext: () => unawaited(
-                        _openAdjacentEpisode(viewState, previous: false),
-                      ),
+            builder: (context, _) {
+              final reader = ImageReaderEngine(
+                key: const Key('comic-reader-engine'),
+                listKey: const Key('comic-reader-image-list'),
+                pageKey: const Key('comic-reader-page-view'),
+                slotKeyPrefix: 'comic-reader-image-slot',
+                capability: ComicReaderCapability(
+                  viewState: viewState,
+                  preferences: preferences,
+                  imageHeaderBuilder: imageHeaderBuilder,
+                  controller: controller,
+                  diagnosticRecorder: widget.diagnosticRecorder,
+                  exitResult: _exitResultFor(viewState),
+                  commentTailSurface: commentTail,
+                  onLastImageVisible: () => unawaited(commentSession.load()),
+                  onToggleBookmark: () => unawaited(_toggleBookmark()),
+                  onOpenSourceThread: () => _openSourceThread(viewState),
+                  onShowMoreActions: () =>
+                      unawaited(_showMoreActionSheet(viewState)),
+                  onShowChapterList: () =>
+                      unawaited(_showChapterListSheet(viewState)),
+                  onOpenAdjacentEpisode: ({required direction}) => unawaited(
+                    _openAdjacentEpisode(
+                      sourceEpisodeId: viewState.episodeId,
+                      direction: direction,
                     ),
-              ),
-            ),
+                  ),
+                  buildNextChapterTransition: (context) =>
+                      _ReaderNextChapterTransition(
+                        nextChapter: viewState.nextChapter,
+                        isSwitchingEpisode: viewState.isSwitchingEpisode,
+                        onOpenNext: () => unawaited(
+                          _openAdjacentEpisode(
+                            sourceEpisodeId: viewState.episodeId,
+                            direction: ComicEpisodeDirection.next,
+                          ),
+                        ),
+                      ),
+                ),
+              );
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  reader,
+                  if (viewState.isSwitchingEpisode)
+                    const Positioned.fill(child: _ComicReaderSwitchOverlay()),
+                ],
+              );
+            },
           );
         },
       ),
@@ -190,22 +209,14 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     );
   }
 
-  Future<void> _openAdjacentEpisode(
-    ComicReaderViewState viewState, {
-    required bool previous,
+  Future<void> _openAdjacentEpisode({
+    required String sourceEpisodeId,
+    required ComicEpisodeDirection direction,
   }) async {
-    if (viewState.isSwitchingEpisode) {
-      return;
-    }
-    final controller = _controller();
-    final targetEpisodeId = previous
-        ? await controller.goToPreviousEpisode()
-        : await controller.goToNextEpisode();
-    if (targetEpisodeId == null || !mounted) {
-      return;
-    }
-    // 引擎按 ownerId（episodeId）变化自动复位滚动/索引，这里无需手动重置位置。
-    await controller.goToEpisode(targetEpisodeId);
+    await _controller().openAdjacentEpisode(
+      sourceEpisodeId: sourceEpisodeId,
+      direction: direction,
+    );
   }
 
   Future<void> _handleReaderMoreAction(
@@ -326,7 +337,21 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     if (selected == null || selected.isCurrent || !mounted) {
       return;
     }
-    await _controller().goToEpisode(selected.episodeId);
+    await _controller().openEpisode(episodeId: selected.episodeId);
+  }
+}
+
+class _ComicReaderSwitchOverlay extends StatelessWidget {
+  const _ComicReaderSwitchOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return AbsorbPointer(
+      child: ColoredBox(
+        color: Theme.of(context).colorScheme.surface,
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+    );
   }
 }
 

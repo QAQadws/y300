@@ -1242,6 +1242,39 @@ void main() {
         'yamibo:100:102',
         episodeId,
       ]);
+
+      await repository.clearReadingProgress(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:102',
+      );
+      final fallbackProgress = await repository.getLastReadProgress(
+        comicId: 'yamibo:100',
+      );
+      expect(fallbackProgress?.episodeId, episodeId);
+      expect(
+        await repository.getReadingProgressForEpisode(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:102',
+        ),
+        isNull,
+      );
+
+      await repository.clearReadingProgress(
+        comicId: 'yamibo:100',
+        episodeId: episodeId,
+      );
+      expect(
+        await repository.getReadingProgresses(comicId: 'yamibo:100'),
+        isEmpty,
+      );
+      final db = await dbFuture;
+      final comicRow = await db.query(
+        ComicLocalDb.comicsTable,
+        columns: const <String>['last_read_episode_id'],
+        where: 'comic_id = ?',
+        whereArgs: const <Object>['yamibo:100'],
+      );
+      expect(comicRow.single['last_read_episode_id'], isNull);
     });
 
     test(

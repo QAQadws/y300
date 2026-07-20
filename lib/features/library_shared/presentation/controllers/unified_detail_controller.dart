@@ -165,12 +165,15 @@ class UnifiedDetailController {
     await _loadChaptersOnly();
   }
 
-  Future<void> clearAllReadState() async {
+  Future<void> resetChapterReadingState({required String episodeId}) async {
     final readStateAdapter = _readStateAdapter;
     if (readStateAdapter == null) {
       throw UnsupportedError('当前作品不支持章节已读状态');
     }
-    await readStateAdapter.clearAllReadState(workId: _workId);
+    await readStateAdapter.resetChapterReadingState(
+      workId: _workId,
+      episodeId: episodeId,
+    );
     await _loadChaptersOnly();
   }
 

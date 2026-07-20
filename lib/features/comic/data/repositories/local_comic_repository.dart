@@ -21,6 +21,7 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 class LocalComicRepository
     implements
         ComicRepository,
+        ComicReadingProgressResetter,
         ComicCatalogOverrideRepository,
         ComicShelfSnapshotRepository,
         ComicShelfStatsRepository,
@@ -384,6 +385,17 @@ class LocalComicRepository
     required String episodeId,
   }) {
     return _readingProgressStore.getReadingProgressForEpisode(
+      comicId: comicId,
+      episodeId: episodeId,
+    );
+  }
+
+  @override
+  Future<void> clearReadingProgress({
+    required String comicId,
+    required String episodeId,
+  }) {
+    return _readingProgressStore.clearReadingProgress(
       comicId: comicId,
       episodeId: episodeId,
     );

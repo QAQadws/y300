@@ -7,6 +7,7 @@ import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_tail_surface.dart';
+import 'package:y300/features/comic/presentation/widgets/comic_comment_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
 
 void main() {
@@ -95,12 +96,12 @@ void main() {
         session: session,
         imageHeaderBuilder: null,
         hasNextEpisode: true,
-        nextEpisodeTitle: '第 2 话',
         onAdvanceEpisode: () => advances++,
       );
       addTearDown(tail.dispose);
       addTearDown(session.dispose);
 
+      expect(tail.hasAdvance, isFalse);
       await session.load();
 
       expect(tail.hasAdvance, isTrue);
@@ -109,6 +110,42 @@ void main() {
       expect(tail.isAdjacentPreloadReady, isTrue);
     },
   );
+
+  testWidgets('advance is an invisible swipe sentinel', (tester) async {
+    final session = ComicCommentSessionController(
+      key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
+      loader: _TailFakeLoader(),
+    );
+    final tail = ComicCommentTailSurface(
+      session: session,
+      imageHeaderBuilder: null,
+      hasNextEpisode: true,
+      onAdvanceEpisode: () {},
+    );
+    addTearDown(tail.dispose);
+    addTearDown(session.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => tail.buildAdvance(
+              context,
+              ReaderTailActions(onRetry: () {}, onAdvance: () {}),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('comic-comment-tail-advance-sentinel')),
+      findsOneWidget,
+    );
+    expect(find.byType(ComicCommentFeedbackSurface), findsNothing);
+    expect(find.textContaining('继续滑动进入'), findsNothing);
+  });
 }
 
 class _TailFakeLoader implements ComicCommentLoader {

@@ -263,6 +263,29 @@ void main() {
       },
     );
 
+    test('clear all read also resets orphaned episode state rows', () async {
+      await repository.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'comic:stale:removed-episode',
+        workId: 'comic:stale',
+        isRead: true,
+        readAt: DateTime(2026, 5, 4),
+      );
+
+      await repository.setWorksReadState(
+        moduleKey: LibraryModuleKey.comic,
+        workIds: <String>{'comic:stale'},
+        isRead: false,
+      );
+
+      final state = await repository.getEpisodeState(
+        moduleKey: LibraryModuleKey.comic,
+        episodeId: 'comic:stale:removed-episode',
+      );
+      expect(state?.isRead, isFalse);
+      expect(state?.readAt, isNull);
+    });
+
     test(
       'setWorksReadState only updates novel episodes for target module',
       () async {

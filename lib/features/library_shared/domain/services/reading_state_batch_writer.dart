@@ -4,8 +4,8 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 //
 // 批量阅读状态写入：把「作品级 / 多作品级」的已读/未读标记收口到一个边界。
 //
-// 解耦目标：当前详情页 `clearAllReadState` 逐章 upsert、阅读器读完单章标记、
-// 书架多选批量标记，三处语义分散。阶段 4 让它们共用本 writer，data 层用
+// 解耦目标：书架多选批量标记通过本 writer 写入统一状态表；详情页的单章节
+// 阅读重置则由章节状态能力直接处理，避免误用作品级批量语义。data 层用
 // 集合式 upsert 事务从章节源表补齐状态行，避免大作品下 N 次 upsert 的卡顿、
 // 中途不一致，以及“无状态行章节无法被批量标记”的问题。
 //

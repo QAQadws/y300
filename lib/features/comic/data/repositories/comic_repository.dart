@@ -6,6 +6,16 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
+/// Optional persistence capability for clearing one comic chapter's saved
+/// image position. Keeping this separate avoids forcing non-SQLite test and
+/// remote repository implementations to expose storage-specific behavior.
+abstract interface class ComicReadingProgressResetter {
+  Future<void> clearReadingProgress({
+    required String comicId,
+    required String episodeId,
+  });
+}
+
 /// 漫画仓库：封装书架数据访问，屏蔽具体存储实现。
 abstract class ComicRepository implements CatalogUrlUpdater {
   Future<List<ComicShelfCategory>> getCategories();

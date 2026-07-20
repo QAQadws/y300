@@ -9,6 +9,7 @@ import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart'
 import 'package:y300/features/comic/domain/services/comic_incremental_episode_discovery.dart';
 import 'package:y300/features/comic/domain/services/comic_catalog_url_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
@@ -24,7 +25,6 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_source_id_comparator.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 
 /// 漫画详情适配器（Phase 6）。
 ///
@@ -48,7 +48,6 @@ class ComicDetailAdapter
     ComicRefreshOutcomeApplier? refreshOutcomeApplier,
     ComicDownloadService? downloadService,
     ImageCacheService? imageCacheService,
-    ReadingStateBatchWriter? readingStateBatchWriter,
     BulkDownloadUseCase? bulkDownloadUseCase,
     ComicIncrementalEpisodeDiscovery? incrementalDiscovery,
     ComicEpisodeDiscoveryService? discoveryService,
@@ -62,7 +61,6 @@ class ComicDetailAdapter
        _refreshOutcomeApplier = refreshOutcomeApplier,
        _downloadService = downloadService,
        _coverCacheService = LibraryCoverCacheService(imageCacheService),
-       _readingStateBatchWriter = readingStateBatchWriter,
        _bulkDownloadUseCase = bulkDownloadUseCase,
        _incrementalDiscovery = incrementalDiscovery,
        _discoveryService = discoveryService,
@@ -71,6 +69,8 @@ class ComicDetailAdapter
        _catalogUrlPolicy = catalogUrlPolicy,
        _stateRepository = stateRepository;
 
+  static const ComicEpisodeSequence _episodeSequence = ComicEpisodeSequence();
+
   final ComicRepository _repository;
   final ComicEpisodeRefreshService? _refreshService;
   final ComicSearchRefreshQueueEnqueuer? _searchQueue;
@@ -78,7 +78,6 @@ class ComicDetailAdapter
   final ComicRefreshOutcomeApplier? _refreshOutcomeApplier;
   final ComicDownloadService? _downloadService;
   final LibraryCoverCacheService _coverCacheService;
-  final ReadingStateBatchWriter? _readingStateBatchWriter;
   final BulkDownloadUseCase? _bulkDownloadUseCase;
   final ComicIncrementalEpisodeDiscovery? _incrementalDiscovery;
   final ComicEpisodeDiscoveryService? _discoveryService;
@@ -232,7 +231,7 @@ class ComicDetailAdapter
     if (episodes.isEmpty) {
       return null;
     }
-    final ordered = [...episodes]..sort(_compareEpisodesByFirstTid);
+    final ordered = _episodeSequence.order(episodes);
     for (final episode in ordered) {
       final images = await _repository.getEpisodeImages(
         episodeId: episode.episodeId,
@@ -242,25 +241,6 @@ class ComicDetailAdapter
       }
     }
     return null;
-  }
-
-  int _compareEpisodesByFirstTid(ComicEpisodeItem a, ComicEpisodeItem b) {
-    final aTid = int.tryParse(a.sourceTid.trim());
-    final bTid = int.tryParse(b.sourceTid.trim());
-    if (aTid != null && bTid != null && aTid != bTid) {
-      return aTid.compareTo(bTid);
-    }
-    if (aTid != null && bTid == null) {
-      return -1;
-    }
-    if (aTid == null && bTid != null) {
-      return 1;
-    }
-    final order = a.orderIndex.compareTo(b.orderIndex);
-    if (order != 0) {
-      return order;
-    }
-    return a.episodeId.compareTo(b.episodeId);
   }
 
   @override
@@ -343,29 +323,21 @@ class ComicDetailAdapter
   }
 
   @override
-  Future<void> clearAllReadState({required String workId}) async {
-    final writer = _readingStateBatchWriter;
-    if (writer != null) {
-      await writer.setWorkRead(
-        module: LibraryModuleKey.comic,
-        workId: workId,
-        isRead: false,
-      );
-      return;
-    }
-    final episodes = await _repository.getComicEpisodes(
-      comicId: workId,
-      descending: false,
+  Future<void> resetChapterReadingState({
+    required String workId,
+    required String episodeId,
+  }) async {
+    await _stateRepository.upsertEpisodeState(
+      moduleKey: LibraryModuleKey.comic,
+      episodeId: episodeId,
+      workId: workId,
+      isRead: false,
+      readAt: null,
     );
-    for (final episode in episodes) {
-      await _stateRepository.upsertEpisodeState(
-        moduleKey: LibraryModuleKey.comic,
-        episodeId: episode.episodeId,
-        workId: workId,
-        isRead: false,
-        readAt: null,
-      );
-    }
+    final resetter = _repository is ComicReadingProgressResetter
+        ? _repository as ComicReadingProgressResetter
+        : null;
+    await resetter?.clearReadingProgress(comicId: workId, episodeId: episodeId);
   }
 
   @override
@@ -436,12 +408,16 @@ class ComicDetailAdapter
       comicId: workId,
       descending: false,
     );
-    if (episodes.isEmpty) {
+    final orderedEpisodes = _episodeSequence.order(episodes);
+    if (orderedEpisodes.isEmpty) {
       return null;
     }
     final targetEpisodeId = preferContinue
-        ? await _resolveContinueEpisodeId(workId: workId, episodes: episodes)
-        : episodes.first.episodeId;
+        ? await _resolveContinueEpisodeId(
+            workId: workId,
+            episodes: orderedEpisodes,
+          )
+        : orderedEpisodes.first.episodeId;
     return ReaderRouteTarget(workId: workId, episodeId: targetEpisodeId);
   }
 

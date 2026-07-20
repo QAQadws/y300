@@ -244,6 +244,15 @@ class LocalLibraryStateRepository
         ? 'AND src.content_type = ?'
         : '';
     await db.transaction((txn) async {
+      // Also normalize orphaned state rows. They can survive chapter refresh
+      // or duplicate-work cleanup and otherwise make "clear all read" appear
+      // ineffective in aggregate queries.
+      await txn.update(
+        ComicLocalDb.libraryEpisodeStateTable,
+        <String, Object?>{'is_read': isRead ? 1 : 0, 'read_at': readAtMillis},
+        where: 'content_type = ? AND work_id IN ($placeholders)',
+        whereArgs: <Object>[contentType, ...workIdArgs],
+      );
       await txn.rawInsert(
         '''
         INSERT OR REPLACE INTO ${ComicLocalDb.libraryEpisodeStateTable} (

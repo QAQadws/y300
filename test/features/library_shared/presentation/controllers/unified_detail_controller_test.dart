@@ -117,11 +117,14 @@ void main() {
     );
     expect(controller.state.chapters.map((e) => e.episodeId), ['e2']);
 
-    await controller.clearAllReadState();
+    await controller.markChapterRead(episodeId: 'e2', isRead: true);
+    await controller.resetChapterReadingState(episodeId: 'e1');
     await controller.updateFilters(
       const LibraryFilterSet(unread: TriStateFilterValue.include),
     );
-    expect(controller.state.chapters.length, 2);
+    expect(controller.state.chapters.map((chapter) => chapter.episodeId), [
+      'e1',
+    ]);
 
     await controller.deleteChapterDownload(episodeId: 'e2');
     await controller.updateFilters(
@@ -152,8 +155,11 @@ class _FakeDetailAdapter
   };
 
   @override
-  Future<void> clearAllReadState({required String workId}) async {
-    _read.updateAll((key, value) => false);
+  Future<void> resetChapterReadingState({
+    required String workId,
+    required String episodeId,
+  }) async {
+    _read[episodeId] = false;
   }
 
   @override

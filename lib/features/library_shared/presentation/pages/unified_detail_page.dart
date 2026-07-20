@@ -735,10 +735,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                 ),
                 if (_supportsChapterReadState)
                   ListTile(
+                    key: ValueKey<String>(
+                      'unified-detail-chapter-reset-reading-action-${chapter.episodeId}',
+                    ),
                     leading: const Icon(Icons.remove_done),
-                    title: const Text('取消全部已读'),
+                    title: const Text('重置本章阅读'),
                     onTap: () async {
-                      await _controller.clearAllReadState();
+                      await _controller.resetChapterReadingState(
+                        episodeId: chapter.episodeId,
+                      );
                       if (!mounted || !sheetContext.mounted) {
                         return;
                       }

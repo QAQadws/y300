@@ -25,7 +25,6 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
-import 'package:y300/features/library_shared/domain/services/reading_state_batch_writer.dart';
 
 void main() {
   test(
@@ -440,21 +439,24 @@ void main() {
   );
 
   test(
-    'clearAllReadState delegates to ReadingStateBatchWriter when injected',
+    'resetChapterReadingState clears only the selected chapter progress',
     () async {
-      final writer = _RecordingReadingStateBatchWriter();
+      final repository = _FakeComicRepository();
+      final stateRepository = _RecordingChapterResetStateRepository();
       final adapter = ComicDetailAdapter(
-        _FakeComicRepository(),
-        readingStateBatchWriter: writer,
-        stateRepository: _FakeLibraryStateRepository(),
+        repository,
+        stateRepository: stateRepository,
       );
 
-      await adapter.clearAllReadState(workId: 'comic:1');
+      await adapter.resetChapterReadingState(
+        workId: 'comic:1',
+        episodeId: 'comic:1:120',
+      );
 
-      expect(writer.calls, hasLength(1));
-      expect(writer.calls.single.module, LibraryModuleKey.comic);
-      expect(writer.calls.single.workIds, <String>{'comic:1'});
-      expect(writer.calls.single.isRead, isFalse);
+      expect(stateRepository.lastEpisodeId, 'comic:1:120');
+      expect(stateRepository.lastIsRead, isFalse);
+      expect(stateRepository.lastReadAt, isNull);
+      expect(repository.clearedProgress, const <String>['comic:1:120']);
     },
   );
 
@@ -909,7 +911,10 @@ class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
 }
 
 class _FakeComicRepository
-    implements ComicRepository, ComicCatalogOverrideRepository {
+    implements
+        ComicRepository,
+        ComicCatalogOverrideRepository,
+        ComicReadingProgressResetter {
   _FakeComicRepository({
     this.progress,
     this.progresses,
@@ -929,6 +934,7 @@ class _FakeComicRepository
   bool mergeCalled = false;
   List<ComicEpisodeLink> lastMergedLinks = const [];
   String? lastFallbackTid;
+  final List<String> clearedProgress = <String>[];
 
   @override
   Future<ComicDetail?> getComicDetail({required String comicId}) async {
@@ -1140,6 +1146,15 @@ class _FakeComicRepository
     required int imageIndex,
     required double scrollOffset,
   }) async {}
+
+  @override
+  Future<void> clearReadingProgress({
+    required String comicId,
+    required String episodeId,
+  }) async {
+    clearedProgress.add(episodeId);
+  }
+
   @override
   Future<void> updateCatalogUrl({
     required String comicId,
@@ -1405,46 +1420,27 @@ class _RecordingLibraryStateRepository extends _FakeLibraryStateRepository {
   }
 }
 
-class _RecordingReadingStateBatchWriter implements ReadingStateBatchWriter {
-  final List<_ReadingStateBatchCall> calls = <_ReadingStateBatchCall>[];
+class _RecordingChapterResetStateRepository
+    extends _FakeLibraryStateRepository {
+  String? lastEpisodeId;
+  bool? lastIsRead;
+  DateTime? lastReadAt;
 
   @override
-  Future<void> setWorkRead({
-    required LibraryModuleKey module,
+  Future<void> upsertEpisodeState({
+    required LibraryModuleKey moduleKey,
+    required String episodeId,
     required String workId,
-    required bool isRead,
+    bool? isRead,
+    bool? isDownloaded,
+    bool? isBookmarked,
+    DateTime? readAt,
+    DateTime? downloadedAt,
   }) async {
-    calls.add(
-      _ReadingStateBatchCall(
-        module: module,
-        workIds: <String>{workId},
-        isRead: isRead,
-      ),
-    );
+    lastEpisodeId = episodeId;
+    lastIsRead = isRead;
+    lastReadAt = readAt;
   }
-
-  @override
-  Future<void> setWorksRead({
-    required LibraryModuleKey module,
-    required Set<String> workIds,
-    required bool isRead,
-  }) async {
-    calls.add(
-      _ReadingStateBatchCall(module: module, workIds: workIds, isRead: isRead),
-    );
-  }
-}
-
-class _ReadingStateBatchCall {
-  const _ReadingStateBatchCall({
-    required this.module,
-    required this.workIds,
-    required this.isRead,
-  });
-
-  final LibraryModuleKey module;
-  final Set<String> workIds;
-  final bool isRead;
 }
 
 class _RecordingBulkDownloadUseCase implements BulkDownloadUseCase {

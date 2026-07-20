@@ -6,6 +6,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/services/comic_reader_continuous_image_adapter.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
@@ -60,7 +61,8 @@ class ComicReaderCapability extends ReaderCapability {
   final VoidCallback onShowChapterList;
   final VoidCallback onOpenSourceThread;
   final VoidCallback onToggleBookmark;
-  final void Function({required bool previous}) onOpenAdjacentEpisode;
+  final void Function({required ComicEpisodeDirection direction})
+  onOpenAdjacentEpisode;
   final WidgetBuilder buildNextChapterTransition;
   final ReaderTailSurface? commentTailSurface;
   final VoidCallback? onLastImageVisible;
@@ -171,8 +173,10 @@ class ComicReaderCapability extends ReaderCapability {
     return ReaderChapterNavSpec(
       hasPrevious: viewState.hasPreviousEpisode,
       hasNext: viewState.hasNextEpisode,
-      onPrevious: () => onOpenAdjacentEpisode(previous: true),
-      onNext: () => onOpenAdjacentEpisode(previous: false),
+      onPrevious: () =>
+          onOpenAdjacentEpisode(direction: ComicEpisodeDirection.previous),
+      onNext: () =>
+          onOpenAdjacentEpisode(direction: ComicEpisodeDirection.next),
       previousTooltip: viewState.hasPreviousEpisode ? '上一话' : '已是第一话',
       nextTooltip: viewState.hasNextEpisode ? '下一话' : '已是最后一话',
     );
@@ -215,7 +219,9 @@ class ComicReaderCapability extends ReaderCapability {
 
   @override
   void onImageVisible(int index) {
-    unawaited(controller.onImageVisible(index));
+    unawaited(
+      controller.onImageVisible(index, expectedEpisodeId: viewState.episodeId),
+    );
     if (preferences.readerMode != ReaderModePreference.vertical &&
         index == viewState.images.length - 1) {
       onLastImageVisible?.call();
@@ -224,13 +230,21 @@ class ComicReaderCapability extends ReaderCapability {
 
   @override
   void onScrollProgress({required int index, required double offset}) {
-    controller.onScrollProgress(currentIndex: index, scrollOffset: offset);
+    controller.onScrollProgress(
+      currentIndex: index,
+      scrollOffset: offset,
+      expectedEpisodeId: viewState.episodeId,
+    );
   }
 
   @override
   Future<void> onSeek({required int index, required double offset}) {
     // 主动 seek（滑块/翻章）需要立即把目标页持久化，区别于滚动中的进度上报。
-    return controller.jumpToImageIndex(index, scrollOffset: offset);
+    return controller.jumpToImageIndex(
+      index,
+      scrollOffset: offset,
+      expectedEpisodeId: viewState.episodeId,
+    );
   }
 
   @override
@@ -340,10 +354,12 @@ class ComicReaderCapability extends ReaderCapability {
         imageUrl: imageUrl,
         width: size.width.round(),
         height: size.height.round(),
+        expectedEpisodeId: viewState.episodeId,
       ),
       onImageFailed: () => controller.onImageDisplayFailed(
         imageIndex: spec.index,
         imageUrl: imageUrl,
+        expectedEpisodeId: viewState.episodeId,
       ),
     );
   }

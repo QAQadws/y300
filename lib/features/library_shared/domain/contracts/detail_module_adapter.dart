@@ -108,7 +108,12 @@ abstract interface class DetailChapterReadStateAdapter {
     required bool isRead,
   });
 
-  Future<void> clearAllReadState({required String workId});
+  /// Reset one chapter's reading state without touching its bookmark or
+  /// download state.
+  Future<void> resetChapterReadingState({
+    required String workId,
+    required String episodeId,
+  });
 }
 
 /// 章节下载可选能力。

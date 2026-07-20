@@ -15,6 +15,7 @@ import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 
 class ComicReaderArgs {
@@ -250,6 +251,8 @@ final comicReaderControllerProvider = AsyncNotifierProvider.autoDispose
 class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   ComicReaderController(this._args);
 
+  static const ComicEpisodeSequence _episodeSequence = ComicEpisodeSequence();
+
   final ComicReaderArgs _args;
   late ComicRepository _repository;
   late ComicReaderService _readerService;
@@ -452,9 +455,13 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   Future<void> onScrollProgress({
     required int currentIndex,
     required double scrollOffset,
+    String? expectedEpisodeId,
   }) async {
+    if (expectedEpisodeId != null && expectedEpisodeId != _activeEpisodeId) {
+      return;
+    }
     final current = state.value;
-    if (current == null) {
+    if (current == null || current.isSwitchingEpisode) {
       return;
     }
     _recordVisiblePage(
@@ -474,9 +481,18 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   ///
   /// UI is responsible for the actual scroll/page movement.
   /// Controller only persists and mirrors logical progress state.
-  Future<void> jumpToImageIndex(int index, {double? scrollOffset}) async {
+  Future<void> jumpToImageIndex(
+    int index, {
+    double? scrollOffset,
+    String? expectedEpisodeId,
+  }) async {
+    if (expectedEpisodeId != null && expectedEpisodeId != _activeEpisodeId) {
+      return;
+    }
     final current = state.value;
-    if (current == null || current.images.isEmpty) {
+    if (current == null ||
+        current.isSwitchingEpisode ||
+        current.images.isEmpty) {
       return;
     }
     final clampedIndex = index.clamp(0, current.images.length - 1).toInt();
@@ -484,10 +500,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     _cancelScheduledProgressPersistence();
     _visibleImageIndexes.add(clampedIndex);
     await _saveProgressNow(
+      episodeId: current.episodeId,
       currentIndex: clampedIndex,
       scrollOffset: nextOffset,
       source: ComicReaderProgressSource.jump,
     );
+    if (!ref.mounted || _activeEpisodeId != current.episodeId) {
+      return;
+    }
     state = AsyncData(
       current.copyWith(
         currentImageIndex: clampedIndex,
@@ -501,57 +521,114 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     );
   }
 
-  Future<bool> goToEpisode(String episodeId) async {
-    final targetEpisodeId = episodeId.trim();
-    if (targetEpisodeId.isEmpty || targetEpisodeId == _activeEpisodeId) {
-      return false;
-    }
+  Future<bool> openEpisode({
+    required String episodeId,
+    ComicEpisodeOpenPolicy policy = ComicEpisodeOpenPolicy.resumeIfUnread,
+  }) {
+    return _openEpisodeTransaction(
+      requestedEpisodeId: episodeId,
+      policy: policy,
+    );
+  }
+
+  Future<bool> openAdjacentEpisode({
+    required String sourceEpisodeId,
+    required ComicEpisodeDirection direction,
+  }) {
+    return _openEpisodeTransaction(
+      sourceEpisodeId: sourceEpisodeId,
+      direction: direction,
+      policy: ComicEpisodeOpenPolicy.startAtBeginning,
+    );
+  }
+
+  Future<bool> _openEpisodeTransaction({
+    String? requestedEpisodeId,
+    String? sourceEpisodeId,
+    ComicEpisodeDirection? direction,
+    required ComicEpisodeOpenPolicy policy,
+  }) async {
     final current = state.value;
-    if (current == null) {
+    final sourceId = sourceEpisodeId?.trim();
+    if (current == null ||
+        current.isSwitchingEpisode ||
+        (sourceId != null && sourceId != _activeEpisodeId)) {
       return false;
     }
+
+    final requestedId = requestedEpisodeId?.trim();
+    if (direction == null &&
+        (requestedId == null ||
+            requestedId.isEmpty ||
+            requestedId == _activeEpisodeId)) {
+      return false;
+    }
+
     state = AsyncData(
-      current.copyWith(isSwitchingEpisode: true, hint: '正在加载章节'),
+      current.copyWith(isSwitchingEpisode: true, clearHint: true),
     );
     _cancelScheduledProgressPersistence();
-    final previousVisibleImageIndexes = Set<int>.of(_visibleImageIndexes);
-    final previousResolvedImageIndexes = Set<int>.of(_resolvedImageIndexes);
-    _currentEpisodeId = targetEpisodeId;
-    _visibleImageIndexes.clear();
-    _resolvedImageIndexes.clear();
-    _firstImageVisibleLogged = false;
 
+    String? targetEpisodeId = requestedEpisodeId?.trim();
     try {
-      final nextState = await _loadState(episodeId: targetEpisodeId);
+      if (direction != null) {
+        final episodes = await _loadEpisodesInReaderOrder();
+        if (!ref.mounted ||
+            (sourceId != null && sourceId != _activeEpisodeId)) {
+          return false;
+        }
+        targetEpisodeId = _episodeSequence
+            .adjacent(
+              episodes: episodes,
+              episodeId: sourceId ?? _activeEpisodeId,
+              direction: direction,
+            )
+            ?.episodeId;
+      }
+      if (!ref.mounted ||
+          targetEpisodeId == null ||
+          targetEpisodeId.isEmpty ||
+          targetEpisodeId == _activeEpisodeId) {
+        if (ref.mounted) {
+          final latest = state.value ?? current;
+          state = AsyncData(
+            latest.copyWith(isSwitchingEpisode: false, clearHint: true),
+          );
+        }
+        return false;
+      }
+
+      final nextState = await _loadState(
+        episodeId: targetEpisodeId,
+        policy: policy,
+      );
       if (!ref.mounted) {
         return false;
       }
+      _currentEpisodeId = targetEpisodeId;
+      _visibleImageIndexes.clear();
+      _resolvedImageIndexes.clear();
+      _firstImageVisibleLogged = false;
       state = AsyncData(
-        nextState.copyWith(
-          isSwitchingEpisode: false,
-          hint: '已切换到 ${nextState.episodeTitle}',
-        ),
+        nextState.copyWith(isSwitchingEpisode: false, clearHint: true),
       );
       _logReaderEvent(
         'episode_switched',
         pageIndex: nextState.currentImageIndex,
         totalPages: nextState.images.length,
-        extra: <String, Object?>{'targetEpisodeId': targetEpisodeId},
+        extra: <String, Object?>{
+          'targetEpisodeId': targetEpisodeId,
+          'policy': policy.name,
+        },
       );
       return true;
     } catch (error) {
-      _currentEpisodeId = current.episodeId;
-      _visibleImageIndexes
-        ..clear()
-        ..addAll(previousVisibleImageIndexes);
-      _resolvedImageIndexes
-        ..clear()
-        ..addAll(previousResolvedImageIndexes);
       if (!ref.mounted) {
         return false;
       }
+      final latest = state.value ?? current;
       state = AsyncData(
-        current.copyWith(isSwitchingEpisode: false, hint: '章节切换失败，请稍后重试'),
+        latest.copyWith(isSwitchingEpisode: false, hint: '章节切换失败，请稍后重试'),
       );
       _logReaderEvent(
         'episode_switch_failed',
@@ -569,9 +646,27 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   /// This is intentionally separate from `_loadState`: single-page chapters
   /// should become read only after the page is actually visible, not merely
   /// because the chapter metadata was loaded.
-  Future<void> onImageVisible(int imageIndex) async {
+  Future<void> onImageVisible(
+    int imageIndex, {
+    String? expectedEpisodeId,
+  }) async {
+    return _onImageVisible(
+      imageIndex: imageIndex,
+      expectedEpisodeId: expectedEpisodeId,
+    );
+  }
+
+  Future<void> _onImageVisible({
+    required int imageIndex,
+    String? expectedEpisodeId,
+  }) async {
+    if (expectedEpisodeId != null && expectedEpisodeId != _activeEpisodeId) {
+      return;
+    }
     final current = state.value;
-    if (current == null || current.images.isEmpty) {
+    if (current == null ||
+        current.isSwitchingEpisode ||
+        current.images.isEmpty) {
       return;
     }
     final clampedIndex = imageIndex.clamp(0, current.images.length - 1).toInt();
@@ -593,9 +688,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     required String imageUrl,
     required int width,
     required int height,
+    String? expectedEpisodeId,
   }) async {
+    if (expectedEpisodeId != null && expectedEpisodeId != _activeEpisodeId) {
+      return;
+    }
     final current = state.value;
     if (current == null ||
+        current.isSwitchingEpisode ||
         current.images.isEmpty ||
         width <= 0 ||
         height <= 0) {
@@ -683,9 +783,15 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   Future<void> onImageDisplayFailed({
     required int imageIndex,
     required String imageUrl,
+    String? expectedEpisodeId,
   }) async {
+    if (expectedEpisodeId != null && expectedEpisodeId != _activeEpisodeId) {
+      return;
+    }
     final current = state.value;
-    if (current == null || current.images.isEmpty) {
+    if (current == null ||
+        current.isSwitchingEpisode ||
+        current.images.isEmpty) {
       return;
     }
     final clampedIndex = imageIndex.clamp(0, current.images.length - 1).toInt();
@@ -741,6 +847,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     }
     _cancelScheduledProgressPersistence();
     await _saveProgressNow(
+      episodeId: current.episodeId,
       currentIndex: current.currentImageIndex,
       scrollOffset: current.lastScrollOffset,
       source: ComicReaderProgressSource.exit,
@@ -759,10 +866,12 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }) {
     _progressPersistDebounceTimer?.cancel();
     final version = ++_persistVersion;
+    final episodeId = _activeEpisodeId;
     _progressPersistDebounceTimer = Timer(
       const Duration(milliseconds: 180),
       () async {
         await _saveProgressNow(
+          episodeId: episodeId,
           currentIndex: currentIndex,
           scrollOffset: scrollOffset,
           source: source,
@@ -805,17 +914,24 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   }
 
   Future<void> _saveProgressNow({
+    required String episodeId,
     required int currentIndex,
     required double scrollOffset,
     required ComicReaderProgressSource source,
   }) async {
+    if (!ref.mounted || episodeId != _activeEpisodeId) {
+      return;
+    }
     final startedAt = DateTime.now();
     await _readingStateWriter.saveProgress(
       comicId: _args.comicId,
-      episodeId: _activeEpisodeId,
+      episodeId: episodeId,
       imageIndex: currentIndex,
       scrollOffset: scrollOffset,
     );
+    if (!ref.mounted || episodeId != _activeEpisodeId) {
+      return;
+    }
     _logReaderEvent(
       'page_visible',
       source: source,
@@ -965,36 +1081,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     return localPath;
   }
 
-  /// Returns previous episode id if available.
-  Future<String?> goToPreviousEpisode() async {
-    final episodes = await _repository.getComicEpisodes(
-      comicId: _args.comicId,
-      descending: false,
-    );
-    final currentIndex = episodes.indexWhere(
-      (e) => e.episodeId == _activeEpisodeId,
-    );
-    if (currentIndex <= 0) {
-      return null;
-    }
-    return episodes[currentIndex - 1].episodeId;
-  }
-
-  /// Returns next episode id if available.
-  Future<String?> goToNextEpisode() async {
-    final episodes = await _repository.getComicEpisodes(
-      comicId: _args.comicId,
-      descending: false,
-    );
-    final currentIndex = episodes.indexWhere(
-      (e) => e.episodeId == _activeEpisodeId,
-    );
-    if (currentIndex < 0 || currentIndex + 1 >= episodes.length) {
-      return null;
-    }
-    return episodes[currentIndex + 1].episodeId;
-  }
-
   /// Resolves only the next episode's image metadata for reader lookahead.
   ///
   /// It may populate the normal episode-image table when the next chapter has
@@ -1002,17 +1088,15 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   /// state, bookmark state, or explicit download state.
   Future<ComicAdjacentEpisodePreload?> prepareNextEpisodePreload() async {
     final activeEpisodeId = _activeEpisodeId;
-    final episodes = await _repository.getComicEpisodes(
-      comicId: _args.comicId,
-      descending: false,
+    final episodes = await _loadEpisodesInReaderOrder();
+    final nextEpisode = _episodeSequence.adjacent(
+      episodes: episodes,
+      episodeId: activeEpisodeId,
+      direction: ComicEpisodeDirection.next,
     );
-    final currentIndex = episodes.indexWhere(
-      (episode) => episode.episodeId == activeEpisodeId,
-    );
-    if (currentIndex < 0 || currentIndex + 1 >= episodes.length) {
+    if (nextEpisode == null) {
       return null;
     }
-    final nextEpisode = episodes[currentIndex + 1];
     final images = await _ensureEpisodeImages(nextEpisode);
     if (!ref.mounted || _activeEpisodeId != activeEpisodeId || images.isEmpty) {
       return null;
@@ -1023,31 +1107,17 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     );
   }
 
-  Future<ComicReaderViewState> _loadState({required String episodeId}) async {
+  Future<ComicReaderViewState> _loadState({
+    required String episodeId,
+    ComicEpisodeOpenPolicy policy = ComicEpisodeOpenPolicy.resumeIfUnread,
+  }) async {
     final startedAt = DateTime.now();
-    final episodes = await _repository.getComicEpisodes(
-      comicId: _args.comicId,
-      descending: false,
-    );
+    final episodes = await _loadEpisodesInReaderOrder();
     final episodeIndex = episodes.indexWhere((e) => e.episodeId == episodeId);
     if (episodeIndex < 0) {
       throw StateError('章节不存在');
     }
     final episode = episodes[episodeIndex];
-    final images = await _ensureEpisodeImages(episode);
-    if (!ref.mounted) {
-      throw StateError('阅读器已销毁');
-    }
-    final progress = await _repository.getReadingProgressForEpisode(
-      comicId: _args.comicId,
-      episodeId: episodeId,
-    );
-    final currentImageIndex = progress == null
-        ? 0
-        : progress.imageIndex
-              .clamp(0, images.isEmpty ? 0 : images.length - 1)
-              .toInt();
-    final scrollOffset = progress?.scrollOffset ?? 0.0;
     final isRead = await _readingStateWriter.isEpisodeRead(
       comicId: _args.comicId,
       episodeId: episodeId,
@@ -1056,6 +1126,24 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       comicId: _args.comicId,
       episodeId: episodeId,
     );
+    final images = await _ensureEpisodeImages(episode);
+    if (!ref.mounted) {
+      throw StateError('阅读器已销毁');
+    }
+    final shouldRestoreProgress =
+        policy == ComicEpisodeOpenPolicy.resumeIfUnread && !isRead;
+    final progress = shouldRestoreProgress
+        ? await _repository.getReadingProgressForEpisode(
+            comicId: _args.comicId,
+            episodeId: episodeId,
+          )
+        : null;
+    final currentImageIndex = progress == null
+        ? 0
+        : progress.imageIndex
+              .clamp(0, images.isEmpty ? 0 : images.length - 1)
+              .toInt();
+    final scrollOffset = progress?.scrollOffset ?? 0.0;
     if (isRead) {
       _completedEpisodeIds.add(episodeId);
     }
@@ -1118,6 +1206,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       elapsedMs: DateTime.now().difference(startedAt).inMilliseconds,
     );
     return viewState;
+  }
+
+  Future<List<ComicEpisodeItem>> _loadEpisodesInReaderOrder() async {
+    final episodes = await _repository.getComicEpisodes(
+      comicId: _args.comicId,
+      descending: false,
+    );
+    return _episodeSequence.order(episodes);
   }
 
   Future<List<ComicEpisodeImageItem>> _ensureEpisodeImages(

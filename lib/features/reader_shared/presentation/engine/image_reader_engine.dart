@@ -55,6 +55,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     implements ReaderEngineActions {
   late final ScrollController _scrollController;
   PageController? _pageController;
+  String? _pageControllerOwnerId;
   late final ReaderOverlayController _overlayController;
   late final ReaderGestureCoordinator _gestureCoordinator;
   late final ValueNotifier<bool> _zoomGate;
@@ -184,7 +185,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
 
     final positionState = _resetIfOwnerChanged(content, preferences.readerMode);
-    _syncPageControllerIfNeeded(mode, positionState.committedLogicalIndex);
+    _syncPageControllerIfNeeded(
+      mode,
+      positionState.committedLogicalIndex,
+      content.ownerId,
+    );
     _restorePositionIfNeeded(mode, preferences.readerMode, content);
 
     final total = content.length;
@@ -301,6 +306,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     return ReaderPagedSwipeGate(
       blockedListenable: _zoomGate,
       child: ContinuousImageReaderView(
+        key: ValueKey<String>('reader-paged-owner-${content.ownerId}'),
         items: items,
         mode: ContinuousImageReaderMode.horizontal,
         pageController: _pageController,
@@ -496,19 +502,26 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     ReaderTailSurface tail,
     FutureOr<void> Function() callback,
   ) {
+    unawaited(_invokeTailCallbackAndWait(tail, callback));
+  }
+
+  Future<void> _invokeTailCallbackAndWait(
+    ReaderTailSurface tail,
+    FutureOr<void> Function() callback,
+  ) async {
     if (!_isCurrentTail(tail)) {
       return;
     }
-    unawaited(
-      Future<void>.sync(callback).catchError((Object error, StackTrace stack) {
-        _recordReaderDiagnostic(
-          type: ContinuousImageDiagnosticEventType.seekFailed,
-          status: 'tailCallbackFailed',
-          result: error.runtimeType.toString(),
-          message: stack.toString().split('\n').first,
-        );
-      }),
-    );
+    try {
+      await callback();
+    } catch (error, stack) {
+      _recordReaderDiagnostic(
+        type: ContinuousImageDiagnosticEventType.seekFailed,
+        status: 'tailCallbackFailed',
+        result: error.runtimeType.toString(),
+        message: stack.toString().split('\n').first,
+      );
+    }
   }
 
   bool _isCurrentTail(ReaderTailSurface tail) {
@@ -533,9 +546,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (tail == null || position.isImage) {
       return null;
     }
-    if (position.isAdvance) {
-      return '继续';
-    }
+    if (position.isAdvance) return null;
     return tail.indicatorLabel;
   }
 
@@ -719,20 +730,22 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   void _syncPageControllerIfNeeded(
     ContinuousImageReaderMode mode,
     int initialIndex,
+    String ownerId,
   ) {
     if (mode == ContinuousImageReaderMode.vertical) {
       return;
     }
     final expectedInitialPage = initialIndex.clamp(0, 1 << 20).toInt();
     final controller = _pageController;
-    if (controller == null) {
+    if (controller == null || _pageControllerOwnerId != ownerId) {
       _pageController = PageController(initialPage: expectedInitialPage);
+      _pageControllerOwnerId = ownerId;
+      if (controller != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          controller.dispose();
+        });
+      }
       return;
-    }
-    if (!controller.hasClients &&
-        controller.initialPage != expectedInitialPage) {
-      controller.dispose();
-      _pageController = PageController(initialPage: expectedInitialPage);
     }
   }
 
@@ -891,17 +904,14 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       return;
     }
     if (pageController.position.isScrollingNotifier.value) {
-      positionState.consumeInitialRestore();
-      _commitLogicalIndex(
-        pageController.page?.round() ?? positionState.committedLogicalIndex,
-      );
       _recordInitialRestoreCompleted(
-        index: _lastKnownIndex,
+        index: targetPage,
         mode: readerMode,
         generation: generation,
-        status: 'consumed',
-        result: 'scrollInProgress',
+        status: 'pending',
+        result: 'controllerStillScrolling',
       );
+      _schedulePositionRetry();
       return;
     }
     final page = pageController.page;
@@ -1194,9 +1204,14 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (_reportedVisibleImageIndexes.contains(imageIndex)) {
       return;
     }
+    final ownerId = _capability.content.ownerId;
+    final sessionGeneration = _readerSessionGeneration;
     _reportedVisibleImageIndexes.add(imageIndex);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
+      if (!mounted ||
+          _lastOwnerId != ownerId ||
+          _readerSessionGeneration != sessionGeneration ||
+          _capability.content.ownerId != ownerId) {
         return;
       }
       _capability.onImageVisible(imageIndex);
@@ -1207,10 +1222,20 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   Future<void> _onPageChanged(int pageIndex) async {
     final content = _capability.content;
+    final page = _pageController?.page;
+    if (page != null && (page - pageIndex).abs() > 0.5) {
+      return;
+    }
+    final positionState = _positionState;
+    if (positionState != null &&
+        positionState.needsInitialRestore &&
+        positionState.ownerId == content.ownerId &&
+        pageIndex != content.initialIndex) {
+      return;
+    }
     final position = _pagedPositionForPage(pageIndex, content.length);
     if (!position.isImage) {
       _hideReaderMenuForContentMotion();
-      _pulsePageIndicator();
       _pagedPosition = position;
       if (position.isTail) {
         final tail = _tailSurface;
@@ -1220,12 +1245,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
             _invokeTailCallback(tail, tail.onVisible);
           }
         }
-      } else {
+      } else if (position.isAdvance) {
         final tail = _tailSurface;
         if (tail != null) {
           final key = '${_lastOwnerId ?? '-'}:${tail.id}';
           if (_reportedAdvanceSurfaceKeys.add(key)) {
-            _invokeTailCallback(tail, tail.onAdvance);
+            unawaited(_invokeAdvanceCallbackAndAllowRetry(tail, key));
           }
         }
       }
@@ -1260,6 +1285,19 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     );
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  Future<void> _invokeAdvanceCallbackAndAllowRetry(
+    ReaderTailSurface tail,
+    String key,
+  ) async {
+    await _invokeTailCallbackAndWait(tail, tail.onAdvance);
+    if (mounted) {
+      // A successful owner change clears this set during the next session
+      // reset. On failure, removing the key lets the user retry after
+      // returning to the comment tail; never animate the old PageView back.
+      _reportedAdvanceSurfaceKeys.remove(key);
     }
   }
 
@@ -1912,6 +1950,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (nextMode == ReaderModePreference.vertical) {
       _pageController?.dispose();
       _pageController = null;
+      _pageControllerOwnerId = null;
     }
     setState(() {});
     await WidgetsBinding.instance.endOfFrame;

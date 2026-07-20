@@ -23,12 +23,10 @@ class ComicCommentTailSurface extends ChangeNotifier
     required ComicCommentSessionController session,
     required ImageRequestHeaderBuilder? imageHeaderBuilder,
     bool hasNextEpisode = false,
-    String? nextEpisodeTitle,
     FutureOr<void> Function()? onAdvanceEpisode,
   }) : _session = session,
        _imageHeaderBuilder = imageHeaderBuilder,
        _hasNextEpisode = hasNextEpisode,
-       _nextEpisodeTitle = nextEpisodeTitle,
        _onAdvanceEpisode = onAdvanceEpisode {
     _session.addListener(_onSessionChanged);
   }
@@ -36,16 +34,13 @@ class ComicCommentTailSurface extends ChangeNotifier
   final ComicCommentSessionController _session;
   final ImageRequestHeaderBuilder? _imageHeaderBuilder;
   bool _hasNextEpisode;
-  String? _nextEpisodeTitle;
   FutureOr<void> Function()? _onAdvanceEpisode;
 
   void updateNavigation({
     required bool hasNextEpisode,
-    required String? nextEpisodeTitle,
     required FutureOr<void> Function()? onAdvanceEpisode,
   }) {
     _hasNextEpisode = hasNextEpisode;
-    _nextEpisodeTitle = nextEpisodeTitle;
     _onAdvanceEpisode = onAdvanceEpisode;
   }
 
@@ -63,7 +58,8 @@ class ComicCommentTailSurface extends ChangeNotifier
   String get indicatorLabel => ComicCommentCopy.indicator;
 
   @override
-  bool get hasAdvance => _hasNextEpisode && _onAdvanceEpisode != null;
+  bool get hasAdvance =>
+      _hasNextEpisode && _onAdvanceEpisode != null && isAdjacentPreloadReady;
 
   @override
   bool get isAdjacentPreloadReady {
@@ -124,10 +120,10 @@ class ComicCommentTailSurface extends ChangeNotifier
 
   @override
   Widget buildAdvance(BuildContext context, ReaderTailActions actions) {
-    return ComicCommentFeedbackSurface(
-      key: const Key('comic-comment-tail-advance'),
-      kind: ComicCommentFeedbackKind.advance,
-      nextEpisodeTitle: _nextEpisodeTitle,
+    // This page exists only because PageView needs a real child to receive
+    // the swipe after the comment page. It must never become reader chrome.
+    return const ExcludeSemantics(
+      child: SizedBox.expand(key: Key('comic-comment-tail-advance-sentinel')),
     );
   }
 
