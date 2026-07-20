@@ -68,7 +68,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.coordinatorBuilder,
     this.restorePolicy = const NovelReaderPaginationRestorePolicy(),
     this.paginationCache,
-    this.diagnosticsSink = const NovelReaderDebugPaginationDiagnosticsSink(),
+    this.diagnosticsSink = const NovelReaderNoopPaginationDiagnosticsSink(),
     this.bottomChromeReserveFraction = 0.18,
   });
 
