@@ -32,6 +32,7 @@ class NovelReaderPaginationDiagnostics {
     this.textLayoutCount = 0,
     this.complexBlockCount = 0,
     this.safeTextFallbackCount = 0,
+    this.firstPageDuration = Duration.zero,
     this.availableHeight = 0,
     this.averageTextPageFullness = 0,
     this.lowFullnessPageCount = 0,
@@ -89,6 +90,7 @@ class NovelReaderPaginationDiagnostics {
   final int textLayoutCount;
   final int complexBlockCount;
   final int safeTextFallbackCount;
+  final Duration firstPageDuration;
   final double availableHeight;
   final double averageTextPageFullness;
   final int lowFullnessPageCount;
@@ -116,6 +118,7 @@ class NovelReaderPaginationDiagnostics {
         'atomizationMs=${atomizationDuration.inMilliseconds}, '
         'sessionCreateMs=${measureSessionCreateDuration.inMilliseconds}, '
         'classificationMs=${classificationDuration.inMilliseconds}, '
+        'firstPageMs=${firstPageDuration.inMilliseconds}, '
         'rendererValidations=$rendererValidationCount, '
         'rendererMismatches=$rendererValidationMismatchCount, '
         'textLayouts=$textLayoutCount, complexBlocks=$complexBlockCount, '

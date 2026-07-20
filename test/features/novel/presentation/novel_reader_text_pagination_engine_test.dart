@@ -8,6 +8,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_classifier.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_html_text_range_slicer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_text_run_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_text_pagination_engine.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
@@ -142,6 +143,23 @@ void main() {
       ),
       throwsArgumentError,
     );
+  });
+
+  test('one indexed slice session preserves nested wrappers across pages', () {
+    const slicer = NovelReaderHtmlTextRangeSlicer();
+    final session = slicer.prepare(
+      '<p><strong>甲乙</strong><br><span style="color:#123456">丙丁</span></p>',
+    );
+
+    final first = session.slice(start: 0, end: 2);
+    final second = session.slice(start: 2, end: 4);
+
+    expect(html_parser.parseFragment(first).text, '甲乙');
+    expect(first, contains('<strong>甲乙</strong>'));
+    expect(first, isNot(contains('<span')));
+    expect(html_parser.parseFragment(second).text, '丙丁');
+    expect(second, contains('<br>'));
+    expect(second, contains('color:#123456'));
   });
 }
 

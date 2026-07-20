@@ -210,10 +210,12 @@ final class DefaultNovelReaderTextPaginationEngine
     required double firstPageHeight,
     required double paragraphSpacing,
   }) {
+    final sliceSession = rangeSlicer.prepare(atom.atom.html);
     if (metrics.lineRanges.isEmpty || atom.atom.textLength == 0) {
       return <NovelReaderTextPageChunk>[
         _chunk(
           atom: atom,
+          sliceSession: sliceSession,
           start: 0,
           end: atom.atom.textLength,
           usedHeight: metrics.totalHeight + paragraphSpacing,
@@ -226,6 +228,7 @@ final class DefaultNovelReaderTextPaginationEngine
       return <NovelReaderTextPageChunk>[
         _chunk(
           atom: atom,
+          sliceSession: sliceSession,
           start: 0,
           end: atom.atom.textLength,
           usedHeight: height,
@@ -247,6 +250,7 @@ final class DefaultNovelReaderTextPaginationEngine
         chunks.add(
           _chunk(
             atom: atom,
+            sliceSession: sliceSession,
             start: metrics.lineRanges[firstLine].sourceStart,
             end: previous.sourceEnd,
             usedHeight: usedHeight,
@@ -262,6 +266,7 @@ final class DefaultNovelReaderTextPaginationEngine
         chunks.add(
           _chunk(
             atom: atom,
+            sliceSession: sliceSession,
             start: line.sourceStart,
             end: line.sourceEnd,
             usedHeight: usedHeight,
@@ -276,6 +281,7 @@ final class DefaultNovelReaderTextPaginationEngine
       chunks.add(
         _chunk(
           atom: atom,
+          sliceSession: sliceSession,
           start: metrics.lineRanges[firstLine].sourceStart,
           end: metrics.lineRanges.last.sourceEnd,
           usedHeight: usedHeight,
@@ -288,6 +294,7 @@ final class DefaultNovelReaderTextPaginationEngine
 
   NovelReaderTextPageChunk _chunk({
     required NovelReaderClassifiedPaginationAtom atom,
+    required NovelReaderHtmlTextRangeSliceSession sliceSession,
     required int start,
     required int end,
     required double usedHeight,
@@ -297,11 +304,7 @@ final class DefaultNovelReaderTextPaginationEngine
     final safeEnd = end.clamp(safeStart, atom.atom.textLength);
     final baseOffset = atom.atom.startAnchor.textOffset;
     return NovelReaderTextPageChunk(
-      html: rangeSlicer.slice(
-        html: atom.atom.html,
-        start: safeStart,
-        end: safeEnd,
-      ),
+      html: sliceSession.slice(start: safeStart, end: safeEnd),
       startAnchor: atom.atom.startAnchor.copyWith(
         textOffset: baseOffset + safeStart,
       ),

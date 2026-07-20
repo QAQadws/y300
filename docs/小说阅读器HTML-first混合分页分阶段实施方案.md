@@ -1,6 +1,6 @@
 # 小说阅读器 HTML-first 混合分页分阶段实施方案
 
-> 状态：Phase 0-5 已完成（2026-07-21）；Phase 6 待实施
+> 状态：Phase 0-6 工程实现已完成（2026-07-21）；Phase 6 Profile/Release 真机发布验收待执行
 >
 > 编写日期：2026-07-20
 >
@@ -815,6 +815,10 @@ final class NovelReaderPaginationProgress {
 
 ### Phase 6：性能基准、真机和灰度
 
+> 实施状态：工程实现已完成（2026-07-21）。固定 fixture、20/80/200 页
+> 合成基准、性能预算策略和自动纵向降级已落地；Android/iOS Profile/Release
+> 真机时长仍是发布门禁，不能由 Debug 自动化代替。
+
 目标：确认长文章在实际设备上可发布。
 
 矩阵：
@@ -832,6 +836,30 @@ final class NovelReaderPaginationProgress {
 - 锁屏、后台、进程回收、断网读取水合正文。
 
 灰度规则：默认仍为滚动模式，分页作为显式设置开放；超过性能预算自动回到滚动模式；诊断不包含正文。
+
+#### Phase 6 自动化证据
+
+- `NovelPaginationHtmlFixtureLoader` 复用共享 `forumHtmlPrototypeSamples` 路径清单，以 UTF-8 读取 `docs/html/特殊格式`，再通过生产 `ThreadDetailHtmlParser` 提取首楼 message；不复制一套测试专用正文选择器。
+- `注音.html`、`文字背景色.html`、`折叠目录.html`、`字颜色字号.html` 均进入真实 preparation、classifier、hybrid planner；ruby、折叠和正文图片 route 有明确断言。
+- 合成表格覆盖完整 table/row 保留与超高 inner scroll；不把表格拆成非法 HTML。
+- 固定 20/80/200 页段落型合成长文验证成本随 atom/page 增长，普通文字没有 complex fallback，每个 safe atom 只做一次 TextPainter layout，HTML validation 保持有界。
+- `NovelReaderHtmlTextRangeSliceSession` 对同一 safe atom 只 parse/index 一次 HTML，后续页面按预计算 source offset 克隆相交 wrapper；消除每页重新 `parseFragment` 的 `O(P × N)` 热点。
+- diagnostics 新增 `firstPageDuration`。Profile/Release 默认执行纯文字 `500ms/2s`、混合格式 `800ms/5s` 的首屏/完整 plan 预算；Debug 默认只采集、不自动降级。
+- 超预算通过 surface 的 `onFallbackToVertical` 返回既有 controller 边界，复用偏好预览和持久化流程；planner/performance policy 不依赖 repository，不写 SQLite。
+
+#### Phase 6 真机发布门禁
+
+以下项目必须在准备发布的构建上记录设备、系统、文章 fixture、首屏时长、完整 plan 时长和结果；未执行项不得写成“已通过”：
+
+| 平台/场景 | Profile | Release | 发布要求 |
+| --- | --- | --- | --- |
+| Android 13/14/15，小屏与大屏 | 待执行 | 待执行 | 80 页纯文字和混合格式均满足对应预算 |
+| 当前支持的 iOS，小屏与大屏 | 待执行 | 待执行 | 80 页纯文字和混合格式均满足对应预算 |
+| light/sepia/dark，最小/默认/最大字号 | 待执行 | 待执行 | 无溢出、空白假成功页或错误 cache 复用 |
+| LTR/RTL，已知/未知图片尺寸、失败与缓存命中 | 待执行 | 待执行 | 逻辑页序、占位和 reflow 稳定 |
+| 锁屏、后台、进程回收、断网水合正文 | 待执行 | 待执行 | 取消隔离正确，正文/书签/进度不丢失 |
+
+Profile/Release 只要任一预算不满足，就保留自动纵向降级并阻止把分页设为默认模式；当前产品默认仍为纵向阅读，分页只能由用户显式选择。
 
 ## 16. 接口装配建议
 

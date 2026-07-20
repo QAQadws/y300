@@ -24,6 +24,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pa
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
@@ -74,6 +75,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.paginationMeasureCache,
     this.preparedChapterCache,
     this.diagnosticsSink = const NovelReaderNoopPaginationDiagnosticsSink(),
+    this.performancePolicy = const NovelReaderPaginationPerformancePolicy(),
     this.chromeInsets = const ReaderChromeInsets.zero(),
   });
 
@@ -104,6 +106,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final NovelReaderPaginationMeasureCache? paginationMeasureCache;
   final NovelReaderPreparedChapterCache? preparedChapterCache;
   final NovelReaderPaginationDiagnosticsSink diagnosticsSink;
+  final NovelReaderPaginationPerformancePolicy performancePolicy;
   final ReaderChromeInsets chromeInsets;
 
   @override
@@ -128,6 +131,8 @@ class _NovelReaderHtmlPagedSurfaceState
   String? _recordedDiagnosticsKey;
   Stopwatch? _layoutStopwatch;
   bool _layoutCacheHit = false;
+  Duration? _firstPageDuration;
+  String? _performanceFallbackKey;
 
   @override
   void initState() {
@@ -270,6 +275,12 @@ class _NovelReaderHtmlPagedSurfaceState
                       message: '本章没有可显示的正文',
                     );
                   }
+                  _firstPageDuration ??= _layoutStopwatch?.elapsed;
+                  _schedulePerformanceFallbackIfNeeded(
+                    plan: plan,
+                    key: key,
+                    isComplete: progress?.isComplete == true,
+                  );
                   final requestedPage = _requestedPageFor(plan);
                   if (progress?.isComplete == true) {
                     _scheduleDiagnostics(
@@ -384,6 +395,8 @@ class _NovelReaderHtmlPagedSurfaceState
     _layoutGeneration += 1;
     _layoutCacheHit = _coordinator!.isCached(key);
     _layoutStopwatch = Stopwatch()..start();
+    _firstPageDuration = null;
+    _performanceFallbackKey = null;
     _recordedDiagnosticsKey = null;
     _planStream = _coordinator!.paginateIncrementally(
       chapter: prepared,
@@ -444,6 +457,7 @@ class _NovelReaderHtmlPagedSurfaceState
           textLayoutCount: plan.textLayoutCount,
           complexBlockCount: plan.complexBlockCount,
           safeTextFallbackCount: plan.safeTextFallbackCount,
+          firstPageDuration: _firstPageDuration ?? Duration.zero,
           availableHeight: key.viewportHeightPx.toDouble(),
           averageTextPageFullness: plan.averageTextPageFullness,
           lowFullnessPageCount: plan.lowFullnessPageCount,
@@ -454,6 +468,36 @@ class _NovelReaderHtmlPagedSurfaceState
           measurementSamples: plan.measurementSamples,
         ),
       );
+    });
+  }
+
+  void _schedulePerformanceFallbackIfNeeded({
+    required NovelReaderPaginationPlan plan,
+    required NovelReaderPaginationKey key,
+    required bool isComplete,
+  }) {
+    final callback = widget.onFallbackToVertical;
+    final firstPageDuration = _firstPageDuration;
+    if (callback == null || firstPageDuration == null) {
+      return;
+    }
+    final reason = widget.performancePolicy.evaluate(
+      plan: plan,
+      firstPageDuration: firstPageDuration,
+      fullPlanDuration: isComplete ? _layoutStopwatch?.elapsed : null,
+    );
+    if (reason == null) {
+      return;
+    }
+    final fallbackKey = '${key.cacheIdentity}|${reason.name}';
+    if (_performanceFallbackKey == fallbackKey) {
+      return;
+    }
+    _performanceFallbackKey = fallbackKey;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _planKey == key) {
+        callback();
+      }
     });
   }
 
