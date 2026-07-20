@@ -1,6 +1,6 @@
 # 小说阅读器 HTML-first 混合分页分阶段实施方案
 
-> 状态：Phase 0-3 已完成（2026-07-21）；Phase 4-6 待实施
+> 状态：Phase 0-4 已完成（2026-07-21）；Phase 5-6 待实施
 >
 > 编写日期：2026-07-20
 >
@@ -781,6 +781,9 @@ final class NovelReaderPaginationProgress {
 验收：ruby base/rt 不分离且最终视觉与 renderer 一致；嵌套折叠状态正确；折叠点击不改变后续 page index，或明确触发新 layout revision；表格不被非法拆分或截断；超高 block 有内部滚动或纵向入口。
 
 ### Phase 4：Page composer 和 renderer validation
+
+> 实施状态：已完成（2026-07-21）。生产分页已切换到 renderer revision 3
+> 的 hybrid planner；滚动模式和最终 HTML renderer 不变。
 
 目标：组合 safe text、complex block 和 isolated image。
 

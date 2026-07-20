@@ -81,6 +81,7 @@ final class NovelReaderComplexBlockPaginationEngine {
       metrics: NovelReaderComplexBlockMetrics(
         height: measurement.height,
         route: atom.route,
+        isOversized: measurement.height > key.viewportHeightPx,
         requiresInnerScroll:
             atom.route == NovelReaderPaginationRoute.collapseBlock ||
             measurement.height > key.viewportHeightPx,

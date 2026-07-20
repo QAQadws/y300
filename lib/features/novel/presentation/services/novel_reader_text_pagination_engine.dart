@@ -12,6 +12,7 @@ abstract interface class NovelReaderTextPaginationEngine {
     required List<NovelReaderPaginationTextRun> runs,
     required double width,
     required double pageHeight,
+    double? firstPageHeight,
     required double paragraphSpacing,
     required String typographySignature,
     TextDirection textDirection = TextDirection.ltr,
@@ -68,6 +69,7 @@ final class DefaultNovelReaderTextPaginationEngine
     required List<NovelReaderPaginationTextRun> runs,
     required double width,
     required double pageHeight,
+    double? firstPageHeight,
     required double paragraphSpacing,
     required String typographySignature,
     TextDirection textDirection = TextDirection.ltr,
@@ -81,10 +83,13 @@ final class DefaultNovelReaderTextPaginationEngine
         'Text pagination accepts safe text atoms only.',
       );
     }
+    final resolvedFirstPageHeight = firstPageHeight ?? pageHeight;
     if (!width.isFinite ||
         width <= 0 ||
         !pageHeight.isFinite ||
-        pageHeight <= 0) {
+        pageHeight <= 0 ||
+        !resolvedFirstPageHeight.isFinite ||
+        resolvedFirstPageHeight <= 0) {
       throw ArgumentError('Text pagination requires positive finite bounds.');
     }
     final key = _TextMetricsKey(
@@ -116,6 +121,7 @@ final class DefaultNovelReaderTextPaginationEngine
       atom: atom,
       metrics: metrics,
       pageHeight: pageHeight,
+      firstPageHeight: resolvedFirstPageHeight,
       paragraphSpacing: paragraphSpacing,
     );
     return NovelReaderTextPaginationResult(
@@ -201,6 +207,7 @@ final class DefaultNovelReaderTextPaginationEngine
     required NovelReaderClassifiedPaginationAtom atom,
     required NovelReaderTextLayoutMetrics metrics,
     required double pageHeight,
+    required double firstPageHeight,
     required double paragraphSpacing,
   }) {
     if (metrics.lineRanges.isEmpty || atom.atom.textLength == 0) {
@@ -234,7 +241,8 @@ final class DefaultNovelReaderTextPaginationEngine
       final line = metrics.lineRanges[index];
       final isLastLine = index == metrics.lineRanges.length - 1;
       final addition = line.height + (isLastLine ? paragraphSpacing : 0);
-      if (usedHeight > 0 && usedHeight + addition > pageHeight) {
+      final currentBudget = chunks.isEmpty ? firstPageHeight : pageHeight;
+      if (usedHeight > 0 && usedHeight + addition > currentBudget) {
         final previous = metrics.lineRanges[index - 1];
         chunks.add(
           _chunk(
@@ -249,7 +257,8 @@ final class DefaultNovelReaderTextPaginationEngine
         usedHeight = 0;
       }
       usedHeight += addition;
-      if (usedHeight > pageHeight && firstLine == index) {
+      final lineBudget = chunks.isEmpty ? firstPageHeight : pageHeight;
+      if (usedHeight > lineBudget && firstLine == index) {
         chunks.add(
           _chunk(
             atom: atom,

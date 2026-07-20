@@ -77,6 +77,7 @@ final class NovelReaderComplexBlockMetrics {
   const NovelReaderComplexBlockMetrics({
     required this.height,
     required this.route,
+    required this.isOversized,
     required this.requiresInnerScroll,
     required this.measurementCacheHit,
     required this.frameWaitCount,
@@ -87,6 +88,7 @@ final class NovelReaderComplexBlockMetrics {
 
   final double height;
   final NovelReaderPaginationRoute route;
+  final bool isOversized;
   final bool requiresInnerScroll;
   final bool measurementCacheHit;
   final int frameWaitCount;

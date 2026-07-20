@@ -18,8 +18,8 @@ import 'package:y300/features/novel/presentation/services/novel_html_chapter_ren
 import 'package:y300/features/novel/presentation/services/novel_html_image_reader_bridge.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_html_page_breaker.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
@@ -212,10 +212,11 @@ class _NovelReaderHtmlPagedSurfaceState
                   widget.preferences,
                   widget.typography,
                   htmlPreferences,
+                  MediaQuery.textScalerOf(context),
                 ),
                 themeSignature: widget.theme.signature,
                 imageDimensionRevision: prepared.imageDimensionRevision,
-                rendererRevision: 2,
+                rendererRevision: 3,
                 topChromeInsetPx: NovelReaderPaginationKey.logicalPixels(
                   topChromeInset,
                 ),
@@ -337,6 +338,7 @@ class _NovelReaderHtmlPagedSurfaceState
       threadId: widget.episode.sourceTid,
       imageOwner: widget.episode.sourceTid,
       headerBuilder: widget.imageHeaderBuilder,
+      textScale: MediaQuery.textScalerOf(context).scale(1000).round(),
       builder: widget.coordinatorBuilder,
     );
     if (_coordinator == null || _coordinatorSignature != coordinatorSignature) {
@@ -398,6 +400,7 @@ class _NovelReaderHtmlPagedSurfaceState
               preparationDuration: _preparationDuration,
               atomizationDuration: plan.atomizationDuration,
               measureSessionCreateDuration: plan.measureSessionCreateDuration,
+              classificationDuration: plan.classificationDuration,
               frameWaitCount: plan.frameWaitCount,
               domSliceCount: plan.domSliceCount,
               readableImageCount: plan.readableImageCount,
@@ -405,11 +408,16 @@ class _NovelReaderHtmlPagedSurfaceState
               rendererValidationCount: plan.rendererValidationCount,
               rendererValidationMismatchCount:
                   plan.rendererValidationMismatchCount,
+              textLayoutCount: plan.textLayoutCount,
+              complexBlockCount: plan.complexBlockCount,
+              safeTextFallbackCount: plan.safeTextFallbackCount,
               availableHeight: key.viewportHeightPx.toDouble(),
               averageTextPageFullness: plan.averageTextPageFullness,
               lowFullnessPageCount: plan.lowFullnessPageCount,
               gapReasonCounts: plan.gapReasonCounts,
               atomKindCounts: plan.atomKindCounts,
+              routeCounts: plan.routeCounts,
+              routeReasonCounts: plan.routeReasonCounts,
               measurementSamples: plan.measurementSamples,
             ),
           );
@@ -426,17 +434,23 @@ class _NovelReaderHtmlPagedSurfaceState
     required BuildContext context,
     required ForumHtmlReaderPreferences htmlPreferences,
   }) {
+    final measureAdapter = NovelReaderHtmlPaginationMeasureAdapter(
+      hostContext: context,
+      theme: widget.theme,
+      preferences: htmlPreferences,
+      sourceId: widget.episode.episodeId,
+      threadId: widget.episode.sourceTid,
+      imageCacheOwnerId: widget.episode.sourceTid,
+      imageHeaderBuilder: widget.imageHeaderBuilder,
+    );
     return DefaultNovelReaderPaginationCoordinator(
-      pageBreaker: NovelReaderHtmlPageBreaker(
-        measureAdapter: NovelReaderHtmlPaginationMeasureAdapter(
-          hostContext: context,
-          theme: widget.theme,
-          preferences: htmlPreferences,
-          sourceId: widget.episode.episodeId,
-          threadId: widget.episode.sourceTid,
-          imageCacheOwnerId: widget.episode.sourceTid,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
-        ),
+      pageBreaker: DefaultNovelReaderHybridPaginationPlanner(
+        measureAdapter: measureAdapter,
+        preferences: htmlPreferences,
+        theme: widget.theme,
+        baseStyle: widget.typography.body,
+        textAlign: widget.typography.textAlign,
+        textScaler: MediaQuery.textScalerOf(context),
         measureCache:
             widget.paginationMeasureCache ??
             (_ownedMeasureCache ??= NovelReaderPaginationMeasureCache()),
@@ -507,6 +521,7 @@ class _NovelReaderHtmlPagedSurfaceState
     NovelReaderPreferences preferences,
     NovelReaderTypography typography,
     ForumHtmlReaderPreferences htmlPreferences,
+    TextScaler textScaler,
   ) {
     return jsonEncode(<Object?>[
       preferences.fontSize,
@@ -522,6 +537,7 @@ class _NovelReaderHtmlPagedSurfaceState
       htmlPreferences.typography.lineHeightScale,
       htmlPreferences.typography.paragraphSpacing,
       typography.textAlign.index,
+      textScaler.scale(1000).round(),
     ]);
   }
 

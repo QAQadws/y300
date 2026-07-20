@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
@@ -33,20 +34,35 @@ class NovelReaderPaginationPlan {
     this.measurementDuration = Duration.zero,
     this.atomizationDuration = Duration.zero,
     this.measureSessionCreateDuration = Duration.zero,
+    this.classificationDuration = Duration.zero,
     this.frameWaitCount = 0,
     this.domSliceCount = 0,
     this.readableImageCount = 0,
     this.textFastPathCount = 0,
     this.rendererValidationCount = 0,
     this.rendererValidationMismatchCount = 0,
+    this.textLayoutCount = 0,
+    this.complexBlockCount = 0,
+    this.safeTextFallbackCount = 0,
     Map<NovelReaderPaginationAtomKind, int> atomKindCounts =
         const <NovelReaderPaginationAtomKind, int>{},
+    Map<NovelReaderPaginationRoute, int> routeCounts =
+        const <NovelReaderPaginationRoute, int>{},
+    Map<NovelReaderPaginationRouteReason, int> routeReasonCounts =
+        const <NovelReaderPaginationRouteReason, int>{},
     List<NovelReaderPaginationMeasurementSample> measurementSamples =
         const <NovelReaderPaginationMeasurementSample>[],
   }) : pages = List<NovelReaderPageFragment>.unmodifiable(pages),
        atomKindCounts = Map<NovelReaderPaginationAtomKind, int>.unmodifiable(
          atomKindCounts,
        ),
+       routeCounts = Map<NovelReaderPaginationRoute, int>.unmodifiable(
+         routeCounts,
+       ),
+       routeReasonCounts =
+           Map<NovelReaderPaginationRouteReason, int>.unmodifiable(
+             routeReasonCounts,
+           ),
        measurementSamples =
            List<NovelReaderPaginationMeasurementSample>.unmodifiable(
              measurementSamples,
@@ -61,13 +77,19 @@ class NovelReaderPaginationPlan {
   final Duration measurementDuration;
   final Duration atomizationDuration;
   final Duration measureSessionCreateDuration;
+  final Duration classificationDuration;
   final int frameWaitCount;
   final int domSliceCount;
   final int readableImageCount;
   final int textFastPathCount;
   final int rendererValidationCount;
   final int rendererValidationMismatchCount;
+  final int textLayoutCount;
+  final int complexBlockCount;
+  final int safeTextFallbackCount;
   final Map<NovelReaderPaginationAtomKind, int> atomKindCounts;
+  final Map<NovelReaderPaginationRoute, int> routeCounts;
+  final Map<NovelReaderPaginationRouteReason, int> routeReasonCounts;
   final List<NovelReaderPaginationMeasurementSample> measurementSamples;
 
   int get pageCount => pages.length;
