@@ -1,6 +1,6 @@
 # 小说阅读器 HTML-first 混合分页分阶段实施方案
 
-> 状态：Phase 0-2 已完成（2026-07-21）；Phase 3-6 待实施
+> 状态：Phase 0-3 已完成（2026-07-21）；Phase 4-6 待实施
 >
 > 编写日期：2026-07-20
 >
@@ -763,6 +763,9 @@ final class NovelReaderPaginationProgress {
 验收：纯文本章节不再为每个范围创建 HTML probe；CJK、中英混排、数字、空格、`&nbsp;` 和换行稳定；ruby 不会误进入普通 TextPainter；样式和 anchor 与 renderer 校验一致。
 
 ### Phase 3：复杂 block、折叠和表格原子页
+
+> 实施状态：已完成（2026-07-21）。复杂 block 描述器和单次真实测量
+> 引擎已落地；统一 page composer 接入留给 Phase 4。
 
 目标：把样本中的复杂结构纳入 hybrid planner。
 
