@@ -398,6 +398,9 @@ class _NovelReaderHtmlPagedSurfaceState
               preparationDuration: _preparationDuration,
               atomizationDuration: plan.atomizationDuration,
               measureSessionCreateDuration: plan.measureSessionCreateDuration,
+              frameWaitCount: plan.frameWaitCount,
+              domSliceCount: plan.domSliceCount,
+              readableImageCount: plan.readableImageCount,
               textFastPathCount: plan.textFastPathCount,
               rendererValidationCount: plan.rendererValidationCount,
               rendererValidationMismatchCount:

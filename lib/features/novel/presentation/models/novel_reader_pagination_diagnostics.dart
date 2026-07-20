@@ -21,6 +21,9 @@ class NovelReaderPaginationDiagnostics {
     this.preparationDuration = Duration.zero,
     this.atomizationDuration = Duration.zero,
     this.measureSessionCreateDuration = Duration.zero,
+    this.frameWaitCount = 0,
+    this.domSliceCount = 0,
+    this.readableImageCount = 0,
     this.textFastPathCount = 0,
     this.rendererValidationCount = 0,
     this.rendererValidationMismatchCount = 0,
@@ -60,6 +63,9 @@ class NovelReaderPaginationDiagnostics {
   final Duration preparationDuration;
   final Duration atomizationDuration;
   final Duration measureSessionCreateDuration;
+  final int frameWaitCount;
+  final int domSliceCount;
+  final int readableImageCount;
   final int textFastPathCount;
   final int rendererValidationCount;
   final int rendererValidationMismatchCount;
@@ -82,6 +88,8 @@ class NovelReaderPaginationDiagnostics {
         '$measurementCacheHitCount, measurementMs='
         '${measurementDuration.inMilliseconds}, averageTextFullness='
         '${averageTextPageFullness.toStringAsFixed(2)}, '
+        'frameWaits=$frameWaitCount, domSlices=$domSliceCount, '
+        'readableImages=$readableImageCount, '
         'prepareMs=${preparationDuration.inMilliseconds}, '
         'atomizationMs=${atomizationDuration.inMilliseconds}, '
         'sessionCreateMs=${measureSessionCreateDuration.inMilliseconds}, '

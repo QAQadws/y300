@@ -31,6 +31,7 @@ void main() {
         plan.pageIndexForAnchor(plan.pages.last.startAnchor),
         plan.pages.last.index,
       );
+      expect(plan.domSliceCount, greaterThan(0));
     },
   );
 
@@ -107,6 +108,8 @@ void main() {
     expect(plan.measurementCount, greaterThanOrEqualTo(3));
     expect(plan.measurementSamples, isNotEmpty);
     expect(plan.measurementSamples.length, lessThanOrEqualTo(64));
+    expect(plan.readableImageCount, 1);
+    expect(plan.frameWaitCount, 0);
   });
 
   test('image dimensions do not change surrounding text page count', () async {

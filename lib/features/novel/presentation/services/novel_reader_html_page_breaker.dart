@@ -74,6 +74,8 @@ final class NovelReaderHtmlPageBreaker
   NovelReaderPaginationCancellationToken? _cancellationToken;
   int _measurementCount = 0;
   int _measurementCacheHitCount = 0;
+  int _frameWaitCount = 0;
+  int _domSliceCount = 0;
   Duration _measurementDuration = Duration.zero;
   List<NovelReaderPaginationMeasurementSample> _measurementSamples =
       <NovelReaderPaginationMeasurementSample>[];
@@ -98,6 +100,8 @@ final class NovelReaderHtmlPageBreaker
     _cancellationToken = cancellationToken;
     _measurementCount = 0;
     _measurementCacheHitCount = 0;
+    _frameWaitCount = 0;
+    _domSliceCount = 0;
     _measurementDuration = Duration.zero;
     _measurementSamples = <NovelReaderPaginationMeasurementSample>[];
     _buffer = null;
@@ -138,6 +142,9 @@ final class NovelReaderHtmlPageBreaker
         measurementDuration: _measurementDuration,
         atomizationDuration: atomizationStopwatch.elapsed,
         measureSessionCreateDuration: sessionStopwatch.elapsed,
+        frameWaitCount: _frameWaitCount,
+        domSliceCount: _domSliceCount,
+        readableImageCount: chapter.renderDocument.sequence.entries.length,
         rendererValidationCount: _measurementCount - _measurementCacheHitCount,
         atomKindCounts: atomKindCounts,
         measurementSamples: _measurementSamples,
@@ -351,6 +358,7 @@ final class NovelReaderHtmlPageBreaker
     _cancellationToken?.throwIfCancelled();
     stopwatch.stop();
     _measurementDuration += stopwatch.elapsed;
+    _frameWaitCount += result.frameWaitCount;
     if (result.fromCache) {
       _measurementCacheHitCount += 1;
     }
@@ -542,6 +550,7 @@ final class NovelReaderHtmlPageBreaker
   }
 
   String _sliceHtml(String html, int start, int end) {
+    _domSliceCount += 1;
     final fragment = html_parser.parseFragment(html);
     final cursor = _TextCursor();
     final output = <html_dom.Node>[];

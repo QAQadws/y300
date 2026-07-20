@@ -27,13 +27,16 @@ void main() {
 
     expect(firstResult.height, 42);
     expect(firstResult.fromCache, isFalse);
+    expect(firstResult.frameWaitCount, 3);
     expect(secondResult.height, 42);
     expect(secondResult.fromCache, isTrue);
+    expect(secondResult.frameWaitCount, 0);
     expect(session.cache.length, 1);
 
     final cached = await session.measure(request);
     expect(cached.height, 42);
     expect(cached.fromCache, isTrue);
+    expect(cached.frameWaitCount, 0);
     expect(delegate.calls, 1);
     await session.dispose();
   });
@@ -145,6 +148,8 @@ void main() {
     expect(first.height, greaterThan(0));
     expect(second.height, greaterThan(0));
     expect(second.height, isNot(first.height));
+    expect(first.frameWaitCount, greaterThan(0));
+    expect(second.frameWaitCount, greaterThan(0));
     await session.dispose();
     await tester.pump();
   });
@@ -232,7 +237,9 @@ class _DelayedMeasureSession implements NovelReaderPaginationMeasureSession {
   }
 
   void complete(double height) {
-    completer.complete(NovelReaderPaginationMeasureResult(height: height));
+    completer.complete(
+      NovelReaderPaginationMeasureResult(height: height, frameWaitCount: 3),
+    );
   }
 
   @override

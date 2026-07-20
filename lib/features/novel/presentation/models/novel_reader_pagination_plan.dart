@@ -33,6 +33,9 @@ class NovelReaderPaginationPlan {
     this.measurementDuration = Duration.zero,
     this.atomizationDuration = Duration.zero,
     this.measureSessionCreateDuration = Duration.zero,
+    this.frameWaitCount = 0,
+    this.domSliceCount = 0,
+    this.readableImageCount = 0,
     this.textFastPathCount = 0,
     this.rendererValidationCount = 0,
     this.rendererValidationMismatchCount = 0,
@@ -58,6 +61,9 @@ class NovelReaderPaginationPlan {
   final Duration measurementDuration;
   final Duration atomizationDuration;
   final Duration measureSessionCreateDuration;
+  final int frameWaitCount;
+  final int domSliceCount;
+  final int readableImageCount;
   final int textFastPathCount;
   final int rendererValidationCount;
   final int rendererValidationMismatchCount;

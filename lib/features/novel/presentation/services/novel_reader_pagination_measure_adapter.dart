@@ -31,15 +31,21 @@ class NovelReaderPaginationMeasureResult {
   const NovelReaderPaginationMeasureResult({
     required this.height,
     this.fromCache = false,
+    this.frameWaitCount = 0,
   });
 
   final double height;
   final bool fromCache;
+  final int frameWaitCount;
 
-  NovelReaderPaginationMeasureResult copyWith({bool? fromCache}) {
+  NovelReaderPaginationMeasureResult copyWith({
+    bool? fromCache,
+    int? frameWaitCount,
+  }) {
     return NovelReaderPaginationMeasureResult(
       height: height,
       fromCache: fromCache ?? this.fromCache,
+      frameWaitCount: frameWaitCount ?? this.frameWaitCount,
     );
   }
 }
@@ -146,13 +152,17 @@ final class NovelReaderCachingPaginationMeasureSession
   ) {
     final cached = cache.get(request);
     if (cached != null) {
-      return Future<NovelReaderPaginationMeasureResult>.value(cached);
+      return Future<NovelReaderPaginationMeasureResult>.value(
+        cached.copyWith(fromCache: true, frameWaitCount: 0),
+      );
     }
 
     final cacheKey = _MeasureCacheKey.from(request);
     final existing = _inFlight[cacheKey];
     if (existing != null) {
-      return existing.then((result) => result.copyWith(fromCache: true));
+      return existing.then(
+        (result) => result.copyWith(fromCache: true, frameWaitCount: 0),
+      );
     }
 
     final future = _delegate.measure(request).then((result) {
@@ -286,6 +296,8 @@ final class _NovelReaderHtmlPaginationMeasureSession
   Future<void> _tail = Future<void>.value();
   int _token = 0;
   int? _pendingToken;
+  int _frameWaitCount = 0;
+  int? _pendingStartFrameWaitCount;
   Completer<NovelReaderPaginationMeasureResult>? _pending;
   bool _disposed = false;
 
@@ -327,6 +339,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
     final token = ++_token;
     final hadHost = _entry != null;
     _pendingToken = token;
+    _pendingStartFrameWaitCount = _frameWaitCount;
     final completer = Completer<NovelReaderPaginationMeasureResult>();
     _pending = completer;
     await _ensureHost(request: request, token: token);
@@ -362,6 +375,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
       );
     }
     // The coordinator can be started while a FutureBuilder is building.
+    _frameWaitCount += 1;
     await WidgetsBinding.instance.endOfFrame;
     if (_disposed) {
       throw const NovelReaderPaginationException(
@@ -383,6 +397,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
                 initialRequest: request,
                 initialToken: token,
                 onMeasured: _completeHeight,
+                onFrameWaited: _recordFrameWait,
                 childBuilder: _buildCandidate,
               ),
             ),
@@ -418,7 +433,14 @@ final class _NovelReaderHtmlPaginationMeasureSession
     final completer = _pending!;
     _pending = null;
     _pendingToken = null;
-    completer.complete(NovelReaderPaginationMeasureResult(height: height));
+    completer.complete(
+      NovelReaderPaginationMeasureResult(
+        height: height,
+        frameWaitCount:
+            _frameWaitCount - (_pendingStartFrameWaitCount ?? _frameWaitCount),
+      ),
+    );
+    _pendingStartFrameWaitCount = null;
   }
 
   void _completeError(int token, Object error, [StackTrace? stack]) {
@@ -428,7 +450,12 @@ final class _NovelReaderHtmlPaginationMeasureSession
     final completer = _pending!;
     _pending = null;
     _pendingToken = null;
+    _pendingStartFrameWaitCount = null;
     completer.completeError(error, stack);
+  }
+
+  void _recordFrameWait() {
+    _frameWaitCount += 1;
   }
 
   @override
@@ -459,12 +486,14 @@ class _NovelReaderPaginationMeasureHost extends StatefulWidget {
     required this.initialRequest,
     required this.initialToken,
     required this.onMeasured,
+    required this.onFrameWaited,
     required this.childBuilder,
   });
 
   final NovelReaderPaginationMeasureRequest initialRequest;
   final int initialToken;
   final void Function(int token, double height) onMeasured;
+  final VoidCallback onFrameWaited;
   final Widget Function(NovelReaderPaginationMeasureRequest request)
   childBuilder;
 
@@ -496,6 +525,7 @@ class _NovelReaderPaginationMeasureHostState
     return _NovelReaderPaginationMeasureProbe(
       key: ValueKey<int>(_token),
       onMeasured: (height) => widget.onMeasured(_token, height),
+      onFrameWaited: widget.onFrameWaited,
       child: widget.childBuilder(_request),
     );
   }
@@ -505,10 +535,12 @@ class _NovelReaderPaginationMeasureProbe extends StatefulWidget {
   const _NovelReaderPaginationMeasureProbe({
     super.key,
     required this.onMeasured,
+    required this.onFrameWaited,
     required this.child,
   });
 
   final ValueChanged<double> onMeasured;
+  final VoidCallback onFrameWaited;
   final Widget child;
 
   @override
@@ -523,7 +555,10 @@ class _NovelReaderPaginationMeasureProbeState
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reportSize());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onFrameWaited();
+      _reportSize();
+    });
   }
 
   @override
@@ -535,7 +570,10 @@ class _NovelReaderPaginationMeasureProbeState
     }
     final renderObject = context.findRenderObject();
     if (renderObject is! RenderBox || !renderObject.hasSize) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _reportSize());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onFrameWaited();
+        _reportSize();
+      });
       return;
     }
     _reported = true;
