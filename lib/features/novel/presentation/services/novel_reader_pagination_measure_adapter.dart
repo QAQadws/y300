@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -13,17 +14,34 @@ class NovelReaderPaginationMeasureRequest {
     required this.html,
     required this.chapter,
     required this.key,
+    this.atomId,
+    this.startOffset,
+    this.endOffset,
   });
 
   final String html;
   final NovelReaderPreparedChapter chapter;
   final NovelReaderPaginationKey key;
+  final String? atomId;
+  final int? startOffset;
+  final int? endOffset;
 }
 
 class NovelReaderPaginationMeasureResult {
-  const NovelReaderPaginationMeasureResult({required this.height});
+  const NovelReaderPaginationMeasureResult({
+    required this.height,
+    this.fromCache = false,
+  });
 
   final double height;
+  final bool fromCache;
+
+  NovelReaderPaginationMeasureResult copyWith({bool? fromCache}) {
+    return NovelReaderPaginationMeasureResult(
+      height: height,
+      fromCache: fromCache ?? this.fromCache,
+    );
+  }
 }
 
 abstract interface class NovelReaderPaginationMeasureAdapter {
@@ -32,10 +50,143 @@ abstract interface class NovelReaderPaginationMeasureAdapter {
   );
 }
 
-/// Measures the same HTML renderer used by the vertical reader in a temporary
-/// offstage overlay entry. It never becomes part of reader page state.
+abstract interface class NovelReaderPaginationMeasureSession {
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  );
+
+  Future<void> dispose();
+}
+
+abstract interface class NovelReaderPaginationMeasureSessionFactory {
+  NovelReaderPaginationMeasureSession create({
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+  });
+}
+
+/// Creates a session for adapters that only expose the original one-shot API.
+///
+/// This keeps deterministic test adapters and non-widget callers compatible
+/// while the real HTML adapter uses a persistent probe host.
+final class NovelReaderAdapterMeasureSessionFactory
+    implements NovelReaderPaginationMeasureSessionFactory {
+  const NovelReaderAdapterMeasureSessionFactory(this.adapter);
+
+  final NovelReaderPaginationMeasureAdapter adapter;
+
+  @override
+  NovelReaderPaginationMeasureSession create({
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+  }) {
+    return _DirectPaginationMeasureSession(adapter);
+  }
+}
+
+/// A bounded LRU cache for exact candidate measurements.
+///
+/// The candidate HTML is part of the key on purpose. Atom and range metadata
+/// makes diagnostics useful, while the exact HTML prevents an unsafe cache hit
+/// when two ranges happen to share offsets but produce different wrappers.
+final class NovelReaderPaginationMeasureCache {
+  NovelReaderPaginationMeasureCache({this.capacity = 512})
+    : assert(capacity > 0);
+
+  final int capacity;
+  final LinkedHashMap<_MeasureCacheKey, NovelReaderPaginationMeasureResult>
+  _entries =
+      LinkedHashMap<_MeasureCacheKey, NovelReaderPaginationMeasureResult>();
+
+  int get length => _entries.length;
+
+  NovelReaderPaginationMeasureResult? get(
+    NovelReaderPaginationMeasureRequest request,
+  ) {
+    final key = _MeasureCacheKey.from(request);
+    final result = _entries.remove(key);
+    if (result == null) {
+      return null;
+    }
+    _entries[key] = result;
+    return result.copyWith(fromCache: true);
+  }
+
+  void put(
+    NovelReaderPaginationMeasureRequest request,
+    NovelReaderPaginationMeasureResult result,
+  ) {
+    final key = _MeasureCacheKey.from(request);
+    _entries.remove(key);
+    _entries[key] = result.copyWith(fromCache: false);
+    while (_entries.length > capacity) {
+      _entries.remove(_entries.keys.first);
+    }
+  }
+
+  void clear() => _entries.clear();
+}
+
+final class NovelReaderCachingPaginationMeasureSession
+    implements NovelReaderPaginationMeasureSession {
+  NovelReaderCachingPaginationMeasureSession({
+    required NovelReaderPaginationMeasureSession delegate,
+    NovelReaderPaginationMeasureCache? cache,
+  }) : _delegate = delegate,
+       cache = cache ?? NovelReaderPaginationMeasureCache();
+
+  final NovelReaderPaginationMeasureSession _delegate;
+  final NovelReaderPaginationMeasureCache cache;
+  final Map<_MeasureCacheKey, Future<NovelReaderPaginationMeasureResult>>
+  _inFlight = <_MeasureCacheKey, Future<NovelReaderPaginationMeasureResult>>{};
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  ) {
+    final cached = cache.get(request);
+    if (cached != null) {
+      return Future<NovelReaderPaginationMeasureResult>.value(cached);
+    }
+
+    final cacheKey = _MeasureCacheKey.from(request);
+    final existing = _inFlight[cacheKey];
+    if (existing != null) {
+      return existing.then((result) => result.copyWith(fromCache: true));
+    }
+
+    final future = _delegate.measure(request).then((result) {
+      cache.put(request, result);
+      return result;
+    });
+    _inFlight[cacheKey] = future;
+    unawaited(
+      future.then<void>(
+        (_) => _removeInFlight(cacheKey, future),
+        onError: (Object error, StackTrace stack) =>
+            _removeInFlight(cacheKey, future),
+      ),
+    );
+    return future;
+  }
+
+  @override
+  Future<void> dispose() => _delegate.dispose();
+
+  void _removeInFlight(
+    _MeasureCacheKey key,
+    Future<NovelReaderPaginationMeasureResult> future,
+  ) {
+    if (identical(_inFlight[key], future)) {
+      _inFlight.remove(key);
+    }
+  }
+}
+
 final class NovelReaderHtmlPaginationMeasureAdapter
-    implements NovelReaderPaginationMeasureAdapter {
+    implements
+        NovelReaderPaginationMeasureAdapter,
+        NovelReaderPaginationMeasureSessionFactory {
   NovelReaderHtmlPaginationMeasureAdapter({
     required BuildContext hostContext,
     required this.theme,
@@ -57,9 +208,152 @@ final class NovelReaderHtmlPaginationMeasureAdapter
   final Duration timeout;
 
   @override
+  NovelReaderPaginationMeasureSession create({
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+  }) {
+    return _NovelReaderHtmlPaginationMeasureSession(
+      hostContext: _hostContext,
+      theme: theme,
+      preferences: preferences,
+      sourceId: sourceId,
+      threadId: threadId,
+      imageCacheOwnerId: imageCacheOwnerId,
+      imageHeaderBuilder: imageHeaderBuilder,
+      chapter: chapter,
+      key: key,
+      timeout: timeout,
+    );
+  }
+
+  @override
   Future<NovelReaderPaginationMeasureResult> measure(
     NovelReaderPaginationMeasureRequest request,
   ) async {
+    final session = create(chapter: request.chapter, key: request.key);
+    try {
+      return await session.measure(request);
+    } finally {
+      await session.dispose();
+    }
+  }
+}
+
+final class _DirectPaginationMeasureSession
+    implements NovelReaderPaginationMeasureSession {
+  const _DirectPaginationMeasureSession(this.adapter);
+
+  final NovelReaderPaginationMeasureAdapter adapter;
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  ) => adapter.measure(request);
+
+  @override
+  Future<void> dispose() async {}
+}
+
+final class _NovelReaderHtmlPaginationMeasureSession
+    implements NovelReaderPaginationMeasureSession {
+  _NovelReaderHtmlPaginationMeasureSession({
+    required BuildContext hostContext,
+    required this.theme,
+    required this.preferences,
+    required this.sourceId,
+    required this.threadId,
+    required this.imageCacheOwnerId,
+    required this.imageHeaderBuilder,
+    required this.chapter,
+    required this.key,
+    required this.timeout,
+  }) : _hostContext = hostContext;
+
+  final BuildContext _hostContext;
+  final ForumHtmlThemeContext theme;
+  final ForumHtmlReaderPreferences preferences;
+  final String sourceId;
+  final String? threadId;
+  final String? imageCacheOwnerId;
+  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final NovelReaderPreparedChapter chapter;
+  final NovelReaderPaginationKey key;
+  final Duration timeout;
+  final GlobalKey<_NovelReaderPaginationMeasureHostState> _hostKey =
+      GlobalKey<_NovelReaderPaginationMeasureHostState>();
+
+  OverlayEntry? _entry;
+  Future<void> _tail = Future<void>.value();
+  int _token = 0;
+  int? _pendingToken;
+  Completer<NovelReaderPaginationMeasureResult>? _pending;
+  bool _disposed = false;
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  ) {
+    final completer = Completer<NovelReaderPaginationMeasureResult>();
+    final operation = _tail.then<void>((_) async {
+      try {
+        completer.complete(await _measureNow(request));
+      } catch (error, stack) {
+        completer.completeError(error, stack);
+      }
+    });
+    _tail = operation.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stack) {},
+    );
+    return completer.future;
+  }
+
+  Future<NovelReaderPaginationMeasureResult> _measureNow(
+    NovelReaderPaginationMeasureRequest request,
+  ) async {
+    if (_disposed) {
+      throw const NovelReaderPaginationException(
+        code: 'measurementSessionDisposed',
+        message: 'The pagination measurement session has been disposed.',
+      );
+    }
+    if (request.chapter.episodeId != chapter.episodeId || request.key != key) {
+      throw const NovelReaderPaginationException(
+        code: 'measurementSessionMismatch',
+        message: 'The request does not belong to this measurement session.',
+      );
+    }
+
+    final token = ++_token;
+    final hadHost = _entry != null;
+    _pendingToken = token;
+    final completer = Completer<NovelReaderPaginationMeasureResult>();
+    _pending = completer;
+    await _ensureHost(request: request, token: token);
+    if (hadHost) {
+      _hostKey.currentState?.submit(request: request, token: token);
+    }
+
+    return completer.future.timeout(
+      timeout,
+      onTimeout: () {
+        final error = const NovelReaderPaginationException(
+          code: 'measurementTimeout',
+          message: 'HTML renderer pagination measurement timed out.',
+        );
+        _completeError(token, error);
+        throw error;
+      },
+    );
+  }
+
+  Future<void> _ensureHost({
+    required NovelReaderPaginationMeasureRequest request,
+    required int token,
+  }) async {
+    if (_entry != null) {
+      return;
+    }
     final overlay = Overlay.maybeOf(_hostContext, rootOverlay: true);
     if (overlay == null) {
       throw const NovelReaderPaginationException(
@@ -68,24 +362,14 @@ final class NovelReaderHtmlPaginationMeasureAdapter
       );
     }
     // The coordinator can be started while a FutureBuilder is building.
-    // Wait until that frame is complete before mutating the overlay.
     await WidgetsBinding.instance.endOfFrame;
-
-    final completer = Completer<NovelReaderPaginationMeasureResult>();
-    var removed = false;
-    late final OverlayEntry entry;
-    void removeEntry() {
-      if (removed) {
-        return;
-      }
-      removed = true;
-      entry.remove();
+    if (_disposed) {
+      throw const NovelReaderPaginationException(
+        code: 'measurementSessionDisposed',
+        message: 'The pagination measurement session has been disposed.',
+      );
     }
-
-    final preparedDocument = request.chapter.renderDocument.copyWith(
-      preparedHtml: request.html,
-    );
-    entry = OverlayEntry(
+    _entry = OverlayEntry(
       builder: (context) {
         return Positioned(
           left: 0,
@@ -94,48 +378,132 @@ final class NovelReaderHtmlPaginationMeasureAdapter
           child: IgnorePointer(
             child: Opacity(
               opacity: 0,
-              child: _NovelReaderPaginationMeasureProbe(
-                onMeasured: (height) {
-                  if (!completer.isCompleted) {
-                    completer.complete(
-                      NovelReaderPaginationMeasureResult(height: height),
-                    );
-                  }
-                },
-                child: ForumHtmlWidgetPostRenderer(
-                  html: request.html,
-                  theme: theme,
-                  preparedDocument: preparedDocument,
-                  preferences: preferences,
-                  sourceId: sourceId,
-                  threadId: threadId,
-                  imageHeaderBuilder: imageHeaderBuilder,
-                  imageCacheOwnerId: imageCacheOwnerId,
-                ),
+              child: _NovelReaderPaginationMeasureHost(
+                key: _hostKey,
+                initialRequest: request,
+                initialToken: token,
+                onMeasured: _completeHeight,
+                childBuilder: _buildCandidate,
               ),
             ),
           ),
         );
       },
     );
+    overlay.insert(_entry!);
+  }
 
-    try {
-      overlay.insert(entry);
-      return await completer.future.timeout(
-        timeout,
-        onTimeout: () => throw const NovelReaderPaginationException(
-          code: 'measurementTimeout',
-          message: 'HTML pagination candidate measurement timed out.',
+  Widget _buildCandidate(NovelReaderPaginationMeasureRequest request) {
+    final preparedDocument = request.chapter.renderDocument.copyWith(
+      preparedHtml: request.html,
+    );
+    return ForumHtmlWidgetPostRenderer(
+      html: request.html,
+      theme: theme,
+      preparedDocument: preparedDocument,
+      preferences: preferences,
+      sourceId: sourceId,
+      threadId: threadId,
+      imageHeaderBuilder: imageHeaderBuilder,
+      imageCacheOwnerId: imageCacheOwnerId,
+      buildAsync: false,
+      enableCaching: false,
+    );
+  }
+
+  void _completeHeight(int token, double height) {
+    if (_pendingToken != token || _pending == null || _pending!.isCompleted) {
+      return;
+    }
+    final completer = _pending!;
+    _pending = null;
+    _pendingToken = null;
+    completer.complete(NovelReaderPaginationMeasureResult(height: height));
+  }
+
+  void _completeError(int token, Object error, [StackTrace? stack]) {
+    if (_pendingToken != token || _pending == null || _pending!.isCompleted) {
+      return;
+    }
+    final completer = _pending!;
+    _pending = null;
+    _pendingToken = null;
+    completer.completeError(error, stack);
+  }
+
+  @override
+  Future<void> dispose() async {
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
+    final pending = _pending;
+    if (pending != null && !pending.isCompleted) {
+      _completeError(
+        _pendingToken ?? -1,
+        const NovelReaderPaginationException(
+          code: 'measurementSessionDisposed',
+          message: 'The pagination measurement session has been disposed.',
         ),
       );
-    } finally {
-      removeEntry();
     }
+    _entry?.remove();
+    _entry = null;
+    await _tail;
+  }
+}
+
+class _NovelReaderPaginationMeasureHost extends StatefulWidget {
+  const _NovelReaderPaginationMeasureHost({
+    super.key,
+    required this.initialRequest,
+    required this.initialToken,
+    required this.onMeasured,
+    required this.childBuilder,
+  });
+
+  final NovelReaderPaginationMeasureRequest initialRequest;
+  final int initialToken;
+  final void Function(int token, double height) onMeasured;
+  final Widget Function(NovelReaderPaginationMeasureRequest request)
+  childBuilder;
+
+  @override
+  State<_NovelReaderPaginationMeasureHost> createState() =>
+      _NovelReaderPaginationMeasureHostState();
+}
+
+class _NovelReaderPaginationMeasureHostState
+    extends State<_NovelReaderPaginationMeasureHost> {
+  late NovelReaderPaginationMeasureRequest _request = widget.initialRequest;
+  late int _token = widget.initialToken;
+
+  void submit({
+    required NovelReaderPaginationMeasureRequest request,
+    required int token,
+  }) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _request = request;
+      _token = token;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _NovelReaderPaginationMeasureProbe(
+      key: ValueKey<int>(_token),
+      onMeasured: (height) => widget.onMeasured(_token, height),
+      child: widget.childBuilder(_request),
+    );
   }
 }
 
 class _NovelReaderPaginationMeasureProbe extends StatefulWidget {
   const _NovelReaderPaginationMeasureProbe({
+    super.key,
     required this.onMeasured,
     required this.child,
   });
@@ -173,6 +541,56 @@ class _NovelReaderPaginationMeasureProbeState
     _reported = true;
     widget.onMeasured(renderObject.size.height);
   }
+}
+
+final class _MeasureCacheKey {
+  const _MeasureCacheKey({
+    required this.layoutIdentity,
+    required this.episodeId,
+    required this.atomId,
+    required this.startOffset,
+    required this.endOffset,
+    required this.html,
+  });
+
+  factory _MeasureCacheKey.from(NovelReaderPaginationMeasureRequest request) {
+    return _MeasureCacheKey(
+      layoutIdentity: request.key.cacheIdentity,
+      episodeId: request.chapter.episodeId,
+      atomId: request.atomId ?? '',
+      startOffset: request.startOffset ?? -1,
+      endOffset: request.endOffset ?? -1,
+      html: request.html,
+    );
+  }
+
+  final String layoutIdentity;
+  final String episodeId;
+  final String atomId;
+  final int startOffset;
+  final int endOffset;
+  final String html;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _MeasureCacheKey &&
+        other.layoutIdentity == layoutIdentity &&
+        other.episodeId == episodeId &&
+        other.atomId == atomId &&
+        other.startOffset == startOffset &&
+        other.endOffset == endOffset &&
+        other.html == html;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    layoutIdentity,
+    episodeId,
+    atomId,
+    startOffset,
+    endOffset,
+    html,
+  );
 }
 
 class NovelReaderPaginationException implements Exception {

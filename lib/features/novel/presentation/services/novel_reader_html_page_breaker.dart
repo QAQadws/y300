@@ -25,13 +25,20 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   NovelReaderHtmlPageBreaker({
     required NovelReaderPaginationMeasureAdapter measureAdapter,
     this.atomExtractor = const NovelReaderPaginationAtomExtractor(),
+    NovelReaderPaginationMeasureSessionFactory? measureSessionFactory,
+    this.measureCacheCapacity = 512,
     this.maxMeasurements = 4096,
     this.maxPages = 5000,
     this.maxSplitSearchIterations = 12,
     this.cooperativeYieldInterval = 32,
-  }) : _measureAdapter = measureAdapter;
+  }) : _measureSessionFactory =
+           measureSessionFactory ??
+           (measureAdapter is NovelReaderPaginationMeasureSessionFactory
+               ? measureAdapter as NovelReaderPaginationMeasureSessionFactory
+               : NovelReaderAdapterMeasureSessionFactory(measureAdapter));
 
-  final NovelReaderPaginationMeasureAdapter _measureAdapter;
+  final NovelReaderPaginationMeasureSessionFactory _measureSessionFactory;
+  final int measureCacheCapacity;
   final NovelReaderPaginationAtomExtractor atomExtractor;
   final int maxMeasurements;
   final int maxPages;
@@ -41,11 +48,13 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   late NovelReaderPreparedChapter _chapter;
   late NovelReaderPaginationKey _key;
   int _measurementCount = 0;
+  int _measurementCacheHitCount = 0;
   Duration _measurementDuration = Duration.zero;
   List<NovelReaderPaginationMeasurementSample> _measurementSamples =
       <NovelReaderPaginationMeasurementSample>[];
   _PageBuffer? _buffer;
   List<NovelReaderPageFragment> _pages = <NovelReaderPageFragment>[];
+  late NovelReaderPaginationMeasureSession _measureSession;
 
   @override
   Future<NovelReaderPaginationPlan> paginate(
@@ -56,28 +65,43 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
     _chapter = chapter;
     _key = key;
     _measurementCount = 0;
+    _measurementCacheHitCount = 0;
     _measurementDuration = Duration.zero;
     _measurementSamples = <NovelReaderPaginationMeasurementSample>[];
     _buffer = null;
     _pages = <NovelReaderPageFragment>[];
     final atoms = atomExtractor.extract(chapter);
     final atomKindCounts = <NovelReaderPaginationAtomKind, int>{};
-
-    for (final atom in atoms) {
-      atomKindCounts.update(atom.kind, (value) => value + 1, ifAbsent: () => 1);
-      await _appendAtom(atom);
-    }
-    _flushBuffer(gapReason: NovelReaderPageGapReason.naturalEnd);
-    return NovelReaderPaginationPlan(
-      key: key,
-      episodeId: chapter.episodeId,
-      pages: _pages,
-      atomCount: atoms.length,
-      measurementCount: _measurementCount,
-      measurementDuration: _measurementDuration,
-      atomKindCounts: atomKindCounts,
-      measurementSamples: _measurementSamples,
+    final session = NovelReaderCachingPaginationMeasureSession(
+      delegate: _measureSessionFactory.create(chapter: chapter, key: key),
+      cache: NovelReaderPaginationMeasureCache(capacity: measureCacheCapacity),
     );
+    _measureSession = session;
+
+    try {
+      for (final atom in atoms) {
+        atomKindCounts.update(
+          atom.kind,
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        );
+        await _appendAtom(atom);
+      }
+      _flushBuffer(gapReason: NovelReaderPageGapReason.naturalEnd);
+      return NovelReaderPaginationPlan(
+        key: key,
+        episodeId: chapter.episodeId,
+        pages: _pages,
+        atomCount: atoms.length,
+        measurementCount: _measurementCount,
+        measurementCacheHitCount: _measurementCacheHitCount,
+        measurementDuration: _measurementDuration,
+        atomKindCounts: atomKindCounts,
+        measurementSamples: _measurementSamples,
+      );
+    } finally {
+      await session.dispose();
+    }
   }
 
   void _validateInput(
@@ -98,6 +122,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
       );
     }
     if (maxMeasurements <= 0 ||
+        measureCacheCapacity <= 0 ||
         maxPages <= 0 ||
         maxSplitSearchIterations <= 0) {
       throw const NovelReaderPaginationException(
@@ -242,15 +267,21 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
     }
     final candidate = '${_buffer?.html ?? ''}${piece.html}';
     final stopwatch = Stopwatch()..start();
-    final result = await _measureAdapter.measure(
+    final result = await _measureSession.measure(
       NovelReaderPaginationMeasureRequest(
         html: candidate,
         chapter: _chapter,
         key: _key,
+        atomId: piece.atomId,
+        startOffset: piece.startOffset,
+        endOffset: piece.endOffset,
       ),
     );
     stopwatch.stop();
     _measurementDuration += stopwatch.elapsed;
+    if (result.fromCache) {
+      _measurementCacheHitCount += 1;
+    }
     if (_measurementSamples.length < 64) {
       _measurementSamples.add(
         NovelReaderPaginationMeasurementSample(
@@ -258,6 +289,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
           atomKind: piece.atomKind,
           height: result.height,
           duration: stopwatch.elapsed,
+          fromCache: result.fromCache,
         ),
       );
     }
@@ -331,6 +363,8 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
       atomId: atom.atomId,
       atomKind: atom.kind,
       html: html,
+      startOffset: start,
+      endOffset: end,
       startAnchor: atom.startAnchor.copyWith(
         textOffset: baseOffset + start,
         pageIndex: 0,
@@ -365,6 +399,8 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
         atomId: piece.atomId,
         atomKind: piece.atomKind,
         html: piece.html,
+        startOffset: piece.startOffset,
+        endOffset: piece.endOffset,
         startAnchor: piece.startAnchor,
         endAnchor: piece.endAnchor,
         imageIndices: piece.imageIndices,
@@ -524,6 +560,8 @@ class _PagePiece {
     required this.atomId,
     required this.atomKind,
     required this.html,
+    required this.startOffset,
+    required this.endOffset,
     required this.startAnchor,
     required this.endAnchor,
     required this.imageIndices,
@@ -533,6 +571,8 @@ class _PagePiece {
   final String atomId;
   final NovelReaderPaginationAtomKind atomKind;
   final String html;
+  final int startOffset;
+  final int endOffset;
   final NovelReaderTextAnchor startAnchor;
   final NovelReaderTextAnchor endAnchor;
   final List<int> imageIndices;

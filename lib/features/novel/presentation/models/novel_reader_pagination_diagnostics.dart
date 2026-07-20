@@ -16,6 +16,7 @@ class NovelReaderPaginationDiagnostics {
     required this.flowUnitCount,
     this.atomCount = 0,
     this.measurementCount = 0,
+    this.measurementCacheHitCount = 0,
     this.measurementDuration = Duration.zero,
     this.availableHeight = 0,
     this.averageTextPageFullness = 0,
@@ -48,6 +49,7 @@ class NovelReaderPaginationDiagnostics {
   final int flowUnitCount;
   final int atomCount;
   final int measurementCount;
+  final int measurementCacheHitCount;
   final Duration measurementDuration;
   final double availableHeight;
   final double averageTextPageFullness;
@@ -64,7 +66,8 @@ class NovelReaderPaginationDiagnostics {
         'reflows=$reflowCount, unknownImageDimensions='
         '$unknownImageDimensionCount, overflowPages=$overflowPageCount, '
         'cacheHit=$cacheHit, flowUnits=$flowUnitCount, atoms=$atomCount, '
-        'measurements=$measurementCount, measurementMs='
+        'measurements=$measurementCount, measurementCacheHits='
+        '$measurementCacheHitCount, measurementMs='
         '${measurementDuration.inMilliseconds}, averageTextFullness='
         '${averageTextPageFullness.toStringAsFixed(2)}, '
         'lowFullnessPages=$lowFullnessPageCount, gapReasons='

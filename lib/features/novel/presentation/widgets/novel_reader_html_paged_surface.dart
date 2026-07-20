@@ -366,6 +366,7 @@ class _NovelReaderHtmlPagedSurfaceState
               flowUnitCount: prepared.flowUnits.length,
               atomCount: plan.atomCount,
               measurementCount: plan.measurementCount,
+              measurementCacheHitCount: plan.measurementCacheHitCount,
               measurementDuration: plan.measurementDuration,
               availableHeight: key.viewportHeightPx.toDouble(),
               averageTextPageFullness: plan.averageTextPageFullness,

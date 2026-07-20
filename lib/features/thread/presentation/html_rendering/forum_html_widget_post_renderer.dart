@@ -25,6 +25,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     required this.theme,
     this.callbacks = const ForumHtmlRenderCallbacks(),
     this.preferences,
+    this.buildAsync,
+    this.enableCaching,
     this.sourceId,
     this.threadId,
     this.imageHeaderBuilder,
@@ -43,6 +45,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ForumHtmlThemeContext theme;
   final ForumHtmlRenderCallbacks callbacks;
   final ForumHtmlReaderPreferences? preferences;
+  final bool? buildAsync;
+  final bool? enableCaching;
   final String? sourceId;
   final String? threadId;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
@@ -93,6 +97,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       preparedHtml,
       key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
       baseUrl: forumBaseUri,
+      buildAsync: buildAsync,
       customStylesBuilder: stylePolicy.customStylesFor,
       customWidgetBuilder: (element) => _buildCustomWidget(
         element,
@@ -101,6 +106,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
         document,
       ),
       factoryBuilder: _cachedImageFactoryBuilder(),
+      enableCaching: enableCaching,
       renderMode: RenderMode.column,
       textStyle: stylePolicy.baseTextStyle(context),
       onTapUrl: callbacks.onTapUrl,
@@ -162,6 +168,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           theme: theme,
           callbacks: callbacks,
           preferences: resolvedPreferences,
+          buildAsync: buildAsync,
+          enableCaching: enableCaching,
           sourceId: sourceId,
           threadId: threadId,
           imageHeaderBuilder: imageHeaderBuilder,

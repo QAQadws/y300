@@ -11,12 +11,14 @@ class NovelReaderPaginationMeasurementSample {
     required this.atomKind,
     required this.height,
     required this.duration,
+    this.fromCache = false,
   });
 
   final String atomId;
   final NovelReaderPaginationAtomKind atomKind;
   final double height;
   final Duration duration;
+  final bool fromCache;
 }
 
 @immutable
@@ -27,6 +29,7 @@ class NovelReaderPaginationPlan {
     required List<NovelReaderPageFragment> pages,
     this.atomCount = 0,
     this.measurementCount = 0,
+    this.measurementCacheHitCount = 0,
     this.measurementDuration = Duration.zero,
     Map<NovelReaderPaginationAtomKind, int> atomKindCounts =
         const <NovelReaderPaginationAtomKind, int>{},
@@ -46,6 +49,7 @@ class NovelReaderPaginationPlan {
   final List<NovelReaderPageFragment> pages;
   final int atomCount;
   final int measurementCount;
+  final int measurementCacheHitCount;
   final Duration measurementDuration;
   final Map<NovelReaderPaginationAtomKind, int> atomKindCounts;
   final List<NovelReaderPaginationMeasurementSample> measurementSamples;
