@@ -1,6 +1,6 @@
 # 小说阅读器 HTML-first 混合分页分阶段实施方案
 
-> 状态：Phase 0/1 已完成（2026-07-21）；Phase 2-6 待实施
+> 状态：Phase 0-2 已完成（2026-07-21）；Phase 3-6 待实施
 >
 > 编写日期：2026-07-20
 >
@@ -746,6 +746,9 @@ final class NovelReaderPaginationProgress {
 验收：嵌套 font 继承正确；`font size=3..6` 不被重复解释；颜色和背景色在 light/sepia/dark 下与 renderer policy 一致；ruby、表格、折叠、图片和未知字体不进入普通 safe path。
 
 ### Phase 2：TextPainter 纯文本分页器
+
+> 实施状态：已完成（2026-07-21）。纯文本引擎和进程内 metrics cache
+> 已落地；生产 planner 接入仍按阶段边界留给 Phase 4。
 
 目标：消除普通文字的候选 HTML 二分测量。
 
