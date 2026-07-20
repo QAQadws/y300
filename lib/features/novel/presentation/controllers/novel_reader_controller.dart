@@ -388,6 +388,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       pageIndex: position.pageIndex,
       pageCount: position.pageCount,
       paginationKey: position.paginationKey,
+      isPageCountFinal: position.isPageCountFinal,
       anchorNodeId: position.anchor.nodeId,
       anchorTextOffset: position.anchor.textOffset,
     );

@@ -157,6 +157,7 @@ class NovelReaderProgressPolicy {
     required int pageIndex,
     required int pageCount,
     required String paginationKey,
+    bool isPageCountFinal = true,
     String? anchorNodeId,
     int anchorTextOffset = 0,
   }) {
@@ -186,7 +187,7 @@ class NovelReaderProgressPolicy {
       anchorNodeId: _normalizeAnchor(anchorNodeId),
       anchorTextOffset: math.max(0, anchorTextOffset).toInt(),
       paginationKey: normalizedKey,
-      progressPercent: safePageCount <= 1
+      progressPercent: !isPageCountFinal || safePageCount <= 1
           ? 0
           : safePageIndex / (safePageCount - 1),
     );

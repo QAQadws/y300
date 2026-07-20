@@ -12,6 +12,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navi
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_diagnostics.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
@@ -116,7 +117,7 @@ class _NovelReaderHtmlPagedSurfaceState
   Object? _prepareSignature;
   NovelReaderPaginationCoordinator? _coordinator;
   Object? _coordinatorSignature;
-  Future<NovelReaderPaginationPlan>? _planFuture;
+  Stream<NovelReaderPaginationProgress>? _planStream;
   NovelReaderPaginationKey? _planKey;
   NovelReaderPaginationCache? _ownedCache;
   NovelReaderPaginationMeasureCache? _ownedMeasureCache;
@@ -124,6 +125,9 @@ class _NovelReaderHtmlPagedSurfaceState
   Duration _preparationDuration = Duration.zero;
   int _layoutGeneration = 0;
   String? _lastUnavailableNavigationKey;
+  String? _recordedDiagnosticsKey;
+  Stopwatch? _layoutStopwatch;
+  bool _layoutCacheHit = false;
 
   @override
   void initState() {
@@ -224,17 +228,18 @@ class _NovelReaderHtmlPagedSurfaceState
                   bottomChromeInset,
                 ),
               );
-              final planFuture = _ensurePlanFuture(
+              final planStream = _ensurePlanStream(
                 context: context,
                 prepared: prepared,
                 key: key,
                 htmlPreferences: htmlPreferences,
               );
-              return FutureBuilder<NovelReaderPaginationPlan>(
+              return StreamBuilder<NovelReaderPaginationProgress>(
                 key: ValueKey<NovelReaderPaginationKey>(key),
-                future: planFuture,
+                stream: planStream,
                 builder: (context, planSnapshot) {
-                  final plan = planSnapshot.data;
+                  final progress = planSnapshot.data;
+                  final plan = progress?.plan;
                   if (plan == null) {
                     if (planSnapshot.hasError) {
                       return _NovelReaderPaginationFailureView(
@@ -251,6 +256,14 @@ class _NovelReaderHtmlPagedSurfaceState
                     );
                   }
                   if (plan.pages.isEmpty) {
+                    if (progress?.isComplete != true) {
+                      return const _NovelReaderPaginationStateView(
+                        key: Key('novel-reader-paged-layout-loading'),
+                        icon: Icons.view_agenda_outlined,
+                        message: '正在计算分页布局',
+                        showProgress: true,
+                      );
+                    }
                     return const _NovelReaderPaginationStateView(
                       key: Key('novel-reader-paged-empty'),
                       icon: Icons.article_outlined,
@@ -258,10 +271,17 @@ class _NovelReaderHtmlPagedSurfaceState
                     );
                   }
                   final requestedPage = _requestedPageFor(plan);
-                  _scheduleUnavailableNavigationIfNeeded(
-                    plan: plan,
-                    requestedPage: requestedPage,
-                  );
+                  if (progress?.isComplete == true) {
+                    _scheduleDiagnostics(
+                      plan: plan,
+                      prepared: prepared,
+                      key: key,
+                    );
+                    _scheduleUnavailableNavigationIfNeeded(
+                      plan: plan,
+                      requestedPage: requestedPage,
+                    );
+                  }
                   return Padding(
                     key: const Key('novel-reader-paged-surface'),
                     padding: EdgeInsets.fromLTRB(
@@ -277,6 +297,7 @@ class _NovelReaderHtmlPagedSurfaceState
                         child: _NovelReaderPagedPageView(
                           key: ValueKey<String>(plan.key.cacheIdentity),
                           plan: plan,
+                          isPageCountFinal: progress?.isComplete == true,
                           initialPage:
                               requestedPage ??
                               widget.restorePolicy.resolveInitialPage(
@@ -319,14 +340,14 @@ class _NovelReaderHtmlPagedSurfaceState
     );
   }
 
-  Future<NovelReaderPaginationPlan> _ensurePlanFuture({
+  Stream<NovelReaderPaginationProgress> _ensurePlanStream({
     required BuildContext context,
     required NovelReaderPreparedChapter prepared,
     required NovelReaderPaginationKey key,
     required ForumHtmlReaderPreferences htmlPreferences,
   }) {
-    if (_planKey == key && _planFuture != null) {
-      return _planFuture!;
+    if (_planKey == key && _planStream != null) {
+      return _planStream!;
     }
     if (_planKey != null && _planKey != key) {
       _coordinator?.cancelPending();
@@ -361,73 +382,79 @@ class _NovelReaderHtmlPagedSurfaceState
     }
     _planKey = key;
     _layoutGeneration += 1;
-    final cacheHit = _coordinator!.isCached(key);
-    final stopwatch = Stopwatch()..start();
-    final planFuture = _coordinator!.paginate(chapter: prepared, key: key);
-    _planFuture = planFuture;
-    unawaited(
-      planFuture.then<void>(
-        (plan) {
-          stopwatch.stop();
-          if (!mounted || _planKey != key) {
-            return;
-          }
-          widget.diagnosticsSink.record(
-            NovelReaderPaginationDiagnostics(
-              episodeId: plan.episodeId,
-              paginationKey: key.layoutFingerprint,
-              pageCount: plan.pageCount,
-              layoutDuration: stopwatch.elapsed,
-              reflowCount: _layoutGeneration - 1,
-              unknownImageDimensionCount: prepared
-                  .renderDocument
-                  .sequence
-                  .entries
-                  .where(
-                    (entry) =>
-                        entry.htmlWidth == null || entry.htmlHeight == null,
-                  )
-                  .length,
-              overflowPageCount: plan.pages
-                  .where((page) => page.hasOverflow)
-                  .length,
-              cacheHit: cacheHit,
-              flowUnitCount: prepared.flowUnits.length,
-              atomCount: plan.atomCount,
-              measurementCount: plan.measurementCount,
-              measurementCacheHitCount: plan.measurementCacheHitCount,
-              measurementDuration: plan.measurementDuration,
-              preparationDuration: _preparationDuration,
-              atomizationDuration: plan.atomizationDuration,
-              measureSessionCreateDuration: plan.measureSessionCreateDuration,
-              classificationDuration: plan.classificationDuration,
-              frameWaitCount: plan.frameWaitCount,
-              domSliceCount: plan.domSliceCount,
-              readableImageCount: plan.readableImageCount,
-              textFastPathCount: plan.textFastPathCount,
-              rendererValidationCount: plan.rendererValidationCount,
-              rendererValidationMismatchCount:
-                  plan.rendererValidationMismatchCount,
-              textLayoutCount: plan.textLayoutCount,
-              complexBlockCount: plan.complexBlockCount,
-              safeTextFallbackCount: plan.safeTextFallbackCount,
-              availableHeight: key.viewportHeightPx.toDouble(),
-              averageTextPageFullness: plan.averageTextPageFullness,
-              lowFullnessPageCount: plan.lowFullnessPageCount,
-              gapReasonCounts: plan.gapReasonCounts,
-              atomKindCounts: plan.atomKindCounts,
-              routeCounts: plan.routeCounts,
-              routeReasonCounts: plan.routeReasonCounts,
-              measurementSamples: plan.measurementSamples,
-            ),
-          );
-        },
-        onError: (Object error, StackTrace stack) {
-          stopwatch.stop();
-        },
-      ),
+    _layoutCacheHit = _coordinator!.isCached(key);
+    _layoutStopwatch = Stopwatch()..start();
+    _recordedDiagnosticsKey = null;
+    _planStream = _coordinator!.paginateIncrementally(
+      chapter: prepared,
+      key: key,
     );
-    return _planFuture!;
+    return _planStream!;
+  }
+
+  void _scheduleDiagnostics({
+    required NovelReaderPaginationPlan plan,
+    required NovelReaderPreparedChapter prepared,
+    required NovelReaderPaginationKey key,
+  }) {
+    final diagnosticsKey = key.cacheIdentity;
+    if (_recordedDiagnosticsKey == diagnosticsKey) {
+      return;
+    }
+    _recordedDiagnosticsKey = diagnosticsKey;
+    final stopwatch = _layoutStopwatch;
+    if (stopwatch?.isRunning == true) {
+      stopwatch!.stop();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _planKey != key) {
+        return;
+      }
+      widget.diagnosticsSink.record(
+        NovelReaderPaginationDiagnostics(
+          episodeId: plan.episodeId,
+          paginationKey: key.layoutFingerprint,
+          pageCount: plan.pageCount,
+          layoutDuration: stopwatch?.elapsed ?? Duration.zero,
+          reflowCount: _layoutGeneration - 1,
+          unknownImageDimensionCount: prepared.renderDocument.sequence.entries
+              .where(
+                (entry) => entry.htmlWidth == null || entry.htmlHeight == null,
+              )
+              .length,
+          overflowPageCount: plan.pages
+              .where((page) => page.hasOverflow)
+              .length,
+          cacheHit: _layoutCacheHit,
+          flowUnitCount: prepared.flowUnits.length,
+          atomCount: plan.atomCount,
+          measurementCount: plan.measurementCount,
+          measurementCacheHitCount: plan.measurementCacheHitCount,
+          measurementDuration: plan.measurementDuration,
+          preparationDuration: _preparationDuration,
+          atomizationDuration: plan.atomizationDuration,
+          measureSessionCreateDuration: plan.measureSessionCreateDuration,
+          classificationDuration: plan.classificationDuration,
+          frameWaitCount: plan.frameWaitCount,
+          domSliceCount: plan.domSliceCount,
+          readableImageCount: plan.readableImageCount,
+          textFastPathCount: plan.textFastPathCount,
+          rendererValidationCount: plan.rendererValidationCount,
+          rendererValidationMismatchCount: plan.rendererValidationMismatchCount,
+          textLayoutCount: plan.textLayoutCount,
+          complexBlockCount: plan.complexBlockCount,
+          safeTextFallbackCount: plan.safeTextFallbackCount,
+          availableHeight: key.viewportHeightPx.toDouble(),
+          averageTextPageFullness: plan.averageTextPageFullness,
+          lowFullnessPageCount: plan.lowFullnessPageCount,
+          gapReasonCounts: plan.gapReasonCounts,
+          atomKindCounts: plan.atomKindCounts,
+          routeCounts: plan.routeCounts,
+          routeReasonCounts: plan.routeReasonCounts,
+          measurementSamples: plan.measurementSamples,
+        ),
+      );
+    });
   }
 
   NovelReaderPaginationCoordinator _defaultCoordinator({
@@ -513,7 +540,7 @@ class _NovelReaderHtmlPagedSurfaceState
     );
     _coordinator = null;
     _coordinatorSignature = null;
-    _planFuture = null;
+    _planStream = null;
     _planKey = null;
   }
 
@@ -549,7 +576,7 @@ class _NovelReaderHtmlPagedSurfaceState
     setState(() {
       _prepareFuture = null;
       _prepareSignature = null;
-      _planFuture = null;
+      _planStream = null;
       _planKey = null;
     });
   }
@@ -560,7 +587,7 @@ class _NovelReaderHtmlPagedSurfaceState
     }
     _coordinator?.clear();
     setState(() {
-      _planFuture = null;
+      _planStream = null;
       _planKey = null;
     });
   }
@@ -600,6 +627,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   const _NovelReaderPagedPageView({
     super.key,
     required this.plan,
+    required this.isPageCountFinal,
     required this.initialPage,
     this.navigationRequest,
     this.targetPage,
@@ -620,6 +648,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   });
 
   final NovelReaderPaginationPlan plan;
+  final bool isPageCountFinal;
   final int initialPage;
   final NovelReaderAnchorNavigationRequest? navigationRequest;
   final int? targetPage;
@@ -647,6 +676,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   late final PageController _pageController;
   int _currentPage = 0;
   bool _reportedInitialPage = false;
+  bool _hasUserNavigated = false;
 
   @override
   void initState() {
@@ -667,6 +697,23 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   @override
   void didUpdateWidget(covariant _NovelReaderPagedPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isPageCountFinal && widget.isPageCountFinal) {
+      final restoredPage = widget.initialPage
+          .clamp(0, math.max(0, widget.plan.pageCount - 1))
+          .toInt();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        if (!_hasUserNavigated && restoredPage != _currentPage) {
+          _pageController.jumpToPage(restoredPage);
+          setState(() {
+            _currentPage = restoredPage;
+          });
+        }
+        _emitPosition(_currentPage);
+      });
+    }
     final oldRequestId = oldWidget.navigationRequest?.requestId;
     final newRequestId = widget.navigationRequest?.requestId;
     if (oldRequestId == newRequestId || widget.targetPage == null) {
@@ -690,14 +737,15 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   @override
   Widget build(BuildContext context) {
     final pageCount = widget.plan.pageCount;
+    final totalPageLabel = widget.isPageCountFinal ? '$pageCount 页' : '计算中';
     return Semantics(
       key: const Key('novel-reader-paged-semantics'),
       container: true,
       explicitChildNodes: true,
       liveRegion: true,
       label:
-          '${widget.episode.episodeTitle}，第 ${_currentPage + 1} 页，共 $pageCount 页',
-      value: '第 ${_currentPage + 1} 页，共 $pageCount 页',
+          '${widget.episode.episodeTitle}，第 ${_currentPage + 1} 页，共 $totalPageLabel',
+      value: '第 ${_currentPage + 1} 页，共 $totalPageLabel',
       increasedValue: _currentPage + 1 < pageCount
           ? '下一页，第 ${_currentPage + 2} 页'
           : null,
@@ -755,7 +803,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
                     vertical: 4,
                   ),
                   child: Text(
-                    '${_currentPage + 1} / $pageCount',
+                    '${_currentPage + 1} / ${widget.isPageCountFinal ? pageCount : '计算中'}',
                     key: const Key('novel-reader-page-indicator-text'),
                   ),
                 ),
@@ -771,6 +819,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       return;
     }
     _pageController.jumpToPage(index);
+    _hasUserNavigated = true;
     if (_currentPage != index) {
       setState(() {
         _currentPage = index;
@@ -782,6 +831,9 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   void _onPageChanged(int index) {
     if (!mounted || index < 0 || index >= widget.plan.pageCount) {
       return;
+    }
+    if (_reportedInitialPage && index != _currentPage) {
+      _hasUserNavigated = true;
     }
     setState(() {
       _currentPage = index;
@@ -803,6 +855,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         paginationKey: widget.plan.key.layoutFingerprint,
         pageIndex: index,
         pageCount: widget.plan.pageCount,
+        isPageCountFinal: widget.isPageCountFinal,
         anchor: page.startAnchor.copyWith(pageIndex: index),
       ),
     );

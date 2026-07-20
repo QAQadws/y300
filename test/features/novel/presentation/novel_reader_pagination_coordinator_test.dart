@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_page_breaker.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_incremental_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
@@ -87,6 +89,37 @@ void main() {
       expect(coordinator.cache.length, 0);
     },
   );
+
+  test('coalesces and replays incremental progress for the same key', () async {
+    final breaker = _IncrementalDelayedBreaker();
+    final coordinator = DefaultNovelReaderPaginationCoordinator(
+      pageBreaker: breaker,
+    );
+    final chapter = _prepared('episode');
+    final key = _key('episode');
+
+    final first = coordinator.paginateIncrementally(chapter: chapter, key: key);
+    final firstPartial = first.first;
+    breaker.emit(_progress('episode', isComplete: false));
+    expect((await firstPartial).isComplete, isFalse);
+
+    final second = coordinator.paginateIncrementally(
+      chapter: chapter,
+      key: key,
+    );
+    expect((await second.first).isComplete, isFalse);
+    expect(breaker.calls, 1);
+
+    final completed = coordinator
+        .paginateIncrementally(chapter: chapter, key: key)
+        .firstWhere((progress) => progress.isComplete);
+    breaker.emit(_progress('episode', isComplete: true));
+    await breaker.close();
+
+    expect((await completed).isComplete, isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(coordinator.cache.length, 1);
+  });
 }
 
 NovelReaderPreparedChapter _prepared(String episodeId) {
@@ -141,6 +174,18 @@ NovelReaderPaginationPlan _plan(String episodeId) {
   );
 }
 
+NovelReaderPaginationProgress _progress(
+  String episodeId, {
+  required bool isComplete,
+}) {
+  return NovelReaderPaginationProgress(
+    plan: _plan(episodeId),
+    isComplete: isComplete,
+    processedAtomCount: isComplete ? 1 : 0,
+    totalAtomCount: 1,
+  );
+}
+
 class _DelayedBreaker implements NovelReaderPageBreaker {
   final Completer<NovelReaderPaginationPlan> completer =
       Completer<NovelReaderPaginationPlan>();
@@ -181,4 +226,39 @@ class _CancellableDelayedBreaker
   }
 
   void complete(NovelReaderPaginationPlan plan) => completer.complete(plan);
+}
+
+class _IncrementalDelayedBreaker
+    implements NovelReaderPageBreaker, NovelReaderIncrementalPaginationPlanner {
+  final StreamController<NovelReaderPaginationProgress> _controller =
+      StreamController<NovelReaderPaginationProgress>();
+  int calls = 0;
+
+  @override
+  Future<NovelReaderPaginationPlan> paginate(
+    NovelReaderPreparedChapter chapter,
+    NovelReaderPaginationKey key,
+  ) async {
+    return (await planIncrementally(
+      chapter: chapter,
+      key: key,
+      cancellationToken: NovelReaderPaginationCancellationToken(),
+    ).firstWhere((progress) => progress.isComplete)).plan;
+  }
+
+  @override
+  Stream<NovelReaderPaginationProgress> planIncrementally({
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+    required NovelReaderPaginationCancellationToken cancellationToken,
+  }) {
+    calls += 1;
+    return _controller.stream;
+  }
+
+  void emit(NovelReaderPaginationProgress progress) {
+    _controller.add(progress);
+  }
+
+  Future<void> close() => _controller.close();
 }

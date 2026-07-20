@@ -4,12 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_text_run.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_block_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_page_breaker.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_incremental_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_classifier.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
@@ -32,6 +35,7 @@ abstract interface class NovelReaderHybridPaginationPlanner {
 final class DefaultNovelReaderHybridPaginationPlanner
     implements
         NovelReaderHybridPaginationPlanner,
+        NovelReaderIncrementalPaginationPlanner,
         NovelReaderPageBreaker,
         NovelReaderIsolatedPageBreakerFactory,
         NovelReaderCancellablePageBreaker {
@@ -112,6 +116,59 @@ final class DefaultNovelReaderHybridPaginationPlanner
     required NovelReaderPreparedChapter chapter,
     required NovelReaderPaginationKey key,
     required NovelReaderPaginationCancellationToken cancellationToken,
+  }) {
+    return _plan(
+      chapter: chapter,
+      key: key,
+      cancellationToken: cancellationToken,
+    );
+  }
+
+  @override
+  Stream<NovelReaderPaginationProgress> planIncrementally({
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+    required NovelReaderPaginationCancellationToken cancellationToken,
+  }) {
+    late final StreamController<NovelReaderPaginationProgress> controller;
+    controller = StreamController<NovelReaderPaginationProgress>(
+      onListen: () {
+        unawaited(
+          _plan(
+            chapter: chapter,
+            key: key,
+            cancellationToken: cancellationToken,
+            onProgress: (progress) async {
+              if (!controller.isClosed) {
+                controller.add(progress);
+                await Future<void>.delayed(Duration.zero);
+              }
+            },
+          ).then<void>(
+            (_) async {
+              if (!controller.isClosed) {
+                await controller.close();
+              }
+            },
+            onError: (Object error, StackTrace stackTrace) async {
+              if (!controller.isClosed) {
+                controller.addError(error, stackTrace);
+                await controller.close();
+              }
+            },
+          ),
+        );
+      },
+      onCancel: cancellationToken.cancel,
+    );
+    return controller.stream;
+  }
+
+  Future<NovelReaderPaginationPlan> _plan({
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+    required NovelReaderPaginationCancellationToken cancellationToken,
+    Future<void> Function(NovelReaderPaginationProgress progress)? onProgress,
   }) async {
     _validateInput(chapter, key);
     cancellationToken.throwIfCancelled();
@@ -178,6 +235,58 @@ final class DefaultNovelReaderHybridPaginationPlanner
     var rendererValidationMismatchCount = 0;
     var domSliceCount = 0;
     var safePageOrdinal = 0;
+    var processedAtomCount = 0;
+    var publishedPageCount = 0;
+
+    NovelReaderPaginationPlan snapshotPlan(
+      List<NovelReaderPageFragment> pages,
+    ) {
+      return NovelReaderPaginationPlan(
+        key: key,
+        episodeId: chapter.episodeId,
+        pages: pages,
+        atomCount: atoms.length,
+        measurementCount: session.measurementCount,
+        measurementCacheHitCount: session.cacheHitCount,
+        measurementDuration: session.measurementDuration,
+        atomizationDuration: atomizationStopwatch.elapsed,
+        measureSessionCreateDuration: sessionStopwatch.elapsed,
+        classificationDuration: classificationStopwatch.elapsed,
+        frameWaitCount: session.frameWaitCount,
+        domSliceCount: domSliceCount,
+        readableImageCount: chapter.renderDocument.sequence.entries.length,
+        textFastPathCount: textFastPathCount,
+        rendererValidationCount: rendererValidationCount,
+        rendererValidationMismatchCount: rendererValidationMismatchCount,
+        textLayoutCount: textLayoutCount,
+        complexBlockCount: complexBlockCount,
+        safeTextFallbackCount: safeTextFallbackCount,
+        atomKindCounts: atomKinds,
+        routeCounts: routes,
+        routeReasonCounts: routeReasons,
+        measurementSamples: session.samples,
+      );
+    }
+
+    Future<void> publishFinalPages({bool isComplete = false}) async {
+      if (onProgress == null) {
+        return;
+      }
+      cancellationToken.throwIfCancelled();
+      final pages = composer.pages;
+      if (!isComplete && pages.length <= publishedPageCount) {
+        return;
+      }
+      publishedPageCount = pages.length;
+      await onProgress(
+        NovelReaderPaginationProgress(
+          plan: snapshotPlan(pages),
+          isComplete: isComplete,
+          processedAtomCount: processedAtomCount,
+          totalAtomCount: atoms.length,
+        ),
+      );
+    }
 
     try {
       for (final classified in classifiedAtoms) {
@@ -296,6 +405,8 @@ final class DefaultNovelReaderHybridPaginationPlanner
                   measurer: complexMeasurer,
                 );
                 composer.appendComplexBlock(fallback, block);
+                processedAtomCount += 1;
+                await publishFinalPages();
                 continue;
               }
               accepted = backed;
@@ -308,6 +419,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
                   gapReason: NovelReaderPageGapReason.algorithmBoundary,
                 );
               }
+              await publishFinalPages();
             }
             textFastPathCount += accepted.chunks.length;
             safePageOrdinal += accepted.chunks.length;
@@ -326,6 +438,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
               atom: classified,
               measuredHeight: measured.height,
             );
+            await publishFinalPages();
           case NovelReaderPaginationRoute.rubyInline:
           case NovelReaderPaginationRoute.collapseBlock:
           case NovelReaderPaginationRoute.tableBlock:
@@ -338,35 +451,16 @@ final class DefaultNovelReaderHybridPaginationPlanner
               measurer: complexMeasurer,
             );
             composer.appendComplexBlock(classified, block);
+            await publishFinalPages();
         }
+        processedAtomCount += 1;
+        await publishFinalPages();
       }
       cancellationToken.throwIfCancelled();
       final pages = composer.finish();
-      return NovelReaderPaginationPlan(
-        key: key,
-        episodeId: chapter.episodeId,
-        pages: pages,
-        atomCount: atoms.length,
-        measurementCount: session.measurementCount,
-        measurementCacheHitCount: session.cacheHitCount,
-        measurementDuration: session.measurementDuration,
-        atomizationDuration: atomizationStopwatch.elapsed,
-        measureSessionCreateDuration: sessionStopwatch.elapsed,
-        classificationDuration: classificationStopwatch.elapsed,
-        frameWaitCount: session.frameWaitCount,
-        domSliceCount: domSliceCount,
-        readableImageCount: chapter.renderDocument.sequence.entries.length,
-        textFastPathCount: textFastPathCount,
-        rendererValidationCount: rendererValidationCount,
-        rendererValidationMismatchCount: rendererValidationMismatchCount,
-        textLayoutCount: textLayoutCount,
-        complexBlockCount: complexBlockCount,
-        safeTextFallbackCount: safeTextFallbackCount,
-        atomKindCounts: atomKinds,
-        routeCounts: routes,
-        routeReasonCounts: routeReasons,
-        measurementSamples: session.samples,
-      );
+      final plan = snapshotPlan(pages);
+      await publishFinalPages(isComplete: true);
+      return plan;
     } finally {
       await session.dispose();
     }

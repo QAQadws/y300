@@ -9,6 +9,7 @@ class NovelReaderPaginationPosition {
     required this.pageIndex,
     required this.pageCount,
     required this.anchor,
+    this.isPageCountFinal = true,
   });
 
   final String episodeId;
@@ -16,4 +17,5 @@ class NovelReaderPaginationPosition {
   final int pageIndex;
   final int pageCount;
   final NovelReaderTextAnchor anchor;
+  final bool isPageCountFinal;
 }

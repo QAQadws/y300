@@ -1,6 +1,6 @@
 # 小说阅读器 HTML-first 混合分页分阶段实施方案
 
-> 状态：Phase 0-4 已完成（2026-07-21）；Phase 5-6 待实施
+> 状态：Phase 0-5 已完成（2026-07-21）；Phase 6 待实施
 >
 > 编写日期：2026-07-20
 >
@@ -798,6 +798,9 @@ final class NovelReaderPaginationProgress {
 验收：普通文字页 fullness 达标；低 fullness 有明确原因；mismatch 不产生空白假成功页；回退不删除进度、书签或正文。
 
 ### Phase 5：首屏优先和增量 plan
+
+> 实施状态：已完成（2026-07-21）。planner、coordinator 与 paged surface
+> 已改用稳定页快照流；仅发布 composer 已封口页面，完整 plan 仍是唯一可缓存结果。
 
 目标：避免长章节必须等完整 plan 才能开始阅读。
 

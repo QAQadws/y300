@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
@@ -183,6 +186,77 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('publishes only stable pages before the complete plan', () async {
+    final chapter = await _prepare(
+      '<p>${List<String>.filled(80, '增量分页正文 mixed 123。').join()}</p>',
+    );
+    final token = NovelReaderPaginationCancellationToken();
+
+    final events = await _planner(_RecordingMeasureAdapter())
+        .planIncrementally(
+          chapter: chapter,
+          key: _key(chapter, height: 120),
+          cancellationToken: token,
+        )
+        .toList();
+
+    expect(events.length, greaterThan(1));
+    expect(events.first.isComplete, isFalse);
+    expect(events.first.plan.pages, hasLength(1));
+    expect(events.last.isComplete, isTrue);
+    expect(events.last.processedAtomCount, events.last.totalAtomCount);
+    for (var index = 1; index < events.length; index += 1) {
+      final previous = events[index - 1].plan.pages;
+      final current = events[index].plan.pages;
+      expect(current.length, greaterThanOrEqualTo(previous.length));
+      expect(current.take(previous.length).toList(), previous);
+    }
+  });
+
+  test('incremental pagination stops publishing after cancellation', () async {
+    final chapter = await _prepare(
+      '<p>${List<String>.filled(80, '可取消的增量分页正文。').join()}</p>',
+    );
+    final token = NovelReaderPaginationCancellationToken();
+    final events = <NovelReaderPaginationProgress>[];
+    final done = Completer<void>();
+
+    _planner(_RecordingMeasureAdapter())
+        .planIncrementally(
+          chapter: chapter,
+          key: _key(chapter, height: 120),
+          cancellationToken: token,
+        )
+        .listen(
+          (progress) {
+            events.add(progress);
+            if (!progress.isComplete && !token.isCancelled) {
+              token.cancel();
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            expect(
+              error,
+              isA<NovelReaderPaginationException>().having(
+                (value) => value.code,
+                'code',
+                'paginationCancelled',
+              ),
+            );
+            done.complete();
+          },
+          onDone: () {
+            if (!done.isCompleted) {
+              done.complete();
+            }
+          },
+        );
+
+    await done.future;
+    expect(events, isNotEmpty);
+    expect(events.every((event) => !event.isComplete), isTrue);
   });
 }
 

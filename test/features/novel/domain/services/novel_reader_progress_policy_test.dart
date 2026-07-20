@@ -122,6 +122,23 @@ void main() {
     expect(snapshot.progressPercent, 0.5);
   });
 
+  test('incremental page count does not fabricate completion percent', () {
+    final snapshot = policy.pagedSnapshot(
+      novelId: 'novel:1',
+      episodeId: 'episode-1',
+      flowMode: NovelReaderFlowMode.pagedLtr,
+      pageIndex: 1,
+      pageCount: 2,
+      paginationKey: 'layout-v1',
+      isPageCountFinal: false,
+      anchorNodeId: 'paragraph-2',
+    );
+
+    expect(snapshot.pageIndex, 1);
+    expect(snapshot.anchorNodeId, 'paragraph-2');
+    expect(snapshot.progressPercent, 0);
+  });
+
   test(
     'paged progress can restore vertical position by percent after mode switch',
     () {
