@@ -1,5 +1,43 @@
 import 'package:flutter/material.dart';
 
+@immutable
+class ReaderChromeInsets {
+  const ReaderChromeInsets({
+    this.top = 0,
+    this.bottom = 0,
+    this.safeAreaBottom = 0,
+    this.pageIndicatorReservedHeight = 0,
+  }) : assert(top >= 0),
+       assert(bottom >= 0),
+       assert(safeAreaBottom >= 0),
+       assert(pageIndicatorReservedHeight >= 0);
+
+  const ReaderChromeInsets.zero() : this();
+
+  final double top;
+  final double bottom;
+  final double safeAreaBottom;
+  final double pageIndicatorReservedHeight;
+
+  double get topInset => top;
+
+  double get bottomInset =>
+      bottom + safeAreaBottom + pageIndicatorReservedHeight;
+
+  @override
+  bool operator ==(Object other) {
+    return other is ReaderChromeInsets &&
+        other.top == top &&
+        other.bottom == bottom &&
+        other.safeAreaBottom == safeAreaBottom &&
+        other.pageIndicatorReservedHeight == pageIndicatorReservedHeight;
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(top, bottom, safeAreaBottom, pageIndicatorReservedHeight);
+}
+
 class ReaderToolbarAction {
   const ReaderToolbarAction({
     required this.id,

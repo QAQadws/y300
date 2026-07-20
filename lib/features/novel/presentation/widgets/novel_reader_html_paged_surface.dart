@@ -24,6 +24,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -69,7 +70,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.restorePolicy = const NovelReaderPaginationRestorePolicy(),
     this.paginationCache,
     this.diagnosticsSink = const NovelReaderNoopPaginationDiagnosticsSink(),
-    this.bottomChromeReserveFraction = 0.18,
+    this.chromeInsets = const ReaderChromeInsets.zero(),
   });
 
   final String rawHtml;
@@ -97,7 +98,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final NovelReaderPaginationRestorePolicy restorePolicy;
   final NovelReaderPaginationCache? paginationCache;
   final NovelReaderPaginationDiagnosticsSink diagnosticsSink;
-  final double bottomChromeReserveFraction;
+  final ReaderChromeInsets chromeInsets;
 
   @override
   State<NovelReaderHtmlPagedSurface> createState() =>
@@ -138,12 +139,14 @@ class _NovelReaderHtmlPagedSurfaceState
           final pagePadding = widget.preferences.pagePadding
               .clamp(0.0, 96.0)
               .toDouble();
-          final bottomChromeReserve =
-              constraints.maxHeight *
-              widget.bottomChromeReserveFraction.clamp(0.0, 0.35).toDouble();
+          final topChromeInset = widget.chromeInsets.topInset;
+          final bottomChromeInset = widget.chromeInsets.bottomInset;
           final availableWidth = constraints.maxWidth - pagePadding * 2;
           final availableHeight =
-              constraints.maxHeight - pagePadding * 2 - bottomChromeReserve;
+              constraints.maxHeight -
+              pagePadding * 2 -
+              topChromeInset -
+              bottomChromeInset;
           final contentMaxWidth = widget.typography.contentMaxWidth < 160
               ? 160
               : widget.typography.contentMaxWidth;
@@ -199,6 +202,12 @@ class _NovelReaderHtmlPagedSurfaceState
                 themeSignature: widget.theme.signature,
                 imageDimensionRevision: prepared.imageDimensionRevision,
                 rendererRevision: 2,
+                topChromeInsetPx: NovelReaderPaginationKey.logicalPixels(
+                  topChromeInset,
+                ),
+                bottomChromeInsetPx: NovelReaderPaginationKey.logicalPixels(
+                  bottomChromeInset,
+                ),
               );
               final planFuture = _ensurePlanFuture(
                 context: context,
@@ -242,9 +251,9 @@ class _NovelReaderHtmlPagedSurfaceState
                     key: const Key('novel-reader-paged-surface'),
                     padding: EdgeInsets.fromLTRB(
                       pagePadding,
+                      pagePadding + topChromeInset,
                       pagePadding,
-                      pagePadding,
-                      pagePadding + bottomChromeReserve,
+                      pagePadding + bottomChromeInset,
                     ),
                     child: Center(
                       child: SizedBox(

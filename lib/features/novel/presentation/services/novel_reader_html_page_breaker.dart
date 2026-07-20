@@ -145,8 +145,9 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
     }
     final textLength = atom.textLength;
     final isBreakable =
-        atom.breakability == NovelReaderFlowUnitBreakability.text ||
-        atom.breakability == NovelReaderFlowUnitBreakability.inlineText;
+        atom.kind != NovelReaderPaginationAtomKind.heading &&
+        (atom.breakability == NovelReaderFlowUnitBreakability.text ||
+            atom.breakability == NovelReaderFlowUnitBreakability.inlineText);
     final whole = _pieceFor(atom, 0, textLength, atom.html);
 
     final wholeMeasurement = await _measure(whole);
@@ -155,7 +156,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
       return;
     }
     var acceptedMeasurement = wholeMeasurement;
-    if (_buffer != null) {
+    if (!isBreakable && _buffer != null) {
       _flushBuffer(gapReason: _gapReasonFor(atom));
       final retryMeasurement = await _measure(whole);
       acceptedMeasurement = retryMeasurement;

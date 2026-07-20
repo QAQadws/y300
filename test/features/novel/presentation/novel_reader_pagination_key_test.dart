@@ -64,4 +64,31 @@ void main() {
     expect(NovelReaderPaginationKey.logicalPixels(double.nan), 0);
     expect(NovelReaderPaginationKey.logicalPixels(320.4), 320);
   });
+
+  test('changes identity when chrome insets change', () {
+    const base = NovelReaderPaginationKey(
+      episodeId: 'episode',
+      contentHash: 'content',
+      viewportWidthPx: 320,
+      viewportHeightPx: 600,
+      typographySignature: 'font=18.5|line=1.6',
+      themeSignature: 'sepia',
+      imageDimensionRevision: 1,
+      rendererRevision: 2,
+    );
+    const withBottomInset = NovelReaderPaginationKey(
+      episodeId: 'episode',
+      contentHash: 'content',
+      viewportWidthPx: 320,
+      viewportHeightPx: 600,
+      typographySignature: 'font=18.5|line=1.6',
+      themeSignature: 'sepia',
+      imageDimensionRevision: 1,
+      rendererRevision: 2,
+      bottomChromeInsetPx: 48,
+    );
+
+    expect(base, isNot(withBottomInset));
+    expect(base.cacheIdentity, isNot(withBottomInset.cacheIdentity));
+  });
 }

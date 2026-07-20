@@ -34,6 +34,41 @@ void main() {
     },
   );
 
+  test(
+    'greedy fill uses remaining height before flushing a text atom',
+    () async {
+      final chapter = await _prepare('<p>12345678</p><p>abcdefgh</p>');
+      final plan = await NovelReaderHtmlPageBreaker(
+        measureAdapter: const _TextHeightMeasureAdapter(),
+      ).paginate(chapter, _key(chapter, height: 10));
+
+      expect(plan.pageCount, 2);
+      expect(plan.pages.first.fullness, 1);
+      expect(
+        html_parser.parseFragment(plan.pages.first.html).text,
+        '12345678ab',
+      );
+      expect(html_parser.parseFragment(plan.pages.last.html).text, 'cdefgh');
+      expect(
+        plan.pages.first.gapReason,
+        NovelReaderPageGapReason.algorithmBoundary,
+      );
+    },
+  );
+
+  test('keeps a heading intact instead of splitting its text range', () async {
+    final chapter = await _prepare('<p>前置正文</p><h2>这是一个完整标题</h2><p>后续正文</p>');
+    final plan = await NovelReaderHtmlPageBreaker(
+      measureAdapter: const _TextHeightMeasureAdapter(),
+    ).paginate(chapter, _key(chapter, height: 10));
+
+    final headingPages = plan.pages
+        .where((page) => page.html.contains('<h2>'))
+        .toList(growable: false);
+    expect(headingPages, hasLength(1));
+    expect(headingPages.single.html, contains('<h2>这是一个完整标题</h2>'));
+  });
+
   test('keeps readable image indexes global across page fragments', () async {
     final chapter = await _prepare(
       '<p>图片前</p><img src="data/attachment/forum/one.jpg">'

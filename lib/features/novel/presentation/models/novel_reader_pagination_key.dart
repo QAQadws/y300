@@ -19,6 +19,8 @@ class NovelReaderPaginationKey {
     required this.themeSignature,
     required this.imageDimensionRevision,
     required this.rendererRevision,
+    this.topChromeInsetPx = 0,
+    this.bottomChromeInsetPx = 0,
   });
 
   final String episodeId;
@@ -29,6 +31,8 @@ class NovelReaderPaginationKey {
   final String themeSignature;
   final int imageDimensionRevision;
   final int rendererRevision;
+  final int topChromeInsetPx;
+  final int bottomChromeInsetPx;
 
   /// A stable cache identity. It is not a persistence or business ID.
   String get cacheIdentity => jsonEncode(<Object?>[
@@ -40,6 +44,8 @@ class NovelReaderPaginationKey {
     themeSignature,
     imageDimensionRevision,
     rendererRevision,
+    topChromeInsetPx,
+    bottomChromeInsetPx,
   ]);
 
   /// A compact identity persisted with reading progress. It deliberately
@@ -64,7 +70,9 @@ class NovelReaderPaginationKey {
         other.typographySignature == typographySignature &&
         other.themeSignature == themeSignature &&
         other.imageDimensionRevision == imageDimensionRevision &&
-        other.rendererRevision == rendererRevision;
+        other.rendererRevision == rendererRevision &&
+        other.topChromeInsetPx == topChromeInsetPx &&
+        other.bottomChromeInsetPx == bottomChromeInsetPx;
   }
 
   @override
@@ -77,5 +85,7 @@ class NovelReaderPaginationKey {
     themeSignature,
     imageDimensionRevision,
     rendererRevision,
+    topChromeInsetPx,
+    bottomChromeInsetPx,
   );
 }

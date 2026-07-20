@@ -169,6 +169,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                       ),
                       imageHeaderBuilder,
                       externalLauncher,
+                      ReaderChromeInsets(
+                        safeAreaBottom: MediaQuery.paddingOf(context).bottom,
+                      ),
                     ),
                   );
                   final readerSurfaceIdentity =
@@ -302,6 +305,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     ForumHtmlThemeContext htmlTheme,
     ImageRequestHeaderBuilder imageHeaderBuilder,
     ForumWebViewExternalLauncher externalLauncher,
+    ReaderChromeInsets chromeInsets,
   ) {
     if (viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
       return NovelReaderHtmlPagedSurface(
@@ -312,6 +316,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         theme: htmlTheme,
         imageReferer: _imageRefererFor(viewState),
         progressSnapshot: viewState.progressSnapshot,
+        chromeInsets: chromeInsets,
         semanticDocument: viewState.document,
         navigationRequest: _pendingAnchorNavigationRequest,
         paginationCache: _paginationCache,
