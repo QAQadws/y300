@@ -198,7 +198,7 @@ class _NovelReaderHtmlPagedSurfaceState
                 ),
                 themeSignature: widget.theme.signature,
                 imageDimensionRevision: prepared.imageDimensionRevision,
-                rendererRevision: 1,
+                rendererRevision: 2,
               );
               final planFuture = _ensurePlanFuture(
                 context: context,
@@ -364,6 +364,15 @@ class _NovelReaderHtmlPagedSurfaceState
                   .length,
               cacheHit: cacheHit,
               flowUnitCount: prepared.flowUnits.length,
+              atomCount: plan.atomCount,
+              measurementCount: plan.measurementCount,
+              measurementDuration: plan.measurementDuration,
+              availableHeight: key.viewportHeightPx.toDouble(),
+              averageTextPageFullness: plan.averageTextPageFullness,
+              lowFullnessPageCount: plan.lowFullnessPageCount,
+              gapReasonCounts: plan.gapReasonCounts,
+              atomKindCounts: plan.atomKindCounts,
+              measurementSamples: plan.measurementSamples,
             ),
           );
         },

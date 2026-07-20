@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_extractor.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 
 abstract interface class NovelReaderPageBreaker {
@@ -22,6 +24,7 @@ abstract interface class NovelReaderPageBreaker {
 final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   NovelReaderHtmlPageBreaker({
     required NovelReaderPaginationMeasureAdapter measureAdapter,
+    this.atomExtractor = const NovelReaderPaginationAtomExtractor(),
     this.maxMeasurements = 4096,
     this.maxPages = 5000,
     this.maxSplitSearchIterations = 12,
@@ -29,6 +32,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   }) : _measureAdapter = measureAdapter;
 
   final NovelReaderPaginationMeasureAdapter _measureAdapter;
+  final NovelReaderPaginationAtomExtractor atomExtractor;
   final int maxMeasurements;
   final int maxPages;
   final int maxSplitSearchIterations;
@@ -37,6 +41,9 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
   late NovelReaderPreparedChapter _chapter;
   late NovelReaderPaginationKey _key;
   int _measurementCount = 0;
+  Duration _measurementDuration = Duration.zero;
+  List<NovelReaderPaginationMeasurementSample> _measurementSamples =
+      <NovelReaderPaginationMeasurementSample>[];
   _PageBuffer? _buffer;
   List<NovelReaderPageFragment> _pages = <NovelReaderPageFragment>[];
 
@@ -49,19 +56,27 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
     _chapter = chapter;
     _key = key;
     _measurementCount = 0;
+    _measurementDuration = Duration.zero;
+    _measurementSamples = <NovelReaderPaginationMeasurementSample>[];
     _buffer = null;
     _pages = <NovelReaderPageFragment>[];
+    final atoms = atomExtractor.extract(chapter);
+    final atomKindCounts = <NovelReaderPaginationAtomKind, int>{};
 
-    for (final unit in chapter.flowUnits) {
-      if (unit.html.trim().isNotEmpty) {
-        await _appendUnit(unit);
-      }
+    for (final atom in atoms) {
+      atomKindCounts.update(atom.kind, (value) => value + 1, ifAbsent: () => 1);
+      await _appendAtom(atom);
     }
-    _flushBuffer();
+    _flushBuffer(gapReason: NovelReaderPageGapReason.naturalEnd);
     return NovelReaderPaginationPlan(
       key: key,
       episodeId: chapter.episodeId,
       pages: _pages,
+      atomCount: atoms.length,
+      measurementCount: _measurementCount,
+      measurementDuration: _measurementDuration,
+      atomKindCounts: atomKindCounts,
+      measurementSamples: _measurementSamples,
     );
   }
 
@@ -98,98 +113,121 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
     }
   }
 
-  Future<void> _appendUnit(NovelReaderFlowUnit unit) async {
-    final textLength = _textLength(unit.html);
-    final isBreakable =
-        unit.breakability == NovelReaderFlowUnitBreakability.text ||
-        unit.breakability == NovelReaderFlowUnitBreakability.inlineText;
-    final whole = _pieceFor(unit, 0, textLength, unit.html);
-
-    if (await _fits(whole)) {
-      _appendPiece(whole);
+  Future<void> _appendAtom(NovelReaderPaginationAtom atom) async {
+    if (atom.isIsolatedImage) {
+      await _appendIsolatedImage(atom);
       return;
     }
+    final textLength = atom.textLength;
+    final isBreakable =
+        atom.breakability == NovelReaderFlowUnitBreakability.text ||
+        atom.breakability == NovelReaderFlowUnitBreakability.inlineText;
+    final whole = _pieceFor(atom, 0, textLength, atom.html);
+
+    final wholeMeasurement = await _measure(whole);
+    if (_fitsHeight(wholeMeasurement.height)) {
+      _appendPiece(whole, measuredHeight: wholeMeasurement.height);
+      return;
+    }
+    var acceptedMeasurement = wholeMeasurement;
     if (_buffer != null) {
-      _flushBuffer();
-      if (await _fits(whole)) {
-        _appendPiece(whole);
+      _flushBuffer(gapReason: _gapReasonFor(atom));
+      final retryMeasurement = await _measure(whole);
+      acceptedMeasurement = retryMeasurement;
+      if (_fitsHeight(retryMeasurement.height)) {
+        _appendPiece(whole, measuredHeight: retryMeasurement.height);
         return;
       }
     }
     if (!isBreakable || textLength == 0) {
-      _appendOverflow(whole, NovelReaderPageOverflowState.atomicWidget);
-      _flushBuffer();
+      _appendOverflow(
+        whole,
+        NovelReaderPageOverflowState.atomicWidget,
+        measuredHeight: acceptedMeasurement.height,
+      );
+      _flushBuffer(
+        gapReason: acceptedMeasurement.height > _key.viewportHeightPx
+            ? NovelReaderPageGapReason.oversizedWidget
+            : NovelReaderPageGapReason.atomicWidget,
+      );
       return;
     }
-    await _appendBreakableUnit(unit, textLength);
+    await _appendBreakableAtom(atom, textLength);
   }
 
-  Future<void> _appendBreakableUnit(
-    NovelReaderFlowUnit unit,
+  Future<void> _appendBreakableAtom(
+    NovelReaderPaginationAtom atom,
     int textLength,
   ) async {
     var offset = 0;
     while (offset < textLength) {
-      final bestEnd = await _largestFittingEnd(unit, offset, textLength);
-      if (bestEnd > offset) {
+      final result = await _largestFittingEnd(atom, offset, textLength);
+      if (result.end > offset) {
         _appendPiece(
           _pieceFor(
-            unit,
+            atom,
             offset,
-            bestEnd,
-            _sliceHtml(unit.html, offset, bestEnd),
+            result.end,
+            _sliceHtml(atom.html, offset, result.end),
           ),
+          measuredHeight: result.height,
         );
-        offset = bestEnd;
+        offset = result.end;
         continue;
       }
       if (_buffer != null) {
-        _flushBuffer();
+        _flushBuffer(gapReason: NovelReaderPageGapReason.algorithmBoundary);
         continue;
       }
+      final remainder = _pieceFor(
+        atom,
+        offset,
+        textLength,
+        _sliceHtml(atom.html, offset, textLength),
+      );
+      final remainderMeasurement = await _measure(remainder);
       _appendOverflow(
-        _pieceFor(
-          unit,
-          offset,
-          textLength,
-          _sliceHtml(unit.html, offset, textLength),
-        ),
+        remainder,
         NovelReaderPageOverflowState.minimumTextFragment,
+        measuredHeight: remainderMeasurement.height,
       );
       offset = textLength;
-      _flushBuffer();
+      _flushBuffer(gapReason: NovelReaderPageGapReason.algorithmBoundary);
     }
   }
 
-  Future<int> _largestFittingEnd(
-    NovelReaderFlowUnit unit,
+  Future<_FitResult> _largestFittingEnd(
+    NovelReaderPaginationAtom atom,
     int start,
     int end,
   ) async {
     var low = start + 1;
     var high = end;
     var best = start;
+    var bestHeight = 0.0;
     var iterations = 0;
     while (low <= high && iterations < maxSplitSearchIterations) {
       iterations += 1;
       final candidateEnd = (low + high) ~/ 2;
       final piece = _pieceFor(
-        unit,
+        atom,
         start,
         candidateEnd,
-        _sliceHtml(unit.html, start, candidateEnd),
+        _sliceHtml(atom.html, start, candidateEnd),
       );
-      if (await _fits(piece)) {
+      final measurement = await _measure(piece);
+      if (_fitsHeight(measurement.height)) {
         best = candidateEnd;
+        bestHeight = measurement.height;
         low = candidateEnd + 1;
       } else {
         high = candidateEnd - 1;
       }
     }
-    return best;
+    return _FitResult(end: best, height: bestHeight);
   }
 
-  Future<bool> _fits(_PagePiece piece) async {
+  Future<NovelReaderPaginationMeasureResult> _measure(_PagePiece piece) async {
     _measurementCount += 1;
     if (_measurementCount > maxMeasurements) {
       throw const NovelReaderPaginationException(
@@ -203,6 +241,7 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
       await Future<void>.delayed(Duration.zero);
     }
     final candidate = '${_buffer?.html ?? ''}${piece.html}';
+    final stopwatch = Stopwatch()..start();
     final result = await _measureAdapter.measure(
       NovelReaderPaginationMeasureRequest(
         html: candidate,
@@ -210,59 +249,134 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
         key: _key,
       ),
     );
+    stopwatch.stop();
+    _measurementDuration += stopwatch.elapsed;
+    if (_measurementSamples.length < 64) {
+      _measurementSamples.add(
+        NovelReaderPaginationMeasurementSample(
+          atomId: piece.atomId,
+          atomKind: piece.atomKind,
+          height: result.height,
+          duration: stopwatch.elapsed,
+        ),
+      );
+    }
     if (!result.height.isFinite || result.height < 0) {
       throw const NovelReaderPaginationException(
         code: 'invalidMeasurement',
         message: 'HTML renderer returned an invalid pagination height.',
       );
     }
-    return result.height <= _key.viewportHeightPx;
+    return result;
+  }
+
+  bool _fitsHeight(double height) => height <= _key.viewportHeightPx;
+
+  NovelReaderPageGapReason _gapReasonFor(NovelReaderPaginationAtom atom) {
+    if (atom.isIsolatedImage) {
+      return NovelReaderPageGapReason.isolatedImage;
+    }
+    if (atom.kind == NovelReaderPaginationAtomKind.atomicWidget) {
+      return NovelReaderPageGapReason.atomicWidget;
+    }
+    return NovelReaderPageGapReason.algorithmBoundary;
+  }
+
+  Future<void> _appendIsolatedImage(NovelReaderPaginationAtom atom) async {
+    _flushBuffer(gapReason: NovelReaderPageGapReason.isolatedImage);
+    final piece = _pieceFor(atom, 0, atom.textLength, atom.html);
+    final measurement = await _measure(piece);
+    if (_pages.length >= maxPages) {
+      throw const NovelReaderPaginationException(
+        code: 'pageLimitExceeded',
+        message: 'Pagination page budget was exceeded.',
+      );
+    }
+    final overflow = !_fitsHeight(measurement.height);
+    _pages.add(
+      NovelReaderPageFragment(
+        index: _pages.length,
+        html: piece.html,
+        startAnchor: piece.startAnchor,
+        endAnchor: piece.endAnchor,
+        imageIndices: piece.imageIndices,
+        anchorRanges: <NovelReaderPageAnchorRange>[
+          NovelReaderPageAnchorRange(
+            start: piece.startAnchor,
+            end: piece.endAnchor,
+          ),
+        ],
+        overflowState: overflow
+            ? NovelReaderPageOverflowState.atomicWidget
+            : NovelReaderPageOverflowState.none,
+        requiresInnerScroll: overflow,
+        usedHeight: measurement.height,
+        availableHeight: _key.viewportHeightPx.toDouble(),
+        gapReason: overflow
+            ? NovelReaderPageGapReason.oversizedWidget
+            : NovelReaderPageGapReason.isolatedImage,
+        containsIsolatedImage: true,
+      ),
+    );
   }
 
   _PagePiece _pieceFor(
-    NovelReaderFlowUnit unit,
+    NovelReaderPaginationAtom atom,
     int start,
     int end,
     String html,
   ) {
-    final baseOffset = unit.startAnchor.textOffset;
+    final baseOffset = atom.startAnchor.textOffset;
     return _PagePiece(
+      atomId: atom.atomId,
+      atomKind: atom.kind,
       html: html,
-      startAnchor: unit.startAnchor.copyWith(
+      startAnchor: atom.startAnchor.copyWith(
         textOffset: baseOffset + start,
         pageIndex: 0,
         scrollOffset: 0,
         progressPercent: 0,
       ),
-      endAnchor: unit.endAnchor.copyWith(
+      endAnchor: atom.endAnchor.copyWith(
         textOffset: baseOffset + end,
         pageIndex: 0,
         scrollOffset: 0,
         progressPercent: 0,
       ),
-      imageIndices: _imageIndices(html),
+      imageIndices: atom.imageIndices.isEmpty
+          ? _imageIndices(html)
+          : atom.imageIndices,
     );
   }
 
-  void _appendPiece(_PagePiece piece) {
+  void _appendPiece(_PagePiece piece, {required double measuredHeight}) {
     final buffer = _buffer ??= _PageBuffer();
-    buffer.append(piece);
+    buffer.append(piece, measuredHeight: measuredHeight);
   }
 
-  void _appendOverflow(_PagePiece piece, NovelReaderPageOverflowState state) {
+  void _appendOverflow(
+    _PagePiece piece,
+    NovelReaderPageOverflowState state, {
+    required double measuredHeight,
+  }) {
     final buffer = _buffer ??= _PageBuffer();
     buffer.append(
       _PagePiece(
+        atomId: piece.atomId,
+        atomKind: piece.atomKind,
         html: piece.html,
         startAnchor: piece.startAnchor,
         endAnchor: piece.endAnchor,
         imageIndices: piece.imageIndices,
         overflowState: state,
       ),
+      measuredHeight: measuredHeight,
     );
   }
 
-  void _flushBuffer() {
+  void _flushBuffer({
+    NovelReaderPageGapReason gapReason = NovelReaderPageGapReason.none,
+  }) {
     final buffer = _buffer;
     if (buffer == null || buffer.html.trim().isEmpty) {
       _buffer = null;
@@ -285,13 +399,13 @@ final class NovelReaderHtmlPageBreaker implements NovelReaderPageBreaker {
         overflowState: buffer.overflowState,
         requiresInnerScroll:
             buffer.overflowState != NovelReaderPageOverflowState.none,
+        usedHeight: buffer.usedHeight,
+        availableHeight: _key.viewportHeightPx.toDouble(),
+        gapReason: gapReason,
+        containsIsolatedImage: buffer.containsIsolatedImage,
       ),
     );
     _buffer = null;
-  }
-
-  int _textLength(String html) {
-    return (html_parser.parseFragment(html).text ?? '').runes.length;
   }
 
   List<int> _imageIndices(String html) {
@@ -398,8 +512,17 @@ class _TextCursor {
   int value = 0;
 }
 
+class _FitResult {
+  const _FitResult({required this.end, required this.height});
+
+  final int end;
+  final double height;
+}
+
 class _PagePiece {
   const _PagePiece({
+    required this.atomId,
+    required this.atomKind,
     required this.html,
     required this.startAnchor,
     required this.endAnchor,
@@ -407,6 +530,8 @@ class _PagePiece {
     this.overflowState = NovelReaderPageOverflowState.none,
   });
 
+  final String atomId;
+  final NovelReaderPaginationAtomKind atomKind;
   final String html;
   final NovelReaderTextAnchor startAnchor;
   final NovelReaderTextAnchor endAnchor;
@@ -423,6 +548,8 @@ class _PageBuffer {
   NovelReaderTextAnchor? endAnchor;
   NovelReaderPageOverflowState overflowState =
       NovelReaderPageOverflowState.none;
+  double usedHeight = 0;
+  bool containsIsolatedImage = false;
 
   String get html => _html.toString();
 
@@ -434,7 +561,7 @@ class _PageBuffer {
   List<NovelReaderPageAnchorRange> get anchorRanges =>
       List<NovelReaderPageAnchorRange>.unmodifiable(_anchorRanges);
 
-  void append(_PagePiece piece) {
+  void append(_PagePiece piece, {required double measuredHeight}) {
     startAnchor ??= piece.startAnchor;
     endAnchor = piece.endAnchor;
     _anchorRanges.add(
@@ -445,6 +572,7 @@ class _PageBuffer {
     );
     _html.write(piece.html);
     _imageIndices.addAll(piece.imageIndices);
+    usedHeight = measuredHeight;
     if (piece.overflowState != NovelReaderPageOverflowState.none) {
       overflowState = piece.overflowState;
     }

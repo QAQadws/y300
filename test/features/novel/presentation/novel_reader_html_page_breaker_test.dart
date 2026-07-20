@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_page_breaker.dart';
@@ -45,6 +46,71 @@ void main() {
     expect(plan.pages.expand((page) => page.imageIndices), contains(0));
     expect(plan.pages.expand((page) => page.imageIndices), isNot(contains(1)));
     expect(plan.pages.every((page) => page.index >= 0), isTrue);
+  });
+
+  test('isolates readable images between stable text pages', () async {
+    final chapter = await _prepare(
+      '<p>图片前正文</p>'
+      '<img src="data/attachment/forum/one.jpg">'
+      '<p>图片后正文</p>',
+    );
+    final plan = await NovelReaderHtmlPageBreaker(
+      measureAdapter: const _TextHeightMeasureAdapter(),
+    ).paginate(chapter, _key(chapter, height: 20));
+
+    expect(plan.pages, hasLength(3));
+    expect(plan.pages[0].containsIsolatedImage, isFalse);
+    expect(plan.pages[0].gapReason, NovelReaderPageGapReason.isolatedImage);
+    expect(plan.pages[1].containsIsolatedImage, isTrue);
+    expect(plan.pages[1].imageIndices, <int>[0]);
+    expect(plan.pages[1].gapReason, NovelReaderPageGapReason.isolatedImage);
+    expect(plan.pageIndexForAnchor(plan.pages[1].startAnchor), 1);
+    expect(plan.pages[2].containsIsolatedImage, isFalse);
+    expect(plan.pages[2].gapReason, NovelReaderPageGapReason.naturalEnd);
+    expect(plan.atomCount, 3);
+    expect(plan.atomKindCounts[NovelReaderPaginationAtomKind.image], 1);
+    expect(plan.measurementCount, greaterThanOrEqualTo(3));
+    expect(plan.measurementSamples, isNotEmpty);
+    expect(plan.measurementSamples.length, lessThanOrEqualTo(64));
+  });
+
+  test('image dimensions do not change surrounding text page count', () async {
+    final unknown = await _prepare(
+      '<p>图片前正文</p>'
+      '<img src="data/attachment/forum/one.jpg">'
+      '<p>图片后正文</p>',
+    );
+    final known = await _prepare(
+      '<p>图片前正文</p>'
+      '<img width="800" height="600" '
+      'src="data/attachment/forum/one.jpg">'
+      '<p>图片后正文</p>',
+    );
+    final breaker = NovelReaderHtmlPageBreaker(
+      measureAdapter: const _TextHeightMeasureAdapter(),
+    );
+
+    final unknownPlan = await breaker.paginate(
+      unknown,
+      _key(unknown, height: 20),
+    );
+    final knownPlan = await breaker.paginate(known, _key(known, height: 20));
+    final unknownTextPages = unknownPlan.pages
+        .where((page) => !page.containsIsolatedImage)
+        .length;
+    final knownTextPages = knownPlan.pages
+        .where((page) => !page.containsIsolatedImage)
+        .length;
+
+    expect(unknownTextPages, knownTextPages);
+    expect(
+      unknownPlan.pages.where((page) => page.containsIsolatedImage),
+      hasLength(1),
+    );
+    expect(
+      knownPlan.pages.where((page) => page.containsIsolatedImage),
+      hasLength(1),
+    );
   });
 
   test('maps an anchor from a unit in the middle of a page', () async {

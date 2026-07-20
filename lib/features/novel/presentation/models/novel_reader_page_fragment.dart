@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 
 enum NovelReaderPageOverflowState { none, atomicWidget, minimumTextFragment }
 
@@ -32,6 +33,10 @@ class NovelReaderPageFragment {
     this.anchorRanges = const <NovelReaderPageAnchorRange>[],
     this.overflowState = NovelReaderPageOverflowState.none,
     this.requiresInnerScroll = false,
+    this.usedHeight = 0,
+    this.availableHeight = 0,
+    this.gapReason = NovelReaderPageGapReason.none,
+    this.containsIsolatedImage = false,
   });
 
   final int index;
@@ -48,8 +53,20 @@ class NovelReaderPageFragment {
   final List<int> imageIndices;
   final NovelReaderPageOverflowState overflowState;
   final bool requiresInnerScroll;
+  final double usedHeight;
+  final double availableHeight;
+  final NovelReaderPageGapReason gapReason;
+  final bool containsIsolatedImage;
 
   bool get hasOverflow => overflowState != NovelReaderPageOverflowState.none;
+
+  double get gapHeight => availableHeight <= 0
+      ? 0
+      : (availableHeight - usedHeight).clamp(0.0, availableHeight);
+
+  double get fullness => availableHeight <= 0
+      ? 0
+      : (usedHeight / availableHeight).clamp(0.0, double.infinity);
 
   @override
   String toString() => 'NovelReaderPageFragment($index, $overflowState)';
@@ -64,7 +81,11 @@ class NovelReaderPageFragment {
         listEquals(other.anchorRanges, anchorRanges) &&
         listEquals(other.imageIndices, imageIndices) &&
         other.overflowState == overflowState &&
-        other.requiresInnerScroll == requiresInnerScroll;
+        other.requiresInnerScroll == requiresInnerScroll &&
+        other.usedHeight == usedHeight &&
+        other.availableHeight == availableHeight &&
+        other.gapReason == gapReason &&
+        other.containsIsolatedImage == containsIsolatedImage;
   }
 
   @override
@@ -77,5 +98,9 @@ class NovelReaderPageFragment {
     Object.hashAll(imageIndices),
     overflowState,
     requiresInnerScroll,
+    usedHeight,
+    availableHeight,
+    gapReason,
+    containsIsolatedImage,
   );
 }
