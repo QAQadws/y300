@@ -33,7 +33,7 @@ void main() {
     }
   });
 
-  test('reads valid supported fields and resets obsolete meanings', () async {
+  test('reads supported fields and resets obsolete display fields', () async {
     await db.insert(ComicLocalDb.readerPreferencesTable, <String, Object?>{
       'content_type': 'novel',
       'font_size': 19.0,
@@ -60,7 +60,7 @@ void main() {
     expect(loaded.lineHeight, 1.9);
     expect(loaded.themePreset, NovelReaderThemePreset.dark);
     expect(loaded.conversionMode, NovelReaderConversionMode.toSimplified);
-    expect(loaded.flowMode, NovelReaderFlowMode.vertical);
+    expect(loaded.flowMode, NovelReaderFlowMode.pagedRtl);
     expect(loaded.paragraphSpacing, 10);
     expect(loaded.pagePadding, 16);
     expect(loaded.fontFamily, 'system');
@@ -80,6 +80,7 @@ void main() {
       'page_padding': 16.0,
       'theme_mode': 'future-theme',
       'font_family': 'system',
+      'flow_mode': 'future-flow',
       'conversion_mode': 'future-conversion',
     });
 

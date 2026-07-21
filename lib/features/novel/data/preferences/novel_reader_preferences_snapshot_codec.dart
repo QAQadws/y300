@@ -17,6 +17,7 @@ final class NovelReaderPreferencesSnapshotCodec {
       'schemaVersion': schemaVersion,
       'fontSize': normalized.fontSize,
       'lineHeight': normalized.lineHeight,
+      'flowMode': normalized.flowMode.storageValue,
       'themePreset': normalized.themePreset.storageValue,
       'conversionMode': normalized.conversionMode.storageValue,
     });
@@ -46,6 +47,7 @@ final class NovelReaderPreferencesSnapshotCodec {
           max: maximumLineHeight,
           fallback: defaults.lineHeight,
         ),
+        flowMode: _flowMode(decoded['flowMode'], defaults.flowMode),
         themePreset: _themePreset(decoded['themePreset'], defaults.themePreset),
         conversionMode: _conversionMode(
           decoded['conversionMode'],
@@ -72,6 +74,7 @@ final class NovelReaderPreferencesSnapshotCodec {
         max: maximumLineHeight,
         fallback: defaults.lineHeight,
       ),
+      flowMode: preferences.flowMode,
       themePreset: preferences.themePreset,
       conversionMode: preferences.conversionMode,
     );
@@ -105,6 +108,13 @@ final class NovelReaderPreferencesSnapshotCodec {
       }
     }
     return fallback;
+  }
+
+  NovelReaderFlowMode _flowMode(Object? raw, NovelReaderFlowMode fallback) {
+    if (raw is! String) {
+      return fallback;
+    }
+    return NovelReaderFlowModeCodec.fromStorage(raw, fallback: fallback);
   }
 
   NovelReaderConversionMode _conversionMode(

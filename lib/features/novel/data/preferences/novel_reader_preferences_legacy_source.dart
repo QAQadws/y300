@@ -42,6 +42,7 @@ final class SqliteNovelReaderPreferencesLegacySource
           max: NovelReaderPreferencesSnapshotCodec.maximumLineHeight,
           fallback: defaults.lineHeight,
         ),
+        flowMode: _flowMode(_stringValue(row['flow_mode']), defaults.flowMode),
         themePreset: _themePreset(
           _stringValue(row['theme_preset']) ?? _stringValue(row['theme_mode']),
           defaults.themePreset,
@@ -84,6 +85,10 @@ final class SqliteNovelReaderPreferencesLegacySource
       'system': NovelReaderThemePreset.followSystem,
     };
     return aliases[raw] ?? fallback;
+  }
+
+  NovelReaderFlowMode _flowMode(String? raw, NovelReaderFlowMode fallback) {
+    return NovelReaderFlowModeCodec.fromStorage(raw, fallback: fallback);
   }
 
   NovelReaderConversionMode _conversionMode(

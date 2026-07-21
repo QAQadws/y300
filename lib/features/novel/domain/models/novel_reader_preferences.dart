@@ -76,7 +76,10 @@ extension NovelReaderFlowModeCodec on NovelReaderFlowMode {
     }
   }
 
-  static NovelReaderFlowMode fromStorage(String? value) {
+  static NovelReaderFlowMode fromStorage(
+    String? value, {
+    NovelReaderFlowMode fallback = NovelReaderFlowMode.vertical,
+  }) {
     switch (value) {
       case 'pagedLtr':
       case 'paged_ltr':
@@ -85,8 +88,9 @@ extension NovelReaderFlowModeCodec on NovelReaderFlowMode {
       case 'paged_rtl':
         return NovelReaderFlowMode.pagedRtl;
       case 'vertical':
-      default:
         return NovelReaderFlowMode.vertical;
+      default:
+        return fallback;
     }
   }
 }

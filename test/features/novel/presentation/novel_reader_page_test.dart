@@ -701,6 +701,49 @@ void main() {
     );
   });
 
+  testWidgets('NovelReaderPage persists paged mode across reconstruction', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      firstParagraphs: List<String>.generate(
+        12,
+        (index) => '持久化分页段落 $index ${List<String>.filled(60, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-display')),
+    );
+    await tester.pumpAndSettle();
+    final pagedLtr = find.byKey(
+      const ValueKey<String>('reader-segment-分页 LTR'),
+    );
+    await tester.ensureVisible(pagedLtr);
+    await tester.tap(pagedLtr);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+
+    expect(repository.preferences.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(
+      find.byKey(const Key('novel-reader-paged-page-view')),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('novel-reader-paragraph-list')), findsNothing);
+    expect(
+      find.byKey(const Key('novel-reader-paged-page-view')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('NovelReaderPage restores a visible page for the same layout', (
     tester,
   ) async {

@@ -56,25 +56,28 @@ void main() {
     expect(loaded.lineHeight, 1.85);
     expect(loaded.themePreset, NovelReaderThemePreset.dark);
     expect(loaded.conversionMode, NovelReaderConversionMode.toTraditional);
-    expect(loaded.flowMode, NovelReaderFlowMode.vertical);
+    expect(loaded.flowMode, NovelReaderFlowMode.pagedRtl);
     expect(loaded.paragraphSpacing, 10);
     expect(snapshot.keys, <String>{
       'schemaVersion',
       'fontSize',
       'lineHeight',
+      'flowMode',
       'themePreset',
       'conversionMode',
     });
+    expect(snapshot['flowMode'], 'pagedRtl');
     expect(
       preferences.getInt(PreferenceKeys.novelReaderMigrationVersion.name),
       1,
     );
   });
 
-  test('new snapshot wins without reading stale SQLite', () async {
+  test('saved snapshot survives repository reconstruction', () async {
     await repository.save(
       NovelReaderPreferences.defaults().copyWith(
         fontSize: 22,
+        flowMode: NovelReaderFlowMode.pagedLtr,
         themePreset: NovelReaderThemePreset.light,
       ),
     );
@@ -82,12 +85,54 @@ void main() {
       fontSize: 16,
       themePreset: NovelReaderThemePreset.dark,
     );
+    repository = SharedPreferencesNovelReaderPreferencesRepository(
+      preferencesStore: SharedPreferencesStore(),
+      legacySource: legacySource,
+    );
 
     final loaded = await repository.load();
 
     expect(loaded.fontSize, 22);
+    expect(loaded.flowMode, NovelReaderFlowMode.pagedLtr);
     expect(loaded.themePreset, NovelReaderThemePreset.light);
     expect(legacySource.callCount, 0);
+  });
+
+  test('codec round-trips every supported flow mode', () {
+    const codec = NovelReaderPreferencesSnapshotCodec();
+
+    for (final flowMode in NovelReaderFlowMode.values) {
+      final preferences = NovelReaderPreferences.defaults().copyWith(
+        flowMode: flowMode,
+      );
+      final encoded = jsonDecode(codec.encode(preferences));
+
+      expect(
+        (encoded as Map<String, dynamic>)['flowMode'],
+        flowMode.storageValue,
+      );
+      expect(codec.decode(jsonEncode(encoded)).flowMode, flowMode);
+    }
+  });
+
+  test('schema 1 snapshot without flow mode remains compatible', () {
+    const codec = NovelReaderPreferencesSnapshotCodec();
+
+    final decoded = codec.decode(
+      jsonEncode(<String, Object>{
+        'schemaVersion': 1,
+        'fontSize': 21,
+        'lineHeight': 1.8,
+        'themePreset': 'dark',
+        'conversionMode': 'toSimplified',
+      }),
+    );
+
+    expect(decoded.fontSize, 21);
+    expect(decoded.lineHeight, 1.8);
+    expect(decoded.themePreset, NovelReaderThemePreset.dark);
+    expect(decoded.conversionMode, NovelReaderConversionMode.toSimplified);
+    expect(decoded.flowMode, NovelReaderFlowMode.vertical);
   });
 
   test('malformed snapshot falls back without reviving SQLite', () async {
@@ -128,6 +173,7 @@ void main() {
         'schemaVersion': 1,
         'fontSize': 99,
         'lineHeight': 1.9,
+        'flowMode': 'future-flow',
         'themePreset': 'future-theme',
         'conversionMode': 'future-conversion',
       }),
@@ -135,6 +181,7 @@ void main() {
 
     expect(decoded.fontSize, 18.5);
     expect(decoded.lineHeight, 1.9);
+    expect(decoded.flowMode, NovelReaderFlowMode.vertical);
     expect(decoded.themePreset, NovelReaderThemePreset.sepia);
     expect(decoded.conversionMode, NovelReaderConversionMode.none);
   });
