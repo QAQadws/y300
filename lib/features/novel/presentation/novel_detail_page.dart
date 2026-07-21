@@ -13,12 +13,15 @@ import 'package:y300/features/library_shared/presentation/pages/unified_detail_p
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_interaction_models.dart';
+import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_hydration_controller.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_open_mode_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_chapter_hydration_panel.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+
+const _progressDiagnostics = NovelReaderProgressDiagnostics();
 
 /// 小说详情页：统一详情页薄壳、首次章节水合与双打开模式入口。
 class NovelDetailPage extends ConsumerStatefulWidget {
@@ -337,6 +340,14 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     ReaderRouteTarget target, {
     NovelEpisodeOpenPolicy openPolicy = NovelEpisodeOpenPolicy.startAtBeginning,
   }) async {
+    _progressDiagnostics.log(
+      'reader_route',
+      fields: <String, Object?>{
+        'novelId': target.workId,
+        'episodeId': target.episodeId,
+        'openPolicy': openPolicy.name,
+      },
+    );
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => NovelReaderPage(

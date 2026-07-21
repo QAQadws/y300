@@ -19,8 +19,11 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
 import 'package:y300/features/novel/domain/services/novel_intro_section_extractor.dart';
+import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+
+const _progressDiagnostics = NovelReaderProgressDiagnostics();
 
 class LocalNovelRepository
     implements
@@ -1056,6 +1059,18 @@ class LocalNovelRepository
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _progressDiagnostics.log(
+      'db_save',
+      fields: <String, Object?>{
+        'novelId': novelId,
+        'episodeId': episodeId,
+        'flowMode': flowMode.name,
+        'scrollOffset': scrollOffset.toStringAsFixed(2),
+        'progressPercent': progressPercent.toStringAsFixed(4),
+        'pageIndex': pageIndex,
+        'pageCount': pageCount,
+      },
+    );
   }
 
   @override
@@ -1070,16 +1085,24 @@ class LocalNovelRepository
       limit: 1,
     );
     if (rows.isEmpty) {
+      _progressDiagnostics.log(
+        'db_load_miss',
+        fields: <String, Object?>{'novelId': novelId},
+      );
       return null;
     }
 
     final row = rows.first;
     final episodeId = (row['episode_id'] as String?) ?? '';
     if (episodeId.isEmpty) {
+      _progressDiagnostics.log(
+        'db_load_invalid',
+        fields: <String, Object?>{'novelId': novelId},
+      );
       return null;
     }
 
-    return NovelReadingProgress(
+    final progress = NovelReadingProgress(
       novelId: novelId,
       episodeId: episodeId,
       scrollOffset: (row['scroll_offset'] as num?)?.toDouble() ?? 0,
@@ -1105,6 +1128,19 @@ class LocalNovelRepository
           .clamp(0.0, 1.0)
           .toDouble(),
     );
+    _progressDiagnostics.log(
+      'db_load',
+      fields: <String, Object?>{
+        'novelId': progress.novelId,
+        'episodeId': progress.episodeId,
+        'flowMode': progress.flowMode.name,
+        'scrollOffset': progress.scrollOffset.toStringAsFixed(2),
+        'progressPercent': progress.progressPercent.toStringAsFixed(4),
+        'pageIndex': progress.pageIndex,
+        'pageCount': progress.pageCount,
+      },
+    );
+    return progress;
   }
 
   @override

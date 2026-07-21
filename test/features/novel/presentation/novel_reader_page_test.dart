@@ -20,6 +20,7 @@ import 'package:y300/features/library_shared/domain/models/library_state_models.
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
+import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
@@ -140,6 +141,88 @@ void main() {
         findsOneWidget,
       );
       expect(scrollableState.position.pixels, greaterThan(firstOffset));
+    },
+  );
+
+  testWidgets(
+    'NovelReaderPage restores vertical progress after HTML content is ready',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        firstParagraphs: List<String>.generate(
+          60,
+          (index) => '第一章恢复测试段落 $index',
+        ),
+        readingProgress: NovelReadingProgress(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+          scrollOffset: 320,
+          updatedAt: DateTime(2026, 7, 21),
+          progressPercent: 0.25,
+        ),
+      );
+
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
+      await tester.pumpAndSettle();
+
+      final scrollable = find.descendant(
+        of: find.byKey(const Key('novel-reader-paragraph-list')),
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(scrollable).position;
+
+      expect(position.maxScrollExtent, greaterThan(320));
+      expect(position.pixels, closeTo(320, 0.01));
+      expect(repository.readingProgress?.scrollOffset, closeTo(320, 0.01));
+    },
+  );
+
+  testWidgets(
+    'vertical progress survives exit and a new continue-reading session',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        firstParagraphs: List<String>.generate(
+          60,
+          (index) => '第一章往返测试段落 $index',
+        ),
+      );
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: repository,
+          home: const _NovelReaderRoundTripHost(),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('open-novel-from-beginning')));
+      await tester.pumpAndSettle();
+      await _showReaderMenu(tester);
+      final firstSlider = tester.widget<Slider>(
+        find.byKey(const Key('shared-reader-progress-slider')),
+      );
+      firstSlider.onChangeStart?.call(0.59);
+      firstSlider.onChanged?.call(0.59);
+      firstSlider.onChangeEnd?.call(0.59);
+      await tester.pumpAndSettle();
+
+      expect(repository.readingProgress?.progressPercent, closeTo(0.59, 0.01));
+      final savedOffset = repository.readingProgress!.scrollOffset;
+      expect(savedOffset, greaterThan(0));
+
+      await tester.tap(find.byKey(const Key('shared-reader-top-back-button')));
+      await tester.pumpAndSettle();
+      expect(find.byType(NovelReaderPage), findsNothing);
+
+      await tester.tap(find.byKey(const Key('continue-novel-reading')));
+      await tester.pumpAndSettle();
+
+      final scrollable = find.descendant(
+        of: find.byKey(const Key('novel-reader-paragraph-list')),
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(scrollable).position;
+      expect(position.pixels, closeTo(savedOffset, 0.01));
+
+      await _showReaderMenu(tester);
+      expect(find.text('59%'), findsOneWidget);
     },
   );
 
@@ -1458,6 +1541,7 @@ Widget _buildReaderApp({
   NovelChapterUpdateService? chapterUpdateService,
   ThemeData? theme,
   String initialEpisodeId = 'novel:49:100:5001',
+  Widget? home,
 }) {
   return ProviderScope(
     overrides: [
@@ -1491,12 +1575,50 @@ Widget _buildReaderApp({
     ],
     child: MaterialApp(
       theme: theme,
-      home: NovelReaderPage(
-        novelId: 'novel:49:100',
-        initialEpisodeId: initialEpisodeId,
-      ),
+      home:
+          home ??
+          NovelReaderPage(
+            novelId: 'novel:49:100',
+            initialEpisodeId: initialEpisodeId,
+          ),
     ),
   );
+}
+
+class _NovelReaderRoundTripHost extends StatelessWidget {
+  const _NovelReaderRoundTripHost();
+
+  @override
+  Widget build(BuildContext context) {
+    Future<void> open(NovelEpisodeOpenPolicy policy) {
+      return Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => NovelReaderPage(
+            novelId: 'novel:49:100',
+            initialEpisodeId: 'novel:49:100:5001',
+            openPolicy: policy,
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      body: Column(
+        children: [
+          TextButton(
+            key: const Key('open-novel-from-beginning'),
+            onPressed: () => open(NovelEpisodeOpenPolicy.startAtBeginning),
+            child: const Text('从头阅读'),
+          ),
+          TextButton(
+            key: const Key('continue-novel-reading'),
+            onPressed: () => open(NovelEpisodeOpenPolicy.resumeLastRead),
+            child: const Text('继续阅读'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _RecordingNovelChapterUpdateService implements NovelChapterUpdateService {

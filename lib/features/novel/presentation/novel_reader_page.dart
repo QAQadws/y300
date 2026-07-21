@@ -12,6 +12,7 @@ import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
+import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
@@ -30,6 +31,8 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
+
+const _progressDiagnostics = NovelReaderProgressDiagnostics();
 
 class NovelReaderPage extends ConsumerStatefulWidget {
   const NovelReaderPage({
@@ -67,6 +70,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   int _readerSemanticsSuspendCount = 0;
   bool _hasRestoredOffset = false;
   String? _verticalRestoreOwner;
+  String? _verticalContentReadyOwner;
+  String? _verticalRestoreScheduledOwner;
   bool _isProgrammaticScrollChange = false;
   bool _allowPopAfterProgressFlush = false;
   bool _isHandlingPop = false;
@@ -94,6 +99,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   @override
   void initState() {
     super.initState();
+    _progressDiagnostics.log(
+      'page_open',
+      fields: <String, Object?>{
+        'novelId': widget.novelId,
+        'episodeId': widget.initialEpisodeId,
+        'openPolicy': widget.openPolicy.name,
+      },
+    );
     WidgetsBinding.instance.addObserver(this);
     _overlayController = ReaderOverlayController();
     _scrollController = ScrollController()..addListener(_onScroll);
@@ -118,7 +131,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused) {
-      unawaited(_saveVisibleProgressNow());
+      unawaited(_saveVisibleProgressNow(reason: 'lifecycle_${state.name}'));
     }
   }
 
@@ -159,7 +172,22 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             }
             if (_verticalRestoreOwner != restoreOwner) {
               _verticalRestoreOwner = restoreOwner;
+              _verticalContentReadyOwner = null;
+              _verticalRestoreScheduledOwner = null;
               _hasRestoredOffset = false;
+              _progressDiagnostics.log(
+                'surface_owner',
+                fields: <String, Object?>{
+                  'novelId': widget.novelId,
+                  'owner': restoreOwner,
+                  'openPolicy': widget.openPolicy.name,
+                  'snapshotOffset': viewState.progressSnapshot.scrollOffset
+                      .toStringAsFixed(2),
+                  'snapshotPercent': viewState.progressSnapshot.progressPercent
+                      .toStringAsFixed(4),
+                  'snapshotFlowMode': viewState.progressSnapshot.flowMode.name,
+                },
+              );
             }
             final theme = Theme.of(context);
             final palette = _themeResolver.resolve(
@@ -176,13 +204,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               color: palette.background,
               child: Builder(
                 builder: (context) {
-                  if (viewState.preferences.flowMode ==
-                      NovelReaderFlowMode.vertical) {
-                    _restoreOffsetIfNeeded(
-                      episodeId: viewState.currentEpisode.episodeId,
-                      snapshot: viewState.progressSnapshot,
-                    );
-                  }
                   final reader = ReaderOverlayScaffold(
                     controller: _overlayController,
                     topBar: _buildTopBarConfig(viewState),
@@ -417,6 +438,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final fraction = value.clamp(0.0, 1.0).toDouble();
     final maxScrollExtent = _scrollController.position.maxScrollExtent;
     final targetOffset = fraction * maxScrollExtent;
+    _progressDiagnostics.log(
+      'slider_seek',
+      fields: <String, Object?>{
+        'novelId': widget.novelId,
+        'episodeId': viewState.currentEpisode.episodeId,
+        'targetPercent': fraction.toStringAsFixed(4),
+        'targetOffset': targetOffset.toStringAsFixed(2),
+        'maxScrollExtent': maxScrollExtent.toStringAsFixed(2),
+      },
+    );
     setState(() {
       _isProgressSeekInFlight = true;
       _progressSliderPreview = fraction;
@@ -536,10 +567,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         onOpenImage: _openHtmlReaderImage,
         onImageFallback: (request) => _copyNovelImageUrl(request.url),
         onContentReady: () {
-          unawaited(
-            ref
-                .read(novelReaderControllerProvider(_args).notifier)
-                .onVerticalContentReady(viewState.currentEpisode.episodeId),
+          _restoreVerticalOffsetAfterContentReady(
+            owner:
+                '${viewState.currentEpisode.episodeId}|'
+                '${NovelReaderFlowMode.vertical.name}',
+            episodeId: viewState.currentEpisode.episodeId,
           );
         },
       ),
@@ -555,24 +587,59 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         ),
       ],
     ];
-    return ListView(
-      key: const Key('novel-reader-paragraph-list'),
-      controller: _scrollController,
-      padding: EdgeInsets.all(viewState.preferences.pagePadding),
-      children: [
-        Center(
-          child: ConstrainedBox(
-            key: const Key('novel-reader-content-column'),
-            constraints: BoxConstraints(
-              maxWidth: _safeContentMaxWidth(typography),
+    final restoreOwner =
+        '${viewState.currentEpisode.episodeId}|'
+        '${NovelReaderFlowMode.vertical.name}';
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.depth == 0 &&
+            notification is ScrollStartNotification &&
+            notification.dragDetails != null &&
+            !_hasRestoredOffset) {
+          _hasRestoredOffset = true;
+          _verticalRestoreScheduledOwner = null;
+          _progressDiagnostics.log(
+            'restore_cancel',
+            fields: <String, Object?>{
+              'novelId': widget.novelId,
+              'episodeId': viewState.currentEpisode.episodeId,
+              'reason': 'user_scroll_started',
+            },
+          );
+        }
+        return false;
+      },
+      child: NotificationListener<ScrollMetricsNotification>(
+        onNotification: (notification) {
+          if (notification.depth == 0) {
+            _scheduleVerticalRestoreAttempt(
+              owner: restoreOwner,
+              episodeId: viewState.currentEpisode.episodeId,
+              trigger: 'metrics_changed',
+            );
+          }
+          return false;
+        },
+        child: ListView(
+          key: const Key('novel-reader-paragraph-list'),
+          controller: _scrollController,
+          padding: EdgeInsets.all(viewState.preferences.pagePadding),
+          children: [
+            Center(
+              child: ConstrainedBox(
+                key: const Key('novel-reader-content-column'),
+                constraints: BoxConstraints(
+                  maxWidth: _safeContentMaxWidth(typography),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: children,
+                ),
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
-            ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -584,9 +651,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     if (!_hasRestoredOffset) {
-      // Once the user has started a real drag, stop any pending restore from
-      // fighting the gesture mid-flight.
-      _hasRestoredOffset = true;
+      // Ignore layout-driven position notifications until either restoration
+      // succeeds or a real drag explicitly takes ownership of the position.
+      return;
     }
     _overlayController.hideMenu();
     ref
@@ -597,51 +664,223 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         );
   }
 
-  void _restoreOffsetIfNeeded({
+  void _restoreVerticalOffsetAfterContentReady({
+    required String owner,
     required String episodeId,
-    required NovelReaderProgressSnapshot snapshot,
   }) {
-    if (_hasRestoredOffset) {
+    if (!mounted || _verticalRestoreOwner != owner) {
+      _progressDiagnostics.log(
+        'html_ready_stale',
+        fields: <String, Object?>{
+          'novelId': widget.novelId,
+          'episodeId': episodeId,
+          'callbackOwner': owner,
+          'activeOwner': _verticalRestoreOwner,
+        },
+      );
       return;
     }
+    final current = ref.read(novelReaderControllerProvider(_args)).value;
+    _progressDiagnostics.log(
+      'html_ready',
+      fields: <String, Object?>{
+        'novelId': widget.novelId,
+        'episodeId': episodeId,
+        'owner': owner,
+        'openPolicy': widget.openPolicy.name,
+        'hasClients': _scrollController.hasClients,
+        'currentOffset': _scrollController.hasClients
+            ? _scrollController.offset.toStringAsFixed(2)
+            : null,
+        'maxScrollExtent': _scrollController.hasClients
+            ? _scrollController.position.maxScrollExtent.toStringAsFixed(2)
+            : null,
+        'snapshotOffset': current?.progressSnapshot.scrollOffset
+            .toStringAsFixed(2),
+        'snapshotPercent': current?.progressSnapshot.progressPercent
+            .toStringAsFixed(4),
+        'snapshotFlowMode': current?.progressSnapshot.flowMode.name,
+      },
+    );
+    if (current == null ||
+        current.transition != null ||
+        current.currentEpisode.episodeId != episodeId ||
+        current.preferences.flowMode != NovelReaderFlowMode.vertical) {
+      _progressDiagnostics.log(
+        'restore_skip',
+        fields: <String, Object?>{
+          'novelId': widget.novelId,
+          'episodeId': episodeId,
+          'reason': 'state_mismatch',
+        },
+      );
+      return;
+    }
+    _verticalContentReadyOwner = owner;
+    if (_hasRestoredOffset) {
+      _progressDiagnostics.log(
+        'restore_skip',
+        fields: <String, Object?>{
+          'novelId': widget.novelId,
+          'episodeId': episodeId,
+          'reason': 'already_restored',
+          'currentOffset': _scrollController.hasClients
+              ? _scrollController.offset.toStringAsFixed(2)
+              : null,
+        },
+      );
+      _notifyVerticalContentReady(episodeId);
+      return;
+    }
+    _scheduleVerticalRestoreAttempt(
+      owner: owner,
+      episodeId: episodeId,
+      trigger: 'html_ready',
+    );
+  }
+
+  void _scheduleVerticalRestoreAttempt({
+    required String owner,
+    required String episodeId,
+    required String trigger,
+  }) {
+    if (!mounted ||
+        _verticalRestoreOwner != owner ||
+        _verticalContentReadyOwner != owner ||
+        _hasRestoredOffset ||
+        _verticalRestoreScheduledOwner == owner) {
+      return;
+    }
+    _verticalRestoreScheduledOwner = owner;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_verticalRestoreScheduledOwner == owner) {
+        _verticalRestoreScheduledOwner = null;
+      }
+      _attemptVerticalRestore(
+        owner: owner,
+        episodeId: episodeId,
+        trigger: trigger,
+      );
+    });
+  }
+
+  void _attemptVerticalRestore({
+    required String owner,
+    required String episodeId,
+    required String trigger,
+  }) {
+    if (!mounted ||
+        _verticalRestoreOwner != owner ||
+        _verticalContentReadyOwner != owner ||
+        _hasRestoredOffset) {
+      return;
+    }
+    final current = ref.read(novelReaderControllerProvider(_args)).value;
+    if (current == null ||
+        current.transition != null ||
+        current.currentEpisode.episodeId != episodeId ||
+        current.preferences.flowMode != NovelReaderFlowMode.vertical) {
+      return;
+    }
+    final snapshot = current.progressSnapshot;
     if (snapshot.scrollOffset <= 0 &&
         snapshot.progressPercent <= 0 &&
         snapshot.paginationKey == null) {
       _hasRestoredOffset = true;
+      _progressDiagnostics.log(
+        'restore_beginning',
+        fields: <String, Object?>{
+          'novelId': widget.novelId,
+          'episodeId': episodeId,
+          'openPolicy': widget.openPolicy.name,
+        },
+      );
+      _notifyVerticalContentReady(episodeId);
       return;
     }
-    final current = ref.read(novelReaderControllerProvider(_args)).value;
-    if (current?.transition != null) {
+    if (!_scrollController.hasClients) {
+      _logVerticalRestoreWait(
+        episodeId: episodeId,
+        trigger: trigger,
+        snapshot: snapshot,
+        reason: 'no_scroll_clients',
+      );
       return;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients || _hasRestoredOffset) {
-        return;
-      }
-      final latest = ref.read(novelReaderControllerProvider(_args)).value;
-      if (latest?.transition != null ||
-          latest?.currentEpisode.episodeId != episodeId) {
-        return;
-      }
-      final max = _scrollController.position.maxScrollExtent;
-      final offset = _progressPolicy.restoreScrollOffset(
-        snapshot,
+    final max = _scrollController.position.maxScrollExtent;
+    if (max <= 0) {
+      _logVerticalRestoreWait(
+        episodeId: episodeId,
+        trigger: trigger,
+        snapshot: snapshot,
+        reason: 'empty_scroll_extent',
         maxScrollExtent: max,
-        viewportDimension: _scrollController.position.viewportDimension,
       );
-      _isProgrammaticScrollChange = true;
-      try {
-        _scrollController.jumpTo(offset.clamp(0.0, max).toDouble());
-      } finally {
-        _isProgrammaticScrollChange = false;
-      }
-      _hasRestoredOffset = true;
-      unawaited(
-        ref
-            .read(novelReaderControllerProvider(_args).notifier)
-            .onScrollOffsetChanged(offset, maxScrollExtent: max),
-      );
-    });
+      return;
+    }
+    final offset = _progressPolicy.restoreScrollOffset(
+      snapshot,
+      maxScrollExtent: max,
+      viewportDimension: _scrollController.position.viewportDimension,
+    );
+    _progressDiagnostics.log(
+      'restore_apply',
+      fields: <String, Object?>{
+        'novelId': widget.novelId,
+        'episodeId': episodeId,
+        'trigger': trigger,
+        'openPolicy': widget.openPolicy.name,
+        'snapshotFlowMode': snapshot.flowMode.name,
+        'snapshotOffset': snapshot.scrollOffset.toStringAsFixed(2),
+        'snapshotPercent': snapshot.progressPercent.toStringAsFixed(4),
+        'maxScrollExtent': max.toStringAsFixed(2),
+        'viewportDimension': _scrollController.position.viewportDimension
+            .toStringAsFixed(2),
+        'targetOffset': offset.toStringAsFixed(2),
+      },
+    );
+    _isProgrammaticScrollChange = true;
+    try {
+      _scrollController.jumpTo(offset.clamp(0.0, max).toDouble());
+    } finally {
+      _isProgrammaticScrollChange = false;
+    }
+    _hasRestoredOffset = true;
+    unawaited(
+      ref
+          .read(novelReaderControllerProvider(_args).notifier)
+          .onScrollOffsetChanged(offset, maxScrollExtent: max),
+    );
+    _notifyVerticalContentReady(episodeId);
+  }
+
+  void _logVerticalRestoreWait({
+    required String episodeId,
+    required String trigger,
+    required NovelReaderProgressSnapshot snapshot,
+    required String reason,
+    double? maxScrollExtent,
+  }) {
+    _progressDiagnostics.log(
+      'restore_wait',
+      fields: <String, Object?>{
+        'novelId': widget.novelId,
+        'episodeId': episodeId,
+        'trigger': trigger,
+        'reason': reason,
+        'snapshotOffset': snapshot.scrollOffset.toStringAsFixed(2),
+        'snapshotPercent': snapshot.progressPercent.toStringAsFixed(4),
+        'maxScrollExtent': maxScrollExtent?.toStringAsFixed(2),
+      },
+    );
+  }
+
+  void _notifyVerticalContentReady(String episodeId) {
+    unawaited(
+      ref
+          .read(novelReaderControllerProvider(_args).notifier)
+          .onVerticalContentReady(episodeId),
+    );
   }
 
   Future<void> _popReader() async {
@@ -654,7 +893,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
     _isHandlingPop = true;
     try {
-      await _saveVisibleProgressNow();
+      await _saveVisibleProgressNow(reason: 'route_pop');
       if (!mounted) {
         return;
       }
@@ -666,7 +905,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   Future<void> _openDifferentEpisode(Future<bool> Function() action) async {
-    await _saveVisibleProgressNow();
+    await _saveVisibleProgressNow(reason: 'before_episode_switch');
     _hasRestoredOffset = false;
     if (_scrollController.hasClients) {
       _isProgrammaticScrollChange = true;
@@ -684,17 +923,32 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _showReaderSnackBar('章节切换失败，已保留当前章节');
   }
 
-  Future<void> _saveVisibleProgressNow() async {
+  Future<void> _saveVisibleProgressNow({required String reason}) async {
     final viewState = ref.read(novelReaderControllerProvider(_args)).value;
     if (viewState == null) {
+      _progressDiagnostics.log(
+        'visible_flush_skip',
+        fields: <String, Object?>{
+          'novelId': widget.novelId,
+          'reason': reason,
+          'cause': 'state_unavailable',
+        },
+      );
       return;
     }
     final controller = ref.read(novelReaderControllerProvider(_args).notifier);
     if (viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
+      _logVisibleFlush(reason: reason, snapshot: viewState.progressSnapshot);
       await controller.saveCurrentProgressNow(viewState.progressSnapshot);
       return;
     }
     if (!_scrollController.hasClients || !_hasRestoredOffset) {
+      _logVisibleFlush(
+        reason: reason,
+        snapshot: viewState.progressSnapshot,
+        hasClients: _scrollController.hasClients,
+        hasRestoredOffset: _hasRestoredOffset,
+      );
       await controller.saveCurrentProgressNow(viewState.progressSnapshot);
       return;
     }
@@ -704,13 +958,44 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final maxScrollExtent = _scrollController.hasClients
         ? _scrollController.position.maxScrollExtent
         : 0.0;
-    await controller.saveCurrentProgressNow(
-      _progressPolicy.verticalSnapshot(
-        novelId: widget.novelId,
-        episodeId: viewState.currentEpisode.episodeId,
-        scrollOffset: offset,
-        maxScrollExtent: maxScrollExtent,
-      ),
+    final snapshot = _progressPolicy.verticalSnapshot(
+      novelId: widget.novelId,
+      episodeId: viewState.currentEpisode.episodeId,
+      scrollOffset: offset,
+      maxScrollExtent: maxScrollExtent,
+    );
+    _logVisibleFlush(
+      reason: reason,
+      snapshot: snapshot,
+      maxScrollExtent: maxScrollExtent,
+      hasClients: true,
+      hasRestoredOffset: _hasRestoredOffset,
+    );
+    await controller.saveCurrentProgressNow(snapshot);
+  }
+
+  void _logVisibleFlush({
+    required String reason,
+    required NovelReaderProgressSnapshot snapshot,
+    double? maxScrollExtent,
+    bool? hasClients,
+    bool? hasRestoredOffset,
+  }) {
+    _progressDiagnostics.log(
+      'visible_flush',
+      fields: <String, Object?>{
+        'reason': reason,
+        'novelId': snapshot.novelId,
+        'episodeId': snapshot.episodeId,
+        'flowMode': snapshot.flowMode.name,
+        'scrollOffset': snapshot.scrollOffset.toStringAsFixed(2),
+        'progressPercent': snapshot.progressPercent.toStringAsFixed(4),
+        'pageIndex': snapshot.pageIndex,
+        'pageCount': snapshot.pageCount,
+        'maxScrollExtent': maxScrollExtent?.toStringAsFixed(2),
+        'hasClients': hasClients,
+        'hasRestoredOffset': hasRestoredOffset,
+      },
     );
   }
 
