@@ -83,28 +83,52 @@ void main() {
   });
 
   test(
-    'routes ruby, tables, collapses and inline images away from safe text',
+    'assigns explicit capabilities to ruby, dedicated and atomic content',
     () {
       final cases =
           <
             String,
-            (NovelReaderPaginationRoute, NovelReaderPaginationRouteReason)
+            (NovelReaderPaginationRoute, NovelReaderPaginationRouteReason, bool)
           >{
             '<p>前<ruby>字<rt>じ</rt></ruby>后</p>': (
               NovelReaderPaginationRoute.rubyInline,
               NovelReaderPaginationRouteReason.containsRuby,
+              true,
             ),
             '<table><tr><td>正文</td></tr></table>': (
               NovelReaderPaginationRoute.tableBlock,
               NovelReaderPaginationRouteReason.containsTable,
+              false,
             ),
             '<div class="showcollapse_box"><div>正文</div></div>': (
               NovelReaderPaginationRoute.collapseBlock,
               NovelReaderPaginationRouteReason.containsCollapse,
+              false,
             ),
             '<p>前<img src="static/image/smiley/default/smile.gif">后</p>': (
-              NovelReaderPaginationRoute.complexHtml,
+              NovelReaderPaginationRoute.atomicWidget,
               NovelReaderPaginationRouteReason.containsImage,
+              false,
+            ),
+            '<iframe src="about:blank"></iframe>': (
+              NovelReaderPaginationRoute.atomicWidget,
+              NovelReaderPaginationRouteReason.containsWidgetSpan,
+              false,
+            ),
+            '<video src="video.mp4"></video>': (
+              NovelReaderPaginationRoute.atomicWidget,
+              NovelReaderPaginationRouteReason.containsWidgetSpan,
+              false,
+            ),
+            '<audio src="audio.mp3"></audio>': (
+              NovelReaderPaginationRoute.atomicWidget,
+              NovelReaderPaginationRouteReason.containsWidgetSpan,
+              false,
+            ),
+            '<canvas>fallback</canvas>': (
+              NovelReaderPaginationRoute.atomicWidget,
+              NovelReaderPaginationRouteReason.containsWidgetSpan,
+              false,
             ),
           };
 
@@ -117,12 +141,17 @@ void main() {
         );
         expect(classified.route, entry.value.$1, reason: entry.key);
         expect(classified.reason, entry.value.$2, reason: entry.key);
-        expect(classified.isBreakable, isFalse, reason: entry.key);
+        expect(classified.isBreakable, entry.value.$3, reason: entry.key);
+        expect(
+          classified.layoutPolicy.isBreakable,
+          entry.value.$3,
+          reason: entry.key,
+        );
       }
     },
   );
 
-  test('routes unknown fonts and unsupported CSS to complex HTML', () {
+  test('routes text-bearing unsupported styles to flowable complex text', () {
     final unknownFont = classifier.classify(
       atom: _atom('<p><font face="Uninstalled Fantasy Font">正文</font></p>'),
       baseStyle: _baseStyle,
@@ -144,21 +173,97 @@ void main() {
       theme: _lightTheme,
     );
 
-    expect(unknownFont.route, NovelReaderPaginationRoute.complexHtml);
+    expect(unknownFont.route, NovelReaderPaginationRoute.flowableComplexText);
     expect(
       unknownFont.reason,
       NovelReaderPaginationRouteReason.unsupportedFont,
     );
-    expect(unsupportedCss.route, NovelReaderPaginationRoute.complexHtml);
+    expect(
+      unsupportedCss.route,
+      NovelReaderPaginationRoute.flowableComplexText,
+    );
     expect(
       unsupportedCss.reason,
       NovelReaderPaginationRouteReason.unsupportedStyle,
     );
-    expect(unsupportedDecoration.route, NovelReaderPaginationRoute.complexHtml);
+    expect(
+      unsupportedDecoration.route,
+      NovelReaderPaginationRoute.flowableComplexText,
+    );
     expect(
       unsupportedDecoration.reason,
       NovelReaderPaginationRouteReason.unsupportedStyle,
     );
+    expect(unknownFont.isBreakable, isTrue);
+    expect(unsupportedCss.isBreakable, isTrue);
+    expect(unsupportedDecoration.isBreakable, isTrue);
+  });
+
+  test('keeps unknown text wrappers flowable but risky layouts atomic', () {
+    final unknownWrapper = classifier.classify(
+      atom: _atom('<article>旧论坛文字 wrapper</article>'),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+    final positioned = classifier.classify(
+      atom: _atom('<div style="position:absolute">正文</div>'),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+    final scripted = classifier.classify(
+      atom: _atom('<div onclick="layout()">正文</div>'),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+
+    expect(
+      unknownWrapper.route,
+      NovelReaderPaginationRoute.flowableComplexText,
+    );
+    expect(
+      unknownWrapper.reason,
+      NovelReaderPaginationRouteReason.unsupportedTag,
+    );
+    expect(positioned.route, NovelReaderPaginationRoute.atomicWidget);
+    expect(
+      positioned.reason,
+      NovelReaderPaginationRouteReason.unsupportedStyle,
+    );
+    expect(scripted.route, NovelReaderPaginationRoute.atomicWidget);
+    expect(
+      scripted.reason,
+      NovelReaderPaginationRouteReason.unsupportedAttribute,
+    );
+  });
+
+  test('dedicated and atomic content take precedence over nested ruby', () {
+    final table = classifier.classify(
+      atom: _atom('<table><tr><td><ruby>字<rt>じ</rt></ruby></td></tr></table>'),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+    final collapse = classifier.classify(
+      atom: _atom(
+        '<div class="showcollapse_box"><ruby>字<rt>じ</rt></ruby></div>',
+      ),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+    final iframe = classifier.classify(
+      atom: _atom('<iframe><ruby>字<rt>じ</rt></ruby></iframe>'),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+
+    expect(table.route, NovelReaderPaginationRoute.tableBlock);
+    expect(collapse.route, NovelReaderPaginationRoute.collapseBlock);
+    expect(iframe.route, NovelReaderPaginationRoute.atomicWidget);
   });
 
   test('keeps semantic underline in the supported text subset', () {
@@ -228,12 +333,15 @@ void main() {
       theme: _lightTheme,
     );
 
-    expect(unknownValue.route, NovelReaderPaginationRoute.complexHtml);
+    expect(unknownValue.route, NovelReaderPaginationRoute.flowableComplexText);
     expect(
       unknownValue.reason,
       NovelReaderPaginationRouteReason.unsupportedAttribute,
     );
-    expect(nestedAlignment.route, NovelReaderPaginationRoute.complexHtml);
+    expect(
+      nestedAlignment.route,
+      NovelReaderPaginationRoute.flowableComplexText,
+    );
     expect(
       nestedAlignment.reason,
       NovelReaderPaginationRouteReason.unsupportedAttribute,
@@ -261,7 +369,7 @@ void main() {
     );
 
     expect(editStatus.route, NovelReaderPaginationRoute.safeText);
-    expect(unknownClass.route, NovelReaderPaginationRoute.complexHtml);
+    expect(unknownClass.route, NovelReaderPaginationRoute.flowableComplexText);
     expect(
       unknownClass.reason,
       NovelReaderPaginationRouteReason.unsupportedAttribute,

@@ -1,0 +1,54 @@
+{
+  "Version": "1",
+  "Charset": "UTF-8",
+  "FixtureMetadata": {
+    "kind": "novelComplexHtmlPhase0",
+    "source": "sanitized structural excerpt from the user-provided thread 565218 capture",
+    "requestedPage": 1,
+    "originalPostCount": 100,
+    "sanitizedExcerpt": true,
+    "targetPid": "41425048",
+    "requestVersion": "1",
+    "reusesExistingFixturePid": "41425060",
+    "removedSensitiveFields": [
+      "cookiepre",
+      "auth",
+      "saltkey",
+      "formhash",
+      "member_uid",
+      "member_username"
+    ]
+  },
+  "Variables": {
+    "fid": "55",
+    "ppp": "100",
+    "thread": {
+      "tid": "565218",
+      "fid": "55",
+      "typeid": "295",
+      "subject": "Sanitized invalid-font and collapse pagination fixture",
+      "author": "fixture-author",
+      "authorid": "1",
+      "replies": "99",
+      "allreplies": "99",
+      "maxposition": "100",
+      "views": "0"
+    },
+    "postlist": [
+      {
+        "pid": "41425048",
+        "tid": "565218",
+        "first": "1",
+        "author": "fixture-author",
+        "authorid": "1",
+        "dateline": "2025-01-01 00:00",
+        "message": "<div align=\"center\"><strong><font face=\"&amp;quot;\"> </font><font face=\"&amp;quot;\">我的朋友毫不踌躇</font></strong></div><br /><div align=\"center\"><strong>简介</strong></div><br /><div align=\"center\">第一行结构化简介。</div><div align=\"center\">第二行结构化简介。</div><br /><div class=\"showcollapse_box\"><div class=\"showcollapse_title\">本文提示，涉及剧透，慎点</div><div class=\"showcollapse_content\">脱敏后的折叠内容。<div class=\"showcollapse_gather\">收起</div></div></div><br /><strong>目录：</strong><br /><div class=\"showcollapse_box\"><div class=\"showcollapse_title\">ACT01-20</div><div class=\"showcollapse_content\"><a href=\"https://bbs.yamibo.com/forum.php?mod=redirect&amp;goto=findpost&amp;ptid=565218&amp;pid=41425060\" target=\"_blank\">ACT01</a><div class=\"showcollapse_gather\">收起</div></div></div>",
+        "anonymous": "0",
+        "attachment": "0",
+        "status": "0",
+        "number": "1"
+      }
+    ],
+    "imagelist": [""]
+  }
+}

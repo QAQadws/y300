@@ -144,7 +144,7 @@ void main() {
             ),
           );
 
-      expect(classified.route, NovelReaderPaginationRoute.complexHtml);
+      expect(classified.route, NovelReaderPaginationRoute.flowableComplexText);
       expect(page.metrics.measurementCacheHit, isTrue);
       expect(page.metrics.frameWaitCount, 0);
     },

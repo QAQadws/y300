@@ -111,6 +111,17 @@ class NovelReaderPaginationPlan {
 
   int get pageCount => pages.length;
 
+  int get flowableComplexAtomCount =>
+      routeCounts[NovelReaderPaginationRoute.flowableComplexText] ?? 0;
+
+  int get atomicWidgetAtomCount =>
+      routeCounts[NovelReaderPaginationRoute.atomicWidget] ?? 0;
+
+  int get dedicatedContentAtomCount =>
+      (routeCounts[NovelReaderPaginationRoute.isolatedImage] ?? 0) +
+      (routeCounts[NovelReaderPaginationRoute.tableBlock] ?? 0) +
+      (routeCounts[NovelReaderPaginationRoute.collapseBlock] ?? 0);
+
   bool get hasOverflowFallback => pages.any((page) => page.hasOverflow);
 
   double get averageTextPageFullness {

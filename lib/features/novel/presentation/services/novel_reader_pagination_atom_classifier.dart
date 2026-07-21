@@ -3,6 +3,8 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_flowability_inspector.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_text_style_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
@@ -11,11 +13,17 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 final class NovelReaderPaginationAtomClassifier {
   const NovelReaderPaginationAtomClassifier({
     this.styleResolver = const DefaultForumHtmlTextStyleResolver(),
+    this.flowabilityInspector =
+        const DefaultNovelReaderComplexHtmlFlowabilityInspector(),
+    this.layoutPolicyResolver =
+        const DefaultNovelReaderPaginationLayoutPolicyResolver(),
     CssInlineStyleDeclarationCodec declarationCodec =
         const CssInlineStyleDeclarationCodec(),
   }) : _declarationCodec = declarationCodec;
 
   final ForumHtmlTextStyleResolver styleResolver;
+  final NovelReaderComplexHtmlFlowabilityInspector flowabilityInspector;
+  final NovelReaderPaginationLayoutPolicyResolver layoutPolicyResolver;
   final CssInlineStyleDeclarationCodec _declarationCodec;
 
   static const Set<String> _rootBlockTags = <String>{
@@ -67,13 +75,6 @@ final class NovelReaderPaginationAtomClassifier {
       );
     }
     final fragment = html_parser.parseFragment(atom.html);
-    if (_contains(fragment, 'ruby,rt,rp')) {
-      return _classified(
-        atom,
-        NovelReaderPaginationRoute.rubyInline,
-        NovelReaderPaginationRouteReason.containsRuby,
-      );
-    }
     if (_contains(fragment, '.showcollapse_box')) {
       return _classified(
         atom,
@@ -91,7 +92,7 @@ final class NovelReaderPaginationAtomClassifier {
     if (_contains(fragment, 'img')) {
       return _classified(
         atom,
-        NovelReaderPaginationRoute.complexHtml,
+        NovelReaderPaginationRoute.atomicWidget,
         NovelReaderPaginationRouteReason.containsImage,
       );
     }
@@ -101,15 +102,22 @@ final class NovelReaderPaginationAtomClassifier {
     )) {
       return _classified(
         atom,
-        NovelReaderPaginationRoute.complexHtml,
+        NovelReaderPaginationRoute.atomicWidget,
         NovelReaderPaginationRouteReason.containsWidgetSpan,
       );
     }
     if (atom.kind == NovelReaderPaginationAtomKind.atomicWidget) {
       return _classified(
         atom,
-        NovelReaderPaginationRoute.complexHtml,
+        NovelReaderPaginationRoute.atomicWidget,
         NovelReaderPaginationRouteReason.atomicWidget,
+      );
+    }
+    if (_contains(fragment, 'ruby,rt,rp')) {
+      return _classified(
+        atom,
+        NovelReaderPaginationRoute.rubyInline,
+        NovelReaderPaginationRouteReason.containsRuby,
       );
     }
 
@@ -118,9 +126,8 @@ final class NovelReaderPaginationAtomClassifier {
         atom.kind == NovelReaderPaginationAtomKind.inlineText ||
         atom.kind == NovelReaderPaginationAtomKind.spacer;
     if (roots.isEmpty || (!isInlineRoot && roots.length != 1)) {
-      return _classified(
+      return _classifiedByFlowability(
         atom,
-        NovelReaderPaginationRoute.complexHtml,
         NovelReaderPaginationRouteReason.unsupportedTag,
       );
     }
@@ -134,18 +141,13 @@ final class NovelReaderPaginationAtomClassifier {
         theme: theme,
       );
       if (failure != null) {
-        return _classified(
-          atom,
-          NovelReaderPaginationRoute.complexHtml,
-          failure,
-        );
+        return _classifiedByFlowability(atom, failure);
       }
     }
-    return NovelReaderClassifiedPaginationAtom(
-      atom: atom,
-      route: NovelReaderPaginationRoute.safeText,
-      isBreakable: true,
-      reason: NovelReaderPaginationRouteReason.safeTextSubset,
+    return _classified(
+      atom,
+      NovelReaderPaginationRoute.safeText,
+      NovelReaderPaginationRouteReason.safeTextSubset,
     );
   }
 
@@ -276,11 +278,26 @@ final class NovelReaderPaginationAtomClassifier {
     NovelReaderPaginationRoute route,
     NovelReaderPaginationRouteReason reason,
   ) {
+    final layoutPolicy = layoutPolicyResolver.resolve(route);
     return NovelReaderClassifiedPaginationAtom(
       atom: atom,
       route: route,
-      isBreakable: false,
       reason: reason,
+      layoutPolicy: layoutPolicy,
+    );
+  }
+
+  NovelReaderClassifiedPaginationAtom _classifiedByFlowability(
+    NovelReaderPaginationAtom atom,
+    NovelReaderPaginationRouteReason reason,
+  ) {
+    final flowability = flowabilityInspector.inspect(atom.html);
+    return _classified(
+      atom,
+      flowability.isFlowable
+          ? NovelReaderPaginationRoute.flowableComplexText
+          : NovelReaderPaginationRoute.atomicWidget,
+      reason,
     );
   }
 }

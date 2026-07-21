@@ -33,6 +33,9 @@ class NovelReaderPaginationDiagnostics {
     this.textLayoutCount = 0,
     this.complexBlockCount = 0,
     this.safeTextFallbackCount = 0,
+    this.flowableComplexAtomCount = 0,
+    this.atomicWidgetAtomCount = 0,
+    this.dedicatedContentAtomCount = 0,
     this.firstPageDuration = Duration.zero,
     this.cancelledPlanCount = 0,
     this.availableHeight = 0,
@@ -99,6 +102,9 @@ class NovelReaderPaginationDiagnostics {
   final int textLayoutCount;
   final int complexBlockCount;
   final int safeTextFallbackCount;
+  final int flowableComplexAtomCount;
+  final int atomicWidgetAtomCount;
+  final int dedicatedContentAtomCount;
   final Duration firstPageDuration;
   final int cancelledPlanCount;
   final double availableHeight;
@@ -138,6 +144,9 @@ class NovelReaderPaginationDiagnostics {
         'rendererMismatches=$rendererValidationMismatchCount, '
         'textLayouts=$textLayoutCount, safeRuns=$safeTextRunCount, '
         'complexBlocks=$complexBlockCount, '
+        'flowableComplexAtoms=$flowableComplexAtomCount, '
+        'atomicWidgetAtoms=$atomicWidgetAtomCount, '
+        'dedicatedContentAtoms=$dedicatedContentAtomCount, '
         'safeFallbacks=$safeTextFallbackCount, routes=$routeCounts, '
         'safeFallbackReasons=$safeTextFallbackReasonCounts, '
         'routeReasons=$routeReasonCounts, '

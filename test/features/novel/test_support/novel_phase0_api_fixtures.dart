@@ -51,6 +51,18 @@ const novelPaginationDivParagraphFixturePath =
     'test/features/novel/fixtures/pagination/'
     'thread_565218_pid_41425060_v1.json';
 
+const novelComplexHtmlThread511960FixturePath =
+    'test/features/novel/fixtures/pagination/'
+    'thread_511960_complex_blocks_v1.json';
+
+const novelComplexHtmlThread565218FixturePath =
+    'test/features/novel/fixtures/pagination/'
+    'thread_565218_pid_41425048_complex_v1.json';
+
+const novelComplexHtmlInvalidFontFixturePath =
+    'test/features/novel/fixtures/pagination/'
+    'flowable_complex_invalid_font_v1.html';
+
 Map<String, dynamic> _asStringMap(Object? value) {
   if (value is Map<String, dynamic>) {
     return value;

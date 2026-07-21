@@ -1,0 +1,68 @@
+{
+  "Version": "1",
+  "Charset": "UTF-8",
+  "FixtureMetadata": {
+    "kind": "novelComplexHtmlPhase0",
+    "source": "sanitized structural excerpts from the user-provided thread 511960 capture",
+    "requestedPage": 1,
+    "originalPostCount": 20,
+    "sanitizedExcerpt": true,
+    "targetPids": ["39844616", "39844657"],
+    "requestVersion": "1",
+    "removedSensitiveFields": [
+      "cookiepre",
+      "auth",
+      "saltkey",
+      "formhash",
+      "member_uid",
+      "member_username"
+    ]
+  },
+  "Variables": {
+    "fid": "55",
+    "ppp": "20",
+    "thread": {
+      "tid": "511960",
+      "fid": "55",
+      "typeid": "295",
+      "subject": "Sanitized image, table, and divider pagination fixture",
+      "author": "fixture-author",
+      "authorid": "1",
+      "replies": "19",
+      "allreplies": "19",
+      "maxposition": "20",
+      "views": "0"
+    },
+    "postlist": [
+      {
+        "pid": "39844616",
+        "tid": "511960",
+        "first": "1",
+        "author": "fixture-author",
+        "authorid": "1",
+        "dateline": "2025-01-01 00:00",
+        "message": "<div align=\"center\"><img src=\"https://bbs.yamibo.com/data/attachment/forum/fixture-cover.jpg\" width=\"640\" height=\"960\" /></div><br /><div align=\"center\"><table><tbody><tr><th>汉化信息</th></tr><tr><td>结构化测试正文</td></tr></tbody></table></div>",
+        "anonymous": "0",
+        "attachment": "0",
+        "status": "0",
+        "number": "1"
+      },
+      {
+        "pid": "39844657",
+        "tid": "511960",
+        "first": "0",
+        "author": "fixture-author",
+        "authorid": "1",
+        "dateline": "2025-01-01 00:01",
+        "message": "<div align=\"center\"><font color=\"DarkOrange\">序章：结构边界样本</font></div><br /><br />　　第一段正文用于锁定普通文字路由。<br />　　第二段正文位于居中分隔符之前。<br /><br /><div align=\"center\">＊＊＊</div><br /><br />　　分隔符之后的正文继续使用相同阅读样式。",
+        "anonymous": "0",
+        "attachment": "0",
+        "status": "0",
+        "number": "2"
+      }
+    ],
+    "imagelist": [
+      "https://bbs.yamibo.com/data/attachment/forum/fixture-cover.jpg"
+    ]
+  }
+}

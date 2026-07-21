@@ -17,6 +17,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_increment
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_classifier.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_page_composer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_renderer_validator.dart';
@@ -50,6 +51,8 @@ final class DefaultNovelReaderHybridPaginationPlanner
     this.textScaler = TextScaler.noScaling,
     this.atomExtractor = const NovelReaderPaginationAtomExtractor(),
     this.atomClassifier = const NovelReaderPaginationAtomClassifier(),
+    this.layoutPolicyResolver =
+        const DefaultNovelReaderPaginationLayoutPolicyResolver(),
     this.textRunExtractor = const NovelReaderPaginationTextRunExtractor(),
     this.complexBlockEngine = const NovelReaderComplexBlockPaginationEngine(),
     this.validationPolicy = const NovelReaderPaginationValidationPolicy(),
@@ -79,6 +82,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
   final TextScaler textScaler;
   final NovelReaderPaginationAtomExtractor atomExtractor;
   final NovelReaderPaginationAtomClassifier atomClassifier;
+  final NovelReaderPaginationLayoutPolicyResolver layoutPolicyResolver;
   final NovelReaderPaginationTextRunExtractor textRunExtractor;
   final NovelReaderComplexBlockPaginationEngine complexBlockEngine;
   final NovelReaderPaginationValidationPolicy validationPolicy;
@@ -658,8 +662,10 @@ final class DefaultNovelReaderHybridPaginationPlanner
             );
             await publishFinalPages();
           case NovelReaderPaginationRoute.rubyInline:
+          case NovelReaderPaginationRoute.flowableComplexText:
           case NovelReaderPaginationRoute.collapseBlock:
           case NovelReaderPaginationRoute.tableBlock:
+          case NovelReaderPaginationRoute.atomicWidget:
           case NovelReaderPaginationRoute.complexHtml:
             complexBlockCount += 1;
             final block = await complexBlockEngine.paginate(
@@ -766,6 +772,8 @@ final class DefaultNovelReaderHybridPaginationPlanner
     final first = chunks[startIndex];
     final html = chunks.skip(startIndex).map((chunk) => chunk.html).join();
     final atom = classified.atom;
+    final route = NovelReaderPaginationRoute.flowableComplexText;
+    final layoutPolicy = layoutPolicyResolver.resolve(route);
     return NovelReaderClassifiedPaginationAtom(
       atom: NovelReaderPaginationAtom(
         atomId: '${atom.atomId}:fallback-${first.sourceStart}',
@@ -778,20 +786,22 @@ final class DefaultNovelReaderHybridPaginationPlanner
         breakability: atom.breakability,
         imagePagePolicy: atom.imagePagePolicy,
       ),
-      route: NovelReaderPaginationRoute.complexHtml,
-      isBreakable: false,
+      route: route,
       reason: NovelReaderPaginationRouteReason.unsupportedStyle,
+      layoutPolicy: layoutPolicy,
     );
   }
 
   NovelReaderClassifiedPaginationAtom _complexFallbackForAtom(
     NovelReaderClassifiedPaginationAtom classified,
   ) {
+    final route = NovelReaderPaginationRoute.flowableComplexText;
+    final layoutPolicy = layoutPolicyResolver.resolve(route);
     return NovelReaderClassifiedPaginationAtom(
       atom: classified.atom,
-      route: NovelReaderPaginationRoute.complexHtml,
-      isBreakable: false,
+      route: route,
       reason: NovelReaderPaginationRouteReason.unsupportedStyle,
+      layoutPolicy: layoutPolicy,
     );
   }
 
@@ -927,6 +937,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
       textScaler: textScaler,
       atomExtractor: atomExtractor,
       atomClassifier: atomClassifier,
+      layoutPolicyResolver: layoutPolicyResolver,
       textRunExtractor: textRunExtractor,
       complexBlockEngine: complexBlockEngine,
       validationPolicy: validationPolicy,
