@@ -1,6 +1,6 @@
 # 小说阅读器复杂 HTML 流式分页 Phase 0 基线与 ADR
 
-> 状态：Phase 0 已完成，ADR 已接受
+> 状态：Phase 0 已完成，ADR 已接受；Phase 1-2 已落地
 >
 > 日期：2026-07-21
 >
@@ -317,4 +317,19 @@ flutter analyze
 - [x] ADR 已裁定 route/policy、dedicated、atomic、二分、缓存和 rollback。
 - [x] 生产分页行为未修改。
 
-下一阶段为 Phase 1：能力模型和分类器拆分。Phase 1 只能增加明确 policy 和 diagnostics，仍不得提前改变用户可见页数。
+## 16. Phase 1-2 后续实施记录
+
+Phase 1 已将 route reason 与 layout policy 解耦，并引入
+`flowableComplexText`、`atomicWidget`、flowability inspector 和 capability
+diagnostics。该阶段仍通过旧 whole-atom engine 输出页面，因此无效字体样本的
+默认可见基线尚未变化。
+
+Phase 2 已在小说共享 chapter preparation 边界加入 revision `1` 的 legacy
+markup normalizer。默认路径会删除两个 quote-only `font face`，保留所有正文、
+wrapper 和其它样式属性，使样本全部进入 `safeText` 并从 3 页降为 1 页。
+注入 `NoopNovelReaderLegacyMarkupNormalizer` 仍可复现本 ADR 记录的 3 页、两次
+whole-atom measurement 和前两页 `0.0500` fullness，因此历史证据与 rollback
+基线没有丢失。
+
+下一阶段为 Phase 3：DOM boundary index 与合法切片。Phase 3 只建立纯 DOM
+范围基础设施，不提前接入生产 composer。

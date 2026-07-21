@@ -11,7 +11,9 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_legacy_markup_normalizer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_classifier.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
@@ -35,6 +37,7 @@ void main() {
       final baseline = await _paginate(
         html: html,
         episodeId: 'phase0-invalid-font',
+        legacyMarkupNormalizer: const NoopNovelReaderLegacyMarkupNormalizer(),
       );
       final unsupportedFontAtoms = baseline.classified
           .where(
@@ -138,7 +141,7 @@ void main() {
       );
 
       final blockRoutes = await _classifyPosts(thread511960);
-      final complexRoutes = await _classifyPosts(thread565218);
+      final normalizedRoutes = await _classifyPosts(thread565218);
       final existingRoutes = await _classifyPosts(existingLongText);
 
       // Stable structural diagnostics only; no body HTML is emitted.
@@ -147,8 +150,8 @@ void main() {
         'NOVEL_COMPLEX_HTML_FIXTURES '
         'blocksRoutes=${_routeCounts(blockRoutes)} '
         'blocksReasons=${_reasonCounts(blockRoutes)} '
-        'complexRoutes=${_routeCounts(complexRoutes)} '
-        'complexReasons=${_reasonCounts(complexRoutes)} '
+        'normalizedRoutes=${_routeCounts(normalizedRoutes)} '
+        'normalizedReasons=${_reasonCounts(normalizedRoutes)} '
         'existingRoutes=${_routeCounts(existingRoutes)} '
         'existingReasons=${_reasonCounts(existingRoutes)}',
       );
@@ -166,16 +169,14 @@ void main() {
           NovelReaderPaginationRouteReason.containsTable: 1,
         },
       );
-      expect(_routeCounts(complexRoutes), <NovelReaderPaginationRoute, int>{
-        NovelReaderPaginationRoute.flowableComplexText: 1,
-        NovelReaderPaginationRoute.safeText: 9,
+      expect(_routeCounts(normalizedRoutes), <NovelReaderPaginationRoute, int>{
+        NovelReaderPaginationRoute.safeText: 10,
         NovelReaderPaginationRoute.collapseBlock: 2,
       });
       expect(
-        _reasonCounts(complexRoutes),
+        _reasonCounts(normalizedRoutes),
         <NovelReaderPaginationRouteReason, int>{
-          NovelReaderPaginationRouteReason.unsupportedFont: 1,
-          NovelReaderPaginationRouteReason.safeTextSubset: 9,
+          NovelReaderPaginationRouteReason.safeTextSubset: 10,
           NovelReaderPaginationRouteReason.containsCollapse: 2,
         },
       );
@@ -194,21 +195,40 @@ void main() {
   );
 
   test(
-    'target behavior: short complex titles share a page with following text',
+    'phase 2 normalizes invalid font titles onto the safe text path',
     () async {
       final html = File(
         novelComplexHtmlInvalidFontFixturePath,
       ).readAsStringSync();
-      final baseline = await _paginate(
+      final normalized = await _paginate(
         html: html,
-        episodeId: 'phase0-future-target',
+        episodeId: 'phase2-normalized-font',
       );
 
-      expect(baseline.plan.pages.first.html, contains('喜歡的人和義妹'));
-      expect(baseline.plan.pages.first.html, contains('第一話（１）'));
-      expect(baseline.plan.pages.first.html, contains('如果能轉世重生'));
+      expect(normalized.chapter.legacyMarkupNormalization.revision, 1);
+      expect(
+        normalized.chapter.legacyMarkupNormalization.normalizedAttributeCount,
+        2,
+      );
+      expect(normalized.chapter.html, isNot(contains('face=')));
+      expect(
+        normalized.classified,
+        everyElement(
+          isA<NovelReaderClassifiedPaginationAtom>().having(
+            (atom) => atom.route,
+            'route',
+            NovelReaderPaginationRoute.safeText,
+          ),
+        ),
+      );
+      expect(normalized.plan.pageCount, 1);
+      expect(normalized.plan.complexBlockCount, 0);
+      expect(normalized.plan.measurementCount, 1);
+      expect(normalized.plan.rendererValidationCount, 1);
+      expect(normalized.plan.pages.first.html, contains('喜歡的人和義妹'));
+      expect(normalized.plan.pages.first.html, contains('第一話（１）'));
+      expect(normalized.plan.pages.first.html, contains('如果能轉世重生'));
     },
-    skip: 'Phase 5 will enable flowable complex HTML page composition.',
   );
 }
 
@@ -231,8 +251,14 @@ Future<List<NovelReaderClassifiedPaginationAtom>> _classifyPosts(
 Future<_Phase0Baseline> _paginate({
   required String html,
   required String episodeId,
+  NovelReaderLegacyMarkupNormalizer legacyMarkupNormalizer =
+      const DefaultNovelReaderLegacyMarkupNormalizer(),
 }) async {
-  final chapter = await _prepare(html: html, episodeId: episodeId);
+  final chapter = await _prepare(
+    html: html,
+    episodeId: episodeId,
+    legacyMarkupNormalizer: legacyMarkupNormalizer,
+  );
   final classified = _classify(chapter);
   final key = NovelReaderPaginationKey(
     episodeId: chapter.episodeId,
@@ -270,6 +296,7 @@ Future<_Phase0Baseline> _paginate({
   }
   stopwatch.stop();
   return _Phase0Baseline(
+    chapter: chapter,
     classified: classified,
     plan: finalPlan!,
     firstPageDuration: firstPageDuration,
@@ -280,6 +307,8 @@ Future<NovelReaderPreparedChapter> _prepare({
   required String html,
   required String episodeId,
   String sourceTid = 'phase0-thread',
+  NovelReaderLegacyMarkupNormalizer legacyMarkupNormalizer =
+      const DefaultNovelReaderLegacyMarkupNormalizer(),
 }) {
   final episode = NovelEpisodeItem(
     episodeId: episodeId,
@@ -288,7 +317,11 @@ Future<NovelReaderPreparedChapter> _prepare({
     episodeTitle: 'Phase 0 complex HTML baseline',
     orderIndex: 0,
   );
-  return const DefaultNovelReaderHtmlPreparationService().prepare(
+  return DefaultNovelReaderHtmlPreparationService(
+    preparer: NovelHtmlChapterRenderPreparer(
+      legacyMarkupNormalizer: legacyMarkupNormalizer,
+    ),
+  ).prepare(
     rawHtml: html,
     episode: episode,
     preferences: _preferences,
@@ -343,11 +376,13 @@ Map<NovelReaderPaginationRouteReason, int> _reasonCounts(
 
 final class _Phase0Baseline {
   const _Phase0Baseline({
+    required this.chapter,
     required this.classified,
     required this.plan,
     required this.firstPageDuration,
   });
 
+  final NovelReaderPreparedChapter chapter;
   final List<NovelReaderClassifiedPaginationAtom> classified;
   final NovelReaderPaginationPlan plan;
   final Duration? firstPageDuration;

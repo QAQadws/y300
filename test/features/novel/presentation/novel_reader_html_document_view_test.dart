@@ -229,6 +229,9 @@ const _darkTheme = ForumHtmlThemeContext(
 
 final class _DeferredNovelHtmlChapterPreparer
     implements NovelHtmlChapterPreparer {
+  @override
+  int get legacyMarkupNormalizerRevision => 0;
+
   final calls = <_DeferredPrepareCall>[];
 
   @override

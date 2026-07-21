@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 
 @immutable
@@ -36,6 +37,8 @@ class NovelReaderPaginationDiagnostics {
     this.flowableComplexAtomCount = 0,
     this.atomicWidgetAtomCount = 0,
     this.dedicatedContentAtomCount = 0,
+    this.legacyMarkupNormalizerRevision = 0,
+    this.normalizedLegacyAttributeCount = 0,
     this.firstPageDuration = Duration.zero,
     this.cancelledPlanCount = 0,
     this.availableHeight = 0,
@@ -51,6 +54,9 @@ class NovelReaderPaginationDiagnostics {
         const <NovelReaderPaginationRouteReason, int>{},
     Map<NovelReaderSafeTextFallbackReason, int> safeTextFallbackReasonCounts =
         const <NovelReaderSafeTextFallbackReason, int>{},
+    Map<NovelReaderLegacyMarkupNormalizationReason, int>
+        legacyMarkupNormalizationReasonCounts =
+        const <NovelReaderLegacyMarkupNormalizationReason, int>{},
     List<NovelReaderPaginationMeasurementSample> measurementSamples =
         const <NovelReaderPaginationMeasurementSample>[],
   }) : gapReasonCounts = Map<NovelReaderPageGapReason, int>.unmodifiable(
@@ -69,6 +75,10 @@ class NovelReaderPaginationDiagnostics {
        safeTextFallbackReasonCounts =
            Map<NovelReaderSafeTextFallbackReason, int>.unmodifiable(
              safeTextFallbackReasonCounts,
+           ),
+       legacyMarkupNormalizationReasonCounts =
+           Map<NovelReaderLegacyMarkupNormalizationReason, int>.unmodifiable(
+             legacyMarkupNormalizationReasonCounts,
            ),
        measurementSamples =
            List<NovelReaderPaginationMeasurementSample>.unmodifiable(
@@ -105,6 +115,8 @@ class NovelReaderPaginationDiagnostics {
   final int flowableComplexAtomCount;
   final int atomicWidgetAtomCount;
   final int dedicatedContentAtomCount;
+  final int legacyMarkupNormalizerRevision;
+  final int normalizedLegacyAttributeCount;
   final Duration firstPageDuration;
   final int cancelledPlanCount;
   final double availableHeight;
@@ -116,6 +128,8 @@ class NovelReaderPaginationDiagnostics {
   final Map<NovelReaderPaginationRouteReason, int> routeReasonCounts;
   final Map<NovelReaderSafeTextFallbackReason, int>
   safeTextFallbackReasonCounts;
+  final Map<NovelReaderLegacyMarkupNormalizationReason, int>
+  legacyMarkupNormalizationReasonCounts;
   final List<NovelReaderPaginationMeasurementSample> measurementSamples;
 
   double get measurementCacheHitRate =>
@@ -147,6 +161,9 @@ class NovelReaderPaginationDiagnostics {
         'flowableComplexAtoms=$flowableComplexAtomCount, '
         'atomicWidgetAtoms=$atomicWidgetAtomCount, '
         'dedicatedContentAtoms=$dedicatedContentAtomCount, '
+        'legacyNormalizerRevision=$legacyMarkupNormalizerRevision, '
+        'normalizedLegacyAttributes=$normalizedLegacyAttributeCount, '
+        'normalizationReasons=$legacyMarkupNormalizationReasonCounts, '
         'safeFallbacks=$safeTextFallbackCount, routes=$routeCounts, '
         'safeFallbackReasons=$safeTextFallbackReasonCounts, '
         'routeReasons=$routeReasonCounts, '

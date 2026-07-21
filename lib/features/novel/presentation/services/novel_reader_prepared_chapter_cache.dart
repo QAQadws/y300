@@ -66,6 +66,10 @@ final class NovelReaderCachingHtmlPreparationService
       <String, Future<NovelReaderPreparedChapter>>{};
 
   @override
+  int get legacyMarkupNormalizerRevision =>
+      _delegate.legacyMarkupNormalizerRevision;
+
+  @override
   Future<NovelReaderPreparedChapter> prepare({
     required String rawHtml,
     required NovelEpisodeItem episode,
@@ -86,6 +90,7 @@ final class NovelReaderCachingHtmlPreparationService
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,
       semanticDocumentHash: semanticDocument?.rawHtmlHash,
+      legacyMarkupNormalizerRevision: legacyMarkupNormalizerRevision,
     ).value;
     final cached = cache.get(key);
     if (cached != null) {
@@ -143,6 +148,7 @@ final class _PreparationCacheKey {
     required String? threadId,
     required String? imageCacheOwnerId,
     required String? semanticDocumentHash,
+    required int legacyMarkupNormalizerRevision,
   }) {
     final source = <String?>[
       _hash(rawHtml),
@@ -157,6 +163,7 @@ final class _PreparationCacheKey {
       threadId,
       imageCacheOwnerId,
       semanticDocumentHash,
+      legacyMarkupNormalizerRevision.toString(),
     ].join('\u001f');
     return _PreparationCacheKey(_hash(source));
   }

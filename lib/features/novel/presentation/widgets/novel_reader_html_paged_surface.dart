@@ -512,6 +512,12 @@ class _NovelReaderHtmlPagedSurfaceState
           flowableComplexAtomCount: plan.flowableComplexAtomCount,
           atomicWidgetAtomCount: plan.atomicWidgetAtomCount,
           dedicatedContentAtomCount: plan.dedicatedContentAtomCount,
+          legacyMarkupNormalizerRevision:
+              prepared.legacyMarkupNormalization.revision,
+          normalizedLegacyAttributeCount:
+              prepared.legacyMarkupNormalization.normalizedAttributeCount,
+          legacyMarkupNormalizationReasonCounts:
+              prepared.legacyMarkupNormalization.reasonCounts,
           safeTextRunCount: plan.safeTextRunCount,
           firstPageDuration: _firstPageDuration ?? Duration.zero,
           cancelledPlanCount: _cancelledPlanCount,

@@ -8,6 +8,8 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 
 abstract interface class NovelReaderHtmlPreparationService {
+  int get legacyMarkupNormalizerRevision;
+
   Future<NovelReaderPreparedChapter> prepare({
     required String rawHtml,
     required NovelEpisodeItem episode,
@@ -29,6 +31,10 @@ final class DefaultNovelReaderHtmlPreparationService
 
   final NovelHtmlChapterPreparer preparer;
   final NovelReaderHtmlFlowUnitExtractor flowUnitExtractor;
+
+  @override
+  int get legacyMarkupNormalizerRevision =>
+      preparer.legacyMarkupNormalizerRevision;
 
   @override
   Future<NovelReaderPreparedChapter> prepare({
@@ -56,13 +62,17 @@ final class DefaultNovelReaderHtmlPreparationService
     );
     return NovelReaderPreparedChapter(
       episodeId: episode.episodeId,
-      contentHash: _stableHash(prepared.document.preparedHtml),
+      contentHash: _stableHash(
+        '${prepared.legacyMarkupNormalization.revision}\u001f'
+        '${prepared.document.preparedHtml}',
+      ),
       html: prepared.html,
       renderDocument: prepared.document,
       flowUnits: flowUnits,
       themeSignature: prepared.document.themeSignature,
       imageDimensionRevision: _imageDimensionRevision(prepared.document),
       convertedTextNodeCount: prepared.convertedTextNodeCount,
+      legacyMarkupNormalization: prepared.legacyMarkupNormalization,
     );
   }
 

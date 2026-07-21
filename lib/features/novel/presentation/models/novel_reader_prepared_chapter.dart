@@ -1,4 +1,5 @@
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 
 /// A visual chapter prepared by the HTML-first renderer.
@@ -17,6 +18,8 @@ class NovelReaderPreparedChapter {
     required this.themeSignature,
     required this.imageDimensionRevision,
     required this.convertedTextNodeCount,
+    this.legacyMarkupNormalization =
+        NovelReaderLegacyMarkupNormalizationSummary.none,
   });
 
   final String episodeId;
@@ -27,6 +30,7 @@ class NovelReaderPreparedChapter {
   final String themeSignature;
   final int imageDimensionRevision;
   final int convertedTextNodeCount;
+  final NovelReaderLegacyMarkupNormalizationSummary legacyMarkupNormalization;
 }
 
 class NovelReaderFlowUnit {

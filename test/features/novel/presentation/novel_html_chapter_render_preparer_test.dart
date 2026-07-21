@@ -79,7 +79,8 @@ void main() {
     () async {
       const convertedHtml =
           '<a id="source-link" href="thread-101-1-1.html">'
-          '<font id="converted" color="black">轉換後正文</font></a>'
+          '<font id="converted" face="&amp;quot" color="black">'
+          '轉換後正文</font></a>'
           '<img id="aimg_9" src="data/attachment/forum/page.jpg">';
       final conversionService = _FixedConversionService(convertedHtml);
       final orderedPreparer = NovelHtmlChapterRenderPreparer(
@@ -111,6 +112,9 @@ void main() {
       expect(prepared.html, contains('轉換後正文'));
       expect(prepared.document.preparedHtml, contains('轉換後正文'));
       expect(prepared.document.preparedHtml, isNot(contains('转换前正文')));
+      expect(prepared.html, isNot(contains('face=')));
+      expect(prepared.document.preparedHtml, isNot(contains('face=')));
+      expect(prepared.legacyMarkupNormalization.normalizedAttributeCount, 1);
       expect(converted.foreground?.toARGB32(), isNot(0xFF000000));
       expect(
         fragment.querySelector('#source-link')?.attributes['href'],

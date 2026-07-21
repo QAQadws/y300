@@ -1,6 +1,6 @@
 # 小说阅读器复杂 HTML 流式分页分阶段实施方案
 
-> 状态：Phase 0-1 已完成（2026-07-21）；Phase 2-8 待实施
+> 状态：Phase 0-2 已完成（2026-07-21）；Phase 3-8 待实施
 >
 > 编写日期：2026-07-21
 >
@@ -938,12 +938,44 @@ flowabilityFailureReasonCounts
 
 目标：让可以证明为 no-op 的损坏属性尽早回到 safe path。
 
+> 实施状态：已完成（2026-07-21）。规范化位于小说共享 chapter
+> preparation 边界：文字转换之后、`ForumHtmlRenderPreparer` 的主题与图片
+> preparation 之前。纵向阅读、分页 atom 提取和最终 renderer 因而使用同一份
+> normalized HTML；论坛帖子 preparation 不受小说规则影响。
+
 交付：
 
 - `NovelReaderLegacyMarkupNormalizer`。
 - quote-only/empty `font face` 规则。
 - 规范化 reason 和 revision。
 - 纵向与分页共用同一 prepared HTML 的验证。
+
+实际落地：
+
+- 新增可注入的 `NovelReaderLegacyMarkupNormalizer`，默认实现只扫描存在
+  `<font ... face ...>` 候选的 HTML，再使用结构化 DOM parser 删除无效属性；
+  普通章节不会额外构建 normalizer DOM。
+- 第一版规则只删除空 `face`、单双引号/quote entity-only `face`，以及只由
+  引号、空白和逗号组成的空 family 列表。删除属性时保留 `<font>`、外层
+  wrapper、正文、`color`、`size`、style、链接和其它属性。
+- 未知但具有实际 family token 的值保持原字符串，例如
+  `Uninstalled Fantasy Font` 和 `'Noto Serif CJK TC', serif`；它们仍由
+  classifier 路由为 `flowableComplexText/unsupportedFont`。
+- 新增稳定 reason：`emptyFontFace`、`invalidQuoteOnlyFontFace` 和
+  `invalidNoUsableFontFamilyToken`。summary 随 `NovelHtmlPreparedChapter` 和
+  `NovelReaderPreparedChapter` 传递，runtime diagnostics 只记录 revision、
+  count 和 reason 分布，不记录正文。
+- normalizer revision 当前为 `1`，并同时进入 preparation cache key 和
+  prepared chapter `contentHash`。规则升级或通过
+  `NoopNovelReaderLegacyMarkupNormalizer` 回滚时，不会复用不同规范化版本的
+  prepared chapter 或分页 plan。
+- 无效字体最小样本默认路径由 2 个 `flowableComplexText` 标题变为全
+  `safeText`，从 3 页降为 1 页，complex block 为 0；safe path 仍保留 1 次
+  最终 renderer validation。注入 no-op 后旧 3 页、前两页 fullness
+  `0.0500` 的 Phase 0 基线仍可稳定复现。
+- light、sepia、dark 三种主题下，损坏 `face` 的最终 prepared renderer HTML
+  与手工移除该无效属性的 control 完全一致；简繁转换输出也在进入主题适配前
+  执行相同规范化。
 
 验收：
 

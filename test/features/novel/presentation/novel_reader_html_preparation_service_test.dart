@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_legacy_markup_normalizer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
@@ -38,6 +40,8 @@ void main() {
     expect(prepared.flowUnits.last.imageIndices, <int>[0]);
     expect(prepared.imageDimensionRevision, isNonZero);
     expect(prepared.html, rawHtml);
+    expect(prepared.legacyMarkupNormalization.revision, 1);
+    expect(prepared.legacyMarkupNormalization.normalizedAttributeCount, 0);
   });
 
   test(
@@ -75,6 +79,86 @@ void main() {
         second.renderDocument.sequence.entries.map((entry) => entry.cacheKey),
         first.renderDocument.sequence.entries.map((entry) => entry.cacheKey),
       );
+    },
+  );
+
+  test('includes the legacy normalizer revision in content identity', () async {
+    final preferences = adapter.map(NovelReaderPreferences.defaults());
+    final current = await service.prepare(
+      rawHtml: '<p>稳定正文</p>',
+      episode: _episode,
+      preferences: preferences,
+      theme: _theme,
+      sourceId: _episode.episodeId,
+      threadId: _episode.sourceTid,
+      imageCacheOwnerId: _episode.sourceTid,
+    );
+    final legacy =
+        await const DefaultNovelReaderHtmlPreparationService(
+          preparer: NovelHtmlChapterRenderPreparer(
+            legacyMarkupNormalizer: NoopNovelReaderLegacyMarkupNormalizer(),
+          ),
+        ).prepare(
+          rawHtml: '<p>稳定正文</p>',
+          episode: _episode,
+          preferences: preferences,
+          theme: _theme,
+          sourceId: _episode.episodeId,
+          threadId: _episode.sourceTid,
+          imageCacheOwnerId: _episode.sourceTid,
+        );
+
+    expect(
+      current.renderDocument.preparedHtml,
+      legacy.renderDocument.preparedHtml,
+    );
+    expect(current.legacyMarkupNormalization.revision, 1);
+    expect(legacy.legacyMarkupNormalization.revision, 0);
+    expect(current.contentHash, isNot(legacy.contentHash));
+  });
+
+  test(
+    'isolates shared preparation cache entries by normalizer revision',
+    () async {
+      final cache = NovelReaderPreparedChapterCache();
+      final currentService = NovelReaderCachingHtmlPreparationService(
+        delegate: const DefaultNovelReaderHtmlPreparationService(),
+        cache: cache,
+      );
+      final legacyService = NovelReaderCachingHtmlPreparationService(
+        delegate: const DefaultNovelReaderHtmlPreparationService(
+          preparer: NovelHtmlChapterRenderPreparer(
+            legacyMarkupNormalizer: NoopNovelReaderLegacyMarkupNormalizer(),
+          ),
+        ),
+        cache: cache,
+      );
+      final preferences = adapter.map(NovelReaderPreferences.defaults());
+
+      final current = await currentService.prepare(
+        rawHtml: '<font face="&amp;quot">正文</font>',
+        episode: _episode,
+        preferences: preferences,
+        theme: _theme,
+        sourceId: _episode.episodeId,
+        threadId: _episode.sourceTid,
+        imageCacheOwnerId: _episode.sourceTid,
+      );
+      final legacy = await legacyService.prepare(
+        rawHtml: '<font face="&amp;quot">正文</font>',
+        episode: _episode,
+        preferences: preferences,
+        theme: _theme,
+        sourceId: _episode.episodeId,
+        threadId: _episode.sourceTid,
+        imageCacheOwnerId: _episode.sourceTid,
+      );
+
+      expect(cache.length, 2);
+      expect(current.legacyMarkupNormalization.revision, 1);
+      expect(legacy.legacyMarkupNormalization.revision, 0);
+      expect(current.html, isNot(contains('face=')));
+      expect(legacy.html, contains('face='));
     },
   );
 
@@ -127,6 +211,9 @@ void main() {
 
 class _CountingPreparationService implements NovelReaderHtmlPreparationService {
   int calls = 0;
+
+  @override
+  int get legacyMarkupNormalizerRevision => 1;
 
   @override
   Future<NovelReaderPreparedChapter> prepare({
