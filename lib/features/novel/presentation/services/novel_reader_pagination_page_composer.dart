@@ -9,17 +9,29 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 final class NovelReaderPaginationPageComposer {
   NovelReaderPaginationPageComposer({
     required this.pageHeight,
+    required this.lineHeight,
     this.maxPages = 5000,
   }) {
-    if (!pageHeight.isFinite || pageHeight <= 0 || maxPages <= 0) {
+    if (!pageHeight.isFinite ||
+        pageHeight <= 0 ||
+        !lineHeight.isFinite ||
+        lineHeight <= 0 ||
+        maxPages <= 0) {
       throw ArgumentError('Composer bounds and page budget must be positive.');
     }
   }
 
   final double pageHeight;
+  final double lineHeight;
   final int maxPages;
   final List<NovelReaderPageFragment> _pages = <NovelReaderPageFragment>[];
   _ComposedPageBuffer? _buffer;
+  StringBuffer? _pendingStructuralHtml;
+  NovelReaderTextAnchor? _pendingStructuralStart;
+  NovelReaderTextAnchor? _pendingStructuralEnd;
+  int _pendingStructuralBreakCount = 0;
+  bool? _pendingBreakFollowsInlineFlow;
+  bool _bufferEndsInlineFlow = false;
 
   bool get hasBufferedContent => _buffer != null;
   double get remainingHeight =>
@@ -37,8 +49,13 @@ final class NovelReaderPaginationPageComposer {
   void appendTextChunk(
     NovelReaderTextPageChunk chunk, {
     bool contributesRenderableContent = true,
+    bool participatesInInlineFlow = false,
   }) {
     if (chunk.html.trim().isEmpty && chunk.sourceEnd <= chunk.sourceStart) {
+      return;
+    }
+    if (chunk.isStructuralBreak) {
+      _rememberStructuralBreak(chunk);
       return;
     }
     if (chunk.isOversized) {
@@ -57,11 +74,19 @@ final class NovelReaderPaginationPageComposer {
         gapReason: NovelReaderPageGapReason.oversizedWidget,
         requiresInnerScroll: true,
       );
+      _bufferEndsInlineFlow = false;
       return;
     }
-    if (hasBufferedContent && chunk.usedHeight > remainingHeight) {
+    final pendingBreakHeight = _pendingStructuralBreakHeight(
+      nextParticipatesInInlineFlow: participatesInInlineFlow,
+    );
+    if (hasBufferedContent &&
+        chunk.usedHeight + pendingBreakHeight > remainingHeight) {
       flush(gapReason: NovelReaderPageGapReason.algorithmBoundary);
     }
+    _appendPendingStructuralBreaks(
+      nextParticipatesInInlineFlow: participatesInInlineFlow,
+    );
     final buffer = _buffer ??= _ComposedPageBuffer();
     buffer.append(
       html: chunk.html,
@@ -70,6 +95,7 @@ final class NovelReaderPaginationPageComposer {
       usedHeight: chunk.usedHeight,
       contributesRenderableContent: contributesRenderableContent,
     );
+    _bufferEndsInlineFlow = participatesInInlineFlow;
     if (remainingHeight <= 0.01) {
       flush(gapReason: NovelReaderPageGapReason.algorithmBoundary);
     }
@@ -81,6 +107,7 @@ final class NovelReaderPaginationPageComposer {
     bool combineWithBufferedContent = false,
     bool keepPageOpen = false,
   }) {
+    _discardPendingStructuralBreaks();
     if (!combineWithBufferedContent) {
       flush(gapReason: _gapReasonFor(atom.route));
     } else if (!canAppendComplexBlock(block)) {
@@ -98,6 +125,7 @@ final class NovelReaderPaginationPageComposer {
           : NovelReaderPageOverflowState.none,
       imageIndices: atom.atom.imageIndices,
     );
+    _bufferEndsInlineFlow = false;
     if (keepPageOpen &&
         !block.metrics.isOversized &&
         !block.metrics.requiresInnerScroll) {
@@ -116,6 +144,7 @@ final class NovelReaderPaginationPageComposer {
   void appendIsolatedImage({
     required NovelReaderClassifiedPaginationAtom atom,
     required double measuredHeight,
+    bool requiresInnerScroll = false,
   }) {
     flush(gapReason: NovelReaderPageGapReason.isolatedImage);
     final oversized = measuredHeight > pageHeight;
@@ -136,13 +165,15 @@ final class NovelReaderPaginationPageComposer {
       gapReason: oversized
           ? NovelReaderPageGapReason.oversizedWidget
           : NovelReaderPageGapReason.isolatedImage,
-      requiresInnerScroll: oversized,
+      requiresInnerScroll: requiresInnerScroll || oversized,
     );
   }
 
   void flush({required NovelReaderPageGapReason gapReason}) {
+    _discardPendingStructuralBreaks();
     final buffer = _buffer;
     _buffer = null;
+    _bufferEndsInlineFlow = false;
     if (buffer == null || !buffer.hasRenderableContent) {
       return;
     }
@@ -196,6 +227,65 @@ final class NovelReaderPaginationPageComposer {
         NovelReaderPageGapReason.algorithmBoundary,
       _ => NovelReaderPageGapReason.atomicWidget,
     };
+  }
+
+  double _pendingStructuralBreakHeight({
+    required bool nextParticipatesInInlineFlow,
+  }) {
+    final sharesInlineParagraph =
+        _pendingBreakFollowsInlineFlow == true && nextParticipatesInInlineFlow;
+    final includedSeparatorCount = sharesInlineParagraph ? 1 : 0;
+    if (_pendingStructuralBreakCount <= includedSeparatorCount) {
+      return 0;
+    }
+    return (_pendingStructuralBreakCount - includedSeparatorCount) * lineHeight;
+  }
+
+  void _rememberStructuralBreak(NovelReaderTextPageChunk chunk) {
+    // Leading breaks and breaks after an already full page are layout noise;
+    // the page boundary itself already separates the following content.
+    if (!hasBufferedContent || !_buffer!.hasRenderableContent) {
+      return;
+    }
+    final html = _pendingStructuralHtml ??= StringBuffer();
+    html.write(chunk.html);
+    _pendingBreakFollowsInlineFlow ??= _bufferEndsInlineFlow;
+    _pendingStructuralStart ??= chunk.startAnchor;
+    _pendingStructuralEnd = chunk.endAnchor;
+    _pendingStructuralBreakCount += chunk.structuralBreakCount;
+  }
+
+  void _appendPendingStructuralBreaks({
+    required bool nextParticipatesInInlineFlow,
+  }) {
+    if (_pendingStructuralBreakCount == 0) {
+      return;
+    }
+    final buffer = _buffer;
+    final start = _pendingStructuralStart;
+    final end = _pendingStructuralEnd;
+    if (buffer == null || start == null || end == null) {
+      _discardPendingStructuralBreaks();
+      return;
+    }
+    buffer.append(
+      html: _pendingStructuralHtml!.toString(),
+      start: start,
+      end: end,
+      usedHeight: _pendingStructuralBreakHeight(
+        nextParticipatesInInlineFlow: nextParticipatesInInlineFlow,
+      ),
+      contributesRenderableContent: false,
+    );
+    _discardPendingStructuralBreaks();
+  }
+
+  void _discardPendingStructuralBreaks() {
+    _pendingStructuralHtml = null;
+    _pendingStructuralStart = null;
+    _pendingStructuralEnd = null;
+    _pendingStructuralBreakCount = 0;
+    _pendingBreakFollowsInlineFlow = null;
   }
 }
 

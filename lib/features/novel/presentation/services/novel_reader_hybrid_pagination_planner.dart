@@ -225,6 +225,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
     );
     final composer = NovelReaderPaginationPageComposer(
       pageHeight: key.viewportHeightPx.toDouble(),
+      lineHeight: _baseLineHeight(),
       maxPages: maxPages,
     );
 
@@ -611,6 +612,9 @@ final class DefaultNovelReaderHybridPaginationPlanner
               composer.appendTextChunk(
                 chunk,
                 contributesRenderableContent: chunk.hasRenderableContent,
+                participatesInInlineFlow:
+                    classified.atom.kind ==
+                    NovelReaderPaginationAtomKind.inlineText,
               );
               if (keepBackedChunksSeparate) {
                 composer.flush(
@@ -647,6 +651,10 @@ final class DefaultNovelReaderHybridPaginationPlanner
             composer.appendIsolatedImage(
               atom: classified,
               measuredHeight: measured.height,
+              requiresInnerScroll: _hasUnknownImageDimensions(
+                chapter: chapter,
+                imageIndices: classified.atom.imageIndices,
+              ),
             );
             await publishFinalPages();
           case NovelReaderPaginationRoute.rubyInline:
@@ -800,15 +808,48 @@ final class DefaultNovelReaderHybridPaginationPlanner
       }
       final fontSize = run.style.fontSize ?? baseStyle.fontSize ?? 14;
       final height = run.style.height ?? baseStyle.height ?? 1.2;
-      minimum = minimum < fontSize * height ? minimum : fontSize * height;
+      final lineHeight = NovelReaderPaginationLineHeightPolicy.alignToRenderer(
+        fontSize * height,
+      );
+      minimum = minimum < lineHeight ? minimum : lineHeight;
     }
     return minimum.isFinite ? minimum : 1;
   }
 
+  bool _hasUnknownImageDimensions({
+    required NovelReaderPreparedChapter chapter,
+    required List<int> imageIndices,
+  }) {
+    return imageIndices.any((index) {
+      final entry = chapter.renderDocument.sequence.entryAt(index);
+      return entry == null ||
+          entry.htmlWidth == null ||
+          entry.htmlHeight == null;
+    });
+  }
+
   double _baseLineHeight() {
-    final fontSize = baseStyle.fontSize ?? 14;
-    final height = baseStyle.height ?? 1.2;
-    return fontSize * height;
+    final painter = TextPainter(
+      text: TextSpan(text: 'M', style: baseStyle),
+      textDirection: textDirection,
+      textScaler: textScaler,
+    );
+    try {
+      painter.layout();
+      final metrics = painter.computeLineMetrics();
+      if (metrics.isNotEmpty && metrics.first.height > 0) {
+        return NovelReaderPaginationLineHeightPolicy.alignToRenderer(
+          metrics.first.height,
+        );
+      }
+      final fontSize = baseStyle.fontSize ?? 14;
+      final height = baseStyle.height ?? 1.2;
+      return NovelReaderPaginationLineHeightPolicy.alignToRenderer(
+        fontSize * height,
+      );
+    } finally {
+      painter.dispose();
+    }
   }
 
   double _paragraphSpacingFor(NovelReaderPaginationAtom atom) {

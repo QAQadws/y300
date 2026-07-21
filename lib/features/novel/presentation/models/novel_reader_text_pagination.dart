@@ -50,6 +50,7 @@ final class NovelReaderTextPageChunk {
     required this.usedHeight,
     required this.isOversized,
     required this.hasRenderableContent,
+    this.structuralBreakCount = 0,
   });
 
   final String html;
@@ -60,6 +61,15 @@ final class NovelReaderTextPageChunk {
   final double usedHeight;
   final bool isOversized;
   final bool hasRenderableContent;
+
+  /// Number of standalone `<br>` elements represented by this chunk.
+  ///
+  /// A standalone break is layout structure rather than independently
+  /// renderable content. The page composer uses this count to distinguish one
+  /// separator between two text runs from additional blank lines.
+  final int structuralBreakCount;
+
+  bool get isStructuralBreak => structuralBreakCount > 0;
 }
 
 final class NovelReaderTextPaginationResult {

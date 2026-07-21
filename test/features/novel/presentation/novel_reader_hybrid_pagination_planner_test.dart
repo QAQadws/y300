@@ -76,6 +76,14 @@ void main() {
         plan.pages.where((page) => page.containsIsolatedImage),
         hasLength(1),
       );
+      expect(
+        plan.pages
+            .singleWhere((page) => page.containsIsolatedImage)
+            .requiresInnerScroll,
+        isTrue,
+        reason:
+            'Unknown image geometry must not be allowed to overflow after decode.',
+      );
       expect(plan.pages.expand((page) => page.imageIndices), contains(0));
       expect(plan.pages.any((page) => page.html.contains('<ruby>')), isTrue);
       expect(plan.pages.any((page) => page.html.contains('<table>')), isTrue);

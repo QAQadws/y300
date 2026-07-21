@@ -81,6 +81,25 @@ void main() {
     );
   });
 
+  test('aligns fractional line boxes to the final HTML renderer height', () {
+    final prepared = _safeAtom('<p>第一行<br>第二行<br>第三行</p>');
+    final result = DefaultNovelReaderTextPaginationEngine().paginate(
+      atom: prepared.$1,
+      runs: prepared.$2,
+      width: 320,
+      pageHeight: 200,
+      paragraphSpacing: 0,
+      typographySignature: 'fractional-line-height',
+    );
+
+    expect(result.metrics.lineRanges, hasLength(3));
+    expect(
+      result.metrics.lineRanges.map((line) => line.height),
+      everyElement(30),
+    );
+    expect(result.metrics.totalHeight, 90);
+  });
+
   test('reuses metrics and invalidates on width or style changes', () {
     final cache = NovelReaderTextMetricsCache(capacity: 4);
     final engine = DefaultNovelReaderTextPaginationEngine(metricsCache: cache);

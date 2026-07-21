@@ -22,6 +22,23 @@ abstract interface class NovelReaderTextPaginationEngine {
   });
 }
 
+/// Aligns TextPainter metrics with the block sizing used by the final HTML
+/// renderer.
+///
+/// flutter_widget_from_html_core composes text into RenderParagraph blocks
+/// whose logical height is rounded up. Summing unrounded per-atom metrics can
+/// otherwise underestimate a dense page by several pixels.
+abstract final class NovelReaderPaginationLineHeightPolicy {
+  static const double _floatingPointTolerance = 0.000001;
+
+  static double alignToRenderer(double value) {
+    if (!value.isFinite || value <= 0) {
+      return value;
+    }
+    return (value - _floatingPointTolerance).ceilToDouble();
+  }
+}
+
 final class NovelReaderTextMetricsCache {
   NovelReaderTextMetricsCache({this.capacity = 128}) {
     if (capacity <= 0) {
@@ -94,6 +111,9 @@ final class DefaultNovelReaderTextPaginationEngine
       throw ArgumentError('Text pagination requires positive finite bounds.');
     }
     if (atom.atom.kind == NovelReaderPaginationAtomKind.spacer) {
+      final structuralBreakCount = runs
+          .where((run) => run.isParagraphBreak)
+          .length;
       final metrics = NovelReaderTextLayoutMetrics(
         runId: atom.atom.atomId,
         lineRanges: const <NovelReaderTextLineRange>[],
@@ -112,6 +132,7 @@ final class DefaultNovelReaderTextPaginationEngine
             usedHeight: 0,
             isOversized: false,
             hasRenderableContent: false,
+            structuralBreakCount: structuralBreakCount,
           ),
         ],
         metrics: metrics,
@@ -199,7 +220,11 @@ final class DefaultNovelReaderTextPaginationEngine
         }
         final start = layoutRange.start.clamp(0, flattened.text.length);
         final end = layoutRange.end.clamp(start, flattened.text.length);
-        final bottom = top + metric.height;
+        final lineHeight =
+            NovelReaderPaginationLineHeightPolicy.alignToRenderer(
+              metric.height,
+            );
+        final bottom = top + lineHeight;
         ranges.add(
           NovelReaderTextLineRange(
             layoutStart: start,
@@ -224,7 +249,7 @@ final class DefaultNovelReaderTextPaginationEngine
       return NovelReaderTextLayoutMetrics(
         runId: atom.atom.atomId,
         lineRanges: ranges,
-        totalHeight: painter.height,
+        totalHeight: top,
         width: width,
         typographySignature: typographySignature,
       );

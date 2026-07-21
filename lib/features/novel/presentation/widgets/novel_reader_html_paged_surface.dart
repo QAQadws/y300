@@ -180,11 +180,18 @@ class _NovelReaderHtmlPagedSurfaceState
           final pageIndicatorReservedHeight = math
               .min(
                 widget.chromeInsets.pageIndicatorReservedHeight,
-                math.max(0, availableHeight - 1),
+                math.max(
+                  0,
+                  availableHeight -
+                      NovelReaderPagedIndicatorLayout.rendererSafetyInset -
+                      1,
+                ),
               )
               .toDouble();
           final paginationHeight =
-              availableHeight - pageIndicatorReservedHeight;
+              availableHeight -
+              pageIndicatorReservedHeight -
+              NovelReaderPagedIndicatorLayout.rendererSafetyInset;
           final contentMaxWidth = widget.typography.contentMaxWidth < 160
               ? 160
               : widget.typography.contentMaxWidth;
@@ -240,7 +247,7 @@ class _NovelReaderHtmlPagedSurfaceState
                 ),
                 themeSignature: widget.theme.signature,
                 imageDimensionRevision: prepared.imageDimensionRevision,
-                rendererRevision: 9,
+                rendererRevision: 12,
                 topChromeInsetPx: NovelReaderPaginationKey.logicalPixels(
                   topChromeInset,
                 ),
@@ -360,7 +367,10 @@ class _NovelReaderHtmlPagedSurfaceState
                               NovelReaderFlowMode.pagedRtl,
                           showProgressIndicator:
                               widget.preferences.showProgressIndicator,
-                          contentBottomInset: pageIndicatorReservedHeight,
+                          contentBottomInset:
+                              pageIndicatorReservedHeight +
+                              NovelReaderPagedIndicatorLayout
+                                  .rendererSafetyInset,
                           theme: widget.theme,
                           htmlPreferences: htmlPreferences,
                           typography: widget.typography,
@@ -636,6 +646,12 @@ class _NovelReaderHtmlPagedSurfaceState
     required BuildContext context,
     required ForumHtmlReaderPreferences htmlPreferences,
   }) {
+    final blockSpacingMode = ForumHtmlBlockSpacingMode.discuzLineDivs;
+    final rendererBaseStyle = ForumHtmlStylePolicy(
+      htmlPreferences,
+      theme: widget.theme,
+      blockSpacingMode: blockSpacingMode,
+    ).baseTextStyle(context);
     final measureAdapter = NovelReaderHtmlPaginationMeasureAdapter(
       hostContext: context,
       theme: widget.theme,
@@ -644,14 +660,14 @@ class _NovelReaderHtmlPagedSurfaceState
       threadId: widget.episode.sourceTid,
       imageCacheOwnerId: widget.episode.sourceTid,
       imageHeaderBuilder: widget.imageHeaderBuilder,
-      blockSpacingMode: ForumHtmlBlockSpacingMode.discuzLineDivs,
+      blockSpacingMode: blockSpacingMode,
     );
     return DefaultNovelReaderPaginationCoordinator(
       pageBreaker: DefaultNovelReaderHybridPaginationPlanner(
         measureAdapter: measureAdapter,
         preferences: htmlPreferences,
         theme: widget.theme,
-        baseStyle: widget.typography.body,
+        baseStyle: rendererBaseStyle,
         textAlign: widget.typography.textAlign,
         textScaler: MediaQuery.textScalerOf(context),
         measureCache:
