@@ -9,7 +9,7 @@ void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
-  test('DB 33 to 34 adds nullable pagination identity fields', () async {
+  test('legacy DB upgrades all nullable pagination identity fields', () async {
     final temp = await Directory.systemTemp.createTemp(
       'y300-novel-phase4-migration-',
     );
@@ -61,7 +61,11 @@ void main() {
     )).map((row) => row['name']).toSet();
     expect(
       columns,
-      containsAll(<String>{'anchor_text_offset', 'pagination_key'}),
+      containsAll(<String>{
+        'anchor_text_offset',
+        'pagination_key',
+        'page_count',
+      }),
     );
     final row = (await db.query(
       ComicLocalDb.novelReadingProgressTable,
@@ -73,5 +77,6 @@ void main() {
     expect(row['anchor_node_id'], 'node-4');
     expect(row['anchor_text_offset'], 0);
     expect(row['pagination_key'], isNull);
+    expect(row['page_count'], isNull);
   });
 }

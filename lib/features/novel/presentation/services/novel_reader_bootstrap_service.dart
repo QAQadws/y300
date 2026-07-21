@@ -1,6 +1,7 @@
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
@@ -11,11 +12,13 @@ class NovelReaderLoadContext {
   const NovelReaderLoadContext({
     required this.novelId,
     required this.requestedEpisodeId,
+    this.openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
     this.preservedProgress,
   });
 
   final String novelId;
   final String requestedEpisodeId;
+  final NovelEpisodeOpenPolicy openPolicy;
   final NovelReadingProgress? preservedProgress;
 }
 
@@ -111,6 +114,7 @@ class DefaultNovelReaderBootstrapService
     );
     final restoredProgress = _progressForEpisode(
       episodeId: currentEpisode.episodeId,
+      openPolicy: context.openPolicy,
       currentProgress: readingProgress,
       preservedProgress: context.preservedProgress,
     );
@@ -136,14 +140,18 @@ class DefaultNovelReaderBootstrapService
 
   NovelReadingProgress? _progressForEpisode({
     required String episodeId,
+    required NovelEpisodeOpenPolicy openPolicy,
     required NovelReadingProgress? currentProgress,
     required NovelReadingProgress? preservedProgress,
   }) {
-    if (currentProgress?.episodeId == episodeId) {
-      return currentProgress;
+    if (openPolicy == NovelEpisodeOpenPolicy.startAtBeginning) {
+      return null;
     }
     if (preservedProgress?.episodeId == episodeId) {
       return preservedProgress;
+    }
+    if (currentProgress?.episodeId == episodeId) {
+      return currentProgress;
     }
     return null;
   }

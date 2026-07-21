@@ -1,3 +1,4 @@
+import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
@@ -62,8 +63,13 @@ final class NovelReaderPaginationRestorePolicy {
     }
 
     if (snapshot.progressPercent.isFinite && snapshot.progressPercent > 0) {
-      return (snapshot.progressPercent.clamp(0.0, 1.0) * (pageCount - 1))
-          .round()
+      final scale =
+          snapshot.flowMode == NovelReaderFlowMode.vertical ||
+              snapshot.pageCount != null
+          ? pageCount
+          : pageCount - 1;
+      return (snapshot.progressPercent.clamp(0.0, 1.0) * scale)
+          .floor()
           .clamp(0, pageCount - 1)
           .toInt();
     }

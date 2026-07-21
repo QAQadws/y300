@@ -5,6 +5,7 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
@@ -14,10 +15,15 @@ import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap
 import 'package:y300/features/novel/presentation/services/novel_reader_preference_impact_analyzer.dart';
 
 class NovelReaderArgs {
-  const NovelReaderArgs({required this.novelId, required this.episodeId});
+  const NovelReaderArgs({
+    required this.novelId,
+    required this.episodeId,
+    this.openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
+  });
 
   final String novelId;
   final String episodeId;
+  final NovelEpisodeOpenPolicy openPolicy;
 
   @override
   bool operator ==(Object other) {
@@ -26,11 +32,12 @@ class NovelReaderArgs {
     }
     return other is NovelReaderArgs &&
         other.novelId == novelId &&
-        other.episodeId == episodeId;
+        other.episodeId == episodeId &&
+        other.openPolicy == openPolicy;
   }
 
   @override
-  int get hashCode => Object.hash(novelId, episodeId);
+  int get hashCode => Object.hash(novelId, episodeId, openPolicy);
 }
 
 class NovelReaderViewState {
@@ -178,8 +185,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       const NovelReaderProgressPolicy();
   final NovelReaderPreferenceImpactAnalyzer _preferenceImpactAnalyzer =
       const DefaultNovelReaderPreferenceImpactAnalyzer();
-  final Map<String, NovelReadingProgress> _knownReadingProgressByEpisodeId =
-      <String, NovelReadingProgress>{};
+  String? _pendingBeginningCommitEpisodeId;
   int _activeSessionToken = 0;
   int _transitionRequestSerial = 0;
   int _preferenceCommitSerial = 0;
@@ -187,7 +193,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   @override
   FutureOr<NovelReaderViewState> build() async {
     ref.onDispose(ref.read(novelReaderProgressCommitterProvider).cancel);
-    return _loadInitialCriticalState(_args.episodeId);
+    return _loadInitialCriticalState(
+      _args.episodeId,
+      openPolicy: _args.openPolicy,
+    );
   }
 
   void previewPreferences(NovelReaderPreferences next) {
@@ -203,14 +212,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (!diff.hasChanges) {
       return;
     }
-    state = AsyncData(
-      current.copyWith(
-        effectivePreferences: effectiveNext,
-        progressSnapshot: current.progressSnapshot.copyWith(
-          flowMode: effectiveNext.flowMode,
-        ),
-      ),
-    );
+    state = AsyncData(current.copyWith(effectivePreferences: effectiveNext));
   }
 
   Future<void> commitPreferences(NovelReaderPreferences next) async {
@@ -228,12 +230,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         return;
       }
       state = AsyncData(
-        current.copyWith(
-          effectivePreferences: persistedEffective,
-          progressSnapshot: current.progressSnapshot.copyWith(
-            flowMode: persistedEffective.flowMode,
-          ),
-        ),
+        current.copyWith(effectivePreferences: persistedEffective),
       );
       return;
     }
@@ -251,9 +248,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       latest.copyWith(
         persistedPreferences: next,
         effectivePreferences: effectivePreferences,
-        progressSnapshot: latest.progressSnapshot.copyWith(
-          flowMode: effectivePreferences.flowMode,
-        ),
       ),
     );
 
@@ -278,7 +272,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     final context = NovelReaderLoadContext(
       novelId: _args.novelId,
       requestedEpisodeId: current.currentEpisode.episodeId,
-      preservedProgress: current.readingProgress,
+      preservedProgress: _readingProgressFromSnapshot(current.progressSnapshot),
     );
     final critical = await _loadCriticalBootstrap(context);
     if (!ref.mounted || commitSerial != _preferenceCommitSerial) {
@@ -303,12 +297,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return;
     }
     state = AsyncData(
-      current.copyWith(
-        effectivePreferences: persistedEffective,
-        progressSnapshot: current.progressSnapshot.copyWith(
-          flowMode: persistedEffective.flowMode,
-        ),
-      ),
+      current.copyWith(effectivePreferences: persistedEffective),
     );
   }
 
@@ -368,8 +357,27 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       scrollOffset: offset,
       maxScrollExtent: maxScrollExtent,
     );
+    _clearPendingBeginningCommit(snapshot.episodeId);
     _applyProgressSnapshot(snapshot);
     ref.read(novelReaderProgressCommitterProvider).schedule(snapshot);
+  }
+
+  Future<void> onVerticalContentReady(String episodeId) async {
+    final current = state.value;
+    if (current == null ||
+        current.currentEpisode.episodeId != episodeId ||
+        current.preferences.flowMode != NovelReaderFlowMode.vertical ||
+        _pendingBeginningCommitEpisodeId != episodeId) {
+      return;
+    }
+    _pendingBeginningCommitEpisodeId = null;
+    await saveCurrentProgressNow(
+      _progressPolicy.initialSnapshot(
+        novelId: _args.novelId,
+        episodeId: episodeId,
+        flowMode: NovelReaderFlowMode.vertical,
+      ),
+    );
   }
 
   void onPagedPositionChanged(NovelReaderPaginationPosition position) {
@@ -392,8 +400,17 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       anchorNodeId: position.anchor.nodeId,
       anchorTextOffset: position.anchor.textOffset,
     );
+    final shouldCommitBeginning =
+        _pendingBeginningCommitEpisodeId == position.episodeId;
+    if (shouldCommitBeginning) {
+      _pendingBeginningCommitEpisodeId = null;
+    }
     _applyProgressSnapshot(snapshot);
-    ref.read(novelReaderProgressCommitterProvider).schedule(snapshot);
+    if (shouldCommitBeginning) {
+      unawaited(saveCurrentProgressNow(snapshot));
+    } else {
+      ref.read(novelReaderProgressCommitterProvider).schedule(snapshot);
+    }
   }
 
   Future<void> saveCurrentOffsetNow(double offset) async {
@@ -524,7 +541,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       state = const AsyncLoading();
       state = await AsyncValue.guard(() async {
         await ref.read(novelChapterUpdateServiceProvider).update(_args.novelId);
-        return _loadInitialCriticalState(_args.episodeId);
+        return _loadInitialCriticalState(
+          _args.episodeId,
+          openPolicy: _args.openPolicy,
+        );
       });
       return state.hasValue;
     }
@@ -532,19 +552,26 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       episodeId: current.currentEpisode.episodeId,
       kind: NovelReaderTransitionKind.updatingWork,
       updateWork: true,
+      openPolicy: NovelEpisodeOpenPolicy.resumeLastRead,
     );
   }
 
   Future<NovelReaderViewState> _loadInitialCriticalState(
     String episodeId, {
+    NovelEpisodeOpenPolicy openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
     NovelReadingProgress? preservedProgress,
   }) async {
     final context = NovelReaderLoadContext(
       novelId: _args.novelId,
       requestedEpisodeId: episodeId,
+      openPolicy: openPolicy,
       preservedProgress: preservedProgress,
     );
     final critical = await _loadCriticalBootstrap(context);
+    _markBeginningCommitIfNeeded(
+      episodeId: critical.currentEpisode.episodeId,
+      openPolicy: openPolicy,
+    );
     if (!ref.mounted) {
       return _initialStateFromCritical(critical);
     }
@@ -569,6 +596,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     required String episodeId,
     required NovelReaderTransitionKind kind,
     bool updateWork = false,
+    NovelEpisodeOpenPolicy openPolicy = NovelEpisodeOpenPolicy.startAtBeginning,
   }) async {
     final current = state.value;
     if (current == null) {
@@ -578,10 +606,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     final context = NovelReaderLoadContext(
       novelId: _args.novelId,
       requestedEpisodeId: episodeId,
-      preservedProgress: _preservedProgressForEpisode(
-        episodeId: episodeId,
-        current: current,
-      ),
+      openPolicy: openPolicy,
+      preservedProgress: openPolicy == NovelEpisodeOpenPolicy.resumeLastRead
+          ? _readingProgressFromSnapshot(current.progressSnapshot)
+          : null,
     );
     state = AsyncData(
       current.copyWith(
@@ -609,6 +637,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         critical: critical,
       );
       state = AsyncData(nextState);
+      _markBeginningCommitIfNeeded(
+        episodeId: critical.currentEpisode.episodeId,
+        openPolicy: openPolicy,
+      );
       _scheduleHydrateSupplemental(
         context: context,
         critical: critical,
@@ -785,7 +817,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   NovelReaderViewState _initialStateFromCritical(
     NovelReaderCriticalBootstrap critical,
   ) {
-    _rememberReadingProgress(critical.readingProgress);
     return NovelReaderViewState(
       novel: null,
       episodes: critical.episodes,
@@ -810,7 +841,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     required NovelReaderViewState previous,
     required NovelReaderCriticalBootstrap critical,
   }) {
-    _rememberReadingProgress(critical.readingProgress);
     final currentEpisodeBookmarks = _bookmarksForEpisode(
       previous.bookmarks,
       critical.currentEpisode.episodeId,
@@ -853,7 +883,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return;
     }
     final readingProgress = _readingProgressFromSnapshot(snapshot);
-    _rememberReadingProgress(readingProgress);
     state = AsyncData(current.copyWith(readingProgress: readingProgress));
   }
 
@@ -867,6 +896,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       updatedAt: DateTime.now(),
       flowMode: snapshot.flowMode,
       pageIndex: snapshot.pageIndex,
+      pageCount: snapshot.pageCount,
       anchorNodeId: snapshot.anchorNodeId,
       anchorTextOffset: snapshot.anchorTextOffset,
       paginationKey: snapshot.paginationKey,
@@ -874,28 +904,20 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     );
   }
 
-  NovelReadingProgress? _preservedProgressForEpisode({
+  void _markBeginningCommitIfNeeded({
     required String episodeId,
-    required NovelReaderViewState current,
+    required NovelEpisodeOpenPolicy openPolicy,
   }) {
-    final cached = _knownReadingProgressByEpisodeId[episodeId];
-    if (cached != null) {
-      return cached;
-    }
-    if (current.readingProgress?.episodeId == episodeId) {
-      return current.readingProgress;
-    }
-    if (current.progressSnapshot.episodeId == episodeId) {
-      return _readingProgressFromSnapshot(current.progressSnapshot);
-    }
-    return null;
+    _pendingBeginningCommitEpisodeId =
+        openPolicy == NovelEpisodeOpenPolicy.startAtBeginning
+        ? episodeId
+        : null;
   }
 
-  void _rememberReadingProgress(NovelReadingProgress? progress) {
-    if (progress == null) {
-      return;
+  void _clearPendingBeginningCommit(String episodeId) {
+    if (_pendingBeginningCommitEpisodeId == episodeId) {
+      _pendingBeginningCommitEpisodeId = null;
     }
-    _knownReadingProgressByEpisodeId[progress.episodeId] = progress;
   }
 
   Future<void> _reloadBookmarks(NovelRepository repository) async {

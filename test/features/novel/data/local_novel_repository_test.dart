@@ -131,6 +131,7 @@ void main() {
         scrollOffset: 222.5,
         flowMode: NovelReaderFlowMode.pagedLtr,
         pageIndex: 3,
+        pageCount: 10,
         anchorNodeId: 'node-3',
         anchorTextOffset: 17,
         paginationKey: 'layout-key-3',
@@ -146,6 +147,7 @@ void main() {
       expect(progress.scrollOffset, 222.5);
       expect(progress.flowMode, NovelReaderFlowMode.pagedLtr);
       expect(progress.pageIndex, 3);
+      expect(progress.pageCount, 10);
       expect(progress.anchorNodeId, 'node-3');
       expect(progress.anchorTextOffset, 17);
       expect(progress.paginationKey, 'layout-key-3');
@@ -170,10 +172,41 @@ void main() {
       expect(progress.scrollOffset, 128);
       expect(progress.flowMode, NovelReaderFlowMode.vertical);
       expect(progress.pageIndex, 0);
+      expect(progress.pageCount, isNull);
       expect(progress.anchorNodeId, isNull);
       expect(progress.anchorTextOffset, 0);
       expect(progress.paginationKey, isNull);
       expect(progress.progressPercent, 0);
+    });
+
+    test('reading progress keeps exactly one row per novel', () async {
+      await repository.saveReadingProgress(
+        novelId: 'novel:single-progress',
+        episodeId: 'episode-1',
+        scrollOffset: 20,
+      );
+      await repository.saveReadingProgress(
+        novelId: 'novel:single-progress',
+        episodeId: 'episode-2',
+        scrollOffset: 0,
+        flowMode: NovelReaderFlowMode.pagedRtl,
+        pageIndex: 0,
+        pageCount: 8,
+      );
+
+      final db = await dbFuture;
+      final rows = await db.query(
+        ComicLocalDb.novelReadingProgressTable,
+        where: 'novel_id = ?',
+        whereArgs: const <Object>['novel:single-progress'],
+      );
+      final progress = await repository.getReadingProgress(
+        novelId: 'novel:single-progress',
+      );
+
+      expect(rows, hasLength(1));
+      expect(progress?.episodeId, 'episode-2');
+      expect(progress?.pageCount, 8);
     });
 
     test('reader bookmarks can persist and are purged with work', () async {

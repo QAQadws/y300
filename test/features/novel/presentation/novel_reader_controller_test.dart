@@ -11,6 +11,7 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
+import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
@@ -131,7 +132,7 @@ void main() {
 
       expect(state.persistedPreferences, initial.persistedPreferences);
       expect(state.effectivePreferences, next);
-      expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.pagedLtr);
+      expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.vertical);
       expect(repository.latestPreferences, isNull);
       expect(repository.upsertPreferencesCallCount, 0);
     },
@@ -343,10 +344,11 @@ void main() {
 
       final state = container.read(provider).value!;
       expect(state.progressSnapshot.pageIndex, 2);
+      expect(state.progressSnapshot.pageCount, 5);
       expect(state.progressSnapshot.paginationKey, 'layout-v1');
       expect(state.progressSnapshot.anchorNodeId, 'node-2');
       expect(state.progressSnapshot.anchorTextOffset, 14);
-      expect(state.progressSnapshot.progressPercent, 0.5);
+      expect(state.progressSnapshot.progressPercent, 0.4);
       expect(progressCommitter.scheduleCallCount, 1);
     },
   );
@@ -372,7 +374,7 @@ void main() {
   });
 
   test(
-    'openEpisodeFromCatalog loads target and preserves target progress',
+    'openEpisodeFromCatalog always starts the target chapter at the beginning',
     () async {
       final targetProgress = NovelReadingProgress(
         novelId: 'novel:49:100',
@@ -403,7 +405,7 @@ void main() {
 
       final state = await container.read(provider.future);
       expect(state.currentEpisode.episodeId, 'novel:49:100:5002');
-      expect(state.currentOffset, 88);
+      expect(state.currentOffset, 0);
       expect(repository.savedProgressEpisodeIds, contains('novel:49:100:5001'));
     },
   );
@@ -448,8 +450,56 @@ void main() {
       final target = container.read(provider).value!;
       expect(target.currentEpisode.episodeId, 'novel:49:100:5002');
       expect(target.progressSnapshot.pageIndex, 0);
+      expect(target.progressSnapshot.pageCount, isNull);
       expect(target.progressSnapshot.paginationKey, isNull);
       expect(target.progressSnapshot.anchorNodeId, isNull);
+    },
+  );
+
+  test(
+    'initial start policy ignores the matching persisted progress',
+    () async {
+      final repository = _ControllerNovelRepository(
+        readingProgress: NovelReadingProgress(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5002',
+          scrollOffset: 320,
+          updatedAt: DateTime(2026, 7, 21),
+          progressPercent: 0.75,
+        ),
+      );
+      final progressCommitter = _FakeNovelReaderProgressCommitter();
+      final container = _buildContainer(
+        repository: repository,
+        progressCommitter: progressCommitter,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5002',
+        openPolicy: NovelEpisodeOpenPolicy.startAtBeginning,
+      );
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      final state = await container.read(
+        novelReaderControllerProvider(args).future,
+      );
+
+      expect(state.progressSnapshot.scrollOffset, 0);
+      expect(state.progressSnapshot.progressPercent, 0);
+      expect(progressCommitter.flushCallCount, 0);
+
+      await container
+          .read(novelReaderControllerProvider(args).notifier)
+          .onVerticalContentReady('novel:49:100:5002');
+
+      expect(progressCommitter.flushCallCount, 1);
+      expect(
+        progressCommitter.latestFlushedSnapshot?.episodeId,
+        args.episodeId,
+      );
+      expect(progressCommitter.latestFlushedSnapshot?.progressPercent, 0);
     },
   );
 
@@ -1164,6 +1214,7 @@ class _ControllerNovelRepository implements NovelRepository {
     required double scrollOffset,
     NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
     int pageIndex = 0,
+    int? pageCount,
     String? anchorNodeId,
     int anchorTextOffset = 0,
     String? paginationKey,
@@ -1177,6 +1228,7 @@ class _ControllerNovelRepository implements NovelRepository {
       updatedAt: DateTime(2026, 6, 8),
       flowMode: flowMode,
       pageIndex: pageIndex,
+      pageCount: pageCount,
       anchorNodeId: anchorNodeId,
       anchorTextOffset: anchorTextOffset,
       paginationKey: paginationKey,

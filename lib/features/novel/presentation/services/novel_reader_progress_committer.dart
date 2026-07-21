@@ -69,6 +69,7 @@ class DefaultNovelReaderProgressCommitter
         scrollOffset: snapshot.scrollOffset,
         flowMode: snapshot.flowMode,
         pageIndex: snapshot.pageIndex,
+        pageCount: snapshot.pageCount,
         anchorNodeId: snapshot.anchorNodeId,
         anchorTextOffset: snapshot.anchorTextOffset,
         paginationKey: snapshot.paginationKey,

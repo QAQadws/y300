@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 34;
+  static const int dbVersion = 35;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -99,6 +99,9 @@ class ComicLocalDb {
     }
     if (oldVersion < 34 && newVersion >= 34) {
       await _upgradeFrom33To34(db);
+    }
+    if (oldVersion < 35 && newVersion >= 35) {
+      await _upgradeFrom34To35(db);
     }
   }
 
@@ -204,6 +207,15 @@ class ComicLocalDb {
       table: novelReadingProgressTable,
       column: 'anchor_text_offset',
       definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+
+  static Future<void> _upgradeFrom34To35(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: novelReadingProgressTable,
+      column: 'page_count',
+      definition: 'INTEGER',
     );
   }
 
@@ -478,6 +490,7 @@ class ComicLocalDb {
         scroll_offset REAL NOT NULL,
         flow_mode TEXT,
         page_index INTEGER,
+        page_count INTEGER,
         anchor_node_id TEXT,
         anchor_text_offset INTEGER NOT NULL DEFAULT 0,
         pagination_key TEXT,

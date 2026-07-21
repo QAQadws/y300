@@ -11,6 +11,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
+import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_interaction_models.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_hydration_controller.dart';
@@ -209,6 +210,9 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       await _openReader(
         context,
         ReaderRouteTarget(workId: widget.novelId, episodeId: chapter.episodeId),
+        openPolicy: chapter.progressInfo?.isCurrent == true
+            ? NovelEpisodeOpenPolicy.resumeLastRead
+            : NovelEpisodeOpenPolicy.startAtBeginning,
       );
       return;
     }
@@ -229,7 +233,11 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
         ref.read(novelChapterOpenModeControllerProvider).value ??
         NovelChapterOpenMode.reader;
     if (mode == NovelChapterOpenMode.reader) {
-      await _openReader(context, target);
+      await _openReader(
+        context,
+        target,
+        openPolicy: NovelEpisodeOpenPolicy.resumeLastRead,
+      );
       return;
     }
 
@@ -326,13 +334,15 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
 
   Future<void> _openReader(
     BuildContext context,
-    ReaderRouteTarget target,
-  ) async {
+    ReaderRouteTarget target, {
+    NovelEpisodeOpenPolicy openPolicy = NovelEpisodeOpenPolicy.startAtBeginning,
+  }) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => NovelReaderPage(
           novelId: target.workId,
           initialEpisodeId: target.episodeId,
+          openPolicy: openPolicy,
         ),
       ),
     );

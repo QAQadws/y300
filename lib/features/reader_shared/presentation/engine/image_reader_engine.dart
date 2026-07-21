@@ -2109,7 +2109,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final currentIndex = _sliderPreviewIndex ?? _lastKnownIndex;
     final nav = _capability.chapterNav(context);
     return ReaderBottomBarConfig(
-      progress: ReaderProgressConfig(
+      progress: ReaderProgressConfig.discrete(
         current: currentIndex + 1,
         total: total,
         previousTooltip: nav?.previousTooltip ?? '上一章',

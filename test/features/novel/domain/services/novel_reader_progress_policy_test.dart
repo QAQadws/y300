@@ -43,7 +43,7 @@ void main() {
         ),
       );
 
-      expect(snapshot.flowMode, NovelReaderFlowMode.vertical);
+      expect(snapshot.flowMode, NovelReaderFlowMode.pagedLtr);
       expect(snapshot.scrollOffset, 0);
       expect(snapshot.pageIndex, 0);
       expect(snapshot.anchorNodeId, 'paragraph-8');
@@ -116,10 +116,11 @@ void main() {
 
     expect(snapshot.scrollOffset, 0);
     expect(snapshot.pageIndex, 2);
+    expect(snapshot.pageCount, 5);
     expect(snapshot.paginationKey, 'layout-v1');
     expect(snapshot.anchorNodeId, 'paragraph-4');
     expect(snapshot.anchorTextOffset, 18);
-    expect(snapshot.progressPercent, 0.5);
+    expect(snapshot.progressPercent, 0.4);
   });
 
   test('incremental page count does not fabricate completion percent', () {
@@ -135,6 +136,7 @@ void main() {
     );
 
     expect(snapshot.pageIndex, 1);
+    expect(snapshot.pageCount, isNull);
     expect(snapshot.anchorNodeId, 'paragraph-2');
     expect(snapshot.progressPercent, 0);
   });
@@ -151,7 +153,7 @@ void main() {
         paginationKey: 'layout-v1',
       );
 
-      expect(policy.restoreScrollOffset(snapshot, maxScrollExtent: 800), 400);
+      expect(policy.restoreScrollOffset(snapshot, maxScrollExtent: 800), 320);
     },
   );
 
@@ -159,13 +161,20 @@ void main() {
     const snapshot = NovelReaderProgressSnapshot(
       novelId: 'novel:1',
       episodeId: 'episode-1',
-      flowMode: NovelReaderFlowMode.vertical,
+      flowMode: NovelReaderFlowMode.pagedLtr,
       scrollOffset: 345.5,
       pageIndex: 8,
       progressPercent: 0.625,
     );
 
-    expect(policy.restoreScrollOffset(snapshot, maxScrollExtent: 800), 500);
+    expect(
+      policy.restoreScrollOffset(
+        snapshot,
+        maxScrollExtent: 800,
+        viewportDimension: 200,
+      ),
+      300,
+    );
   });
 
   test('restore policy prefers same layout page, then anchor and percent', () {
@@ -269,6 +278,19 @@ void main() {
     expect(
       restorePolicy.resolveInitialPage(plan: plan, snapshot: invalidLegacy),
       0,
+    );
+
+    const verticalPercent = NovelReaderProgressSnapshot(
+      novelId: 'novel:1',
+      episodeId: 'episode-1',
+      flowMode: NovelReaderFlowMode.vertical,
+      scrollOffset: 0,
+      pageIndex: 0,
+      progressPercent: 0.66,
+    );
+    expect(
+      restorePolicy.resolveInitialPage(plan: plan, snapshot: verticalPercent),
+      1,
     );
 
     final partialPlan = NovelReaderPaginationPlan(

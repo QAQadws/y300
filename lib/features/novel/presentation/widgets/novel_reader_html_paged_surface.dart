@@ -61,6 +61,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     required this.progressSnapshot,
     this.semanticDocument,
     this.navigationRequest,
+    this.pageSeekRequest,
     this.imageHeaderBuilder,
     this.onLinkTap,
     this.onOpenImage,
@@ -92,6 +93,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final NovelReaderProgressSnapshot progressSnapshot;
   final NovelReaderDocument? semanticDocument;
   final NovelReaderAnchorNavigationRequest? navigationRequest;
+  final NovelReaderPageSeekRequest? pageSeekRequest;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
@@ -365,6 +367,7 @@ class _NovelReaderHtmlPagedSurfaceState
                           isPageCountFinal: isPlanComplete,
                           initialPage: initialPage,
                           navigationRequest: widget.navigationRequest,
+                          pageSeekRequest: widget.pageSeekRequest,
                           targetPage: requestedPage,
                           reverse:
                               widget.preferences.flowMode ==
@@ -867,6 +870,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     required this.isPageCountFinal,
     required this.initialPage,
     this.navigationRequest,
+    this.pageSeekRequest,
     this.targetPage,
     required this.reverse,
     required this.showProgressIndicator,
@@ -889,6 +893,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final bool isPageCountFinal;
   final int initialPage;
   final NovelReaderAnchorNavigationRequest? navigationRequest;
+  final NovelReaderPageSeekRequest? pageSeekRequest;
   final int? targetPage;
   final bool reverse;
   final bool showProgressIndicator;
@@ -955,15 +960,29 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     }
     final oldRequestId = oldWidget.navigationRequest?.requestId;
     final newRequestId = widget.navigationRequest?.requestId;
-    if (oldRequestId == newRequestId || widget.targetPage == null) {
+    if (oldRequestId != newRequestId && widget.targetPage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.targetPage == null) {
+          return;
+        }
+        _pageController.jumpToPage(widget.targetPage!);
+        _emitPosition(widget.targetPage!);
+      });
+    }
+    final oldSeekRequestId = oldWidget.pageSeekRequest?.requestId;
+    final seekRequest = widget.pageSeekRequest;
+    if (oldSeekRequestId == seekRequest?.requestId || seekRequest == null) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || widget.targetPage == null) {
+      if (!mounted ||
+          seekRequest.episodeId != widget.plan.episodeId ||
+          seekRequest.paginationKey != widget.plan.key.layoutFingerprint ||
+          seekRequest.pageIndex < 0 ||
+          seekRequest.pageIndex >= widget.plan.pageCount) {
         return;
       }
-      _pageController.jumpToPage(widget.targetPage!);
-      _emitPosition(widget.targetPage!);
+      _jumpToPage(seekRequest.pageIndex);
     });
   }
 

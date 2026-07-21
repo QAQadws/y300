@@ -107,6 +107,7 @@ class NovelReadingProgress {
     required this.updatedAt,
     this.flowMode = NovelReaderFlowMode.vertical,
     this.pageIndex = 0,
+    this.pageCount,
     this.anchorNodeId,
     this.anchorTextOffset = 0,
     this.paginationKey,
@@ -119,6 +120,7 @@ class NovelReadingProgress {
   final DateTime updatedAt;
   final NovelReaderFlowMode flowMode;
   final int pageIndex;
+  final int? pageCount;
   final String? anchorNodeId;
   final int anchorTextOffset;
   final String? paginationKey;

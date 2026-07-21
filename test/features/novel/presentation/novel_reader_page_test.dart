@@ -302,7 +302,7 @@ void main() {
     );
   });
 
-  testWidgets('NovelReaderPage bottom menu omits progress and bookmarks', (
+  testWidgets('NovelReaderPage bottom menu shows progress and chapter nav', (
     tester,
   ) async {
     final repository = _FakeNovelRepository.threeEpisodes();
@@ -312,10 +312,32 @@ void main() {
     await _showReaderMenu(tester);
     expect(
       find.byKey(const Key('shared-reader-progress-slider')),
-      findsNothing,
+      findsOneWidget,
     );
-    expect(find.byKey(const Key('shared-reader-prev-button')), findsNothing);
-    expect(find.byKey(const Key('shared-reader-next-button')), findsNothing);
+    expect(find.byKey(const Key('shared-reader-prev-button')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-next-button')), findsOneWidget);
+    final verticalSlider = tester.widget<Slider>(
+      find.byKey(const Key('shared-reader-progress-slider')),
+    );
+    expect(verticalSlider.divisions, isNull);
+    expect(find.text('0%'), findsOneWidget);
+    expect(find.text('100%'), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('shared-reader-prev-button')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('shared-reader-next-button')),
+          )
+          .onPressed,
+      isNotNull,
+    );
     expect(
       find.byKey(const Key('shared-reader-bottom-action-bookmark')),
       findsNothing,
@@ -346,6 +368,27 @@ void main() {
       find.byKey(const Key('novel-reader-show-chapter-title-switch')),
       findsNothing,
     );
+  });
+
+  testWidgets('vertical progress slider seeks once on release', (tester) async {
+    final repository = _FakeNovelRepository(
+      firstParagraphs: List<String>.generate(30, (index) => '滚动进度段落 $index'),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+    await _showReaderMenu(tester);
+
+    final slider = tester.widget<Slider>(
+      find.byKey(const Key('shared-reader-progress-slider')),
+    );
+    slider.onChangeStart?.call(0.5);
+    slider.onChanged?.call(0.5);
+    slider.onChangeEnd?.call(0.5);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(repository.lastSavedOffset, greaterThan(0));
+    expect(repository.readingProgress?.progressPercent, closeTo(0.5, 0.01));
   });
 
   testWidgets('NovelReaderPage transition chrome follows reader palette', (
@@ -686,7 +729,13 @@ void main() {
       find.byKey(const Key('novel-reader-page-indicator-text')),
     );
     expect(indicatorText.style?.fontSize, 11);
-    expect(find.byType(DecoratedBox), findsNothing);
+    expect(
+      find.ancestor(
+        of: find.byKey(const Key('novel-reader-page-indicator-text')),
+        matching: find.byType(DecoratedBox),
+      ),
+      findsNothing,
+    );
     expect(
       tester
           .getBottomLeft(
@@ -699,6 +748,21 @@ void main() {
             .dy,
       ),
     );
+
+    await _showReaderMenu(tester);
+    final pagedSlider = tester.widget<Slider>(
+      find.byKey(const Key('shared-reader-progress-slider')),
+    );
+    expect(pagedSlider.divisions, isNotNull);
+    expect(find.text('计算中'), findsNothing);
+    pagedSlider.onChangeStart?.call(pagedSlider.max);
+    pagedSlider.onChanged?.call(pagedSlider.max);
+    pagedSlider.onChangeEnd?.call(pagedSlider.max);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(repository.readingProgress?.pageIndex, pagedSlider.max.toInt());
+    expect(repository.readingProgress?.pageCount, pagedSlider.max.toInt() + 1);
   });
 
   testWidgets('NovelReaderPage persists paged mode across reconstruction', (
@@ -1033,6 +1097,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_readerText('第三段。'), findsOneWidget);
+    expect(repository.readingProgress?.episodeId, 'novel:49:100:5002');
+    expect(repository.readingProgress?.scrollOffset, 0);
+    expect(repository.readingProgress?.progressPercent, 0);
   });
 
   testWidgets('NovelReaderPage hides next chapter transition on last episode', (
@@ -1049,8 +1116,24 @@ void main() {
 
     expect(_readerText('第五段。'), findsOneWidget);
     await _showReaderMenu(tester);
-    expect(find.byKey(const Key('shared-reader-prev-button')), findsNothing);
-    expect(find.byKey(const Key('shared-reader-next-button')), findsNothing);
+    expect(find.byKey(const Key('shared-reader-prev-button')), findsOneWidget);
+    expect(find.byKey(const Key('shared-reader-next-button')), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('shared-reader-prev-button')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('shared-reader-next-button')),
+          )
+          .onPressed,
+      isNull,
+    );
     expect(
       find.byKey(const Key('novel-reader-next-chapter-transition')),
       findsNothing,
@@ -1881,6 +1964,7 @@ class _FakeNovelRepository implements NovelRepository {
     required double scrollOffset,
     NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
     int pageIndex = 0,
+    int? pageCount,
     String? anchorNodeId,
     int anchorTextOffset = 0,
     String? paginationKey,
@@ -1895,6 +1979,7 @@ class _FakeNovelRepository implements NovelRepository {
       updatedAt: DateTime(2026, 6, 8),
       flowMode: flowMode,
       pageIndex: pageIndex,
+      pageCount: pageCount,
       anchorNodeId: anchorNodeId,
       anchorTextOffset: anchorTextOffset,
       paginationKey: paginationKey,

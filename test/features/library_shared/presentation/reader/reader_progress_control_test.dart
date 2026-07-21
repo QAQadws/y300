@@ -47,6 +47,49 @@ void main() {
     expect(events, containsAllInOrder(['start', 'change', 'end']));
   });
 
+  testWidgets('continuous progress has custom labels and no divisions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildProgress(
+        config: ReaderProgressConfig.continuous(
+          value: 0.42,
+          leadingLabel: '42%',
+          trailingLabel: '100%',
+          onChanged: (_) {},
+          onChangeEnd: (_) {},
+        ),
+      ),
+    );
+
+    final slider = tester.widget<Slider>(
+      find.byKey(const Key('shared-reader-progress-slider')),
+    );
+    expect(slider.value, 0.42);
+    expect(slider.divisions, isNull);
+    expect(find.text('42%'), findsOneWidget);
+    expect(find.text('100%'), findsOneWidget);
+  });
+
+  testWidgets('discrete progress derives page divisions', (tester) async {
+    await tester.pumpWidget(
+      _buildProgress(
+        config: ReaderProgressConfig.discrete(
+          current: 3,
+          total: 8,
+          onChanged: (_) {},
+          onChangeEnd: (_) {},
+        ),
+      ),
+    );
+
+    final slider = tester.widget<Slider>(
+      find.byKey(const Key('shared-reader-progress-slider')),
+    );
+    expect(slider.value, 2);
+    expect(slider.divisions, 7);
+  });
+
   testWidgets(
     'locked ReaderProgressControl preserves the enabled slider style',
     (tester) async {
@@ -162,10 +205,12 @@ void main() {
     );
 
     final track = tester.widget<DecoratedBox>(
-      find.ancestor(
-        of: find.byKey(const Key('shared-reader-progress-slider')),
-        matching: find.byType(DecoratedBox),
-      ).first,
+      find
+          .ancestor(
+            of: find.byKey(const Key('shared-reader-progress-slider')),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
     );
     final decoration = track.decoration as BoxDecoration;
 
@@ -180,9 +225,7 @@ Widget _buildProgress({
   return MaterialApp(
     theme: theme,
     home: Scaffold(
-      body: Center(
-        child: ReaderProgressControl(config: config),
-      ),
+      body: Center(child: ReaderProgressControl(config: config)),
     ),
   );
 }

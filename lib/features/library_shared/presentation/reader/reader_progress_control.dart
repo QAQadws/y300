@@ -3,29 +3,41 @@ import 'package:y300/features/library_shared/presentation/reader/reader_chrome_p
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 
 class ReaderProgressControl extends StatelessWidget {
-  const ReaderProgressControl({
-    super.key,
-    required this.config,
-  });
+  const ReaderProgressControl({super.key, required this.config});
 
   final ReaderProgressConfig config;
 
   @override
   Widget build(BuildContext context) {
-    final palette =
-        const ReaderChromePaletteResolver().resolve(Theme.of(context));
-    final safeTotal = config.total < 1 ? 1 : config.total;
-    final current = config.current.clamp(1, safeTotal).toInt();
-    final sliderValue = (current - 1).toDouble();
-    final maxValue = (safeTotal - 1).toDouble();
+    final palette = const ReaderChromePaletteResolver().resolve(
+      Theme.of(context),
+    );
+    final discreteTotal = config.total;
+    final isDiscrete = discreteTotal != null;
+    final safeTotal = isDiscrete && discreteTotal < 1 ? 1 : discreteTotal;
+    final current = isDiscrete
+        ? (config.current ?? 1).clamp(1, safeTotal!).toInt()
+        : null;
+    final minValue = config.min;
+    final configuredMax = config.max ?? ((safeTotal ?? 1) - 1).toDouble();
+    final hasRange = configuredMax > minValue;
+    final maxValue = hasRange ? configuredMax : minValue + 1;
+    final rawValue = isDiscrete
+        ? (current! - 1).toDouble()
+        : (config.value ?? minValue);
+    final sliderValue = rawValue.clamp(minValue, maxValue).toDouble();
+    final leadingLabel =
+        config.leadingLabel ?? (current ?? sliderValue).toString();
+    final trailingLabel =
+        config.trailingLabel ?? (safeTotal ?? maxValue).toString();
+    final sliderEnabled = config.sliderEnabled && hasRange;
 
     return Row(
       children: [
         IconButton(
           key: const Key('shared-reader-prev-button'),
           tooltip: config.previousTooltip,
-          onPressed:
-              config.previousEnabled ? config.onPrevious : null,
+          onPressed: config.previousEnabled ? config.onPrevious : null,
           icon: Icon(config.previousIcon),
         ),
         Expanded(
@@ -39,9 +51,9 @@ class ReaderProgressControl extends StatelessWidget {
               child: Row(
                 children: [
                   SizedBox(
-                    width: 36,
+                    width: 56,
                     child: Text(
-                      '$current',
+                      leadingLabel,
                       key: const Key('shared-reader-current-label'),
                       textAlign: TextAlign.left,
                     ),
@@ -52,19 +64,23 @@ class ReaderProgressControl extends StatelessWidget {
                       child: Slider(
                         key: const Key('shared-reader-progress-slider'),
                         value: sliderValue,
-                        min: 0,
+                        min: minValue,
                         max: maxValue,
-                        divisions: safeTotal > 1 ? safeTotal - 1 : null,
-                        onChangeStart: config.onChangeStart,
-                        onChanged: config.onChanged,
-                        onChangeEnd: config.onChangeEnd,
+                        divisions: isDiscrete
+                            ? (safeTotal! > 1 ? safeTotal - 1 : null)
+                            : config.divisions,
+                        onChangeStart: sliderEnabled
+                            ? config.onChangeStart
+                            : null,
+                        onChanged: sliderEnabled ? config.onChanged : null,
+                        onChangeEnd: sliderEnabled ? config.onChangeEnd : null,
                       ),
                     ),
                   ),
                   SizedBox(
-                    width: 36,
+                    width: 56,
                     child: Text(
-                      '$safeTotal',
+                      trailingLabel,
                       key: const Key('shared-reader-total-label'),
                       textAlign: TextAlign.right,
                     ),

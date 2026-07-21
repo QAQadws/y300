@@ -1,0 +1,1 @@
+enum NovelEpisodeOpenPolicy { resumeLastRead, startAtBeginning }

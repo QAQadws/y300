@@ -1032,6 +1032,7 @@ class LocalNovelRepository
     required double scrollOffset,
     NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
     int pageIndex = 0,
+    int? pageCount,
     String? anchorNodeId,
     int anchorTextOffset = 0,
     String? paginationKey,
@@ -1046,6 +1047,7 @@ class LocalNovelRepository
         'scroll_offset': scrollOffset,
         'flow_mode': flowMode.storageValue,
         'page_index': pageIndex < 0 ? 0 : pageIndex,
+        'page_count': pageCount == null || pageCount <= 0 ? null : pageCount,
         'anchor_node_id': _normalizeNullable(anchorNodeId),
         'anchor_text_offset': anchorTextOffset.clamp(0, 1 << 30).toInt(),
         'pagination_key': _normalizeNullable(paginationKey),
@@ -1090,6 +1092,10 @@ class LocalNovelRepository
       pageIndex: ((row['page_index'] as num?)?.toInt() ?? 0)
           .clamp(0, 1 << 30)
           .toInt(),
+      pageCount: switch ((row['page_count'] as num?)?.toInt()) {
+        final value? when value > 0 => value,
+        _ => null,
+      },
       anchorNodeId: _normalizeNullable(row['anchor_node_id'] as String?),
       anchorTextOffset: ((row['anchor_text_offset'] as num?)?.toInt() ?? 0)
           .clamp(0, 1 << 30)

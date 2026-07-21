@@ -21,6 +21,7 @@ import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
+import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_interaction_models.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
@@ -354,7 +355,7 @@ void main() {
     );
 
     await tester.tap(find.text('继续'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 300));
 
     final threadPage = tester.widget<ThreadDetailPage>(
@@ -377,11 +378,66 @@ void main() {
 
     await _scrollNovelChapterIntoTapArea(tester);
     await tester.tap(find.text('Chapter 1'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byType(NovelReaderPage), findsOneWidget);
+    expect(
+      tester.widget<NovelReaderPage>(find.byType(NovelReaderPage)).openPolicy,
+      NovelEpisodeOpenPolicy.startAtBeginning,
+    );
     expect(resolver.callCount, 0);
+  });
+
+  testWidgets('continue resumes the single last-read progress', (tester) async {
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(),
+      routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+      repository: _FakeNovelRepository(
+        progress: NovelReadingProgress(
+          novelId: 'novel:1',
+          episodeId: 'novel:1:e1',
+          scrollOffset: 88,
+          updatedAt: DateTime(2026, 7, 21),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('继续'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<NovelReaderPage>(find.byType(NovelReaderPage)).openPolicy,
+      NovelEpisodeOpenPolicy.resumeLastRead,
+    );
+  });
+
+  testWidgets('the chapter marked last-read resumes its progress', (
+    tester,
+  ) async {
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(),
+      routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+      repository: _FakeNovelRepository(
+        progress: NovelReadingProgress(
+          novelId: 'novel:1',
+          episodeId: 'novel:1:e1',
+          scrollOffset: 88,
+          updatedAt: DateTime(2026, 7, 21),
+        ),
+      ),
+    );
+
+    await _scrollNovelChapterIntoTapArea(tester);
+    await tester.tap(find.text('Chapter 1'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<NovelReaderPage>(find.byType(NovelReaderPage)).openPolicy,
+      NovelEpisodeOpenPolicy.resumeLastRead,
+    );
   });
 
   testWidgets('source route failure offers opening the thread home', (
@@ -968,6 +1024,7 @@ class _FakeNovelRepository implements NovelRepository {
     required double scrollOffset,
     NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
     int pageIndex = 0,
+    int? pageCount,
     String? anchorNodeId,
     int anchorTextOffset = 0,
     String? paginationKey,

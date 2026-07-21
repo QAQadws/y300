@@ -29,6 +29,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
+    this.onContentReady,
     this.preferencesAdapter = const NovelHtmlReaderPreferencesAdapter(),
     this.preparer = const NovelHtmlChapterRenderPreparer(),
     this.preparationService,
@@ -46,6 +47,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
+  final VoidCallback? onContentReady;
   final NovelHtmlReaderPreferencesAdapter preferencesAdapter;
   final NovelHtmlChapterPreparer preparer;
   final NovelReaderHtmlPreparationService? preparationService;
@@ -61,6 +63,7 @@ class _NovelReaderHtmlDocumentViewState
     extends ConsumerState<NovelReaderHtmlDocumentView> {
   Future<NovelReaderPreparedChapter>? _future;
   Object? _signature;
+  Object? _reportedReadySignature;
   NovelReaderPreparedChapterCache? _ownedPreparedCache;
 
   @override
@@ -95,6 +98,7 @@ class _NovelReaderHtmlDocumentViewState
                 child: Center(child: CircularProgressIndicator()),
               );
             }
+            _scheduleContentReady();
             return ForumHtmlWidgetPostRenderer(
               key: const Key('novel-reader-html-renderer'),
               html: prepared.html,
@@ -154,6 +158,19 @@ class _NovelReaderHtmlDocumentViewState
       threadId: widget.episode.sourceTid,
       imageCacheOwnerId: widget.episode.sourceTid,
     );
+  }
+
+  void _scheduleContentReady() {
+    final signature = _signature;
+    if (signature == null || _reportedReadySignature == signature) {
+      return;
+    }
+    _reportedReadySignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _signature == signature) {
+        widget.onContentReady?.call();
+      }
+    });
   }
 
   void _handleImageTap({

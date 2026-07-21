@@ -101,10 +101,68 @@ class ReaderProgressConfig {
     this.nextTooltip = '下一章',
     this.previousIcon = Icons.skip_previous,
     this.nextIcon = Icons.skip_next,
-  });
+  }) : value = null,
+       min = 0,
+       max = null,
+       divisions = null,
+       leadingLabel = null,
+       trailingLabel = null,
+       sliderEnabled = true;
 
-  final int current;
-  final int total;
+  const ReaderProgressConfig.discrete({
+    required this.current,
+    required this.total,
+    required this.onChanged,
+    required this.onChangeEnd,
+    this.onChangeStart,
+    this.onPrevious,
+    this.onNext,
+    this.previousEnabled = true,
+    this.nextEnabled = true,
+    this.sliderEnabled = true,
+    this.interactionLocked = false,
+    this.previousTooltip = '上一章',
+    this.nextTooltip = '下一章',
+    this.previousIcon = Icons.skip_previous,
+    this.nextIcon = Icons.skip_next,
+    this.leadingLabel,
+    this.trailingLabel,
+  }) : value = null,
+       min = 0,
+       max = null,
+       divisions = null;
+
+  const ReaderProgressConfig.continuous({
+    required this.value,
+    required this.onChanged,
+    required this.onChangeEnd,
+    required this.leadingLabel,
+    required this.trailingLabel,
+    this.min = 0,
+    this.max = 1,
+    this.divisions,
+    this.onChangeStart,
+    this.onPrevious,
+    this.onNext,
+    this.previousEnabled = true,
+    this.nextEnabled = true,
+    this.sliderEnabled = true,
+    this.interactionLocked = false,
+    this.previousTooltip = '上一章',
+    this.nextTooltip = '下一章',
+    this.previousIcon = Icons.skip_previous,
+    this.nextIcon = Icons.skip_next,
+  }) : current = null,
+       total = null;
+
+  final int? current;
+  final int? total;
+  final double? value;
+  final double min;
+  final double? max;
+  final int? divisions;
+  final String? leadingLabel;
+  final String? trailingLabel;
   final ValueChanged<double> onChanged;
   final ValueChanged<double> onChangeEnd;
   final ValueChanged<double>? onChangeStart;
@@ -112,6 +170,7 @@ class ReaderProgressConfig {
   final VoidCallback? onNext;
   final bool previousEnabled;
   final bool nextEnabled;
+  final bool sliderEnabled;
   final bool interactionLocked;
   final String previousTooltip;
   final String nextTooltip;

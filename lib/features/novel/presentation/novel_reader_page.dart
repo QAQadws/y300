@@ -11,11 +11,13 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_external_
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
@@ -34,10 +36,12 @@ class NovelReaderPage extends ConsumerStatefulWidget {
     super.key,
     required this.novelId,
     required this.initialEpisodeId,
+    this.openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
   });
 
   final String novelId;
   final String initialEpisodeId;
+  final NovelEpisodeOpenPolicy openPolicy;
 
   @override
   ConsumerState<NovelReaderPage> createState() => _NovelReaderPageState();
@@ -74,10 +78,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       NovelReaderPreparedChapterCache();
   int _anchorNavigationSerial = 0;
   NovelReaderAnchorNavigationRequest? _pendingAnchorNavigationRequest;
+  int _pageSeekSerial = 0;
+  NovelReaderPageSeekRequest? _pendingPageSeekRequest;
+  NovelReaderPaginationPosition? _pagedPosition;
+  double? _progressSliderPreview;
+  bool _isProgressSeekInFlight = false;
+  String? _progressControlOwner;
 
   NovelReaderArgs get _args => NovelReaderArgs(
     novelId: widget.novelId,
     episodeId: widget.initialEpisodeId,
+    openPolicy: widget.openPolicy,
   );
 
   @override
@@ -139,6 +150,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             final restoreOwner =
                 '${viewState.currentEpisode.episodeId}|'
                 '${viewState.preferences.flowMode.name}';
+            if (_progressControlOwner != restoreOwner) {
+              _progressControlOwner = restoreOwner;
+              _pagedPosition = null;
+              _pendingPageSeekRequest = null;
+              _progressSliderPreview = null;
+              _isProgressSeekInFlight = false;
+            }
             if (_verticalRestoreOwner != restoreOwner) {
               _verticalRestoreOwner = restoreOwner;
               _hasRestoredOffset = false;
@@ -290,7 +308,69 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderController controller,
   ) {
     return ReaderBottomBarConfig(
+      progress: _buildProgressConfig(viewState, controller),
       actions: _buildBottomActions(viewState, controller),
+    );
+  }
+
+  ReaderProgressConfig _buildProgressConfig(
+    NovelReaderViewState viewState,
+    NovelReaderController controller,
+  ) {
+    final isLocked = viewState.transition != null || _isProgressSeekInFlight;
+    final onPrevious = viewState.hasPreviousEpisode
+        ? () => unawaited(_openDifferentEpisode(controller.goToPreviousEpisode))
+        : null;
+    final onNext = viewState.hasNextEpisode
+        ? () => unawaited(_openDifferentEpisode(controller.goToNextEpisode))
+        : null;
+    if (viewState.preferences.flowMode == NovelReaderFlowMode.vertical) {
+      final fraction =
+          (_progressSliderPreview ?? viewState.progressSnapshot.progressPercent)
+              .clamp(0.0, 1.0)
+              .toDouble();
+      return ReaderProgressConfig.continuous(
+        value: fraction,
+        leadingLabel: '${(fraction * 100).floor()}%',
+        trailingLabel: '100%',
+        interactionLocked: isLocked,
+        previousEnabled: viewState.hasPreviousEpisode && !isLocked,
+        nextEnabled: viewState.hasNextEpisode && !isLocked,
+        onPrevious: onPrevious,
+        onNext: onNext,
+        onChangeStart: _previewProgressSlider,
+        onChanged: _previewProgressSlider,
+        onChangeEnd: (value) =>
+            unawaited(_seekVerticalProgress(value, viewState, controller)),
+      );
+    }
+
+    final position = _pagedPosition;
+    final isFinal =
+        position?.episodeId == viewState.currentEpisode.episodeId &&
+        position?.isPageCountFinal == true;
+    final total = isFinal
+        ? position!.pageCount
+        : (viewState.progressSnapshot.pageCount ?? 1);
+    final currentIndex =
+        (_progressSliderPreview?.round() ??
+                (position?.pageIndex ?? viewState.progressSnapshot.pageIndex))
+            .clamp(0, total - 1)
+            .toInt();
+    return ReaderProgressConfig.discrete(
+      current: currentIndex + 1,
+      total: total,
+      leadingLabel: '${currentIndex + 1}',
+      trailingLabel: isFinal ? '$total' : '计算中',
+      sliderEnabled: isFinal,
+      interactionLocked: isLocked,
+      previousEnabled: viewState.hasPreviousEpisode && !isLocked,
+      nextEnabled: viewState.hasNextEpisode && !isLocked,
+      onPrevious: onPrevious,
+      onNext: onNext,
+      onChangeStart: _previewProgressSlider,
+      onChanged: _previewProgressSlider,
+      onChangeEnd: (value) => _seekPagedProgress(value, viewState),
     );
   }
 
@@ -314,6 +394,79 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     ];
   }
 
+  void _previewProgressSlider(double value) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _progressSliderPreview = value;
+    });
+  }
+
+  Future<void> _seekVerticalProgress(
+    double value,
+    NovelReaderViewState viewState,
+    NovelReaderController controller,
+  ) async {
+    if (!_scrollController.hasClients || _isProgressSeekInFlight) {
+      if (mounted) {
+        setState(() => _progressSliderPreview = null);
+      }
+      return;
+    }
+    final fraction = value.clamp(0.0, 1.0).toDouble();
+    final maxScrollExtent = _scrollController.position.maxScrollExtent;
+    final targetOffset = fraction * maxScrollExtent;
+    setState(() {
+      _isProgressSeekInFlight = true;
+      _progressSliderPreview = fraction;
+    });
+    _isProgrammaticScrollChange = true;
+    try {
+      _scrollController.jumpTo(targetOffset);
+      await controller.saveCurrentProgressNow(
+        _progressPolicy.verticalSnapshot(
+          novelId: widget.novelId,
+          episodeId: viewState.currentEpisode.episodeId,
+          scrollOffset: targetOffset,
+          maxScrollExtent: maxScrollExtent,
+        ),
+      );
+    } finally {
+      _isProgrammaticScrollChange = false;
+      if (mounted) {
+        setState(() {
+          _isProgressSeekInFlight = false;
+          _progressSliderPreview = null;
+        });
+      }
+    }
+  }
+
+  void _seekPagedProgress(double value, NovelReaderViewState viewState) {
+    final position = _pagedPosition;
+    if (_isProgressSeekInFlight ||
+        position == null ||
+        !position.isPageCountFinal ||
+        position.episodeId != viewState.currentEpisode.episodeId) {
+      if (mounted) {
+        setState(() => _progressSliderPreview = null);
+      }
+      return;
+    }
+    final targetIndex = value.round().clamp(0, position.pageCount - 1).toInt();
+    setState(() {
+      _isProgressSeekInFlight = true;
+      _progressSliderPreview = targetIndex.toDouble();
+      _pendingPageSeekRequest = NovelReaderPageSeekRequest(
+        requestId: ++_pageSeekSerial,
+        episodeId: position.episodeId,
+        paginationKey: position.paginationKey,
+        pageIndex: targetIndex,
+      );
+    });
+  }
+
   Widget _buildReaderList(
     NovelReaderViewState viewState,
     NovelReaderTypography typography,
@@ -334,6 +487,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         chromeInsets: chromeInsets,
         semanticDocument: viewState.document,
         navigationRequest: _pendingAnchorNavigationRequest,
+        pageSeekRequest: _pendingPageSeekRequest,
         paginationCache: _paginationCache,
         paginationMeasureCache: _paginationMeasureCache,
         preparedChapterCache: _preparedChapterCache,
@@ -345,6 +499,20 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           ref.read(novelReaderControllerProvider(_args).notifier),
         ),
         onPositionChanged: (position) {
+          if (mounted) {
+            setState(() {
+              _pagedPosition = position;
+              final pending = _pendingPageSeekRequest;
+              if (pending != null &&
+                  pending.episodeId == position.episodeId &&
+                  pending.paginationKey == position.paginationKey &&
+                  pending.pageIndex == position.pageIndex) {
+                _pendingPageSeekRequest = null;
+                _progressSliderPreview = null;
+                _isProgressSeekInFlight = false;
+              }
+            });
+          }
           _overlayController.hideMenu();
           ref
               .read(novelReaderControllerProvider(_args).notifier)
@@ -367,6 +535,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         onLinkTap: (link) => _openReaderLink(link, externalLauncher),
         onOpenImage: _openHtmlReaderImage,
         onImageFallback: (request) => _copyNovelImageUrl(request.url),
+        onContentReady: () {
+          unawaited(
+            ref
+                .read(novelReaderControllerProvider(_args).notifier)
+                .onVerticalContentReady(viewState.currentEpisode.episodeId),
+          );
+        },
       ),
       if (viewState.nextEpisode != null) ...[
         SizedBox(height: viewState.preferences.paragraphSpacing * 2),
@@ -452,6 +627,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       final offset = _progressPolicy.restoreScrollOffset(
         snapshot,
         maxScrollExtent: max,
+        viewportDimension: _scrollController.position.viewportDimension,
       );
       _isProgrammaticScrollChange = true;
       try {
@@ -460,6 +636,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         _isProgrammaticScrollChange = false;
       }
       _hasRestoredOffset = true;
+      unawaited(
+        ref
+            .read(novelReaderControllerProvider(_args).notifier)
+            .onScrollOffsetChanged(offset, maxScrollExtent: max),
+      );
     });
   }
 

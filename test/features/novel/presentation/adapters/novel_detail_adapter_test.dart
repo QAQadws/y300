@@ -544,6 +544,7 @@ class _FakeNovelRepository implements NovelRepository {
     required double scrollOffset,
     NovelReaderFlowMode flowMode = NovelReaderFlowMode.vertical,
     int pageIndex = 0,
+    int? pageCount,
     String? anchorNodeId,
     int anchorTextOffset = 0,
     String? paginationKey,

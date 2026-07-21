@@ -19,3 +19,18 @@ class NovelReaderPaginationPosition {
   final NovelReaderTextAnchor anchor;
   final bool isPageCountFinal;
 }
+
+@immutable
+class NovelReaderPageSeekRequest {
+  const NovelReaderPageSeekRequest({
+    required this.requestId,
+    required this.episodeId,
+    required this.paginationKey,
+    required this.pageIndex,
+  });
+
+  final int requestId;
+  final String episodeId;
+  final String paginationKey;
+  final int pageIndex;
+}
