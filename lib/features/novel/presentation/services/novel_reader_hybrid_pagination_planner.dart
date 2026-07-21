@@ -13,6 +13,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_block_pagination_engine.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_flowable_complex_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_page_breaker.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_incremental_pagination_planner.dart';
@@ -57,8 +58,8 @@ final class DefaultNovelReaderHybridPaginationPlanner
         const DefaultNovelReaderPaginationLayoutPolicyResolver(),
     this.textRunExtractor = const NovelReaderPaginationTextRunExtractor(),
     this.complexBlockEngine = const NovelReaderComplexBlockPaginationEngine(),
-    this.flowableComplexEngine =
-        const DefaultNovelReaderFlowableComplexPaginationEngine(),
+    NovelReaderFlowableComplexPaginationEngine? flowableComplexEngine,
+    NovelReaderComplexHtmlBoundaryCache? boundaryCache,
     this.validationPolicy = const NovelReaderPaginationValidationPolicy(),
     NovelReaderPaginationMeasureSessionFactory? measureSessionFactory,
     NovelReaderPaginationMeasureCache? measureCache,
@@ -74,7 +75,13 @@ final class DefaultNovelReaderHybridPaginationPlanner
        measureCache =
            measureCache ??
            NovelReaderPaginationMeasureCache(capacity: measureCacheCapacity),
-       textMetricsCache = textMetricsCache ?? NovelReaderTextMetricsCache();
+       textMetricsCache = textMetricsCache ?? NovelReaderTextMetricsCache(),
+       flowableComplexEngine =
+           flowableComplexEngine ??
+           DefaultNovelReaderFlowableComplexPaginationEngine(
+             boundaryCache:
+                 boundaryCache ?? NovelReaderComplexHtmlBoundaryCache(),
+           );
 
   final NovelReaderPaginationMeasureAdapter _measureAdapter;
   final NovelReaderPaginationMeasureSessionFactory _measureSessionFactory;
@@ -248,6 +255,9 @@ final class DefaultNovelReaderHybridPaginationPlanner
     var domSliceCount = 0;
     var flowableComplexFragmentCount = 0;
     var complexBoundaryCount = 0;
+    var complexBoundaryIndexBuildCount = 0;
+    var complexBoundaryIndexCacheHitCount = 0;
+    var complexBoundaryIndexSingleFlightHitCount = 0;
     var complexSearchProbeCount = 0;
     var complexSearchCacheHitCount = 0;
     var complexSearchBudgetExceededCount = 0;
@@ -290,6 +300,10 @@ final class DefaultNovelReaderHybridPaginationPlanner
         complexBlockCount: complexBlockCount,
         flowableComplexFragmentCount: flowableComplexFragmentCount,
         complexBoundaryCount: complexBoundaryCount,
+        complexBoundaryIndexBuildCount: complexBoundaryIndexBuildCount,
+        complexBoundaryIndexCacheHitCount: complexBoundaryIndexCacheHitCount,
+        complexBoundaryIndexSingleFlightHitCount:
+            complexBoundaryIndexSingleFlightHitCount,
         complexSearchProbeCount: complexSearchProbeCount,
         complexSearchCacheHitCount: complexSearchCacheHitCount,
         complexSearchBudgetExceededCount: complexSearchBudgetExceededCount,
@@ -743,6 +757,11 @@ final class DefaultNovelReaderHybridPaginationPlanner
               );
             }
             complexBoundaryCount += flowable.boundaryCount;
+            complexBoundaryIndexBuildCount += flowable.boundaryIndexBuildCount;
+            complexBoundaryIndexCacheHitCount +=
+                flowable.boundaryIndexCacheHitCount;
+            complexBoundaryIndexSingleFlightHitCount +=
+                flowable.boundaryIndexSingleFlightHitCount;
             complexSearchProbeCount += flowable.probeCount;
             complexSearchCacheHitCount += flowable.cacheHitCount;
             complexSearchBudgetExceededCount += flowable.budgetExceededCount;

@@ -140,6 +140,7 @@ final class DefaultNovelReaderComplexHtmlFitSearcher
         observation: whole,
         session: session,
         state: state,
+        bufferedPageHtml: bufferedPageHtml,
         requiresFreshPage: requiresFreshPage,
       );
     }
@@ -150,6 +151,7 @@ final class DefaultNovelReaderComplexHtmlFitSearcher
         observation: whole,
         session: session,
         state: state,
+        bufferedPageHtml: bufferedPageHtml,
         requiresFreshPage: requiresFreshPage,
       );
     }
@@ -168,6 +170,7 @@ final class DefaultNovelReaderComplexHtmlFitSearcher
         observation: minimum,
         session: session,
         state: state,
+        bufferedPageHtml: bufferedPageHtml,
         requiresFreshPage: requiresFreshPage,
       );
     }
@@ -220,6 +223,7 @@ final class DefaultNovelReaderComplexHtmlFitSearcher
       observation: observations[bestFitIndex]!,
       session: session,
       state: state,
+      bufferedPageHtml: bufferedPageHtml,
       requiresFreshPage: requiresFreshPage,
     );
   }
@@ -228,15 +232,20 @@ final class DefaultNovelReaderComplexHtmlFitSearcher
     required _FitObservation observation,
     required NovelReaderComplexHtmlSliceSession session,
     required _FitSearchState state,
+    required String bufferedPageHtml,
     required bool requiresFreshPage,
   }) {
+    final accepted = state.verifyAccepted(
+      bufferedPageHtml: bufferedPageHtml,
+      observation: observation,
+    );
     return NovelReaderComplexHtmlFitResult(
-      slice: observation.slice,
-      measuredHeight: observation.height,
+      slice: accepted.slice,
+      measuredHeight: accepted.height,
       probeCount: state.probeCount,
       cacheHitCount: state.cacheHitCount,
-      fits: observation.fits,
-      exhaustedAtom: observation.slice.endOffset == session.textLength,
+      fits: accepted.fits,
+      exhaustedAtom: accepted.slice.endOffset == session.textLength,
       requiresFreshPage: requiresFreshPage,
       budgetExceeded: state.budgetExceeded,
     );
@@ -328,6 +337,27 @@ final class _FitSearchState {
   int probeCount = 0;
   int cacheHitCount = 0;
   bool budgetExceeded = false;
+
+  _FitObservation verifyAccepted({
+    required String bufferedPageHtml,
+    required _FitObservation observation,
+  }) {
+    final key = _FitCandidateKey(
+      html: '$bufferedPageHtml${observation.slice.html}',
+      startOffset: observation.slice.startOffset,
+      endOffset: observation.slice.endOffset,
+    );
+    final cached = _cache[key];
+    if (cached == null) {
+      throw const NovelReaderPaginationException(
+        code: 'complexFitSearchAcceptedCandidateMissing',
+        message: 'The accepted complex HTML candidate was not measured.',
+      );
+    }
+    cacheHitCount += 1;
+    cancellationToken.throwIfCancelled();
+    return cached;
+  }
 
   Future<_FitObservation?> probe({
     required String bufferedPageHtml,

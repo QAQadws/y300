@@ -90,6 +90,57 @@ void main() {
     await secondSession.dispose();
   });
 
+  test('coalesces exact in-flight metrics across isolated sessions', () async {
+    final cache = NovelReaderPaginationMeasureCache(capacity: 4);
+    final firstDelegate = _DelayedMeasureSession();
+    final secondDelegate = _CountingMeasureSession();
+    final firstSession = NovelReaderCachingPaginationMeasureSession(
+      delegate: firstDelegate,
+      cache: cache,
+    );
+    final secondSession = NovelReaderCachingPaginationMeasureSession(
+      delegate: secondDelegate,
+      cache: cache,
+    );
+    final request = _request(html: '<p>shared in flight</p>');
+
+    final first = firstSession.measure(request);
+    final second = secondSession.measure(request);
+    expect(firstDelegate.calls, 1);
+    expect(secondDelegate.calls, 0);
+
+    firstDelegate.complete(64);
+    expect((await first).fromCache, isFalse);
+    expect((await second).fromCache, isTrue);
+    expect(secondDelegate.calls, 0);
+    await firstSession.dispose();
+    await secondSession.dispose();
+  });
+
+  test(
+    'a disposed caching session cannot serve stale cached metrics',
+    () async {
+      final session = NovelReaderCachingPaginationMeasureSession(
+        delegate: _CountingMeasureSession(),
+      );
+      final request = _request(html: '<p>disposed</p>');
+
+      await session.measure(request);
+      await session.dispose();
+
+      await expectLater(
+        session.measure(request),
+        throwsA(
+          isA<NovelReaderPaginationException>().having(
+            (error) => error.code,
+            'code',
+            'measurementSessionDisposed',
+          ),
+        ),
+      );
+    },
+  );
+
   testWidgets('reuses one HTML probe for sequential candidates', (
     tester,
   ) async {
@@ -152,6 +203,51 @@ void main() {
     expect(second.frameWaitCount, greaterThan(0));
     await session.dispose();
     await tester.pump();
+  });
+
+  testWidgets('disposing a real session completes pending work', (
+    tester,
+  ) async {
+    late BuildContext hostContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            hostContext = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    final chapter = await _prepare();
+    final key = _key(chapter);
+    final session = NovelReaderHtmlPaginationMeasureAdapter(
+      hostContext: hostContext,
+      theme: _theme,
+      preferences: ForumHtmlReaderPreferences.defaults(),
+      sourceId: chapter.episodeId,
+    ).create(chapter: chapter, key: key);
+    final pending = session.measure(
+      NovelReaderPaginationMeasureRequest(
+        html: '<p>pending candidate</p>',
+        chapter: chapter,
+        key: key,
+      ),
+    );
+
+    final dispose = session.dispose();
+    await expectLater(
+      pending,
+      throwsA(
+        isA<NovelReaderPaginationException>().having(
+          (error) => error.code,
+          'code',
+          'measurementSessionDisposed',
+        ),
+      ),
+    );
+    await dispose;
   });
 }
 

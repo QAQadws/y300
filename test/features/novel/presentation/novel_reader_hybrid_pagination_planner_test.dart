@@ -776,9 +776,33 @@ void main() {
     expect(plan.pages.single.html, contains('复杂标题'));
     expect(plan.pages.single.html, contains('后文'));
     expect(plan.flowableComplexFragmentCount, 1);
+    expect(plan.complexBoundaryIndexBuildCount, 1);
+    expect(plan.complexBoundaryIndexCacheHitCount, 0);
     expect(plan.complexSearchProbeCount, 1);
+    expect(plan.complexSearchCacheHitCount, 1);
     expect(plan.atomicWidgetPageCount, 0);
     expect(plan.flowabilityFailureReasonCounts, isEmpty);
+  });
+
+  test('shares the boundary index across isolated production plans', () async {
+    final chapter = await _prepare(
+      '<p><font face="Fantasy Novel Font">复杂缓存正文。</font></p>',
+    );
+    final planner = _planner(
+      _RecordingMeasureAdapter(
+        heightFor: (request, _) =>
+            (request.endOffset! - request.startOffset!) * 10.0,
+      ),
+    );
+    final key = _key(chapter, height: 200);
+
+    final first = await planner.paginate(chapter, key);
+    final second = await planner.paginate(chapter, key);
+
+    expect(first.complexBoundaryIndexBuildCount, 1);
+    expect(first.complexBoundaryIndexCacheHitCount, 0);
+    expect(second.complexBoundaryIndexBuildCount, 0);
+    expect(second.complexBoundaryIndexCacheHitCount, 1);
   });
 
   test('paginates a long flowable complex atom across three pages', () async {
@@ -797,6 +821,7 @@ void main() {
     expect(plan.pageCount, 3);
     expect(plan.flowableComplexFragmentCount, 3);
     expect(plan.complexBoundaryCount, greaterThanOrEqualTo(24));
+    expect(plan.complexBoundaryIndexBuildCount, 1);
     expect(plan.complexSearchProbeCount, greaterThan(3));
     expect(plan.atomicWidgetPageCount, 0);
     expect(

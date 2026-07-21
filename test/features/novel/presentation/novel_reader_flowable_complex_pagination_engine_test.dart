@@ -7,6 +7,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_flowable_co
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_flowable_complex_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
@@ -47,6 +48,8 @@ void main() {
     expect(result.chunks.single.flushAfterAppend, isFalse);
     expect(result.chunks.single.composedHeight, 60);
     expect(result.probeCount, 1);
+    expect(result.cacheHitCount, 1);
+    expect(session.requests, hasLength(1));
   });
 
   test('splits a long atom into continuous page-sized chunks', () async {
@@ -188,6 +191,42 @@ void main() {
 
     expect(result.requiresAtomicFallback, isFalse);
     expect(result.chunks, hasLength(1));
+  });
+
+  test('reuses a boundary session across production engine calls', () async {
+    final cache = NovelReaderComplexHtmlBoundaryCache();
+    final engine = DefaultNovelReaderFlowableComplexPaginationEngine(
+      boundaryCache: cache,
+    );
+    final atom = _atom('cached complex text');
+    const page = NovelReaderPaginationPageContext(
+      bufferedHtml: '',
+      hasBufferedContent: false,
+      availableHeight: 400,
+    );
+
+    final first = await engine.paginate(
+      atom: atom,
+      page: page,
+      chapter: chapter,
+      key: key,
+      measureSession: _RecordingSession(_rangeHeight),
+      cancellationToken: NovelReaderPaginationCancellationToken(),
+    );
+    final second = await engine.paginate(
+      atom: atom,
+      page: page,
+      chapter: chapter,
+      key: key,
+      measureSession: _RecordingSession(_rangeHeight),
+      cancellationToken: NovelReaderPaginationCancellationToken(),
+    );
+
+    expect(first.boundaryIndexBuildCount, 1);
+    expect(first.boundaryIndexCacheHitCount, 0);
+    expect(second.boundaryIndexBuildCount, 0);
+    expect(second.boundaryIndexCacheHitCount, 1);
+    expect(cache.length, 1);
   });
 
   test('rejects a route without the DOM-range flow policy', () async {

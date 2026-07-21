@@ -54,6 +54,9 @@ class NovelReaderPaginationPlan {
     this.complexBlockCount = 0,
     this.flowableComplexFragmentCount = 0,
     this.complexBoundaryCount = 0,
+    this.complexBoundaryIndexBuildCount = 0,
+    this.complexBoundaryIndexCacheHitCount = 0,
+    this.complexBoundaryIndexSingleFlightHitCount = 0,
     this.complexSearchProbeCount = 0,
     this.complexSearchCacheHitCount = 0,
     this.complexSearchBudgetExceededCount = 0,
@@ -121,6 +124,9 @@ class NovelReaderPaginationPlan {
   final int complexBlockCount;
   final int flowableComplexFragmentCount;
   final int complexBoundaryCount;
+  final int complexBoundaryIndexBuildCount;
+  final int complexBoundaryIndexCacheHitCount;
+  final int complexBoundaryIndexSingleFlightHitCount;
   final int complexSearchProbeCount;
   final int complexSearchCacheHitCount;
   final int complexSearchBudgetExceededCount;

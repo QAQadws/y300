@@ -5,6 +5,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_flowable_co
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_layout_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_fit_searcher.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
@@ -26,10 +27,12 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
   const DefaultNovelReaderFlowableComplexPaginationEngine({
     this.boundaryIndexer = const DefaultNovelReaderComplexHtmlBoundaryIndexer(),
     this.fitSearcher = const DefaultNovelReaderComplexHtmlFitSearcher(),
+    this.boundaryCache,
   });
 
   final NovelReaderComplexHtmlBoundaryIndexer boundaryIndexer;
   final NovelReaderComplexHtmlFitSearcher fitSearcher;
+  final NovelReaderComplexHtmlBoundaryCache? boundaryCache;
 
   @override
   Future<NovelReaderFlowableComplexPaginationResult> paginate({
@@ -44,17 +47,52 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
     cancellationToken.throwIfCancelled();
 
     late final NovelReaderComplexHtmlSliceSession sliceSession;
+    var boundaryIndexBuildCount = 0;
+    var boundaryIndexCacheHitCount = 0;
+    var boundaryIndexSingleFlightHitCount = 0;
     try {
-      sliceSession = boundaryIndexer.prepare(
-        html: atom.atom.html,
-        startAnchor: atom.atom.startAnchor,
-      );
+      final cache = boundaryCache;
+      if (cache == null) {
+        boundaryIndexBuildCount = 1;
+        sliceSession = boundaryIndexer.prepare(
+          html: atom.atom.html,
+          startAnchor: atom.atom.startAnchor,
+        );
+      } else {
+        final cached = await cache.resolve(
+          request: NovelReaderComplexHtmlBoundaryCacheRequest(
+            episodeId: chapter.episodeId,
+            contentHash: chapter.contentHash,
+            atomId: atom.atom.atomId,
+            html: atom.atom.html,
+            startAnchor: atom.atom.startAnchor,
+            normalizerRevision: chapter.legacyMarkupNormalization.revision,
+          ),
+          build: () {
+            boundaryIndexBuildCount = 1;
+            return boundaryIndexer.prepare(
+              html: atom.atom.html,
+              startAnchor: atom.atom.startAnchor,
+            );
+          },
+        );
+        cancellationToken.throwIfCancelled();
+        sliceSession = cached.session;
+        boundaryIndexBuildCount = cached.fromCache || cached.joinedInFlight
+            ? 0
+            : 1;
+        boundaryIndexCacheHitCount = cached.fromCache ? 1 : 0;
+        boundaryIndexSingleFlightHitCount = cached.joinedInFlight ? 1 : 0;
+      }
     } catch (error) {
       if (_isCancellation(error)) {
         rethrow;
       }
       return _fallback(
         NovelReaderFlowableComplexFallbackReason.boundaryIndexFailure,
+        boundaryIndexBuildCount: boundaryIndexBuildCount,
+        boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
+        boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
       );
     }
 
@@ -94,6 +132,9 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           probeCount: probeCount,
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
+          boundaryIndexBuildCount: boundaryIndexBuildCount,
+          boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
+          boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
         );
       } catch (error) {
         if (_isCancellation(error)) {
@@ -105,6 +146,9 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           probeCount: probeCount,
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
+          boundaryIndexBuildCount: boundaryIndexBuildCount,
+          boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
+          boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
         );
       }
 
@@ -121,6 +165,9 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
           minimumFragmentCount: 1,
+          boundaryIndexBuildCount: boundaryIndexBuildCount,
+          boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
+          boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
         );
       }
 
@@ -132,6 +179,9 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           probeCount: probeCount,
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
+          boundaryIndexBuildCount: boundaryIndexBuildCount,
+          boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
+          boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
         );
       }
       final hasRemainder = slice.endOffset < sliceSession.textLength;
@@ -155,6 +205,9 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
       cacheHitCount: cacheHitCount,
       budgetExceededCount: budgetExceededCount,
       minimumFragmentCount: 0,
+      boundaryIndexBuildCount: boundaryIndexBuildCount,
+      boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
+      boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
     );
   }
 
@@ -165,6 +218,9 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
     int cacheHitCount = 0,
     int budgetExceededCount = 0,
     int minimumFragmentCount = 0,
+    int boundaryIndexBuildCount = 0,
+    int boundaryIndexCacheHitCount = 0,
+    int boundaryIndexSingleFlightHitCount = 0,
   }) {
     return NovelReaderFlowableComplexPaginationResult(
       chunks: const <NovelReaderFlowableComplexChunk>[],
@@ -173,6 +229,9 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
       cacheHitCount: cacheHitCount,
       budgetExceededCount: budgetExceededCount,
       minimumFragmentCount: minimumFragmentCount,
+      boundaryIndexBuildCount: boundaryIndexBuildCount,
+      boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
+      boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
       fallbackReason: reason,
     );
   }

@@ -42,6 +42,7 @@ void main() {
     expect(result.fits, isTrue);
     expect(result.exhaustedAtom, isTrue);
     expect(result.probeCount, 1);
+    expect(result.cacheHitCount, 1);
     expect(measurer.probedOffsets, <int>[5]);
   });
 
@@ -249,9 +250,9 @@ void main() {
         availableHeight: 45,
       );
 
-      expect(first.cacheHitCount, 0);
+      expect(first.cacheHitCount, 1);
       expect(delegate.requests, hasLength(firstDelegateCallCount));
-      expect(second.cacheHitCount, second.probeCount);
+      expect(second.cacheHitCount, second.probeCount + 1);
       expect(second.slice.endOffset, first.slice.endOffset);
     },
   );

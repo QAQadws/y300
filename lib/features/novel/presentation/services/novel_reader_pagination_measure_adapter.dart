@@ -104,6 +104,9 @@ final class NovelReaderPaginationMeasureCache {
   final LinkedHashMap<_MeasureCacheKey, NovelReaderPaginationMeasureResult>
   _entries =
       LinkedHashMap<_MeasureCacheKey, NovelReaderPaginationMeasureResult>();
+  final Map<_MeasureCacheKey, Future<NovelReaderPaginationMeasureResult>>
+  _inFlight = <_MeasureCacheKey, Future<NovelReaderPaginationMeasureResult>>{};
+  int _generation = 0;
 
   int get length => _entries.length;
 
@@ -131,7 +134,58 @@ final class NovelReaderPaginationMeasureCache {
     }
   }
 
-  void clear() => _entries.clear();
+  Future<NovelReaderPaginationMeasureResult> resolve({
+    required NovelReaderPaginationMeasureRequest request,
+    required Future<NovelReaderPaginationMeasureResult> Function() measure,
+  }) {
+    final cached = get(request);
+    if (cached != null) {
+      return Future<NovelReaderPaginationMeasureResult>.value(
+        cached.copyWith(fromCache: true, frameWaitCount: 0),
+      );
+    }
+
+    final key = _MeasureCacheKey.from(request);
+    final existing = _inFlight[key];
+    if (existing != null) {
+      return existing.then(
+        (result) => result.copyWith(fromCache: true, frameWaitCount: 0),
+      );
+    }
+
+    final requestGeneration = _generation;
+    final future = Future<NovelReaderPaginationMeasureResult>.sync(measure)
+        .then((result) {
+          if (requestGeneration == _generation) {
+            put(request, result);
+          }
+          return result;
+        });
+    _inFlight[key] = future;
+    unawaited(
+      future.then<void>(
+        (_) => _removeInFlight(key, future),
+        onError: (Object error, StackTrace stackTrace) =>
+            _removeInFlight(key, future),
+      ),
+    );
+    return future;
+  }
+
+  void clear() {
+    _generation += 1;
+    _entries.clear();
+    _inFlight.clear();
+  }
+
+  void _removeInFlight(
+    _MeasureCacheKey key,
+    Future<NovelReaderPaginationMeasureResult> future,
+  ) {
+    if (identical(_inFlight[key], future)) {
+      _inFlight.remove(key);
+    }
+  }
 }
 
 final class NovelReaderCachingPaginationMeasureSession
@@ -144,53 +198,33 @@ final class NovelReaderCachingPaginationMeasureSession
 
   final NovelReaderPaginationMeasureSession _delegate;
   final NovelReaderPaginationMeasureCache cache;
-  final Map<_MeasureCacheKey, Future<NovelReaderPaginationMeasureResult>>
-  _inFlight = <_MeasureCacheKey, Future<NovelReaderPaginationMeasureResult>>{};
+  bool _disposed = false;
 
   @override
   Future<NovelReaderPaginationMeasureResult> measure(
     NovelReaderPaginationMeasureRequest request,
   ) {
-    final cached = cache.get(request);
-    if (cached != null) {
-      return Future<NovelReaderPaginationMeasureResult>.value(
-        cached.copyWith(fromCache: true, frameWaitCount: 0),
+    if (_disposed) {
+      return Future<NovelReaderPaginationMeasureResult>.error(
+        const NovelReaderPaginationException(
+          code: 'measurementSessionDisposed',
+          message: 'The pagination measurement session has been disposed.',
+        ),
       );
     }
-
-    final cacheKey = _MeasureCacheKey.from(request);
-    final existing = _inFlight[cacheKey];
-    if (existing != null) {
-      return existing.then(
-        (result) => result.copyWith(fromCache: true, frameWaitCount: 0),
-      );
-    }
-
-    final future = _delegate.measure(request).then((result) {
-      cache.put(request, result);
-      return result;
-    });
-    _inFlight[cacheKey] = future;
-    unawaited(
-      future.then<void>(
-        (_) => _removeInFlight(cacheKey, future),
-        onError: (Object error, StackTrace stack) =>
-            _removeInFlight(cacheKey, future),
-      ),
+    return cache.resolve(
+      request: request,
+      measure: () => _delegate.measure(request),
     );
-    return future;
   }
 
   @override
-  Future<void> dispose() => _delegate.dispose();
-
-  void _removeInFlight(
-    _MeasureCacheKey key,
-    Future<NovelReaderPaginationMeasureResult> future,
-  ) {
-    if (identical(_inFlight[key], future)) {
-      _inFlight.remove(key);
+  Future<void> dispose() async {
+    if (_disposed) {
+      return;
     }
+    _disposed = true;
+    await _delegate.dispose();
   }
 }
 

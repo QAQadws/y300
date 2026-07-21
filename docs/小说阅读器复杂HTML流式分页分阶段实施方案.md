@@ -1,6 +1,6 @@
 # 小说阅读器复杂 HTML 流式分页分阶段实施方案
 
-> 状态：Phase 0-6 已完成（2026-07-21）；Phase 7-8 待实施
+> 状态：Phase 0-7 已完成（2026-07-21）；Phase 8 待实施
 >
 > 编写日期：2026-07-21
 >
@@ -751,6 +751,12 @@ boundaryIndexerRevision
 
 value 只在进程内保存，不持久化 DOM。
 
+Phase 7 的生产实现使用容量 `32` 的 LRU。私有精确 key 还包含 atom HTML 与
+`startAnchor(episodeId/nodeId/textOffset)`，用于防御错误复用的 content hash 或
+atom id；这些内容只存在内存 key 中，不进入 diagnostics。同步 DOM index build
+通过共享 Future 暴露，同一 key 的并发请求加入同一个 in-flight build，完成后才
+写入 LRU。Cache clear 使用 generation 阻止旧 Future 回填。
+
 ### 14.2 Measure cache
 
 复用 `NovelReaderPaginationMeasureCache`，key 继续包含完整候选 HTML 和 layout identity，并增加：
@@ -763,6 +769,11 @@ bufferSignature
 ```
 
 同一个 accepted candidate 的最终验证应命中已有 probe 结果。
+
+Phase 7 将 in-flight map 下沉到共享 `NovelReaderPaginationMeasureCache`，因此不同
+isolated measure session 也能合并完全相同的候选；session dispose 后不得再读取
+该 session 的缓存结果。Fit searcher 接受候选时重新取得本次搜索已记录的
+observation 并计为 cache hit，不执行第二次 renderer layout。
 
 ### 14.3 单飞
 
@@ -835,6 +846,9 @@ normalizationReasonCounts
 flowableComplexAtomCount
 flowableComplexFragmentCount
 complexBoundaryCount
+complexBoundaryIndexBuildCount
+complexBoundaryIndexCacheHitCount
+complexBoundaryIndexSingleFlightHitCount
 complexSearchProbeCount
 complexSearchCacheHitCount
 complexSearchBudgetExceededCount
@@ -1226,6 +1240,9 @@ dedicated table/collapse、旧样本目标行为和既有增量稳定页不变�
 
 ### Phase 7：真实 renderer 集成、缓存和性能
 
+> 实施状态：已完成（2026-07-21）。生产 renderer revision 保持 `14`；本阶段只
+> 强化派生缓存、并发、生命周期、诊断和回归门禁，没有改变页面可见排版语义。
+
 目标：用真实 HtmlWidget 约束测试、缓存调优和性能门禁硬化 Phase 5 已接入的
 persistent measurement session。
 
@@ -1237,6 +1254,27 @@ persistent measurement session。
 - first-page priority 和 generation cancellation。
 - timeout、search budget 和纵向降级。
 
+实际实现：
+
+- 新增有界 `NovelReaderComplexHtmlBoundaryCache`，按 episode/content/atom/HTML/
+  anchor/normalizer revision/indexer revision 精确隔离不可变 DOM session；生产
+  surface 在 coordinator 重建之间继续复用同一个进程内 cache。
+- Boundary build 与 range measurement 都支持跨 isolated session single-flight；
+  measurement LRU 继续以完整 candidate HTML、layout identity、atom 和 range 为
+  key，buffer signature 已由完整 candidate HTML 覆盖。
+- Accepted candidate 的最终确认复用搜索内已验证 observation，因此 diagnostics
+  增加一次 cache hit，但真实 renderer probe 数不增加。
+- Plan 与 diagnostics 新增 boundary index build/cache/single-flight 指标；日志仍
+  只输出结构化计数，不输出 HTML、认证数据或本地路径。
+- Caching measure session dispose 现在幂等，并拒绝 dispose 后的缓存读取；真实
+  measure session 的 pending work、coordinator generation 取消和迟到增量结果均有
+  自动化测试，旧结果不能写入新 plan 或 plan cache。
+- 真实 `ForumHtmlWidgetPostRenderer` 代表性矩阵覆盖 light/sepia/dark、
+  `240/320/420/600` 宽度、最小/默认/最大字号与行高、系统 text scale `1.4`，测量高度与
+  直接 renderer 高度一致。完整设备、横屏和 Profile/Release 矩阵仍属于 Phase 8。
+- 既有 `800ms` 单 probe timeout、每片段 `12` probe 上限、首屏/完整 plan timer
+  和纵向 fallback 保持为唯一预算链路；没有新增第二套 watchdog。
+
 验收：
 
 - 普通 safe text probe 数不增加。
@@ -1244,6 +1282,14 @@ persistent measurement session。
 - 80 页纯文字性能与当前实现相当。
 - 混合文章成本与 flowable complex 页面数相关，而不是所有正文字符。
 - 无无限 loading、悬挂 session 或迟到页面写入。
+
+自动化结果：
+
+- `20/80/200` 页 safe-only 均保持 `complexSearchProbeCount == 0`。
+- safe 正文扩大十倍、complex atom 数不变时，complex probe 数保持不变。
+- 同 accepted candidate 只有一次真实 measure，最终确认命中搜索缓存。
+- boundary LRU、精确失效、并发 single-flight、跨 session measurement single-flight、
+  dispose、generation cancellation 和纵向性能 fallback 全部通过测试。
 
 ### Phase 8：全量回归、真机与旧路径清理
 

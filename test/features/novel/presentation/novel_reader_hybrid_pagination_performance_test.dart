@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
@@ -71,6 +72,8 @@ void main() {
         expect(plan.pageCount, lessThan(targetPages * 2));
         expect(plan.textLayoutCount, plan.atomCount);
         expect(plan.complexBlockCount, 0);
+        expect(plan.complexBoundaryIndexBuildCount, 0);
+        expect(plan.complexSearchProbeCount, 0);
         expect(plan.safeTextFallbackCount, 0);
         expect(plan.rendererValidationCount, 1);
         expect(plan.measurementCount, 1);
@@ -125,6 +128,54 @@ void main() {
     expect(plan.rendererValidationMismatchCount, 0);
     expect(plan.safeTextFallbackCount, 0);
   });
+
+  test(
+    'complex probe cost does not scale with surrounding safe text',
+    () async {
+      Future<NovelReaderPaginationPlan> paginate(int safeParagraphCount) async {
+        final chapter = await const DefaultNovelReaderHtmlPreparationService()
+            .prepare(
+              rawHtml: _mixedHtmlFor(safeParagraphCount),
+              episode: _episode,
+              preferences: _preferences,
+              theme: _theme,
+              sourceId: _episode.episodeId,
+              threadId: _episode.sourceTid,
+              imageCacheOwnerId: _episode.sourceTid,
+            );
+        final key = NovelReaderPaginationKey(
+          episodeId: chapter.episodeId,
+          contentHash: chapter.contentHash,
+          viewportWidthPx: 320,
+          viewportHeightPx: 600,
+          typographySignature: 'phase7-mixed-scaling',
+          themeSignature: chapter.themeSignature,
+          imageDimensionRevision: chapter.imageDimensionRevision,
+          rendererRevision: 14,
+        );
+        return DefaultNovelReaderHybridPaginationPlanner(
+          measureAdapter: const _ConstantMeasureAdapter(),
+          preferences: _preferences,
+          theme: _theme,
+          baseStyle: _baseStyle,
+          validationPolicy: const NovelReaderPaginationValidationPolicy(
+            interval: 10000,
+          ),
+        ).paginate(chapter, key);
+      }
+
+      final short = await paginate(20);
+      final long = await paginate(200);
+
+      expect(short.flowableComplexAtomCount, 2);
+      expect(long.flowableComplexAtomCount, 2);
+      expect(short.complexSearchProbeCount, 2);
+      expect(long.complexSearchProbeCount, short.complexSearchProbeCount);
+      expect(short.complexBoundaryIndexBuildCount, 2);
+      expect(long.complexBoundaryIndexBuildCount, 2);
+      expect(long.textLayoutCount, greaterThan(short.textLayoutCount * 5));
+    },
+  );
 }
 
 String _htmlFor(int targetPages) {
@@ -140,6 +191,17 @@ String _riskHtmlFor(int targetPages) {
     targetPages * 2,
     '<p><span style="background-color:#efe1b8">$paragraph</span></p>',
   ).join();
+}
+
+String _mixedHtmlFor(int safeParagraphCount) {
+  const safe = '<p>普通文字路径不应触发复杂 HTML renderer probe。</p>';
+  const complex = '<p><font face="Fantasy Novel Font">复杂样式正文。</font></p>';
+  final before = List<String>.filled(safeParagraphCount ~/ 2, safe).join();
+  final after = List<String>.filled(
+    safeParagraphCount - safeParagraphCount ~/ 2,
+    safe,
+  ).join();
+  return '$before$complex$complex$after';
 }
 
 const _episode = NovelEpisodeItem(

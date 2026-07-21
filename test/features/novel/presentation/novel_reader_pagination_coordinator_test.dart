@@ -120,6 +120,48 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(coordinator.cache.length, 1);
   });
+
+  test('drops late incremental writes from a cancelled generation', () async {
+    final breaker = _IncrementalDelayedBreaker();
+    final coordinator = DefaultNovelReaderPaginationCoordinator(
+      pageBreaker: breaker,
+    );
+    final events = <NovelReaderPaginationProgress>[];
+    final cancelled = Completer<void>();
+
+    coordinator
+        .paginateIncrementally(
+          chapter: _prepared('episode'),
+          key: _key('episode'),
+        )
+        .listen(
+          events.add,
+          onError: (Object error, StackTrace stackTrace) {
+            expect(
+              error,
+              isA<NovelReaderPaginationException>().having(
+                (value) => value.code,
+                'code',
+                'paginationCancelled',
+              ),
+            );
+            if (!cancelled.isCompleted) {
+              cancelled.complete();
+            }
+          },
+        );
+
+    coordinator.cancelPending();
+    await cancelled.future;
+    expect(breaker.token?.isCancelled, isTrue);
+
+    breaker.emit(_progress('episode', isComplete: true));
+    await breaker.close();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(events, isEmpty);
+    expect(coordinator.cache.length, 0);
+  });
 }
 
 NovelReaderPreparedChapter _prepared(String episodeId) {
@@ -233,6 +275,7 @@ class _IncrementalDelayedBreaker
   final StreamController<NovelReaderPaginationProgress> _controller =
       StreamController<NovelReaderPaginationProgress>();
   int calls = 0;
+  NovelReaderPaginationCancellationToken? token;
 
   @override
   Future<NovelReaderPaginationPlan> paginate(
@@ -253,6 +296,7 @@ class _IncrementalDelayedBreaker
     required NovelReaderPaginationCancellationToken cancellationToken,
   }) {
     calls += 1;
+    token = cancellationToken;
     return _controller.stream;
   }
 

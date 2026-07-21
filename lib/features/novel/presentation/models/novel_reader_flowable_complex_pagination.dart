@@ -48,6 +48,9 @@ final class NovelReaderFlowableComplexPaginationResult {
     required this.cacheHitCount,
     required this.budgetExceededCount,
     required this.minimumFragmentCount,
+    this.boundaryIndexBuildCount = 0,
+    this.boundaryIndexCacheHitCount = 0,
+    this.boundaryIndexSingleFlightHitCount = 0,
     this.fallbackReason,
   }) : chunks = List<NovelReaderFlowableComplexChunk>.unmodifiable(chunks),
        assert(boundaryCount >= 0),
@@ -55,6 +58,9 @@ final class NovelReaderFlowableComplexPaginationResult {
        assert(cacheHitCount >= 0),
        assert(budgetExceededCount >= 0),
        assert(minimumFragmentCount >= 0),
+       assert(boundaryIndexBuildCount >= 0),
+       assert(boundaryIndexCacheHitCount >= 0),
+       assert(boundaryIndexSingleFlightHitCount >= 0),
        assert(fallbackReason == null || chunks.isEmpty);
 
   final List<NovelReaderFlowableComplexChunk> chunks;
@@ -63,6 +69,9 @@ final class NovelReaderFlowableComplexPaginationResult {
   final int cacheHitCount;
   final int budgetExceededCount;
   final int minimumFragmentCount;
+  final int boundaryIndexBuildCount;
+  final int boundaryIndexCacheHitCount;
+  final int boundaryIndexSingleFlightHitCount;
   final NovelReaderFlowableComplexFallbackReason? fallbackReason;
 
   bool get requiresAtomicFallback => fallbackReason != null;

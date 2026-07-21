@@ -1,6 +1,6 @@
 # 小说阅读器复杂 HTML 流式分页 Phase 0 基线与 ADR
 
-> 状态：Phase 0 已完成，ADR 已接受；Phase 1-3 已落地
+> 状态：Phase 0 已完成，ADR 已接受；Phase 1-7 已落地
 >
 > 日期：2026-07-21
 >
@@ -297,7 +297,43 @@ line box 变化会违反 ADR-007 的“已发布页面不可变”，并使页�
 - Protected inline 的合成 DOM 搜索位置不计入正文 text anchor。
 - Phase 6 提升 renderer revision，使旧 whole-block Ruby/inline plan 失效。
 
-## 14. Rollback
+## 14. ADR-010：DOM boundary cache 与 renderer measure cache 分层
+
+### 决策
+
+接受。
+
+DOM boundary session 与 renderer 高度具有不同失效维度，必须使用两个独立的有界
+进程内 cache：
+
+- Boundary cache key 包含 episode、content hash、atom id、精确 HTML、起始
+  anchor、normalizer revision 和 boundary indexer revision；不包含 viewport、主题
+  或字体，因为合法 DOM 切点与布局无关。
+- Measurement cache key 包含 layout identity、episode、atom、range 和完整 candidate
+  HTML；完整 candidate 已包含当前 page buffer，等价于精确 buffer signature。
+- 两个 cache 都在共享 cache 实例中维护 in-flight Future，使 isolated planner/
+  measure session 之间的完全相同工作只执行一次。
+- Cache value 不持久化；clear 后迟到 Future 不得回填新 generation。
+
+### 原因
+
+把 DOM session 按 layout key 缓存会在字号、主题或 viewport 改变时重复 parse；把
+renderer 高度只按 DOM identity 缓存则会产生错误页边界。分层后，DOM parse 成本与
+flowable atom 数相关，renderer 高度仍对所有视觉输入保持严格隔离。
+
+Accepted candidate 的最终确认复用 fit search 内已经测量的 observation，并记录
+cache hit；它不为了“验证”再触发一次等价 renderer layout。
+
+### 生命周期约束
+
+- Caching measure session dispose 幂等，dispose 后即使共享 cache 已有值也拒绝请求。
+- 真实 session dispose 必须完成 pending completer 并移除 OverlayEntry。
+- Generation cancellation 后，正在执行的 probe 可以完成，但结果不得发布或写 plan
+  cache。
+- Diagnostics 只记录 build/hit/single-flight 数量，不记录 cache key、HTML 或 anchor
+  内容。
+
+## 15. Rollback
 
 每个后续阶段必须可以独立回退：
 
@@ -325,7 +361,7 @@ Phase 6 Ruby/protected inline
 
 rollback 不回写正文，不涉及数据库迁移。
 
-## 15. Phase 0 自动化
+## 16. Phase 0 自动化
 
 新增：
 
@@ -349,7 +385,7 @@ flutter test test/features/novel/presentation/novel_reader_hybrid_pagination_fix
 flutter analyze
 ```
 
-## 16. Phase 0 完成门禁
+## 17. Phase 0 完成门禁
 
 - [x] 两份 JSON 以 UTF-8、`version=1` 读取。
 - [x] 原始认证信息未写入仓库。
@@ -361,7 +397,7 @@ flutter analyze
 - [x] ADR 已裁定 route/policy、dedicated、atomic、二分、缓存和 rollback。
 - [x] 生产分页行为未修改。
 
-## 17. Phase 1-6 后续实施记录
+## 18. Phase 1-7 后续实施记录
 
 Phase 1 已将 route reason 与 layout policy 解耦，并引入
 `flowableComplexText`、`atomicWidget`、flowability inspector 和 capability
@@ -419,5 +455,26 @@ slice，但长段落可以在 cluster 前后跨页；protected-inline 合成搜�
 anchor。新增 fixture 覆盖日文、英文、间隔点、连续 Ruby 和固定尺寸 smiley，生产
 renderer revision 提升到 `14`。
 
-下一阶段为 Phase 7：补齐真实 renderer 一致性矩阵、boundary/range cache 调优、
-性能门禁、timeout 与纵向降级验证。
+Phase 7 已新增容量 `32` 的 `NovelReaderComplexHtmlBoundaryCache`。生产 surface 持有
+cache，默认 hybrid planner 将它注入 flowable engine，并在 isolated planner 之间
+共享；精确 key 与 ADR-010 一致。Plan/diagnostics 新增 boundary index build、LRU
+hit 和 in-flight join 计数。Boundary index revision 当前为 `1`，仅用于派生内存缓存
+失效，不进入数据库。
+
+`NovelReaderPaginationMeasureCache` 现在同时拥有 LRU 与 in-flight map，完全相同的
+range candidate 可以跨 isolated measure session 共享 Future。Fit searcher 最终接受
+candidate 时复用本次搜索 observation，计为 cache hit 且不增加真实 renderer probe。
+Caching session dispose 后拒绝任何请求；真实 renderer session 的 pending dispose、
+跨 session single-flight 和 generation 取消后的迟到结果均有自动化覆盖。
+
+真实 `ForumHtmlWidgetPostRenderer` 矩阵已验证 light/sepia/dark、最小/默认/最大字号
+与行高、`240/320/420/600` 宽度和系统 text scale `1.4` 下，production measure
+session 与直接 renderer 高度一致。`20/80/200` 页 safe-only 基准保持 complex probe
+为零；safe 正文扩大十倍且 complex atom 数不变时，complex probe 数保持不变。
+既有单 probe `800ms`、每 fragment 12 probe、首屏和完整 plan 预算及纵向 fallback
+继续生效。
+
+本阶段不改变可见分页规则，因此 renderer revision 保持 `14`。没有修改小说
+preparation、SQLite、进度、书签、纵向模式或网络协议，小说正文仍固定请求
+`version=1`。下一阶段为 Phase 8：全量 fixture、设备/Profile/Release 矩阵与旧路径
+清理。

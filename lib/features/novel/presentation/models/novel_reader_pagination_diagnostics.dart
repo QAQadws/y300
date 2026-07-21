@@ -36,6 +36,9 @@ class NovelReaderPaginationDiagnostics {
     this.complexBlockCount = 0,
     this.flowableComplexFragmentCount = 0,
     this.complexBoundaryCount = 0,
+    this.complexBoundaryIndexBuildCount = 0,
+    this.complexBoundaryIndexCacheHitCount = 0,
+    this.complexBoundaryIndexSingleFlightHitCount = 0,
     this.complexSearchProbeCount = 0,
     this.complexSearchCacheHitCount = 0,
     this.complexSearchBudgetExceededCount = 0,
@@ -131,6 +134,9 @@ class NovelReaderPaginationDiagnostics {
   final int complexBlockCount;
   final int flowableComplexFragmentCount;
   final int complexBoundaryCount;
+  final int complexBoundaryIndexBuildCount;
+  final int complexBoundaryIndexCacheHitCount;
+  final int complexBoundaryIndexSingleFlightHitCount;
   final int complexSearchProbeCount;
   final int complexSearchCacheHitCount;
   final int complexSearchBudgetExceededCount;
@@ -190,6 +196,10 @@ class NovelReaderPaginationDiagnostics {
         'complexBlocks=$complexBlockCount, '
         'flowableComplexFragments=$flowableComplexFragmentCount, '
         'complexBoundaries=$complexBoundaryCount, '
+        'complexBoundaryIndexBuilds=$complexBoundaryIndexBuildCount, '
+        'complexBoundaryIndexCacheHits=$complexBoundaryIndexCacheHitCount, '
+        'complexBoundaryIndexSingleFlightHits='
+        '$complexBoundaryIndexSingleFlightHitCount, '
         'complexSearchProbes=$complexSearchProbeCount, '
         'complexSearchCacheHits=$complexSearchCacheHitCount, '
         'complexSearchBudgetExceeded=$complexSearchBudgetExceededCount, '

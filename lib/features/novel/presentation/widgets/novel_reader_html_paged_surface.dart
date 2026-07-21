@@ -20,6 +20,7 @@ import 'package:y300/features/novel/presentation/services/novel_html_chapter_ren
 import 'package:y300/features/novel/presentation/services/novel_html_image_reader_bridge.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
@@ -75,6 +76,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.restorePolicy = const NovelReaderPaginationRestorePolicy(),
     this.paginationCache,
     this.paginationMeasureCache,
+    this.paginationBoundaryCache,
     this.preparedChapterCache,
     this.diagnosticsSink = const NovelReaderNoopPaginationDiagnosticsSink(),
     this.performancePolicy = const NovelReaderPaginationPerformancePolicy(),
@@ -106,6 +108,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final NovelReaderPaginationRestorePolicy restorePolicy;
   final NovelReaderPaginationCache? paginationCache;
   final NovelReaderPaginationMeasureCache? paginationMeasureCache;
+  final NovelReaderComplexHtmlBoundaryCache? paginationBoundaryCache;
   final NovelReaderPreparedChapterCache? preparedChapterCache;
   final NovelReaderPaginationDiagnosticsSink diagnosticsSink;
   final NovelReaderPaginationPerformancePolicy performancePolicy;
@@ -126,6 +129,7 @@ class _NovelReaderHtmlPagedSurfaceState
   NovelReaderPaginationKey? _planKey;
   NovelReaderPaginationCache? _ownedCache;
   NovelReaderPaginationMeasureCache? _ownedMeasureCache;
+  NovelReaderComplexHtmlBoundaryCache? _ownedBoundaryCache;
   NovelReaderPreparedChapterCache? _ownedPreparedCache;
   Duration _preparationDuration = Duration.zero;
   int _layoutGeneration = 0;
@@ -510,6 +514,11 @@ class _NovelReaderHtmlPagedSurfaceState
           complexBlockCount: plan.complexBlockCount,
           flowableComplexFragmentCount: plan.flowableComplexFragmentCount,
           complexBoundaryCount: plan.complexBoundaryCount,
+          complexBoundaryIndexBuildCount: plan.complexBoundaryIndexBuildCount,
+          complexBoundaryIndexCacheHitCount:
+              plan.complexBoundaryIndexCacheHitCount,
+          complexBoundaryIndexSingleFlightHitCount:
+              plan.complexBoundaryIndexSingleFlightHitCount,
           complexSearchProbeCount: plan.complexSearchProbeCount,
           complexSearchCacheHitCount: plan.complexSearchCacheHitCount,
           complexSearchBudgetExceededCount:
@@ -691,6 +700,9 @@ class _NovelReaderHtmlPagedSurfaceState
         baseStyle: rendererBaseStyle,
         textAlign: widget.typography.textAlign,
         textScaler: MediaQuery.textScalerOf(context),
+        boundaryCache:
+            widget.paginationBoundaryCache ??
+            (_ownedBoundaryCache ??= NovelReaderComplexHtmlBoundaryCache()),
         measureCache:
             widget.paginationMeasureCache ??
             (_ownedMeasureCache ??= NovelReaderPaginationMeasureCache()),
