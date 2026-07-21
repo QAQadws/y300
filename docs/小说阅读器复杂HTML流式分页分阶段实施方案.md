@@ -1,6 +1,6 @@
 # 小说阅读器复杂 HTML 流式分页分阶段实施方案
 
-> 状态：Phase 0-3 已完成（2026-07-21）；Phase 4-8 待实施
+> 状态：Phase 0-4 已完成（2026-07-21）；Phase 5-8 待实施
 >
 > 编写日期：2026-07-21
 >
@@ -418,6 +418,8 @@ final class NovelReaderComplexHtmlFitResult {
     required this.cacheHitCount,
     required this.fits,
     required this.exhaustedAtom,
+    required this.requiresFreshPage,
+    required this.budgetExceeded,
   });
 
   final NovelReaderComplexHtmlSlice slice;
@@ -426,10 +428,20 @@ final class NovelReaderComplexHtmlFitResult {
   final int cacheHitCount;
   final bool fits;
   final bool exhaustedAtom;
+  final bool requiresFreshPage;
+  final bool budgetExceeded;
 }
 ```
 
-fit searcher 不写 composer，也不发布页面。它只返回最大可放入前缀和测量证据。
+`availableHeight` 表示整页正文高度上限，而不是扣除当前 buffer 后的估算剩余
+高度；候选始终以 `bufferedPageHtml + slice.html` 的完整 renderer 高度判定。
+`measuredHeight` 同样是该完整候选的高度。`requiresFreshPage=true` 表示当前页连
+最小合法片段都放不下，searcher 已在空白整页上重新搜索，调用方必须先封当前页
+再追加返回片段。
+
+fit searcher 不写 composer，也不发布页面。它只返回最大已验证可放入前缀和测量
+证据；`budgetExceeded=true` 时返回的是预算内 offset 最大的已验证 fit，而不是
+未经测量的推测边界。
 
 ### 7.6 Flowable engine
 
@@ -1046,6 +1058,11 @@ flowabilityFailureReasonCounts
 
 目标：在确定性 fake measurer 下完成可验证的 upper-bound 搜索。
 
+> 实施状态：已完成（2026-07-21）。本阶段新增纯 fit-search service 和结果
+> 模型，只消费 Phase 3 的合法 boundary 与既有 pagination measure session；
+> 尚未接入 hybrid planner、真实 renderer 或 page composer，因此不改变生产
+> 分页页数与用户可见行为。
+
 交付：
 
 - `NovelReaderComplexHtmlFitSearcher`。
@@ -1055,6 +1072,33 @@ flowabilityFailureReasonCounts
 - 12 probe 硬预算。
 - cache hit、cancel 和非单调检测。
 
+实际落地：
+
+- 新增 `NovelReaderComplexHtmlFitSearcher`、
+  `DefaultNovelReaderComplexHtmlFitSearcher`、
+  `NovelReaderPaginationMeasureContext` 与
+  `NovelReaderComplexHtmlFitResult`。Measure context 直接复用现有 persistent
+  `NovelReaderPaginationMeasureSession`、chapter、pagination key 和 atom id，
+  没有建立第二套 renderer 或缓存协议。
+- 每次搜索先测完整 remainder；整段可容纳时一次 probe 返回。整段 overflow 后
+  测最小合法片段，随后先在 block/hard-break/sentence/word/Ruby/protected-inline
+  等 coarse boundary 上做 upper-bound，再只在已验证 fit 与首个 overflow 之间
+  的 grapheme boundary 上细化。
+- 当前 buffer 连最小片段都放不下时，以空 buffer 在同一搜索事务中重试，并通过
+  `requiresFreshPage` 把“先封页”决策显式交给 Phase 5；空白整页仍放不下时返回
+  `fits=false` 的已测最小片段，供后续 minimum-fragment 降级处理。
+- 每次 measurement session 调用前后都检查 cooperative cancellation。单次搜索
+  最多调用 session 12 次；预算不足时只返回 offset 最大的已验证 fit，并标记
+  `budgetExceeded`，永远不返回未测候选。
+- 每个 buffer composition 维护独立单调性 ledger。更长范围高度显著下降，或在
+  较短候选 overflow 后较长候选重新 fit，都会抛出稳定错误码
+  `complexFitSearchNonMonotonic`，留给 Phase 5 路由 atomic/vertical fallback。
+- 相同 candidate 在单次搜索内按精确 HTML 与 range 复用；跨搜索缓存和并发
+  single-flight 继续由现有 `NovelReaderCachingPaginationMeasureSession` 负责。
+  Search result 分别记录 session probe 和 cache hit 数量，不记录正文。
+- 高度判定沿用 renderer validator 的 `0.5` logical-pixel 容差。空 atom 直接
+  返回 exhausted 的不可渲染空 slice，不创建 measurement probe 或伪页面。
+
 验收：
 
 - 返回结果始终是最大已验证 fit boundary。
@@ -1062,6 +1106,11 @@ flowabilityFailureReasonCounts
 - 搜索不会返回未测量候选。
 - 取消后不继续 probe。
 - 相同 candidate 复用 cache。
+
+自动化覆盖 whole remainder fast check、exact fit、部分 fit、全部 overflow、仅
+最小片段 fit、buffer flush-and-retry、coarse-to-grapheme 搜索顺序、12 probe
+硬预算、取消、measurement cache、非单调拒绝和空 atom；并与 Phase 3 boundary
+测试共同验证 searcher 只消费合法闭合 slice。
 
 ### Phase 5：Flowable complex engine 与 composer 合页
 

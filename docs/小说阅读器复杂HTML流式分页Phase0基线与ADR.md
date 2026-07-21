@@ -317,7 +317,7 @@ flutter analyze
 - [x] ADR 已裁定 route/policy、dedicated、atomic、二分、缓存和 rollback。
 - [x] 生产分页行为未修改。
 
-## 16. Phase 1-3 后续实施记录
+## 16. Phase 1-4 后续实施记录
 
 Phase 1 已将 route reason 与 layout policy 解耦，并引入
 `flowableComplexText`、`atomicWidget`、flowability inspector 和 capability
@@ -338,5 +338,17 @@ range，合法 boundary 携带连续 anchor；空白 slice 明确返回不可渲
 尚未接入 planner、renderer probe 或 composer，因此 Phase 0/2 的可见分页基线
 不因 Phase 3 再次变化。
 
-下一阶段为 Phase 4：有界 fit searcher。Phase 4 只能在确定性 measurer 上搜索
-Phase 3 的合法 boundary，不接入生产 renderer。
+Phase 4 已新增纯 `NovelReaderComplexHtmlFitSearcher`。它在 Phase 3 合法 boundary
+上先执行 whole-remainder fast check，再按语义 coarse boundary 与 grapheme fine
+boundary 两层 upper-bound；当前 buffer 连最小片段都放不下时自动改为空白整页
+重试，并通过 `requiresFreshPage` 返回明确的封页证据。搜索最多调用 measure
+session 12 次，取消在每次 probe 前后检查，非单调高度使用稳定错误终止，预算
+不足时只返回已测量的最大 fit。缓存与并发 single-flight 继续复用既有
+`NovelReaderCachingPaginationMeasureSession`。该 service 仅由确定性 fake
+measurer 测试，尚未接入生产 planner、真实 renderer 或 composer，因此可见分页
+基线仍保持不变。
+
+下一阶段为 Phase 5：将 flowable complex engine 和 composer 接到 Phase 4 的
+搜索结果，并在接入时提升 renderer revision。Phase 5 必须正确消费
+`requiresFreshPage`、minimum-fragment overflow、budget exceeded 和非单调错误，
+不得绕过已发布页面不可变规则。
