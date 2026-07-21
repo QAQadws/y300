@@ -51,10 +51,6 @@ final class NovelReaderPaginationAtomClassifier {
     'font-size',
     'font-style',
     'font-weight',
-    'text-decoration',
-    'text-decoration-color',
-    'text-decoration-line',
-    'text-decoration-style',
   };
 
   NovelReaderClassifiedPaginationAtom classify({

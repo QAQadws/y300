@@ -135,6 +135,14 @@ void main() {
       preferences: _preferences,
       theme: _lightTheme,
     );
+    final unsupportedDecoration = classifier.classify(
+      atom: _atom(
+        '<p><span style="text-decoration:line-through">正文</span></p>',
+      ),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
 
     expect(unknownFont.route, NovelReaderPaginationRoute.complexHtml);
     expect(
@@ -146,6 +154,31 @@ void main() {
       unsupportedCss.reason,
       NovelReaderPaginationRouteReason.unsupportedStyle,
     );
+    expect(unsupportedDecoration.route, NovelReaderPaginationRoute.complexHtml);
+    expect(
+      unsupportedDecoration.reason,
+      NovelReaderPaginationRouteReason.unsupportedStyle,
+    );
+  });
+
+  test('keeps semantic underline in the supported text subset', () {
+    final classified = classifier.classify(
+      atom: _atom('<p><u>下划线</u></p>'),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+
+    expect(classified.route, NovelReaderPaginationRoute.safeText);
+    final run = extractor
+        .extract(
+          classifiedAtom: classified,
+          baseStyle: _baseStyle,
+          preferences: _preferences,
+          theme: _lightTheme,
+        )
+        .single;
+    expect(run.style.decoration, TextDecoration.underline);
   });
 
   test('keeps prepared author colors aligned across reader themes', () {
