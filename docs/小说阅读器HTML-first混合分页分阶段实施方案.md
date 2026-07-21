@@ -807,6 +807,9 @@ final class NovelReaderPaginationProgress {
 
 > 实施状态：已完成（2026-07-21）。planner、coordinator 与 paged surface
 > 已改用稳定页快照流；仅发布 composer 已封口页面，完整 plan 仍是唯一可缓存结果。首个稳定页校验通过后立即发布，后续周期性/risk-style renderer validation 按页继续，不再阻塞首屏。
+> 恢复同布局页或 anchor 时，目标尚未进入稳定快照便保持“正在恢复阅读位置”，
+> 不挂载临时第一页、不提交临时进度；目标页封口后立即建立分页会话，仍无需
+> 等待目标页之后的完整 plan。
 
 目标：避免长章节必须等完整 plan 才能开始阅读。
 
@@ -853,6 +856,7 @@ final class NovelReaderPaginationProgress {
 - diagnostics 新增 `firstPageDuration`。Profile/Release 默认执行纯文字 `500ms/2s`、混合格式 `800ms/5s` 的首屏/完整 plan 预算；Debug 默认只采集、不自动降级。
 - diagnostics 同时记录 safe text run 数、measurement cache hit rate、被 generation 取消的 plan 数和结构化 safe fallback reason；不记录正文或本地路径。
 - 首屏未产生任何 page 时按最大 800ms 门禁自动回到纵向；已产生首屏但完整 plan 停滞时按最大 5s 门禁自动回到纵向。计时器随 key/generation/dispose 取消，不会让旧章节触发新章节降级。
+- 增量恢复使用 `resolveAvailablePage` 判定 stable plan 是否已经包含持久化同布局页或 anchor；不可解析时不显示第一页占位，也不触发 `onPositionChanged`。目标出现后直接显示目标页，complete plan 才允许 percentage/legacy fallback。
 - Text run 提取或 TextPainter 布局异常只把当前 safe atom 降级到 complex HTML；renderer validation mismatch 只降级尚未发布的当前 atom remainder。已经发布的稳定页不回写、不重排。
 - HTML renderer probe 的 800ms timeout 会生成保留原 HTML 的明确 inner-scroll overflow 页；正文图片 probe timeout 仍保留独立图片页，不把整章清空或写入空白候选。
 - 风险文字样式按布局 style signature 去重：同一签名首次出现时校验，后续只按 validation interval 抽检；不会因一篇长文反复使用同一背景色或字体样式而退化为逐页 HTML probe。
@@ -932,6 +936,7 @@ Riverpod/provider 只负责依赖组合和生命周期，不承担分页算法�
 - 搜索 anchor 可以定位到 hybrid page。
 - 书签恢复到同一文本附近。
 - measurement、preload、cache hit 和 validator 不写阅读进度。
+- 增量恢复目标尚未出现在 stable pages 时不挂载临时 PageView、不覆盖已保存进度；目标出现后上报的第一页就是用户真实恢复页。
 - 小说水合、已读语义和 `version=1` 请求不改变。
 
 ### 17.6 性能测试

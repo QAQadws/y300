@@ -242,6 +242,95 @@ void main() {
     await tester.pump();
     expect(fallbackCount, 1);
   });
+
+  testWidgets(
+    'incremental restore waits for the saved anchor before reporting progress',
+    (tester) async {
+      final preferences = NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      );
+      final theme = ThemeData.light();
+      final palette = const NovelReaderThemeResolver().resolve(
+        preferences: preferences,
+        theme: theme,
+        platformBrightness: Brightness.light,
+      );
+      final typography = const NovelReaderTypographyResolver().resolve(
+        preferences: preferences,
+        theme: theme,
+        palette: palette,
+      );
+      final htmlTheme = const NovelForumHtmlRenderThemeFactory().fromPalette(
+        palette,
+      );
+      final coordinator = _ControlledRestorePaginationCoordinator();
+      final positions = <int>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: Scaffold(
+            body: NovelReaderHtmlPagedSurface(
+              rawHtml: '<p>第一页</p><p>恢复目标页</p>',
+              episode: _episode,
+              preferences: preferences,
+              typography: typography,
+              theme: htmlTheme,
+              imageReferer: 'https://bbs.yamibo.com/',
+              progressSnapshot: const NovelReaderProgressSnapshot(
+                novelId: 'performance-novel',
+                episodeId: 'performance-episode',
+                flowMode: NovelReaderFlowMode.pagedLtr,
+                scrollOffset: 0,
+                pageIndex: 1,
+                anchorNodeId: 'paragraph-1',
+                progressPercent: 0.5,
+              ),
+              coordinatorBuilder:
+                  ({
+                    required BuildContext context,
+                    required ForumHtmlThemeContext theme,
+                    required ForumHtmlReaderPreferences preferences,
+                    required String sourceId,
+                    required String? threadId,
+                    required String? imageCacheOwnerId,
+                    required ImageRequestHeaderBuilder? imageHeaderBuilder,
+                  }) => coordinator,
+              onPositionChanged: (position) {
+                positions.add(position.pageIndex);
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('novel-reader-paged-restoring-position')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('novel-reader-paged-page-view')),
+        findsNothing,
+      );
+      expect(positions, isEmpty);
+
+      coordinator.emitTargetPage();
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('novel-reader-paged-restoring-position')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('novel-reader-paged-page-view')),
+        findsOneWidget,
+      );
+      expect(positions, <int>[1]);
+    },
+  );
 }
 
 const _episode = NovelEpisodeItem(
@@ -337,6 +426,109 @@ final class _PartialThenStalledPaginationCoordinator
     );
     _controller = controller;
     return controller.stream;
+  }
+
+  @override
+  bool isCached(NovelReaderPaginationKey key) => false;
+
+  @override
+  void cancelPending() {
+    unawaited(_controller?.close());
+  }
+
+  @override
+  void clear() => cancelPending();
+
+  @override
+  void clearEpisode(String episodeId) => cancelPending();
+}
+
+final class _ControlledRestorePaginationCoordinator
+    implements NovelReaderPaginationCoordinator {
+  StreamController<NovelReaderPaginationProgress>? _controller;
+  NovelReaderPreparedChapter? _chapter;
+  NovelReaderPaginationKey? _key;
+
+  @override
+  Future<NovelReaderPaginationPlan> paginate({
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+  }) => Completer<NovelReaderPaginationPlan>().future;
+
+  @override
+  Stream<NovelReaderPaginationProgress> paginateIncrementally({
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+  }) {
+    _chapter = chapter;
+    _key = key;
+    late final StreamController<NovelReaderPaginationProgress> controller;
+    controller = StreamController<NovelReaderPaginationProgress>(
+      onListen: () {
+        controller.add(_progress(pageCount: 1));
+      },
+    );
+    _controller = controller;
+    return controller.stream;
+  }
+
+  void emitTargetPage() {
+    _controller?.add(_progress(pageCount: 2));
+  }
+
+  NovelReaderPaginationProgress _progress({required int pageCount}) {
+    final chapter = _chapter!;
+    final key = _key!;
+    const firstStart = NovelReaderTextAnchor(
+      episodeId: 'performance-episode',
+      nodeId: 'paragraph-0',
+    );
+    const firstEnd = NovelReaderTextAnchor(
+      episodeId: 'performance-episode',
+      nodeId: 'paragraph-0',
+      textOffset: 3,
+    );
+    const targetStart = NovelReaderTextAnchor(
+      episodeId: 'performance-episode',
+      nodeId: 'paragraph-1',
+    );
+    const targetEnd = NovelReaderTextAnchor(
+      episodeId: 'performance-episode',
+      nodeId: 'paragraph-1',
+      textOffset: 5,
+    );
+    final pages = <NovelReaderPageFragment>[
+      const NovelReaderPageFragment(
+        index: 0,
+        html: '<p>第一页</p>',
+        startAnchor: firstStart,
+        endAnchor: firstEnd,
+        imageIndices: <int>[],
+        usedHeight: 80,
+        availableHeight: 600,
+      ),
+      if (pageCount > 1)
+        const NovelReaderPageFragment(
+          index: 1,
+          html: '<p>恢复目标页</p>',
+          startAnchor: targetStart,
+          endAnchor: targetEnd,
+          imageIndices: <int>[],
+          usedHeight: 80,
+          availableHeight: 600,
+        ),
+    ];
+    return NovelReaderPaginationProgress(
+      plan: NovelReaderPaginationPlan(
+        key: key,
+        episodeId: chapter.episodeId,
+        pages: pages,
+        atomCount: 3,
+      ),
+      isComplete: false,
+      processedAtomCount: pageCount,
+      totalAtomCount: 3,
+    );
   }
 
   @override

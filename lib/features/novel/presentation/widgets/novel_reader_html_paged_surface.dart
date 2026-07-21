@@ -280,20 +280,41 @@ class _NovelReaderHtmlPagedSurfaceState
                       message: '本章没有可显示的正文',
                     );
                   }
+                  final isPlanComplete = progress?.isComplete == true;
+                  final requestedPage = _requestedPageFor(plan);
+                  final navigationIsPending = _hasPendingAnchorNavigation(
+                    plan: plan,
+                    requestedPage: requestedPage,
+                    isPlanComplete: isPlanComplete,
+                  );
+                  final initialPage =
+                      requestedPage ??
+                      widget.restorePolicy.resolveAvailablePage(
+                        plan: plan,
+                        snapshot: widget.progressSnapshot,
+                        isPlanComplete: isPlanComplete,
+                      );
+                  if (navigationIsPending || initialPage == null) {
+                    return const _NovelReaderPaginationStateView(
+                      key: Key('novel-reader-paged-restoring-position'),
+                      icon: Icons.bookmark_outline,
+                      message: '正在恢复阅读位置',
+                      showProgress: true,
+                    );
+                  }
                   _firstPageBudgetTimer?.cancel();
                   _firstPageBudgetTimer = null;
                   _firstPageDuration ??= _layoutStopwatch?.elapsed;
                   _ensureFullPlanBudgetTimer(
                     key: key,
-                    isComplete: progress?.isComplete == true,
+                    isComplete: isPlanComplete,
                   );
                   _schedulePerformanceFallbackIfNeeded(
                     plan: plan,
                     key: key,
-                    isComplete: progress?.isComplete == true,
+                    isComplete: isPlanComplete,
                   );
-                  final requestedPage = _requestedPageFor(plan);
-                  if (progress?.isComplete == true) {
+                  if (isPlanComplete) {
                     _planCompleted = true;
                     _scheduleDiagnostics(
                       plan: plan,
@@ -320,13 +341,8 @@ class _NovelReaderHtmlPagedSurfaceState
                         child: _NovelReaderPagedPageView(
                           key: ValueKey<String>(plan.key.cacheIdentity),
                           plan: plan,
-                          isPageCountFinal: progress?.isComplete == true,
-                          initialPage:
-                              requestedPage ??
-                              widget.restorePolicy.resolveInitialPage(
-                                plan: plan,
-                                snapshot: widget.progressSnapshot,
-                              ),
+                          isPageCountFinal: isPlanComplete,
+                          initialPage: initialPage,
                           navigationRequest: widget.navigationRequest,
                           targetPage: requestedPage,
                           reverse:
@@ -746,6 +762,18 @@ class _NovelReaderHtmlPagedSurfaceState
       return null;
     }
     return plan.pageIndexForAnchor(request.anchor);
+  }
+
+  bool _hasPendingAnchorNavigation({
+    required NovelReaderPaginationPlan plan,
+    required int? requestedPage,
+    required bool isPlanComplete,
+  }) {
+    final request = widget.navigationRequest;
+    return !isPlanComplete &&
+        requestedPage == null &&
+        request != null &&
+        request.anchor.episodeId == plan.episodeId;
   }
 
   void _scheduleUnavailableNavigationIfNeeded({

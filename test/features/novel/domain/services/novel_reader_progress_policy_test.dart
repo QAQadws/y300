@@ -270,5 +270,35 @@ void main() {
       restorePolicy.resolveInitialPage(plan: plan, snapshot: invalidLegacy),
       0,
     );
+
+    final partialPlan = NovelReaderPaginationPlan(
+      key: key,
+      episodeId: plan.episodeId,
+      pages: <NovelReaderPageFragment>[plan.pages.first],
+    );
+    expect(
+      restorePolicy.resolveAvailablePage(
+        plan: partialPlan,
+        snapshot: changedLayout,
+        isPlanComplete: false,
+      ),
+      isNull,
+    );
+    expect(
+      restorePolicy.resolveAvailablePage(
+        plan: plan,
+        snapshot: changedLayout,
+        isPlanComplete: false,
+      ),
+      1,
+    );
+    expect(
+      restorePolicy.resolveAvailablePage(
+        plan: partialPlan,
+        snapshot: invalidLegacy,
+        isPlanComplete: true,
+      ),
+      0,
+    );
   });
 }

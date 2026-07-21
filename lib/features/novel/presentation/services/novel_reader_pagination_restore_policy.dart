@@ -7,6 +7,38 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 final class NovelReaderPaginationRestorePolicy {
   const NovelReaderPaginationRestorePolicy();
 
+  /// Resolves a page only when an incremental plan already contains enough
+  /// stable information to restore it without displaying a temporary page.
+  /// A complete plan can use the existing percentage and legacy fallbacks.
+  int? resolveAvailablePage({
+    required NovelReaderPaginationPlan plan,
+    required NovelReaderProgressSnapshot snapshot,
+    required bool isPlanComplete,
+  }) {
+    final pageCount = plan.pageCount;
+    if (pageCount <= 0) {
+      return null;
+    }
+    if (snapshot.episodeId != plan.episodeId) {
+      return 0;
+    }
+    if (snapshot.paginationKey == plan.key.layoutFingerprint &&
+        _isValidPage(snapshot.pageIndex, pageCount)) {
+      return snapshot.pageIndex;
+    }
+    final anchor = _anchorFromSnapshot(snapshot);
+    if (anchor != null) {
+      final anchoredPage = plan.pageIndexForAnchor(anchor);
+      if (anchoredPage != null && _isValidPage(anchoredPage, pageCount)) {
+        return anchoredPage;
+      }
+    }
+    if (!isPlanComplete && _hasMeaningfulResumeTarget(snapshot)) {
+      return null;
+    }
+    return resolveInitialPage(plan: plan, snapshot: snapshot);
+  }
+
   int resolveInitialPage({
     required NovelReaderPaginationPlan plan,
     required NovelReaderProgressSnapshot snapshot,
@@ -61,5 +93,12 @@ final class NovelReaderPaginationRestorePolicy {
 
   bool _isValidPage(int index, int pageCount) {
     return index >= 0 && index < pageCount;
+  }
+
+  bool _hasMeaningfulResumeTarget(NovelReaderProgressSnapshot snapshot) {
+    final anchorNodeId = snapshot.anchorNodeId?.trim();
+    return snapshot.pageIndex > 0 ||
+        snapshot.progressPercent > 0 ||
+        (anchorNodeId != null && anchorNodeId.isNotEmpty);
   }
 }
