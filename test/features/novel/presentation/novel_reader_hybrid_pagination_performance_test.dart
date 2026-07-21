@@ -84,12 +84,62 @@ void main() {
       },
     );
   }
+
+  test('repeated risk styles use signature and interval validation', () async {
+    final chapter = await const DefaultNovelReaderHtmlPreparationService()
+        .prepare(
+          rawHtml: _riskHtmlFor(80),
+          episode: _episode,
+          preferences: _preferences,
+          theme: _theme,
+          sourceId: _episode.episodeId,
+          threadId: _episode.sourceTid,
+          imageCacheOwnerId: _episode.sourceTid,
+        );
+    final key = NovelReaderPaginationKey(
+      episodeId: chapter.episodeId,
+      contentHash: chapter.contentHash,
+      viewportWidthPx: 320,
+      viewportHeightPx: 600,
+      typographySignature: 'phase6-risk-style',
+      themeSignature: chapter.themeSignature,
+      imageDimensionRevision: chapter.imageDimensionRevision,
+      rendererRevision: 3,
+    );
+    final plan = await DefaultNovelReaderHybridPaginationPlanner(
+      measureAdapter: const _ConstantMeasureAdapter(),
+      preferences: _preferences,
+      theme: _theme,
+      baseStyle: _baseStyle,
+      validationPolicy: const NovelReaderPaginationValidationPolicy(
+        interval: 16,
+      ),
+    ).paginate(chapter, key);
+
+    expect(plan.textFastPathCount, greaterThan(16));
+    expect(plan.rendererValidationCount, lessThan(plan.textFastPathCount));
+    expect(
+      plan.rendererValidationCount,
+      lessThanOrEqualTo(1 + plan.textFastPathCount ~/ 16),
+    );
+    expect(plan.rendererValidationMismatchCount, 0);
+    expect(plan.safeTextFallbackCount, 0);
+  });
 }
 
 String _htmlFor(int targetPages) {
   const unit = '长篇小说分页性能基准 mixed 123，保持中文、英文和数字的稳定换行。';
   final paragraph = List<String>.filled(6, unit).join();
   return List<String>.filled(targetPages * 2, '<p>$paragraph</p>').join();
+}
+
+String _riskHtmlFor(int targetPages) {
+  const unit = '带背景色的长篇分页风险样式 mixed 123，校验次数必须有界。';
+  final paragraph = List<String>.filled(6, unit).join();
+  return List<String>.filled(
+    targetPages * 2,
+    '<p><span style="background-color:#efe1b8">$paragraph</span></p>',
+  ).join();
 }
 
 const _episode = NovelEpisodeItem(

@@ -157,6 +157,125 @@ void main() {
   );
 
   test(
+    'moves a heading forward when the following body line would orphan',
+    () async {
+      final chapter = await _prepare(
+        '<p>${List<String>.filled(20, '前文').join()}</p>'
+        '<h2>章节标题</h2>'
+        '<p>标题后的第一行正文。</p>',
+      );
+      final plan = await _planner(
+        _RecordingMeasureAdapter(),
+      ).paginate(chapter, _key(chapter, height: 180));
+
+      final headingPage = plan.pages.singleWhere(
+        (page) => page.html.contains('<h2>'),
+      );
+      expect(headingPage.index, greaterThan(0));
+      expect(plan.pages[headingPage.index - 1].html, isNot(contains('<h2>')));
+      expect(headingPage.html, contains('标题后的第一行正文'));
+    },
+  );
+
+  test(
+    'keeps a fitting table on the buffered text page after validation',
+    () async {
+      final chapter = await _prepare(
+        '<p>表格前的短文。</p>'
+        '<table><tr><td>单元格</td></tr></table>',
+      );
+      final adapter = _RecordingMeasureAdapter(
+        heightFor: (request, _) {
+          if (request.atomId?.contains(':composition:validation') == true) {
+            return 70;
+          }
+          return request.html.contains('<table>') ? 24 : 30;
+        },
+      );
+
+      final plan = await _planner(
+        adapter,
+      ).paginate(chapter, _key(chapter, height: 120));
+
+      expect(plan.pageCount, 1);
+      expect(plan.pages.single.html, contains('表格前的短文'));
+      expect(plan.pages.single.html, contains('<table>'));
+      expect(plan.pages.single.anchorRanges, hasLength(2));
+      expect(plan.rendererValidationCount, 2);
+      expect(plan.rendererValidationMismatchCount, 0);
+    },
+  );
+
+  test(
+    'moves a complex block to its own page when composition overflows',
+    () async {
+      final chapter = await _prepare(
+        '<p>表格前的短文。</p>'
+        '<table><tr><td>单元格</td></tr></table>',
+      );
+      final adapter = _RecordingMeasureAdapter(
+        heightFor: (request, _) {
+          if (request.atomId?.contains(':composition:validation') == true) {
+            return 180;
+          }
+          return request.html.contains('<table>') ? 24 : 30;
+        },
+      );
+
+      final plan = await _planner(
+        adapter,
+      ).paginate(chapter, _key(chapter, height: 120));
+
+      expect(plan.pageCount, 2);
+      expect(plan.pages.first.html, contains('表格前的短文'));
+      expect(plan.pages.first.html, isNot(contains('<table>')));
+      expect(plan.pages.last.html, contains('<table>'));
+      expect(plan.rendererValidationMismatchCount, 1);
+    },
+  );
+
+  test(
+    'keeps original pages when complex composition validation throws',
+    () async {
+      final chapter = await _prepare(
+        '<p>表格前的短文。</p>'
+        '<table><tr><td>单元格</td></tr></table>',
+      );
+
+      final plan = await DefaultNovelReaderHybridPaginationPlanner(
+        measureAdapter: const _ThrowingCompositionMeasureAdapter(),
+        preferences: _preferences,
+        theme: _theme,
+        baseStyle: _baseStyle,
+      ).paginate(chapter, _key(chapter, height: 120));
+
+      expect(plan.pageCount, 2);
+      expect(plan.pages.first.html, contains('表格前的短文'));
+      expect(plan.pages.last.html, contains('<table>'));
+      expect(plan.pages.every((page) => page.html.trim().isNotEmpty), isTrue);
+    },
+  );
+
+  test('validates each distinct risk style signature once', () async {
+    final chapter = await _prepare(
+      '<p><span style="background-color:#ffeeaa">第一种样式。</span></p>'
+      '<p><span style="background-color:#ddeeff">第二种样式。</span></p>',
+    );
+    final plan = await DefaultNovelReaderHybridPaginationPlanner(
+      measureAdapter: _RecordingMeasureAdapter(),
+      preferences: _preferences,
+      theme: _theme,
+      baseStyle: _baseStyle,
+      validationPolicy: const NovelReaderPaginationValidationPolicy(
+        interval: 10000,
+      ),
+    ).paginate(chapter, _key(chapter, height: 200));
+
+    expect(plan.rendererValidationCount, 2);
+    expect(plan.rendererValidationMismatchCount, 0);
+  });
+
+  test(
     'marks oversized tables as inner-scroll pages without splitting rows',
     () async {
       const table = '<table><tr><td>第一行</td></tr><tr><td>第二行</td></tr></table>';
@@ -517,6 +636,23 @@ final class _ThrowingTextStyleResolver implements ForumHtmlTextStyleResolver {
     required ForumHtmlThemeContext theme,
   }) {
     throw StateError('synthetic text layout failure');
+  }
+}
+
+final class _ThrowingCompositionMeasureAdapter
+    implements NovelReaderPaginationMeasureAdapter {
+  const _ThrowingCompositionMeasureAdapter();
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  ) async {
+    if (request.atomId?.contains(':composition:validation') == true) {
+      throw StateError('synthetic composition validation failure');
+    }
+    return NovelReaderPaginationMeasureResult(
+      height: request.html.contains('<table>') ? 24 : 30,
+    );
   }
 }
 

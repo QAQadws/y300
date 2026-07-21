@@ -28,6 +28,12 @@ final class NovelReaderPaginationPageComposer {
   List<NovelReaderPageFragment> get pages =>
       List<NovelReaderPageFragment>.unmodifiable(_pages);
 
+  bool canAppendComplexBlock(NovelReaderComplexBlockPage block) {
+    return hasBufferedContent &&
+        !block.metrics.isOversized &&
+        block.metrics.height <= remainingHeight;
+  }
+
   void appendTextChunk(NovelReaderTextPageChunk chunk) {
     if (chunk.html.trim().isEmpty && chunk.sourceEnd <= chunk.sourceStart) {
       return;
@@ -66,20 +72,26 @@ final class NovelReaderPaginationPageComposer {
 
   void appendComplexBlock(
     NovelReaderClassifiedPaginationAtom atom,
-    NovelReaderComplexBlockPage block,
-  ) {
-    flush(gapReason: _gapReasonFor(atom.route));
-    final buffer = _ComposedPageBuffer()
-      ..append(
-        html: block.html,
-        start: block.startAnchor,
-        end: block.endAnchor,
-        usedHeight: block.metrics.height,
-        overflowState: block.metrics.requiresInnerScroll
-            ? NovelReaderPageOverflowState.atomicWidget
-            : NovelReaderPageOverflowState.none,
-        imageIndices: atom.atom.imageIndices,
-      );
+    NovelReaderComplexBlockPage block, {
+    bool combineWithBufferedContent = false,
+  }) {
+    if (!combineWithBufferedContent) {
+      flush(gapReason: _gapReasonFor(atom.route));
+    } else if (!canAppendComplexBlock(block)) {
+      throw StateError('Complex block does not fit the buffered page.');
+    }
+    final buffer = _buffer ?? _ComposedPageBuffer();
+    _buffer = null;
+    buffer.append(
+      html: block.html,
+      start: block.startAnchor,
+      end: block.endAnchor,
+      usedHeight: block.metrics.height,
+      overflowState: block.metrics.requiresInnerScroll
+          ? NovelReaderPageOverflowState.atomicWidget
+          : NovelReaderPageOverflowState.none,
+      imageIndices: atom.atom.imageIndices,
+    );
     _emit(
       buffer,
       gapReason: block.metrics.isOversized

@@ -730,7 +730,9 @@ final class NovelReaderPaginationProgress {
 ### Phase 1：安全文字子集和共享 style resolver
 
 > 实施状态：已完成（2026-07-21）。共享 resolver、保守 classifier 和
-> text-run extractor 已落地；尚未接管生产分页，接入留给 Phase 4。
+> text-run extractor 已落地；尚未接管生产分页，接入留给 Phase 4。共享
+> resolver 尚未精确实现的 CSS `text-decoration*` 保守进入 complex route，
+> `<u>` 和链接等已映射语义继续走 safe path，不允许静默丢失装饰样式。
 
 目标：在不改变最终 HTML renderer 的前提下生成 TextPainter runs。
 
@@ -748,7 +750,9 @@ final class NovelReaderPaginationProgress {
 ### Phase 2：TextPainter 纯文本分页器
 
 > 实施状态：已完成（2026-07-21）。纯文本引擎和进程内 metrics cache
-> 已落地；生产 planner 接入仍按阶段边界留给 Phase 4。
+> 已落地；生产 planner 接入仍按阶段边界留给 Phase 4。标题保持完整，且
+> 后续为 safe body text 时会预留至少一行基础行高；当前页无法同时容纳时
+> 在标题前封页，避免页尾孤立标题。
 
 目标：消除普通文字的候选 HTML 二分测量。
 
@@ -783,7 +787,9 @@ final class NovelReaderPaginationProgress {
 ### Phase 4：Page composer 和 renderer validation
 
 > 实施状态：已完成（2026-07-21）。生产分页已切换到 renderer revision 3
-> 的 hybrid planner；滚动模式和最终 HTML renderer 不变。
+> 的 hybrid planner；滚动模式和最终 HTML renderer 不变。复杂 block 在
+> metrics 可放入当前页时只做一次组合校验，通过后填充剩余空间；真实组合
+> 溢出或校验异常时退回独立页，不修改已发布页面。
 
 目标：组合 safe text、complex block 和 isolated image。
 
@@ -849,6 +855,8 @@ final class NovelReaderPaginationProgress {
 - 首屏未产生任何 page 时按最大 800ms 门禁自动回到纵向；已产生首屏但完整 plan 停滞时按最大 5s 门禁自动回到纵向。计时器随 key/generation/dispose 取消，不会让旧章节触发新章节降级。
 - Text run 提取或 TextPainter 布局异常只把当前 safe atom 降级到 complex HTML；renderer validation mismatch 只降级尚未发布的当前 atom remainder。已经发布的稳定页不回写、不重排。
 - HTML renderer probe 的 800ms timeout 会生成保留原 HTML 的明确 inner-scroll overflow 页；正文图片 probe timeout 仍保留独立图片页，不把整章清空或写入空白候选。
+- 风险文字样式按布局 style signature 去重：同一签名首次出现时校验，后续只按 validation interval 抽检；不会因一篇长文反复使用同一背景色或字体样式而退化为逐页 HTML probe。
+- 已测量且能放入当前页剩余高度的 table/ruby/collapse/complex block 先执行一次组合 renderer validation；通过后与缓冲文字同页并立即封口，溢出或 probe 异常则保持原 HTML 并回退到独立页。
 - 超预算通过 surface 的 `onFallbackToVertical` 返回既有 controller 边界，复用偏好预览和持久化流程；planner/performance policy 不依赖 repository，不写 SQLite。
 - `flutter build apk --release --target-platform android-arm64` 已通过，标准 Flutter artifact 与 Gradle 自描述 artifact 均生成；构建成功只证明 arm64 Release 可编译，不替代设备性能和视觉验收。
 
@@ -938,9 +946,11 @@ Riverpod/provider 只负责依赖组合和生命周期，不承担分页算法�
 - 是否复制了 `ForumHtmlStylePolicy`、作者颜色和字号解析。
 - HTML renderer 是否仍是最终视觉权威。
 - 是否对每个普通文本候选重新创建 HtmlWidget。
+- 风险样式是否按 style signature 去重，而不是让同一签名逐页启动 HtmlWidget probe。
 - 是否把表格、折叠、图片或 WidgetSpan 错归为纯文本。
 - 折叠展开是否造成后续 page index 隐式漂移。
 - 表格是否被非法拆分或静默裁切。
+- 可放入剩余高度的复杂 block 是否经过一次组合校验后复用当前页，组合溢出时是否可靠退回独立页。
 - `font face` 无法复现时是否进入 complex fallback。
 - `<ruby>/<rt>/<rp>` 是否保持 base/annotation 成对，且没有被摊平成普通文本。
 - ruby 是否在 base 与 annotation 之间产生非法分页断点。

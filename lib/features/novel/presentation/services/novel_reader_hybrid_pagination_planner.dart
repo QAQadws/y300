@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
@@ -238,6 +239,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
     var safePageOrdinal = 0;
     final safeTextFallbackReasonCounts =
         <NovelReaderSafeTextFallbackReason, int>{};
+    final validatedRiskStyleSignatures = <String>{};
     var processedAtomCount = 0;
     var publishedPageCount = 0;
 
@@ -317,7 +319,12 @@ final class DefaultNovelReaderHybridPaginationPlanner
     }
 
     try {
-      for (final classified in classifiedAtoms) {
+      for (
+        var classifiedIndex = 0;
+        classifiedIndex < classifiedAtoms.length;
+        classifiedIndex += 1
+      ) {
+        final classified = classifiedAtoms[classifiedIndex];
         cancellationToken.throwIfCancelled();
         switch (classified.route) {
           case NovelReaderPaginationRoute.safeText:
@@ -393,13 +400,34 @@ final class DefaultNovelReaderHybridPaginationPlanner
               continue;
             }
 
+            final nextAtomIsBodyText =
+                classifiedIndex + 1 < classifiedAtoms.length &&
+                classifiedAtoms[classifiedIndex + 1].route ==
+                    NovelReaderPaginationRoute.safeText &&
+                classifiedAtoms[classifiedIndex + 1].atom.kind !=
+                    NovelReaderPaginationAtomKind.heading;
+            if (classified.atom.kind == NovelReaderPaginationAtomKind.heading &&
+                nextAtomIsBodyText &&
+                composer.hasBufferedContent &&
+                textResult.chunks.isNotEmpty &&
+                textResult.chunks.first.usedHeight + _baseLineHeight() >
+                    composer.remainingHeight) {
+              composer.flush(
+                gapReason: NovelReaderPageGapReason.algorithmBoundary,
+              );
+            }
+
+            final riskStyleSignature = _riskStyleSignature(runs);
+            final needsRiskStyleValidation =
+                riskStyleSignature != null &&
+                !validatedRiskStyleSignatures.contains(riskStyleSignature);
             late final _TextValidationSummary validation;
             try {
               validation = await _validateTextChunk(
                 chunks: textResult.chunks,
                 chunkIndex: 0,
                 classified: classified,
-                runs: runs,
+                hasRiskStyle: needsRiskStyleValidation,
                 chapter: chapter,
                 key: key,
                 validator: validator,
@@ -423,6 +451,11 @@ final class DefaultNovelReaderHybridPaginationPlanner
             var accepted = textResult;
             var keepBackedChunksSeparate = false;
             var firstChunkValidated = validation.validationCount > 0;
+            if (firstChunkValidated && validation.firstMismatch == null) {
+              if (riskStyleSignature != null) {
+                validatedRiskStyleSignatures.add(riskStyleSignature);
+              }
+            }
             if (validation.firstMismatch != null) {
               if (composer.hasBufferedContent) {
                 composer.flush(
@@ -492,16 +525,18 @@ final class DefaultNovelReaderHybridPaginationPlanner
               accepted = backed;
               keepBackedChunksSeparate = true;
               firstChunkValidated = true;
+              if (riskStyleSignature != null) {
+                validatedRiskStyleSignatures.add(riskStyleSignature);
+              }
             }
             var remainderFellBack = false;
-            final hasRiskStyle = _hasRiskStyle(runs);
             for (var index = 0; index < accepted.chunks.length; index += 1) {
               final chunk = accepted.chunks[index];
               final shouldValidate =
                   !(index == 0 && firstChunkValidated) &&
                   validationPolicy.shouldValidate(
                     safePageOrdinal: safePageOrdinal,
-                    hasRiskStyle: hasRiskStyle,
+                    hasRiskStyle: false,
                   );
               if (shouldValidate) {
                 cancellationToken.throwIfCancelled();
@@ -612,7 +647,34 @@ final class DefaultNovelReaderHybridPaginationPlanner
               key: key,
               measurer: complexMeasurer,
             );
-            composer.appendComplexBlock(classified, block);
+            var combineWithBufferedContent = false;
+            if (composer.canAppendComplexBlock(block)) {
+              cancellationToken.throwIfCancelled();
+              try {
+                final validation = await validator.validate(
+                  html: '${composer.bufferedHtml}${block.html}',
+                  atomId: '${classified.atom.atomId}:composition',
+                  chapter: chapter,
+                  key: key,
+                  availableHeight: key.viewportHeightPx.toDouble(),
+                );
+                rendererValidationCount += 1;
+                combineWithBufferedContent = validation.matches;
+                if (!validation.matches) {
+                  rendererValidationMismatchCount += 1;
+                }
+              } catch (error) {
+                if (_isCancellation(error)) {
+                  rethrow;
+                }
+                rendererValidationCount += 1;
+              }
+            }
+            composer.appendComplexBlock(
+              classified,
+              block,
+              combineWithBufferedContent: combineWithBufferedContent,
+            );
             await publishFinalPages();
         }
         processedAtomCount += 1;
@@ -632,7 +694,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
     required List<NovelReaderTextPageChunk> chunks,
     required int chunkIndex,
     required NovelReaderClassifiedPaginationAtom classified,
-    required List<NovelReaderPaginationTextRun> runs,
+    required bool hasRiskStyle,
     required NovelReaderPreparedChapter chapter,
     required NovelReaderPaginationKey key,
     required NovelReaderPaginationRendererValidator validator,
@@ -647,7 +709,6 @@ final class DefaultNovelReaderHybridPaginationPlanner
         firstMismatch: null,
       );
     }
-    final hasRiskStyle = _hasRiskStyle(runs);
     if (!validationPolicy.shouldValidate(
       safePageOrdinal: safePageOrdinal,
       hasRiskStyle: hasRiskStyle,
@@ -731,18 +792,42 @@ final class DefaultNovelReaderHybridPaginationPlanner
     return minimum.isFinite ? minimum : 1;
   }
 
-  bool _hasRiskStyle(List<NovelReaderPaginationTextRun> runs) {
+  double _baseLineHeight() {
+    final fontSize = baseStyle.fontSize ?? 14;
+    final height = baseStyle.height ?? 1.2;
+    return fontSize * height;
+  }
+
+  String? _riskStyleSignature(List<NovelReaderPaginationTextRun> runs) {
+    final signatures = <String>{};
     for (final run in runs) {
       final style = run.style;
-      if (style.backgroundColor != null ||
-          style.fontFamily != baseStyle.fontFamily ||
-          style.fontSize != baseStyle.fontSize ||
-          style.fontWeight != baseStyle.fontWeight ||
-          style.fontStyle != baseStyle.fontStyle) {
-        return true;
+      if (_isRiskStyle(style)) {
+        signatures.add(
+          jsonEncode(<Object?>[
+            style.backgroundColor?.toARGB32(),
+            style.fontFamily,
+            style.fontSize,
+            style.height,
+            style.fontWeight?.value,
+            style.fontStyle?.index,
+          ]),
+        );
       }
     }
-    return false;
+    if (signatures.isEmpty) {
+      return null;
+    }
+    final ordered = signatures.toList(growable: false)..sort();
+    return ordered.join('|');
+  }
+
+  bool _isRiskStyle(TextStyle style) {
+    return style.backgroundColor != null ||
+        style.fontFamily != baseStyle.fontFamily ||
+        style.fontSize != baseStyle.fontSize ||
+        style.fontWeight != baseStyle.fontWeight ||
+        style.fontStyle != baseStyle.fontStyle;
   }
 
   void _validateInput(
