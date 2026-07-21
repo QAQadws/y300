@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
@@ -12,6 +13,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_block_pagination_engine.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_flowable_complex_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_page_breaker.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_incremental_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_classifier.dart';
@@ -55,6 +57,8 @@ final class DefaultNovelReaderHybridPaginationPlanner
         const DefaultNovelReaderPaginationLayoutPolicyResolver(),
     this.textRunExtractor = const NovelReaderPaginationTextRunExtractor(),
     this.complexBlockEngine = const NovelReaderComplexBlockPaginationEngine(),
+    this.flowableComplexEngine =
+        const DefaultNovelReaderFlowableComplexPaginationEngine(),
     this.validationPolicy = const NovelReaderPaginationValidationPolicy(),
     NovelReaderPaginationMeasureSessionFactory? measureSessionFactory,
     NovelReaderPaginationMeasureCache? measureCache,
@@ -85,6 +89,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
   final NovelReaderPaginationLayoutPolicyResolver layoutPolicyResolver;
   final NovelReaderPaginationTextRunExtractor textRunExtractor;
   final NovelReaderComplexBlockPaginationEngine complexBlockEngine;
+  final NovelReaderFlowableComplexPaginationEngine flowableComplexEngine;
   final NovelReaderPaginationValidationPolicy validationPolicy;
   final NovelReaderPaginationMeasureCache measureCache;
   final NovelReaderTextMetricsCache textMetricsCache;
@@ -241,8 +246,20 @@ final class DefaultNovelReaderHybridPaginationPlanner
     var rendererValidationCount = 0;
     var rendererValidationMismatchCount = 0;
     var domSliceCount = 0;
+    var flowableComplexFragmentCount = 0;
+    var complexBoundaryCount = 0;
+    var complexSearchProbeCount = 0;
+    var complexSearchCacheHitCount = 0;
+    var complexSearchBudgetExceededCount = 0;
+    var minimumComplexFragmentCount = 0;
+    var dedicatedImagePageCount = 0;
+    var dedicatedTablePageCount = 0;
+    var dedicatedCollapsePageCount = 0;
+    var atomicWidgetPageCount = 0;
     final safeTextFallbackReasonCounts =
         <NovelReaderSafeTextFallbackReason, int>{};
+    final flowabilityFailureReasonCounts =
+        <NovelReaderFlowableComplexFallbackReason, int>{};
     final validatedRiskStyleSignatures = <String>{};
     final validatedSafePageOrdinals = <int>{};
     var processedAtomCount = 0;
@@ -271,11 +288,22 @@ final class DefaultNovelReaderHybridPaginationPlanner
         rendererValidationMismatchCount: rendererValidationMismatchCount,
         textLayoutCount: textLayoutCount,
         complexBlockCount: complexBlockCount,
+        flowableComplexFragmentCount: flowableComplexFragmentCount,
+        complexBoundaryCount: complexBoundaryCount,
+        complexSearchProbeCount: complexSearchProbeCount,
+        complexSearchCacheHitCount: complexSearchCacheHitCount,
+        complexSearchBudgetExceededCount: complexSearchBudgetExceededCount,
+        minimumComplexFragmentCount: minimumComplexFragmentCount,
+        dedicatedImagePageCount: dedicatedImagePageCount,
+        dedicatedTablePageCount: dedicatedTablePageCount,
+        dedicatedCollapsePageCount: dedicatedCollapsePageCount,
+        atomicWidgetPageCount: atomicWidgetPageCount,
         safeTextFallbackCount: safeTextFallbackCount,
         atomKindCounts: atomKinds,
         routeCounts: routes,
         routeReasonCounts: routeReasons,
         safeTextFallbackReasonCounts: safeTextFallbackReasonCounts,
+        flowabilityFailureReasonCounts: flowabilityFailureReasonCounts,
         measurementSamples: session.samples,
       );
     }
@@ -311,14 +339,37 @@ final class DefaultNovelReaderHybridPaginationPlanner
         ifAbsent: () => 1,
       );
       complexBlockCount += 1;
-      final fallback = _complexFallbackForAtom(classified);
+      final fallback = _atomicFallbackForFlowableAtom(classified);
       final block = await complexBlockEngine.paginate(
         atom: fallback,
         chapter: chapter,
         key: key,
         measurer: complexMeasurer,
       );
-      composer.appendComplexBlock(fallback, block);
+      composer.appendDedicatedBlock(fallback, block);
+      atomicWidgetPageCount += 1;
+      processedAtomCount += 1;
+      await publishFinalPages();
+    }
+
+    Future<void> fallbackFlowableAtom(
+      NovelReaderClassifiedPaginationAtom classified,
+      NovelReaderFlowableComplexFallbackReason reason,
+    ) async {
+      flowabilityFailureReasonCounts.update(
+        reason,
+        (value) => value + 1,
+        ifAbsent: () => 1,
+      );
+      final fallback = _atomicFallbackForFlowableAtom(classified);
+      final block = await complexBlockEngine.paginate(
+        atom: fallback,
+        chapter: chapter,
+        key: key,
+        measurer: complexMeasurer,
+      );
+      composer.appendDedicatedBlock(fallback, block);
+      atomicWidgetPageCount += 1;
       processedAtomCount += 1;
       await publishFinalPages();
     }
@@ -607,7 +658,8 @@ final class DefaultNovelReaderHybridPaginationPlanner
                     key: key,
                     measurer: complexMeasurer,
                   );
-                  composer.appendComplexBlock(fallback, block);
+                  composer.appendDedicatedBlock(fallback, block);
+                  atomicWidgetPageCount += 1;
                   await publishFinalPages();
                   remainderFellBack = true;
                   break;
@@ -660,13 +712,52 @@ final class DefaultNovelReaderHybridPaginationPlanner
                 imageIndices: classified.atom.imageIndices,
               ),
             );
+            dedicatedImagePageCount += 1;
             await publishFinalPages();
-          case NovelReaderPaginationRoute.rubyInline:
           case NovelReaderPaginationRoute.flowableComplexText:
-          case NovelReaderPaginationRoute.collapseBlock:
-          case NovelReaderPaginationRoute.tableBlock:
-          case NovelReaderPaginationRoute.atomicWidget:
-          case NovelReaderPaginationRoute.complexHtml:
+            complexBlockCount += 1;
+            late final NovelReaderFlowableComplexPaginationResult flowable;
+            try {
+              flowable = await flowableComplexEngine.paginate(
+                atom: classified,
+                page: composer.flowableComplexPageContext,
+                chapter: chapter,
+                key: key,
+                measureSession: session,
+                cancellationToken: cancellationToken,
+              );
+            } catch (error) {
+              if (_isCancellation(error)) {
+                rethrow;
+              }
+              flowable = NovelReaderFlowableComplexPaginationResult(
+                chunks: const <NovelReaderFlowableComplexChunk>[],
+                boundaryCount: 0,
+                probeCount: 0,
+                cacheHitCount: 0,
+                budgetExceededCount: 0,
+                minimumFragmentCount: 0,
+                fallbackReason:
+                    NovelReaderFlowableComplexFallbackReason.measurementFailure,
+              );
+            }
+            complexBoundaryCount += flowable.boundaryCount;
+            complexSearchProbeCount += flowable.probeCount;
+            complexSearchCacheHitCount += flowable.cacheHitCount;
+            complexSearchBudgetExceededCount += flowable.budgetExceededCount;
+            minimumComplexFragmentCount += flowable.minimumFragmentCount;
+            if (flowable.fallbackReason case final reason?) {
+              await fallbackFlowableAtom(classified, reason);
+              continue;
+            }
+            for (final chunk in flowable.chunks) {
+              cancellationToken.throwIfCancelled();
+              composer.appendFlowableComplexChunk(chunk);
+              flowableComplexFragmentCount += 1;
+              domSliceCount += 1;
+              await publishFinalPages();
+            }
+          case NovelReaderPaginationRoute.rubyInline:
             complexBlockCount += 1;
             final block = await complexBlockEngine.paginate(
               atom: classified,
@@ -702,10 +793,33 @@ final class DefaultNovelReaderHybridPaginationPlanner
               block,
               combineWithBufferedContent: combineWithBufferedContent,
               keepPageOpen:
-                  classified.route == NovelReaderPaginationRoute.rubyInline &&
                   !block.metrics.isOversized &&
                   !block.metrics.requiresInnerScroll,
             );
+            await publishFinalPages();
+          case NovelReaderPaginationRoute.collapseBlock:
+          case NovelReaderPaginationRoute.tableBlock:
+          case NovelReaderPaginationRoute.atomicWidget:
+          case NovelReaderPaginationRoute.complexHtml:
+            complexBlockCount += 1;
+            final block = await complexBlockEngine.paginate(
+              atom: classified,
+              chapter: chapter,
+              key: key,
+              measurer: complexMeasurer,
+            );
+            composer.appendDedicatedBlock(classified, block);
+            switch (classified.route) {
+              case NovelReaderPaginationRoute.tableBlock:
+                dedicatedTablePageCount += 1;
+              case NovelReaderPaginationRoute.collapseBlock:
+                dedicatedCollapsePageCount += 1;
+              case NovelReaderPaginationRoute.atomicWidget ||
+                  NovelReaderPaginationRoute.complexHtml:
+                atomicWidgetPageCount += 1;
+              default:
+                break;
+            }
             await publishFinalPages();
         }
         processedAtomCount += 1;
@@ -772,7 +886,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
     final first = chunks[startIndex];
     final html = chunks.skip(startIndex).map((chunk) => chunk.html).join();
     final atom = classified.atom;
-    final route = NovelReaderPaginationRoute.flowableComplexText;
+    const route = NovelReaderPaginationRoute.atomicWidget;
     final layoutPolicy = layoutPolicyResolver.resolve(route);
     return NovelReaderClassifiedPaginationAtom(
       atom: NovelReaderPaginationAtom(
@@ -792,16 +906,15 @@ final class DefaultNovelReaderHybridPaginationPlanner
     );
   }
 
-  NovelReaderClassifiedPaginationAtom _complexFallbackForAtom(
+  NovelReaderClassifiedPaginationAtom _atomicFallbackForFlowableAtom(
     NovelReaderClassifiedPaginationAtom classified,
   ) {
-    final route = NovelReaderPaginationRoute.flowableComplexText;
-    final layoutPolicy = layoutPolicyResolver.resolve(route);
+    const route = NovelReaderPaginationRoute.atomicWidget;
     return NovelReaderClassifiedPaginationAtom(
       atom: classified.atom,
       route: route,
-      reason: NovelReaderPaginationRouteReason.unsupportedStyle,
-      layoutPolicy: layoutPolicy,
+      reason: classified.reason,
+      layoutPolicy: layoutPolicyResolver.resolve(route),
     );
   }
 
@@ -940,6 +1053,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
       layoutPolicyResolver: layoutPolicyResolver,
       textRunExtractor: textRunExtractor,
       complexBlockEngine: complexBlockEngine,
+      flowableComplexEngine: flowableComplexEngine,
       validationPolicy: validationPolicy,
       measureSessionFactory: _measureSessionFactory,
       measureCache: measureCache,

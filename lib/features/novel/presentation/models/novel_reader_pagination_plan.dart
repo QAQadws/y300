@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
@@ -51,6 +52,16 @@ class NovelReaderPaginationPlan {
     this.rendererValidationMismatchCount = 0,
     this.textLayoutCount = 0,
     this.complexBlockCount = 0,
+    this.flowableComplexFragmentCount = 0,
+    this.complexBoundaryCount = 0,
+    this.complexSearchProbeCount = 0,
+    this.complexSearchCacheHitCount = 0,
+    this.complexSearchBudgetExceededCount = 0,
+    this.minimumComplexFragmentCount = 0,
+    this.dedicatedImagePageCount = 0,
+    this.dedicatedTablePageCount = 0,
+    this.dedicatedCollapsePageCount = 0,
+    this.atomicWidgetPageCount = 0,
     this.safeTextFallbackCount = 0,
     Map<NovelReaderPaginationAtomKind, int> atomKindCounts =
         const <NovelReaderPaginationAtomKind, int>{},
@@ -60,6 +71,9 @@ class NovelReaderPaginationPlan {
         const <NovelReaderPaginationRouteReason, int>{},
     Map<NovelReaderSafeTextFallbackReason, int> safeTextFallbackReasonCounts =
         const <NovelReaderSafeTextFallbackReason, int>{},
+    Map<NovelReaderFlowableComplexFallbackReason, int>
+        flowabilityFailureReasonCounts =
+        const <NovelReaderFlowableComplexFallbackReason, int>{},
     List<NovelReaderPaginationMeasurementSample> measurementSamples =
         const <NovelReaderPaginationMeasurementSample>[],
   }) : pages = List<NovelReaderPageFragment>.unmodifiable(pages),
@@ -76,6 +90,10 @@ class NovelReaderPaginationPlan {
        safeTextFallbackReasonCounts =
            Map<NovelReaderSafeTextFallbackReason, int>.unmodifiable(
              safeTextFallbackReasonCounts,
+           ),
+       flowabilityFailureReasonCounts =
+           Map<NovelReaderFlowableComplexFallbackReason, int>.unmodifiable(
+             flowabilityFailureReasonCounts,
            ),
        measurementSamples =
            List<NovelReaderPaginationMeasurementSample>.unmodifiable(
@@ -101,12 +119,24 @@ class NovelReaderPaginationPlan {
   final int rendererValidationMismatchCount;
   final int textLayoutCount;
   final int complexBlockCount;
+  final int flowableComplexFragmentCount;
+  final int complexBoundaryCount;
+  final int complexSearchProbeCount;
+  final int complexSearchCacheHitCount;
+  final int complexSearchBudgetExceededCount;
+  final int minimumComplexFragmentCount;
+  final int dedicatedImagePageCount;
+  final int dedicatedTablePageCount;
+  final int dedicatedCollapsePageCount;
+  final int atomicWidgetPageCount;
   final int safeTextFallbackCount;
   final Map<NovelReaderPaginationAtomKind, int> atomKindCounts;
   final Map<NovelReaderPaginationRoute, int> routeCounts;
   final Map<NovelReaderPaginationRouteReason, int> routeReasonCounts;
   final Map<NovelReaderSafeTextFallbackReason, int>
   safeTextFallbackReasonCounts;
+  final Map<NovelReaderFlowableComplexFallbackReason, int>
+  flowabilityFailureReasonCounts;
   final List<NovelReaderPaginationMeasurementSample> measurementSamples;
 
   int get pageCount => pages.length;
@@ -127,7 +157,7 @@ class NovelReaderPaginationPlan {
   double get averageTextPageFullness {
     final values = pages
         .where(
-          (page) => !page.containsIsolatedImage && page.availableHeight > 0,
+          (page) => !page.isDedicatedContentPage && page.availableHeight > 0,
         )
         .map((page) => page.fullness)
         .toList(growable: false);
@@ -141,6 +171,7 @@ class NovelReaderPaginationPlan {
       .where(
         (page) =>
             !page.containsIsolatedImage &&
+            !page.isDedicatedContentPage &&
             page.availableHeight > 0 &&
             page.fullness < 0.65,
       )

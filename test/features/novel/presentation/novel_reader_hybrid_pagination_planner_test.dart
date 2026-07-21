@@ -7,6 +7,8 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as html_dom;
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
@@ -310,11 +312,15 @@ void main() {
       expect(plan.routeCounts[NovelReaderPaginationRoute.safeText], 88);
       expect(plan.routeCounts[NovelReaderPaginationRoute.rubyInline], 1);
       expect(plan.routeCounts[NovelReaderPaginationRoute.collapseBlock], 1);
-      expect(plan.pageCount, lessThanOrEqualTo(8));
+      expect(plan.pageCount, lessThanOrEqualTo(9));
+      expect(plan.dedicatedCollapsePageCount, 1);
       expect(plan.averageTextPageFullness, greaterThan(0.9));
+      final textPages = plan.pages
+          .where((page) => !page.isDedicatedContentPage)
+          .toList(growable: false);
       expect(
-        plan.pages
-            .take(plan.pageCount - 1)
+        textPages
+            .take(textPages.length - 1)
             .every((page) => page.fullness > 0.85),
         isTrue,
       );
@@ -352,62 +358,65 @@ void main() {
     },
   );
 
-  test(
-    'keeps a fitting table on the buffered text page after validation',
-    () async {
-      final chapter = await _prepare(
-        '<p>表格前的短文。</p>'
-        '<table><tr><td>单元格</td></tr></table>',
-      );
-      final adapter = _RecordingMeasureAdapter(
-        heightFor: (request, _) {
-          if (request.atomId?.contains(':composition:validation') == true) {
-            return 70;
-          }
-          return request.html.contains('<table>') ? 24 : 30;
-        },
-      );
+  test('keeps a fitting table on a dedicated page', () async {
+    final chapter = await _prepare(
+      '<p>表格前的短文。</p>'
+      '<table><tr><td>单元格</td></tr></table>',
+    );
+    final adapter = _RecordingMeasureAdapter(
+      heightFor: (request, _) {
+        if (request.atomId?.contains(':composition:validation') == true) {
+          return 70;
+        }
+        return request.html.contains('<table>') ? 24 : 30;
+      },
+    );
 
-      final plan = await _planner(
-        adapter,
-      ).paginate(chapter, _key(chapter, height: 120));
+    final plan = await _planner(
+      adapter,
+    ).paginate(chapter, _key(chapter, height: 120));
 
-      expect(plan.pageCount, 1);
-      expect(plan.pages.single.html, contains('表格前的短文'));
-      expect(plan.pages.single.html, contains('<table>'));
-      expect(plan.pages.single.anchorRanges, hasLength(2));
-      expect(plan.rendererValidationCount, 2);
-      expect(plan.rendererValidationMismatchCount, 0);
-    },
-  );
+    expect(plan.pageCount, 2);
+    expect(plan.pages.first.html, contains('表格前的短文'));
+    expect(plan.pages.first.html, isNot(contains('<table>')));
+    expect(plan.pages.last.html, contains('<table>'));
+    expect(plan.pages.last.isDedicatedContentPage, isTrue);
+    expect(plan.pages.last.gapReason, NovelReaderPageGapReason.dedicatedTable);
+    expect(plan.dedicatedTablePageCount, 1);
+    expect(plan.rendererValidationCount, 1);
+    expect(plan.rendererValidationMismatchCount, 0);
+  });
 
-  test(
-    'moves a complex block to its own page when composition overflows',
-    () async {
-      final chapter = await _prepare(
-        '<p>表格前的短文。</p>'
-        '<table><tr><td>单元格</td></tr></table>',
-      );
-      final adapter = _RecordingMeasureAdapter(
-        heightFor: (request, _) {
-          if (request.atomId?.contains(':composition:validation') == true) {
-            return 180;
-          }
-          return request.html.contains('<table>') ? 24 : 30;
-        },
-      );
+  test('does not probe page composition for a dedicated table', () async {
+    final chapter = await _prepare(
+      '<p>表格前的短文。</p>'
+      '<table><tr><td>单元格</td></tr></table>',
+    );
+    final adapter = _RecordingMeasureAdapter(
+      heightFor: (request, _) {
+        if (request.atomId?.contains(':composition:validation') == true) {
+          return 180;
+        }
+        return request.html.contains('<table>') ? 24 : 30;
+      },
+    );
 
-      final plan = await _planner(
-        adapter,
-      ).paginate(chapter, _key(chapter, height: 120));
+    final plan = await _planner(
+      adapter,
+    ).paginate(chapter, _key(chapter, height: 120));
 
-      expect(plan.pageCount, 2);
-      expect(plan.pages.first.html, contains('表格前的短文'));
-      expect(plan.pages.first.html, isNot(contains('<table>')));
-      expect(plan.pages.last.html, contains('<table>'));
-      expect(plan.rendererValidationMismatchCount, 1);
-    },
-  );
+    expect(plan.pageCount, 2);
+    expect(plan.pages.first.html, contains('表格前的短文'));
+    expect(plan.pages.first.html, isNot(contains('<table>')));
+    expect(plan.pages.last.html, contains('<table>'));
+    expect(
+      adapter.requests.where(
+        (request) => request.atomId?.contains(':composition') == true,
+      ),
+      isEmpty,
+    );
+    expect(plan.rendererValidationMismatchCount, 0);
+  });
 
   test(
     'keeps original pages when complex composition validation throws',
@@ -690,6 +699,90 @@ void main() {
       expect(plan.pages.single.html, chapter.html);
     },
   );
+
+  test('composes safe, flowable complex and safe text on one page', () async {
+    final chapter = await _prepare(
+      '<p>前文。</p>'
+      '<p><font face="Fantasy Novel Font">复杂标题。</font></p>'
+      '<p>后文。</p>',
+    );
+    final adapter = _RecordingMeasureAdapter(
+      heightFor: (request, _) {
+        if (request.atomId?.endsWith(':validation') == true) {
+          return 30;
+        }
+        return _visibleText(request.html).runes.length * 10.0;
+      },
+    );
+
+    final plan = await _planner(
+      adapter,
+    ).paginate(chapter, _key(chapter, height: 200));
+
+    expect(plan.routeCounts[NovelReaderPaginationRoute.flowableComplexText], 1);
+    expect(plan.pageCount, 1);
+    expect(plan.pages.single.html, contains('前文'));
+    expect(plan.pages.single.html, contains('复杂标题'));
+    expect(plan.pages.single.html, contains('后文'));
+    expect(plan.flowableComplexFragmentCount, 1);
+    expect(plan.complexSearchProbeCount, 1);
+    expect(plan.atomicWidgetPageCount, 0);
+    expect(plan.flowabilityFailureReasonCounts, isEmpty);
+  });
+
+  test('paginates a long flowable complex atom across three pages', () async {
+    final chapter = await _prepare(
+      '<p><font face="Fantasy Novel Font">${List.filled(24, '甲').join()}</font></p>',
+    );
+    final adapter = _RecordingMeasureAdapter(
+      heightFor: (request, _) =>
+          (request.endOffset! - request.startOffset!) * 10.0,
+    );
+
+    final plan = await _planner(
+      adapter,
+    ).paginate(chapter, _key(chapter, height: 80));
+
+    expect(plan.pageCount, 3);
+    expect(plan.flowableComplexFragmentCount, 3);
+    expect(plan.complexBoundaryCount, greaterThanOrEqualTo(24));
+    expect(plan.complexSearchProbeCount, greaterThan(3));
+    expect(plan.atomicWidgetPageCount, 0);
+    expect(
+      plan.pages.map((page) => _visibleText(page.html)).join(),
+      List.filled(24, '甲').join(),
+    );
+    for (var index = 1; index < plan.pages.length; index += 1) {
+      expect(
+        plan.pages[index - 1].endAnchor.textOffset,
+        plan.pages[index].startAnchor.textOffset,
+      );
+    }
+  });
+
+  test(
+    'falls back atomically when the minimum complex fragment overflows',
+    () async {
+      final chapter = await _prepare(
+        '<p><font face="Fantasy Novel Font">复杂正文。</font></p>',
+      );
+
+      final plan = await _planner(
+        _RecordingMeasureAdapter(heightFor: (_, _) => 200),
+      ).paginate(chapter, _key(chapter, height: 100));
+
+      expect(plan.pageCount, 1);
+      expect(plan.pages.single.requiresInnerScroll, isTrue);
+      expect(plan.pages.single.isDedicatedContentPage, isTrue);
+      expect(plan.minimumComplexFragmentCount, 1);
+      expect(plan.atomicWidgetPageCount, 1);
+      expect(plan.flowableComplexFragmentCount, 0);
+      expect(plan.flowabilityFailureReasonCounts, {
+        NovelReaderFlowableComplexFallbackReason.minimumFragmentOverflow: 1,
+      });
+      expect(_visibleText(plan.pages.single.html), '复杂正文。');
+    },
+  );
 }
 
 String _visibleText(String html) {
@@ -759,12 +852,15 @@ final class _RecordingMeasureAdapter
   final _HeightFor? heightFor;
   int calls = 0;
   int validationCalls = 0;
+  final List<NovelReaderPaginationMeasureRequest> requests =
+      <NovelReaderPaginationMeasureRequest>[];
 
   @override
   Future<NovelReaderPaginationMeasureResult> measure(
     NovelReaderPaginationMeasureRequest request,
   ) async {
     calls += 1;
+    requests.add(request);
     if (request.atomId?.endsWith(':validation') == true) {
       validationCalls += 1;
     }

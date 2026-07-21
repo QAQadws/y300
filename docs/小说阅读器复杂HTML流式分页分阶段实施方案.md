@@ -1,6 +1,6 @@
 # 小说阅读器复杂 HTML 流式分页分阶段实施方案
 
-> 状态：Phase 0-4 已完成（2026-07-21）；Phase 5-8 待实施
+> 状态：Phase 0-5 已完成（2026-07-21）；Phase 6-8 待实施
 >
 > 编写日期：2026-07-21
 >
@@ -452,6 +452,7 @@ abstract interface class NovelReaderFlowableComplexPaginationEngine {
     required NovelReaderPaginationPageContext page,
     required NovelReaderPreparedChapter chapter,
     required NovelReaderPaginationKey key,
+    required NovelReaderPaginationMeasureSession measureSession,
     required NovelReaderPaginationCancellationToken cancellationToken,
   });
 }
@@ -1116,6 +1117,10 @@ flowabilityFailureReasonCounts
 
 目标：让文字型复杂 HTML 真正跨页并保持页面开放。
 
+> 实施状态：已完成（2026-07-21）。`flowableComplexText` 已接入生产 hybrid
+> planner、既有 persistent measure session 与 composer；Ruby/protected-inline
+> 仍保留旧路径，等待 Phase 6。Renderer revision 已提升到 `13`。
+
 交付：
 
 - `NovelReaderFlowableComplexPaginationEngine`。
@@ -1125,6 +1130,37 @@ flowabilityFailureReasonCounts
 - dedicated image/table/collapse 前后强制 flush。
 - renderer revision 提升和旧 cache 失效。
 
+实际落地：
+
+- 新增 `NovelReaderFlowableComplexPaginationEngine`、默认实现和独立领域模型。
+  每个 atom 只建立一个 Phase 3 DOM slice session，从 `startOffset` 循环调用
+  Phase 4 searcher；chunk 显式携带 renderer 组合总高度、`requiresFreshPage` 和
+  `flushAfterAppend`，engine 不直接修改 composer 或发布页面。
+- Engine 只接受 `flowableComplexText + htmlRendererRange + domBoundaries + flow`
+  policy。`rubyInline` 仍由旧 whole-block 路径处理，避免在 Phase 6 adapter 和
+  真正 protected-inline 规则完成前扩大生产范围。
+- 新增 `appendFlowableComplexChunk`。Composer 在追加前把 pending structural
+  break 纳入 page context，追加后用 renderer 返回的 `buffer + slice` 总高度
+  覆盖估算高度；短 complex 后保持页面开放，存在 remainder 时只封口当前稳定页。
+- 当前 buffer 连最小合法片段都放不下时，composer 按
+  `requiresFreshPage=true` 先封旧页；空白整页仍 overflow、boundary/index 异常、
+  非单调或 measurement 失败时，整个 atom 通过显式 `atomicWidget` policy 降级为
+  dedicated inner-scroll page，不丢弃正文、不继续错误搜索。
+- 表格、折叠与 atomic/legacy complex 不再执行 composition probe，统一调用
+  `appendDedicatedBlock`，前后强制 flush。新增 `dedicatedTable`、
+  `dedicatedCollapse` gap reason 和 page-level dedicated 标记；图片继续使用既有
+  isolated API。Dedicated 页不参与“文本页平均填充率”和低填充文本页统计。
+- Planner 汇总 flowable fragment、boundary、search probe/cache hit、budget
+  exceeded、minimum fragment、dedicated page、atomic fallback 和稳定 failure
+  reason。Diagnostics 只输出计数与枚举，不包含正文 HTML、range 内容或敏感数据。
+- 增量计划仍只读取 `composer.pages`，因此最后一个保持开放的 chunk 不会提前
+  发布；partial chunk 只有在 `flushAfterAppend` 封口后才成为稳定页。取消检查保留
+  在 engine 每轮和 searcher 每个 probe 前后。
+- Phase 0 无效字体样本在注入 no-op normalizer 时，两个
+  `unsupportedFont/flowableComplexText` 标题现在也能与后续 safe 正文合为 1 页；
+  默认 Phase 2 normalizer 仍将其转为 safe text。旧 3 页、5% fullness 只作为
+  ADR 历史基线保留，不再是当前行为断言。
+
 验收：
 
 - 短 flowable complex 标题不独占页。
@@ -1133,6 +1169,10 @@ flowabilityFailureReasonCounts
 - 图片、表格、折叠始终独占页。
 - anchor ranges 连续，恢复定位正确。
 - 增量 plan 只发布已经封口的稳定页。
+
+自动化覆盖 safe -> complex -> safe 同页、长未知字体正文三页切分、anchor 连续、
+fresh-page retry、minimum fragment 原子降级、非单调降级、pending `<br>` 组合高度、
+dedicated table/collapse、旧样本目标行为和既有增量稳定页不变量。
 
 ### Phase 6：Ruby 与 protected inline
 
@@ -1154,11 +1194,12 @@ flowabilityFailureReasonCounts
 
 ### Phase 7：真实 renderer 集成、缓存和性能
 
-目标：将 fake measurer 搜索替换为持久 HtmlWidget measurement session，并满足预算。
+目标：用真实 HtmlWidget 约束测试、缓存调优和性能门禁硬化 Phase 5 已接入的
+persistent measurement session。
 
 交付：
 
-- production `NovelReaderPaginationMeasureSession` 接入。
+- production `NovelReaderPaginationMeasureSession` renderer 一致性矩阵。
 - boundary index cache、range measurement cache 和 in-flight single-flight。
 - 完整 diagnostics。
 - first-page priority 和 generation cancellation。

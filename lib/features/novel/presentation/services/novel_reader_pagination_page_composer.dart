@@ -1,6 +1,7 @@
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_block_pagination.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
@@ -37,6 +38,16 @@ final class NovelReaderPaginationPageComposer {
   double get remainingHeight =>
       (pageHeight - (_buffer?.usedHeight ?? 0)).clamp(0, pageHeight);
   String get bufferedHtml => _buffer?.html ?? '';
+  NovelReaderPaginationPageContext get flowableComplexPageContext {
+    final pendingHtml = _pendingStructuralHtml?.toString() ?? '';
+    final html = '$bufferedHtml$pendingHtml';
+    return NovelReaderPaginationPageContext(
+      bufferedHtml: html,
+      hasBufferedContent: html.isNotEmpty,
+      availableHeight: pageHeight,
+    );
+  }
+
   List<NovelReaderPageFragment> get pages =>
       List<NovelReaderPageFragment>.unmodifiable(_pages);
 
@@ -141,6 +152,60 @@ final class NovelReaderPaginationPageComposer {
     );
   }
 
+  void appendFlowableComplexChunk(NovelReaderFlowableComplexChunk chunk) {
+    if (!chunk.composedHeight.isFinite ||
+        chunk.composedHeight > pageHeight + 0.5) {
+      throw StateError('Flowable complex chunk exceeds the page budget.');
+    }
+    if (chunk.requiresFreshPage) {
+      flush(gapReason: NovelReaderPageGapReason.algorithmBoundary);
+    } else {
+      _appendPendingStructuralBreaks(nextParticipatesInInlineFlow: false);
+    }
+
+    final buffer = _buffer ??= _ComposedPageBuffer();
+    buffer.append(
+      html: chunk.slice.html,
+      start: chunk.slice.startAnchor,
+      end: chunk.slice.endAnchor,
+      usedHeight: 0,
+      contributesRenderableContent: chunk.slice.hasRenderableContent,
+    );
+    buffer.setMeasuredHeight(chunk.composedHeight);
+    _bufferEndsInlineFlow = false;
+    if (chunk.flushAfterAppend) {
+      flush(gapReason: NovelReaderPageGapReason.algorithmBoundary);
+    }
+  }
+
+  void appendDedicatedBlock(
+    NovelReaderClassifiedPaginationAtom atom,
+    NovelReaderComplexBlockPage block,
+  ) {
+    _discardPendingStructuralBreaks();
+    final gapReason = _gapReasonFor(atom.route);
+    flush(gapReason: gapReason);
+    final buffer = _ComposedPageBuffer()
+      ..append(
+        html: block.html,
+        start: block.startAnchor,
+        end: block.endAnchor,
+        usedHeight: block.metrics.height,
+        overflowState: block.metrics.requiresInnerScroll
+            ? NovelReaderPageOverflowState.atomicWidget
+            : NovelReaderPageOverflowState.none,
+        imageIndices: atom.atom.imageIndices,
+        isDedicatedContentPage: true,
+      );
+    _emit(
+      buffer,
+      gapReason: block.metrics.isOversized
+          ? NovelReaderPageGapReason.oversizedWidget
+          : gapReason,
+      requiresInnerScroll: block.metrics.requiresInnerScroll,
+    );
+  }
+
   void appendIsolatedImage({
     required NovelReaderClassifiedPaginationAtom atom,
     required double measuredHeight,
@@ -159,6 +224,7 @@ final class NovelReaderPaginationPageComposer {
             : NovelReaderPageOverflowState.none,
         imageIndices: atom.atom.imageIndices,
         containsIsolatedImage: true,
+        isDedicatedContentPage: true,
       );
     _emit(
       buffer,
@@ -215,6 +281,7 @@ final class NovelReaderPaginationPageComposer {
         availableHeight: pageHeight,
         gapReason: gapReason,
         containsIsolatedImage: buffer.containsIsolatedImage,
+        isDedicatedContentPage: buffer.isDedicatedContentPage,
       ),
     );
   }
@@ -225,6 +292,10 @@ final class NovelReaderPaginationPageComposer {
         NovelReaderPageGapReason.isolatedImage,
       NovelReaderPaginationRoute.safeText =>
         NovelReaderPageGapReason.algorithmBoundary,
+      NovelReaderPaginationRoute.tableBlock =>
+        NovelReaderPageGapReason.dedicatedTable,
+      NovelReaderPaginationRoute.collapseBlock =>
+        NovelReaderPageGapReason.dedicatedCollapse,
       _ => NovelReaderPageGapReason.atomicWidget,
     };
   }
@@ -300,6 +371,7 @@ final class _ComposedPageBuffer {
   NovelReaderPageOverflowState overflowState =
       NovelReaderPageOverflowState.none;
   bool containsIsolatedImage = false;
+  bool isDedicatedContentPage = false;
   bool hasRenderableContent = false;
 
   String get html => _html.toString();
@@ -320,6 +392,7 @@ final class _ComposedPageBuffer {
         NovelReaderPageOverflowState.none,
     Iterable<int> imageIndices = const <int>[],
     bool containsIsolatedImage = false,
+    bool isDedicatedContentPage = false,
     bool contributesRenderableContent = true,
   }) {
     startAnchor ??= start;
@@ -333,6 +406,12 @@ final class _ComposedPageBuffer {
     }
     this.containsIsolatedImage =
         this.containsIsolatedImage || containsIsolatedImage;
+    this.isDedicatedContentPage =
+        this.isDedicatedContentPage || isDedicatedContentPage;
     hasRenderableContent = hasRenderableContent || contributesRenderableContent;
+  }
+
+  void setMeasuredHeight(double value) {
+    usedHeight = value;
   }
 }

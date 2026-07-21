@@ -20,6 +20,8 @@ enum NovelReaderPageGapReason {
   none,
   naturalEnd,
   isolatedImage,
+  dedicatedTable,
+  dedicatedCollapse,
   atomicWidget,
   oversizedWidget,
   chromeInset,

@@ -28,73 +28,68 @@ import '../test_support/novel_phase0_api_fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test(
-    'flowable classification keeps the current whole-atom page baseline',
-    () async {
-      final html = File(
-        novelComplexHtmlInvalidFontFixturePath,
-      ).readAsStringSync();
-      final baseline = await _paginate(
-        html: html,
-        episodeId: 'phase0-invalid-font',
-        legacyMarkupNormalizer: const NoopNovelReaderLegacyMarkupNormalizer(),
-      );
-      final unsupportedFontAtoms = baseline.classified
-          .where(
-            (atom) =>
-                atom.route == NovelReaderPaginationRoute.flowableComplexText &&
-                atom.reason == NovelReaderPaginationRouteReason.unsupportedFont,
-          )
-          .toList(growable: false);
+  test('flowable titles compose with adjacent text after Phase 5', () async {
+    final html = File(
+      novelComplexHtmlInvalidFontFixturePath,
+    ).readAsStringSync();
+    final baseline = await _paginate(
+      html: html,
+      episodeId: 'phase0-invalid-font',
+      legacyMarkupNormalizer: const NoopNovelReaderLegacyMarkupNormalizer(),
+    );
+    final unsupportedFontAtoms = baseline.classified
+        .where(
+          (atom) =>
+              atom.route == NovelReaderPaginationRoute.flowableComplexText &&
+              atom.reason == NovelReaderPaginationRouteReason.unsupportedFont,
+        )
+        .toList(growable: false);
 
-      expect(unsupportedFontAtoms, hasLength(2));
-      expect(
-        unsupportedFontAtoms.map((atom) => atom.layoutPolicy.measure),
-        everyElement(NovelReaderPaginationMeasurePolicy.htmlRendererRange),
-      );
-      expect(
-        unsupportedFontAtoms.map((atom) => atom.layoutPolicy.split),
-        everyElement(NovelReaderPaginationSplitPolicy.domBoundaries),
-      );
-      expect(
-        unsupportedFontAtoms.map((atom) => atom.atom.html),
-        everyElement(contains('face="&amp;quot"')),
-      );
-      expect(baseline.plan.pageCount, 3);
-      expect(baseline.plan.complexBlockCount, 2);
-      expect(baseline.plan.measurementCount, 2);
-      expect(baseline.plan.flowableComplexAtomCount, 2);
-      expect(baseline.plan.atomicWidgetAtomCount, 0);
-      expect(baseline.plan.dedicatedContentAtomCount, 0);
-      expect(baseline.firstPageDuration, isNotNull);
+    expect(unsupportedFontAtoms, hasLength(2));
+    expect(
+      unsupportedFontAtoms.map((atom) => atom.layoutPolicy.measure),
+      everyElement(NovelReaderPaginationMeasurePolicy.htmlRendererRange),
+    );
+    expect(
+      unsupportedFontAtoms.map((atom) => atom.layoutPolicy.split),
+      everyElement(NovelReaderPaginationSplitPolicy.domBoundaries),
+    );
+    expect(
+      unsupportedFontAtoms.map((atom) => atom.atom.html),
+      everyElement(contains('face="&amp;quot"')),
+    );
+    expect(baseline.plan.pageCount, 1);
+    expect(baseline.plan.complexBlockCount, 2);
+    expect(baseline.plan.flowableComplexFragmentCount, 2);
+    expect(baseline.plan.complexSearchProbeCount, 2);
+    expect(baseline.plan.atomicWidgetPageCount, 0);
+    expect(baseline.plan.flowabilityFailureReasonCounts, isEmpty);
+    expect(baseline.plan.measurementCount, greaterThanOrEqualTo(2));
+    expect(baseline.plan.flowableComplexAtomCount, 2);
+    expect(baseline.plan.atomicWidgetAtomCount, 0);
+    expect(baseline.plan.dedicatedContentAtomCount, 0);
+    expect(baseline.firstPageDuration, isNotNull);
 
-      final firstPage = baseline.plan.pages[0];
-      final secondPage = baseline.plan.pages[1];
-      expect(firstPage.html, contains('喜歡的人和義妹'));
-      expect(firstPage.html, isNot(contains('第一話（１）')));
-      expect(secondPage.html, contains('第一話（１）'));
-      expect(secondPage.html, isNot(contains('如果能轉世重生')));
-      expect(firstPage.gapReason, NovelReaderPageGapReason.atomicWidget);
-      expect(secondPage.gapReason, NovelReaderPageGapReason.atomicWidget);
-      expect(_fullness(firstPage), lessThan(0.1));
-      expect(_fullness(secondPage), lessThan(0.1));
-      final routeCounts = _routeCounts(baseline.classified);
-      final reasonCounts = _reasonCounts(baseline.classified);
+    final firstPage = baseline.plan.pages[0];
+    expect(firstPage.html, contains('喜歡的人和義妹'));
+    expect(firstPage.html, contains('第一話（１）'));
+    expect(firstPage.html, contains('如果能轉世重生'));
+    expect(firstPage.gapReason, NovelReaderPageGapReason.naturalEnd);
+    final routeCounts = _routeCounts(baseline.classified);
+    final reasonCounts = _reasonCounts(baseline.classified);
 
-      // Stable structural diagnostics only; no body HTML is emitted.
-      // ignore: avoid_print
-      print(
-        'NOVEL_COMPLEX_HTML_PHASE0 pages=${baseline.plan.pageCount} '
-        'unsupportedFontAtoms=${unsupportedFontAtoms.length} '
-        'measurements=${baseline.plan.measurementCount} '
-        'rendererValidations=${baseline.plan.rendererValidationCount} '
-        'routes=$routeCounts reasons=$reasonCounts '
-        'firstPageMicros=${baseline.firstPageDuration!.inMicroseconds} '
-        'firstFullness=${_fullness(firstPage).toStringAsFixed(4)} '
-        'secondFullness=${_fullness(secondPage).toStringAsFixed(4)}',
-      );
-    },
-  );
+    // Stable structural diagnostics only; no body HTML is emitted.
+    // ignore: avoid_print
+    print(
+      'NOVEL_COMPLEX_HTML_PHASE0 pages=${baseline.plan.pageCount} '
+      'unsupportedFontAtoms=${unsupportedFontAtoms.length} '
+      'measurements=${baseline.plan.measurementCount} '
+      'rendererValidations=${baseline.plan.rendererValidationCount} '
+      'routes=$routeCounts reasons=$reasonCounts '
+      'firstPageMicros=${baseline.firstPageDuration!.inMicroseconds} '
+      'firstFullness=${_fullness(firstPage).toStringAsFixed(4)}',
+    );
+  });
 
   test(
     'sanitized JSON fixtures retain only required version=1 structure',

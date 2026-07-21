@@ -37,6 +37,7 @@ class NovelReaderPageFragment {
     this.availableHeight = 0,
     this.gapReason = NovelReaderPageGapReason.none,
     this.containsIsolatedImage = false,
+    this.isDedicatedContentPage = false,
   });
 
   final int index;
@@ -57,6 +58,7 @@ class NovelReaderPageFragment {
   final double availableHeight;
   final NovelReaderPageGapReason gapReason;
   final bool containsIsolatedImage;
+  final bool isDedicatedContentPage;
 
   bool get hasOverflow => overflowState != NovelReaderPageOverflowState.none;
 
@@ -85,7 +87,8 @@ class NovelReaderPageFragment {
         other.usedHeight == usedHeight &&
         other.availableHeight == availableHeight &&
         other.gapReason == gapReason &&
-        other.containsIsolatedImage == containsIsolatedImage;
+        other.containsIsolatedImage == containsIsolatedImage &&
+        other.isDedicatedContentPage == isDedicatedContentPage;
   }
 
   @override
@@ -102,5 +105,6 @@ class NovelReaderPageFragment {
     availableHeight,
     gapReason,
     containsIsolatedImage,
+    isDedicatedContentPage,
   );
 }

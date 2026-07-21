@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 
@@ -33,6 +34,16 @@ class NovelReaderPaginationDiagnostics {
     this.rendererValidationMismatchCount = 0,
     this.textLayoutCount = 0,
     this.complexBlockCount = 0,
+    this.flowableComplexFragmentCount = 0,
+    this.complexBoundaryCount = 0,
+    this.complexSearchProbeCount = 0,
+    this.complexSearchCacheHitCount = 0,
+    this.complexSearchBudgetExceededCount = 0,
+    this.minimumComplexFragmentCount = 0,
+    this.dedicatedImagePageCount = 0,
+    this.dedicatedTablePageCount = 0,
+    this.dedicatedCollapsePageCount = 0,
+    this.atomicWidgetPageCount = 0,
     this.safeTextFallbackCount = 0,
     this.flowableComplexAtomCount = 0,
     this.atomicWidgetAtomCount = 0,
@@ -54,6 +65,9 @@ class NovelReaderPaginationDiagnostics {
         const <NovelReaderPaginationRouteReason, int>{},
     Map<NovelReaderSafeTextFallbackReason, int> safeTextFallbackReasonCounts =
         const <NovelReaderSafeTextFallbackReason, int>{},
+    Map<NovelReaderFlowableComplexFallbackReason, int>
+        flowabilityFailureReasonCounts =
+        const <NovelReaderFlowableComplexFallbackReason, int>{},
     Map<NovelReaderLegacyMarkupNormalizationReason, int>
         legacyMarkupNormalizationReasonCounts =
         const <NovelReaderLegacyMarkupNormalizationReason, int>{},
@@ -75,6 +89,10 @@ class NovelReaderPaginationDiagnostics {
        safeTextFallbackReasonCounts =
            Map<NovelReaderSafeTextFallbackReason, int>.unmodifiable(
              safeTextFallbackReasonCounts,
+           ),
+       flowabilityFailureReasonCounts =
+           Map<NovelReaderFlowableComplexFallbackReason, int>.unmodifiable(
+             flowabilityFailureReasonCounts,
            ),
        legacyMarkupNormalizationReasonCounts =
            Map<NovelReaderLegacyMarkupNormalizationReason, int>.unmodifiable(
@@ -111,6 +129,16 @@ class NovelReaderPaginationDiagnostics {
   final int rendererValidationMismatchCount;
   final int textLayoutCount;
   final int complexBlockCount;
+  final int flowableComplexFragmentCount;
+  final int complexBoundaryCount;
+  final int complexSearchProbeCount;
+  final int complexSearchCacheHitCount;
+  final int complexSearchBudgetExceededCount;
+  final int minimumComplexFragmentCount;
+  final int dedicatedImagePageCount;
+  final int dedicatedTablePageCount;
+  final int dedicatedCollapsePageCount;
+  final int atomicWidgetPageCount;
   final int safeTextFallbackCount;
   final int flowableComplexAtomCount;
   final int atomicWidgetAtomCount;
@@ -128,6 +156,8 @@ class NovelReaderPaginationDiagnostics {
   final Map<NovelReaderPaginationRouteReason, int> routeReasonCounts;
   final Map<NovelReaderSafeTextFallbackReason, int>
   safeTextFallbackReasonCounts;
+  final Map<NovelReaderFlowableComplexFallbackReason, int>
+  flowabilityFailureReasonCounts;
   final Map<NovelReaderLegacyMarkupNormalizationReason, int>
   legacyMarkupNormalizationReasonCounts;
   final List<NovelReaderPaginationMeasurementSample> measurementSamples;
@@ -158,6 +188,16 @@ class NovelReaderPaginationDiagnostics {
         'rendererMismatches=$rendererValidationMismatchCount, '
         'textLayouts=$textLayoutCount, safeRuns=$safeTextRunCount, '
         'complexBlocks=$complexBlockCount, '
+        'flowableComplexFragments=$flowableComplexFragmentCount, '
+        'complexBoundaries=$complexBoundaryCount, '
+        'complexSearchProbes=$complexSearchProbeCount, '
+        'complexSearchCacheHits=$complexSearchCacheHitCount, '
+        'complexSearchBudgetExceeded=$complexSearchBudgetExceededCount, '
+        'minimumComplexFragments=$minimumComplexFragmentCount, '
+        'dedicatedImagePages=$dedicatedImagePageCount, '
+        'dedicatedTablePages=$dedicatedTablePageCount, '
+        'dedicatedCollapsePages=$dedicatedCollapsePageCount, '
+        'atomicWidgetPages=$atomicWidgetPageCount, '
         'flowableComplexAtoms=$flowableComplexAtomCount, '
         'atomicWidgetAtoms=$atomicWidgetAtomCount, '
         'dedicatedContentAtoms=$dedicatedContentAtomCount, '
@@ -166,6 +206,7 @@ class NovelReaderPaginationDiagnostics {
         'normalizationReasons=$legacyMarkupNormalizationReasonCounts, '
         'safeFallbacks=$safeTextFallbackCount, routes=$routeCounts, '
         'safeFallbackReasons=$safeTextFallbackReasonCounts, '
+        'flowabilityFailures=$flowabilityFailureReasonCounts, '
         'routeReasons=$routeReasonCounts, '
         'cancelledPlans=$cancelledPlanCount, cacheHitRate='
         '${measurementCacheHitRate.toStringAsFixed(2)}, '

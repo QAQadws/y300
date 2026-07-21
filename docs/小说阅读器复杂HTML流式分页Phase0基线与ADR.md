@@ -86,7 +86,7 @@ Phase 0 未修改 classifier、style resolver、planner、composer、renderer �
 
 自动化同时检查敏感 key 不存在于 `Variables`，所有新增 post 使用 `authorid=1` 的 fixture 身份。
 
-## 3. 当前生产链路证据
+## 3. Phase 0 生产链路证据（历史）
 
 ```text
 prepared HTML
@@ -104,7 +104,9 @@ prepared HTML
       -> emit immediately
 ```
 
-当前 production hybrid planner 不会对这两个标题执行复杂 HTML 二分。它们各自只被整块测量一次。
+Phase 0 时的 production hybrid planner 不会对这两个标题执行复杂 HTML 二分，
+它们各自只被整块测量一次。Phase 5 已替换该行为，当前生产链路见第 16 节；本节
+只保留初始问题证据。
 
 ## 4. Fixture 路由基线
 
@@ -251,12 +253,15 @@ flowable complex search 的每个候选由 `ForumHtmlWidgetPostRenderer` 测量�
 
 ### 决策
 
-Phase 0 同时保留：
+Phase 0 曾同时保留：
 
 - 通过的 characterization test：断言当前两个独占页和 5% fullness。
 - 跳过的目标行为 test：断言标题、章节名和后续正文应进入同页。
 
-不允许主分支持续红灯。Phase 5 完成后移除 `skip`，反转旧 characterization 的页面断言，并保留 route 迁移证据。
+不允许主分支持续红灯。Phase 5 已反转旧 characterization：no-op normalizer 下
+两个 `unsupportedFont` atom 仍保持 flowable route，但标题、章节名和后续正文
+现在合为 1 页。旧 3 页与 5% fullness 继续保留在本 ADR 和历史提交中，不再作为
+当前生产行为断言。
 
 ## 13. Rollback
 
@@ -317,7 +322,7 @@ flutter analyze
 - [x] ADR 已裁定 route/policy、dedicated、atomic、二分、缓存和 rollback。
 - [x] 生产分页行为未修改。
 
-## 16. Phase 1-4 后续实施记录
+## 16. Phase 1-5 后续实施记录
 
 Phase 1 已将 route reason 与 layout policy 解耦，并引入
 `flowableComplexText`、`atomicWidget`、flowability inspector 和 capability
@@ -327,9 +332,10 @@ diagnostics。该阶段仍通过旧 whole-atom engine 输出页面，因此无�
 Phase 2 已在小说共享 chapter preparation 边界加入 revision `1` 的 legacy
 markup normalizer。默认路径会删除两个 quote-only `font face`，保留所有正文、
 wrapper 和其它样式属性，使样本全部进入 `safeText` 并从 3 页降为 1 页。
-注入 `NoopNovelReaderLegacyMarkupNormalizer` 仍可复现本 ADR 记录的 3 页、两次
-whole-atom measurement 和前两页 `0.0500` fullness，因此历史证据与 rollback
-基线没有丢失。
+Phase 5 之前注入 `NoopNovelReaderLegacyMarkupNormalizer` 可以复现本 ADR 记录的
+3 页、两次 whole-atom measurement 和前两页 `0.0500` fullness。Phase 5 后同一
+注入路径会保留两个 flowable route 作为迁移证据，但新 engine 会把它们与相邻
+safe text 合为 1 页；旧行为证据继续保存在本 ADR 和历史提交中。
 
 Phase 3 已抽取共享 `NovelReaderHtmlDomTextIndex`：既有 safe slicer 继续使用
 rune 坐标，新 complex session 使用 grapheme 坐标，两者共用单次 DOM parse、
@@ -348,7 +354,19 @@ session 12 次，取消在每次 probe 前后检查，非单调高度使用稳�
 measurer 测试，尚未接入生产 planner、真实 renderer 或 composer，因此可见分页
 基线仍保持不变。
 
-下一阶段为 Phase 5：将 flowable complex engine 和 composer 接到 Phase 4 的
-搜索结果，并在接入时提升 renderer revision。Phase 5 必须正确消费
-`requiresFreshPage`、minimum-fragment overflow、budget exceeded 和非单调错误，
-不得绕过已发布页面不可变规则。
+Phase 5 已新增 `NovelReaderFlowableComplexPaginationEngine` 并接入生产 hybrid
+planner。每个 flowable atom 只建立一个 DOM session，engine 循环消费 Phase 4
+结果；composer 使用 renderer 返回的组合总高度，按 `requiresFreshPage` 封旧页，
+按 `flushAfterAppend` 只发布已封口片段。短 complex 可以与前后 safe text 合页，
+长 complex 可以跨页且 anchor 连续。Boundary/index、measurement、非单调和整页
+最小片段 overflow 都通过稳定 reason 原子降级，不丢正文。
+
+表格、折叠与 atomic/legacy complex 已改走显式 dedicated API，前后强制 flush，
+不再尝试 composition probe；dedicated 页具有独立 page 标记与 gap reason，不参与
+文本页填充率统计。Planner/diagnostics 新增 fragment、boundary、probe/cache、
+budget、minimum fragment、dedicated/atomic page 和 failure reason 计数。生产
+renderer revision 已提升到 `13`，旧 plan cache 自动失效。Ruby/protected-inline
+仍保留旧路径，等待 Phase 6。
+
+下一阶段为 Phase 6：把 Ruby cluster 和已知稳定尺寸 protected-inline adapter
+接入相同 flowable engine，同时保持未知 inline widget 的 atomic fallback。
