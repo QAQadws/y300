@@ -32,10 +32,12 @@ final class NovelReaderPaginationAtomExtractor {
       var textOffset = unit.startAnchor.textOffset;
       for (var index = 0; index < parts.length; index += 1) {
         final part = parts[index];
-        if (!part.isolatedImage && !_isMeaningfulPart(part.html)) {
+        final partHtml = _normalizeTopLevelTextWhitespace(part.html);
+        final textLength = _textLength(partHtml);
+        if (!part.isolatedImage && !_isMeaningfulPart(partHtml)) {
+          textOffset += textLength;
           continue;
         }
-        final textLength = _textLength(part.html);
         final imageNodeId = part.isolatedImage
             ? '${unit.startAnchor.nodeId ?? unit.unitId}:image-'
                   '${part.imageIndices.single}'
@@ -49,7 +51,7 @@ final class NovelReaderPaginationAtomExtractor {
           textOffset: part.isolatedImage ? 0 : textOffset + textLength,
         );
         final kind = _kindFor(
-          part.html,
+          partHtml,
           unit.breakability,
           isIsolatedImage: part.isolatedImage,
         );
@@ -57,7 +59,7 @@ final class NovelReaderPaginationAtomExtractor {
           NovelReaderPaginationAtom(
             atomId: '${unit.unitId}:atom-$index',
             kind: kind,
-            html: part.html,
+            html: partHtml,
             startAnchor: startAnchor,
             endAnchor: endAnchor,
             textLength: textLength,
@@ -85,6 +87,9 @@ final class NovelReaderPaginationAtomExtractor {
       return NovelReaderPaginationAtomKind.image;
     }
     final fragment = html_parser.parseFragment(html);
+    if (_isLineBreakOnly(fragment)) {
+      return NovelReaderPaginationAtomKind.spacer;
+    }
     final firstElement = fragment.children.isEmpty
         ? null
         : fragment.children.first;
@@ -95,13 +100,52 @@ final class NovelReaderPaginationAtomExtractor {
     if (tag == 'blockquote') {
       return NovelReaderPaginationAtomKind.quote;
     }
+    if (tag == 'div') {
+      return NovelReaderPaginationAtomKind.lineBlock;
+    }
     if (breakability == NovelReaderFlowUnitBreakability.atomicWidget) {
       return NovelReaderPaginationAtomKind.atomicWidget;
     }
     if (html.contains('<img')) {
       return NovelReaderPaginationAtomKind.inlineImage;
     }
+    if (firstElement == null ||
+        breakability == NovelReaderFlowUnitBreakability.inlineText) {
+      return NovelReaderPaginationAtomKind.inlineText;
+    }
     return NovelReaderPaginationAtomKind.text;
+  }
+
+  bool _isLineBreakOnly(html_dom.DocumentFragment fragment) {
+    var hasBreak = false;
+    for (final node in fragment.nodes) {
+      if (node is html_dom.Text && node.data.trim().isEmpty) {
+        continue;
+      }
+      if (node is html_dom.Element && node.localName?.toLowerCase() == 'br') {
+        hasBreak = true;
+        continue;
+      }
+      return false;
+    }
+    return hasBreak;
+  }
+
+  String _normalizeTopLevelTextWhitespace(String html) {
+    final fragment = html_parser.parseFragment(html);
+    if (fragment.nodes.isEmpty ||
+        fragment.nodes.any((node) => node is! html_dom.Text)) {
+      return html;
+    }
+    final text = fragment.nodes
+        .cast<html_dom.Text>()
+        .map((node) => node.data)
+        .join();
+    final normalized = text
+        .replaceAll(RegExp(r'[\t\n\f\r ]+'), ' ')
+        .replaceFirst(RegExp(r'^[\t\n\f\r ]+'), '')
+        .replaceFirst(RegExp(r'[\t\n\f\r ]+$'), '');
+    return const HtmlEscape().convert(normalized);
   }
 
   List<_AtomPart> _splitFragment({
@@ -209,7 +253,7 @@ final class NovelReaderPaginationAtomExtractor {
 
   bool _isMeaningfulPart(String html) {
     final fragment = html_parser.parseFragment(html);
-    if ((fragment.text ?? '').trim().isNotEmpty) {
+    if (_renderableTextPattern.hasMatch(fragment.text ?? '')) {
       return true;
     }
     return fragment.querySelector(
@@ -217,6 +261,10 @@ final class NovelReaderPaginationAtomExtractor {
         ) !=
         null;
   }
+
+  static final RegExp _renderableTextPattern = RegExp(
+    r'[^\s\u00A0\u200B\u2060\u3000\uFEFF]',
+  );
 
   String _serialize(html_dom.Node node) {
     if (node is html_dom.Element) {

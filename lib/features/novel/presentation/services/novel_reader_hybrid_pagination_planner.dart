@@ -236,10 +236,10 @@ final class DefaultNovelReaderHybridPaginationPlanner
     var rendererValidationCount = 0;
     var rendererValidationMismatchCount = 0;
     var domSliceCount = 0;
-    var safePageOrdinal = 0;
     final safeTextFallbackReasonCounts =
         <NovelReaderSafeTextFallbackReason, int>{};
     final validatedRiskStyleSignatures = <String>{};
+    final validatedSafePageOrdinals = <int>{};
     var processedAtomCount = 0;
     var publishedPageCount = 0;
 
@@ -361,7 +361,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
                 width: key.viewportWidthPx.toDouble(),
                 pageHeight: key.viewportHeightPx.toDouble(),
                 firstPageHeight: composer.remainingHeight,
-                paragraphSpacing: preferences.typography.paragraphSpacing,
+                paragraphSpacing: _paragraphSpacingFor(classified.atom),
                 typographySignature: key.typographySignature,
                 textDirection: textDirection,
                 textAlign: textAlign,
@@ -380,7 +380,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
                   runs: runs,
                   width: key.viewportWidthPx.toDouble(),
                   pageHeight: key.viewportHeightPx.toDouble(),
-                  paragraphSpacing: preferences.typography.paragraphSpacing,
+                  paragraphSpacing: _paragraphSpacingFor(classified.atom),
                   typographySignature: key.typographySignature,
                   textDirection: textDirection,
                   textAlign: textAlign,
@@ -421,18 +421,24 @@ final class DefaultNovelReaderHybridPaginationPlanner
             final needsRiskStyleValidation =
                 riskStyleSignature != null &&
                 !validatedRiskStyleSignatures.contains(riskStyleSignature);
+            final candidatePageOrdinal = composer.pages.length;
+            final needsPageValidation =
+                !validatedSafePageOrdinals.contains(candidatePageOrdinal) &&
+                validationPolicy.shouldValidate(
+                  safePageOrdinal: candidatePageOrdinal,
+                  hasRiskStyle: false,
+                );
             late final _TextValidationSummary validation;
             try {
               validation = await _validateTextChunk(
                 chunks: textResult.chunks,
                 chunkIndex: 0,
                 classified: classified,
-                hasRiskStyle: needsRiskStyleValidation,
+                shouldValidate: needsRiskStyleValidation || needsPageValidation,
                 chapter: chapter,
                 key: key,
                 validator: validator,
                 composer: composer,
-                safePageOrdinal: safePageOrdinal,
                 cancellationToken: cancellationToken,
               );
             } catch (error) {
@@ -452,6 +458,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
             var keepBackedChunksSeparate = false;
             var firstChunkValidated = validation.validationCount > 0;
             if (firstChunkValidated && validation.firstMismatch == null) {
+              validatedSafePageOrdinals.add(candidatePageOrdinal);
               if (riskStyleSignature != null) {
                 validatedRiskStyleSignatures.add(riskStyleSignature);
               }
@@ -475,7 +482,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
                   width: key.viewportWidthPx.toDouble(),
                   pageHeight: backedHeight,
                   firstPageHeight: backedHeight,
-                  paragraphSpacing: preferences.typography.paragraphSpacing,
+                  paragraphSpacing: _paragraphSpacingFor(classified.atom),
                   typographySignature: key.typographySignature,
                   textDirection: textDirection,
                   textAlign: textAlign,
@@ -525,6 +532,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
               accepted = backed;
               keepBackedChunksSeparate = true;
               firstChunkValidated = true;
+              validatedSafePageOrdinals.add(composer.pages.length);
               if (riskStyleSignature != null) {
                 validatedRiskStyleSignatures.add(riskStyleSignature);
               }
@@ -532,10 +540,12 @@ final class DefaultNovelReaderHybridPaginationPlanner
             var remainderFellBack = false;
             for (var index = 0; index < accepted.chunks.length; index += 1) {
               final chunk = accepted.chunks[index];
+              final pageOrdinal = composer.pages.length;
               final shouldValidate =
                   !(index == 0 && firstChunkValidated) &&
+                  !validatedSafePageOrdinals.contains(pageOrdinal) &&
                   validationPolicy.shouldValidate(
-                    safePageOrdinal: safePageOrdinal,
+                    safePageOrdinal: pageOrdinal,
                     hasRiskStyle: false,
                   );
               if (shouldValidate) {
@@ -565,6 +575,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
                   );
                 }
                 rendererValidationCount += 1;
+                validatedSafePageOrdinals.add(pageOrdinal);
                 if (!result.matches) {
                   rendererValidationMismatchCount += 1;
                   safeTextFallbackCount += 1;
@@ -597,14 +608,16 @@ final class DefaultNovelReaderHybridPaginationPlanner
                   break;
                 }
               }
-              composer.appendTextChunk(chunk);
+              composer.appendTextChunk(
+                chunk,
+                contributesRenderableContent: chunk.hasRenderableContent,
+              );
               if (keepBackedChunksSeparate) {
                 composer.flush(
                   gapReason: NovelReaderPageGapReason.algorithmBoundary,
                 );
               }
               textFastPathCount += 1;
-              safePageOrdinal += 1;
               await publishFinalPages();
             }
             if (remainderFellBack) {
@@ -674,6 +687,10 @@ final class DefaultNovelReaderHybridPaginationPlanner
               classified,
               block,
               combineWithBufferedContent: combineWithBufferedContent,
+              keepPageOpen:
+                  classified.route == NovelReaderPaginationRoute.rubyInline &&
+                  !block.metrics.isOversized &&
+                  !block.metrics.requiresInnerScroll,
             );
             await publishFinalPages();
         }
@@ -694,12 +711,11 @@ final class DefaultNovelReaderHybridPaginationPlanner
     required List<NovelReaderTextPageChunk> chunks,
     required int chunkIndex,
     required NovelReaderClassifiedPaginationAtom classified,
-    required bool hasRiskStyle,
+    required bool shouldValidate,
     required NovelReaderPreparedChapter chapter,
     required NovelReaderPaginationKey key,
     required NovelReaderPaginationRendererValidator validator,
     required NovelReaderPaginationPageComposer composer,
-    required int safePageOrdinal,
     required NovelReaderPaginationCancellationToken cancellationToken,
   }) async {
     if (chunkIndex < 0 || chunkIndex >= chunks.length) {
@@ -709,10 +725,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
         firstMismatch: null,
       );
     }
-    if (!validationPolicy.shouldValidate(
-      safePageOrdinal: safePageOrdinal,
-      hasRiskStyle: hasRiskStyle,
-    )) {
+    if (!shouldValidate) {
       return const _TextValidationSummary(
         validationCount: 0,
         mismatchCount: 0,
@@ -796,6 +809,15 @@ final class DefaultNovelReaderHybridPaginationPlanner
     final fontSize = baseStyle.fontSize ?? 14;
     final height = baseStyle.height ?? 1.2;
     return fontSize * height;
+  }
+
+  double _paragraphSpacingFor(NovelReaderPaginationAtom atom) {
+    return switch (atom.kind) {
+      NovelReaderPaginationAtomKind.lineBlock ||
+      NovelReaderPaginationAtomKind.inlineText ||
+      NovelReaderPaginationAtomKind.spacer => 0,
+      _ => preferences.typography.paragraphSpacing,
+    };
   }
 
   String? _riskStyleSignature(List<NovelReaderPaginationTextRun> runs) {

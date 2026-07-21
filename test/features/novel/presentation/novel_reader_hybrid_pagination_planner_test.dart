@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -153,6 +154,172 @@ void main() {
       expect(plan.pages.single.html, contains('第一段短文'));
       expect(plan.pages.single.html, contains('第二段短文'));
       expect(plan.pages.single.anchorRanges, hasLength(2));
+    },
+  );
+
+  test('top-level br-separated lines share pages on the text path', () async {
+    final source = List<String>.generate(
+      24,
+      (index) => '第${index + 1}句短文。<br>\r\n',
+    ).join();
+    final chapter = await _prepare(source);
+
+    final plan = await _planner(
+      _RecordingMeasureAdapter(),
+    ).paginate(chapter, _key(chapter, height: 120));
+
+    expect(plan.pageCount, greaterThan(1));
+    expect(plan.pageCount, lessThan(24));
+    expect(plan.complexBlockCount, 0);
+    expect(plan.routeCounts.keys, <NovelReaderPaginationRoute>{
+      NovelReaderPaginationRoute.safeText,
+    });
+    final combinedHtml = plan.pages.map((page) => page.html).join();
+    expect(combinedHtml, contains('第1句短文。<br>'));
+    expect(combinedHtml, contains('第24句短文。'));
+    expect(combinedHtml, isNot(endsWith('<br>')));
+  });
+
+  test('does not publish separator-only pages before an image', () async {
+    final chapter = await _prepare(
+      '<p>图片前正文。</p>'
+      '<div>&nbsp; &nbsp;</div>'
+      '<br><br>'
+      '<img src="data/attachment/forum/blank-page.jpg">',
+    );
+
+    final plan = await _planner(
+      _RecordingMeasureAdapter(),
+    ).paginate(chapter, _key(chapter, height: 42));
+
+    expect(plan.pages, hasLength(2));
+    expect(plan.pages.first.html, contains('图片前正文'));
+    expect(plan.pages.first.containsIsolatedImage, isFalse);
+    expect(plan.pages.last.containsIsolatedImage, isTrue);
+    expect(plan.pages.last.html, contains('blank-page.jpg'));
+    expect(
+      plan.pages.where((page) {
+        final fragment = html_parser.parseFragment(page.html);
+        final text = (fragment.text ?? '').replaceAll('\u00A0', ' ').trim();
+        return text.isEmpty && fragment.querySelector('img') == null;
+      }),
+      isEmpty,
+    );
+  });
+
+  test(
+    'drops a whitespace-only text chunk before an image at 18.5 and 1.6',
+    () async {
+      final chapter = await _prepare(
+        '<div>图片前正文。<br>\r\n<br>\r\n<br>\r\n<br>\r\n</div>'
+        '<img src="data/attachment/forum/blank-chunk.jpg">',
+      );
+
+      final plan = await _planner(
+        _RecordingMeasureAdapter(),
+      ).paginate(chapter, _key(chapter, height: 60));
+
+      expect(
+        plan.pages.where((page) => page.containsIsolatedImage),
+        hasLength(1),
+      );
+      expect(
+        plan.pages.where(
+          (page) =>
+              !page.containsIsolatedImage && _visibleText(page.html).isEmpty,
+        ),
+        isEmpty,
+      );
+      expect(
+        plan.pages.where((page) => _visibleText(page.html).contains('图片前正文')),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('does not place a blank page before the fixture image', () async {
+    final fixture = await File(
+      'test/features/novel/fixtures/pagination/'
+      'nested_title_attachment_v1.html',
+    ).readAsString();
+    final html = fixture.replaceFirst(
+      '[attach]841380[/attach]',
+      '<img src="data/attachment/forum/nested-title-cover.jpg">',
+    );
+    final chapter = await _prepare(html);
+
+    final plan = await _planner(
+      _RecordingMeasureAdapter(),
+    ).paginate(chapter, _key(chapter, height: 600));
+
+    final imagePageIndex = plan.pages.indexWhere(
+      (page) => page.containsIsolatedImage,
+    );
+    expect(imagePageIndex, greaterThan(0));
+    expect(
+      _visibleText(plan.pages[imagePageIndex - 1].html),
+      isNotEmpty,
+      reason: 'A separator-only page must not be emitted before an image.',
+    );
+    expect(
+      plan.pages.where(
+        (page) =>
+            !page.containsIsolatedImage && _visibleText(page.html).isEmpty,
+      ),
+      isEmpty,
+    );
+    final textBeforeImage = plan.pages
+        .take(imagePageIndex)
+        .map((page) => _visibleText(page.html))
+        .join(' ');
+    expect(textBeforeImage, contains('尊重发帖人的意愿'));
+    expect(textBeforeImage, contains('默默下载就是了'));
+    expect(plan.pages[imagePageIndex].html, contains('nested-title-cover.jpg'));
+  });
+
+  test(
+    'ACT23 fixture packs Discuz lines around ruby without sparse pages',
+    () async {
+      final html = await File(
+        'test/features/novel/fixtures/pagination/'
+        'act23_ruby_collapse_v1.html',
+      ).readAsString();
+      final chapter = await _prepare(html);
+      final plan = await _planner(
+        _RecordingMeasureAdapter(
+          heightFor: (request, _) {
+            if (request.html.contains('showcollapse_box')) {
+              return 60;
+            }
+            if (request.html.contains('<ruby>')) {
+              return 120;
+            }
+            return 10;
+          },
+        ),
+      ).paginate(chapter, _key(chapter, height: 600));
+
+      expect(plan.routeCounts[NovelReaderPaginationRoute.safeText], 88);
+      expect(plan.routeCounts[NovelReaderPaginationRoute.rubyInline], 1);
+      expect(plan.routeCounts[NovelReaderPaginationRoute.collapseBlock], 1);
+      expect(plan.pageCount, lessThanOrEqualTo(8));
+      expect(plan.averageTextPageFullness, greaterThan(0.9));
+      expect(
+        plan.pages
+            .take(plan.pageCount - 1)
+            .every((page) => page.fullness > 0.85),
+        isTrue,
+      );
+      expect(
+        plan.pages.where((page) => _visibleText(page.html).isEmpty),
+        isEmpty,
+      );
+      final combinedText = plan.pages
+          .map((page) => _visibleText(page.html))
+          .join();
+      expect(combinedText, contains('ACT23'));
+      expect(combinedText, contains('我也好想变成像蓝沙前辈那样出色的姐姐啊'));
+      expect(combinedText, contains('碎碎念'));
     },
   );
 
@@ -515,6 +682,13 @@ void main() {
       expect(plan.pages.single.html, chapter.html);
     },
   );
+}
+
+String _visibleText(String html) {
+  return (html_parser.parseFragment(html).text ?? '')
+      .replaceAll('\u00A0', ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 }
 
 DefaultNovelReaderHybridPaginationPlanner _planner(

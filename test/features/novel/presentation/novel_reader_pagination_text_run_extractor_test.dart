@@ -181,6 +181,115 @@ void main() {
     expect(run.style.decoration, TextDecoration.underline);
   });
 
+  test('accepts standard root alignment with a known author font', () {
+    for (final alignment in const <String>[
+      'left',
+      'right',
+      'center',
+      'justify',
+    ]) {
+      final classified = classifier.classify(
+        atom: _atom(
+          '<div align="$alignment"><font face="Arial">正文</font></div>',
+        ),
+        baseStyle: _baseStyle,
+        preferences: _preferences,
+        theme: _lightTheme,
+      );
+
+      expect(
+        classified.route,
+        NovelReaderPaginationRoute.safeText,
+        reason: alignment,
+      );
+      final run = extractor
+          .extract(
+            classifiedAtom: classified,
+            baseStyle: _baseStyle,
+            preferences: _preferences,
+            theme: _lightTheme,
+          )
+          .single;
+      expect(run.style.fontFamily, 'Arial', reason: alignment);
+    }
+  });
+
+  test('rejects unknown or nested alignment attributes', () {
+    final unknownValue = classifier.classify(
+      atom: _atom('<div align="diagonal">正文</div>'),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+    final nestedAlignment = classifier.classify(
+      atom: _atom('<div><span align="left">正文</span></div>'),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+
+    expect(unknownValue.route, NovelReaderPaginationRoute.complexHtml);
+    expect(
+      unknownValue.reason,
+      NovelReaderPaginationRouteReason.unsupportedAttribute,
+    );
+    expect(nestedAlignment.route, NovelReaderPaginationRoute.complexHtml);
+    expect(
+      nestedAlignment.reason,
+      NovelReaderPaginationRouteReason.unsupportedAttribute,
+    );
+  });
+
+  test('accepts only the controlled pstatus class', () {
+    final editStatus = classifier.classify(
+      atom: _atom(
+        '<i class="pstatus">最后编辑时间</i>',
+        kind: NovelReaderPaginationAtomKind.inlineText,
+      ),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+    final unknownClass = classifier.classify(
+      atom: _atom(
+        '<i class="custom-status">正文</i>',
+        kind: NovelReaderPaginationAtomKind.inlineText,
+      ),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+
+    expect(editStatus.route, NovelReaderPaginationRoute.safeText);
+    expect(unknownClass.route, NovelReaderPaginationRoute.complexHtml);
+    expect(
+      unknownClass.reason,
+      NovelReaderPaginationRouteReason.unsupportedAttribute,
+    );
+  });
+
+  test('maps common Song typeface names through the shared resolver', () {
+    for (final family in const <String>['宋体', 'SimSun']) {
+      final classified = classifier.classify(
+        atom: _atom('<div><font face="$family">章节标题</font></div>'),
+        baseStyle: _baseStyle,
+        preferences: _preferences,
+        theme: _lightTheme,
+      );
+
+      expect(classified.route, NovelReaderPaginationRoute.safeText);
+      final run = extractor
+          .extract(
+            classifiedAtom: classified,
+            baseStyle: _baseStyle,
+            preferences: _preferences,
+            theme: _lightTheme,
+          )
+          .single;
+      expect(run.style.fontFamily, 'SimSun');
+    }
+  });
+
   test('keeps prepared author colors aligned across reader themes', () {
     for (final theme in <ForumHtmlThemeContext>[
       _lightTheme,
@@ -240,6 +349,26 @@ void main() {
       classified.reason,
       NovelReaderPaginationRouteReason.isolatedReadableImage,
     );
+  });
+
+  test('routes a structural br spacer through the safe text path', () {
+    final classified = classifier.classify(
+      atom: _atom('<br>', kind: NovelReaderPaginationAtomKind.spacer),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+
+    expect(classified.route, NovelReaderPaginationRoute.safeText);
+    expect(classified.isBreakable, isTrue);
+    final runs = extractor.extract(
+      classifiedAtom: classified,
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+    expect(runs, hasLength(1));
+    expect(runs.single.isParagraphBreak, isTrue);
   });
 }
 

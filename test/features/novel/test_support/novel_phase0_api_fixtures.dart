@@ -43,6 +43,14 @@ const novelPhase0AuthorPageFixturePaths = <String>[
   'test/features/novel/fixtures/phase0/author_posts_v1_page_3.json',
 ];
 
+const novelPaginationShortParagraphFixturePath =
+    'test/features/novel/fixtures/pagination/'
+    'thread_572954_pid_41569751_v1.json';
+
+const novelPaginationDivParagraphFixturePath =
+    'test/features/novel/fixtures/pagination/'
+    'thread_565218_pid_41425060_v1.json';
+
 Map<String, dynamic> _asStringMap(Object? value) {
   if (value is Map<String, dynamic>) {
     return value;

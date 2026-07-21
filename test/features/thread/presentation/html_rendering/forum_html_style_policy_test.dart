@@ -55,6 +55,29 @@ void main() {
     expect(policy.customStylesFor(fragment.querySelector('span')!), isNull);
   });
 
+  test('paged Discuz line mode keeps p spacing but removes div margins', () {
+    final preferences = ForumHtmlReaderPreferences.defaults().copyWith(
+      typography: const RichTextTypography(
+        fontScale: 1,
+        lineHeightScale: 1.6,
+        paragraphSpacing: 12,
+      ),
+    );
+    final policy = ForumHtmlStylePolicy(
+      preferences,
+      theme: _theme,
+      blockSpacingMode: ForumHtmlBlockSpacingMode.discuzLineDivs,
+    );
+    final fragment = html_parser.parseFragment(
+      '<div>Discuz 行</div><p>语义段落</p>',
+    );
+
+    expect(policy.customStylesFor(fragment.querySelector('div')!), isNull);
+    expect(policy.customStylesFor(fragment.querySelector('p')!), {
+      'margin': '0 0 12.0px',
+    });
+  });
+
   test('styles the outer quote surface without nesting duplicate chrome', () {
     final policy = _policy(
       ForumHtmlReaderPreferences.defaults().copyWith(

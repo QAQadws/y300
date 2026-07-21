@@ -2,6 +2,7 @@ import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_text_run.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_text_range_slicer.dart';
@@ -92,6 +93,32 @@ final class DefaultNovelReaderTextPaginationEngine
         resolvedFirstPageHeight <= 0) {
       throw ArgumentError('Text pagination requires positive finite bounds.');
     }
+    if (atom.atom.kind == NovelReaderPaginationAtomKind.spacer) {
+      final metrics = NovelReaderTextLayoutMetrics(
+        runId: atom.atom.atomId,
+        lineRanges: const <NovelReaderTextLineRange>[],
+        totalHeight: 0,
+        width: width,
+        typographySignature: typographySignature,
+      );
+      return NovelReaderTextPaginationResult(
+        chunks: <NovelReaderTextPageChunk>[
+          NovelReaderTextPageChunk(
+            html: atom.atom.html,
+            startAnchor: atom.atom.startAnchor,
+            endAnchor: atom.atom.endAnchor,
+            sourceStart: 0,
+            sourceEnd: 0,
+            usedHeight: 0,
+            isOversized: false,
+            hasRenderableContent: false,
+          ),
+        ],
+        metrics: metrics,
+        metricsCacheHit: false,
+        layoutCount: 0,
+      );
+    }
     final key = _TextMetricsKey(
       atomId: atom.atom.atomId,
       contentSignature: _contentSignature(atom.atom.html, runs),
@@ -143,11 +170,7 @@ final class DefaultNovelReaderTextPaginationEngine
   }) {
     final flattened = _flattenRuns(atom, runs);
     final painter = TextPainter(
-      text: TextSpan(
-        children: runs
-            .map((run) => TextSpan(text: run.text, style: run.style))
-            .toList(growable: false),
-      ),
+      text: TextSpan(children: flattened.spans),
       textDirection: textDirection,
       textAlign: textAlign,
       textScaler: textScaler,
@@ -186,10 +209,17 @@ final class DefaultNovelReaderTextPaginationEngine
             top: top,
             bottom: bottom,
             hardBreak: metric.hardBreak,
+            hasRenderableContent: _hasRenderableText(
+              flattened.text.substring(start, end),
+            ),
           ),
         );
         top = bottom;
-        layoutOffset = end > layoutOffset ? end : layoutOffset + 1;
+        layoutOffset = _nextLineLayoutOffset(
+          flattened.text,
+          boundaryEnd: end,
+          currentOffset: layoutOffset,
+        );
       }
       return NovelReaderTextLayoutMetrics(
         runId: atom.atom.atomId,
@@ -220,6 +250,9 @@ final class DefaultNovelReaderTextPaginationEngine
           end: atom.atom.textLength,
           usedHeight: metrics.totalHeight + paragraphSpacing,
           isOversized: metrics.totalHeight + paragraphSpacing > pageHeight,
+          hasRenderableContent: metrics.lineRanges.any(
+            (line) => line.hasRenderableContent,
+          ),
         ),
       ];
     }
@@ -233,6 +266,9 @@ final class DefaultNovelReaderTextPaginationEngine
           end: atom.atom.textLength,
           usedHeight: height,
           isOversized: height > pageHeight,
+          hasRenderableContent: metrics.lineRanges.any(
+            (line) => line.hasRenderableContent,
+          ),
         ),
       ];
     }
@@ -240,6 +276,7 @@ final class DefaultNovelReaderTextPaginationEngine
     final chunks = <NovelReaderTextPageChunk>[];
     var firstLine = 0;
     var usedHeight = 0.0;
+    var hasRenderableContent = false;
     for (var index = 0; index < metrics.lineRanges.length; index += 1) {
       final line = metrics.lineRanges[index];
       final isLastLine = index == metrics.lineRanges.length - 1;
@@ -255,12 +292,15 @@ final class DefaultNovelReaderTextPaginationEngine
             end: previous.sourceEnd,
             usedHeight: usedHeight,
             isOversized: false,
+            hasRenderableContent: hasRenderableContent,
           ),
         );
         firstLine = index;
         usedHeight = 0;
+        hasRenderableContent = false;
       }
       usedHeight += addition;
+      hasRenderableContent = hasRenderableContent || line.hasRenderableContent;
       final lineBudget = chunks.isEmpty ? firstPageHeight : pageHeight;
       if (usedHeight > lineBudget && firstLine == index) {
         chunks.add(
@@ -271,10 +311,12 @@ final class DefaultNovelReaderTextPaginationEngine
             end: line.sourceEnd,
             usedHeight: usedHeight,
             isOversized: true,
+            hasRenderableContent: hasRenderableContent,
           ),
         );
         firstLine = index + 1;
         usedHeight = 0;
+        hasRenderableContent = false;
       }
     }
     if (firstLine < metrics.lineRanges.length) {
@@ -286,6 +328,7 @@ final class DefaultNovelReaderTextPaginationEngine
           end: metrics.lineRanges.last.sourceEnd,
           usedHeight: usedHeight,
           isOversized: usedHeight > pageHeight,
+          hasRenderableContent: hasRenderableContent,
         ),
       );
     }
@@ -299,6 +342,7 @@ final class DefaultNovelReaderTextPaginationEngine
     required int end,
     required double usedHeight,
     required bool isOversized,
+    required bool hasRenderableContent,
   }) {
     final safeStart = start.clamp(0, atom.atom.textLength);
     final safeEnd = end.clamp(safeStart, atom.atom.textLength);
@@ -313,14 +357,49 @@ final class DefaultNovelReaderTextPaginationEngine
       sourceEnd: safeEnd,
       usedHeight: usedHeight,
       isOversized: isOversized,
+      hasRenderableContent: hasRenderableContent,
     );
   }
+
+  bool _hasRenderableText(String text) {
+    return _renderableTextPattern.hasMatch(text);
+  }
+
+  int _nextLineLayoutOffset(
+    String text, {
+    required int boundaryEnd,
+    required int currentOffset,
+  }) {
+    var next = boundaryEnd.clamp(0, text.length);
+    if (next < text.length) {
+      final codeUnit = text.codeUnitAt(next);
+      if (codeUnit == 0x0D &&
+          next + 1 < text.length &&
+          text.codeUnitAt(next + 1) == 0x0A) {
+        next += 2;
+      } else if (codeUnit == 0x0A ||
+          codeUnit == 0x0D ||
+          codeUnit == 0x2028 ||
+          codeUnit == 0x2029) {
+        next += 1;
+      }
+    }
+    if (next <= currentOffset && currentOffset < text.length) {
+      return currentOffset + 1;
+    }
+    return next;
+  }
+
+  static final RegExp _renderableTextPattern = RegExp(
+    r'[^\s\u00A0\u200B\u2060\u3000\uFEFF]',
+  );
 
   _FlattenedText _flattenRuns(
     NovelReaderClassifiedPaginationAtom atom,
     List<NovelReaderPaginationTextRun> runs,
   ) {
     final buffer = StringBuffer();
+    final spans = <InlineSpan>[];
     final sourceOffsets = <int>[0];
     final atomBase = atom.atom.startAnchor.textOffset;
     var currentSource = 0;
@@ -329,24 +408,80 @@ final class DefaultNovelReaderTextPaginationEngine
         currentSource,
         atom.atom.textLength,
       );
-      for (final rune in run.text.runes) {
-        final text = String.fromCharCode(rune);
-        buffer.write(text);
-        final nextSource = run.isParagraphBreak
-            ? currentSource
-            : (currentSource + 1).clamp(0, atom.atom.textLength);
-        for (var unit = 0; unit < text.length; unit += 1) {
-          sourceOffsets.add(
-            unit == text.length - 1 ? nextSource : currentSource,
+      final spanText = StringBuffer();
+      final runes = run.text.runes.toList(growable: false);
+      for (var index = 0; index < runes.length; index += 1) {
+        final sourceStart = currentSource;
+        if (run.isParagraphBreak) {
+          _appendLayoutText(
+            text: String.fromCharCode(runes[index]),
+            sourceStart: sourceStart,
+            sourceEnd: sourceStart,
+            documentBuffer: buffer,
+            spanBuffer: spanText,
+            sourceOffsets: sourceOffsets,
           );
+          continue;
         }
-        currentSource = nextSource;
+        if (_isCollapsibleHtmlWhitespace(runes[index])) {
+          do {
+            currentSource = (currentSource + 1).clamp(0, atom.atom.textLength);
+            index += 1;
+          } while (index < runes.length &&
+              _isCollapsibleHtmlWhitespace(runes[index]));
+          index -= 1;
+          _appendLayoutText(
+            text: ' ',
+            sourceStart: sourceStart,
+            sourceEnd: currentSource,
+            documentBuffer: buffer,
+            spanBuffer: spanText,
+            sourceOffsets: sourceOffsets,
+          );
+          continue;
+        }
+        currentSource = (currentSource + 1).clamp(0, atom.atom.textLength);
+        _appendLayoutText(
+          text: String.fromCharCode(runes[index]),
+          sourceStart: sourceStart,
+          sourceEnd: currentSource,
+          documentBuffer: buffer,
+          spanBuffer: spanText,
+          sourceOffsets: sourceOffsets,
+        );
+      }
+      if (spanText.isNotEmpty) {
+        spans.add(TextSpan(text: spanText.toString(), style: run.style));
       }
     }
     return _FlattenedText(
       buffer.toString(),
       List<int>.unmodifiable(sourceOffsets),
+      List<InlineSpan>.unmodifiable(spans),
     );
+  }
+
+  void _appendLayoutText({
+    required String text,
+    required int sourceStart,
+    required int sourceEnd,
+    required StringBuffer documentBuffer,
+    required StringBuffer spanBuffer,
+    required List<int> sourceOffsets,
+  }) {
+    documentBuffer.write(text);
+    spanBuffer.write(text);
+    for (var unit = 0; unit < text.length; unit += 1) {
+      sourceOffsets.add(unit == text.length - 1 ? sourceEnd : sourceStart);
+    }
+  }
+
+  bool _isCollapsibleHtmlWhitespace(int rune) {
+    return rune == 0x09 ||
+        rune == 0x0A ||
+        rune == 0x0C ||
+        rune == 0x0D ||
+        rune == 0x20;
   }
 
   String _contentSignature(
@@ -382,10 +517,11 @@ final class DefaultNovelReaderTextPaginationEngine
 }
 
 final class _FlattenedText {
-  const _FlattenedText(this.text, this.sourceOffsets);
+  const _FlattenedText(this.text, this.sourceOffsets, this.spans);
 
   final String text;
   final List<int> sourceOffsets;
+  final List<InlineSpan> spans;
 }
 
 final class _TextMetricsKey {

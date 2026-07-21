@@ -37,6 +37,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.onBlockImageResolved,
     this.preparedDocument,
     this.contentImageKind = ForumImageKind.threadInline,
+    this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -63,12 +64,17 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   onBlockImageResolved;
   final ForumHtmlPreparedRenderDocument? preparedDocument;
   final ForumImageKind contentImageKind;
+  final ForumHtmlBlockSpacingMode blockSpacingMode;
 
   @override
   Widget build(BuildContext context) {
     final resolvedPreferences =
         preferences ?? ForumHtmlReaderPreferences.defaults();
-    final stylePolicy = ForumHtmlStylePolicy(resolvedPreferences, theme: theme);
+    final stylePolicy = ForumHtmlStylePolicy(
+      resolvedPreferences,
+      theme: theme,
+      blockSpacingMode: blockSpacingMode,
+    );
     final document =
         preparedDocument ??
         const DefaultForumHtmlRenderPreparer().prepare(
@@ -179,6 +185,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
           onBlockImageResolved: onBlockImageResolved,
           contentImageKind: contentImageKind,
+          blockSpacingMode: blockSpacingMode,
           preparedDocument: document.copyWith(preparedHtml: html),
         );
       },

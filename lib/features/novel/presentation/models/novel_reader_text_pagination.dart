@@ -9,6 +9,7 @@ final class NovelReaderTextLineRange {
     required this.top,
     required this.bottom,
     required this.hardBreak,
+    required this.hasRenderableContent,
   });
 
   final int layoutStart;
@@ -18,6 +19,7 @@ final class NovelReaderTextLineRange {
   final double top;
   final double bottom;
   final bool hardBreak;
+  final bool hasRenderableContent;
 
   double get height => bottom - top;
 }
@@ -47,6 +49,7 @@ final class NovelReaderTextPageChunk {
     required this.sourceEnd,
     required this.usedHeight,
     required this.isOversized,
+    required this.hasRenderableContent,
   });
 
   final String html;
@@ -56,6 +59,7 @@ final class NovelReaderTextPageChunk {
   final int sourceEnd;
   final double usedHeight;
   final bool isOversized;
+  final bool hasRenderableContent;
 }
 
 final class NovelReaderTextPaginationResult {

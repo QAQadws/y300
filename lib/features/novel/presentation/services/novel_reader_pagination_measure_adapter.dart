@@ -6,6 +6,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
@@ -205,6 +206,7 @@ final class NovelReaderHtmlPaginationMeasureAdapter
     this.threadId,
     this.imageCacheOwnerId,
     this.imageHeaderBuilder,
+    this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
     this.timeout = const Duration(milliseconds: 800),
   }) : _hostContext = hostContext;
 
@@ -215,6 +217,7 @@ final class NovelReaderHtmlPaginationMeasureAdapter
   final String? threadId;
   final String? imageCacheOwnerId;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ForumHtmlBlockSpacingMode blockSpacingMode;
   final Duration timeout;
 
   @override
@@ -230,6 +233,7 @@ final class NovelReaderHtmlPaginationMeasureAdapter
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,
       imageHeaderBuilder: imageHeaderBuilder,
+      blockSpacingMode: blockSpacingMode,
       chapter: chapter,
       key: key,
       timeout: timeout,
@@ -274,6 +278,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
     required this.threadId,
     required this.imageCacheOwnerId,
     required this.imageHeaderBuilder,
+    required this.blockSpacingMode,
     required this.chapter,
     required this.key,
     required this.timeout,
@@ -286,6 +291,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
   final String? threadId;
   final String? imageCacheOwnerId;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final ForumHtmlBlockSpacingMode blockSpacingMode;
   final NovelReaderPreparedChapter chapter;
   final NovelReaderPaginationKey key;
   final Duration timeout;
@@ -423,6 +429,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
       imageCacheOwnerId: imageCacheOwnerId,
       buildAsync: false,
       enableCaching: false,
+      blockSpacingMode: blockSpacingMode,
     );
   }
 

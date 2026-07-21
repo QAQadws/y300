@@ -34,7 +34,10 @@ final class NovelReaderPaginationPageComposer {
         block.metrics.height <= remainingHeight;
   }
 
-  void appendTextChunk(NovelReaderTextPageChunk chunk) {
+  void appendTextChunk(
+    NovelReaderTextPageChunk chunk, {
+    bool contributesRenderableContent = true,
+  }) {
     if (chunk.html.trim().isEmpty && chunk.sourceEnd <= chunk.sourceStart) {
       return;
     }
@@ -47,6 +50,7 @@ final class NovelReaderPaginationPageComposer {
           end: chunk.endAnchor,
           usedHeight: chunk.usedHeight,
           overflowState: NovelReaderPageOverflowState.minimumTextFragment,
+          contributesRenderableContent: contributesRenderableContent,
         );
       _emit(
         buffer,
@@ -64,6 +68,7 @@ final class NovelReaderPaginationPageComposer {
       start: chunk.startAnchor,
       end: chunk.endAnchor,
       usedHeight: chunk.usedHeight,
+      contributesRenderableContent: contributesRenderableContent,
     );
     if (remainingHeight <= 0.01) {
       flush(gapReason: NovelReaderPageGapReason.algorithmBoundary);
@@ -74,6 +79,7 @@ final class NovelReaderPaginationPageComposer {
     NovelReaderClassifiedPaginationAtom atom,
     NovelReaderComplexBlockPage block, {
     bool combineWithBufferedContent = false,
+    bool keepPageOpen = false,
   }) {
     if (!combineWithBufferedContent) {
       flush(gapReason: _gapReasonFor(atom.route));
@@ -92,6 +98,12 @@ final class NovelReaderPaginationPageComposer {
           : NovelReaderPageOverflowState.none,
       imageIndices: atom.atom.imageIndices,
     );
+    if (keepPageOpen &&
+        !block.metrics.isOversized &&
+        !block.metrics.requiresInnerScroll) {
+      _buffer = buffer;
+      return;
+    }
     _emit(
       buffer,
       gapReason: block.metrics.isOversized
@@ -131,7 +143,7 @@ final class NovelReaderPaginationPageComposer {
   void flush({required NovelReaderPageGapReason gapReason}) {
     final buffer = _buffer;
     _buffer = null;
-    if (buffer == null || buffer.html.trim().isEmpty) {
+    if (buffer == null || !buffer.hasRenderableContent) {
       return;
     }
     _emit(buffer, gapReason: gapReason);
@@ -147,6 +159,9 @@ final class NovelReaderPaginationPageComposer {
     required NovelReaderPageGapReason gapReason,
     bool requiresInnerScroll = false,
   }) {
+    if (!buffer.hasRenderableContent) {
+      return;
+    }
     if (_pages.length >= maxPages) {
       throw const NovelReaderPaginationException(
         code: 'pageLimitExceeded',
@@ -195,6 +210,7 @@ final class _ComposedPageBuffer {
   NovelReaderPageOverflowState overflowState =
       NovelReaderPageOverflowState.none;
   bool containsIsolatedImage = false;
+  bool hasRenderableContent = false;
 
   String get html => _html.toString();
   List<int> get imageIndices {
@@ -214,6 +230,7 @@ final class _ComposedPageBuffer {
         NovelReaderPageOverflowState.none,
     Iterable<int> imageIndices = const <int>[],
     bool containsIsolatedImage = false,
+    bool contributesRenderableContent = true,
   }) {
     startAnchor ??= start;
     endAnchor = end;
@@ -226,5 +243,6 @@ final class _ComposedPageBuffer {
     }
     this.containsIsolatedImage =
         this.containsIsolatedImage || containsIsolatedImage;
+    hasRenderableContent = hasRenderableContent || contributesRenderableContent;
   }
 }

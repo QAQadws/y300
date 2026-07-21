@@ -161,6 +161,66 @@ void main() {
     expect(second, contains('<br>'));
     expect(second, contains('color:#123456'));
   });
+
+  test('preserves a structural br without layout or page height', () {
+    final prepared = _safeAtom(
+      '<br>',
+      kind: NovelReaderPaginationAtomKind.spacer,
+    );
+
+    final result = DefaultNovelReaderTextPaginationEngine().paginate(
+      atom: prepared.$1,
+      runs: prepared.$2,
+      width: 160,
+      pageHeight: 120,
+      paragraphSpacing: 0,
+      typographySignature: 'structural-break',
+    );
+
+    expect(result.layoutCount, 0);
+    expect(result.metrics.totalHeight, 0);
+    expect(result.chunks, hasLength(1));
+    expect(result.chunks.single.html, '<br>');
+    expect(result.chunks.single.usedHeight, 0);
+    expect(result.chunks.single.hasRenderableContent, isFalse);
+  });
+
+  test('marks a whitespace-only chunk as non-renderable at 18.5 and 1.6', () {
+    final prepared = _safeAtom(
+      '<p>第一页正文<br>\r\n<br>\r\n<br>\r\n<br>\r\n最后正文</p>',
+    );
+
+    final result = DefaultNovelReaderTextPaginationEngine().paginate(
+      atom: prepared.$1,
+      runs: prepared.$2,
+      width: 320,
+      pageHeight: 60,
+      paragraphSpacing: 0,
+      typographySignature: 'font=18.5|line=1.6',
+    );
+
+    expect(result.chunks.length, greaterThan(2));
+    expect(
+      result.chunks.where((chunk) => !chunk.hasRenderableContent),
+      isNotEmpty,
+    );
+    expect(result.chunks.first.hasRenderableContent, isTrue);
+    final renderableHtml = result.chunks
+        .where((chunk) => chunk.hasRenderableContent)
+        .map((chunk) => chunk.html)
+        .join();
+    expect(renderableHtml, contains('第一页正文'));
+    expect(renderableHtml, contains('最后正文'));
+    for (final chunk in result.chunks.where(
+      (chunk) => !chunk.hasRenderableContent,
+    )) {
+      final text = html_parser.parseFragment(chunk.html).text ?? '';
+      expect(
+        text.replaceAll('\u00A0', ' ').replaceAll('\u3000', ' ').trim(),
+        isEmpty,
+      );
+    }
+  });
 }
 
 NovelReaderTextPaginationResult _paginate(

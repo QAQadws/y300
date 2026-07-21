@@ -674,6 +674,31 @@ void main() {
       find.byKey(const Key('novel-reader-page-indicator-text')),
       findsOneWidget,
     );
+    final contentInset = tester.widget<Padding>(
+      find.byKey(const ValueKey<String>('novel-reader-paged-content-inset-0')),
+    );
+    expect(
+      (contentInset.padding as EdgeInsets).bottom,
+      greaterThan(18),
+      reason: 'The page indicator reserves only its compact text footprint.',
+    );
+    final indicatorText = tester.widget<Text>(
+      find.byKey(const Key('novel-reader-page-indicator-text')),
+    );
+    expect(indicatorText.style?.fontSize, 11);
+    expect(find.byType(DecoratedBox), findsNothing);
+    expect(
+      tester
+          .getBottomLeft(
+            find.byKey(const ValueKey<String>('novel-reader-paged-page-0')),
+          )
+          .dy,
+      lessThanOrEqualTo(
+        tester
+            .getTopLeft(find.byKey(const Key('novel-reader-page-indicator')))
+            .dy,
+      ),
+    );
   });
 
   testWidgets('NovelReaderPage restores a visible page for the same layout', (

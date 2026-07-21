@@ -21,8 +21,9 @@ class ReaderChromeInsets {
 
   double get topInset => top;
 
-  double get bottomInset =>
-      bottom + safeAreaBottom + pageIndicatorReservedHeight;
+  double get persistentBottomInset => bottom + safeAreaBottom;
+
+  double get bottomInset => persistentBottomInset + pageIndicatorReservedHeight;
 
   @override
   bool operator ==(Object other) {

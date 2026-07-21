@@ -89,6 +89,54 @@ void main() {
     expect(atoms.first.kind, NovelReaderPaginationAtomKind.text);
     expect(atoms.last.kind, NovelReaderPaginationAtomKind.image);
   });
+
+  test(
+    'classifies top-level text and br nodes without complex widgets',
+    () async {
+      final chapter = await _prepare('第一行<br>\r\n　　第二行<br>\r\n第三行<br>');
+
+      final atoms = extractor.extract(chapter);
+
+      expect(atoms.map((atom) => atom.kind), <NovelReaderPaginationAtomKind>[
+        NovelReaderPaginationAtomKind.inlineText,
+        NovelReaderPaginationAtomKind.spacer,
+        NovelReaderPaginationAtomKind.inlineText,
+        NovelReaderPaginationAtomKind.spacer,
+        NovelReaderPaginationAtomKind.inlineText,
+        NovelReaderPaginationAtomKind.spacer,
+      ]);
+      expect(atoms[0].html, '第一行');
+      expect(atoms[2].html, '　　第二行');
+      expect(atoms[4].html, '第三行');
+      expect(
+        atoms.where((atom) => atom.html.contains(RegExp(r'[\r\n]'))),
+        isEmpty,
+      );
+      expect(
+        atoms.where(
+          (atom) => atom.kind == NovelReaderPaginationAtomKind.spacer,
+        ),
+        hasLength(3),
+      );
+    },
+  );
+
+  test('keeps Discuz div lines and drops whitespace-only divs', () async {
+    final chapter = await _prepare(
+      '<div align="left"><font face="Arial">第一行</font></div>'
+      '<div align="left"><font face="Arial">&nbsp;&nbsp;</font></div>'
+      '<div align="left"><font face="Arial">　　</font></div>'
+      '<p>语义段落</p>',
+    );
+
+    final atoms = extractor.extract(chapter);
+
+    expect(atoms, hasLength(2));
+    expect(atoms.first.kind, NovelReaderPaginationAtomKind.lineBlock);
+    expect(atoms.first.html, contains('第一行'));
+    expect(atoms.last.kind, NovelReaderPaginationAtomKind.text);
+    expect(atoms.last.html, contains('语义段落'));
+  });
 }
 
 Future<NovelReaderPreparedChapter> _prepare(String html) {

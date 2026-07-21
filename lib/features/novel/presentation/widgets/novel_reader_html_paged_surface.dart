@@ -15,6 +15,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_image_reader_bridge.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
@@ -32,6 +33,7 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
@@ -168,13 +170,21 @@ class _NovelReaderHtmlPagedSurfaceState
               .clamp(0.0, 96.0)
               .toDouble();
           final topChromeInset = widget.chromeInsets.topInset;
-          final bottomChromeInset = widget.chromeInsets.bottomInset;
+          final bottomChromeInset = widget.chromeInsets.persistentBottomInset;
           final availableWidth = constraints.maxWidth - pagePadding * 2;
           final availableHeight =
               constraints.maxHeight -
               pagePadding * 2 -
               topChromeInset -
               bottomChromeInset;
+          final pageIndicatorReservedHeight = math
+              .min(
+                widget.chromeInsets.pageIndicatorReservedHeight,
+                math.max(0, availableHeight - 1),
+              )
+              .toDouble();
+          final paginationHeight =
+              availableHeight - pageIndicatorReservedHeight;
           final contentMaxWidth = widget.typography.contentMaxWidth < 160
               ? 160
               : widget.typography.contentMaxWidth;
@@ -184,7 +194,7 @@ class _NovelReaderHtmlPagedSurfaceState
           if (!constraints.hasBoundedWidth ||
               !constraints.hasBoundedHeight ||
               pageWidth <= 0 ||
-              availableHeight <= 0) {
+              paginationHeight <= 0) {
             return const _NovelReaderPaginationStateView(
               key: Key('novel-reader-paged-invalid-viewport'),
               icon: Icons.crop_free,
@@ -220,7 +230,7 @@ class _NovelReaderHtmlPagedSurfaceState
                   pageWidth,
                 ),
                 viewportHeightPx: NovelReaderPaginationKey.logicalPixels(
-                  availableHeight,
+                  paginationHeight,
                 ),
                 typographySignature: _typographySignature(
                   widget.preferences,
@@ -230,7 +240,7 @@ class _NovelReaderHtmlPagedSurfaceState
                 ),
                 themeSignature: widget.theme.signature,
                 imageDimensionRevision: prepared.imageDimensionRevision,
-                rendererRevision: 3,
+                rendererRevision: 9,
                 topChromeInsetPx: NovelReaderPaginationKey.logicalPixels(
                   topChromeInset,
                 ),
@@ -350,6 +360,7 @@ class _NovelReaderHtmlPagedSurfaceState
                               NovelReaderFlowMode.pagedRtl,
                           showProgressIndicator:
                               widget.preferences.showProgressIndicator,
+                          contentBottomInset: pageIndicatorReservedHeight,
                           theme: widget.theme,
                           htmlPreferences: htmlPreferences,
                           typography: widget.typography,
@@ -633,6 +644,7 @@ class _NovelReaderHtmlPagedSurfaceState
       threadId: widget.episode.sourceTid,
       imageCacheOwnerId: widget.episode.sourceTid,
       imageHeaderBuilder: widget.imageHeaderBuilder,
+      blockSpacingMode: ForumHtmlBlockSpacingMode.discuzLineDivs,
     );
     return DefaultNovelReaderPaginationCoordinator(
       pageBreaker: DefaultNovelReaderHybridPaginationPlanner(
@@ -809,6 +821,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     this.targetPage,
     required this.reverse,
     required this.showProgressIndicator,
+    required this.contentBottomInset,
     required this.theme,
     required this.htmlPreferences,
     required this.typography,
@@ -830,6 +843,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final int? targetPage;
   final bool reverse;
   final bool showProgressIndicator;
+  final double contentBottomInset;
   final ForumHtmlThemeContext theme;
   final ForumHtmlReaderPreferences htmlPreferences;
   final NovelReaderTypography typography;
@@ -943,45 +957,45 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
             onPageChanged: _onPageChanged,
             itemBuilder: (context, index) {
               final page = widget.plan.pages[index];
-              return _NovelReaderPagedPage(
-                key: ValueKey<String>('novel-reader-paged-page-${page.index}'),
-                page: page,
-                plan: widget.plan,
-                theme: widget.theme,
-                htmlPreferences: widget.htmlPreferences,
-                typography: widget.typography,
-                renderDocument: widget.renderDocument,
-                episode: widget.episode,
-                imageReferer: widget.imageReferer,
-                imageHeaderBuilder: widget.imageHeaderBuilder,
-                onLinkTap: widget.onLinkTap,
-                onOpenImage: widget.onOpenImage,
-                onImageFallback: widget.onImageFallback,
-                imageReaderBridge: widget.imageReaderBridge,
+              return Padding(
+                key: ValueKey<String>(
+                  'novel-reader-paged-content-inset-${page.index}',
+                ),
+                padding: EdgeInsets.only(bottom: widget.contentBottomInset),
+                child: _NovelReaderPagedPage(
+                  key: ValueKey<String>(
+                    'novel-reader-paged-page-${page.index}',
+                  ),
+                  page: page,
+                  plan: widget.plan,
+                  theme: widget.theme,
+                  htmlPreferences: widget.htmlPreferences,
+                  typography: widget.typography,
+                  renderDocument: widget.renderDocument,
+                  episode: widget.episode,
+                  imageReferer: widget.imageReferer,
+                  imageHeaderBuilder: widget.imageHeaderBuilder,
+                  onLinkTap: widget.onLinkTap,
+                  onOpenImage: widget.onOpenImage,
+                  onImageFallback: widget.onImageFallback,
+                  imageReaderBridge: widget.imageReaderBridge,
+                ),
               );
             },
           ),
           if (widget.showProgressIndicator)
             Positioned(
               key: const Key('novel-reader-page-indicator'),
-              right: 8,
-              bottom: 8,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.surface.withValues(alpha: 0.78),
-                  borderRadius: const BorderRadius.all(Radius.circular(8)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: Text(
-                    '${_currentPage + 1} / ${widget.isPageCountFinal ? pageCount : '计算中'}',
-                    key: const Key('novel-reader-page-indicator-text'),
-                  ),
+              right: NovelReaderPagedIndicatorLayout.rightInset,
+              bottom: NovelReaderPagedIndicatorLayout.bottomInset,
+              child: Text(
+                '${_currentPage + 1} / ${widget.isPageCountFinal ? pageCount : '计算中'}',
+                key: const Key('novel-reader-page-indicator-text'),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontSize: NovelReaderPagedIndicatorLayout.fontSize,
+                  height: NovelReaderPagedIndicatorLayout.lineHeight,
+                  letterSpacing: 0,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -1083,6 +1097,7 @@ class _NovelReaderPagedPage extends StatelessWidget {
       threadId: episode.sourceTid,
       imageHeaderBuilder: imageHeaderBuilder,
       imageCacheOwnerId: episode.sourceTid,
+      blockSpacingMode: ForumHtmlBlockSpacingMode.discuzLineDivs,
       callbacks: ForumHtmlRenderCallbacks(
         onTapUrl: (url) {
           onLinkTap?.call(NovelReaderLink(url: url, text: url));

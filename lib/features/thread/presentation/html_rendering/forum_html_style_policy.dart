@@ -6,16 +6,20 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_read
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
+enum ForumHtmlBlockSpacingMode { paragraphLikeDivs, discuzLineDivs }
+
 class ForumHtmlStylePolicy {
   const ForumHtmlStylePolicy(
     this.preferences, {
     required this.theme,
+    this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
     CssInlineStyleDeclarationCodec inlineStyleDeclarationCodec =
         const CssInlineStyleDeclarationCodec(),
   }) : _inlineStyleDeclarationCodec = inlineStyleDeclarationCodec;
 
   final ForumHtmlReaderPreferences preferences;
   final ForumHtmlThemeContext theme;
+  final ForumHtmlBlockSpacingMode blockSpacingMode;
   final CssInlineStyleDeclarationCodec _inlineStyleDeclarationCodec;
 
   TextStyle baseTextStyle(BuildContext context) {
@@ -158,7 +162,10 @@ class ForumHtmlStylePolicy {
 
   bool _isParagraphLike(html_dom.Element element) {
     final tagName = element.localName?.toLowerCase();
-    return tagName == 'p' || tagName == 'div' || tagName == 'blockquote';
+    return tagName == 'p' ||
+        tagName == 'blockquote' ||
+        (tagName == 'div' &&
+            blockSpacingMode == ForumHtmlBlockSpacingMode.paragraphLikeDivs);
   }
 
   bool _isQuoteSurface(html_dom.Element element) {

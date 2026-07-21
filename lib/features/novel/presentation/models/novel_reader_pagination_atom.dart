@@ -4,6 +4,8 @@ import 'package:y300/features/novel/presentation/models/novel_reader_prepared_ch
 
 enum NovelReaderPaginationAtomKind {
   text,
+  lineBlock,
+  inlineText,
   heading,
   quote,
   image,

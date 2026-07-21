@@ -114,24 +114,32 @@ final class NovelReaderPaginationAtomClassifier {
     }
 
     final roots = fragment.nodes.where(_isMeaningful).toList(growable: false);
-    if (roots.length != 1) {
+    final isInlineRoot =
+        atom.kind == NovelReaderPaginationAtomKind.inlineText ||
+        atom.kind == NovelReaderPaginationAtomKind.spacer;
+    if (roots.isEmpty || (!isInlineRoot && roots.length != 1)) {
       return _classified(
         atom,
         NovelReaderPaginationRoute.complexHtml,
         NovelReaderPaginationRouteReason.unsupportedTag,
       );
     }
-    final root = roots.single;
-    final failure = _validateNode(
-      root,
-      isRoot: true,
-      parentStyle: baseStyle,
-      baseStyle: baseStyle,
-      preferences: preferences,
-      theme: theme,
-    );
-    if (failure != null) {
-      return _classified(atom, NovelReaderPaginationRoute.complexHtml, failure);
+    for (final root in roots) {
+      final failure = _validateNode(
+        root,
+        isRoot: !isInlineRoot,
+        parentStyle: baseStyle,
+        baseStyle: baseStyle,
+        preferences: preferences,
+        theme: theme,
+      );
+      if (failure != null) {
+        return _classified(
+          atom,
+          NovelReaderPaginationRoute.complexHtml,
+          failure,
+        );
+      }
     }
     return NovelReaderClassifiedPaginationAtom(
       atom: atom,
@@ -207,11 +215,30 @@ final class NovelReaderPaginationAtomClassifier {
       final allowed = switch (element.localName?.toLowerCase()) {
         'a' => const <String>{'href', 'target', 'rel', 'style'},
         'font' => const <String>{'color', 'face', 'size', 'style'},
+        'i' => const <String>{'class', 'style'},
+        _ when isRoot => const <String>{'align', 'style'},
         _ => const <String>{'style'},
       };
       if (!allowed.contains(normalized)) {
         return NovelReaderPaginationRouteReason.unsupportedAttribute;
       }
+    }
+    final alignment = element.attributes['align']?.trim().toLowerCase();
+    if (alignment != null &&
+        !const <String>{
+          'left',
+          'right',
+          'center',
+          'justify',
+        }.contains(alignment)) {
+      return NovelReaderPaginationRouteReason.unsupportedAttribute;
+    }
+    final classAttribute = element.attributes['class'];
+    if (classAttribute != null &&
+        (element.localName?.toLowerCase() != 'i' ||
+            element.classes.length != 1 ||
+            !element.classes.contains('pstatus'))) {
+      return NovelReaderPaginationRouteReason.unsupportedAttribute;
     }
     final style = element.attributes['style'];
     if (style == null || style.trim().isEmpty) {

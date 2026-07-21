@@ -62,6 +62,8 @@ final class DefaultForumHtmlTextStyleResolver
 
   static const Map<String, String?> _knownFamilies = <String, String?>{
     'arial': 'Arial',
+    'simsun': 'SimSun',
+    '宋体': 'SimSun',
     'helvetica': 'Helvetica',
     'verdana': 'Verdana',
     'times new roman': 'Times New Roman',

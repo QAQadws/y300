@@ -15,6 +15,7 @@ import 'package:y300/features/novel/domain/services/novel_reader_progress_policy
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
@@ -179,6 +180,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                       externalLauncher,
                       ReaderChromeInsets(
                         safeAreaBottom: MediaQuery.paddingOf(context).bottom,
+                        pageIndicatorReservedHeight:
+                            viewState.preferences.showProgressIndicator
+                            ? NovelReaderPagedIndicatorLayout.reservedHeight(
+                                MediaQuery.textScalerOf(context),
+                              )
+                            : 0,
                       ),
                     ),
                   );
