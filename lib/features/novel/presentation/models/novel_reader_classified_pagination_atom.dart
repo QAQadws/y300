@@ -9,8 +9,6 @@ enum NovelReaderPaginationRoute {
   collapseBlock,
   tableBlock,
   atomicWidget,
-  // Transitional route for persisted diagnostics and explicit legacy tests.
-  complexHtml,
 }
 
 enum NovelReaderPaginationRouteReason {

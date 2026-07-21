@@ -10,6 +10,18 @@ void main() {
 
   group('pagination layout policy resolver', () {
     test('assigns every route an explicit capability policy', () {
+      expect(
+        NovelReaderPaginationRoute.values,
+        const <NovelReaderPaginationRoute>[
+          NovelReaderPaginationRoute.safeText,
+          NovelReaderPaginationRoute.flowableComplexText,
+          NovelReaderPaginationRoute.rubyInline,
+          NovelReaderPaginationRoute.isolatedImage,
+          NovelReaderPaginationRoute.collapseBlock,
+          NovelReaderPaginationRoute.tableBlock,
+          NovelReaderPaginationRoute.atomicWidget,
+        ],
+      );
       final policies =
           <NovelReaderPaginationRoute, NovelReaderPaginationLayoutPolicy>{
             for (final route in NovelReaderPaginationRoute.values)
@@ -52,19 +64,14 @@ void main() {
           keepPageOpen: false,
         );
       }
-      for (final route in const <NovelReaderPaginationRoute>[
-        NovelReaderPaginationRoute.atomicWidget,
-        NovelReaderPaginationRoute.complexHtml,
-      ]) {
-        _expectPolicy(
-          policies[route]!,
-          measure: NovelReaderPaginationMeasurePolicy.htmlRendererWholeAtom,
-          split: NovelReaderPaginationSplitPolicy.none,
-          placement: NovelReaderPaginationPlacementPolicy.dedicatedPage,
-          overflow: NovelReaderPaginationOverflowPolicy.innerScroll,
-          keepPageOpen: false,
-        );
-      }
+      _expectPolicy(
+        policies[NovelReaderPaginationRoute.atomicWidget]!,
+        measure: NovelReaderPaginationMeasurePolicy.htmlRendererWholeAtom,
+        split: NovelReaderPaginationSplitPolicy.none,
+        placement: NovelReaderPaginationPlacementPolicy.dedicatedPage,
+        overflow: NovelReaderPaginationOverflowPolicy.innerScroll,
+        keepPageOpen: false,
+      );
     });
   });
 

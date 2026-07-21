@@ -50,8 +50,7 @@ final class DefaultNovelReaderPaginationLayoutPolicyResolver
       NovelReaderPaginationRoute.isolatedImage ||
       NovelReaderPaginationRoute.tableBlock ||
       NovelReaderPaginationRoute.collapseBlock => dedicatedContent,
-      NovelReaderPaginationRoute.atomicWidget ||
-      NovelReaderPaginationRoute.complexHtml => atomicWidget,
+      NovelReaderPaginationRoute.atomicWidget => atomicWidget,
     };
   }
 }

@@ -1,6 +1,7 @@
 # 小说阅读器复杂 HTML 流式分页分阶段实施方案
 
-> 状态：Phase 0-7 已完成（2026-07-21）；Phase 8 待实施
+> 状态：Phase 0-8 代码与自动化验收已完成（2026-07-21）；Android/iOS
+> Profile/Release 真机验收待用户执行
 >
 > 编写日期：2026-07-21
 >
@@ -15,7 +16,10 @@
 
 ## 1. 结论先行
 
-当前生产分页已经解决了普通文字反复构建 HTML Widget 的性能问题，但仍将多种性质完全不同的内容统一归入 `complexHtml`。`complexHtml` 当前按一个不可拆 block 测量，除 `rubyInline` 外，追加后会立即封页。因此，只有一行文字的未知字体、异常旧式 `<font face>` 或不支持样式，也可能独占整页。
+本方案启动前，生产分页虽然已经解决普通文字反复构建 HTML Widget 的性能问题，
+但仍将多种性质完全不同的内容统一归入 `complexHtml`。它当时按不可拆 block 测量，
+除 `rubyInline` 外追加后立即封页，因此一行未知字体、异常旧式 `<font face>` 或
+不支持样式也可能独占整页。Phase 8 完成后，当前生产模型已经删除该通用 route。
 
 本方案将“渲染复杂”与“不可分页”彻底分离。最终规则固定为：
 
@@ -61,9 +65,10 @@
 <div align="left">　　如果能轉世重生的話，我想成為像她那樣的人。</div>
 ```
 
-`face="&amp;quot"` 不是可映射字体族。当前共享 style resolver 将其报告为 `unsupportedFontFamily`，classifier 再将两个短标题路由为 `complexHtml`。
+`face="&amp;quot"` 不是可映射字体族。Phase 0 时共享 style resolver 将其报告为
+`unsupportedFontFamily`，classifier 再将两个短标题路由为 `complexHtml`。
 
-当前 composer 行为是：
+Phase 0 记录的 composer 行为是：
 
 ```text
 标题 complexHtml
@@ -1295,6 +1300,11 @@ persistent measurement session。
 
 目标：完成兼容验证并删除通用 `complexHtml` 原子语义。
 
+> 实施状态：代码清理与非真机自动化验收已完成（2026-07-21）。生产 route
+> 只保留 7 种显式能力，特殊格式、异常字体、表格、renderer 和页面行为均纳入
+> 回归门禁。Android/iOS Profile/Release 真机性能与视觉矩阵按用户要求待用户执行，
+> 因此本文不把设备门禁标记为通过，也不把分页模式改为默认模式。
+
 交付：
 
 - 四份现有特殊格式 fixture + 本次异常字体 fixture + 表格 fixture。
@@ -1302,6 +1312,50 @@ persistent measurement session。
 - LTR/RTL、主题、字号、行高和 viewport 矩阵。
 - 删除 deprecated `complexHtml` 默认原子分支。
 - 更新 `docs/开发文档.md` 和原 HTML-first 方案的实施状态。
+
+实际落地：
+
+- 删除 `NovelReaderPaginationRoute.complexHtml`，同步删除 layout policy resolver 和
+  hybrid planner 中的 legacy dedicated 分支。最终 route 集合固定为 `safeText`、
+  `flowableComplexText`、`rubyInline`、`isolatedImage`、`collapseBlock`、
+  `tableBlock` 和 `atomicWidget`。
+- 分类器继续按能力闭包处理全部 reason：普通安全文字进入 TextPainter；未知字体、
+  未知文字 wrapper 和单调复杂样式进入 flowable DOM range；Ruby 进入 protected
+  flowable range；图片、表格、折叠进入各自 dedicated route；脚本属性、非单调布局、
+  未知尺寸 inline image 和嵌入组件进入明确的 `atomicWidget`。
+- route 集合不写入 SQLite，diagnostics 和 plan 都是进程内派生数据，因此删除 legacy
+  enum 不需要数据库迁移。该分支在正常 classifier 中早已不可达，本阶段不改变页面
+  边界，renderer revision 保持 `14`。
+- 四份 `docs/html/特殊格式` UTF-8 fixture、异常字体 fixture 和表格 fixture 继续通过
+  生产 preparation、extractor、classifier 与 hybrid planner。每个成功页面均包含
+  可渲染 HTML；图片、表格和折叠 route 及 inner-scroll 语义有独立断言。
+- 真实 renderer 自动化继续覆盖 light/sepia/dark、最小/默认/最大字号与行高、系统
+  text scale `1.4` 以及 `240/320/420/600` 宽度；测量 session 与最终 renderer 高度
+  必须一致且无 Flutter layout exception。
+- 页面自动化继续覆盖 LTR/RTL 逻辑首页、同布局 anchor 恢复、布局变化恢复、分页搜索
+  定位、书签、切章、前后台刷新和真实可见页进度。增量 plan 尚未包含目标 anchor 时
+  不创建 PageView，也不提交候选页进度。
+- safe-only `20/80/200` 页、复杂内容缩放、probe 上限、cache single-flight、取消、
+  dispose、stale generation 和纵向预算降级仍由 Phase 7 性能门禁保护。
+- 小说正文来源、纵向 renderer、SQLite、搜索、书签和进度协议均未改变；小说章节
+  请求继续固定使用 `version=1`。
+- Phase 8 定向回归 80 项、完整 `test/features/novel` 471 项均通过；
+  `flutter analyze` 无问题。Android arm64 Release APK 构建通过并生成 30.9 MB
+  artifact；这只证明当前 Android Release 可编译，不替代下表中的设备时长和视觉验收。
+
+自动化与真机验收边界：
+
+| 维度 | 非真机自动化 | Profile/Release 真机 |
+| --- | --- | --- |
+| route 与 fixture | 7 种显式 route；四份特殊格式、异常字体、表格和两份脱敏 `version=1` JSON | 抽查同一 fixture 的视觉与交互 |
+| 方向与位置 | LTR/RTL、首页、搜索 anchor、书签、同布局/跨布局恢复、真实可见页进度 | 两个方向连续翻页、退出恢复和进程回收 |
+| 主题与排版 | light/sepia/dark、最小/默认/最大字号和行高、text scale `1.4` | 系统字体、用户字体与动态字号视觉确认 |
+| viewport | `240/320/420/600` renderer 宽度及页面层手机/宽屏约束 | Android/iOS 小屏、`450x800`、平板和横屏 |
+| 性能与生命周期 | 20/80/200 页、probe/cache/cancel/dispose/stale generation、预算降级 | Android/iOS Profile/Release 首屏与 full-plan 计时 |
+
+真机记录必须包含平台、系统版本、构建模式、设备、fixture、方向、主题、字号/行高、
+viewport、首屏时长、完整 plan 时长、是否降级和视觉结果。任一发布预算失败时继续保留
+自动纵向降级，不得仅凭 Debug 或 widget test 宣称设备门禁通过。
 
 验收：
 

@@ -1,6 +1,7 @@
 # 小说阅读器 HTML-first 混合分页分阶段实施方案
 
-> 状态：Phase 0-6 代码与自动化已完成（2026-07-21）；设备验收由用户执行
+> 状态：Phase 0-6 与复杂 HTML 流式分页 Phase 0-8 代码及自动化已完成
+> （2026-07-21）；Android/iOS Profile/Release 设备验收由用户执行
 >
 > 编写日期：2026-07-20
 >
@@ -29,10 +30,11 @@
        |-- 普通正文图片
        |     -> 独立图片页
        |
-       |-- ruby/rt 注音
-       |     -> rubyInline 复杂 block
+       |-- 文字型复杂 HTML / ruby/rt 注音
+       |     -> DOM 合法边界 + 真实 renderer 范围测量
+       |     -> flowableComplexText / rubyInline
        |
-       |-- 折叠、表格、图片、WidgetSpan、复杂 HTML
+       |-- 折叠、表格、图片、不可拆 WidgetSpan
              -> ForumHtmlWidgetPostRenderer 原子测量
   -> 页面组合
   -> 有界真实 renderer 校验
@@ -46,7 +48,8 @@
 2. `flutter_widget_from_html_core` 继续作为最终页面的视觉渲染权威。
 3. 复杂 HTML 不强行转换成 TextSpan，不用 TextPainter 近似表格、折叠块、图片或 WidgetSpan。
 4. 普通正文图片继续独立成页，避免图片尺寸不确定性污染前后文字页。
-5. 复杂内容默认作为原子 block，先保证页序、交互和恢复稳定，再考虑细粒度优化。
+5. 文字型复杂 HTML 使用有界 DOM range 分页；只有图片、表格、折叠和具有明确风险
+   证据的不可拆 Widget 使用独立页或受限内部滚动。
 6. 分页派生数据只保存在进程内缓存，小说离线正文仍唯一来自规范化 SQLite 正文。
 
 ## 2. 样本 HTML 证据与范围
@@ -245,29 +248,35 @@ planner 不持有 `PageController`、`BuildContext`、SQLite repository 或进�
 ```dart
 enum NovelReaderPaginationRoute {
   safeText,
+  flowableComplexText,
   rubyInline,
   isolatedImage,
   collapseBlock,
   tableBlock,
-  complexHtml,
+  atomicWidget,
 }
 
 final class NovelReaderClassifiedPaginationAtom {
   const NovelReaderClassifiedPaginationAtom({
     required this.atom,
     required this.route,
-    required this.isBreakable,
     required this.reason,
+    required this.layoutPolicy,
   });
 
   final NovelReaderPaginationAtom atom;
   final NovelReaderPaginationRoute route;
-  final bool isBreakable;
-  final String reason;
+  final NovelReaderPaginationRouteReason reason;
+  final NovelReaderPaginationLayoutPolicy layoutPolicy;
+
+  bool get isBreakable => layoutPolicy.isBreakable;
 }
 ```
 
-`reason` 只记录稳定诊断枚举，例如 `containsRuby`、`containsWidgetSpan`、`containsTable`、`unsupportedStyle`，不能记录正文 HTML。
+`reason` 只记录稳定诊断枚举，例如 `containsRuby`、`containsWidgetSpan`、
+`containsTable`、`unsupportedStyle`，不能记录正文 HTML。最终生产模型不再包含通用
+`complexHtml` route；未知字体、未知文字 wrapper 和单调复杂样式进入
+`flowableComplexText`，脚本、非单调布局和不可拆嵌入组件进入 `atomicWidget`。
 
 ### 6.2 Text run
 
@@ -863,7 +872,9 @@ final class NovelReaderPaginationProgress {
 - 已测量且能放入当前页剩余高度的 table/ruby/collapse/complex block 先执行一次组合 renderer validation；通过后与缓冲文字同页并立即封口，溢出或 probe 异常则保持原 HTML 并回退到独立页。
 - 超预算通过 surface 的 `onFallbackToVertical` 返回既有 controller 边界，复用偏好预览和持久化流程；planner/performance policy 不依赖 repository，不写 SQLite。
 - `flutter build apk --release --target-platform android-arm64` 已通过，标准 Flutter artifact 与 Gradle 自描述 artifact 均生成；构建成功只证明 arm64 Release 可编译，不替代设备性能和视觉验收。
-- 最终自动化复核：完整小说模块 376 项测试、共享 HTML renderer/style/collapse 55 项测试均通过，`flutter analyze` 无问题；arm64 Release AOT 在最终代码上重新构建通过。设备矩阵仍按约定由用户验收，不在此声明通过。
+- Phase 8 最终自动化复核：定向分页回归 80 项、完整小说模块 471 项测试均通过，
+  `flutter analyze` 无问题；arm64 Release APK 在最终代码上重新构建通过并生成
+  30.9 MB artifact。设备矩阵仍按约定由用户验收，不在此声明通过。
 
 #### Phase 6 真机发布门禁
 

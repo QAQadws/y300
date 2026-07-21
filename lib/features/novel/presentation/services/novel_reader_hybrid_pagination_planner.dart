@@ -780,7 +780,6 @@ final class DefaultNovelReaderHybridPaginationPlanner
           case NovelReaderPaginationRoute.collapseBlock:
           case NovelReaderPaginationRoute.tableBlock:
           case NovelReaderPaginationRoute.atomicWidget:
-          case NovelReaderPaginationRoute.complexHtml:
             complexBlockCount += 1;
             final block = await complexBlockEngine.paginate(
               atom: classified,
@@ -794,8 +793,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
                 dedicatedTablePageCount += 1;
               case NovelReaderPaginationRoute.collapseBlock:
                 dedicatedCollapsePageCount += 1;
-              case NovelReaderPaginationRoute.atomicWidget ||
-                  NovelReaderPaginationRoute.complexHtml:
+              case NovelReaderPaginationRoute.atomicWidget:
                 atomicWidgetPageCount += 1;
               default:
                 break;

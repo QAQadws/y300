@@ -1,6 +1,6 @@
 # 小说阅读器复杂 HTML 流式分页 Phase 0 基线与 ADR
 
-> 状态：Phase 0 已完成，ADR 已接受；Phase 1-7 已落地
+> 状态：Phase 0 已完成，ADR 已接受；Phase 1-8 代码与自动化已落地，设备验收待用户执行
 >
 > 日期：2026-07-21
 >
@@ -10,7 +10,9 @@
 
 ## 1. Phase 0 结论
 
-Phase 0 已经用真实结构样本证明：当前前两页低填充并非作者正文天然不可拆，也不是页面高度估算问题，而是两个短标题因为无效 `<font face>` 被分类为 `complexHtml/unsupportedFont`，随后被当前 `appendComplexBlock` 立即封页。
+Phase 0 已经用真实结构样本证明：当时前两页低填充并非作者正文天然不可拆，也不是
+页面高度估算问题，而是两个短标题因为无效 `<font face>` 被分类为
+`complexHtml/unsupportedFont`，随后被当时的 `appendComplexBlock` 立即封页。
 
 确定性测试基线：
 
@@ -397,7 +399,7 @@ flutter analyze
 - [x] ADR 已裁定 route/policy、dedicated、atomic、二分、缓存和 rollback。
 - [x] 生产分页行为未修改。
 
-## 18. Phase 1-7 后续实施记录
+## 18. Phase 1-8 后续实施记录
 
 Phase 1 已将 route reason 与 layout policy 解耦，并引入
 `flowableComplexText`、`atomicWidget`、flowability inspector 和 capability
@@ -476,5 +478,44 @@ session 与直接 renderer 高度一致。`20/80/200` 页 safe-only 基准保持
 
 本阶段不改变可见分页规则，因此 renderer revision 保持 `14`。没有修改小说
 preparation、SQLite、进度、书签、纵向模式或网络协议，小说正文仍固定请求
-`version=1`。下一阶段为 Phase 8：全量 fixture、设备/Profile/Release 矩阵与旧路径
-清理。
+`version=1`。
+
+Phase 8 已删除迁移期 `NovelReaderPaginationRoute.complexHtml` 及其 resolver/planner
+默认原子分支。最终七种 route 都具有显式 capability policy：文字型复杂 reason 只能
+进入 flowable route 或因脚本、非单调布局、未知尺寸 inline 节点等明确证据进入
+`atomicWidget`；图片、表格和折叠继续使用各自 dedicated route。Route 与 diagnostics
+均为进程内派生数据，不涉及 SQLite schema 或数据迁移，且该 legacy route 在正常
+classifier 中早已不可达，因此 renderer revision 继续保持 `14`。
+
+Phase 8 非真机门禁复用并汇总了现有分层测试：四份特殊格式、异常字体、表格、两份
+脱敏 `version=1` JSON；真实 renderer 的主题/字号/行高/viewport 矩阵；LTR/RTL、
+搜索、书签、恢复与真实可见页进度；20/80/200 页性能、cache single-flight、取消、
+dispose、stale generation 和纵向降级。Android/iOS Profile/Release 真机时长与视觉
+验收按用户要求由用户执行，在完成前不声明设备发布门禁通过。
+
+最终非真机复核中，Phase 8 定向测试 80 项、完整小说模块 471 项均通过，
+`flutter analyze` 无问题；Android arm64 Release APK 构建通过并生成 30.9 MB
+artifact。Android 构建不替代 Android 真机性能验收，Windows 环境也不能替代 iOS
+Profile/Release 构建与设备验收。
+
+## 19. ADR-011：删除通用 complex route，失败必须携带能力证据
+
+### 决策
+
+接受。生产分页不再保留通用 `complexHtml` route，也不允许通过“未识别即 dedicated”
+的默认分支决定页面放置。最终分类必须落入以下显式能力之一：
+
+- `safeText`：TextPainter line range。
+- `flowableComplexText` / `rubyInline`：DOM boundary + renderer range。
+- `isolatedImage` / `tableBlock` / `collapseBlock`：显式 dedicated content。
+- `atomicWidget`：存在脚本、非单调布局、未知尺寸 inline 节点或不可拆嵌入组件证据。
+
+测试固定完整 route 集合；新增 route 必须同步提供 policy、planner 分支、fixture 和
+位置/生命周期回归，不能获得隐式默认行为。
+
+### 原因与后果
+
+通用 route 会重新把“渲染复杂”误写为“不可分页”，导致短文字独占页并隐藏 classifier
+遗漏。删除它后，Dart exhaustive switch 会在能力集合变化时直接暴露未处理分支。
+Diagnostics 不持久化 enum，因此无需迁移；历史 Phase 0 的 `complexHtml` 文案继续作为
+问题证据保留，不代表当前生产模型。
