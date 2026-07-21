@@ -832,7 +832,7 @@ final class NovelReaderPaginationProgress {
 
 矩阵：
 
-- 三份 HTML fixture。
+- 四份 HTML fixture。
 - 默认折叠和初始展开变体。
 - 至少一份包含表格的脱敏 fixture。
 - `注音.html` 的 ruby/rt fixture，以及相邻普通文字和多个连续 ruby cluster 变体。
@@ -863,6 +863,7 @@ final class NovelReaderPaginationProgress {
 - 已测量且能放入当前页剩余高度的 table/ruby/collapse/complex block 先执行一次组合 renderer validation；通过后与缓冲文字同页并立即封口，溢出或 probe 异常则保持原 HTML 并回退到独立页。
 - 超预算通过 surface 的 `onFallbackToVertical` 返回既有 controller 边界，复用偏好预览和持久化流程；planner/performance policy 不依赖 repository，不写 SQLite。
 - `flutter build apk --release --target-platform android-arm64` 已通过，标准 Flutter artifact 与 Gradle 自描述 artifact 均生成；构建成功只证明 arm64 Release 可编译，不替代设备性能和视觉验收。
+- 最终自动化复核：完整小说模块 376 项测试、共享 HTML renderer/style/collapse 55 项测试均通过，`flutter analyze` 无问题；arm64 Release AOT 在最终代码上重新构建通过。设备矩阵仍按约定由用户验收，不在此声明通过。
 
 #### Phase 6 真机发布门禁
 
