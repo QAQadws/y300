@@ -4,6 +4,7 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_block_inspectors.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_renderer_validator.dart';
@@ -66,11 +67,22 @@ void main() {
         expect(plan.rendererValidationMismatchCount, 0);
         switch (sample.id) {
           case 'ruby':
+            final ruby = const NovelReaderRubyPaginationAdapter().inspect(
+              message,
+            );
+            expect(ruby.clusters, hasLength(4));
+            expect(ruby.annotationElementCount, 4);
+            expect(ruby.fallbackElementCount, 0);
+            expect(ruby.allClustersPaired, isTrue);
             expect(
               plan.routeCounts[NovelReaderPaginationRoute.rubyInline],
               greaterThan(0),
             );
           case 'collapse_directory':
+            final collapse = const NovelReaderCollapsePaginationAdapter()
+                .inspect(message);
+            expect(collapse.blocks, hasLength(26));
+            expect(collapse.expandedCount, 0);
             expect(
               plan.routeCounts[NovelReaderPaginationRoute.collapseBlock],
               greaterThan(0),

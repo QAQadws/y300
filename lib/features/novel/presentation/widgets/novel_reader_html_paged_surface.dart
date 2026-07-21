@@ -133,6 +133,10 @@ class _NovelReaderHtmlPagedSurfaceState
   bool _layoutCacheHit = false;
   Duration? _firstPageDuration;
   String? _performanceFallbackKey;
+  Timer? _firstPageBudgetTimer;
+  Timer? _fullPlanBudgetTimer;
+  bool _planCompleted = false;
+  int _cancelledPlanCount = 0;
 
   @override
   void initState() {
@@ -148,7 +152,8 @@ class _NovelReaderHtmlPagedSurfaceState
 
   @override
   void dispose() {
-    _coordinator?.cancelPending();
+    _cancelPerformanceTimers();
+    _cancelPendingPagination();
     super.dispose();
   }
 
@@ -275,7 +280,13 @@ class _NovelReaderHtmlPagedSurfaceState
                       message: '本章没有可显示的正文',
                     );
                   }
+                  _firstPageBudgetTimer?.cancel();
+                  _firstPageBudgetTimer = null;
                   _firstPageDuration ??= _layoutStopwatch?.elapsed;
+                  _ensureFullPlanBudgetTimer(
+                    key: key,
+                    isComplete: progress?.isComplete == true,
+                  );
                   _schedulePerformanceFallbackIfNeeded(
                     plan: plan,
                     key: key,
@@ -283,6 +294,7 @@ class _NovelReaderHtmlPagedSurfaceState
                   );
                   final requestedPage = _requestedPageFor(plan);
                   if (progress?.isComplete == true) {
+                    _planCompleted = true;
                     _scheduleDiagnostics(
                       plan: plan,
                       prepared: prepared,
@@ -361,7 +373,7 @@ class _NovelReaderHtmlPagedSurfaceState
       return _planStream!;
     }
     if (_planKey != null && _planKey != key) {
-      _coordinator?.cancelPending();
+      _cancelPendingPagination();
     }
     final coordinatorSignature = (
       theme: widget.theme.signature,
@@ -374,7 +386,7 @@ class _NovelReaderHtmlPagedSurfaceState
       builder: widget.coordinatorBuilder,
     );
     if (_coordinator == null || _coordinatorSignature != coordinatorSignature) {
-      _coordinator?.cancelPending();
+      _cancelPendingPagination();
       _coordinatorSignature = coordinatorSignature;
       _coordinator =
           widget.coordinatorBuilder?.call(
@@ -397,11 +409,14 @@ class _NovelReaderHtmlPagedSurfaceState
     _layoutStopwatch = Stopwatch()..start();
     _firstPageDuration = null;
     _performanceFallbackKey = null;
+    _cancelPerformanceTimers();
     _recordedDiagnosticsKey = null;
     _planStream = _coordinator!.paginateIncrementally(
       chapter: prepared,
       key: key,
     );
+    _planCompleted = false;
+    _startFirstPageBudgetTimer(key);
     return _planStream!;
   }
 
@@ -457,7 +472,9 @@ class _NovelReaderHtmlPagedSurfaceState
           textLayoutCount: plan.textLayoutCount,
           complexBlockCount: plan.complexBlockCount,
           safeTextFallbackCount: plan.safeTextFallbackCount,
+          safeTextRunCount: plan.safeTextRunCount,
           firstPageDuration: _firstPageDuration ?? Duration.zero,
+          cancelledPlanCount: _cancelledPlanCount,
           availableHeight: key.viewportHeightPx.toDouble(),
           averageTextPageFullness: plan.averageTextPageFullness,
           lowFullnessPageCount: plan.lowFullnessPageCount,
@@ -465,6 +482,7 @@ class _NovelReaderHtmlPagedSurfaceState
           atomKindCounts: plan.atomKindCounts,
           routeCounts: plan.routeCounts,
           routeReasonCounts: plan.routeReasonCounts,
+          safeTextFallbackReasonCounts: plan.safeTextFallbackReasonCounts,
           measurementSamples: plan.measurementSamples,
         ),
       );
@@ -489,6 +507,72 @@ class _NovelReaderHtmlPagedSurfaceState
     if (reason == null) {
       return;
     }
+    _schedulePerformanceFallback(key: key, reason: reason);
+  }
+
+  void _startFirstPageBudgetTimer(NovelReaderPaginationKey key) {
+    if (!widget.performancePolicy.enforceBudgets ||
+        widget.onFallbackToVertical == null) {
+      return;
+    }
+    _firstPageBudgetTimer = Timer(
+      widget.performancePolicy.maximumFirstPageBudget,
+      () {
+        if (mounted && _planKey == key && _firstPageDuration == null) {
+          _schedulePerformanceFallback(
+            key: key,
+            reason: NovelReaderPaginationPerformanceFallbackReason
+                .firstPageBudgetExceeded,
+          );
+        }
+      },
+    );
+  }
+
+  void _ensureFullPlanBudgetTimer({
+    required NovelReaderPaginationKey key,
+    required bool isComplete,
+  }) {
+    if (isComplete) {
+      _fullPlanBudgetTimer?.cancel();
+      _fullPlanBudgetTimer = null;
+      return;
+    }
+    if (_fullPlanBudgetTimer != null ||
+        !widget.performancePolicy.enforceBudgets ||
+        widget.onFallbackToVertical == null) {
+      return;
+    }
+    final elapsed = _layoutStopwatch?.elapsed ?? Duration.zero;
+    final budget = widget.performancePolicy.maximumFullPlanBudget;
+    final remaining = budget - elapsed;
+    if (remaining <= Duration.zero) {
+      _schedulePerformanceFallback(
+        key: key,
+        reason: NovelReaderPaginationPerformanceFallbackReason
+            .fullPlanBudgetExceeded,
+      );
+      return;
+    }
+    _fullPlanBudgetTimer = Timer(remaining, () {
+      if (mounted && _planKey == key) {
+        _schedulePerformanceFallback(
+          key: key,
+          reason: NovelReaderPaginationPerformanceFallbackReason
+              .fullPlanBudgetExceeded,
+        );
+      }
+    });
+  }
+
+  void _schedulePerformanceFallback({
+    required NovelReaderPaginationKey key,
+    required NovelReaderPaginationPerformanceFallbackReason reason,
+  }) {
+    final callback = widget.onFallbackToVertical;
+    if (callback == null) {
+      return;
+    }
     final fallbackKey = '${key.cacheIdentity}|${reason.name}';
     if (_performanceFallbackKey == fallbackKey) {
       return;
@@ -499,6 +583,26 @@ class _NovelReaderHtmlPagedSurfaceState
         callback();
       }
     });
+  }
+
+  void _cancelPerformanceTimers() {
+    _firstPageBudgetTimer?.cancel();
+    _fullPlanBudgetTimer?.cancel();
+    _firstPageBudgetTimer = null;
+    _fullPlanBudgetTimer = null;
+  }
+
+  void _cancelPendingPagination({bool clearCache = false}) {
+    if (_planStream != null && !_planCompleted) {
+      _cancelledPlanCount += 1;
+    }
+    _planCompleted = false;
+    _planStream = null;
+    if (clearCache) {
+      _coordinator?.clear();
+    } else {
+      _coordinator?.cancelPending();
+    }
   }
 
   NovelReaderPaginationCoordinator _defaultCoordinator({
@@ -548,7 +652,7 @@ class _NovelReaderHtmlPagedSurfaceState
       return;
     }
     _prepareSignature = signature;
-    _coordinator?.cancelPending();
+    _cancelPendingPagination();
     final preparationService = NovelReaderCachingHtmlPreparationService(
       delegate:
           widget.preparationService ??
@@ -616,7 +720,7 @@ class _NovelReaderHtmlPagedSurfaceState
     if (!mounted) {
       return;
     }
-    _coordinator?.cancelPending();
+    _cancelPendingPagination();
     setState(() {
       _prepareFuture = null;
       _prepareSignature = null;
@@ -629,7 +733,7 @@ class _NovelReaderHtmlPagedSurfaceState
     if (!mounted) {
       return;
     }
-    _coordinator?.clear();
+    _cancelPendingPagination(clearCache: true);
     setState(() {
       _planStream = null;
       _planKey = null;

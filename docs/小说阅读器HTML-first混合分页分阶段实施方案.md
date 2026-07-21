@@ -1,6 +1,6 @@
 # 小说阅读器 HTML-first 混合分页分阶段实施方案
 
-> 状态：Phase 0-6 工程实现已完成（2026-07-21）；Phase 6 Profile/Release 真机发布验收待执行
+> 状态：Phase 0-6 代码与自动化已完成（2026-07-21）；设备验收由用户执行
 >
 > 编写日期：2026-07-20
 >
@@ -13,7 +13,7 @@
 
 ## 1. 结论先行
 
-当前小说分页使用“候选 HTML + `flutter_widget_from_html_core` 真实测量”的方案 A。它能最大程度复用现有 HTML-first 视觉管线，但长章节首次分页会产生大量重复的 HTML 解析、Widget 构建和 Flutter Layout。
+重构前的小说分页使用“候选 HTML + `flutter_widget_from_html_core` 真实测量”的方案 A。它能最大程度复用现有 HTML-first 视觉管线，但长章节首次分页会产生大量重复的 HTML 解析、Widget 构建和 Flutter Layout。当前生产实现已经切换为本文定义的 HTML-first 混合分页；本节保留旧方案描述作为性能问题背景。
 
 对于 80 页左右的正文，当前 Debug 模式已经出现约 100 秒的布局计算时间。这说明继续调整二分次数、缓存容量或事件循环让出频率，不能从根本上解决问题。后续分页应重构为混合分页：
 
@@ -126,7 +126,7 @@
 <ruby>召<rt>・</rt></ruby>
 ```
 
-当前 fixture 包含 47 个 `<ruby>` 和 47 个 `<rt>`，没有 `<rp>`。注音内容既有日文假名，也有英文和间隔点，且 ruby 与前后普通文字处于同一行内排版上下文。
+按 Phase 0 相同的 UTF-8 导入与首楼 message 边界，当前 fixture 包含 4 个 `<ruby>` 和 4 个 `<rt>`，没有 `<rp>`。注音内容既有日文假名，也有英文和间隔点，且 ruby 与前后普通文字处于同一行内排版上下文。完整论坛页面外围出现的其它结构不计入小说首楼正文基线。
 
 ruby 不能直接进入普通 TextPainter safe path：
 
@@ -800,7 +800,7 @@ final class NovelReaderPaginationProgress {
 ### Phase 5：首屏优先和增量 plan
 
 > 实施状态：已完成（2026-07-21）。planner、coordinator 与 paged surface
-> 已改用稳定页快照流；仅发布 composer 已封口页面，完整 plan 仍是唯一可缓存结果。
+> 已改用稳定页快照流；仅发布 composer 已封口页面，完整 plan 仍是唯一可缓存结果。首个稳定页校验通过后立即发布，后续周期性/risk-style renderer validation 按页继续，不再阻塞首屏。
 
 目标：避免长章节必须等完整 plan 才能开始阅读。
 
@@ -815,9 +815,9 @@ final class NovelReaderPaginationProgress {
 
 ### Phase 6：性能基准、真机和灰度
 
-> 实施状态：工程实现已完成（2026-07-21）。固定 fixture、20/80/200 页
+> 实施状态：代码与自动化已完成（2026-07-21）。固定 fixture、20/80/200 页
 > 合成基准、性能预算策略和自动纵向降级已落地；Android/iOS Profile/Release
-> 真机时长仍是发布门禁，不能由 Debug 自动化代替。
+> 设备时长仍是发布门禁，不能由 Debug 自动化代替，并按用户要求由用户执行。
 
 目标：确认长文章在实际设备上可发布。
 
@@ -845,19 +845,24 @@ final class NovelReaderPaginationProgress {
 - 固定 20/80/200 页段落型合成长文验证成本随 atom/page 增长，普通文字没有 complex fallback，每个 safe atom 只做一次 TextPainter layout，HTML validation 保持有界。
 - `NovelReaderHtmlTextRangeSliceSession` 对同一 safe atom 只 parse/index 一次 HTML，后续页面按预计算 source offset 克隆相交 wrapper；消除每页重新 `parseFragment` 的 `O(P × N)` 热点。
 - diagnostics 新增 `firstPageDuration`。Profile/Release 默认执行纯文字 `500ms/2s`、混合格式 `800ms/5s` 的首屏/完整 plan 预算；Debug 默认只采集、不自动降级。
+- diagnostics 同时记录 safe text run 数、measurement cache hit rate、被 generation 取消的 plan 数和结构化 safe fallback reason；不记录正文或本地路径。
+- 首屏未产生任何 page 时按最大 800ms 门禁自动回到纵向；已产生首屏但完整 plan 停滞时按最大 5s 门禁自动回到纵向。计时器随 key/generation/dispose 取消，不会让旧章节触发新章节降级。
+- Text run 提取或 TextPainter 布局异常只把当前 safe atom 降级到 complex HTML；renderer validation mismatch 只降级尚未发布的当前 atom remainder。已经发布的稳定页不回写、不重排。
+- HTML renderer probe 的 800ms timeout 会生成保留原 HTML 的明确 inner-scroll overflow 页；正文图片 probe timeout 仍保留独立图片页，不把整章清空或写入空白候选。
 - 超预算通过 surface 的 `onFallbackToVertical` 返回既有 controller 边界，复用偏好预览和持久化流程；planner/performance policy 不依赖 repository，不写 SQLite。
+- `flutter build apk --release --target-platform android-arm64` 已通过，标准 Flutter artifact 与 Gradle 自描述 artifact 均生成；构建成功只证明 arm64 Release 可编译，不替代设备性能和视觉验收。
 
 #### Phase 6 真机发布门禁
 
-以下项目必须在准备发布的构建上记录设备、系统、文章 fixture、首屏时长、完整 plan 时长和结果；未执行项不得写成“已通过”：
+以下项目由用户在准备发布的构建上记录设备、系统、文章 fixture、首屏时长、完整 plan 时长和结果；未执行项不得写成“已通过”：
 
 | 平台/场景 | Profile | Release | 发布要求 |
 | --- | --- | --- | --- |
-| Android 13/14/15，小屏与大屏 | 待执行 | 待执行 | 80 页纯文字和混合格式均满足对应预算 |
-| 当前支持的 iOS，小屏与大屏 | 待执行 | 待执行 | 80 页纯文字和混合格式均满足对应预算 |
-| light/sepia/dark，最小/默认/最大字号 | 待执行 | 待执行 | 无溢出、空白假成功页或错误 cache 复用 |
-| LTR/RTL，已知/未知图片尺寸、失败与缓存命中 | 待执行 | 待执行 | 逻辑页序、占位和 reflow 稳定 |
-| 锁屏、后台、进程回收、断网水合正文 | 待执行 | 待执行 | 取消隔离正确，正文/书签/进度不丢失 |
+| Android 13/14/15，小屏与大屏 | 用户验收 | 用户验收 | 80 页纯文字和混合格式均满足对应预算 |
+| 当前支持的 iOS，小屏与大屏 | 用户验收 | 用户验收 | 80 页纯文字和混合格式均满足对应预算 |
+| light/sepia/dark，最小/默认/最大字号 | 用户验收 | 用户验收 | 无溢出、空白假成功页或错误 cache 复用 |
+| LTR/RTL，已知/未知图片尺寸、失败与缓存命中 | 用户验收 | 用户验收 | 逻辑页序、占位和 reflow 稳定 |
+| 锁屏、后台、进程回收、断网水合正文 | 用户验收 | 用户验收 | 取消隔离正确，正文/书签/进度不丢失 |
 
 Profile/Release 只要任一预算不满足，就保留自动纵向降级并阻止把分页设为默认模式；当前产品默认仍为纵向阅读，分页只能由用户显式选择。
 
@@ -887,7 +892,7 @@ Riverpod/provider 只负责依赖组合和生命周期，不承担分页算法�
 - `文字背景色.html` 识别颜色、背景色、字号、字体族和嵌套 font。
 - `字颜色字号.html` 识别多个 message 的正文 style run。
 - `折叠目录.html` 识别 collapsed、active、nested collapse。
-- `注音.html` 识别 47 个 ruby/rt cluster，确认当前没有 rp，并保留 base/annotation 成对关系。
+- `注音.html` 的首楼 message 识别 4 个 ruby/rt cluster，确认当前没有 rp，并保留 base/annotation 成对关系。
 - 表格 fixture 识别为 table block。
 
 ### 17.2 TextPainter 测试

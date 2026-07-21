@@ -27,12 +27,14 @@ class NovelReaderPaginationDiagnostics {
     this.domSliceCount = 0,
     this.readableImageCount = 0,
     this.textFastPathCount = 0,
+    this.safeTextRunCount = 0,
     this.rendererValidationCount = 0,
     this.rendererValidationMismatchCount = 0,
     this.textLayoutCount = 0,
     this.complexBlockCount = 0,
     this.safeTextFallbackCount = 0,
     this.firstPageDuration = Duration.zero,
+    this.cancelledPlanCount = 0,
     this.availableHeight = 0,
     this.averageTextPageFullness = 0,
     this.lowFullnessPageCount = 0,
@@ -44,6 +46,8 @@ class NovelReaderPaginationDiagnostics {
         const <NovelReaderPaginationRoute, int>{},
     Map<NovelReaderPaginationRouteReason, int> routeReasonCounts =
         const <NovelReaderPaginationRouteReason, int>{},
+    Map<NovelReaderSafeTextFallbackReason, int> safeTextFallbackReasonCounts =
+        const <NovelReaderSafeTextFallbackReason, int>{},
     List<NovelReaderPaginationMeasurementSample> measurementSamples =
         const <NovelReaderPaginationMeasurementSample>[],
   }) : gapReasonCounts = Map<NovelReaderPageGapReason, int>.unmodifiable(
@@ -58,6 +62,10 @@ class NovelReaderPaginationDiagnostics {
        routeReasonCounts =
            Map<NovelReaderPaginationRouteReason, int>.unmodifiable(
              routeReasonCounts,
+           ),
+       safeTextFallbackReasonCounts =
+           Map<NovelReaderSafeTextFallbackReason, int>.unmodifiable(
+             safeTextFallbackReasonCounts,
            ),
        measurementSamples =
            List<NovelReaderPaginationMeasurementSample>.unmodifiable(
@@ -85,12 +93,14 @@ class NovelReaderPaginationDiagnostics {
   final int domSliceCount;
   final int readableImageCount;
   final int textFastPathCount;
+  final int safeTextRunCount;
   final int rendererValidationCount;
   final int rendererValidationMismatchCount;
   final int textLayoutCount;
   final int complexBlockCount;
   final int safeTextFallbackCount;
   final Duration firstPageDuration;
+  final int cancelledPlanCount;
   final double availableHeight;
   final double averageTextPageFullness;
   final int lowFullnessPageCount;
@@ -98,7 +108,12 @@ class NovelReaderPaginationDiagnostics {
   final Map<NovelReaderPaginationAtomKind, int> atomKindCounts;
   final Map<NovelReaderPaginationRoute, int> routeCounts;
   final Map<NovelReaderPaginationRouteReason, int> routeReasonCounts;
+  final Map<NovelReaderSafeTextFallbackReason, int>
+  safeTextFallbackReasonCounts;
   final List<NovelReaderPaginationMeasurementSample> measurementSamples;
+
+  double get measurementCacheHitRate =>
+      measurementCount == 0 ? 0 : measurementCacheHitCount / measurementCount;
 
   @override
   String toString() {
@@ -121,9 +136,13 @@ class NovelReaderPaginationDiagnostics {
         'firstPageMs=${firstPageDuration.inMilliseconds}, '
         'rendererValidations=$rendererValidationCount, '
         'rendererMismatches=$rendererValidationMismatchCount, '
-        'textLayouts=$textLayoutCount, complexBlocks=$complexBlockCount, '
+        'textLayouts=$textLayoutCount, safeRuns=$safeTextRunCount, '
+        'complexBlocks=$complexBlockCount, '
         'safeFallbacks=$safeTextFallbackCount, routes=$routeCounts, '
+        'safeFallbackReasons=$safeTextFallbackReasonCounts, '
         'routeReasons=$routeReasonCounts, '
+        'cancelledPlans=$cancelledPlanCount, cacheHitRate='
+        '${measurementCacheHitRate.toStringAsFixed(2)}, '
         'lowFullnessPages=$lowFullnessPageCount, gapReasons='
         '$gapReasonCounts, atomKinds=$atomKindCounts)';
   }
@@ -141,7 +160,7 @@ final class NovelReaderNoopPaginationDiagnosticsSink
   void record(NovelReaderPaginationDiagnostics diagnostics) {}
 }
 
-/// Keeps Phase 5 diagnostics available during development without emitting
+/// Keeps pagination diagnostics available during development without emitting
 /// production logs or body contents.
 final class NovelReaderDebugPaginationDiagnosticsSink
     implements NovelReaderPaginationDiagnosticsSink {

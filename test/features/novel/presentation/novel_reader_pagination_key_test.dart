@@ -57,6 +57,36 @@ void main() {
         ).cacheIdentity,
       ),
     );
+    expect(
+      base,
+      isNot(
+        const NovelReaderPaginationKey(
+          episodeId: 'episode',
+          contentHash: 'content',
+          viewportWidthPx: 320,
+          viewportHeightPx: 600,
+          typographySignature: 'font=24|line=1.8',
+          themeSignature: 'sepia',
+          imageDimensionRevision: 1,
+          rendererRevision: 1,
+        ),
+      ),
+    );
+    expect(
+      base,
+      isNot(
+        const NovelReaderPaginationKey(
+          episodeId: 'episode',
+          contentHash: 'content',
+          viewportWidthPx: 320,
+          viewportHeightPx: 600,
+          typographySignature: 'font=18.5|line=1.6',
+          themeSignature: 'sepia',
+          imageDimensionRevision: 2,
+          rendererRevision: 1,
+        ),
+      ),
+    );
   });
 
   test('normalizes unusable logical dimensions to zero', () {

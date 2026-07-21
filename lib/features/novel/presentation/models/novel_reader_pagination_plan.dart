@@ -5,6 +5,13 @@ import 'package:y300/features/novel/presentation/models/novel_reader_page_fragme
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 
+enum NovelReaderSafeTextFallbackReason {
+  textRunExtractionFailure,
+  textLayoutFailure,
+  rendererValidationFailure,
+  rendererMismatch,
+}
+
 @immutable
 class NovelReaderPaginationMeasurementSample {
   const NovelReaderPaginationMeasurementSample({
@@ -39,6 +46,7 @@ class NovelReaderPaginationPlan {
     this.domSliceCount = 0,
     this.readableImageCount = 0,
     this.textFastPathCount = 0,
+    this.safeTextRunCount = 0,
     this.rendererValidationCount = 0,
     this.rendererValidationMismatchCount = 0,
     this.textLayoutCount = 0,
@@ -50,6 +58,8 @@ class NovelReaderPaginationPlan {
         const <NovelReaderPaginationRoute, int>{},
     Map<NovelReaderPaginationRouteReason, int> routeReasonCounts =
         const <NovelReaderPaginationRouteReason, int>{},
+    Map<NovelReaderSafeTextFallbackReason, int> safeTextFallbackReasonCounts =
+        const <NovelReaderSafeTextFallbackReason, int>{},
     List<NovelReaderPaginationMeasurementSample> measurementSamples =
         const <NovelReaderPaginationMeasurementSample>[],
   }) : pages = List<NovelReaderPageFragment>.unmodifiable(pages),
@@ -62,6 +72,10 @@ class NovelReaderPaginationPlan {
        routeReasonCounts =
            Map<NovelReaderPaginationRouteReason, int>.unmodifiable(
              routeReasonCounts,
+           ),
+       safeTextFallbackReasonCounts =
+           Map<NovelReaderSafeTextFallbackReason, int>.unmodifiable(
+             safeTextFallbackReasonCounts,
            ),
        measurementSamples =
            List<NovelReaderPaginationMeasurementSample>.unmodifiable(
@@ -82,6 +96,7 @@ class NovelReaderPaginationPlan {
   final int domSliceCount;
   final int readableImageCount;
   final int textFastPathCount;
+  final int safeTextRunCount;
   final int rendererValidationCount;
   final int rendererValidationMismatchCount;
   final int textLayoutCount;
@@ -90,6 +105,8 @@ class NovelReaderPaginationPlan {
   final Map<NovelReaderPaginationAtomKind, int> atomKindCounts;
   final Map<NovelReaderPaginationRoute, int> routeCounts;
   final Map<NovelReaderPaginationRouteReason, int> routeReasonCounts;
+  final Map<NovelReaderSafeTextFallbackReason, int>
+  safeTextFallbackReasonCounts;
   final List<NovelReaderPaginationMeasurementSample> measurementSamples;
 
   int get pageCount => pages.length;

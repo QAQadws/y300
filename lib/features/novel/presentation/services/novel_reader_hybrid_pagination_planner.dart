@@ -229,12 +229,15 @@ final class DefaultNovelReaderHybridPaginationPlanner
 
     var textLayoutCount = 0;
     var textFastPathCount = 0;
+    var safeTextRunCount = 0;
     var complexBlockCount = 0;
     var safeTextFallbackCount = 0;
     var rendererValidationCount = 0;
     var rendererValidationMismatchCount = 0;
     var domSliceCount = 0;
     var safePageOrdinal = 0;
+    final safeTextFallbackReasonCounts =
+        <NovelReaderSafeTextFallbackReason, int>{};
     var processedAtomCount = 0;
     var publishedPageCount = 0;
 
@@ -256,6 +259,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
         domSliceCount: domSliceCount,
         readableImageCount: chapter.renderDocument.sequence.entries.length,
         textFastPathCount: textFastPathCount,
+        safeTextRunCount: safeTextRunCount,
         rendererValidationCount: rendererValidationCount,
         rendererValidationMismatchCount: rendererValidationMismatchCount,
         textLayoutCount: textLayoutCount,
@@ -264,6 +268,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
         atomKindCounts: atomKinds,
         routeCounts: routes,
         routeReasonCounts: routeReasons,
+        safeTextFallbackReasonCounts: safeTextFallbackReasonCounts,
         measurementSamples: session.samples,
       );
     }
@@ -288,48 +293,67 @@ final class DefaultNovelReaderHybridPaginationPlanner
       );
     }
 
+    Future<void> fallbackWholeSafeAtom(
+      NovelReaderClassifiedPaginationAtom classified,
+      NovelReaderSafeTextFallbackReason reason,
+    ) async {
+      safeTextFallbackCount += 1;
+      safeTextFallbackReasonCounts.update(
+        reason,
+        (value) => value + 1,
+        ifAbsent: () => 1,
+      );
+      complexBlockCount += 1;
+      final fallback = _complexFallbackForAtom(classified);
+      final block = await complexBlockEngine.paginate(
+        atom: fallback,
+        chapter: chapter,
+        key: key,
+        measurer: complexMeasurer,
+      );
+      composer.appendComplexBlock(fallback, block);
+      processedAtomCount += 1;
+      await publishFinalPages();
+    }
+
     try {
       for (final classified in classifiedAtoms) {
         cancellationToken.throwIfCancelled();
         switch (classified.route) {
           case NovelReaderPaginationRoute.safeText:
-            final runs = textRunExtractor.extract(
-              classifiedAtom: classified,
-              baseStyle: baseStyle,
-              preferences: preferences,
-              theme: theme,
-            );
+            late final List<NovelReaderPaginationTextRun> runs;
+            try {
+              runs = textRunExtractor.extract(
+                classifiedAtom: classified,
+                baseStyle: baseStyle,
+                preferences: preferences,
+                theme: theme,
+              );
+            } catch (error) {
+              if (_isCancellation(error)) {
+                rethrow;
+              }
+              await fallbackWholeSafeAtom(
+                classified,
+                NovelReaderSafeTextFallbackReason.textRunExtractionFailure,
+              );
+              continue;
+            }
+            safeTextRunCount += runs.length;
             if (composer.hasBufferedContent &&
                 composer.remainingHeight < _minimumLineHeight(runs)) {
               composer.flush(
                 gapReason: NovelReaderPageGapReason.algorithmBoundary,
               );
             }
-            var textResult = textEngine.paginate(
-              atom: classified,
-              runs: runs,
-              width: key.viewportWidthPx.toDouble(),
-              pageHeight: key.viewportHeightPx.toDouble(),
-              firstPageHeight: composer.remainingHeight,
-              paragraphSpacing: preferences.typography.paragraphSpacing,
-              typographySignature: key.typographySignature,
-              textDirection: textDirection,
-              textAlign: textAlign,
-              textScaler: textScaler,
-            );
-            textLayoutCount += textResult.layoutCount;
-            domSliceCount += textResult.chunks.length;
-            if (composer.hasBufferedContent &&
-                textResult.chunks.isNotEmpty &&
-                textResult.chunks.first.isOversized) {
-              composer.flush(
-                gapReason: NovelReaderPageGapReason.algorithmBoundary,
-              );
+            late NovelReaderTextPaginationResult textResult;
+            try {
               textResult = textEngine.paginate(
                 atom: classified,
                 runs: runs,
                 width: key.viewportWidthPx.toDouble(),
                 pageHeight: key.viewportHeightPx.toDouble(),
+                firstPageHeight: composer.remainingHeight,
                 paragraphSpacing: preferences.typography.paragraphSpacing,
                 typographySignature: key.typographySignature,
                 textDirection: textDirection,
@@ -338,23 +362,67 @@ final class DefaultNovelReaderHybridPaginationPlanner
               );
               textLayoutCount += textResult.layoutCount;
               domSliceCount += textResult.chunks.length;
+              if (composer.hasBufferedContent &&
+                  textResult.chunks.isNotEmpty &&
+                  textResult.chunks.first.isOversized) {
+                composer.flush(
+                  gapReason: NovelReaderPageGapReason.algorithmBoundary,
+                );
+                textResult = textEngine.paginate(
+                  atom: classified,
+                  runs: runs,
+                  width: key.viewportWidthPx.toDouble(),
+                  pageHeight: key.viewportHeightPx.toDouble(),
+                  paragraphSpacing: preferences.typography.paragraphSpacing,
+                  typographySignature: key.typographySignature,
+                  textDirection: textDirection,
+                  textAlign: textAlign,
+                  textScaler: textScaler,
+                );
+                textLayoutCount += textResult.layoutCount;
+                domSliceCount += textResult.chunks.length;
+              }
+            } catch (error) {
+              if (_isCancellation(error)) {
+                rethrow;
+              }
+              await fallbackWholeSafeAtom(
+                classified,
+                NovelReaderSafeTextFallbackReason.textLayoutFailure,
+              );
+              continue;
             }
 
-            final validation = await _validateTextChunks(
-              chunks: textResult.chunks,
-              classified: classified,
-              runs: runs,
-              chapter: chapter,
-              key: key,
-              validator: validator,
-              composer: composer,
-              safePageOrdinal: safePageOrdinal,
-              cancellationToken: cancellationToken,
-            );
+            late final _TextValidationSummary validation;
+            try {
+              validation = await _validateTextChunk(
+                chunks: textResult.chunks,
+                chunkIndex: 0,
+                classified: classified,
+                runs: runs,
+                chapter: chapter,
+                key: key,
+                validator: validator,
+                composer: composer,
+                safePageOrdinal: safePageOrdinal,
+                cancellationToken: cancellationToken,
+              );
+            } catch (error) {
+              if (_isCancellation(error)) {
+                rethrow;
+              }
+              rendererValidationCount += 1;
+              await fallbackWholeSafeAtom(
+                classified,
+                NovelReaderSafeTextFallbackReason.rendererValidationFailure,
+              );
+              continue;
+            }
             rendererValidationCount += validation.validationCount;
             rendererValidationMismatchCount += validation.mismatchCount;
             var accepted = textResult;
             var keepBackedChunksSeparate = false;
+            var firstChunkValidated = validation.validationCount > 0;
             if (validation.firstMismatch != null) {
               if (composer.hasBufferedContent) {
                 composer.flush(
@@ -366,74 +434,168 @@ final class DefaultNovelReaderHybridPaginationPlanner
                           validation.firstMismatch!.actualHeight)
                       .clamp(0.5, 0.95);
               final backedHeight = key.viewportHeightPx * ratio;
-              final backed = textEngine.paginate(
-                atom: classified,
-                runs: runs,
-                width: key.viewportWidthPx.toDouble(),
-                pageHeight: backedHeight,
-                firstPageHeight: backedHeight,
-                paragraphSpacing: preferences.typography.paragraphSpacing,
-                typographySignature: key.typographySignature,
-                textDirection: textDirection,
-                textAlign: textAlign,
-                textScaler: textScaler,
-              );
+              late final NovelReaderTextPaginationResult backed;
+              try {
+                backed = textEngine.paginate(
+                  atom: classified,
+                  runs: runs,
+                  width: key.viewportWidthPx.toDouble(),
+                  pageHeight: backedHeight,
+                  firstPageHeight: backedHeight,
+                  paragraphSpacing: preferences.typography.paragraphSpacing,
+                  typographySignature: key.typographySignature,
+                  textDirection: textDirection,
+                  textAlign: textAlign,
+                  textScaler: textScaler,
+                );
+              } catch (error) {
+                if (_isCancellation(error)) {
+                  rethrow;
+                }
+                await fallbackWholeSafeAtom(
+                  classified,
+                  NovelReaderSafeTextFallbackReason.textLayoutFailure,
+                );
+                continue;
+              }
               textLayoutCount += backed.layoutCount;
               domSliceCount += backed.chunks.length;
-              final backedValidation = await validator.validate(
-                html: backed.chunks.first.html,
-                atomId: classified.atom.atomId,
-                chapter: chapter,
-                key: key,
-                availableHeight: key.viewportHeightPx.toDouble(),
-              );
+              late final NovelReaderRendererValidationResult backedValidation;
+              try {
+                backedValidation = await validator.validate(
+                  html: backed.chunks.first.html,
+                  atomId: classified.atom.atomId,
+                  chapter: chapter,
+                  key: key,
+                  availableHeight: key.viewportHeightPx.toDouble(),
+                );
+              } catch (error) {
+                if (_isCancellation(error)) {
+                  rethrow;
+                }
+                rendererValidationCount += 1;
+                await fallbackWholeSafeAtom(
+                  classified,
+                  NovelReaderSafeTextFallbackReason.rendererValidationFailure,
+                );
+                continue;
+              }
               rendererValidationCount += 1;
               if (!backedValidation.matches) {
                 rendererValidationMismatchCount += 1;
-                safeTextFallbackCount += 1;
-                complexBlockCount += 1;
-                final fallback = NovelReaderClassifiedPaginationAtom(
-                  atom: classified.atom,
-                  route: NovelReaderPaginationRoute.complexHtml,
-                  isBreakable: false,
-                  reason: NovelReaderPaginationRouteReason.unsupportedStyle,
+                await fallbackWholeSafeAtom(
+                  classified,
+                  NovelReaderSafeTextFallbackReason.rendererMismatch,
                 );
-                final block = await complexBlockEngine.paginate(
-                  atom: fallback,
-                  chapter: chapter,
-                  key: key,
-                  measurer: complexMeasurer,
-                );
-                composer.appendComplexBlock(fallback, block);
-                processedAtomCount += 1;
-                await publishFinalPages();
                 continue;
               }
               accepted = backed;
               keepBackedChunksSeparate = true;
+              firstChunkValidated = true;
             }
-            for (final chunk in accepted.chunks) {
+            var remainderFellBack = false;
+            final hasRiskStyle = _hasRiskStyle(runs);
+            for (var index = 0; index < accepted.chunks.length; index += 1) {
+              final chunk = accepted.chunks[index];
+              final shouldValidate =
+                  !(index == 0 && firstChunkValidated) &&
+                  validationPolicy.shouldValidate(
+                    safePageOrdinal: safePageOrdinal,
+                    hasRiskStyle: hasRiskStyle,
+                  );
+              if (shouldValidate) {
+                cancellationToken.throwIfCancelled();
+                NovelReaderRendererValidationResult result;
+                var validationFailed = false;
+                try {
+                  result = await validator.validate(
+                    html: composer.hasBufferedContent
+                        ? '${composer.bufferedHtml}${chunk.html}'
+                        : chunk.html,
+                    atomId: classified.atom.atomId,
+                    chapter: chapter,
+                    key: key,
+                    availableHeight: key.viewportHeightPx.toDouble(),
+                  );
+                } catch (error) {
+                  if (_isCancellation(error)) {
+                    rethrow;
+                  }
+                  validationFailed = true;
+                  result = NovelReaderRendererValidationResult(
+                    actualHeight: double.infinity,
+                    availableHeight: key.viewportHeightPx.toDouble(),
+                    measurementCacheHit: false,
+                    frameWaitCount: 0,
+                  );
+                }
+                rendererValidationCount += 1;
+                if (!result.matches) {
+                  rendererValidationMismatchCount += 1;
+                  safeTextFallbackCount += 1;
+                  safeTextFallbackReasonCounts.update(
+                    validationFailed
+                        ? NovelReaderSafeTextFallbackReason
+                              .rendererValidationFailure
+                        : NovelReaderSafeTextFallbackReason.rendererMismatch,
+                    (value) => value + 1,
+                    ifAbsent: () => 1,
+                  );
+                  complexBlockCount += 1;
+                  composer.flush(
+                    gapReason: NovelReaderPageGapReason.algorithmBoundary,
+                  );
+                  final fallback = _complexFallbackForRemainder(
+                    classified: classified,
+                    chunks: accepted.chunks,
+                    startIndex: index,
+                  );
+                  final block = await complexBlockEngine.paginate(
+                    atom: fallback,
+                    chapter: chapter,
+                    key: key,
+                    measurer: complexMeasurer,
+                  );
+                  composer.appendComplexBlock(fallback, block);
+                  await publishFinalPages();
+                  remainderFellBack = true;
+                  break;
+                }
+              }
               composer.appendTextChunk(chunk);
               if (keepBackedChunksSeparate) {
                 composer.flush(
                   gapReason: NovelReaderPageGapReason.algorithmBoundary,
                 );
               }
+              textFastPathCount += 1;
+              safePageOrdinal += 1;
               await publishFinalPages();
             }
-            textFastPathCount += accepted.chunks.length;
-            safePageOrdinal += accepted.chunks.length;
+            if (remainderFellBack) {
+              await publishFinalPages();
+            }
           case NovelReaderPaginationRoute.isolatedImage:
-            final measured = await session.measure(
-              NovelReaderPaginationMeasureRequest(
-                html: classified.atom.html,
-                chapter: chapter,
-                key: key,
-                atomId: classified.atom.atomId,
-                startOffset: 0,
-                endOffset: classified.atom.textLength,
-              ),
-            );
+            late final NovelReaderPaginationMeasureResult measured;
+            try {
+              measured = await session.measure(
+                NovelReaderPaginationMeasureRequest(
+                  html: classified.atom.html,
+                  chapter: chapter,
+                  key: key,
+                  atomId: classified.atom.atomId,
+                  startOffset: 0,
+                  endOffset: classified.atom.textLength,
+                ),
+              );
+            } on NovelReaderPaginationException catch (error) {
+              if (error.code != 'measurementTimeout') {
+                rethrow;
+              }
+              measured = NovelReaderPaginationMeasureResult(
+                height: key.viewportHeightPx + 1.0,
+              );
+            }
             composer.appendIsolatedImage(
               atom: classified,
               measuredHeight: measured.height,
@@ -466,8 +628,9 @@ final class DefaultNovelReaderHybridPaginationPlanner
     }
   }
 
-  Future<_TextValidationSummary> _validateTextChunks({
+  Future<_TextValidationSummary> _validateTextChunk({
     required List<NovelReaderTextPageChunk> chunks,
+    required int chunkIndex,
     required NovelReaderClassifiedPaginationAtom classified,
     required List<NovelReaderPaginationTextRun> runs,
     required NovelReaderPreparedChapter chapter,
@@ -477,40 +640,82 @@ final class DefaultNovelReaderHybridPaginationPlanner
     required int safePageOrdinal,
     required NovelReaderPaginationCancellationToken cancellationToken,
   }) async {
-    var validationCount = 0;
-    var mismatchCount = 0;
-    NovelReaderRendererValidationResult? firstMismatch;
-    final hasRiskStyle = _hasRiskStyle(runs);
-    for (var index = 0; index < chunks.length; index += 1) {
-      if (!validationPolicy.shouldValidate(
-        safePageOrdinal: safePageOrdinal + index,
-        hasRiskStyle: hasRiskStyle,
-      )) {
-        continue;
-      }
-      cancellationToken.throwIfCancelled();
-      final html = index == 0 && composer.hasBufferedContent
-          ? '${composer.bufferedHtml}${chunks[index].html}'
-          : chunks[index].html;
-      final result = await validator.validate(
-        html: html,
-        atomId: classified.atom.atomId,
-        chapter: chapter,
-        key: key,
-        availableHeight: key.viewportHeightPx.toDouble(),
+    if (chunkIndex < 0 || chunkIndex >= chunks.length) {
+      return const _TextValidationSummary(
+        validationCount: 0,
+        mismatchCount: 0,
+        firstMismatch: null,
       );
-      validationCount += 1;
-      if (!result.matches) {
-        mismatchCount += 1;
-        firstMismatch ??= result;
-        break;
-      }
     }
-    return _TextValidationSummary(
-      validationCount: validationCount,
-      mismatchCount: mismatchCount,
-      firstMismatch: firstMismatch,
+    final hasRiskStyle = _hasRiskStyle(runs);
+    if (!validationPolicy.shouldValidate(
+      safePageOrdinal: safePageOrdinal,
+      hasRiskStyle: hasRiskStyle,
+    )) {
+      return const _TextValidationSummary(
+        validationCount: 0,
+        mismatchCount: 0,
+        firstMismatch: null,
+      );
+    }
+    cancellationToken.throwIfCancelled();
+    final html = composer.hasBufferedContent
+        ? '${composer.bufferedHtml}${chunks[chunkIndex].html}'
+        : chunks[chunkIndex].html;
+    final result = await validator.validate(
+      html: html,
+      atomId: classified.atom.atomId,
+      chapter: chapter,
+      key: key,
+      availableHeight: key.viewportHeightPx.toDouble(),
     );
+    return _TextValidationSummary(
+      validationCount: 1,
+      mismatchCount: result.matches ? 0 : 1,
+      firstMismatch: result.matches ? null : result,
+    );
+  }
+
+  NovelReaderClassifiedPaginationAtom _complexFallbackForRemainder({
+    required NovelReaderClassifiedPaginationAtom classified,
+    required List<NovelReaderTextPageChunk> chunks,
+    required int startIndex,
+  }) {
+    final first = chunks[startIndex];
+    final html = chunks.skip(startIndex).map((chunk) => chunk.html).join();
+    final atom = classified.atom;
+    return NovelReaderClassifiedPaginationAtom(
+      atom: NovelReaderPaginationAtom(
+        atomId: '${atom.atomId}:fallback-${first.sourceStart}',
+        kind: atom.kind,
+        html: html,
+        startAnchor: first.startAnchor,
+        endAnchor: atom.endAnchor,
+        textLength: atom.textLength - first.sourceStart,
+        imageIndices: atom.imageIndices,
+        breakability: atom.breakability,
+        imagePagePolicy: atom.imagePagePolicy,
+      ),
+      route: NovelReaderPaginationRoute.complexHtml,
+      isBreakable: false,
+      reason: NovelReaderPaginationRouteReason.unsupportedStyle,
+    );
+  }
+
+  NovelReaderClassifiedPaginationAtom _complexFallbackForAtom(
+    NovelReaderClassifiedPaginationAtom classified,
+  ) {
+    return NovelReaderClassifiedPaginationAtom(
+      atom: classified.atom,
+      route: NovelReaderPaginationRoute.complexHtml,
+      isBreakable: false,
+      reason: NovelReaderPaginationRouteReason.unsupportedStyle,
+    );
+  }
+
+  bool _isCancellation(Object error) {
+    return error is NovelReaderPaginationException &&
+        error.code == 'paginationCancelled';
   }
 
   double _minimumLineHeight(List<NovelReaderPaginationTextRun> runs) {

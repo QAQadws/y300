@@ -63,11 +63,23 @@ final class NovelReaderComplexBlockPaginationEngine {
         'Complex block engine accepts complex renderer routes only.',
       );
     }
-    final measurement = await measurer.measure(
-      atom: atom,
-      chapter: chapter,
-      key: key,
-    );
+    late final NovelReaderPaginationMeasureResult measurement;
+    var measurementTimedOut = false;
+    try {
+      measurement = await measurer.measure(
+        atom: atom,
+        chapter: chapter,
+        key: key,
+      );
+    } on NovelReaderPaginationException catch (error) {
+      if (error.code != 'measurementTimeout') {
+        rethrow;
+      }
+      measurementTimedOut = true;
+      measurement = NovelReaderPaginationMeasureResult(
+        height: key.viewportHeightPx + 1.0,
+      );
+    }
     if (!measurement.height.isFinite || measurement.height < 0) {
       throw const NovelReaderPaginationException(
         code: 'invalidComplexBlockMeasurement',
@@ -87,6 +99,7 @@ final class NovelReaderComplexBlockPaginationEngine {
             measurement.height > key.viewportHeightPx,
         measurementCacheHit: measurement.fromCache,
         frameWaitCount: measurement.frameWaitCount,
+        measurementTimedOut: measurementTimedOut,
         ruby: atom.route == NovelReaderPaginationRoute.rubyInline
             ? rubyAdapter.inspect(atom.atom.html)
             : null,

@@ -38,6 +38,22 @@ final class NovelReaderPaginationPerformancePolicy {
   final NovelReaderPaginationPerformanceBudget mixedContentBudget;
   final bool enforceBudgets;
 
+  Duration get maximumFirstPageBudget =>
+      plainTextBudget.firstPage > mixedContentBudget.firstPage
+      ? plainTextBudget.firstPage
+      : mixedContentBudget.firstPage;
+
+  Duration get maximumFullPlanBudget =>
+      plainTextBudget.fullPlan > mixedContentBudget.fullPlan
+      ? plainTextBudget.fullPlan
+      : mixedContentBudget.fullPlan;
+
+  NovelReaderPaginationPerformanceBudget budgetFor(
+    NovelReaderPaginationPlan plan,
+  ) {
+    return _isMixed(plan) ? mixedContentBudget : plainTextBudget;
+  }
+
   NovelReaderPaginationPerformanceFallbackReason? evaluate({
     required NovelReaderPaginationPlan plan,
     required Duration firstPageDuration,
@@ -46,7 +62,7 @@ final class NovelReaderPaginationPerformancePolicy {
     if (!enforceBudgets) {
       return null;
     }
-    final budget = _isMixed(plan) ? mixedContentBudget : plainTextBudget;
+    final budget = budgetFor(plan);
     if (firstPageDuration > budget.firstPage) {
       return NovelReaderPaginationPerformanceFallbackReason
           .firstPageBudgetExceeded;

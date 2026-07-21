@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'package:html/dom.dart' as html_dom;
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
@@ -13,9 +15,11 @@ import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pa
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_renderer_validator.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_text_run_extractor.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_text_style_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 void main() {
@@ -32,6 +36,7 @@ void main() {
     expect(plan.pageCount, greaterThan(2));
     expect(plan.textFastPathCount, plan.pageCount);
     expect(plan.textLayoutCount, 1);
+    expect(plan.safeTextRunCount, greaterThan(0));
     expect(plan.complexBlockCount, 0);
     expect(plan.safeTextFallbackCount, 0);
     expect(plan.rendererValidationCount, greaterThan(0));
@@ -124,6 +129,12 @@ void main() {
 
       expect(plan.rendererValidationMismatchCount, 2);
       expect(plan.safeTextFallbackCount, 1);
+      expect(
+        plan.safeTextFallbackReasonCounts,
+        <NovelReaderSafeTextFallbackReason, int>{
+          NovelReaderSafeTextFallbackReason.rendererMismatch: 1,
+        },
+      );
       expect(plan.complexBlockCount, 1);
       expect(plan.pageCount, 1);
       expect(plan.pages.single.html, chapter.html);
@@ -258,6 +269,133 @@ void main() {
     expect(events, isNotEmpty);
     expect(events.every((event) => !event.isComplete), isTrue);
   });
+
+  test('publishes the first page before later renderer validation', () async {
+    final chapter = await _prepare(
+      '<p><span style="background-color:#ffeeaa">'
+      '${List<String>.filled(100, '风险样式增量分页正文。').join()}'
+      '</span></p>',
+    );
+    final adapter = _GatedValidationMeasureAdapter();
+    final firstPage = Completer<NovelReaderPaginationProgress>();
+    final complete = Completer<NovelReaderPaginationProgress>();
+
+    _planner(adapter)
+        .planIncrementally(
+          chapter: chapter,
+          key: _key(chapter, height: 120),
+          cancellationToken: NovelReaderPaginationCancellationToken(),
+        )
+        .listen(
+          (progress) {
+            if (!progress.isComplete && !firstPage.isCompleted) {
+              firstPage.complete(progress);
+            }
+            if (progress.isComplete && !complete.isCompleted) {
+              complete.complete(progress);
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (!firstPage.isCompleted) {
+              firstPage.completeError(error, stackTrace);
+            }
+            if (!complete.isCompleted) {
+              complete.completeError(error, stackTrace);
+            }
+          },
+        );
+
+    final first = await firstPage.future;
+    expect(first.plan.pages, hasLength(1));
+    expect(complete.isCompleted, isFalse);
+    for (
+      var attempt = 0;
+      attempt < 10 && !adapter.laterValidationStarted;
+      attempt += 1
+    ) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(adapter.laterValidationStarted, isTrue);
+
+    adapter.releaseLaterValidation();
+    expect((await complete.future).isComplete, isTrue);
+  });
+
+  test('late validation mismatch preserves already published pages', () async {
+    final chapter = await _prepare(
+      '<p><span style="background-color:#ffeeaa">'
+      '${List<String>.filled(100, '迟到校验不应重写已发布页。').join()}'
+      '</span></p>',
+    );
+    final adapter = _GatedValidationMeasureAdapter(laterHeight: 260);
+    final events = <NovelReaderPaginationProgress>[];
+    final complete = Completer<NovelReaderPaginationProgress>();
+
+    _planner(adapter)
+        .planIncrementally(
+          chapter: chapter,
+          key: _key(chapter, height: 120),
+          cancellationToken: NovelReaderPaginationCancellationToken(),
+        )
+        .listen((progress) {
+          events.add(progress);
+          if (progress.isComplete && !complete.isCompleted) {
+            complete.complete(progress);
+          }
+        }, onError: complete.completeError);
+
+    for (
+      var attempt = 0;
+      attempt < 20 && !adapter.laterValidationStarted;
+      attempt += 1
+    ) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(events, isNotEmpty);
+    final publishedFirstPage = events.first.plan.pages.single;
+
+    adapter.releaseLaterValidation();
+    final finalPlan = (await complete.future).plan;
+
+    expect(finalPlan.pages.first, publishedFirstPage);
+    expect(finalPlan.safeTextFallbackCount, 1);
+    expect(
+      finalPlan.safeTextFallbackReasonCounts,
+      <NovelReaderSafeTextFallbackReason, int>{
+        NovelReaderSafeTextFallbackReason.rendererMismatch: 1,
+      },
+    );
+    expect(finalPlan.complexBlockCount, 1);
+  });
+
+  test(
+    'falls back only the safe atom when text style resolution throws',
+    () async {
+      final chapter = await _prepare('<p>正文</p>');
+      final planner = DefaultNovelReaderHybridPaginationPlanner(
+        measureAdapter: _RecordingMeasureAdapter(),
+        preferences: _preferences,
+        theme: _theme,
+        baseStyle: _baseStyle,
+        textRunExtractor: const NovelReaderPaginationTextRunExtractor(
+          styleResolver: _ThrowingTextStyleResolver(),
+        ),
+      );
+
+      final plan = await planner.paginate(chapter, _key(chapter, height: 120));
+
+      expect(plan.pageCount, 1);
+      expect(plan.safeTextFallbackCount, 1);
+      expect(
+        plan.safeTextFallbackReasonCounts,
+        <NovelReaderSafeTextFallbackReason, int>{
+          NovelReaderSafeTextFallbackReason.textRunExtractionFailure: 1,
+        },
+      );
+      expect(plan.complexBlockCount, 1);
+      expect(plan.pages.single.html, chapter.html);
+    },
+  );
 }
 
 DefaultNovelReaderHybridPaginationPlanner _planner(
@@ -332,6 +470,53 @@ final class _RecordingMeasureAdapter
     return NovelReaderPaginationMeasureResult(
       height: heightFor?.call(request, validationCalls) ?? 10,
     );
+  }
+}
+
+final class _GatedValidationMeasureAdapter
+    implements NovelReaderPaginationMeasureAdapter {
+  _GatedValidationMeasureAdapter({this.laterHeight = 10});
+
+  final Completer<void> _laterValidationGate = Completer<void>();
+  final double laterHeight;
+  int validationCalls = 0;
+  bool laterValidationStarted = false;
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  ) async {
+    if (request.atomId?.endsWith(':validation') == true) {
+      validationCalls += 1;
+      if (validationCalls == 2) {
+        laterValidationStarted = true;
+        await _laterValidationGate.future;
+      }
+    }
+    return NovelReaderPaginationMeasureResult(
+      height: validationCalls >= 2 ? laterHeight : 10,
+    );
+  }
+
+  void releaseLaterValidation() {
+    if (!_laterValidationGate.isCompleted) {
+      _laterValidationGate.complete();
+    }
+  }
+}
+
+final class _ThrowingTextStyleResolver implements ForumHtmlTextStyleResolver {
+  const _ThrowingTextStyleResolver();
+
+  @override
+  ForumHtmlResolvedTextStyle resolve({
+    required html_dom.Element element,
+    required TextStyle parentStyle,
+    required TextStyle baseStyle,
+    required ForumHtmlReaderPreferences preferences,
+    required ForumHtmlThemeContext theme,
+  }) {
+    throw StateError('synthetic text layout failure');
   }
 }
 

@@ -150,6 +150,24 @@ void main() {
     },
   );
 
+  test('turns a renderer timeout into an explicit inner-scroll page', () async {
+    final atom = _atom('<blockquote>超时后仍需显示的复杂正文</blockquote>');
+    final classified = _classify(classifier, atom);
+    final chapter = _chapter(atom.html);
+
+    final page = await const NovelReaderComplexBlockPaginationEngine().paginate(
+      atom: classified,
+      chapter: chapter,
+      key: _key(chapter, height: 600),
+      measurer: const _TimeoutComplexBlockMeasurer(),
+    );
+
+    expect(page.html, atom.html);
+    expect(page.metrics.measurementTimedOut, isTrue);
+    expect(page.metrics.isOversized, isTrue);
+    expect(page.metrics.requiresInnerScroll, isTrue);
+  });
+
   test('rejects safe text and isolated image routes', () async {
     final safe = _classify(classifier, _atom('<p>正文</p>'));
     final image = _classify(
@@ -285,6 +303,23 @@ final class _FakeComplexBlockMeasurer
       height: height,
       fromCache: fromCache,
       frameWaitCount: frameWaitCount,
+    );
+  }
+}
+
+final class _TimeoutComplexBlockMeasurer
+    implements NovelReaderComplexBlockMeasurer {
+  const _TimeoutComplexBlockMeasurer();
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure({
+    required NovelReaderClassifiedPaginationAtom atom,
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+  }) {
+    throw const NovelReaderPaginationException(
+      code: 'measurementTimeout',
+      message: 'synthetic timeout',
     );
   }
 }

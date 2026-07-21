@@ -81,6 +81,7 @@ final class NovelReaderComplexBlockMetrics {
     required this.requiresInnerScroll,
     required this.measurementCacheHit,
     required this.frameWaitCount,
+    this.measurementTimedOut = false,
     this.ruby,
     this.collapse,
     this.table,
@@ -92,6 +93,7 @@ final class NovelReaderComplexBlockMetrics {
   final bool requiresInnerScroll;
   final bool measurementCacheHit;
   final int frameWaitCount;
+  final bool measurementTimedOut;
   final NovelReaderRubyPaginationDescriptor? ruby;
   final NovelReaderCollapsePaginationDescriptor? collapse;
   final NovelReaderTablePaginationDescriptor? table;
