@@ -1,6 +1,6 @@
 # 小说阅读器复杂 HTML 流式分页分阶段实施方案
 
-> 状态：Phase 0-2 已完成（2026-07-21）；Phase 3-8 待实施
+> 状态：Phase 0-3 已完成（2026-07-21）；Phase 4-8 待实施
 >
 > 编写日期：2026-07-21
 >
@@ -988,6 +988,11 @@ flowabilityFailureReasonCounts
 
 目标：建立与 renderer 解耦的纯 DOM 范围基础设施。
 
+> 实施状态：已完成（2026-07-21）。本阶段新增的 grapheme boundary 和
+> complex slice session 仍是纯 service，未接入 hybrid planner、真实 renderer
+> measurement 或 page composer；用户可见分页行为除 Phase 2 已完成的 legacy
+> normalization 外不再变化。
+
 交付：
 
 - 扩展现有 `NovelReaderHtmlTextRangeSliceSession` 的共享 index core。
@@ -995,6 +1000,38 @@ flowabilityFailureReasonCounts
 - `NovelReaderComplexHtmlSliceSession`。
 - protected range 和 anchor mapping。
 - 空白范围和零文本节点策略。
+
+实际落地：
+
+- 抽取 `NovelReaderHtmlDomTextIndex` 作为唯一 DOM parse/index/clone core。
+  既有 `NovelReaderHtmlTextRangeSliceSession` 改为委托该 core，并继续使用 rune
+  坐标以兼容 TextPainter source range；新的 complex session 使用 grapheme
+  坐标，避免拆开代理对、ZWJ emoji 和 combining sequence。
+- 新增 `NovelReaderComplexHtmlBoundaryIndexer`、
+  `NovelReaderComplexHtmlSliceSession`、boundary、protected range 和 slice 模型。
+  Session 持有不可变 index，多次 boundary 查询和 slice 不会重新 parse HTML。
+- Boundary kind 覆盖 block end、hard break、sentence end、word end、grapheme
+  end、Ruby cluster end、protected-inline end 和 atom end；同一 offset 只保留
+  preference 最高者。Boundary 保留原 episode/node anchor，并将 grapheme offset
+  映射为连续 text anchor。
+- `<ruby>` 整体作为 protected range，base、`rt`、`rp` 之间不生成切点；已知
+  smiley 或显式 `data-y300-protected-inline` 节点使用一个合成 grapheme 占位，
+  只能整体进入一个 slice。未知尺寸 inline widget 的 production 分类仍保持
+  atomic，Phase 3 不放宽 classifier。
+- Slice 只克隆与范围相交的祖先 wrapper 和节点，保留 strong/font/span/a、
+  未知 wrapper 及原属性，并重新输出闭合 HTML。Entity 先由 DOM 解码为单个
+  grapheme，序列化时重新 escape，不会切开 `&amp;`。
+- 空白、NBSP、全角空格、零宽空白、纯 `<br>` 和空 block 的 slice 返回
+  `hasRenderableContent=false`；protected inline/ruby 视为可渲染内容。空 atom
+  只提供 offset `0` 的 atom-end boundary，不生成伪页面。
+- Index 构建复杂度为 `O(N + G)`，其中 `N` 为 DOM 节点数、`G` 为 grapheme
+  数；boundary 去重与排序为 `O(G log G)`（遍历阶段为 `O(G)`），slice 成本与
+  相交节点和输出片段长度相关。Phase 4 可按 boundary kind 分层选择 coarse 与
+  grapheme 候选，无需第二套 index。
+- 自动化覆盖 CJK/Latin、ZWJ emoji、组合字符、HTML entity、嵌套 wrapper、
+  异常 wrapper、Ruby+`rt/rp`、smiley、连续 anchor、boundary preference、
+  空白范围和 31 组生成式嵌套组合；counting codec 证明 safe 与 complex session
+  都只 parse 一次。
 
 验收：
 

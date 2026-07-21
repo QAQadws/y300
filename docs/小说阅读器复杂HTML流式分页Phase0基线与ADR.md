@@ -1,6 +1,6 @@
 # 小说阅读器复杂 HTML 流式分页 Phase 0 基线与 ADR
 
-> 状态：Phase 0 已完成，ADR 已接受；Phase 1-2 已落地
+> 状态：Phase 0 已完成，ADR 已接受；Phase 1-3 已落地
 >
 > 日期：2026-07-21
 >
@@ -317,7 +317,7 @@ flutter analyze
 - [x] ADR 已裁定 route/policy、dedicated、atomic、二分、缓存和 rollback。
 - [x] 生产分页行为未修改。
 
-## 16. Phase 1-2 后续实施记录
+## 16. Phase 1-3 后续实施记录
 
 Phase 1 已将 route reason 与 layout policy 解耦，并引入
 `flowableComplexText`、`atomicWidget`、flowability inspector 和 capability
@@ -331,5 +331,12 @@ wrapper 和其它样式属性，使样本全部进入 `safeText` 并从 3 页降
 whole-atom measurement 和前两页 `0.0500` fullness，因此历史证据与 rollback
 基线没有丢失。
 
-下一阶段为 Phase 3：DOM boundary index 与合法切片。Phase 3 只建立纯 DOM
-范围基础设施，不提前接入生产 composer。
+Phase 3 已抽取共享 `NovelReaderHtmlDomTextIndex`：既有 safe slicer 继续使用
+rune 坐标，新 complex session 使用 grapheme 坐标，两者共用单次 DOM parse、
+不可变节点索引和 wrapper clone。Ruby 与已知 protected inline 节点拥有不可拆
+range，合法 boundary 携带连续 anchor；空白 slice 明确返回不可渲染。该 session
+尚未接入 planner、renderer probe 或 composer，因此 Phase 0/2 的可见分页基线
+不因 Phase 3 再次变化。
+
+下一阶段为 Phase 4：有界 fit searcher。Phase 4 只能在确定性 measurer 上搜索
+Phase 3 的合法 boundary，不接入生产 renderer。
