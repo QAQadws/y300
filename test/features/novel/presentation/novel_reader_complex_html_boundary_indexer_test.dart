@@ -152,7 +152,8 @@ void main() {
         .prepare(
           html:
               '<p>前<img class="smilie" '
-              'src="static/image/smiley/default/smile.gif">后</p>',
+              'src="static/image/smiley/default/smile.gif" '
+              'width="24" height="24">后</p>',
           startAnchor: _anchor,
         );
     final range = session.protectedRanges.single;
@@ -161,6 +162,14 @@ void main() {
     expect(range.startOffset, 1);
     expect(range.endOffset, 2);
     expect(range.kind, NovelReaderComplexProtectedRangeKind.inlineWidget);
+    expect(
+      session.boundaries
+          .singleWhere((boundary) => boundary.textOffset == 2)
+          .anchor
+          .textOffset,
+      1,
+      reason: 'Synthetic inline placeholders must not advance text anchors.',
+    );
     final smiley = session.slice(startOffset: 1, endOffset: 2);
     expect(smiley.hasRenderableContent, isTrue);
     expect(
@@ -182,6 +191,17 @@ void main() {
       slices.map((slice) => html_parser.parseFragment(slice.html).text).join(),
       '前后',
     );
+  });
+
+  test('does not protect an asynchronously sized smiley', () {
+    final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+        .prepare(
+          html: '<p>前<img src="static/image/smiley/default/smile.gif">后</p>',
+          startAnchor: _anchor,
+        );
+
+    expect(session.protectedRanges, isEmpty);
+    expect(session.textLength, 2);
   });
 
   test('deduplicates offsets using semantic boundary preference', () {

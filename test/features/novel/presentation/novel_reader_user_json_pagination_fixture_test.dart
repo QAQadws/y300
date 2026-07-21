@@ -74,7 +74,7 @@ void main() {
       NovelReaderPaginationRoute.safeText: 95,
       NovelReaderPaginationRoute.rubyInline: 2,
     });
-    expect(result.plan.pageCount, inInclusiveRange(8, 15));
+    expect(result.plan.pageCount, inInclusiveRange(7, 15));
     expect(result.plan.pageCount, lessThan(96));
     expect(result.plan.averageTextPageFullness, greaterThan(0.8));
     expect(result.plan.complexBlockCount, 2);

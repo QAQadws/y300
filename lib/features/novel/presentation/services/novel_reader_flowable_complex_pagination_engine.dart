@@ -179,7 +179,8 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
 
   void _validateAtom(NovelReaderClassifiedPaginationAtom atom) {
     final policy = atom.layoutPolicy;
-    if (atom.route != NovelReaderPaginationRoute.flowableComplexText ||
+    if (atom.route != NovelReaderPaginationRoute.flowableComplexText &&
+            atom.route != NovelReaderPaginationRoute.rubyInline ||
         policy.measure !=
             NovelReaderPaginationMeasurePolicy.htmlRendererRange ||
         policy.split != NovelReaderPaginationSplitPolicy.domBoundaries ||

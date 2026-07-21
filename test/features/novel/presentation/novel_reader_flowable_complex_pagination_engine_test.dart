@@ -169,9 +169,33 @@ void main() {
     expect(result.chunks, isEmpty);
   });
 
-  test('rejects routes that are not flowable complex text', () async {
+  test('accepts the ruby route with the shared DOM-range policy', () async {
     final engine = const DefaultNovelReaderFlowableComplexPaginationEngine();
     final atom = _atom('ruby', route: NovelReaderPaginationRoute.rubyInline);
+
+    final result = await engine.paginate(
+      atom: atom,
+      page: const NovelReaderPaginationPageContext(
+        bufferedHtml: '',
+        hasBufferedContent: false,
+        availableHeight: 100,
+      ),
+      chapter: chapter,
+      key: key,
+      measureSession: _RecordingSession(_rangeHeight),
+      cancellationToken: NovelReaderPaginationCancellationToken(),
+    );
+
+    expect(result.requiresAtomicFallback, isFalse);
+    expect(result.chunks, hasLength(1));
+  });
+
+  test('rejects a route without the DOM-range flow policy', () async {
+    final engine = const DefaultNovelReaderFlowableComplexPaginationEngine();
+    final atom = _atom(
+      'widget',
+      route: NovelReaderPaginationRoute.atomicWidget,
+    );
 
     await expectLater(
       engine.paginate(
@@ -234,9 +258,13 @@ NovelReaderClassifiedPaginationAtom _atom(
   return NovelReaderClassifiedPaginationAtom(
     atom: atom,
     route: route,
-    reason: route == NovelReaderPaginationRoute.flowableComplexText
-        ? NovelReaderPaginationRouteReason.unsupportedFont
-        : NovelReaderPaginationRouteReason.containsRuby,
+    reason: switch (route) {
+      NovelReaderPaginationRoute.flowableComplexText =>
+        NovelReaderPaginationRouteReason.unsupportedFont,
+      NovelReaderPaginationRoute.rubyInline =>
+        NovelReaderPaginationRouteReason.containsRuby,
+      _ => NovelReaderPaginationRouteReason.atomicWidget,
+    },
     layoutPolicy: const DefaultNovelReaderPaginationLayoutPolicyResolver()
         .resolve(route),
   );

@@ -124,7 +124,7 @@ Phase 0 自动化锁定以下 route 存在性：
 ```text
 safeText: 95 atoms
 rubyInline: 2 atoms
-page count: 8..15
+page count: 7..15（Phase 6 前为 8..15）
 average fullness: > 0.8
 ```
 
@@ -263,7 +263,41 @@ Phase 0 曾同时保留：
 现在合为 1 页。旧 3 页与 5% fullness 继续保留在本 ADR 和历史提交中，不再作为
 当前生产行为断言。
 
-## 13. Rollback
+## 13. ADR-009：Protected inline 必须在首帧前具备稳定布局框
+
+### 决策
+
+接受。
+
+仅当 inline image 同时满足以下条件时，才允许作为 protected cluster 进入 flowable
+complex path：
+
+- 节点是已识别的论坛 smiley，或显式声明 `data-y300-protected-inline`。
+- HTML 同时提供有限正数 `width` 与 `height`，最终 renderer 在首次布局时即可创建
+  固定尺寸容器。
+
+`/smiley/` URL、`smilieid` 和 class 只能证明节点类型，不能单独证明尺寸稳定。无
+宽高 smiley、普通 inline image、非图片声明节点和无稳定尺寸的自定义 widget 继续
+使用 `atomicWidget`。
+
+### 原因
+
+当前远端 smiley renderer 会在 HTML 未提供尺寸时先使用无尺寸 placeholder，再异步
+读取 dimension cache 或等待图片解码。若此类节点进入 flowable page，加载完成后的
+line box 变化会违反 ADR-007 的“已发布页面不可变”，并使页码、anchor 与阅读位置
+发生漂移。将能力判断集中到一个 adapter，可避免 classifier、flowability inspector
+和 DOM slicer 各自维护不一致的 smiley 规则。
+
+### 后果
+
+- 已知固定尺寸 smiley 可以与正文合页并在 cluster 外分页，不计入 readable image
+  页数。
+- 未知尺寸 smiley 会保守进入 atomic dedicated page；后续只有在 preparation 阶段
+  能同步提供稳定尺寸证据时才可放宽，不得依赖加载后的异步尺寸。
+- Protected inline 的合成 DOM 搜索位置不计入正文 text anchor。
+- Phase 6 提升 renderer revision，使旧 whole-block Ruby/inline plan 失效。
+
+## 14. Rollback
 
 每个后续阶段必须可以独立回退：
 
@@ -282,11 +316,16 @@ Phase 5 production integration
   -> 提升 renderer revision
   -> 出现错误时关闭 flowable complex policy
   -> 回到当前 whole-atom complex behavior 或纵向模式
+
+Phase 6 Ruby/protected inline
+  -> 将 rubyInline 重新映射到 whole-atom policy
+  -> 将 protected-inline adapter 默认设为拒绝
+  -> 不修改正文或持久化数据
 ```
 
 rollback 不回写正文，不涉及数据库迁移。
 
-## 14. Phase 0 自动化
+## 15. Phase 0 自动化
 
 新增：
 
@@ -310,7 +349,7 @@ flutter test test/features/novel/presentation/novel_reader_hybrid_pagination_fix
 flutter analyze
 ```
 
-## 15. Phase 0 完成门禁
+## 16. Phase 0 完成门禁
 
 - [x] 两份 JSON 以 UTF-8、`version=1` 读取。
 - [x] 原始认证信息未写入仓库。
@@ -322,7 +361,7 @@ flutter analyze
 - [x] ADR 已裁定 route/policy、dedicated、atomic、二分、缓存和 rollback。
 - [x] 生产分页行为未修改。
 
-## 16. Phase 1-5 后续实施记录
+## 17. Phase 1-6 后续实施记录
 
 Phase 1 已将 route reason 与 layout policy 解耦，并引入
 `flowableComplexText`、`atomicWidget`、flowability inspector 和 capability
@@ -366,7 +405,19 @@ planner。每个 flowable atom 只建立一个 DOM session，engine 循环消费
 文本页填充率统计。Planner/diagnostics 新增 fragment、boundary、probe/cache、
 budget、minimum fragment、dedicated/atomic page 和 failure reason 计数。生产
 renderer revision 已提升到 `13`，旧 plan cache 自动失效。Ruby/protected-inline
-仍保留旧路径，等待 Phase 6。
+在 Phase 5 仍保留旧路径。
 
-下一阶段为 Phase 6：把 Ruby cluster 和已知稳定尺寸 protected-inline adapter
-接入相同 flowable engine，同时保持未知 inline widget 的 atomic fallback。
+Phase 6 已新增共享 `NovelReaderProtectedInlineNodeAdapter`，classifier、flowability
+inspector 与 DOM index 使用同一稳定尺寸规则。论坛 smiley 或显式声明的 inline
+image 只有在 HTML 提供有限正数 `width/height` 时进入 protected range；未知尺寸
+smiley、普通 inline image 和非图片 widget 保持 atomic fallback，防止异步加载重排
+已发布页面。
+
+`rubyInline` 已接入与 `flowableComplexText` 相同的 DOM range engine，生产 planner
+不再使用 whole-block Ruby 分支。完整 Ruby base/`rt`/`rp` cluster 只能整体进入一个
+slice，但长段落可以在 cluster 前后跨页；protected-inline 合成搜索位置不推进正文
+anchor。新增 fixture 覆盖日文、英文、间隔点、连续 Ruby 和固定尺寸 smiley，生产
+renderer revision 提升到 `14`。
+
+下一阶段为 Phase 7：补齐真实 renderer 一致性矩阵、boundary/range cache 调优、
+性能门禁、timeout 与纵向降级验证。

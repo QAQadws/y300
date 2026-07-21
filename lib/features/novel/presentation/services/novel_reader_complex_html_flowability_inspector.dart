@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
 
 enum NovelReaderComplexHtmlFlowabilityFailure {
@@ -40,15 +41,18 @@ final class DefaultNovelReaderComplexHtmlFlowabilityInspector
   const DefaultNovelReaderComplexHtmlFlowabilityInspector({
     CssInlineStyleDeclarationCodec declarationCodec =
         const CssInlineStyleDeclarationCodec(),
+    this.protectedInlineNodeAdapter =
+        const DefaultNovelReaderProtectedInlineNodeAdapter(),
   }) : _declarationCodec = declarationCodec;
 
   final CssInlineStyleDeclarationCodec _declarationCodec;
+  final NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter;
 
   static const _dedicatedSelector =
       'table,thead,tbody,tfoot,tr,td,th,.showcollapse_box';
   static const _scriptedSelector = 'script';
   static const _atomicSelector =
-      'audio,canvas,details,embed,fieldset,iframe,img,object,pre,code,'
+      'audio,canvas,details,embed,fieldset,iframe,object,pre,code,'
       'sub,sup,video';
   static const _nonMonotonicProperties = <String>{
     'position',
@@ -68,9 +72,28 @@ final class DefaultNovelReaderComplexHtmlFlowabilityInspector
   NovelReaderComplexHtmlFlowability inspect(String html) {
     final fragment = html_parser.parseFragment(html);
     final text = fragment.text ?? '';
-    final isTextBearing = _renderableTextPattern.hasMatch(text);
+    var hasStableProtectedInlineNodes = false;
+    for (final element in fragment.querySelectorAll(
+      'img,[data-y300-protected-inline]',
+    )) {
+      final assessment = protectedInlineNodeAdapter.assess(element);
+      if (!assessment.isCandidate || !assessment.isStable) {
+        return NovelReaderComplexHtmlFlowability(
+          isTextBearing: _renderableTextPattern.hasMatch(text),
+          isMonotonic: false,
+          hasProtectedInlineNodes: hasStableProtectedInlineNodes,
+          requiresRubyBoundaries: fragment.querySelector('ruby,rt,rp') != null,
+          failure:
+              NovelReaderComplexHtmlFlowabilityFailure.containsAtomicWidget,
+        );
+      }
+      hasStableProtectedInlineNodes = true;
+    }
+    final isTextBearing =
+        _renderableTextPattern.hasMatch(text) || hasStableProtectedInlineNodes;
     final requiresRubyBoundaries = fragment.querySelector('ruby,rt,rp') != null;
-    final hasProtectedInlineNodes = requiresRubyBoundaries;
+    final hasProtectedInlineNodes =
+        requiresRubyBoundaries || hasStableProtectedInlineNodes;
 
     if (fragment.querySelector(_dedicatedSelector) != null) {
       return NovelReaderComplexHtmlFlowability(

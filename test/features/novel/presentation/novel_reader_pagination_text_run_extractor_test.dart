@@ -459,6 +459,24 @@ void main() {
     );
   });
 
+  test('routes a fixed-size smiley through protected inline flow', () {
+    final classified = classifier.classify(
+      atom: _atom(
+        '<p>前<img src="static/image/smiley/default/smile.gif" '
+        'width="24" height="24">后</p>',
+        kind: NovelReaderPaginationAtomKind.inlineImage,
+      ),
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+
+    expect(classified.route, NovelReaderPaginationRoute.flowableComplexText);
+    expect(classified.reason, NovelReaderPaginationRouteReason.containsImage);
+    expect(classified.isBreakable, isTrue);
+    expect(classified.layoutPolicy.keepPageOpenAfterAppend, isTrue);
+  });
+
   test('routes a structural br spacer through the safe text path', () {
     final classified = classifier.classify(
       atom: _atom('<br>', kind: NovelReaderPaginationAtomKind.spacer),

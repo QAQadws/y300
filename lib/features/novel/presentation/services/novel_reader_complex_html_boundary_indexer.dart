@@ -1,6 +1,7 @@
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_dom_text_index.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
 
 abstract interface class NovelReaderComplexHtmlBoundaryIndexer {
@@ -15,9 +16,12 @@ final class DefaultNovelReaderComplexHtmlBoundaryIndexer
   const DefaultNovelReaderComplexHtmlBoundaryIndexer({
     ForumHtmlFragmentCodec fragmentCodec =
         const HtmlPackageForumHtmlFragmentCodec(),
+    this.protectedInlineNodeAdapter =
+        const DefaultNovelReaderProtectedInlineNodeAdapter(),
   }) : _fragmentCodec = fragmentCodec;
 
   final ForumHtmlFragmentCodec _fragmentCodec;
+  final NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter;
 
   @override
   NovelReaderComplexHtmlSliceSession prepare({
@@ -27,6 +31,7 @@ final class DefaultNovelReaderComplexHtmlBoundaryIndexer
     final index = NovelReaderHtmlDomTextIndex.parse(
       html,
       fragmentCodec: _fragmentCodec,
+      protectedInlineNodeAdapter: protectedInlineNodeAdapter,
     );
     final collector = _ComplexBoundaryCollector(
       startAnchor: startAnchor,
@@ -110,7 +115,10 @@ final class _DefaultNovelReaderComplexHtmlSliceSession
   }
 
   NovelReaderTextAnchor _anchorAt(int offset) {
-    return startAnchor.copyWith(textOffset: startAnchor.textOffset + offset);
+    return startAnchor.copyWith(
+      textOffset:
+          startAnchor.textOffset + _visibleTextOffset(offset, protectedRanges),
+    );
   }
 }
 
@@ -243,7 +251,9 @@ final class _ComplexBoundaryCollector {
           return NovelReaderComplexHtmlBoundary(
             textOffset: offset,
             anchor: startAnchor.copyWith(
-              textOffset: startAnchor.textOffset + offset,
+              textOffset:
+                  startAnchor.textOffset +
+                  _visibleTextOffset(offset, _protectedRanges),
             ),
             kind: candidate.kind,
             preference: candidate.preference,
@@ -278,6 +288,20 @@ final class _ComplexBoundaryCollector {
   static final _wordDelimiterPattern = RegExp(
     r'''^[\s\u00A0\u3000，、：:,.()（）「」『』“”"'-]+$''',
   );
+}
+
+int _visibleTextOffset(
+  int indexedOffset,
+  List<NovelReaderComplexHtmlProtectedRange> protectedRanges,
+) {
+  var syntheticPlaceholderCount = 0;
+  for (final range in protectedRanges) {
+    if (range.kind == NovelReaderComplexProtectedRangeKind.inlineWidget &&
+        range.endOffset <= indexedOffset) {
+      syntheticPlaceholderCount += range.endOffset - range.startOffset;
+    }
+  }
+  return indexedOffset - syntheticPlaceholderCount;
 }
 
 final class _BoundaryCandidate {

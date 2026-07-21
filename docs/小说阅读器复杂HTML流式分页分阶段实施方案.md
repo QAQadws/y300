@@ -1,6 +1,6 @@
 # 小说阅读器复杂 HTML 流式分页分阶段实施方案
 
-> 状态：Phase 0-5 已完成（2026-07-21）；Phase 6-8 待实施
+> 状态：Phase 0-6 已完成（2026-07-21）；Phase 7-8 待实施
 >
 > 编写日期：2026-07-21
 >
@@ -161,7 +161,7 @@
 | 未知但有效字体的纯文字 | `flowableComplexText` | HtmlWidget + DOM 二分 | 是 | 是 | 是 | 最小合法片段或纵向降级 |
 | 特殊内联颜色/背景/字号 | safe 优先，否则 `flowableComplexText` | TextPainter 或 HtmlWidget + DOM 二分 | 是 | 是 | 是 | 同上 |
 | Ruby 段落 | `rubyInline` + flowable policy | HtmlWidget + Ruby 边界二分 | 是 | 是 | 是 | 不拆 cluster |
-| 小型 inline smiley | flowable protected cluster | HtmlWidget + DOM 二分 | 在 cluster 外可拆 | 是 | 是 | 单 cluster 过高则 atomic |
+| 固定尺寸 inline smiley | flowable protected cluster | HtmlWidget + DOM 二分 | 在 cluster 外可拆 | 是 | 是 | 无稳定尺寸或单 cluster 过高则 atomic |
 | 正文图片 | `isolatedImage` | HtmlWidget/尺寸索引 | 否 | 否 | 否 | 独占页内部 contain/scroll |
 | 表格 | `tableBlock` | HtmlWidget | 否 | 否 | 否 | 独占页内部横纵滚动 |
 | 折叠块 | `collapseBlock` | HtmlWidget | 否 | 否 | 否 | 独占页内部滚动 |
@@ -501,7 +501,7 @@ font face contains no usable family token
 | `unsupportedTag`，后代仅文字且单调 | `flowableComplexText` |
 | `containsWidgetSpan` | `atomicWidget`，除非存在已注册 protected-inline adapter |
 | `atomicWidget` | `atomicWidget` |
-| `containsImage` | readable image 提取为 dedicated；smiley 进入 protected-inline；其它图片 atomic |
+| `containsImage` | readable image 提取为 dedicated；固定尺寸 smiley 进入 protected-inline；无稳定尺寸或其它图片 atomic |
 
 ### 8.3 Flowability inspector
 
@@ -627,7 +627,7 @@ hard maximum: 12 probes / fragment
 | 反复解析 HTML | atom DOM 只解析一次 |
 | 可按字符串中点落在标签内部 | 只搜索合法语义边界 |
 | 每次创建一次性 probe | 复用持久 measurement session |
-| 缺少 protected cluster | Ruby、smiley、inline widget 有不可拆范围 |
+| 缺少 protected cluster | Ruby、固定尺寸 smiley、已注册 inline widget 有不可拆范围 |
 | 普通文字也支付 renderer 成本 | safe text 继续 TextPainter 线性路径 |
 
 ## 11. Page composer 改造
@@ -1027,8 +1027,9 @@ flowabilityFailureReasonCounts
   end、Ruby cluster end、protected-inline end 和 atom end；同一 offset 只保留
   preference 最高者。Boundary 保留原 episode/node anchor，并将 grapheme offset
   映射为连续 text anchor。
-- `<ruby>` 整体作为 protected range，base、`rt`、`rp` 之间不生成切点；已知
-  smiley 或显式 `data-y300-protected-inline` 节点使用一个合成 grapheme 占位，
+- `<ruby>` 整体作为 protected range，base、`rt`、`rp` 之间不生成切点；Phase 3
+  原型先为 smiley 或显式 `data-y300-protected-inline` 节点提供合成 grapheme 占位，
+  Phase 6 最终只允许具备首帧稳定宽高的节点启用该能力，
   只能整体进入一个 slice。未知尺寸 inline widget 的 production 分类仍保持
   atomic，Phase 3 不放宽 classifier。
 - Slice 只克隆与范围相交的祖先 wrapper 和节点，保留 strong/font/span/a、
@@ -1178,6 +1179,10 @@ dedicated table/collapse、旧样本目标行为和既有增量稳定页不变�
 
 目标：将 Ruby 和稳定 inline widget 纳入 flowable complex path。
 
+> 实施状态：已完成（2026-07-21）。`rubyInline` 与具备确定布局尺寸的
+> protected-inline 已接入 Phase 5 的生产 flowable engine；未知尺寸节点继续使用
+> atomic fallback。Renderer revision 已提升到 `14`。
+
 交付：
 
 - Ruby cluster boundary adapter。
@@ -1191,6 +1196,33 @@ dedicated table/collapse、旧样本目标行为和既有增量稳定页不变�
 - 日文、英文、间隔点注音和连续 Ruby 通过 fixture。
 - smiley 可随文字分页，不进入正文图片独占页。
 - inline widget 加载不会重排已发布页面。
+
+实际落地：
+
+- 新增 `NovelReaderProtectedInlineNodeAdapter` 和默认实现，作为 classifier、
+  flowability inspector 与 DOM index 共用的稳定尺寸能力边界。论坛 smiley 通过
+  `/static/image/smiley/`、`smilieid` 或 smiley class 识别；非 smiley 图片必须显式
+  声明 `data-y300-protected-inline`，两者都必须同时提供有限正数 `width/height`。
+- “是 smiley”不再等价于“尺寸稳定”。无宽高 smiley、声明节点缺少宽高、非图片
+  protected 节点和普通 inline 图片都保持 `atomicWidget`，不能因远端解码或异步
+  dimension cache 更新而重排已经发布的页。
+- `rubyInline` 现在与 `flowableComplexText` 共用
+  `NovelReaderFlowableComplexPaginationEngine`、DOM boundary session、有界 fit search、
+  persistent measure session 和 composer 合页路径；旧 whole-block Ruby 分支已从生产
+  planner 移除。
+- `<ruby>` 继续作为完整 protected cluster。Slice 会完整保留 base、`rt` 与任意
+  `<rp>` fallback，不在 cluster 内产生候选；日文、英文 annotation、间隔点注音和
+  连续 Ruby 可在 cluster 之间跨页。
+- 稳定 protected-inline 在 DOM 搜索坐标中使用一个合成 grapheme，使节点只能整体
+  进入一个 slice；该占位不推进正文 text anchor，因此表情前后的书签/恢复 anchor
+  仍与原始可见文字连续。
+- 新增 UTF-8 `phase6_ruby_protected_inline_v1.html` fixture 以及 adapter、classifier、
+  boundary、engine 和 production planner 测试。Fixture 锁定 5 个完整 Ruby cluster、
+  10 个 `rp`、固定尺寸 smiley 仅出现一次、无正文丢失/重复、无 dedicated image/
+  atomic page。
+- 生产 renderer revision 提升到 `14`，Phase 6 前的 whole-block Ruby plan 不会从
+  进程内 cache 复用。小说 preparation、SQLite、进度、纵向模式和 `version=1`
+  请求链路不变。
 
 ### Phase 7：真实 renderer 集成、缓存和性能
 
@@ -1250,7 +1282,7 @@ persistent measurement session。
 - 嵌套 strong/font/span/a。
 - `<br>`、连续空行和空 div。
 - Ruby base/rt/rp。
-- protected smiley。
+- 具有固定宽高的 protected smiley，以及无宽高 smiley 的 atomic fallback。
 - 任意连续 slice 可见文本不丢失、不重复。
 - 不产生空白假成功页。
 

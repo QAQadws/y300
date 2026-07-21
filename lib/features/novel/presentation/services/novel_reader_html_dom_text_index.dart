@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:characters/characters.dart';
 import 'package:html/dom.dart' as html_dom;
+import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
 
 enum NovelReaderHtmlDomProtectedNodeKind { ruby, inlineWidget }
@@ -24,28 +25,33 @@ final class NovelReaderHtmlDomTextIndex {
     required this.roots,
     required this.runeLength,
     required this.graphemeLength,
-  });
+    required NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter,
+  }) : _protectedInlineNodeAdapter = protectedInlineNodeAdapter;
 
   factory NovelReaderHtmlDomTextIndex.parse(
     String html, {
     ForumHtmlFragmentCodec fragmentCodec =
         const HtmlPackageForumHtmlFragmentCodec(),
+    NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter =
+        const DefaultNovelReaderProtectedInlineNodeAdapter(),
   }) {
     final fragment = fragmentCodec.parse(html);
     final cursor = _HtmlTextIndexCursor();
     final roots = fragment.nodes
-        .map((node) => _indexNode(node, cursor))
+        .map((node) => _indexNode(node, cursor, protectedInlineNodeAdapter))
         .toList(growable: false);
     return NovelReaderHtmlDomTextIndex._(
       roots: List<NovelReaderHtmlDomIndexedNode>.unmodifiable(roots),
       runeLength: cursor.runeOffset,
       graphemeLength: cursor.graphemeOffset,
+      protectedInlineNodeAdapter: protectedInlineNodeAdapter,
     );
   }
 
   final List<NovelReaderHtmlDomIndexedNode> roots;
   final int runeLength;
   final int graphemeLength;
+  final NovelReaderProtectedInlineNodeAdapter _protectedInlineNodeAdapter;
 
   NovelReaderHtmlDomTextSlice sliceRunes({
     required int start,
@@ -74,13 +80,16 @@ final class NovelReaderHtmlDomTextIndex {
   NovelReaderHtmlDomTextSlice _result(List<html_dom.Node> nodes) {
     return NovelReaderHtmlDomTextSlice(
       html: nodes.map(_serializeNode).join(),
-      hasRenderableContent: nodes.any(_hasRenderableContent),
+      hasRenderableContent: nodes.any(
+        (node) => _hasRenderableContent(node, _protectedInlineNodeAdapter),
+      ),
     );
   }
 
   static NovelReaderHtmlDomIndexedNode _indexNode(
     html_dom.Node node,
     _HtmlTextIndexCursor cursor,
+    NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter,
   ) {
     final runeStart = cursor.runeOffset;
     final graphemeStart = cursor.graphemeOffset;
@@ -100,9 +109,9 @@ final class NovelReaderHtmlDomTextIndex {
       );
     }
     if (node is html_dom.Element) {
-      final protectedKind = _protectedKind(node);
+      final protectedKind = _protectedKind(node, protectedInlineNodeAdapter);
       final children = node.nodes
-          .map((child) => _indexNode(child, cursor))
+          .map((child) => _indexNode(child, cursor, protectedInlineNodeAdapter))
           .toList(growable: false);
       if (protectedKind != null && cursor.graphemeOffset == graphemeStart) {
         cursor.graphemeOffset += 1;
@@ -128,22 +137,13 @@ final class NovelReaderHtmlDomTextIndex {
 
   static NovelReaderHtmlDomProtectedNodeKind? _protectedKind(
     html_dom.Element element,
+    NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter,
   ) {
     final tag = element.localName?.toLowerCase();
     if (tag == 'ruby') {
       return NovelReaderHtmlDomProtectedNodeKind.ruby;
     }
-    if (element.attributes.containsKey('data-y300-protected-inline')) {
-      return NovelReaderHtmlDomProtectedNodeKind.inlineWidget;
-    }
-    if (tag != 'img') {
-      return null;
-    }
-    final src = element.attributes['src']?.toLowerCase() ?? '';
-    final classes = element.classes.map((value) => value.toLowerCase());
-    if (src.contains('static/image/smiley/') ||
-        src.contains('/smiley/') ||
-        classes.any((value) => value.contains('smilie'))) {
+    if (protectedInlineNodeAdapter.assess(element).isStable) {
       return NovelReaderHtmlDomProtectedNodeKind.inlineWidget;
     }
     return null;
@@ -159,14 +159,17 @@ final class NovelReaderHtmlDomTextIndex {
     }
   }
 
-  static bool _hasRenderableContent(html_dom.Node node) {
+  static bool _hasRenderableContent(
+    html_dom.Node node,
+    NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter,
+  ) {
     if (node is html_dom.Text) {
       return _renderableTextPattern.hasMatch(node.data);
     }
     if (node is! html_dom.Element) {
       return false;
     }
-    if (_protectedKind(node) != null ||
+    if (_protectedKind(node, protectedInlineNodeAdapter) != null ||
         const <String>{
           'hr',
           'img',
@@ -177,7 +180,9 @@ final class NovelReaderHtmlDomTextIndex {
         }.contains(node.localName?.toLowerCase())) {
       return true;
     }
-    return node.nodes.any(_hasRenderableContent);
+    return node.nodes.any(
+      (child) => _hasRenderableContent(child, protectedInlineNodeAdapter),
+    );
   }
 
   static String _serializeNode(html_dom.Node node) {

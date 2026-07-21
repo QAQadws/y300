@@ -715,6 +715,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
             dedicatedImagePageCount += 1;
             await publishFinalPages();
           case NovelReaderPaginationRoute.flowableComplexText:
+          case NovelReaderPaginationRoute.rubyInline:
             complexBlockCount += 1;
             late final NovelReaderFlowableComplexPaginationResult flowable;
             try {
@@ -757,46 +758,6 @@ final class DefaultNovelReaderHybridPaginationPlanner
               domSliceCount += 1;
               await publishFinalPages();
             }
-          case NovelReaderPaginationRoute.rubyInline:
-            complexBlockCount += 1;
-            final block = await complexBlockEngine.paginate(
-              atom: classified,
-              chapter: chapter,
-              key: key,
-              measurer: complexMeasurer,
-            );
-            var combineWithBufferedContent = false;
-            if (composer.canAppendComplexBlock(block)) {
-              cancellationToken.throwIfCancelled();
-              try {
-                final validation = await validator.validate(
-                  html: '${composer.bufferedHtml}${block.html}',
-                  atomId: '${classified.atom.atomId}:composition',
-                  chapter: chapter,
-                  key: key,
-                  availableHeight: key.viewportHeightPx.toDouble(),
-                );
-                rendererValidationCount += 1;
-                combineWithBufferedContent = validation.matches;
-                if (!validation.matches) {
-                  rendererValidationMismatchCount += 1;
-                }
-              } catch (error) {
-                if (_isCancellation(error)) {
-                  rethrow;
-                }
-                rendererValidationCount += 1;
-              }
-            }
-            composer.appendComplexBlock(
-              classified,
-              block,
-              combineWithBufferedContent: combineWithBufferedContent,
-              keepPageOpen:
-                  !block.metrics.isOversized &&
-                  !block.metrics.requiresInnerScroll,
-            );
-            await publishFinalPages();
           case NovelReaderPaginationRoute.collapseBlock:
           case NovelReaderPaginationRoute.tableBlock:
           case NovelReaderPaginationRoute.atomicWidget:

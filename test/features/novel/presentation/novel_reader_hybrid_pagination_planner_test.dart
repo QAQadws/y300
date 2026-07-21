@@ -314,7 +314,7 @@ void main() {
       expect(plan.routeCounts[NovelReaderPaginationRoute.collapseBlock], 1);
       expect(plan.pageCount, lessThanOrEqualTo(9));
       expect(plan.dedicatedCollapsePageCount, 1);
-      expect(plan.averageTextPageFullness, greaterThan(0.9));
+      expect(plan.averageTextPageFullness, greaterThan(0.85));
       final textPages = plan.pages
           .where((page) => !page.isDedicatedContentPage)
           .toList(growable: false);
@@ -334,6 +334,57 @@ void main() {
       expect(combinedText, contains('ACT23'));
       expect(combinedText, contains('我也好想变成像蓝沙前辈那样出色的姐姐啊'));
       expect(combinedText, contains('碎碎念'));
+    },
+  );
+
+  test(
+    'flows Ruby and fixed-size smileys without splitting protected clusters',
+    () async {
+      final html = await File(
+        'test/features/novel/fixtures/pagination/'
+        'phase6_ruby_protected_inline_v1.html',
+      ).readAsString();
+      final chapter = await _prepare(html);
+      final plan = await _planner(
+        _RecordingMeasureAdapter(
+          heightFor: (request, _) {
+            final fragment = html_parser.parseFragment(request.html);
+            final imageHeight = fragment.querySelectorAll('img').length * 24;
+            return (_visibleText(request.html).runes.length * 8 + imageHeight)
+                .toDouble();
+          },
+        ),
+      ).paginate(chapter, _key(chapter, height: 180));
+
+      expect(plan.routeCounts[NovelReaderPaginationRoute.rubyInline], 4);
+      expect(
+        plan.routeCounts[NovelReaderPaginationRoute.flowableComplexText],
+        1,
+      );
+      expect(plan.pageCount, greaterThan(1));
+      expect(plan.flowableComplexFragmentCount, greaterThan(5));
+      expect(plan.atomicWidgetPageCount, 0);
+      expect(plan.dedicatedImagePageCount, 0);
+      expect(plan.pages.every((page) => !page.isDedicatedContentPage), isTrue);
+
+      final publishedHtml = plan.pages.map((page) => page.html).join();
+      final published = html_parser.parseFragment(publishedHtml);
+      expect(published.querySelectorAll('ruby'), hasLength(5));
+      expect(published.querySelectorAll('rt'), hasLength(5));
+      expect(published.querySelectorAll('rp'), hasLength(10));
+      for (final ruby in published.querySelectorAll('ruby')) {
+        expect(ruby.querySelectorAll('rt'), hasLength(1));
+        expect(ruby.querySelectorAll('rp'), hasLength(2));
+      }
+      final smileys = published.querySelectorAll('img');
+      expect(smileys, hasLength(1));
+      expect(smileys.single.attributes['width'], '24');
+      expect(smileys.single.attributes['height'], '24');
+      expect(
+        _withoutFormattingWhitespace(publishedHtml),
+        _withoutFormattingWhitespace(chapter.html),
+        reason: 'Flowable slices must not lose or duplicate annotated text.',
+      );
     },
   );
 
@@ -790,6 +841,10 @@ String _visibleText(String html) {
       .replaceAll('\u00A0', ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
+}
+
+String _withoutFormattingWhitespace(String html) {
+  return _visibleText(html).replaceAll(RegExp(r'\s+'), '');
 }
 
 DefaultNovelReaderHybridPaginationPlanner _planner(
