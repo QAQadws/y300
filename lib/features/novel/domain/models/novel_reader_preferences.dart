@@ -135,6 +135,7 @@ class NovelReaderPreferences {
     this.textAlign = NovelReaderTextAlignMode.start,
     this.showProgressIndicator = true,
     this.conversionMode = NovelReaderConversionMode.none,
+    this.safeAreaEnabled = true,
     String? themeMode,
   }) : themePreset = themeMode == null
            ? themePreset
@@ -154,6 +155,7 @@ class NovelReaderPreferences {
     required this.textAlign,
     required this.showProgressIndicator,
     required this.conversionMode,
+    required this.safeAreaEnabled,
   });
 
   factory NovelReaderPreferences.defaults() {
@@ -171,6 +173,7 @@ class NovelReaderPreferences {
       textAlign: NovelReaderTextAlignMode.start,
       showProgressIndicator: true,
       conversionMode: NovelReaderConversionMode.none,
+      safeAreaEnabled: true,
     );
   }
 
@@ -187,6 +190,7 @@ class NovelReaderPreferences {
   final NovelReaderTextAlignMode textAlign;
   final bool showProgressIndicator;
   final NovelReaderConversionMode conversionMode;
+  final bool safeAreaEnabled;
 
   String get themeMode => themePreset.storageValue;
 
@@ -208,7 +212,8 @@ class NovelReaderPreferences {
         other.fontWeight == fontWeight &&
         other.textAlign == textAlign &&
         other.showProgressIndicator == showProgressIndicator &&
-        other.conversionMode == conversionMode;
+        other.conversionMode == conversionMode &&
+        other.safeAreaEnabled == safeAreaEnabled;
   }
 
   @override
@@ -226,6 +231,7 @@ class NovelReaderPreferences {
     textAlign,
     showProgressIndicator,
     conversionMode,
+    safeAreaEnabled,
   );
 
   NovelReaderPreferences copyWith({
@@ -243,6 +249,7 @@ class NovelReaderPreferences {
     NovelReaderTextAlignMode? textAlign,
     bool? showProgressIndicator,
     NovelReaderConversionMode? conversionMode,
+    bool? safeAreaEnabled,
   }) {
     return NovelReaderPreferences._(
       fontSize: fontSize ?? this.fontSize,
@@ -261,6 +268,7 @@ class NovelReaderPreferences {
       showProgressIndicator:
           showProgressIndicator ?? this.showProgressIndicator,
       conversionMode: conversionMode ?? this.conversionMode,
+      safeAreaEnabled: safeAreaEnabled ?? this.safeAreaEnabled,
     );
   }
 }

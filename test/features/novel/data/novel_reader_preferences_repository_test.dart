@@ -65,8 +65,10 @@ void main() {
       'flowMode',
       'themePreset',
       'conversionMode',
+      'safeAreaEnabled',
     });
     expect(snapshot['flowMode'], 'pagedRtl');
+    expect(snapshot['safeAreaEnabled'], isTrue);
     expect(
       preferences.getInt(PreferenceKeys.novelReaderMigrationVersion.name),
       1,
@@ -115,6 +117,23 @@ void main() {
     }
   });
 
+  test(
+    'saved safe area preference survives repository reconstruction',
+    () async {
+      await repository.save(
+        NovelReaderPreferences.defaults().copyWith(safeAreaEnabled: false),
+      );
+      repository = SharedPreferencesNovelReaderPreferencesRepository(
+        preferencesStore: SharedPreferencesStore(),
+        legacySource: legacySource,
+      );
+
+      final loaded = await repository.load();
+
+      expect(loaded.safeAreaEnabled, isFalse);
+    },
+  );
+
   test('schema 1 snapshot without flow mode remains compatible', () {
     const codec = NovelReaderPreferencesSnapshotCodec();
 
@@ -133,6 +152,7 @@ void main() {
     expect(decoded.themePreset, NovelReaderThemePreset.dark);
     expect(decoded.conversionMode, NovelReaderConversionMode.toSimplified);
     expect(decoded.flowMode, NovelReaderFlowMode.vertical);
+    expect(decoded.safeAreaEnabled, isTrue);
   });
 
   test('malformed snapshot falls back without reviving SQLite', () async {

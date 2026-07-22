@@ -70,7 +70,8 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
         previous.contentMaxWidth != next.contentMaxWidth ||
         previous.firstLineIndent != next.firstLineIndent ||
         previous.fontWeight != next.fontWeight ||
-        previous.textAlign != next.textAlign) {
+        previous.textAlign != next.textAlign ||
+        previous.safeAreaEnabled != next.safeAreaEnabled) {
       impacts.add(NovelReaderPreferenceImpact.relayout);
     }
     if (impacts.isEmpty) {

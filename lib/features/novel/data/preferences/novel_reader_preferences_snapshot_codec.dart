@@ -20,6 +20,7 @@ final class NovelReaderPreferencesSnapshotCodec {
       'flowMode': normalized.flowMode.storageValue,
       'themePreset': normalized.themePreset.storageValue,
       'conversionMode': normalized.conversionMode.storageValue,
+      'safeAreaEnabled': normalized.safeAreaEnabled,
     });
   }
 
@@ -53,6 +54,10 @@ final class NovelReaderPreferencesSnapshotCodec {
           decoded['conversionMode'],
           defaults.conversionMode,
         ),
+        safeAreaEnabled: _validBool(
+          decoded['safeAreaEnabled'],
+          fallback: defaults.safeAreaEnabled,
+        ),
       );
     } on FormatException {
       return defaults;
@@ -77,6 +82,7 @@ final class NovelReaderPreferencesSnapshotCodec {
       flowMode: preferences.flowMode,
       themePreset: preferences.themePreset,
       conversionMode: preferences.conversionMode,
+      safeAreaEnabled: preferences.safeAreaEnabled,
     );
   }
 
@@ -91,6 +97,10 @@ final class NovelReaderPreferencesSnapshotCodec {
       return fallback;
     }
     return value;
+  }
+
+  bool _validBool(Object? raw, {required bool fallback}) {
+    return raw is bool ? raw : fallback;
   }
 
   NovelReaderThemePreset _themePreset(

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/data/preferences/novel_reader_preferences_snapshot_codec.dart';
 
 void main() {
   test('NovelReaderPreferences.defaults uses the phase-0 baseline', () {
@@ -18,6 +19,7 @@ void main() {
     expect(defaults.textAlign, NovelReaderTextAlignMode.start);
     expect(defaults.showProgressIndicator, isTrue);
     expect(defaults.conversionMode, NovelReaderConversionMode.none);
+    expect(defaults.safeAreaEnabled, isTrue);
   });
 
   test('constructor uses the same default theme as the default snapshot', () {
@@ -110,4 +112,28 @@ void main() {
       NovelReaderConversionMode.none,
     );
   });
+
+  test(
+    'safe area preference round-trips and defaults old snapshots to enabled',
+    () {
+      const codec = NovelReaderPreferencesSnapshotCodec();
+      final preferences = NovelReaderPreferences.defaults().copyWith(
+        safeAreaEnabled: false,
+      );
+
+      expect(codec.decode(codec.encode(preferences)).safeAreaEnabled, isFalse);
+      expect(
+        codec
+            .decode('{"schemaVersion":1,"fontSize":18.5,"lineHeight":1.6}')
+            .safeAreaEnabled,
+        isTrue,
+      );
+      expect(
+        codec
+            .decode('{"schemaVersion":1,"safeAreaEnabled":"false"}')
+            .safeAreaEnabled,
+        isTrue,
+      );
+    },
+  );
 }

@@ -18,6 +18,7 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
@@ -160,11 +161,22 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             onOpenThread: () => _openFallbackSourceThread(),
           ),
           data: (viewState) {
+            final systemPadding = MediaQuery.paddingOf(context);
             final restoreOwner =
                 '${viewState.currentEpisode.episodeId}|'
                 '${viewState.preferences.flowMode.name}';
-            if (_progressControlOwner != restoreOwner) {
-              _progressControlOwner = restoreOwner;
+            final safeAreaTop = viewState.preferences.safeAreaEnabled
+                ? systemPadding.top
+                : 0.0;
+            final safeAreaBottom = viewState.preferences.safeAreaEnabled
+                ? systemPadding.bottom
+                : 0.0;
+            final paginationGeometryOwner =
+                '$restoreOwner|'
+                '${NovelReaderPaginationKey.logicalPixels(safeAreaTop)}|'
+                '${NovelReaderPaginationKey.logicalPixels(safeAreaBottom)}';
+            if (_progressControlOwner != paginationGeometryOwner) {
+              _progressControlOwner = paginationGeometryOwner;
               _pagedPosition = null;
               _pendingPageSeekRequest = null;
               _progressSliderPreview = null;
@@ -218,7 +230,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                       imageHeaderBuilder,
                       externalLauncher,
                       ReaderChromeInsets(
-                        safeAreaBottom: MediaQuery.paddingOf(context).bottom,
+                        safeAreaTop: safeAreaTop,
+                        safeAreaBottom: safeAreaBottom,
                         pageIndicatorReservedHeight:
                             viewState.preferences.showProgressIndicator
                             ? NovelReaderPagedIndicatorLayout.reservedHeight(
@@ -623,7 +636,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         child: ListView(
           key: const Key('novel-reader-paragraph-list'),
           controller: _scrollController,
-          padding: EdgeInsets.all(viewState.preferences.pagePadding),
+          padding: EdgeInsets.fromLTRB(
+            viewState.preferences.pagePadding,
+            viewState.preferences.pagePadding + chromeInsets.topInset,
+            viewState.preferences.pagePadding,
+            viewState.preferences.pagePadding +
+                chromeInsets.persistentBottomInset,
+          ),
           children: [
             Center(
               child: ConstrainedBox(

@@ -139,6 +139,18 @@ void main() {
         isNot(contains(NovelReaderPreferenceImpact.contentRebuild)),
       );
     });
+
+    test('safe area change only flags relayout', () {
+      final previous = NovelReaderPreferences.defaults();
+      final next = previous.copyWith(safeAreaEnabled: false);
+      final diff = analyzer.compare(previous, next);
+
+      expect(diff.impacts, contains(NovelReaderPreferenceImpact.relayout));
+      expect(
+        diff.impacts,
+        isNot(contains(NovelReaderPreferenceImpact.contentRebuild)),
+      );
+    });
   });
 }
 

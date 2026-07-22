@@ -152,6 +152,15 @@ class _NovelReaderDisplaySettingsSheetState
                       _draft.copyWith(conversionMode: value),
                     ),
                   ),
+                  SwitchListTile.adaptive(
+                    key: const Key('novel-reader-safe-area-switch'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                    title: const Text('安全显示正文'),
+                    value: _draft.safeAreaEnabled,
+                    onChanged: (value) => _applyPreferences(
+                      _draft.copyWith(safeAreaEnabled: value),
+                    ),
+                  ),
                 ],
               ),
             ],

@@ -675,6 +675,10 @@ void main() {
       find.byKey(const Key('novel-reader-conversion-mode-control')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const Key('novel-reader-safe-area-switch')),
+      findsOneWidget,
+    );
     expect(find.text('分页 LTR'), findsOneWidget);
     expect(find.text('分页 RTL'), findsOneWidget);
     expect(find.byKey(const Key('novel-reader-paged-page-view')), findsNothing);
@@ -719,6 +723,36 @@ void main() {
       expect(repository.upsertPreferencesCallCount, 1);
     },
   );
+
+  testWidgets('NovelReaderPage persists the safe area display switch', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository();
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-display')),
+    );
+    await tester.pumpAndSettle();
+
+    final safeAreaSwitch = tester.widget<SwitchListTile>(
+      find.byKey(const Key('novel-reader-safe-area-switch')),
+    );
+    expect(safeAreaSwitch.value, isTrue);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('novel-reader-safe-area-switch')),
+    );
+    await tester.tap(find.byKey(const Key('novel-reader-safe-area-switch')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+
+    expect(repository.latestPreferences?.safeAreaEnabled, isFalse);
+    expect(repository.upsertPreferencesCallCount, 1);
+  });
 
   testWidgets(
     'NovelReaderPage display sheet barrier dismiss keeps applied settings',

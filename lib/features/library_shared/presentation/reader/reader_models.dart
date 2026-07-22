@@ -5,10 +5,12 @@ class ReaderChromeInsets {
   const ReaderChromeInsets({
     this.top = 0,
     this.bottom = 0,
+    this.safeAreaTop = 0,
     this.safeAreaBottom = 0,
     this.pageIndicatorReservedHeight = 0,
   }) : assert(top >= 0),
        assert(bottom >= 0),
+       assert(safeAreaTop >= 0),
        assert(safeAreaBottom >= 0),
        assert(pageIndicatorReservedHeight >= 0);
 
@@ -16,10 +18,11 @@ class ReaderChromeInsets {
 
   final double top;
   final double bottom;
+  final double safeAreaTop;
   final double safeAreaBottom;
   final double pageIndicatorReservedHeight;
 
-  double get topInset => top;
+  double get topInset => top + safeAreaTop;
 
   double get persistentBottomInset => bottom + safeAreaBottom;
 
@@ -30,13 +33,19 @@ class ReaderChromeInsets {
     return other is ReaderChromeInsets &&
         other.top == top &&
         other.bottom == bottom &&
+        other.safeAreaTop == safeAreaTop &&
         other.safeAreaBottom == safeAreaBottom &&
         other.pageIndicatorReservedHeight == pageIndicatorReservedHeight;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(top, bottom, safeAreaBottom, pageIndicatorReservedHeight);
+  int get hashCode => Object.hash(
+    top,
+    bottom,
+    safeAreaTop,
+    safeAreaBottom,
+    pageIndicatorReservedHeight,
+  );
 }
 
 class ReaderToolbarAction {
