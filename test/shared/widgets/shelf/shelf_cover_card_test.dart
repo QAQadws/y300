@@ -1,39 +1,48 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
 void main() {
-  testWidgets('ShelfCoverCard renders title and badge with fallback background', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 120,
-            height: 180,
-            child: ShelfCoverCard(
-              title: '测试标题',
-              coverImageUrl: null,
-              onTap: () {},
-              topLeftBadge: const Text('角标'),
-              fallbackBackground: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF000000), Color(0xFF333333)],
+  testWidgets(
+    'ShelfCoverCard renders title and badge with fallback background',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 120,
+              height: 180,
+              child: ShelfCoverCard(
+                title: '测试标题',
+                coverImageUrl: null,
+                onTap: () {},
+                topLeftBadge: const Text('角标'),
+                fallbackBackground: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF000000), Color(0xFF333333)],
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('测试标题'), findsOneWidget);
-    expect(find.text('角标'), findsOneWidget);
-    expect(find.byType(ShelfCoverCard), findsOneWidget);
-  });
+      expect(find.text('测试标题'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('测试标题')).style?.fontWeight,
+        FontWeight.w500,
+      );
+      expect(find.text('角标'), findsOneWidget);
+      expect(find.byType(ShelfCoverCard), findsOneWidget);
+    },
+  );
 
-  testWidgets('ShelfCoverCard supports custom two-line ellipsis mode', (tester) async {
+  testWidgets('ShelfCoverCard supports custom two-line ellipsis mode', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -54,7 +63,9 @@ void main() {
     expect(find.textContaining('···'), findsOneWidget);
   });
 
-  testWidgets('ShelfCoverCard uses shelf placeholder color from app theme', (tester) async {
+  testWidgets('ShelfCoverCard uses shelf placeholder color from app theme', (
+    tester,
+  ) async {
     final theme = AppTheme.dark();
     final palette = const ShelfThemePaletteResolver().resolve(theme);
 
@@ -76,10 +87,12 @@ void main() {
     );
 
     final fallback = tester.widget<Container>(
-      find.ancestor(
-        of: find.byIcon(Icons.image_not_supported_outlined),
-        matching: find.byType(Container),
-      ).first,
+      find
+          .ancestor(
+            of: find.byIcon(Icons.image_not_supported_outlined),
+            matching: find.byType(Container),
+          )
+          .first,
     );
 
     expect(fallback.color, palette.coverPlaceholderBackground);

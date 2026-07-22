@@ -72,9 +72,7 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleSmall?.copyWith(
                               color: titleColor,
-                              fontWeight: chapter.isRead
-                                  ? FontWeight.w500
-                                  : FontWeight.w600,
+                              fontWeight: FontWeight.normal,
                             ),
                           ),
                         ),

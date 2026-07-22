@@ -250,7 +250,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
               iconTheme: IconThemeData(color: appBarForeground),
               titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: appBarForeground,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.normal,
               ),
               title: Opacity(
                 opacity: progress,

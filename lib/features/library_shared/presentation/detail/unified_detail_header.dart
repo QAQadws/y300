@@ -187,7 +187,7 @@ class _HeroInfoSection extends StatelessWidget {
                       translationGroup: group,
                       publisherName: _nonEmpty(header.publisherName),
                       publisherId: _nonEmpty(header.publisherId),
-                      foregroundColor: palette.onHeader,
+                      foregroundColor: palette.heroInfoForeground,
                     ),
                   ),
                 ),
@@ -324,7 +324,7 @@ class _HeroMetaColumn extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
               color: foregroundColor,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.normal,
             ),
           ),
           if (showContributorMetadata && author != null) ...[

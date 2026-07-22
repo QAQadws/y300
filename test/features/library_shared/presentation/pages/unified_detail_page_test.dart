@@ -50,6 +50,17 @@ void main() {
           .maxLines,
       3,
     );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('unified-detail-hero-title')))
+          .style
+          ?.fontWeight,
+      FontWeight.normal,
+    );
+    expect(
+      tester.widget<AppBar>(find.byType(AppBar)).titleTextStyle?.fontWeight,
+      FontWeight.normal,
+    );
     expect(find.byKey(const Key('unified-detail-author-row')), findsOneWidget);
     expect(find.text('UID: 10001'), findsOneWidget);
     expect(
@@ -90,6 +101,10 @@ void main() {
     expect(
       find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
       findsOneWidget,
+    );
+    expect(
+      tester.widget<Text>(find.text('第1章')).style?.fontWeight,
+      FontWeight.normal,
     );
     expect(find.textContaining('Pid:5001'), findsOneWidget);
 
@@ -515,6 +530,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<AppBar>(find.byType(AppBar)).backgroundColor?.a, 0);
   });
+
+  testWidgets(
+    'UnifiedDetailPage uses dark hero metadata on a light covered header',
+    (tester) async {
+      const pageBackground = Color(0xFFF1F3F5);
+      final adapter = _FakeDetailAdapter(
+        coverLocalPath: 'missing-y300-detail-cover.png',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+            scaffoldBackgroundColor: pageBackground,
+          ),
+          home: UnifiedDetailPage(
+            adapter: adapter,
+            workId: 'work-1',
+            onOpenReader: (context, target) async {},
+            onOpenThread: (context, target) async {},
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('unified-detail-hero-title')))
+            .style
+            ?.color,
+        Colors.black,
+      );
+      expect(
+        tester.widget<AppBar>(find.byType(AppBar)).foregroundColor,
+        Colors.white,
+      );
+    },
+  );
 
   testWidgets(
     'UnifiedDetailPage no-cover header remains available with custom theme',

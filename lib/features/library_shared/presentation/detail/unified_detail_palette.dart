@@ -15,6 +15,7 @@ class UnifiedDetailPalette {
     required this.headerFallbackBackground,
     required this.headerPlaceholderBackground,
     required this.onHeader,
+    required this.heroInfoForeground,
     required this.collapsedAppBarBackground,
     required this.collapsedAppBarForeground,
   });
@@ -26,6 +27,7 @@ class UnifiedDetailPalette {
   final Color headerFallbackBackground;
   final Color headerPlaceholderBackground;
   final Color onHeader;
+  final Color heroInfoForeground;
   final Color collapsedAppBarBackground;
   final Color collapsedAppBarForeground;
 }
@@ -56,6 +58,7 @@ class UnifiedDetailPaletteResolver {
         fallbackBackground,
       ),
       onHeader: Colors.white,
+      heroInfoForeground: _readableOn(pageBackground),
       collapsedAppBarBackground: pageBackground,
       collapsedAppBarForeground: _readableOn(pageBackground),
     );

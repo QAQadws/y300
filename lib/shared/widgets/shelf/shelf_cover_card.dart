@@ -1,13 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
-typedef ShelfCoverLayerBuilder = Widget Function(
-  BuildContext context,
-  ShelfCoverLayerConfig config,
-);
+typedef ShelfCoverLayerBuilder =
+    Widget Function(BuildContext context, ShelfCoverLayerConfig config);
 
 class ShelfCoverLayerConfig {
   const ShelfCoverLayerConfig({
@@ -76,11 +74,10 @@ class ShelfCoverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette =
-        const ShelfThemePaletteResolver().resolve(Theme.of(context));
-    final borderColor = selected
-        ? palette.selectedBorder
-        : Colors.transparent;
+    final palette = const ShelfThemePaletteResolver().resolve(
+      Theme.of(context),
+    );
+    final borderColor = selected ? palette.selectedBorder : Colors.transparent;
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -163,8 +160,9 @@ class ShelfCoverCard extends StatelessWidget {
   }
 
   Widget _buildFallback(BuildContext context) {
-    final palette =
-        const ShelfThemePaletteResolver().resolve(Theme.of(context));
+    final palette = const ShelfThemePaletteResolver().resolve(
+      Theme.of(context),
+    );
     return Container(
       decoration: fallbackBackground,
       color: fallbackBackground == null
@@ -176,9 +174,9 @@ class ShelfCoverCard extends StatelessWidget {
 
   Widget _buildTitleOverlay(BuildContext context) {
     final style = Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
-        );
+      color: Colors.white,
+      fontWeight: FontWeight.w500,
+    );
 
     return Container(
       width: double.infinity,
@@ -187,11 +185,7 @@ class ShelfCoverCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Color(0x00000000),
-            Color(0xA6000000),
-            Color(0xCC000000),
-          ],
+          colors: [Color(0x00000000), Color(0xA6000000), Color(0xCC000000)],
         ),
       ),
       child: showTwoLineCustomEllipsis
@@ -207,10 +201,7 @@ class ShelfCoverCard extends StatelessWidget {
 }
 
 class _TwoLineEllipsisText extends StatelessWidget {
-  const _TwoLineEllipsisText(
-    this.text, {
-    this.style,
-  });
+  const _TwoLineEllipsisText(this.text, {this.style});
 
   final String text;
   final TextStyle? style;
@@ -282,4 +273,3 @@ class _TwoLineEllipsisText extends StatelessWidget {
     return best.isEmpty ? '···' : best;
   }
 }
-

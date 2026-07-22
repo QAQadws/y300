@@ -5,19 +5,22 @@ import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
 
 void main() {
-  test('UnifiedDetailPaletteResolver uses scaffold background as gradient end', () {
-    const pageBackground = Color(0xFF123456);
-    final theme = ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-      scaffoldBackgroundColor: pageBackground,
-    );
+  test(
+    'UnifiedDetailPaletteResolver uses scaffold background as gradient end',
+    () {
+      const pageBackground = Color(0xFF123456);
+      final theme = ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        scaffoldBackgroundColor: pageBackground,
+      );
 
-    final palette = const UnifiedDetailPaletteResolver().resolve(theme);
+      final palette = const UnifiedDetailPaletteResolver().resolve(theme);
 
-    expect(palette.pageBackground, pageBackground);
-    expect(palette.headerGradientEnd, pageBackground);
-    expect(palette.collapsedAppBarBackground, pageBackground);
-  });
+      expect(palette.pageBackground, pageBackground);
+      expect(palette.headerGradientEnd, pageBackground);
+      expect(palette.collapsedAppBarBackground, pageBackground);
+    },
+  );
 
   test('UnifiedDetailPaletteResolver keeps dark gradient end non-white', () {
     const pageBackground = Color(0xFF101214);
@@ -34,6 +37,7 @@ void main() {
 
     expect(palette.headerGradientEnd, pageBackground);
     expect(palette.headerGradientEnd, isNot(Colors.white));
+    expect(palette.heroInfoForeground, Colors.white);
     expect(palette.collapsedAppBarForeground, Colors.white);
   });
 
@@ -47,21 +51,25 @@ void main() {
     expect(palette.headerFallbackBackground, isNot(equals(Colors.white)));
     expect(palette.headerPlaceholderBackground, isNot(equals(Colors.white)));
     expect(palette.onHeader, Colors.white);
+    expect(palette.heroInfoForeground, Colors.black);
   });
 
-  test('UnifiedDetailPaletteResolver uses app cover placeholder semantic when available', () {
-    final theme = AppTheme.dark();
-    final extension = theme.extension<Y300ThemeExtension>()!;
-    final scheme = theme.colorScheme;
+  test(
+    'UnifiedDetailPaletteResolver uses app cover placeholder semantic when available',
+    () {
+      final theme = AppTheme.dark();
+      final extension = theme.extension<Y300ThemeExtension>()!;
+      final scheme = theme.colorScheme;
 
-    final palette = const UnifiedDetailPaletteResolver().resolve(theme);
+      final palette = const UnifiedDetailPaletteResolver().resolve(theme);
 
-    expect(
-      palette.headerFallbackBackground,
-      Color.alphaBlend(
-        scheme.primary.withAlpha(34),
-        extension.coverPlaceholderBackground,
-      ),
-    );
-  });
+      expect(
+        palette.headerFallbackBackground,
+        Color.alphaBlend(
+          scheme.primary.withAlpha(34),
+          extension.coverPlaceholderBackground,
+        ),
+      );
+    },
+  );
 }
