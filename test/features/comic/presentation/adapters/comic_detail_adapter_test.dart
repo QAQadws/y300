@@ -463,6 +463,21 @@ void main() {
     },
   );
 
+  test(
+    'resetWorkReadingState delegates to the comic reset capability',
+    () async {
+      final repository = _FakeComicRepository();
+      final adapter = ComicDetailAdapter(
+        repository,
+        stateRepository: _FakeLibraryStateRepository(),
+      );
+
+      await adapter.resetWorkReadingState(workId: 'comic:1');
+
+      expect(repository.resetComicIds, const <String>['comic:1']);
+    },
+  );
+
   test('downloadAll delegates to BulkDownloadUseCase when injected', () async {
     final bulkDownloadUseCase = _RecordingBulkDownloadUseCase();
     final adapter = ComicDetailAdapter(
@@ -972,7 +987,8 @@ class _FakeComicRepository
     implements
         ComicRepository,
         ComicCatalogOverrideRepository,
-        ComicReadingProgressResetter {
+        ComicReadingProgressResetter,
+        ComicWorkReadingStateResetter {
   _FakeComicRepository({
     this.progress,
     this.progresses,
@@ -993,6 +1009,7 @@ class _FakeComicRepository
   List<ComicEpisodeLink> lastMergedLinks = const [];
   String? lastFallbackTid;
   final List<String> clearedProgress = <String>[];
+  final List<String> resetComicIds = <String>[];
 
   @override
   Future<ComicDetail?> getComicDetail({required String comicId}) async {
@@ -1211,6 +1228,11 @@ class _FakeComicRepository
     required String episodeId,
   }) async {
     clearedProgress.add(episodeId);
+  }
+
+  @override
+  Future<void> resetComicReadingState({required String comicId}) async {
+    resetComicIds.add(comicId);
   }
 
   @override

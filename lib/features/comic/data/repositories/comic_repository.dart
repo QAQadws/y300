@@ -16,6 +16,12 @@ abstract interface class ComicReadingProgressResetter {
   });
 }
 
+/// Optional persistence capability for resetting every reading-related field
+/// owned by one comic while preserving bookmarks, downloads, and image cache.
+abstract interface class ComicWorkReadingStateResetter {
+  Future<void> resetComicReadingState({required String comicId});
+}
+
 /// 漫画仓库：封装书架数据访问，屏蔽具体存储实现。
 abstract class ComicRepository implements CatalogUrlUpdater {
   Future<List<ComicShelfCategory>> getCategories();

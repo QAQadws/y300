@@ -39,6 +39,7 @@ class ComicDetailAdapter
     implements
         DetailModuleAdapter,
         DetailChapterReadStateAdapter,
+        DetailWorkReadingResetAdapter,
         DetailChapterDownloadAdapter,
         DetailChapterDownloadActivityAdapter,
         DetailMetadataEditor,
@@ -365,6 +366,17 @@ class ComicDetailAdapter
         ? _repository as ComicReadingProgressResetter
         : null;
     await resetter?.clearReadingProgress(comicId: workId, episodeId: episodeId);
+  }
+
+  @override
+  Future<void> resetWorkReadingState({required String workId}) async {
+    final resetter = _repository is ComicWorkReadingStateResetter
+        ? _repository as ComicWorkReadingStateResetter
+        : null;
+    if (resetter == null) {
+      throw UnsupportedError('当前漫画仓储不支持整部阅读重置');
+    }
+    await resetter.resetComicReadingState(comicId: workId);
   }
 
   @override

@@ -121,19 +121,26 @@ class UnifiedDetailController {
     await _loadChaptersOnly();
   }
 
-  Future<void> markChapterRead({
+  Future<void> toggleChapterReadingState({
     required String episodeId,
-    required bool isRead,
+    required bool isCurrentlyRead,
   }) async {
     final readStateAdapter = _readStateAdapter;
     if (readStateAdapter == null) {
       throw UnsupportedError('当前作品不支持章节已读状态');
     }
-    await readStateAdapter.markChapterRead(
-      workId: _workId,
-      episodeId: episodeId,
-      isRead: isRead,
-    );
+    if (isCurrentlyRead) {
+      await readStateAdapter.resetChapterReadingState(
+        workId: _workId,
+        episodeId: episodeId,
+      );
+    } else {
+      await readStateAdapter.markChapterRead(
+        workId: _workId,
+        episodeId: episodeId,
+        isRead: true,
+      );
+    }
     await _loadChaptersOnly();
   }
 
@@ -165,15 +172,12 @@ class UnifiedDetailController {
     await _loadChaptersOnly();
   }
 
-  Future<void> resetChapterReadingState({required String episodeId}) async {
-    final readStateAdapter = _readStateAdapter;
-    if (readStateAdapter == null) {
-      throw UnsupportedError('当前作品不支持章节已读状态');
+  Future<void> resetWorkReadingState() async {
+    final resetAdapter = _workReadingResetAdapter;
+    if (resetAdapter == null) {
+      throw UnsupportedError('当前作品不支持整部阅读重置');
     }
-    await readStateAdapter.resetChapterReadingState(
-      workId: _workId,
-      episodeId: episodeId,
-    );
+    await resetAdapter.resetWorkReadingState(workId: _workId);
     await _loadChaptersOnly();
   }
 
@@ -200,6 +204,13 @@ class UnifiedDetailController {
     final adapter = _adapter;
     return adapter is DetailChapterReadStateAdapter
         ? adapter as DetailChapterReadStateAdapter
+        : null;
+  }
+
+  DetailWorkReadingResetAdapter? get _workReadingResetAdapter {
+    final adapter = _adapter;
+    return adapter is DetailWorkReadingResetAdapter
+        ? adapter as DetailWorkReadingResetAdapter
         : null;
   }
 

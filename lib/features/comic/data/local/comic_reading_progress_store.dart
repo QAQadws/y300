@@ -116,6 +116,64 @@ class ComicReadingProgressStore {
     });
   }
 
+  Future<void> resetComicReadingState({required String comicId}) async {
+    final db = await _dbFuture;
+    await db.transaction((txn) async {
+      await txn.update(
+        ComicLocalDb.libraryEpisodeStateTable,
+        <String, Object?>{'is_read': 0, 'read_at': null},
+        where: 'content_type = ? AND work_id = ?',
+        whereArgs: <Object>['comic', comicId],
+      );
+      await txn.rawInsert(
+        '''
+        INSERT OR REPLACE INTO ${ComicLocalDb.libraryEpisodeStateTable} (
+          content_type,
+          episode_id,
+          work_id,
+          is_read,
+          is_downloaded,
+          is_bookmarked,
+          read_at,
+          downloaded_at
+        )
+        SELECT
+          'comic',
+          episode.episode_id,
+          episode.comic_id,
+          0,
+          COALESCE(state.is_downloaded, 0),
+          COALESCE(state.is_bookmarked, 0),
+          NULL,
+          state.downloaded_at
+        FROM ${ComicLocalDb.episodesTable} episode
+        LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} state
+          ON state.content_type = 'comic'
+         AND state.episode_id = episode.episode_id
+        WHERE episode.comic_id = ?
+        ''',
+        <Object>[comicId],
+      );
+      await txn.delete(
+        ComicLocalDb.readingProgressTable,
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+      );
+      await txn.update(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{'last_read_episode_id': null},
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+      );
+      await txn.update(
+        ComicLocalDb.libraryWorkStateTable,
+        <String, Object?>{'last_read_episode_id': null, 'last_read_at': null},
+        where: 'content_type = ? AND work_id = ?',
+        whereArgs: <Object>['comic', comicId],
+      );
+    });
+  }
+
   Future<List<ComicReadingProgress>> getReadingProgresses({
     required String comicId,
   }) async {

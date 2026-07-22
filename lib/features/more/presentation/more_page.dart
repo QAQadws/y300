@@ -133,12 +133,6 @@ class _MorePageState extends ConsumerState<MorePage> {
               );
             },
           ),
-          const ListTile(
-            key: Key('more-reader-settings-placeholder'),
-            leading: Icon(Icons.menu_book_outlined),
-            title: Text('阅读设置（预留）'),
-            subtitle: Text('后续阶段接入阅读器细项配置'),
-          ),
           ..._debugTools.buildTiles(context, ref),
           const AppUpdateCheckTile(),
           ListTile(

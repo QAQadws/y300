@@ -117,6 +117,13 @@ abstract interface class DetailChapterReadStateAdapter {
   });
 }
 
+/// Optional work-level reset capability. It is intentionally separate from
+/// chapter read-state mutation because resetting a work also owns progress and
+/// last-read pointers.
+abstract interface class DetailWorkReadingResetAdapter {
+  Future<void> resetWorkReadingState({required String workId});
+}
+
 /// 章节下载可选能力。
 ///
 /// 只有拥有独立下载产物的模块实现该合同。共享详情页通过能力发现决定是否

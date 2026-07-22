@@ -99,7 +99,10 @@ void main() {
     );
     expect(controller.state.chapters.length, 2);
 
-    await controller.markChapterRead(episodeId: 'e1', isRead: true);
+    await controller.toggleChapterReadingState(
+      episodeId: 'e1',
+      isCurrentlyRead: false,
+    );
     await controller.updateFilters(
       const LibraryFilterSet(unread: TriStateFilterValue.include),
     );
@@ -117,8 +120,14 @@ void main() {
     );
     expect(controller.state.chapters.map((e) => e.episodeId), ['e2']);
 
-    await controller.markChapterRead(episodeId: 'e2', isRead: true);
-    await controller.resetChapterReadingState(episodeId: 'e1');
+    await controller.toggleChapterReadingState(
+      episodeId: 'e2',
+      isCurrentlyRead: false,
+    );
+    await controller.toggleChapterReadingState(
+      episodeId: 'e1',
+      isCurrentlyRead: true,
+    );
     await controller.updateFilters(
       const LibraryFilterSet(unread: TriStateFilterValue.include),
     );
@@ -132,16 +141,53 @@ void main() {
     );
     expect(controller.state.chapters, isEmpty);
   });
+
+  test(
+    'chapter toggle and work reset use distinct adapter operations',
+    () async {
+      final adapter = _FakeDetailAdapter();
+      final controller = UnifiedDetailController(
+        adapter: adapter,
+        workId: 'work-1',
+      );
+      await controller.initialize();
+
+      await controller.toggleChapterReadingState(
+        episodeId: 'e1',
+        isCurrentlyRead: false,
+      );
+      expect(adapter.markReadCallCount, 1);
+      expect(adapter.resetChapterCallCount, 0);
+
+      await controller.toggleChapterReadingState(
+        episodeId: 'e1',
+        isCurrentlyRead: true,
+      );
+      expect(adapter.markReadCallCount, 1);
+      expect(adapter.resetChapterCallCount, 1);
+
+      await controller.resetWorkReadingState();
+      expect(adapter.resetWorkCallCount, 1);
+      expect(
+        controller.state.chapters.every((chapter) => !chapter.isRead),
+        isTrue,
+      );
+    },
+  );
 }
 
 class _FakeDetailAdapter
     implements
         DetailModuleAdapter,
         DetailChapterReadStateAdapter,
+        DetailWorkReadingResetAdapter,
         DetailChapterDownloadAdapter {
   int loadHeaderCount = 0;
   int loadChaptersCount = 0;
   int refreshWorkCount = 0;
+  int markReadCallCount = 0;
+  int resetChapterCallCount = 0;
+  int resetWorkCallCount = 0;
   DetailRefreshResult refreshResult = DetailRefreshResult.immediate;
 
   final Map<String, bool> _read = <String, bool>{'e1': false, 'e2': false};
@@ -159,7 +205,14 @@ class _FakeDetailAdapter
     required String workId,
     required String episodeId,
   }) async {
+    resetChapterCallCount++;
     _read[episodeId] = false;
+  }
+
+  @override
+  Future<void> resetWorkReadingState({required String workId}) async {
+    resetWorkCallCount++;
+    _read.updateAll((key, value) => false);
   }
 
   @override
@@ -285,6 +338,7 @@ class _FakeDetailAdapter
     required String episodeId,
     required bool isRead,
   }) async {
+    markReadCallCount++;
     _read[episodeId] = isRead;
   }
 

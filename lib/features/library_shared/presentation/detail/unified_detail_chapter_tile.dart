@@ -12,6 +12,8 @@ class UnifiedDetailChapterTile extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     this.onToggleDownload,
+    this.onToggleReadState,
+    this.readStateMutationLocked = false,
   });
 
   final Key tileKey;
@@ -22,6 +24,8 @@ class UnifiedDetailChapterTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback? onToggleDownload;
+  final Future<void> Function()? onToggleReadState;
+  final bool readStateMutationLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +38,7 @@ class UnifiedDetailChapterTile extends StatelessWidget {
         ? scheme.onSurfaceVariant.withAlpha(170)
         : scheme.onSurfaceVariant;
 
-    return Material(
+    final tile = Material(
       key: tileKey,
       color: Colors.transparent,
       child: InkWell(
@@ -122,6 +126,210 @@ class UnifiedDetailChapterTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+    final toggleReadState = onToggleReadState;
+    if (toggleReadState == null) {
+      return tile;
+    }
+    final actionLabel = chapter.isRead ? '清除阅读状态' : '标记已读';
+    final actionIcon = chapter.isRead ? Icons.remove_done : Icons.done;
+    final backgroundColor = chapter.isRead
+        ? scheme.secondaryContainer
+        : scheme.primaryContainer;
+    final foregroundColor = chapter.isRead
+        ? scheme.onSecondaryContainer
+        : scheme.onPrimaryContainer;
+
+    return _BoundedReadStateSwipe(
+      key: ValueKey<String>(
+        'unified-detail-chapter-read-swipe-${chapter.episodeId}',
+      ),
+      foregroundKey: ValueKey<String>(
+        'unified-detail-chapter-read-swipe-foreground-${chapter.episodeId}',
+      ),
+      locked: readStateMutationLocked,
+      onTriggered: toggleReadState,
+      background: ColoredBox(
+        color: backgroundColor,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Icon(actionIcon, size: 20, color: foregroundColor),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      actionLabel,
+                      maxLines: 1,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: foregroundColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      child: tile,
+    );
+  }
+}
+
+class _BoundedReadStateSwipe extends StatefulWidget {
+  const _BoundedReadStateSwipe({
+    super.key,
+    required this.foregroundKey,
+    required this.locked,
+    required this.onTriggered,
+    required this.background,
+    required this.child,
+  });
+
+  final Key foregroundKey;
+  final bool locked;
+  final Future<void> Function() onTriggered;
+  final Widget background;
+  final Widget child;
+
+  @override
+  State<_BoundedReadStateSwipe> createState() => _BoundedReadStateSwipeState();
+}
+
+class _BoundedReadStateSwipeState extends State<_BoundedReadStateSwipe>
+    with SingleTickerProviderStateMixin {
+  static const double _maxDragFraction = 1 / 3;
+  static const double _activationFraction = _maxDragFraction * 0.8;
+
+  late final AnimationController _returnController;
+  Animation<double>? _returnAnimation;
+  double _dragFraction = 0;
+  bool _isExecuting = false;
+
+  double get _visibleFraction => _returnAnimation?.value ?? _dragFraction;
+
+  bool get _interactionLocked =>
+      widget.locked || _isExecuting || _returnController.isAnimating;
+
+  @override
+  void initState() {
+    super.initState();
+    _returnController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 180),
+        )..addStatusListener((status) {
+          if (status != AnimationStatus.completed || !mounted) {
+            return;
+          }
+          setState(() {
+            _dragFraction = 0;
+            _returnAnimation = null;
+          });
+        });
+  }
+
+  @override
+  void dispose() {
+    _returnController.dispose();
+    super.dispose();
+  }
+
+  void _updateDrag(DragUpdateDetails details, double width) {
+    if (_interactionLocked || width <= 0) {
+      return;
+    }
+    setState(() {
+      _dragFraction = (_dragFraction + details.delta.dx / width)
+          .clamp(0, _maxDragFraction)
+          .toDouble();
+    });
+  }
+
+  void _finishDrag({required bool allowTrigger}) {
+    if (_interactionLocked) {
+      return;
+    }
+    final shouldTrigger = allowTrigger && _dragFraction >= _activationFraction;
+    _returnAnimation = Tween<double>(begin: _dragFraction, end: 0).animate(
+      CurvedAnimation(parent: _returnController, curve: Curves.easeOutCubic),
+    );
+    _returnController.forward(from: 0);
+    if (shouldTrigger) {
+      _executeAction();
+    }
+  }
+
+  Future<void> _executeAction() async {
+    setState(() {
+      _isExecuting = true;
+    });
+    try {
+      await widget.onTriggered();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isExecuting = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _returnController,
+      builder: (context, child) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final revealWidth = width.isFinite ? width * _visibleFraction : 0.0;
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragUpdate: (details) => _updateDrag(details, width),
+              onHorizontalDragEnd: (_) => _finishDrag(allowTrigger: true),
+              onHorizontalDragCancel: () => _finishDrag(allowTrigger: false),
+              child: ClipRect(
+                child: Stack(
+                  fit: StackFit.passthrough,
+                  children: [
+                    if (revealWidth > 0)
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: revealWidth,
+                        child: ClipRect(
+                          child: OverflowBox(
+                            alignment: Alignment.centerLeft,
+                            minWidth: width * _maxDragFraction,
+                            maxWidth: width * _maxDragFraction,
+                            child: SizedBox(
+                              width: width * _maxDragFraction,
+                              child: widget.background,
+                            ),
+                          ),
+                        ),
+                      ),
+                    FractionalTranslation(
+                      key: widget.foregroundKey,
+                      translation: Offset(_visibleFraction, 0),
+                      child: child!,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+      child: widget.child,
     );
   }
 }

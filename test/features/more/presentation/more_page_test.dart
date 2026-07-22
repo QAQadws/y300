@@ -100,7 +100,7 @@ void main() {
     expect(find.text('检查更新'), findsOneWidget);
     expect(
       find.byKey(const Key('more-reader-settings-placeholder')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('more-composer-quill-prototype-entry')),

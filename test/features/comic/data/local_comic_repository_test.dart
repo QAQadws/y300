@@ -1278,6 +1278,143 @@ void main() {
     });
 
     test(
+      'resetComicReadingState clears reading data and preserves durable state',
+      () async {
+        await repository.addToShelf(
+          comicId: 'yamibo:reset',
+          tid: '1000',
+          fid: '30',
+          title: '重置测试漫画',
+          parsedPost: const ParsedComicPost(
+            imageUrls: <String>[],
+            episodeLinks: <ComicEpisodeLink>[
+              ComicEpisodeLink(
+                url: 'thread-1001-1-1.html',
+                rawText: '1',
+                episodeTitle: '第1话',
+              ),
+              ComicEpisodeLink(
+                url: 'thread-1002-1-1.html',
+                rawText: '2',
+                episodeTitle: '第2话',
+              ),
+            ],
+            plainTextSummary: '摘要',
+          ),
+        );
+        const firstEpisodeId = 'yamibo:reset:1001';
+        const secondEpisodeId = 'yamibo:reset:1002';
+        final stateRepository = LocalLibraryStateRepository(dbFuture);
+        final downloadedAt = DateTime(2026, 7, 22, 12);
+        await stateRepository.upsertEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: firstEpisodeId,
+          workId: 'yamibo:reset',
+          isRead: true,
+          isDownloaded: true,
+          isBookmarked: true,
+          readAt: DateTime(2026, 7, 22, 11),
+          downloadedAt: downloadedAt,
+        );
+        await stateRepository.upsertWorkState(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'yamibo:reset',
+          lastReadEpisodeId: secondEpisodeId,
+          lastReadAt: DateTime(2026, 7, 22, 11),
+          introText: '保留简介',
+        );
+        await repository.saveEpisodeImages(
+          episodeId: firstEpisodeId,
+          imageUrls: const <String>['https://img.test/reset-1.jpg'],
+        );
+        await repository.updateEpisodeImageCacheStatus(
+          episodeId: firstEpisodeId,
+          imageUrl: 'https://img.test/reset-1.jpg',
+          cacheStatus: 'done',
+          cacheLocalPath: '/tmp/reset-1.jpg',
+        );
+        await repository.updateLastReadProgress(
+          comicId: 'yamibo:reset',
+          episodeId: firstEpisodeId,
+          imageIndex: 4,
+          scrollOffset: 400,
+        );
+        await repository.updateLastReadProgress(
+          comicId: 'yamibo:reset',
+          episodeId: secondEpisodeId,
+          imageIndex: 2,
+          scrollOffset: 200,
+        );
+
+        final db = await dbFuture;
+        final comicUpdatedAtBeforeReset = (await db.query(
+          ComicLocalDb.comicsTable,
+          columns: const <String>['updated_at'],
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:reset'],
+        )).single['updated_at'];
+        final workUpdatedAtBeforeReset = (await db.query(
+          ComicLocalDb.libraryWorkStateTable,
+          columns: const <String>['updated_at'],
+          where: 'content_type = ? AND work_id = ?',
+          whereArgs: const <Object>['comic', 'yamibo:reset'],
+        )).single['updated_at'];
+
+        await repository.resetComicReadingState(comicId: 'yamibo:reset');
+
+        final stateRows = await db.query(
+          ComicLocalDb.libraryEpisodeStateTable,
+          where: 'content_type = ? AND work_id = ?',
+          whereArgs: const <Object>['comic', 'yamibo:reset'],
+          orderBy: 'episode_id ASC',
+        );
+        expect(stateRows, hasLength(2));
+        expect(stateRows.every((row) => row['is_read'] == 0), isTrue);
+        final firstState = stateRows.firstWhere(
+          (row) => row['episode_id'] == firstEpisodeId,
+        );
+        expect(firstState['is_downloaded'], 1);
+        expect(firstState['is_bookmarked'], 1);
+        expect(
+          firstState['downloaded_at'],
+          downloadedAt.millisecondsSinceEpoch,
+        );
+        expect(firstState['read_at'], isNull);
+        expect(
+          await repository.getReadingProgresses(comicId: 'yamibo:reset'),
+          isEmpty,
+        );
+        final comicRows = await db.query(
+          ComicLocalDb.comicsTable,
+          columns: const <String>['last_read_episode_id', 'updated_at'],
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:reset'],
+        );
+        expect(comicRows.single['last_read_episode_id'], isNull);
+        expect(comicRows.single['updated_at'], comicUpdatedAtBeforeReset);
+        final workStateRows = await db.query(
+          ComicLocalDb.libraryWorkStateTable,
+          columns: const <String>['updated_at'],
+          where: 'content_type = ? AND work_id = ?',
+          whereArgs: const <Object>['comic', 'yamibo:reset'],
+        );
+        expect(workStateRows.single['updated_at'], workUpdatedAtBeforeReset);
+        final workState = await stateRepository.getWorkState(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'yamibo:reset',
+        );
+        expect(workState?.lastReadEpisodeId, isNull);
+        expect(workState?.lastReadAt, isNull);
+        expect(workState?.introText, '保留简介');
+        final images = await repository.getEpisodeImages(
+          episodeId: firstEpisodeId,
+        );
+        expect(images.single.cacheStatus, 'done');
+        expect(images.single.cacheLocalPath, '/tmp/reset-1.jpg');
+      },
+    );
+
+    test(
       'saveEpisodeImages promotes smallest tid first image as initial cover',
       () async {
         await repository.addToShelf(

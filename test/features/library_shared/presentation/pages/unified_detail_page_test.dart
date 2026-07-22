@@ -998,6 +998,17 @@ void main() {
         findsNothing,
       );
       expect(adapter.lastFilters.unread, TriStateFilterValue.include);
+
+      await tester.drag(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+        const Offset(500, 0),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+        findsNothing,
+      );
     },
   );
 
@@ -1257,10 +1268,10 @@ void main() {
     );
   });
 
-  testWidgets('UnifiedDetailPage resets reading for the selected chapter', (
+  testWidgets('UnifiedDetailPage toggles unread chapter read by right swipe', (
     tester,
   ) async {
-    final adapter = _FakeDetailAdapter()..isRead = true;
+    final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1282,21 +1293,251 @@ void main() {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
     await tester.pumpAndSettle();
 
-    await tester.longPress(
+    await tester.drag(
       find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      const Offset(500, 0),
     );
     await tester.pumpAndSettle();
-    expect(find.text('重置本章阅读'), findsOneWidget);
-    await tester.tap(
-      find.byKey(
-        const ValueKey<String>(
-          'unified-detail-chapter-reset-reading-action-e1',
+
+    expect(adapter.markReadCallCount, 1);
+    expect(adapter.isRead, isTrue);
+    expect(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('UnifiedDetailPage resets read chapter by right swipe', (
+    tester,
+  ) async {
+    final adapter = _FakeDetailAdapter(
+      module: LibraryModuleKey.comic,
+      isRead: true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
         ),
       ),
     );
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      const Offset(500, 0),
+    );
+    await tester.pumpAndSettle();
 
     expect(adapter.lastResetEpisodeId, 'e1');
+    expect(adapter.isRead, isFalse);
+  });
+
+  testWidgets('UnifiedDetailPage caps chapter swipe at one third width', (
+    tester,
+  ) async {
+    final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final chapter = find.byKey(
+      const ValueKey<String>('unified-detail-chapter-e1'),
+    );
+    await tester.scrollUntilVisible(
+      chapter,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    final gesture = await tester.startGesture(tester.getCenter(chapter));
+    await gesture.moveBy(const Offset(30, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(300, 0));
+    await tester.pump();
+
+    final foreground = tester.widget<FractionalTranslation>(
+      find.byKey(
+        const ValueKey<String>(
+          'unified-detail-chapter-read-swipe-foreground-e1',
+        ),
+      ),
+    );
+    expect(foreground.translation.dx, closeTo(1 / 3, 0.001));
+    expect(adapter.markReadCallCount, 0);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(adapter.markReadCallCount, 1);
+  });
+
+  testWidgets('UnifiedDetailPage keeps physical right swipe in RTL', (
+    tester,
+  ) async {
+    final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: UnifiedDetailPage(
+            adapter: adapter,
+            workId: 'work-1',
+            onOpenReader: (context, target) async {},
+            onOpenThread: (context, target) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final chapter = find.byKey(
+      const ValueKey<String>('unified-detail-chapter-e1'),
+    );
+    await tester.scrollUntilVisible(
+      chapter,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.drag(chapter, const Offset(500, 0));
+    await tester.pumpAndSettle();
+
+    expect(adapter.markReadCallCount, 1);
+    expect(adapter.isRead, isTrue);
+  });
+
+  testWidgets('UnifiedDetailPage ignores right-to-left chapter swipe', (
+    tester,
+  ) async {
+    final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(adapter.markReadCallCount, 0);
+    expect(adapter.lastResetEpisodeId, isNull);
+  });
+
+  testWidgets('UnifiedDetailPage reports chapter read mutation failure', (
+    tester,
+  ) async {
+    final adapter = _FakeDetailAdapter(
+      module: LibraryModuleKey.comic,
+      failMarkRead: true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final chapter = find.byKey(
+      const ValueKey<String>('unified-detail-chapter-e1'),
+    );
+    await tester.scrollUntilVisible(
+      chapter,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.drag(chapter, const Offset(500, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('阅读状态更新失败'), findsOneWidget);
+    expect(adapter.isRead, isFalse);
+    expect(chapter, findsOneWidget);
+  });
+
+  testWidgets('UnifiedDetailPage confirms resetting the whole comic', (
+    tester,
+  ) async {
+    final adapter = _FakeDetailAdapter(
+      module: LibraryModuleKey.comic,
+      isRead: true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final chapter = find.byKey(
+      const ValueKey<String>('unified-detail-chapter-e1'),
+    );
+    await tester.scrollUntilVisible(
+      chapter,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.longPress(chapter);
+    await tester.pumpAndSettle();
+    expect(find.text('重置本章阅读'), findsNothing);
+    expect(find.text('重置本漫画阅读'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('unified-detail-work-reset-reading-action')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('重置本漫画阅读？'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(adapter.resetWorkCallCount, 0);
+
+    await tester.longPress(chapter);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('unified-detail-work-reset-reading-action')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('unified-detail-work-reset-reading-confirm')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(adapter.resetWorkCallCount, 1);
     expect(adapter.isRead, isFalse);
   });
 
@@ -1781,6 +2022,7 @@ class _FakeDetailAdapter
     implements
         DetailModuleAdapter,
         DetailChapterReadStateAdapter,
+        DetailWorkReadingResetAdapter,
         DetailChapterDownloadAdapter {
   _FakeDetailAdapter({
     this.module = LibraryModuleKey.novel,
@@ -1789,6 +2031,7 @@ class _FakeDetailAdapter
     this.isBookmarked = false,
     this.isDownloaded = false,
     this.isRead = false,
+    this.failMarkRead = false,
     this.includeSecondChapter = false,
     this.secondIsBookmarked = false,
     this.secondIsDownloaded = false,
@@ -1799,6 +2042,7 @@ class _FakeDetailAdapter
   int loadHeaderCallCount = 0;
   int loadChaptersCallCount = 0;
   int refreshWorkCallCount = 0;
+  int resetWorkCallCount = 0;
   String? lastBookmarkEpisodeId;
   String? lastResetEpisodeId;
   String? lastDownloadedEpisodeId;
@@ -1810,6 +2054,7 @@ class _FakeDetailAdapter
   bool failLoadChaptersOnce = false;
   bool failMarkDownload = false;
   bool failDeleteDownload = false;
+  final bool failMarkRead;
   final String? coverLocalPath;
   final LibraryModuleKey module;
   final LibraryChapterProgressInfo? progressInfo;
@@ -1827,6 +2072,12 @@ class _FakeDetailAdapter
     required String episodeId,
   }) async {
     lastResetEpisodeId = episodeId;
+    isRead = false;
+  }
+
+  @override
+  Future<void> resetWorkReadingState({required String workId}) async {
+    resetWorkCallCount++;
     isRead = false;
   }
 
@@ -1977,6 +2228,9 @@ class _FakeDetailAdapter
     required bool isRead,
   }) async {
     markReadCallCount++;
+    if (failMarkRead) {
+      throw StateError('mark read failed');
+    }
     this.isRead = isRead;
   }
 

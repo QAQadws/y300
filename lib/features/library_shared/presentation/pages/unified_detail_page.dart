@@ -87,6 +87,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   bool _showCollapsedTitle = false;
   int _lastHandledRefreshSignalSequence = 0;
   final Set<String> _downloadingEpisodeIds = <String>{};
+  final Set<String> _readingStateMutationEpisodeIds = <String>{};
+  bool _isResettingWorkReading = false;
   Listenable? _chapterDownloadActivityListenable;
   final RouteContentPresentationGuard _contentPresentationGuard =
       RouteContentPresentationGuard();
@@ -115,6 +117,13 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   bool get _supportsChapterReadState => _readStateAdapter != null;
+
+  DetailWorkReadingResetAdapter? get _workReadingResetAdapter {
+    final adapter = widget.adapter;
+    return adapter is DetailWorkReadingResetAdapter
+        ? adapter as DetailWorkReadingResetAdapter
+        : null;
+  }
 
   @override
   void initState() {
@@ -456,6 +465,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         downloadIconSize: _chapterDownloadIconSize,
                         onTap: () => _openChapter(chapter),
                         onLongPress: () => _showChapterActions(chapter),
+                        onToggleReadState: _supportsChapterReadState
+                            ? () => _toggleChapterReadingState(chapter)
+                            : null,
+                        readStateMutationLocked:
+                            _isResettingWorkReading ||
+                            _readingStateMutationEpisodeIds.contains(
+                              chapter.episodeId,
+                            ),
                         onToggleDownload: _supportsChapterDownloads
                             ? () => _toggleChapterDownload(chapter)
                             : null,
@@ -547,6 +564,32 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       if (mounted) {
         setState(() {
           _downloadingEpisodeIds.remove(chapter.episodeId);
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleChapterReadingState(LibraryChapterItem chapter) async {
+    if (_isResettingWorkReading ||
+        _readingStateMutationEpisodeIds.contains(chapter.episodeId)) {
+      return;
+    }
+    setState(() {
+      _readingStateMutationEpisodeIds.add(chapter.episodeId);
+    });
+    try {
+      await _controller.toggleChapterReadingState(
+        episodeId: chapter.episodeId,
+        isCurrentlyRead: chapter.isRead,
+      );
+    } catch (_) {
+      if (mounted) {
+        _showDetailSnackBar('阅读状态更新失败');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _readingStateMutationEpisodeIds.remove(chapter.episodeId);
         });
       }
     }
@@ -773,22 +816,17 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     setState(() {});
                   },
                 ),
-                if (_supportsChapterReadState)
+                if (_workReadingResetAdapter != null)
                   ListTile(
-                    key: ValueKey<String>(
-                      'unified-detail-chapter-reset-reading-action-${chapter.episodeId}',
-                    ),
+                    key: const Key('unified-detail-work-reset-reading-action'),
                     leading: const Icon(Icons.remove_done),
-                    title: const Text('重置本章阅读'),
+                    title: const Text('重置本漫画阅读'),
                     onTap: () async {
-                      await _controller.resetChapterReadingState(
-                        episodeId: chapter.episodeId,
-                      );
-                      if (!mounted || !sheetContext.mounted) {
+                      if (!sheetContext.mounted) {
                         return;
                       }
                       Navigator.of(sheetContext).pop();
-                      setState(() {});
+                      await _confirmAndResetWorkReadingState();
                     },
                   ),
                 if (_supportsChapterDownloads && chapter.isDownloaded)
@@ -812,6 +850,51 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         );
       },
     );
+  }
+
+  Future<void> _confirmAndResetWorkReadingState() async {
+    if (_isResettingWorkReading) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('重置本漫画阅读？'),
+          content: const Text('全部章节将变为未读，所有阅读进度和上次阅读位置都会被清除。书签和下载不会受影响。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              key: const Key('unified-detail-work-reset-reading-confirm'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('重置'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    setState(() {
+      _isResettingWorkReading = true;
+    });
+    try {
+      await _controller.resetWorkReadingState();
+    } catch (_) {
+      if (mounted) {
+        _showDetailSnackBar('重置漫画阅读失败');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResettingWorkReading = false;
+        });
+      }
+    }
   }
 
   Future<void> _handleMoreAction(String value) async {

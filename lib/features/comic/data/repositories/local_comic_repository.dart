@@ -22,6 +22,7 @@ class LocalComicRepository
     implements
         ComicRepository,
         ComicReadingProgressResetter,
+        ComicWorkReadingStateResetter,
         ComicCatalogOverrideRepository,
         ComicShelfSnapshotRepository,
         ComicShelfStatsRepository,
@@ -399,6 +400,11 @@ class LocalComicRepository
       comicId: comicId,
       episodeId: episodeId,
     );
+  }
+
+  @override
+  Future<void> resetComicReadingState({required String comicId}) {
+    return _readingProgressStore.resetComicReadingState(comicId: comicId);
   }
 
   @override
