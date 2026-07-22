@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -328,12 +326,11 @@ class _ForumHtmlCachedBlockImageViewState
     final image = CachedLibraryImage(
       request: widget.request,
       fit: BoxFit.fitWidth,
-      placeholder: const _ForumHtmlImageLoadingPlaceholder(
-        delay: Duration(milliseconds: 350),
-      ),
+      placeholder: const _ForumHtmlImageSurface(),
       errorPlaceholder: const _ForumHtmlImageErrorPlaceholder(
         icon: Icons.broken_image_outlined,
       ),
+      showDelayedLoadingIndicator: true,
       headerBuilder: widget.imageHeaderBuilder,
       onImageResolved: _handleImageResolved,
     );
@@ -547,61 +544,6 @@ class _ForumHtmlCachedStickerImageViewState
     setState(() {
       _cachedHint = next;
     });
-  }
-}
-
-class _ForumHtmlImageLoadingPlaceholder extends StatefulWidget {
-  const _ForumHtmlImageLoadingPlaceholder({required this.delay});
-
-  final Duration delay;
-
-  @override
-  State<_ForumHtmlImageLoadingPlaceholder> createState() =>
-      _ForumHtmlImageLoadingPlaceholderState();
-}
-
-class _ForumHtmlImageLoadingPlaceholderState
-    extends State<_ForumHtmlImageLoadingPlaceholder> {
-  Timer? _timer;
-  bool _showSpinner = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer(widget.delay, () {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _showSpinner = true;
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _ForumHtmlImageSurface(
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 160),
-        child: _showSpinner
-            ? SizedBox(
-                key: const Key('forum-html-image-loading-spinner'),
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.2,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              )
-            : const SizedBox.shrink(key: ValueKey('forum-html-image-idle')),
-      ),
-    );
   }
 }
 

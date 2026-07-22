@@ -48,6 +48,141 @@ void main() {
     },
   );
 
+  testWidgets('shows a loading indicator only after the configured delay', (
+    tester,
+  ) async {
+    final cacheService = _ControlledImageCacheService();
+
+    await tester.pumpWidget(
+      _loadingHarness(
+        cacheService,
+        remoteImageProvider: const _PendingImageProvider(),
+      ),
+    );
+    await tester.pump();
+
+    expect(_loadingIndicator, findsNothing);
+    await tester.pump(const Duration(milliseconds: 299));
+    expect(_loadingIndicator, findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(_loadingIndicator, findsOneWidget);
+  });
+
+  testWidgets('keeps one loading deadline across cache and remote stages', (
+    tester,
+  ) async {
+    final cacheService = _ControlledImageCacheService();
+
+    await tester.pumpWidget(
+      _loadingHarness(
+        cacheService,
+        remoteImageProvider: const _PendingImageProvider(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    cacheService.completeGetCached('thread-image', null);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(Image), findsOneWidget);
+    expect(cacheService.ensureStarted('thread-image'), isTrue);
+    expect(_loadingIndicator, findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(_loadingIndicator, findsOneWidget);
+  });
+
+  testWidgets('fast image completion never flashes the delayed indicator', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 4, height: 3, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final cacheService = _ControlledImageCacheService();
+    cacheService.completeGetCached('thread-image', null);
+
+    await tester.pumpWidget(
+      _loadingHarness(
+        cacheService,
+        remoteImageProvider: _SynchronousImageProvider(testImage),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(_loadingIndicator, findsNothing);
+  });
+
+  testWidgets('image failure settles and removes the loading indicator', (
+    tester,
+  ) async {
+    final cacheService = _ControlledImageCacheService();
+    final provider = _ControlledImageProvider();
+
+    await tester.pumpWidget(
+      _loadingHarness(cacheService, imageProvider: provider),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(_loadingIndicator, findsOneWidget);
+
+    provider.fail();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('error-placeholder')), findsOneWidget);
+    expect(_loadingIndicator, findsNothing);
+  });
+
+  testWidgets('changing requests resets and isolates the loading deadline', (
+    tester,
+  ) async {
+    final cacheService = _ControlledImageCacheService();
+
+    await tester.pumpWidget(
+      _loadingHarness(
+        cacheService,
+        cacheKey: 'old-image',
+        remoteImageProvider: const _PendingImageProvider(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    await tester.pumpWidget(
+      _loadingHarness(
+        cacheService,
+        cacheKey: 'new-image',
+        remoteImageProvider: const _PendingImageProvider(),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(_loadingIndicator, findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(_loadingIndicator, findsOneWidget);
+  });
+
+  testWidgets('the delayed indicator remains opt-in', (tester) async {
+    final cacheService = _ControlledImageCacheService();
+
+    await tester.pumpWidget(
+      _loadingHarness(
+        cacheService,
+        showDelayedLoadingIndicator: false,
+        remoteImageProvider: const _PendingImageProvider(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 301));
+
+    expect(_loadingIndicator, findsNothing);
+  });
+
   testWidgets('uses cached local result before starting a new cache request', (
     tester,
   ) async {
@@ -253,6 +388,38 @@ ImageCacheRequest _request(String cacheKey) {
   );
 }
 
+Finder get _loadingIndicator =>
+    find.byKey(const Key('cached-library-image-loading-indicator'));
+
+Widget _loadingHarness(
+  ImageCacheService cacheService, {
+  String cacheKey = 'thread-image',
+  bool showDelayedLoadingIndicator = true,
+  ImageProvider? imageProvider,
+  ImageProvider? remoteImageProvider,
+}) {
+  return ProviderScope(
+    overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+    child: MaterialApp(
+      home: Center(
+        child: SizedBox(
+          width: 240,
+          height: 240,
+          child: CachedLibraryImage(
+            request: _request(cacheKey),
+            fit: BoxFit.contain,
+            placeholder: const SizedBox(key: Key('placeholder')),
+            errorPlaceholder: const SizedBox(key: Key('error-placeholder')),
+            imageProviderOverride: imageProvider,
+            showDelayedLoadingIndicator: showDelayedLoadingIndicator,
+            remoteImageProviderOverride: remoteImageProvider,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 io.File _createTempPng(WidgetTester tester) {
   final directory = io.Directory.systemTemp.createTempSync(
     'cached_library_image_test_',
@@ -383,5 +550,43 @@ class _SynchronousImageProvider
     return OneFrameImageStreamCompleter(
       SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
     );
+  }
+}
+
+class _PendingImageProvider extends ImageProvider<_PendingImageProvider> {
+  const _PendingImageProvider();
+
+  @override
+  Future<_PendingImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<_PendingImageProvider>(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    _PendingImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    return OneFrameImageStreamCompleter(Completer<ImageInfo>().future);
+  }
+}
+
+class _ControlledImageProvider extends ImageProvider<_ControlledImageProvider> {
+  final Completer<ImageInfo> _completer = Completer<ImageInfo>();
+
+  void fail() {
+    _completer.completeError(StateError('image failed'));
+  }
+
+  @override
+  Future<_ControlledImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<_ControlledImageProvider>(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    _ControlledImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    return OneFrameImageStreamCompleter(_completer.future);
   }
 }

@@ -574,6 +574,8 @@ void main() {
     );
 
     expect(image.headerBuilder, same(headerBuilder));
+    expect(image.showDelayedLoadingIndicator, isTrue);
+    expect(image.loadingIndicatorDelay, const Duration(milliseconds: 300));
     expect(image.request?.role, ImageCacheRole.threadInline);
     expect(image.request?.ownerType, ImageCacheOwnerType.thread);
     expect(image.request?.ownerId, '573279');
@@ -662,6 +664,7 @@ void main() {
     );
 
     expect(image.request?.role, ImageCacheRole.remoteSmiley);
+    expect(image.showDelayedLoadingIndicator, isFalse);
     expect(image.request?.ownerType, ImageCacheOwnerType.sticker);
     expect(image.request?.effectiveRetentionClass, ImageRetentionClass.sticky);
     expect(

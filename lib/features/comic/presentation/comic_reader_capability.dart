@@ -339,16 +339,14 @@ class ComicReaderCapability extends ReaderCapability {
       fit: spec.fit,
       expectedDisplaySize: spec.expectedDisplaySize,
       width: spec.paged ? null : double.infinity,
-      placeholder: _ComicReaderImageLoadingPlaceholder(
-        paged: spec.paged,
-        imageIndex: spec.index,
-      ),
+      placeholder: _ComicReaderImagePlaceholder(paged: spec.paged),
       errorPlaceholder: _ComicReaderImageErrorPlaceholder(
         imageUrl: imageUrl,
         paged: spec.paged,
         onRetry: spec.onRetry,
       ),
       headerBuilder: imageHeaderBuilder,
+      loadingIndicatorColor: spec.loadingIndicatorColor,
       onImageResolved: (size) {
         spec.onDimensionsResolved(size);
         controller.onImageResolved(
@@ -408,53 +406,22 @@ class _ComicReaderImagePreparationSink implements ReaderImagePreparationSink {
   }
 }
 
-class _ComicReaderImageLoadingPlaceholder extends StatelessWidget {
-  const _ComicReaderImageLoadingPlaceholder({
-    required this.paged,
-    required this.imageIndex,
-  });
+class _ComicReaderImagePlaceholder extends StatelessWidget {
+  const _ComicReaderImagePlaceholder({required this.paged});
 
   final bool paged;
-  final int imageIndex;
 
   @override
   Widget build(BuildContext context) {
-    final content = _ComicReaderLoadingIndicator(
-      key: ValueKey<String>('comic-reader-image-loading-$imageIndex'),
-      text: '图片加载中',
-    );
     if (paged) {
-      return Center(child: content);
+      return const SizedBox.shrink();
     }
     final chromePalette = const ReaderChromePaletteResolver().resolve(
       Theme.of(context),
     );
     return ColoredBox(
       color: chromePalette.imageLoadingPlaceholderBackground,
-      child: Center(child: content),
-    );
-  }
-}
-
-class _ComicReaderLoadingIndicator extends StatelessWidget {
-  const _ComicReaderLoadingIndicator({super.key, required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2.4),
-        ),
-        const SizedBox(height: 10),
-        Text(text, style: Theme.of(context).textTheme.bodySmall),
-      ],
+      child: const SizedBox.shrink(),
     );
   }
 }

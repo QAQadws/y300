@@ -21,6 +21,7 @@ class ReaderSessionImage extends StatelessWidget {
     this.height,
     this.errorPlaceholder,
     this.headerBuilder,
+    this.loadingIndicatorColor,
     this.onImageResolved,
     this.onImageFailed,
     this.imageProviderOverride,
@@ -36,6 +37,7 @@ class ReaderSessionImage extends StatelessWidget {
   final Widget placeholder;
   final Widget? errorPlaceholder;
   final ImageRequestHeaderBuilder? headerBuilder;
+  final Color? loadingIndicatorColor;
   final ValueChanged<Size>? onImageResolved;
   final VoidCallback? onImageFailed;
   @visibleForTesting
@@ -63,6 +65,8 @@ class ReaderSessionImage extends StatelessWidget {
         onLocalPathResolved: sessionBinding.promoteLocalPath,
         imageProviderOverride: imageProviderOverride,
         remoteImageProviderOverride: remoteImageProviderOverride,
+        showDelayedLoadingIndicator: true,
+        loadingIndicatorColor: loadingIndicatorColor,
       ),
     );
   }

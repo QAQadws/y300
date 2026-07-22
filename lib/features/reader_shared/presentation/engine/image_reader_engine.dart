@@ -385,6 +385,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           paged: paged,
           aspectRatio: aspectRatio,
         ),
+        loadingIndicatorColor: _loadingIndicatorColor(preferences),
         onDimensionsResolved: (size) => _onImageDimensionsResolved(
           ownerId: ownerId,
           sessionGeneration: sessionGeneration,
@@ -813,6 +814,13 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       case ReaderBackgroundPreference.gray:
         return const Color(0xFF202124);
     }
+  }
+
+  Color _loadingIndicatorColor(ReaderPreferences preferences) {
+    final background = _backgroundColor(preferences);
+    return ThemeData.estimateBrightnessForColor(background) == Brightness.dark
+        ? Colors.white70
+        : Colors.black54;
   }
 
   ReaderEngineContext _engineContext(ReaderPreferences preferences, int total) {

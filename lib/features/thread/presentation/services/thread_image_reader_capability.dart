@@ -125,14 +125,9 @@ class ThreadImageReaderCapability extends ReaderCapability {
       expectedDisplaySize: spec.expectedDisplaySize,
       width: spec.paged ? null : double.infinity,
       headerBuilder: imageHeaderBuilder,
-      placeholder: const Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2.4),
-        ),
-      ),
+      placeholder: const SizedBox.shrink(),
       errorPlaceholder: const Center(child: Icon(Icons.broken_image_outlined)),
+      loadingIndicatorColor: spec.loadingIndicatorColor,
       onImageResolved: spec.onDimensionsResolved,
     );
   }

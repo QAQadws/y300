@@ -7,6 +7,7 @@ import 'package:y300/core/media/image_display_provider.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/services/default_forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_preload_coordinator.dart';
@@ -159,6 +160,14 @@ void main() {
     );
     await tester.pump();
 
+    final cachedImage = tester.widget<CachedLibraryImage>(
+      find.byType(CachedLibraryImage),
+    );
+    expect(cachedImage.showDelayedLoadingIndicator, isTrue);
+    expect(
+      cachedImage.loadingIndicatorDelay,
+      const Duration(milliseconds: 300),
+    );
     expect(find.byType(Image), findsOneWidget);
     expect(tester.widget<Image>(find.byType(Image)).image, isA<ResizeImage>());
   });

@@ -129,6 +129,36 @@ void main() {
 
     expect(resolvedSize, const Size(3, 5));
   });
+
+  testWidgets('keeps the placeholder until an override emits its first frame', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 3, height: 5, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final provider = _DeferredImageProvider();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryCachedImage(
+          imageProviderOverride: provider,
+          fit: BoxFit.cover,
+          placeholder: const SizedBox(key: Key('placeholder')),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('placeholder')), findsOneWidget);
+
+    provider.complete(testImage);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('placeholder')), findsNothing);
+    expect(find.byType(RawImage), findsOneWidget);
+  });
 }
 
 /// 解开降采样包裹，取底层真实 provider。
@@ -183,5 +213,26 @@ class _SynchronousImageProvider
     return OneFrameImageStreamCompleter(
       SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
     );
+  }
+}
+
+class _DeferredImageProvider extends ImageProvider<_DeferredImageProvider> {
+  final Completer<ImageInfo> _completer = Completer<ImageInfo>();
+
+  void complete(ui.Image image) {
+    _completer.complete(ImageInfo(image: image));
+  }
+
+  @override
+  Future<_DeferredImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<_DeferredImageProvider>(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    _DeferredImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    return OneFrameImageStreamCompleter(_completer.future);
   }
 }

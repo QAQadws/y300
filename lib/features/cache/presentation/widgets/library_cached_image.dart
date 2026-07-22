@@ -151,8 +151,9 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
               testProvider,
               'override:${identityHashCode(testProvider)}',
             );
+            return child;
           }
-          return child;
+          return widget.placeholder;
         },
         errorBuilder: (context, error, stackTrace) {
           _markImageFailed('override:${identityHashCode(testProvider)}');
@@ -184,8 +185,9 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (frame != null || wasSynchronouslyLoaded) {
               _reportImageResolved(fileProvider, 'file:${file.path}');
+              return child;
             }
-            return child;
+            return widget.placeholder;
           },
           errorBuilder: (context, error, stackTrace) {
             _markImageFailed('file:${file.path}');
@@ -265,10 +267,13 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
       height: widget.height,
       alignment: widget.alignment,
       gaplessPlayback: true,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) {
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (frame != null || wasSynchronouslyLoaded) {
+          final isFirstFrame = !_remoteResolved && !_remoteResolveScheduled;
           _markRemoteResolved();
-          widget.onRemoteImageResolved?.call();
+          if (isFirstFrame) {
+            widget.onRemoteImageResolved?.call();
+          }
           _reportImageResolved(provider, 'remote:$remote');
           return child;
         }

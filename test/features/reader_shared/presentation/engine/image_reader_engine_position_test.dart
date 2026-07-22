@@ -157,6 +157,37 @@ void main() {
     expect(find.byType(PageView), findsNothing);
   });
 
+  testWidgets('loading indicator color contrasts reader backgrounds', (
+    tester,
+  ) async {
+    Future<Color> resolveColor(String background) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'reader_pref_mode': 'ltr',
+        'reader_pref_background': background,
+      });
+      final capability = _RecordingPagedCapability();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumImagePrecacheServiceProvider.overrideWithValue(
+              _NoopForumImagePrecacheService(),
+            ),
+          ],
+          child: MaterialApp(home: ImageReaderEngine(capability: capability)),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      final color = capability.loadingIndicatorColors.last;
+      await tester.pumpWidget(const SizedBox.shrink());
+      return color;
+    }
+
+    expect(await resolveColor('black'), Colors.white70);
+    expect(await resolveColor('gray'), Colors.white70);
+    expect(await resolveColor('white'), Colors.black54);
+  });
+
   testWidgets('decoded dimensions replace a paged fallback aspect ratio', (
     tester,
   ) async {
@@ -274,6 +305,7 @@ class _ThrowingSeekCapability extends ReaderCapability {
 
 class _RecordingPagedCapability extends ReaderCapability {
   final List<int> progressIndexes = <int>[];
+  final List<Color> loadingIndicatorColors = <Color>[];
 
   @override
   ReaderContent get content => ReaderContent(
@@ -306,6 +338,7 @@ class _RecordingPagedCapability extends ReaderCapability {
 
   @override
   Widget buildImageContent(BuildContext context, ReaderImageBuildSpec spec) {
+    loadingIndicatorColors.add(spec.loadingIndicatorColor);
     return ColoredBox(
       color: Colors.black,
       child: Center(child: Text('${spec.index}')),

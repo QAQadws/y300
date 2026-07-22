@@ -6,6 +6,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/delayed_image_loading_overlay.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 
 /// Binds an explicit cache request to [LibraryCachedImage].
@@ -30,6 +31,9 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     this.onLocalPathResolved,
     this.imageProviderOverride,
     this.remoteImageProviderOverride,
+    this.showDelayedLoadingIndicator = false,
+    this.loadingIndicatorDelay = const Duration(milliseconds: 300),
+    this.loadingIndicatorColor,
   });
 
   final ImageCacheRequest? request;
@@ -48,6 +52,9 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   final ImageProvider? imageProviderOverride;
   @visibleForTesting
   final ImageProvider? remoteImageProviderOverride;
+  final bool showDelayedLoadingIndicator;
+  final Duration loadingIndicatorDelay;
+  final Color? loadingIndicatorColor;
 
   @override
   ConsumerState<CachedLibraryImage> createState() => _CachedLibraryImageState();
@@ -57,6 +64,8 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   String? _localPath;
   bool _allowRemoteFallback = false;
   bool _displayedRemoteImage = false;
+  bool _displaySettled = false;
+  bool _settledRebuildScheduled = false;
   int _generation = 0;
 
   @override
@@ -68,7 +77,10 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   @override
   void didUpdateWidget(covariant CachedLibraryImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.imageProviderOverride != widget.imageProviderOverride) {
+    if (oldWidget.imageProviderOverride != widget.imageProviderOverride ||
+        oldWidget.remoteImageProviderOverride !=
+            widget.remoteImageProviderOverride ||
+        oldWidget.headerBuilder != widget.headerBuilder) {
       _restartCacheFlow();
       return;
     }
@@ -83,22 +95,31 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   Widget build(BuildContext context) {
     final request = widget.request;
     final generation = _generation;
-    return LibraryCachedImage(
-      localPath: _localPath,
-      imageUrl: _allowRemoteFallback ? request?.sourceUrl : null,
-      imageProviderOverride: widget.imageProviderOverride,
-      remoteImageProviderOverride: widget.remoteImageProviderOverride,
-      fit: widget.fit,
-      width: widget.width,
-      height: widget.height,
-      decodeDisplaySize: widget.decodeDisplaySize,
-      placeholder: widget.placeholder,
-      errorPlaceholder: widget.errorPlaceholder,
-      headerBuilder: widget.headerBuilder,
-      onImageResolved: (size) =>
-          _handleImageResolved(request, size, generation),
-      onRemoteImageResolved: () => _handleRemoteImageResolved(generation),
-      onImageFailed: widget.onImageFailed,
+    return DelayedImageLoadingOverlay(
+      loadIdentity: generation,
+      isLoading: !_displaySettled,
+      enabled: widget.showDelayedLoadingIndicator,
+      delay: widget.loadingIndicatorDelay,
+      color: widget.loadingIndicatorColor,
+      isLoadActive: (loadIdentity) =>
+          mounted && loadIdentity == _generation && !_displaySettled,
+      child: LibraryCachedImage(
+        localPath: _localPath,
+        imageUrl: _allowRemoteFallback ? request?.sourceUrl : null,
+        imageProviderOverride: widget.imageProviderOverride,
+        remoteImageProviderOverride: widget.remoteImageProviderOverride,
+        fit: widget.fit,
+        width: widget.width,
+        height: widget.height,
+        decodeDisplaySize: widget.decodeDisplaySize,
+        placeholder: widget.placeholder,
+        errorPlaceholder: widget.errorPlaceholder,
+        headerBuilder: widget.headerBuilder,
+        onImageResolved: (size) =>
+            _handleImageResolved(request, size, generation),
+        onRemoteImageResolved: () => _handleRemoteImageResolved(generation),
+        onImageFailed: () => _handleImageFailed(generation),
+      ),
     );
   }
 
@@ -110,6 +131,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     if (generation != _generation) {
       return;
     }
+    _markDisplaySettled(generation);
     final cacheKey = request?.cacheKey.trim();
     if (cacheKey != null && cacheKey.isNotEmpty) {
       final service = ref.read(imageCacheServiceProvider);
@@ -126,6 +148,34 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       return;
     }
     _displayedRemoteImage = true;
+    _markDisplaySettled(generation);
+  }
+
+  void _handleImageFailed(int generation) {
+    if (generation != _generation) {
+      return;
+    }
+    _markDisplaySettled(generation);
+    widget.onImageFailed?.call();
+  }
+
+  void _markDisplaySettled(int generation) {
+    if (generation != _generation || _displaySettled) {
+      return;
+    }
+    _displaySettled = true;
+    if (_settledRebuildScheduled) {
+      return;
+    }
+    _settledRebuildScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _generation) {
+        return;
+      }
+      setState(() {
+        _settledRebuildScheduled = false;
+      });
+    });
   }
 
   Future<void> _recordDimensions(
@@ -146,6 +196,8 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     _localPath = null;
     _allowRemoteFallback = false;
     _displayedRemoteImage = false;
+    _displaySettled = !_hasDisplaySource;
+    _settledRebuildScheduled = false;
     if (widget.imageProviderOverride != null) {
       return;
     }
@@ -216,5 +268,12 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
         result.success &&
         localPath != null &&
         localPath.isNotEmpty;
+  }
+
+  bool get _hasDisplaySource {
+    final preferredLocalPath = widget.preferredLocalPath?.trim();
+    return widget.imageProviderOverride != null ||
+        widget.request != null ||
+        (preferredLocalPath != null && preferredLocalPath.isNotEmpty);
   }
 }
