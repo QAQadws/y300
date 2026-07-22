@@ -11,11 +11,12 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_controlle
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
-import 'package:y300/features/app_update/presentation/widgets/app_update_check_tile.dart';
 import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/presentation/comic_download_queue_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
+import 'package:y300/features/more/data/about_providers.dart';
+import 'package:y300/features/more/presentation/about_page.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
 import 'package:y300/features/more/presentation/more_debug_tools.dart';
@@ -43,6 +44,7 @@ class _MorePageState extends ConsumerState<MorePage> {
         ref.watch(appAppearanceControllerProvider).asData?.value ??
         AppAppearanceSettings.defaults();
     final downloadQueueSnapshot = ref.watch(comicDownloadQueueSnapshotProvider);
+    final appInfo = ref.watch(aboutAppInfoProvider).value;
     final navigationState = ref
         .watch(mainNavigationSettingsControllerProvider)
         .value;
@@ -134,13 +136,18 @@ class _MorePageState extends ConsumerState<MorePage> {
             },
           ),
           ..._debugTools.buildTiles(context, ref),
-          const AppUpdateCheckTile(),
           ListTile(
-            key: const Key('more-about-placeholder'),
+            key: const Key('more-about-entry'),
             leading: const Icon(Icons.info_outline),
             title: const Text('关于'),
-            subtitle: Text(_debugTools.aboutSubtitle(ref)),
-            onTap: () => _debugTools.handleAboutTap(context, ref),
+            subtitle: Text(
+              appInfo == null ? '应用信息' : '版本 ${appInfo.version.trim()}',
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AboutPage()),
+              );
+            },
           ),
         ],
       ),

@@ -23,16 +23,6 @@ class MoreDebugTools {
         false;
   }
 
-  String aboutSubtitle(WidgetRef ref) {
-    if (!kDebugMode) {
-      return '应用信息';
-    }
-    final diagnosticEnabled = watchDiagnosticEnabled(ref);
-    return diagnosticEnabled
-        ? '已开启诊断日志模式，连续快速点击 5 次可关闭'
-        : '连续快速点击 5 次可开启诊断日志模式';
-  }
-
   Future<void> handleAboutTap(BuildContext context, WidgetRef ref) async {
     if (!kDebugMode) {
       return;

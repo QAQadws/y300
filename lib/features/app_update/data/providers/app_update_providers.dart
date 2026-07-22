@@ -3,8 +3,12 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/features/app_update/data/gitee/dio_gitee_checksum_repository.dart';
 import 'package:y300/features/app_update/data/gitee/dio_gitee_latest_release_repository.dart';
+import 'package:y300/features/app_update/data/gitee/dio_gitee_release_notes_remote_source.dart';
+import 'package:y300/features/app_update/data/gitee/persisting_gitee_latest_release_repository.dart';
+import 'package:y300/features/app_update/data/local/shared_prefs_app_release_notes_repository.dart';
 import 'package:y300/features/app_update/data/local/local_app_update_file_store.dart';
 import 'package:y300/features/app_update/data/platform/background_downloader_binary_downloader.dart';
 import 'package:y300/features/app_update/data/platform/crypto_app_update_artifact_verifier.dart';
@@ -13,6 +17,8 @@ import 'package:y300/features/app_update/data/platform/permission_handler_app_up
 import 'package:y300/features/app_update/data/platform/url_launcher_app_update_launcher.dart';
 import 'package:y300/features/app_update/domain/repositories/gitee_latest_release_repository.dart';
 import 'package:y300/features/app_update/domain/repositories/app_update_checksum_repository.dart';
+import 'package:y300/features/app_update/domain/repositories/app_release_notes_remote_source.dart';
+import 'package:y300/features/app_update/domain/repositories/app_release_notes_repository.dart';
 import 'package:y300/features/app_update/domain/services/app_update_binary_downloader.dart';
 import 'package:y300/features/app_update/domain/services/app_update_artifact_verifier.dart';
 import 'package:y300/features/app_update/domain/services/app_update_download_service.dart';
@@ -20,6 +26,7 @@ import 'package:y300/features/app_update/domain/services/app_update_file_store.d
 import 'package:y300/features/app_update/domain/services/app_update_install_permission_gateway.dart';
 import 'package:y300/features/app_update/domain/services/app_update_installer.dart';
 import 'package:y300/features/app_update/domain/services/app_update_launcher.dart';
+import 'package:y300/features/app_update/domain/services/app_release_notes_service.dart';
 import 'package:y300/features/app_update/presentation/controllers/app_update_prompt_coordinator.dart';
 
 final appUpdateDioProvider = Provider<Dio>((ref) {
@@ -36,10 +43,39 @@ final appUpdateDioProvider = Provider<Dio>((ref) {
 
 final giteeLatestReleaseRepositoryProvider =
     Provider<GiteeLatestReleaseRepository>((ref) {
-      return DioGiteeLatestReleaseRepository(
+      return PersistingGiteeLatestReleaseRepository(
+        delegate: DioGiteeLatestReleaseRepository(
+          dio: ref.watch(appUpdateDioProvider),
+        ),
+        releaseNotesService: ref.watch(appReleaseNotesServiceProvider),
+      );
+    });
+
+final appReleaseNotesRepositoryProvider = Provider<AppReleaseNotesRepository>((
+  ref,
+) {
+  return SharedPrefsAppReleaseNotesRepository(
+    preferencesStore: ref.watch(preferencesStoreProvider),
+  );
+});
+
+final appReleaseNotesRemoteSourceProvider =
+    Provider<AppReleaseNotesRemoteSource>((ref) {
+      return DioGiteeReleaseNotesRemoteSource(
         dio: ref.watch(appUpdateDioProvider),
       );
     });
+
+final appReleaseNotesServiceProvider = Provider<AppReleaseNotesService>((ref) {
+  final logger = ref.watch(loggerProvider);
+  return AppReleaseNotesService(
+    repository: ref.watch(appReleaseNotesRepositoryProvider),
+    remoteSource: ref.watch(appReleaseNotesRemoteSourceProvider),
+    onPersistenceFailure: (error) {
+      logger.w('[AppUpdate][release_notes_store] error=$error');
+    },
+  );
+});
 
 final appUpdateChecksumRepositoryProvider =
     Provider<AppUpdateChecksumRepository>((ref) {

@@ -12,6 +12,9 @@ abstract final class PreferenceKeys {
   static const appNavigationSnapshotV1 = PreferenceKey<String>(
     PreferenceKeyNames.appNavigationSnapshotV1,
   );
+  static const appUpdateReleaseNotesSnapshotV1 = PreferenceKey<String>(
+    PreferenceKeyNames.appUpdateReleaseNotesSnapshotV1,
+  );
   static const forumShellMode = PreferenceKey<String>(
     PreferenceKeyNames.forumShellMode,
   );

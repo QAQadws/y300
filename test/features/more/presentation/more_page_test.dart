@@ -92,19 +92,22 @@ void main() {
     expect(find.byKey(const Key('more-download-queue-entry')), findsOneWidget);
     expect(find.text('下载队列'), findsOneWidget);
     expect(find.text('暂无下载任务'), findsOneWidget);
-    await _scrollUntilVisibleIfNeeded(
-      tester,
-      find.byKey(const Key('more-check-update-entry')),
-    );
-    expect(find.byKey(const Key('more-check-update-entry')), findsOneWidget);
-    expect(find.text('检查更新'), findsOneWidget);
+    expect(find.byKey(const Key('about-check-update-entry')), findsNothing);
     expect(
       find.byKey(const Key('more-reader-settings-placeholder')),
       findsNothing,
     );
+    await _scrollUntilVisibleIfNeeded(
+      tester,
+      find.byKey(const Key('more-composer-quill-prototype-entry')),
+    );
     expect(
       find.byKey(const Key('more-composer-quill-prototype-entry')),
       findsOneWidget,
+    );
+    await _scrollUntilVisibleIfNeeded(
+      tester,
+      find.byKey(const Key('more-html-renderer-prototype-entry')),
     );
     expect(
       find.byKey(const Key('more-html-renderer-prototype-entry')),
@@ -112,10 +115,10 @@ void main() {
     );
     await _scrollUntilVisibleIfNeeded(
       tester,
-      find.byKey(const Key('more-about-placeholder')),
+      find.byKey(const Key('more-about-entry')),
     );
-    expect(find.byKey(const Key('more-about-placeholder')), findsOneWidget);
-    expect(find.textContaining('连续快速点击 5 次可开启诊断日志模式'), findsOneWidget);
+    expect(find.byKey(const Key('more-about-entry')), findsOneWidget);
+    expect(find.text('关于'), findsOneWidget);
   });
 
   testWidgets('MorePage opens the HTML renderer prototype in debug builds', (
@@ -321,51 +324,6 @@ void main() {
     expect(find.text('当前：WebView 模式'), findsOneWidget);
     expect(
       find.byKey(const Key('more-forum-mode-option-native')),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('MorePage toggles diagnostic mode after five quick about taps', (
-    tester,
-  ) async {
-    final controller = _FakeSyncDiagnosticModeController();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: false),
-          ),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
-          syncDiagnosticModeControllerProvider.overrideWith(() => controller),
-          appAppearanceControllerProvider.overrideWith(
-            () => _FakeAppAppearanceController(),
-          ),
-        ],
-        child: const MaterialApp(home: MorePage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final aboutTile = find.byKey(const Key('more-about-placeholder'));
-    await _scrollUntilVisibleIfNeeded(tester, aboutTile);
-    await tester.drag(find.byType(ListView), const Offset(0, -80));
-    await tester.pumpAndSettle();
-    for (var i = 0; i < 5; i++) {
-      await tester.tap(aboutTile);
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.pumpAndSettle();
-
-    expect(controller.toggleCount, 1);
-    expect(find.textContaining('诊断日志模式已开启'), findsOneWidget);
-    await _scrollUntilVisibleIfNeeded(
-      tester,
-      find.byKey(const Key('more-thread-detail-diagnostic-switch')),
-    );
-    expect(
-      find.byKey(const Key('more-thread-detail-diagnostic-switch')),
       findsOneWidget,
     );
   });

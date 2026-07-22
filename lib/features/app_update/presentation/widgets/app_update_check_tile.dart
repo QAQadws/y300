@@ -7,7 +7,9 @@ import 'package:y300/features/app_update/presentation/controllers/app_update_pro
 import 'package:y300/shared/widgets/transient_feedback.dart';
 
 class AppUpdateCheckTile extends ConsumerStatefulWidget {
-  const AppUpdateCheckTile({super.key});
+  const AppUpdateCheckTile({super.key, this.showVersionSubtitle = true});
+
+  final bool showVersionSubtitle;
 
   @override
   ConsumerState<AppUpdateCheckTile> createState() => _AppUpdateCheckTileState();
@@ -25,12 +27,16 @@ class _AppUpdateCheckTileState extends ConsumerState<AppUpdateCheckTile> {
       builder: (context, snapshot) {
         final version = snapshot.data?.trim();
         return ListTile(
-          key: const Key('more-check-update-entry'),
+          key: const Key('about-check-update-entry'),
           leading: const Icon(Icons.system_update_alt_outlined),
           title: const Text('检查更新'),
-          subtitle: Text(
-            version == null || version.isEmpty ? '当前版本：读取中' : '当前版本：$version',
-          ),
+          subtitle: widget.showVersionSubtitle
+              ? Text(
+                  version == null || version.isEmpty
+                      ? '当前版本：读取中'
+                      : '当前版本：$version',
+                )
+              : null,
           trailing: _checking
               ? const SizedBox.square(
                   dimension: 20,

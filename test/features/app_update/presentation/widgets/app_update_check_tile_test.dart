@@ -27,7 +27,7 @@ void main() {
     await _pumpTile(tester, coordinator);
 
     expect(find.text('当前版本：0.0.1'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('more-check-update-entry')));
+    await tester.tap(find.byKey(const Key('about-check-update-entry')));
     await tester.pumpAndSettle();
 
     expect(find.text('已是最新版本'), findsOneWidget);
@@ -50,7 +50,7 @@ void main() {
     );
 
     await _pumpTile(tester, coordinator);
-    await tester.tap(find.byKey(const Key('more-check-update-entry')));
+    await tester.tap(find.byKey(const Key('about-check-update-entry')));
     await tester.pumpAndSettle();
     await promptRequested;
 
