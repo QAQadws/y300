@@ -749,6 +749,88 @@ void main() {
     expect(selectionHost.isActive, isTrue);
   });
 
+  testWidgets(
+    'MainShellPage selection category creation safely handles cancel and confirm',
+    (tester) async {
+      final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      final selectionHost = ShelfSelectionHostController();
+      final webViewDriver = _FakeForumWebViewDriver();
+      final createdNames = <String>[];
+      final requests = <SelectionActionExecutionRequest>[];
+      addTearDown(queueSnapshot.dispose);
+      addTearDown(selectionHost.dispose);
+      await _pumpSelectionShell(
+        tester,
+        queueSnapshot: queueSnapshot,
+        selectionHost: selectionHost,
+        webViewDriver: webViewDriver,
+      );
+
+      selectionHost.activate(
+        ownerToken: Object(),
+        moduleKey: LibraryModuleKey.comic,
+        moduleTitle: '漫画',
+        activeCategoryId: 'default',
+        selectedCount: 1,
+        selectedWorkIds: const <String>{'comic-1'},
+        selectionActions: const <SelectionAction>[
+          SelectionAction(
+            id: SelectionActionIds.assignCategory,
+            icon: Icons.label_outline,
+            label: '标签',
+          ),
+        ],
+        delegate: ShelfSelectionHostDelegate(
+          exitSelection: () async {},
+          selectAllVisible: () async {},
+          invertVisible: () async {},
+          loadAvailableCategories: () async => const <LibraryCategory>[],
+          createCategory: (name) async {
+            createdNames.add(name);
+            return 'created-category';
+          },
+          runSelectionAction: (request) async {
+            requests.add(request);
+            return const SelectionActionResult(message: 'done');
+          },
+          refreshAfterAction: () async {},
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('selection-action-assign-category')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('新建分类'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOne);
+
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(createdNames, isEmpty);
+      expect(requests, isEmpty);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('selection-action-assign-category')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('新建分类'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '新分类');
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+
+      expect(createdNames, const <String>['新分类']);
+      expect(requests, hasLength(1));
+      expect(requests.single.targetCategoryId, 'created-category');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('MainShellPage unfavorite action requires confirmation', (
     tester,
   ) async {
@@ -854,6 +936,48 @@ Future<void> _pumpShellTab(WidgetTester tester) async {
   // bounded frame window for the tab transition, not global quiescence.
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
+}
+
+Future<void> _pumpSelectionShell(
+  WidgetTester tester, {
+  required ValueNotifier<ComicSearchRefreshQueueSnapshot> queueSnapshot,
+  required ShelfSelectionHostController selectionHost,
+  required _FakeForumWebViewDriver webViewDriver,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+        novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+        libraryStateRepositoryProvider.overrideWithValue(
+          _FakeLibraryStateRepository(),
+        ),
+        localFavoriteRepositoryProvider.overrideWith(
+          (ref) => _FakeLocalFavoriteRepository(),
+        ),
+        favoriteSyncServiceProvider.overrideWith(
+          (ref) => _FakeFavoriteSyncService(),
+        ),
+        comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+          queueSnapshot,
+        ),
+        mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+        mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
+        mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
+        authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+        shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
+        forumModeSettingsRepositoryProvider.overrideWithValue(
+          _FakeForumModeSettingsRepository(),
+        ),
+        forumWebViewDriverFactoryProvider.overrideWithValue(
+          () => webViewDriver,
+        ),
+        cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+      ],
+      child: const MaterialApp(home: MainShellPage()),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 Future<void> _pumpMainShellReady(WidgetTester tester) async {

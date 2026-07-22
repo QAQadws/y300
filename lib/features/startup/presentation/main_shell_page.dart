@@ -347,35 +347,11 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     return selectionHost.createCategory(categoryName.trim());
   }
 
-  Future<String?> _showCreateCategoryDialog() async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
+  Future<String?> _showCreateCategoryDialog() {
+    return showDialog<String>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('新建分类'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: '请输入分类名称'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(controller.text);
-              },
-              child: const Text('确定'),
-            ),
-          ],
-        );
-      },
+      builder: (_) => const _CreateSelectionCategoryDialog(),
     );
-    controller.dispose();
-    return result;
   }
 
   void _showSelectionMessage(String message) {
@@ -454,5 +430,54 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       ),
       MainShellDestination.more => const MorePage(),
     };
+  }
+}
+
+class _CreateSelectionCategoryDialog extends StatefulWidget {
+  const _CreateSelectionCategoryDialog();
+
+  @override
+  State<_CreateSelectionCategoryDialog> createState() =>
+      _CreateSelectionCategoryDialogState();
+}
+
+class _CreateSelectionCategoryDialogState
+    extends State<_CreateSelectionCategoryDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('selection-create-category-dialog'),
+      title: const Text('新建分类'),
+      content: TextField(
+        key: const Key('selection-create-category-name-field'),
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(hintText: '请输入分类名称'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('确定'),
+        ),
+      ],
+    );
   }
 }
