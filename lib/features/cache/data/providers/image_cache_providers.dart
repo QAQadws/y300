@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
-import 'package:y300/features/cache/data/services/cache_diagnostic_recorder.dart';
 import 'package:y300/features/cache/data/services/cache_mutation_bus.dart';
 import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
 import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
@@ -33,7 +32,6 @@ import 'package:y300/features/composer_shared/data/providers/composer_draft_prov
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/cache/presentation/services/default_forum_image_precache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
-import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 
 final imageCacheDirectoryResolverProvider =
@@ -72,7 +70,6 @@ final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
     // The service memoizes the resulting Future, so this remains one DB
     // session rather than a new open attempt per cache operation.
     () => ComicLocalDb.open(),
-    diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
     mutationReporter: ref.watch(cacheMutationBusProvider),
   );
 });
@@ -81,7 +78,6 @@ final parsedSnapshotCacheServiceProvider = Provider<ParsedSnapshotCacheService>(
   (ref) {
     return LocalParsedSnapshotCacheService.lazy(
       () => ComicLocalDb.open(),
-      diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
       mutationReporter: ref.watch(cacheMutationBusProvider),
     );
   },
@@ -116,7 +112,6 @@ final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
     directoryResolver: ref.watch(imageCacheDirectoryResolverProvider),
     headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
     mutationReporter: ref.watch(cacheMutationBusProvider),
-    diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
   );
 });
 
@@ -144,12 +139,6 @@ final forumImagePrecacheServiceProvider = Provider<ForumImagePrecacheService>((
   );
 });
 
-final cacheDiagnosticRecorderProvider = Provider<CacheDiagnosticRecorder>((
-  ref,
-) {
-  return SyncCacheDiagnosticRecorder(ref.watch(syncDiagnosticRecorderProvider));
-});
-
 final cacheDiagnosticExportServiceProvider =
     Provider<CacheDiagnosticExportService>((ref) {
       return JsonCacheDiagnosticExportService(
@@ -170,7 +159,6 @@ final cacheMaintenanceServiceProvider = Provider<CacheMaintenanceService>((
       protectedCoverCacheMaintenanceProvider,
     ),
     protectedCoverOwnerExists: (_) => true,
-    diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
   );
 });
 

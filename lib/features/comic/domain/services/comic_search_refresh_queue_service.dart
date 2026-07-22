@@ -5,7 +5,6 @@ import 'package:y300/features/comic/data/repositories/comic_search_refresh_queue
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -57,7 +56,6 @@ class ComicSearchRefreshQueueService
     required ComicSearchRefreshQueueRepository queueRepository,
     required ComicEpisodeRefreshService refreshService,
     required ComicRefreshOutcomeApplier refreshOutcomeApplier,
-    SyncDiagnosticRecorder? diagnosticRecorder,
     this.cadence = ForumSearchScheduler.defaultInterval,
     ComicSearchRefreshRetryPolicy retryPolicy =
         const ComicSearchRefreshRetryPolicy(),
@@ -65,8 +63,6 @@ class ComicSearchRefreshQueueService
   }) : _queueRepository = queueRepository,
        _refreshService = refreshService,
        _refreshOutcomeApplier = refreshOutcomeApplier,
-       _diagnosticRecorder =
-           diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
        _retryPolicy = retryPolicy,
        _nowProvider = nowProvider ?? DateTime.now,
        _snapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
@@ -79,7 +75,6 @@ class ComicSearchRefreshQueueService
   final ComicSearchRefreshQueueRepository _queueRepository;
   final ComicEpisodeRefreshService _refreshService;
   final ComicRefreshOutcomeApplier _refreshOutcomeApplier;
-  final SyncDiagnosticRecorder _diagnosticRecorder;
   final ComicSearchRefreshRetryPolicy _retryPolicy;
   final DateTime Function() _nowProvider;
   final ValueNotifier<ComicSearchRefreshQueueSnapshot> _snapshot;
@@ -132,17 +127,6 @@ class ComicSearchRefreshQueueService
     _logQueue(
       'enqueue comicId=$comicId title=$title position=$position '
       'deduplicated=${result.deduplicated}',
-    );
-    _diagnosticRecorder.record(
-      scope: 'comic_search_queue',
-      event: 'enqueue',
-      fields: <String, Object?>{
-        'comicId': comicId,
-        'sourceTid': request.sourceTid,
-        'title': title,
-        'position': position,
-        'deduplicated': result.deduplicated,
-      },
     );
     if (!_started) {
       unawaited(start());
@@ -277,16 +261,6 @@ class ComicSearchRefreshQueueService
       'run task=${task.id} comicId=${task.comicId} '
       'sourceTid=${task.request.sourceTid}',
     );
-    _diagnosticRecorder.record(
-      scope: 'comic_search_queue',
-      event: 'run',
-      fields: <String, Object?>{
-        'taskId': task.id,
-        'comicId': task.comicId,
-        'sourceTid': task.request.sourceTid,
-        'attempts': task.attempts,
-      },
-    );
     try {
       final preloaded = _preloadedRootDetails[task.id];
       final outcome = await _refreshService.fetchSearchAndCurrentOnly(
@@ -313,32 +287,8 @@ class ComicSearchRefreshQueueService
           'links=${outcome.links.length} inserted=${applied.insertedCount} '
           'updated=${applied.updatedCount}',
         );
-        _diagnosticRecorder.record(
-          scope: 'comic_search_queue',
-          event: 'done',
-          fields: <String, Object?>{
-            'taskId': task.id,
-            'comicId': task.comicId,
-            'sourceTid': task.request.sourceTid,
-            'links': outcome.links.length,
-            'inserted': applied.insertedCount,
-            'updated': applied.updatedCount,
-            'source': outcome.source.name,
-          },
-        );
       } else {
         _logQueue('done task=${task.id} comicId=${task.comicId} links=0');
-        _diagnosticRecorder.record(
-          scope: 'comic_search_queue',
-          event: 'done',
-          fields: <String, Object?>{
-            'taskId': task.id,
-            'comicId': task.comicId,
-            'sourceTid': task.request.sourceTid,
-            'links': 0,
-            'source': outcome.source.name,
-          },
-        );
       }
       await _queueRepository.markCompleted(id: task.id, now: _nowProvider());
       _preloadedRootDetails.remove(task.id);
@@ -359,17 +309,6 @@ class ComicSearchRefreshQueueService
         'failed task=${task.id} comicId=${task.comicId} '
         'attempts=$attempts error=$message',
       );
-      _diagnosticRecorder.record(
-        scope: 'comic_search_queue',
-        event: 'failed',
-        fields: <String, Object?>{
-          'taskId': task.id,
-          'comicId': task.comicId,
-          'sourceTid': task.request.sourceTid,
-          'attempts': attempts,
-          'error': message,
-        },
-      );
       await _queueRepository.markFailed(
         id: task.id,
         attempts: attempts,
@@ -382,17 +321,6 @@ class ComicSearchRefreshQueueService
     _logQueue(
       'retry task=${task.id} comicId=${task.comicId} '
       'attempts=$attempts error=$message',
-    );
-    _diagnosticRecorder.record(
-      scope: 'comic_search_queue',
-      event: 'retry',
-      fields: <String, Object?>{
-        'taskId': task.id,
-        'comicId': task.comicId,
-        'sourceTid': task.request.sourceTid,
-        'attempts': attempts,
-        'error': message,
-      },
     );
     await _queueRepository.markRetry(
       id: task.id,

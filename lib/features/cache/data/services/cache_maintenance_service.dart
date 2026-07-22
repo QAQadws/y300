@@ -1,7 +1,6 @@
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
-import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
@@ -18,8 +17,6 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
     required CacheBudgetCoordinator cacheBudgetCoordinator,
     ProtectedCoverCacheMaintenance? protectedCoverMaintenance,
     bool Function(CachedImageRecord record)? protectedCoverOwnerExists,
-    CacheDiagnosticRecorder diagnosticRecorder =
-        const NoopCacheDiagnosticRecorder(),
     DateTime Function()? now,
   }) : _imageCacheService = imageCacheService,
        _documentCacheService = documentCacheService,
@@ -28,7 +25,6 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
        _cacheBudgetCoordinator = cacheBudgetCoordinator,
        _protectedCoverMaintenance = protectedCoverMaintenance,
        _protectedCoverOwnerExists = protectedCoverOwnerExists,
-       _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
   final ImageCacheService _imageCacheService;
@@ -38,7 +34,6 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
   final CacheBudgetCoordinator _cacheBudgetCoordinator;
   final ProtectedCoverCacheMaintenance? _protectedCoverMaintenance;
   final bool Function(CachedImageRecord record)? _protectedCoverOwnerExists;
-  final CacheDiagnosticRecorder _diagnosticRecorder;
   final DateTime Function() _now;
 
   @override
@@ -83,7 +78,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
         break;
     }
 
-    final result = CacheClearResult(
+    return CacheClearResult(
       imageCacheCleared: imageCacheCleared,
       deletedDocuments: deletedDocuments,
       deletedSnapshots: deletedSnapshots,
@@ -93,26 +88,6 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
       deletedBytes: deletedBytes,
       failedParticipantIds: failedParticipantIds,
     );
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: 'prune',
-        namespace: CacheNamespace.document,
-        bucket: StorageBucket.pageCache,
-        reason: 'clear_${request.scope.name}',
-        fields: <String, Object?>{
-          'imageCacheCleared': result.imageCacheCleared,
-          'deletedDocuments': result.deletedDocuments,
-          'deletedSnapshots': result.deletedSnapshots,
-          'deletedProtectedCoverRecords': result.deletedProtectedCoverRecords,
-          'deletedImagesByRole': result.deletedImagesByRole,
-          'deletedRegularEntries': result.deletedRegularEntries,
-          'deletedBytes': result.deletedBytes,
-          'failedParticipantIds': result.failedParticipantIds.join(','),
-          'deletedEntries': result.deletedEntries,
-        },
-      ),
-    );
-    return result;
   }
 
   @override
@@ -128,7 +103,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
     final budget = await _cacheBudgetCoordinator.pruneToLimit(
       maxBytes: request.maxCacheBytes,
     );
-    final result = CachePruneResult(
+    return CachePruneResult(
       deletedDocuments: deletedDocuments,
       deletedSnapshots: deletedSnapshots,
       deletedProtectedCoverRecords: deletedProtectedCoverRecords,
@@ -136,26 +111,6 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
       deletedBytes: budget.deletedBytes,
       failedParticipantIds: budget.failedParticipantIds,
     );
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: 'prune',
-        namespace: CacheNamespace.document,
-        bucket: StorageBucket.pageCache,
-        reason: 'scheduled_or_limit',
-        fields: <String, Object?>{
-          'maxCacheBytes': request.maxCacheBytes,
-          'documentMaxAgeDays': request.documentMaxAge.inDays,
-          'deletedDocuments': result.deletedDocuments,
-          'deletedSnapshots': result.deletedSnapshots,
-          'deletedProtectedCoverRecords': result.deletedProtectedCoverRecords,
-          'deletedCacheEntries': result.deletedCacheEntries,
-          'deletedBytes': result.deletedBytes,
-          'failedParticipantIds': result.failedParticipantIds.join(','),
-          'deletedEntries': result.deletedEntries,
-        },
-      ),
-    );
-    return result;
   }
 
   @override

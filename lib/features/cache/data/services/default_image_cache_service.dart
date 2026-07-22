@@ -8,10 +8,9 @@ import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
-import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 
 abstract class ImageFileDownloader {
   Future<String> download({
@@ -57,16 +56,13 @@ class DefaultImageCacheService
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
     ImageFileDownloader downloader = const CacheManagerImageFileDownloader(),
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
-    CacheDiagnosticRecorder diagnosticRecorder =
-        const NoopCacheDiagnosticRecorder(),
   }) : _repository = repository,
        _cacheManagerFuture = cacheManagerFuture,
        _directoryResolver = directoryResolver,
        _headerBuilder = headerBuilder,
        _urlResolver = urlResolver,
        _downloader = downloader,
-       _mutationReporter = mutationReporter,
-       _diagnosticRecorder = diagnosticRecorder;
+       _mutationReporter = mutationReporter;
 
   final ImageCacheRepository _repository;
   final Future<BaseCacheManager> _cacheManagerFuture;
@@ -75,7 +71,6 @@ class DefaultImageCacheService
   final SiteUrlResolver _urlResolver;
   final ImageFileDownloader _downloader;
   final CacheMutationReporter _mutationReporter;
-  final CacheDiagnosticRecorder _diagnosticRecorder;
   final Map<String, Future<CachedImageResult>> _ensureTasks =
       <String, Future<CachedImageResult>>{};
 
@@ -104,13 +99,6 @@ class DefaultImageCacheService
     final sourceUrl =
         _urlResolver.resolve(request.sourceUrl) ?? request.sourceUrl.trim();
     if (cacheKey.isEmpty || sourceUrl.isEmpty) {
-      _recordImageEvent(
-        event: 'miss',
-        request: request,
-        cacheKey: cacheKey,
-        reason: 'invalid_request',
-        hit: false,
-      );
       return CachedImageResult.failed;
     }
 
@@ -138,14 +126,6 @@ class DefaultImageCacheService
             height: existing?.height,
           ),
         );
-        _recordImageEvent(
-          event: 'hit',
-          request: request,
-          cacheKey: cacheKey,
-          reason: 'indexed_file',
-          hit: true,
-          fields: <String, Object?>{'bytes': bytes},
-        );
         return CachedImageResult(
           success: true,
           cacheKey: cacheKey,
@@ -156,13 +136,6 @@ class DefaultImageCacheService
           height: existing?.height,
         );
       }
-      _recordImageEvent(
-        event: 'miss',
-        request: request,
-        cacheKey: cacheKey,
-        reason: 'indexed_file_missing',
-        hit: false,
-      );
     }
 
     final cacheManager = await _cacheManagerFuture;
@@ -183,14 +156,6 @@ class DefaultImageCacheService
           height: existing?.height,
         ),
       );
-      _recordImageEvent(
-        event: 'hit',
-        request: request,
-        cacheKey: cacheKey,
-        reason: 'cache_manager_file',
-        hit: true,
-        fields: <String, Object?>{'bytes': bytes},
-      );
       return CachedImageResult(
         success: true,
         cacheKey: cacheKey,
@@ -203,13 +168,6 @@ class DefaultImageCacheService
     }
 
     try {
-      _recordImageEvent(
-        event: sourceChanged ? 'refresh' : 'miss',
-        request: request,
-        cacheKey: cacheKey,
-        reason: sourceChanged ? 'source_changed' : 'not_cached',
-        hit: false,
-      );
       final headers = await _buildHeaders(sourceUrl);
       final localPath = await _downloader.download(
         cacheManager: cacheManager,
@@ -232,13 +190,6 @@ class DefaultImageCacheService
         ),
       );
       _mutationReporter.reportMutation(CacheNamespace.image);
-      _recordImageEvent(
-        event: 'write',
-        request: request,
-        cacheKey: cacheKey,
-        reason: 'downloaded',
-        fields: <String, Object?>{'bytes': bytes},
-      );
       return CachedImageResult(
         success: true,
         cacheKey: cacheKey,
@@ -248,13 +199,6 @@ class DefaultImageCacheService
         height: sourceChanged ? null : existing?.height,
       );
     } catch (_) {
-      _recordImageEvent(
-        event: 'miss',
-        request: request,
-        cacheKey: cacheKey,
-        reason: 'download_failed',
-        hit: false,
-      );
       return CachedImageResult.failed;
     }
   }
@@ -275,59 +219,18 @@ class DefaultImageCacheService
     }
     final record = await _repository.getByKey(normalized);
     if (record == null) {
-      _diagnosticRecorder.record(
-        CacheDiagnosticEvent(
-          event: 'miss',
-          namespace: CacheNamespace.image,
-          bucket: StorageBucket.imageCache,
-          cacheKey: normalized,
-          reason: 'record_missing',
-          hit: false,
-        ),
-      );
       return null;
     }
     final path = record.localPath?.trim();
     if (path == null || path.isEmpty) {
-      _diagnosticRecorder.record(
-        CacheDiagnosticEvent(
-          event: 'miss',
-          namespace: CacheNamespace.image,
-          bucket: StorageBucket.imageCache,
-          cacheKey: normalized,
-          reason: 'path_missing',
-          hit: false,
-        ),
-      );
       return null;
     }
     final file = io.File(path);
     if (!await file.exists()) {
-      _diagnosticRecorder.record(
-        CacheDiagnosticEvent(
-          event: 'miss',
-          namespace: CacheNamespace.image,
-          bucket: StorageBucket.imageCache,
-          cacheKey: normalized,
-          reason: 'file_missing',
-          hit: false,
-        ),
-      );
       return null;
     }
     final bytes = await file.length();
     await _repository.touch(normalized, DateTime.now());
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: 'hit',
-        namespace: CacheNamespace.image,
-        bucket: StorageBucket.imageCache,
-        cacheKey: normalized,
-        reason: 'direct_lookup',
-        hit: true,
-        fields: <String, Object?>{'bytes': bytes},
-      ),
-    );
     return CachedImageResult(
       success: true,
       cacheKey: normalized,
@@ -393,18 +296,6 @@ class DefaultImageCacheService
         lastAccessedAt: now,
       ),
     );
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: 'write',
-        namespace: CacheNamespace.image,
-        bucket: StorageBucket.imageCache,
-        cacheKey: request.cacheKey,
-        ownerType: _cacheOwnerTypeFor(request.ownerType),
-        ownerId: request.ownerId,
-        reason: 'protected_copy',
-        fields: <String, Object?>{'bytes': bytes, 'role': request.role.dbValue},
-      ),
-    );
     return CachedImageResult(
       success: true,
       cacheKey: request.cacheKey,
@@ -425,17 +316,6 @@ class DefaultImageCacheService
     for (final record in records) {
       await _deleteRecord(record);
     }
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: 'prune',
-        namespace: CacheNamespace.image,
-        bucket: StorageBucket.imageCache,
-        ownerType: _cacheOwnerTypeFor(ownerType),
-        ownerId: ownerId,
-        reason: 'owner_deleted',
-        fields: <String, Object?>{'deleted': records.length},
-      ),
-    );
     return records.length;
   }
 
@@ -455,28 +335,13 @@ class DefaultImageCacheService
       return;
     }
     final records = await _repository.listUnprotectedByAccessTime();
-    var deleted = 0;
     for (final record in records.where(_isRegularRecord)) {
       await _deleteRecord(record);
-      deleted += 1;
       usage -= record.bytes;
       if (usage <= maxBytes) {
         break;
       }
     }
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: 'prune',
-        namespace: CacheNamespace.image,
-        bucket: StorageBucket.imageCache,
-        reason: 'max_bytes',
-        fields: <String, Object?>{
-          'deleted': deleted,
-          'maxBytes': maxBytes,
-          'remainingBytes': usage,
-        },
-      ),
-    );
   }
 
   @override
@@ -497,18 +362,6 @@ class DefaultImageCacheService
     for (final record in records) {
       await _deleteRecord(record);
     }
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: 'prune',
-        namespace: CacheNamespace.image,
-        bucket: StorageBucket.imageCache,
-        reason: 'clear_unprotected_by_roles',
-        fields: <String, Object?>{
-          'deleted': records.length,
-          'roles': roles.map((r) => r.dbValue).join(','),
-        },
-      ),
-    );
     return records.length;
   }
 
@@ -578,18 +431,6 @@ class DefaultImageCacheService
       await _deleteRecord(record);
       deletedBytes += record.bytes;
     }
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: 'prune',
-        namespace: CacheNamespace.image,
-        bucket: StorageBucket.imageCache,
-        reason: 'clear_regular',
-        fields: <String, Object?>{
-          'deleted': clearable.length,
-          'deletedBytes': deletedBytes,
-        },
-      ),
-    );
     return CacheParticipantClearResult(
       deletedEntries: clearable.length,
       deletedBytes: deletedBytes,
@@ -658,42 +499,5 @@ class DefaultImageCacheService
 
   String _fileNameSafe(String value) {
     return value.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
-  }
-
-  void _recordImageEvent({
-    required String event,
-    required ImageCacheRequest request,
-    required String cacheKey,
-    String? reason,
-    bool? hit,
-    Map<String, Object?> fields = const <String, Object?>{},
-  }) {
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: event,
-        namespace: CacheNamespace.image,
-        bucket: StorageBucket.imageCache,
-        cacheKey: cacheKey.isEmpty ? request.cacheKey : cacheKey,
-        ownerType: _cacheOwnerTypeFor(request.ownerType),
-        ownerId: request.ownerId,
-        hit: hit,
-        reason: reason,
-        fields: <String, Object?>{
-          'role': request.role.dbValue,
-          'retentionClass': request.effectiveRetentionClass,
-          'protected': request.protected,
-          ...fields,
-        },
-      ),
-    );
-  }
-
-  CacheOwnerType? _cacheOwnerTypeFor(ImageCacheOwnerType ownerType) {
-    for (final candidate in CacheOwnerType.values) {
-      if (candidate.id == ownerType.dbValue) {
-        return candidate;
-      }
-    }
-    return null;
   }
 }

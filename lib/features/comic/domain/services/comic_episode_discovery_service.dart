@@ -9,7 +9,6 @@ import 'package:y300/features/comic/domain/services/catalog_thread_html_parser.d
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
@@ -95,7 +94,6 @@ class ComicEpisodeDiscoveryService {
     YamiboTagPageParsing? tagPageParsing,
     ForumPostDomExtractor? domExtractor,
     ForumThreadUrlParser? urlParser,
-    SyncDiagnosticRecorder? diagnosticRecorder,
     EpisodeDiscoveryConfig config = const EpisodeDiscoveryConfig(),
   }) : _fetchThreadDetail = fetchThreadDetail,
        _opPostParser = opPostParser,
@@ -112,8 +110,6 @@ class ComicEpisodeDiscoveryService {
              urlParser: urlParser ?? const ForumThreadUrlParser(),
            ),
        _urlParser = urlParser ?? const ForumThreadUrlParser(),
-       _diagnosticRecorder =
-           diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
        _config = config;
 
   static final RegExp _subjectEpisodeNoPattern = RegExp(
@@ -128,7 +124,6 @@ class ComicEpisodeDiscoveryService {
   final CatalogThreadHtmlParser _catalogThreadHtmlParser;
   final ForumPostDomExtractor _domExtractor;
   final ForumThreadUrlParser _urlParser;
-  final SyncDiagnosticRecorder _diagnosticRecorder;
   final EpisodeDiscoveryConfig _config;
 
   Future<EpisodeDiscoveryResult> discoverFromTid(String tid) async {
@@ -346,16 +341,6 @@ class ComicEpisodeDiscoveryService {
       if (!visitedPages.add(pageUrl)) {
         continue;
       }
-      _diagnosticRecorder.record(
-        scope: 'comic_discovery',
-        event: 'fetch_catalog_page',
-        fields: <String, Object?>{
-          'url': pageUrl,
-          'governed': governor != null,
-          'fetcher': 'desktopHtmlClient',
-        },
-      );
-
       final html = await _runCatalogRequest(
         governor: governor,
         action: () => _catalogHtmlFetcher.fetchHtml(pageUrl),
@@ -435,11 +420,6 @@ class ComicEpisodeDiscoveryService {
     }
     final cached = threadCache?.get(tid);
     if (cached != null) {
-      _diagnosticRecorder.record(
-        scope: 'comic_discovery',
-        event: 'fetch_thread_cache_hit',
-        fields: <String, Object?>{'tid': tid},
-      );
       final parsed = _opPostParser.parse(
         tid: cached.tid,
         fid: cached.fid,
@@ -456,11 +436,6 @@ class ComicEpisodeDiscoveryService {
         ),
       );
     }
-    _diagnosticRecorder.record(
-      scope: 'comic_discovery',
-      event: 'fetch_thread',
-      fields: <String, Object?>{'tid': tid, 'governed': governor != null},
-    );
     final result = await _runThreadRequest(
       governor: governor,
       action: () => _fetchThreadDetail(tid),

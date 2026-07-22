@@ -9,10 +9,8 @@ import 'package:y300/features/cache/domain/services/forum_image_precache_service
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
-import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
@@ -57,7 +55,6 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onOpenPostLink,
     this.onOpenPostImages,
     required this.onOpenPostActions,
-    this.diagnosticRecorder = const NoopThreadDetailDiagnosticRecorder(),
     this.htmlImagePrecacheService,
     this.onPostBuilt,
     this.imageDimensionStore,
@@ -83,7 +80,6 @@ class ThreadDetailContent extends StatefulWidget {
   onOpenPostImages;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
-  final ThreadDetailDiagnosticRecorder diagnosticRecorder;
   final ForumImagePrecacheService? htmlImagePrecacheService;
   final ValueChanged<int>? onPostBuilt;
 
@@ -130,8 +126,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       oldWidget.imageDimensionStore?.removeListener(_onImageDimensionsChanged);
       widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
     }
-    if (!identical(oldWidget.diagnosticRecorder, widget.diagnosticRecorder) ||
-        !identical(oldWidget.imageDimensionStore, widget.imageDimensionStore)) {
+    if (!identical(oldWidget.imageDimensionStore, widget.imageDimensionStore)) {
       _entryPlanner = _createEntryPlanner();
     }
     if (!identical(oldWidget.scrollController, widget.scrollController) ||
@@ -175,7 +170,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   /// render plan 缓存自然失效并以可信尺寸重建。
   ThreadDetailRenderEntryPlanner _createEntryPlanner() {
     return ThreadDetailRenderEntryPlanner(
-      diagnosticRecorder: widget.diagnosticRecorder,
       bodyRenderPlanner: ThreadPostBodyRenderPlanner(
         resourceLayoutHintResolver: ThreadPostResourceLayoutHintResolver(
           lockTrustedDimensions: true,
@@ -225,7 +219,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         itemCount: entries.length,
         itemBuilder: (context, index) {
           final entry = entries[index];
-          _recordEntryBuild(entry);
           return _buildEntry(context, entry, palette);
         },
       ),
@@ -292,7 +285,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
               ? start + count - index - 1
               : start + index;
           final entry = entries[entryIndex];
-          _recordEntryBuild(entry);
           Widget child = _buildEntry(
             context,
             entry,
@@ -310,25 +302,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         childCount: count,
         addSemanticIndexes: false,
       ),
-    );
-  }
-
-  void _recordEntryBuild(ThreadDetailRenderEntry entry) {
-    // Hot path: runs for every item build. Bail out before computing scroll
-    // position or building the message string when diagnostics are disabled
-    // (always the case in release, where the recorder is a const no-op).
-    if (!widget.diagnosticRecorder.enabled) {
-      return;
-    }
-    final position = widget.scrollController?.hasClients == true
-        ? widget.scrollController!.position.pixels
-        : null;
-    widget.diagnosticRecorder.record(
-      type: ThreadDetailDiagnosticEventType.entryBuild,
-      entryKey: entry.key,
-      pid: entry.post?.pid,
-      scrollOffset: position,
-      message: 'build ${entry.kind.name}',
     );
   }
 
@@ -382,7 +355,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     }
     return _htmlImagePreloadCoordinator ??= ThreadHtmlImagePreloadCoordinator(
       precacheService: service,
-      diagnosticRecorder: widget.diagnosticRecorder,
     );
   }
 

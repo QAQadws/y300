@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/network_diagnostic_recorder.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
@@ -59,13 +58,12 @@ void main() {
     });
 
     test(
-      'getText attaches cookies, saves set-cookie, records diagnostics, and logs string length',
+      'getText attaches cookies, saves set-cookie, and logs string length',
       () async {
         final adapter = _GatewayTestAdapter(
           textBody: '<html>ok</html>',
           setCookie: const <String>['auth=after; Path=/; HttpOnly'],
         );
-        final diagnostics = _RecordingNetworkDiagnosticRecorder();
         final logOutput = _MemoryLogOutput();
         final cookieStore = CookieStore();
         final uri = Uri.parse('https://bbs.yamibo.com/index.php?mobile=2');
@@ -76,7 +74,6 @@ void main() {
         final gateway = _buildGateway(
           adapter: adapter,
           cookieStore: cookieStore,
-          diagnostics: diagnostics,
           logOutput: logOutput,
         );
 
@@ -96,11 +93,6 @@ void main() {
         expect(result.dataOrNull?.body, '<html>ok</html>');
         expect(adapter.lastHeaders['Cookie'], 'auth=before');
         expect(await cookieStore.readCookieHeader(uri), 'auth=after');
-        expect(diagnostics.records.single.succeeded, isTrue);
-        expect(diagnostics.records.single.statusCode, 200);
-        expect(diagnostics.records.single.kind, 'html');
-        expect(diagnostics.records.single.operation, 'forum.home.chrome');
-        expect(diagnostics.records.single.requestId, 'yhttp-1');
         expect(
           logOutput.lines.join('\n'),
           contains(
@@ -113,15 +105,10 @@ void main() {
       },
     );
 
-    test('getBytes records imageProbe context and logs bytes length', () async {
+    test('getBytes logs imageProbe context and bytes length', () async {
       final adapter = _GatewayTestAdapter(bytesBody: const <int>[1, 2, 3, 4]);
-      final diagnostics = _RecordingNetworkDiagnosticRecorder();
       final logOutput = _MemoryLogOutput();
-      final gateway = _buildGateway(
-        adapter: adapter,
-        diagnostics: diagnostics,
-        logOutput: logOutput,
-      );
+      final gateway = _buildGateway(adapter: adapter, logOutput: logOutput);
 
       final result = await gateway.getBytes(
         Uri.parse('https://bbs.yamibo.com/data/attachment/block/banner.jpg'),
@@ -139,12 +126,6 @@ void main() {
         reason: '${result.errorOrNull?.message} ${result.errorOrNull?.raw}',
       );
       expect(result.dataOrNull?.body, const <int>[1, 2, 3, 4]);
-      expect(diagnostics.records.single.succeeded, isTrue);
-      expect(diagnostics.records.single.kind, 'imageProbe');
-      expect(diagnostics.records.single.operation, 'forum.home.carouselProbe');
-      expect(diagnostics.records.single.module, 'forum');
-      expect(diagnostics.records.single.pageKind, 'home');
-      expect(diagnostics.records.single.requestId, 'yhttp-1');
       expect(
         logOutput.lines.join('\n'),
         contains('[YamiboHTTP][imageProbe][forum.home.carouselProbe] GET'),
@@ -178,37 +159,24 @@ void main() {
       expect(adapter.lastHeaders[Headers.contentTypeHeader], contains('form'));
     });
 
-    test(
-      'getText failure keeps statusCode and records failed diagnostic',
-      () async {
-        final adapter = _GatewayTestAdapter(statusCode: 503, textBody: 'down');
-        final diagnostics = _RecordingNetworkDiagnosticRecorder();
-        final logOutput = _MemoryLogOutput();
-        final gateway = _buildGateway(
-          adapter: adapter,
-          diagnostics: diagnostics,
-          logOutput: logOutput,
-        );
+    test('getText failure keeps statusCode and logs the failure', () async {
+      final adapter = _GatewayTestAdapter(statusCode: 503, textBody: 'down');
+      final logOutput = _MemoryLogOutput();
+      final gateway = _buildGateway(adapter: adapter, logOutput: logOutput);
 
-        final result = await gateway.getText(
-          Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
-          context: const YamiboRequestContext(
-            kind: YamiboRequestKind.html,
-            operation: 'forum.home.chrome',
-          ),
-        );
+      final result = await gateway.getText(
+        Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'forum.home.chrome',
+        ),
+      );
 
-        expect(result.isFailure, isTrue);
-        expect(result.errorOrNull?.statusCode, 503);
-        expect(diagnostics.records.single.succeeded, isFalse);
-        expect(diagnostics.records.single.statusCode, 503);
-        expect(diagnostics.records.single.kind, 'html');
-        expect(diagnostics.records.single.operation, 'forum.home.chrome');
-        expect(diagnostics.records.single.requestId, 'yhttp-1');
-        expect(logOutput.lines.join('\n'), contains('-> failed 503'));
-        expect(logOutput.lines.join('\n'), contains('requestId=yhttp-1'));
-      },
-    );
+      expect(result.isFailure, isTrue);
+      expect(result.errorOrNull?.statusCode, 503);
+      expect(logOutput.lines.join('\n'), contains('-> failed 503'));
+      expect(logOutput.lines.join('\n'), contains('requestId=yhttp-1'));
+    });
 
     test('getText stores session snapshot extracted from HTML', () async {
       final sessionStore = YamiboSessionStore();
@@ -287,7 +255,6 @@ void main() {
 YamiboHttpGateway _buildGateway({
   required _GatewayTestAdapter adapter,
   CookieStore? cookieStore,
-  _RecordingNetworkDiagnosticRecorder? diagnostics,
   _MemoryLogOutput? logOutput,
   YamiboSessionStore? sessionStore,
   YamiboSessionExtractor? sessionExtractor,
@@ -307,7 +274,6 @@ YamiboHttpGateway _buildGateway({
       filter: ProductionFilter(),
       level: Level.trace,
     ),
-    diagnosticRecorder: diagnostics,
     sessionStore: sessionStore,
     sessionExtractor: sessionExtractor,
     dio: dio,
@@ -408,73 +374,6 @@ class _GatewayTestAdapter implements HttpClientAdapter {
     }
     return String.fromCharCodes(bytes);
   }
-}
-
-class _RecordingNetworkDiagnosticRecorder implements NetworkDiagnosticRecorder {
-  final records = <_DiagnosticRecord>[];
-
-  @override
-  void recordHttpRequest({
-    required String method,
-    required Uri uri,
-    required DateTime startedAt,
-    required int elapsedMs,
-    int? statusCode,
-    bool succeeded = true,
-    String? error,
-    String? kind,
-    String? operation,
-    String? module,
-    String? pageKind,
-    String? requestId,
-  }) {
-    records.add(
-      _DiagnosticRecord(
-        method: method,
-        uri: uri,
-        startedAt: startedAt,
-        elapsedMs: elapsedMs,
-        statusCode: statusCode,
-        succeeded: succeeded,
-        error: error,
-        kind: kind,
-        operation: operation,
-        module: module,
-        pageKind: pageKind,
-        requestId: requestId,
-      ),
-    );
-  }
-}
-
-class _DiagnosticRecord {
-  const _DiagnosticRecord({
-    required this.method,
-    required this.uri,
-    required this.startedAt,
-    required this.elapsedMs,
-    required this.succeeded,
-    this.statusCode,
-    this.error,
-    this.kind,
-    this.operation,
-    this.module,
-    this.pageKind,
-    this.requestId,
-  });
-
-  final String method;
-  final Uri uri;
-  final DateTime startedAt;
-  final int elapsedMs;
-  final int? statusCode;
-  final bool succeeded;
-  final String? error;
-  final String? kind;
-  final String? operation;
-  final String? module;
-  final String? pageKind;
-  final String? requestId;
 }
 
 class _MemoryLogOutput extends LogOutput {

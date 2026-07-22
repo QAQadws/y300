@@ -1,14 +1,14 @@
 import 'dart:async';
 
-import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
-
 // Adjust this single constant when tuning favorite sync request pacing.
 // Applies to ALL favorite sync modes (first / automatic-resume / manual
 // recent-add) — every governed parse request waits this long after the
 // previous one completes, to avoid tripping the site's temporary IP ban.
 const Duration favoriteSyncGovernorCooldown = Duration(milliseconds: 700);
 
-@Deprecated('Renamed to favoriteSyncGovernorCooldown (now covers all sync modes).')
+@Deprecated(
+  'Renamed to favoriteSyncGovernorCooldown (now covers all sync modes).',
+)
 const Duration favoriteFirstSyncGovernorCooldown = favoriteSyncGovernorCooldown;
 
 enum FavoriteSyncExecutionMode {
@@ -30,10 +30,7 @@ enum FavoriteFirstSyncRequestKind {
 }
 
 class FavoriteSyncExecutionContext {
-  const FavoriteSyncExecutionContext({
-    required this.mode,
-    this.governor,
-  });
+  const FavoriteSyncExecutionContext({required this.mode, this.governor});
 
   const FavoriteSyncExecutionContext.bootstrapInitial({
     required FavoriteFirstSyncRequestGovernor governor,
@@ -78,16 +75,12 @@ class DefaultFavoriteFirstSyncRequestGovernor
     this.cooldown = favoriteSyncGovernorCooldown,
     DateTime Function()? nowProvider,
     Future<void> Function(Duration duration)? delay,
-    SyncDiagnosticRecorder? diagnosticRecorder,
   }) : _nowProvider = nowProvider ?? DateTime.now,
-       _delay = delay ?? Future<void>.delayed,
-       _diagnosticRecorder =
-           diagnosticRecorder ?? const NoopSyncDiagnosticRecorder();
+       _delay = delay ?? Future<void>.delayed;
 
   final Duration cooldown;
   final DateTime Function() _nowProvider;
   final Future<void> Function(Duration duration) _delay;
-  final SyncDiagnosticRecorder _diagnosticRecorder;
 
   Future<void> _tail = Future<void>.value();
   DateTime? _lastCompletedAt;
@@ -102,44 +95,13 @@ class DefaultFavoriteFirstSyncRequestGovernor
     late final Future<void> scheduled;
     scheduled = previousTail.then((_) async {
       final wait = _remainingCooldown();
-      final startedAt = _nowProvider();
-      _diagnosticRecorder.record(
-        scope: 'favorite_first_sync_governor',
-        event: 'request_scheduled',
-        fields: <String, Object?>{
-          'kind': kind.name,
-          'cooldownMs': cooldown.inMilliseconds,
-          'waitMs': wait.inMilliseconds,
-        },
-      );
       if (wait > Duration.zero) {
         await _delay(wait);
       }
       try {
         final result = await action();
-        _diagnosticRecorder.record(
-          scope: 'favorite_first_sync_governor',
-          event: 'request_succeeded',
-          fields: <String, Object?>{
-            'kind': kind.name,
-            'waitMs': wait.inMilliseconds,
-            'elapsedMs':
-                _nowProvider().difference(startedAt).inMilliseconds,
-          },
-        );
         completer.complete(result);
       } catch (error, stackTrace) {
-        _diagnosticRecorder.record(
-          scope: 'favorite_first_sync_governor',
-          event: 'request_failed',
-          fields: <String, Object?>{
-            'kind': kind.name,
-            'waitMs': wait.inMilliseconds,
-            'elapsedMs':
-                _nowProvider().difference(startedAt).inMilliseconds,
-            'error': '$error',
-          },
-        );
         completer.completeError(error, stackTrace);
       } finally {
         _lastCompletedAt = _nowProvider();

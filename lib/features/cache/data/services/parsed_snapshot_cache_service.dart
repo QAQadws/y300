@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
-import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -11,30 +10,23 @@ class LocalParsedSnapshotCacheService
     implements ParsedSnapshotCacheService, CacheBudgetParticipant {
   LocalParsedSnapshotCacheService(
     Future<Database> dbFuture, {
-    CacheDiagnosticRecorder diagnosticRecorder =
-        const NoopCacheDiagnosticRecorder(),
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
     DateTime Function()? now,
   }) : _dbFutureFactory = (() => dbFuture),
        _mutationReporter = mutationReporter,
-       _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
   LocalParsedSnapshotCacheService.lazy(
     Future<Database> Function() dbFutureFactory, {
-    CacheDiagnosticRecorder diagnosticRecorder =
-        const NoopCacheDiagnosticRecorder(),
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
     DateTime Function()? now,
   }) : _dbFutureFactory = dbFutureFactory,
        _mutationReporter = mutationReporter,
-       _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
   final Future<Database> Function() _dbFutureFactory;
   Future<Database>? _dbFuture;
   final CacheMutationReporter _mutationReporter;
-  final CacheDiagnosticRecorder _diagnosticRecorder;
   final DateTime Function() _now;
 
   Future<Database> get _db => _dbFuture ??= _dbFutureFactory();
@@ -52,46 +44,17 @@ class LocalParsedSnapshotCacheService
       limit: 1,
     );
     if (rows.isEmpty) {
-      _recordSnapshotEvent(
-        event: 'miss',
-        descriptor: descriptor,
-        reason: 'snapshot_missing',
-        hit: false,
-      );
       return null;
     }
     final row = rows.first;
     if ((row['snapshot_type'] as String? ?? '') != codec.snapshotType ||
         (row['codec_version'] as int? ?? -1) != codec.codecVersion ||
         (row['parser_version'] as int? ?? -1) != codec.parserVersion) {
-      _recordSnapshotEvent(
-        event: 'miss',
-        descriptor: descriptor,
-        reason: 'version_mismatch',
-        hit: false,
-        fields: <String, Object?>{
-          'expectedSnapshotType': codec.snapshotType,
-          'actualSnapshotType': row['snapshot_type'],
-          'expectedCodecVersion': codec.codecVersion,
-          'actualCodecVersion': row['codec_version'],
-          'expectedParserVersion': codec.parserVersion,
-          'actualParserVersion': row['parser_version'],
-        },
-      );
       return null;
     }
     final now = _now();
     final expiresAt = _toDateTime(row['expires_at']);
     if (expiresAt != null && !now.isBefore(expiresAt)) {
-      _recordSnapshotEvent(
-        event: 'miss',
-        descriptor: descriptor,
-        reason: 'expired',
-        hit: false,
-        fields: <String, Object?>{
-          'expiresAt': expiresAt.toUtc().toIso8601String(),
-        },
-      );
       return null;
     }
 
@@ -99,26 +62,8 @@ class LocalParsedSnapshotCacheService
       final decoded = jsonDecode(row['payload_json'] as String);
       final snapshot = _fromRow(row, codec.decode(decoded));
       await touch(descriptor.cacheKey, now);
-      _recordSnapshotEvent(
-        event: snapshot.isFresh(now) ? 'hit' : 'stale',
-        descriptor: descriptor,
-        reason: snapshot.isFresh(now) ? 'fresh_snapshot' : 'stale_snapshot',
-        hit: true,
-        fields: <String, Object?>{
-          if (snapshot.staleAt != null)
-            'staleAt': snapshot.staleAt!.toUtc().toIso8601String(),
-          if (snapshot.expiresAt != null)
-            'expiresAt': snapshot.expiresAt!.toUtc().toIso8601String(),
-        },
-      );
       return snapshot;
     } catch (_) {
-      _recordSnapshotEvent(
-        event: 'miss',
-        descriptor: descriptor,
-        reason: 'decode_failed',
-        hit: false,
-      );
       return null;
     }
   }
@@ -159,19 +104,6 @@ class LocalParsedSnapshotCacheService
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     _mutationReporter.reportMutation(CacheNamespace.snapshot);
-    _recordSnapshotEvent(
-      event: 'write',
-      descriptor: descriptor,
-      reason: 'snapshot_put',
-      fields: <String, Object?>{
-        'snapshotType': codec.snapshotType,
-        'codecVersion': codec.codecVersion,
-        'parserVersion': codec.parserVersion,
-        'payloadBytes': utf8.encode(payloadJson).length,
-        'freshForSeconds': policy.freshFor.inSeconds,
-        'keepStaleForSeconds': policy.keepStaleFor.inSeconds,
-      },
-    );
   }
 
   @override
@@ -191,23 +123,11 @@ class LocalParsedSnapshotCacheService
     required String ownerId,
   }) async {
     final db = await _db;
-    final deleted = await db.delete(
+    return db.delete(
       ComicLocalDb.cachedSnapshotsTable,
       where: 'owner_type = ? AND owner_id = ?',
       whereArgs: <Object>[ownerType.id, ownerId],
     );
-    _recordSnapshotEvent(
-      event: 'prune',
-      descriptor: SnapshotCacheDescriptor(
-        cacheKey: '',
-        ownerType: ownerType,
-        ownerId: ownerId,
-        snapshotType: 'unknown',
-      ),
-      reason: 'owner_deleted',
-      fields: <String, Object?>{'deleted': deleted},
-    );
-    return deleted;
   }
 
   @override
@@ -216,46 +136,21 @@ class LocalParsedSnapshotCacheService
     required String ownerIdPrefix,
   }) async {
     final db = await _db;
-    final deleted = await db.delete(
+    return db.delete(
       ComicLocalDb.cachedSnapshotsTable,
       where: 'owner_type = ? AND owner_id LIKE ?',
       whereArgs: <Object>[ownerType.id, '$ownerIdPrefix%'],
     );
-    _recordSnapshotEvent(
-      event: 'prune',
-      descriptor: SnapshotCacheDescriptor(
-        cacheKey: '',
-        ownerType: ownerType,
-        ownerId: ownerIdPrefix,
-        snapshotType: 'unknown',
-      ),
-      reason: 'owner_prefix_deleted',
-      fields: <String, Object?>{'deleted': deleted},
-    );
-    return deleted;
   }
 
   @override
   Future<int> deleteExpired(DateTime now) async {
     final db = await _db;
-    final deleted = await db.delete(
+    return db.delete(
       ComicLocalDb.cachedSnapshotsTable,
       where: 'expires_at IS NOT NULL AND expires_at <= ?',
       whereArgs: <Object>[now.millisecondsSinceEpoch],
     );
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: 'prune',
-        namespace: CacheNamespace.snapshot,
-        bucket: StorageBucket.pageCache,
-        reason: 'expired',
-        fields: <String, Object?>{
-          'deleted': deleted,
-          'now': now.toUtc().toIso8601String(),
-        },
-      ),
-    );
-    return deleted;
   }
 
   @override
@@ -412,33 +307,6 @@ class LocalParsedSnapshotCacheService
   String? _normalizeNullable(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
-  }
-
-  void _recordSnapshotEvent({
-    required String event,
-    required SnapshotCacheDescriptor descriptor,
-    String? reason,
-    bool? hit,
-    Map<String, Object?> fields = const <String, Object?>{},
-  }) {
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: event,
-        namespace: CacheNamespace.snapshot,
-        bucket: StorageBucket.pageCache,
-        cacheKey: descriptor.cacheKey.isEmpty ? null : descriptor.cacheKey,
-        ownerType: descriptor.ownerType,
-        ownerId: descriptor.ownerId,
-        hit: hit,
-        reason: reason,
-        fields: <String, Object?>{
-          'snapshotType': descriptor.snapshotType,
-          if (descriptor.sourceDocumentKey != null)
-            'sourceDocumentKey': descriptor.sourceDocumentKey,
-          ...fields,
-        },
-      ),
-    );
   }
 
   String _snapshotLabel(String snapshotType) {

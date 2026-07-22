@@ -15,7 +15,6 @@ import 'package:y300/features/app_update/domain/repositories/gitee_latest_releas
 import 'package:y300/features/app_update/domain/services/app_release_notes_service.dart';
 import 'package:y300/features/app_update/domain/services/app_update_launcher.dart';
 import 'package:y300/features/app_update/presentation/controllers/app_update_prompt_coordinator.dart';
-import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/more/data/about_providers.dart';
 import 'package:y300/features/more/domain/models/about_app_info.dart';
 import 'package:y300/features/more/domain/services/about_external_link_launcher.dart';
@@ -109,10 +108,9 @@ void main() {
     expect(find.text('无法打开 GitHub 仓库'), findsOneWidget);
   });
 
-  testWidgets('keeps the five-tap diagnostic gesture on the app icon', (
+  testWidgets('renders the app icon as non-interactive content', (
     tester,
   ) async {
-    final diagnosticController = _FakeSyncDiagnosticModeController();
     final coordinator = _coordinator();
     addTearDown(coordinator.dispose);
     await tester.pumpWidget(
@@ -122,9 +120,6 @@ void main() {
             (ref) async =>
                 const AboutAppInfo(version: '0.0.6', buildNumber: '9'),
           ),
-          syncDiagnosticModeControllerProvider.overrideWith(
-            () => diagnosticController,
-          ),
           appUpdatePromptCoordinatorProvider.overrideWithValue(coordinator),
         ],
         child: const MaterialApp(home: AboutPage()),
@@ -132,14 +127,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    for (var index = 0; index < 5; index++) {
-      await tester.tap(find.byKey(const Key('about-app-icon-tap-target')));
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.pumpAndSettle();
-
-    expect(diagnosticController.toggleCount, 1);
-    expect(find.textContaining('诊断日志模式已开启'), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.byKey(const Key('about-app-icon-tap-target')), findsNothing);
+    expect(find.textContaining('诊断日志模式'), findsNothing);
   });
 }
 
@@ -226,22 +216,5 @@ final class _UnusedUpdateLauncher implements AppUpdateLauncher {
   @override
   Future<AppUpdateLaunchResult> openApk(Uri apkUri) {
     throw UnimplementedError();
-  }
-}
-
-final class _FakeSyncDiagnosticModeController
-    extends SyncDiagnosticModeController {
-  var toggleCount = 0;
-  var _enabled = false;
-
-  @override
-  Future<bool> build() async => _enabled;
-
-  @override
-  Future<bool> toggle() async {
-    toggleCount++;
-    _enabled = !_enabled;
-    state = AsyncData(_enabled);
-    return _enabled;
   }
 }

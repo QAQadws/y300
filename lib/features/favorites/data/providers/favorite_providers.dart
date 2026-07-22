@@ -15,7 +15,6 @@ import 'package:y300/features/favorites/data/use_cases/unfavorite_use_case_provi
 import 'package:y300/features/favorites/domain/services/favorite_link_service.dart';
 import 'package:y300/features/favorites/domain/services/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/presentation/adapters/favorite_shelf_adapter.dart';
-import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
@@ -27,26 +26,24 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 export 'package:y300/features/favorites/data/use_cases/unfavorite_use_case_providers.dart';
 
-final localFavoriteRepositoryProvider = Provider<LocalFavoriteRepository>((ref) {
+final localFavoriteRepositoryProvider = Provider<LocalFavoriteRepository>((
+  ref,
+) {
   return SqfliteLocalFavoriteRepository(ComicLocalDb.open());
 });
 
 final favoriteDetailContextLoaderProvider =
     Provider<FavoriteDetailContextLoader>((ref) {
-  return DefaultFavoriteDetailContextLoader(
-    loadThreadDetail: (tid) =>
-        ref.read(threadJsonRepositoryProvider).getThreadDetail(
-              tid: tid,
-              page: 1,
-            ),
-    loadTagLookup: () => ref.read(forumTagLookupProvider.future),
-    classifier: ref.watch(threadContentClassifierProvider),
-    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
-  );
-});
+      return DefaultFavoriteDetailContextLoader(
+        loadThreadDetail: (tid) => ref
+            .read(threadJsonRepositoryProvider)
+            .getThreadDetail(tid: tid, page: 1),
+        loadTagLookup: () => ref.read(forumTagLookupProvider.future),
+        classifier: ref.watch(threadContentClassifierProvider),
+      );
+    });
 
 final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
-  final diagnosticRecorder = ref.watch(syncDiagnosticRecorderProvider);
   return NetworkFavoriteSyncService(
     remoteRepository: ref.watch(favoriteRepositoryProvider),
     localRepository: ref.watch(localFavoriteRepositoryProvider),
@@ -55,10 +52,7 @@ final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
     postIngestTaskRunner: ref.watch(libraryPostIngestTaskRunnerProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     downloadStorageService: ref.watch(downloadStorageServiceProvider),
-    diagnosticRecorder: diagnosticRecorder,
-    governorFactory: () => DefaultFavoriteFirstSyncRequestGovernor(
-      diagnosticRecorder: diagnosticRecorder,
-    ),
+    governorFactory: DefaultFavoriteFirstSyncRequestGovernor.new,
   );
 });
 
@@ -68,8 +62,9 @@ final favoriteLinkServiceProvider = Provider<FavoriteLinkService>((ref) {
   );
 });
 
-final favoriteShelfBootstrapperProvider =
-    Provider<FavoriteShelfBootstrapper>((ref) {
+final favoriteShelfBootstrapperProvider = Provider<FavoriteShelfBootstrapper>((
+  ref,
+) {
   return DefaultFavoriteShelfBootstrapper(
     repository: ref.watch(localFavoriteRepositoryProvider),
     syncService: ref.watch(favoriteSyncServiceProvider),
@@ -88,15 +83,15 @@ final favoriteShelfAdapterProvider = Provider<FavoriteShelfAdapter>((ref) {
     ref.watch(localFavoriteRepositoryProvider),
     syncService: ref.watch(favoriteSyncServiceProvider),
     imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
-    comicCoverCacheWriterResolver: () => ref.read(comicCoverCacheWriterProvider),
-    novelCoverCacheWriterResolver: () => ref.read(novelCoverCacheWriterProvider),
+    comicCoverCacheWriterResolver: () =>
+        ref.read(comicCoverCacheWriterProvider),
+    novelCoverCacheWriterResolver: () =>
+        ref.read(novelCoverCacheWriterProvider),
     taskProgressHub: ref.watch(libraryTaskProgressHubWorkflowProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
-    categoryAssignUseCaseResolver: () => ref.read(
-      favoriteShelfCategoryAssignUseCaseProvider,
-    ),
-    unfavoriteThreadUseCaseResolver: () => ref.read(
-      unfavoriteThreadUseCaseProvider,
-    ),
+    categoryAssignUseCaseResolver: () =>
+        ref.read(favoriteShelfCategoryAssignUseCaseProvider),
+    unfavoriteThreadUseCaseResolver: () =>
+        ref.read(unfavoriteThreadUseCaseProvider),
   );
 });

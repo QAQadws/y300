@@ -28,8 +28,6 @@ import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
-import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
@@ -65,15 +63,12 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     required ComicRefreshKeywordResolver keywordResolver,
     required ComicSearchCandidateRanker candidateRanker,
     required ComicEpisodeLinkMerger episodeLinkMerger,
-    SyncDiagnosticRecorder? diagnosticRecorder,
     ThreadSeedFetcher? threadSeedFetcher,
   }) : _discoveryService = discoveryService,
        _searchService = searchService,
        _keywordResolver = keywordResolver,
        _candidateRanker = candidateRanker,
        _episodeLinkMerger = episodeLinkMerger,
-       _diagnosticRecorder =
-           diagnosticRecorder ?? const NoopSyncDiagnosticRecorder(),
        _threadSeedFetcher = threadSeedFetcher;
 
   final ComicEpisodeDiscoveryService _discoveryService;
@@ -81,7 +76,6 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   final ComicRefreshKeywordResolver _keywordResolver;
   final ComicSearchCandidateRanker _candidateRanker;
   final ComicEpisodeLinkMerger _episodeLinkMerger;
-  final SyncDiagnosticRecorder _diagnosticRecorder;
   final ThreadSeedFetcher? _threadSeedFetcher;
 
   @override
@@ -469,15 +463,6 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   }
 
   void _logRefresh(ComicEpisodeRefreshRequest request, String message) {
-    _diagnosticRecorder.record(
-      scope: 'comic_refresh',
-      event: 'log',
-      fields: <String, Object?>{
-        'comicId': request.comicId ?? '',
-        'sourceTid': request.sourceTid,
-        'message': message,
-      },
-    );
     if (kReleaseMode) {
       return;
     }
@@ -519,7 +504,6 @@ final comicEpisodeDiscoveryServiceProvider =
         catalogHtmlFetcher: YamiboCatalogHtmlFetcher(
           htmlClient: ref.watch(yamiboHtmlClientProvider),
         ),
-        diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
       );
     });
 
@@ -568,7 +552,6 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
       keywordResolver: ref.watch(comicRefreshKeywordResolverProvider),
       candidateRanker: ref.watch(comicSearchCandidateRankerProvider),
       episodeLinkMerger: ref.watch(comicEpisodeLinkMergerProvider),
-      diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
       threadSeedFetcher: (tid) async {
         final result = await ref
             .read(threadJsonRepositoryProvider)

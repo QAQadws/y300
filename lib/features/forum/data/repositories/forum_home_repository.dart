@@ -6,12 +6,10 @@ import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
-import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/services/forum_home_html_parser.dart';
@@ -90,8 +88,6 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       freshFor: Duration(minutes: 5),
       keepStaleFor: Duration(days: 1),
     ),
-    CacheDiagnosticRecorder diagnosticRecorder =
-        const NoopCacheDiagnosticRecorder(),
     DateTime Function()? now,
   }) : _htmlClient = htmlClient,
        _imageProbe = imageProbe,
@@ -102,7 +98,6 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
        _cacheKeyCanonicalizer = cacheKeyCanonicalizer,
        _snapshotCodec = snapshotCodec,
        _snapshotPolicy = snapshotPolicy,
-       _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
   final YamiboHtmlClient _htmlClient;
@@ -114,7 +109,6 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
   final CacheKeyCanonicalizer _cacheKeyCanonicalizer;
   final ForumHomeSnapshotCodec _snapshotCodec;
   final SnapshotCachePolicy _snapshotPolicy;
-  final CacheDiagnosticRecorder _diagnosticRecorder;
   final DateTime Function() _now;
 
   @override
@@ -138,13 +132,6 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       }
     }
 
-    _recordPageCacheEvent(
-      event: 'refresh',
-      descriptor: documentDescriptor,
-      reason: cachePolicy == CacheLoadPolicy.networkFirst
-          ? 'network_first'
-          : 'snapshot_not_fresh',
-    );
     final htmlResult = await _htmlClient.getMobilePage(
       path: '/index.php',
       queryParameters: const <String, String>{'mobile': '2'},
@@ -155,26 +142,11 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       ),
     );
     if (htmlResult case ApiFailure<String>(:final error)) {
-      _recordPageCacheEvent(
-        event: 'refresh_failed',
-        descriptor: documentDescriptor,
-        reason: error.type.name,
-        fields: <String, Object?>{
-          'message': error.message,
-          if (error.statusCode != null) 'statusCode': error.statusCode,
-        },
-      );
       final cached = await _parseCachedDocument(
         documentDescriptor: documentDescriptor,
         snapshotDescriptor: snapshotDescriptor,
       );
       if (cached != null) {
-        _recordPageCacheEvent(
-          event: 'stale',
-          descriptor: documentDescriptor,
-          reason: 'network_failed_document_fallback',
-          hit: true,
-        );
         return ApiSuccess(cached);
       }
       return ApiFailure(
@@ -193,11 +165,6 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       final payload = await _parsePayload(html);
       await _putDocument(descriptor: documentDescriptor, html: html);
       await _putSnapshot(descriptor: snapshotDescriptor, payload: payload);
-      _recordPageCacheEvent(
-        event: 'refresh_succeeded',
-        descriptor: documentDescriptor,
-        fields: <String, Object?>{'bodyBytes': html.length},
-      );
       return ApiSuccess(payload);
     } catch (error) {
       return ApiFailure(
@@ -344,28 +311,6 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     }
   }
 
-  void _recordPageCacheEvent({
-    required String event,
-    required DocumentCacheDescriptor descriptor,
-    String? reason,
-    bool? hit,
-    Map<String, Object?> fields = const <String, Object?>{},
-  }) {
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: event,
-        namespace: CacheNamespace.document,
-        bucket: StorageBucket.pageCache,
-        cacheKey: descriptor.cacheKey,
-        ownerType: descriptor.ownerType,
-        ownerId: descriptor.ownerId,
-        hit: hit,
-        reason: reason,
-        fields: fields,
-      ),
-    );
-  }
-
   Future<ForumHomeHtmlData> _withResolvedCarouselAspectRatio(
     ForumHomeHtmlData data,
   ) async {
@@ -422,17 +367,13 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
           ForumHomeSectionData(
             title: '我收藏的版块',
             kind: ForumHomeSectionKind.favorite,
-            items: [
-              for (final item in favoriteItems) _toHomeForumData(item),
-            ],
+            items: [for (final item in favoriteItems) _toHomeForumData(item)],
           ),
         for (final section in regularSections)
           ForumHomeSectionData(
             title: section.title,
             kind: ForumHomeSectionKind.regular,
-            items: [
-              for (final item in section.items) _toHomeForumData(item),
-            ],
+            items: [for (final item in section.items) _toHomeForumData(item)],
           ),
       ],
       chromeData: ForumHomeChromeData(
@@ -669,6 +610,5 @@ final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
     sessionStore: ref.watch(yamiboSessionStoreProvider),
     documentCacheService: ref.watch(documentCacheServiceProvider),
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
-    diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
   );
 });

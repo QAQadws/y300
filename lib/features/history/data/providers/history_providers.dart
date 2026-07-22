@@ -16,7 +16,6 @@ import 'package:y300/features/history/domain/services/history_use_cases.dart';
 import 'package:y300/features/history/domain/services/history_visit_draft_normalizer.dart';
 import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/history/domain/services/record_history_visit_use_case.dart';
-import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
 
 final historyDatabaseNameProvider = Provider<String>((ref) {
   return HistoryLocalDb.dbName;
@@ -46,9 +45,7 @@ final historyDiagnosticRecorderProvider = Provider<HistoryDiagnosticRecorder>((
   if (!kDebugMode) {
     return const NoopHistoryDiagnosticRecorder();
   }
-  return DebugHistoryDiagnosticRecorder(
-    structuredRecorder: ref.watch(syncDiagnosticRecorderProvider),
-  );
+  return DebugHistoryDiagnosticRecorder();
 });
 
 final historyRetentionPolicyProvider = Provider<HistoryRetentionPolicy>((ref) {

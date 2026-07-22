@@ -6,7 +6,6 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/network_diagnostic_recorder.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_logger.dart';
@@ -19,7 +18,6 @@ class YamiboHttpGateway {
   YamiboHttpGateway({
     required CookieStore cookieStore,
     required Logger logger,
-    NetworkDiagnosticRecorder? diagnosticRecorder,
     YamiboSessionStore? sessionStore,
     YamiboSessionExtractor? sessionExtractor,
     Dio? dio,
@@ -29,8 +27,6 @@ class YamiboHttpGateway {
        _sessionStore = sessionStore,
        _sessionExtractor = sessionExtractor,
        _defaultUserAgent = defaultUserAgent,
-       _diagnosticRecorder =
-           diagnosticRecorder ?? const NoopNetworkDiagnosticRecorder(),
        _requestLogger = YamiboRequestLogger(
          logger: logger,
          enableLog: enableLog,
@@ -52,7 +48,6 @@ class YamiboHttpGateway {
   final YamiboSessionStore? _sessionStore;
   final YamiboSessionExtractor? _sessionExtractor;
   final String _defaultUserAgent;
-  final NetworkDiagnosticRecorder _diagnosticRecorder;
   final YamiboRequestLogger _requestLogger;
   final Dio _dio;
   int _nextRequestSequence = 0;
@@ -266,13 +261,6 @@ class YamiboHttpGateway {
 
       _saveExtractedSession(body: body, context: context);
       final elapsedMs = _elapsedMs(startedAt);
-      _recordSuccess(
-        context: context,
-        requestId: requestId,
-        response: response,
-        startedAt: startedAt,
-        elapsedMs: elapsedMs,
-      );
       _requestLogger.logSuccess(
         context: context,
         requestId: requestId,
@@ -296,13 +284,6 @@ class YamiboHttpGateway {
       if (response != null) {
         await _saveCookies(response);
       }
-      _recordFailure(
-        context: context,
-        requestId: requestId,
-        error: error,
-        startedAt: startedAt,
-        elapsedMs: elapsedMs,
-      );
       _requestLogger.logFailure(
         context: context,
         requestId: requestId,
@@ -406,52 +387,6 @@ class YamiboHttpGateway {
       break;
     }
     return text;
-  }
-
-  void _recordSuccess({
-    required YamiboRequestContext context,
-    required String requestId,
-    required Response<Object?> response,
-    required DateTime startedAt,
-    required int elapsedMs,
-  }) {
-    _diagnosticRecorder.recordHttpRequest(
-      method: response.requestOptions.method,
-      uri: response.requestOptions.uri,
-      startedAt: startedAt,
-      elapsedMs: elapsedMs,
-      statusCode: response.statusCode,
-      succeeded: true,
-      kind: context.kind.name,
-      operation: context.operation,
-      module: context.module,
-      pageKind: context.pageKind,
-      requestId: requestId,
-    );
-  }
-
-  void _recordFailure({
-    required YamiboRequestContext context,
-    required String requestId,
-    required DioException error,
-    required DateTime startedAt,
-    required int elapsedMs,
-  }) {
-    final request = error.requestOptions;
-    _diagnosticRecorder.recordHttpRequest(
-      method: request.method,
-      uri: request.uri,
-      startedAt: startedAt,
-      elapsedMs: elapsedMs,
-      statusCode: error.response?.statusCode,
-      succeeded: false,
-      error: error.message,
-      kind: context.kind.name,
-      operation: context.operation,
-      module: context.module,
-      pageKind: context.pageKind,
-      requestId: requestId,
-    );
   }
 
   ApiError _mapDioError(DioException error) {

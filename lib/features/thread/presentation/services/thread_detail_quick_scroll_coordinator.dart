@@ -3,14 +3,6 @@ import 'package:flutter/widgets.dart';
 
 enum ThreadDetailQuickScrollTarget { top, bottom }
 
-typedef ThreadDetailQuickScrollDiagnostic =
-    void Function({
-      required ThreadDetailQuickScrollTarget target,
-      required bool animated,
-      required double sourceOffset,
-      required double targetOffset,
-    });
-
 /// Owns the transient direction and endpoint state for thread quick scrolling.
 ///
 /// The coordinator observes only the page's primary scrollable. It does not own
@@ -20,13 +12,11 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
     required ScrollController scrollController,
     this.animationDuration = const Duration(milliseconds: 260),
     this.endpointTolerance = 1,
-    this.onNavigation,
   }) : _scrollController = scrollController;
 
   final ScrollController _scrollController;
   final Duration animationDuration;
   final double endpointTolerance;
-  final ThreadDetailQuickScrollDiagnostic? onNavigation;
 
   ThreadDetailQuickScrollTarget _target = ThreadDetailQuickScrollTarget.bottom;
   bool _isScrollable = false;
@@ -113,13 +103,6 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
     _isNavigating = true;
     _navigationInterrupted = false;
     notifyListeners();
-    onNavigation?.call(
-      target: requestedTarget,
-      animated: animate,
-      sourceOffset: sourceOffset,
-      targetOffset: targetOffset,
-    );
-
     try {
       if (animate) {
         await _scrollController.animateTo(

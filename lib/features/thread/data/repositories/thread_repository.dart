@@ -6,11 +6,9 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
-import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/services/thread_detail_html_diagnostics.dart';
 import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
@@ -61,8 +59,6 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
       freshFor: Duration(minutes: 5),
       keepStaleFor: Duration(days: 7),
     ),
-    CacheDiagnosticRecorder diagnosticRecorder =
-        const NoopCacheDiagnosticRecorder(),
     ThreadDetailNativeDebugLog? debugLog,
     DateTime Function()? now,
   }) : _htmlClient = htmlClient,
@@ -73,7 +69,6 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
        _cacheKeyCanonicalizer = cacheKeyCanonicalizer,
        _snapshotCodec = snapshotCodec,
        _snapshotPolicy = snapshotPolicy,
-       _diagnosticRecorder = diagnosticRecorder,
        _debugLog = debugLog,
        _now = now ?? DateTime.now;
 
@@ -85,7 +80,6 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
   final CacheKeyCanonicalizer _cacheKeyCanonicalizer;
   final ThreadDetailSnapshotCodec _snapshotCodec;
   final SnapshotCachePolicy _snapshotPolicy;
-  final CacheDiagnosticRecorder _diagnosticRecorder;
   final ThreadDetailNativeDebugLog? _debugLog;
   final DateTime Function() _now;
 
@@ -119,11 +113,6 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
       'tid=$tid page=$page query=${_formatQuery(queryParameters)} '
           'snapshot=fresh-miss',
     );
-    _recordPageCacheEvent(
-      event: 'refresh',
-      descriptor: documentDescriptor,
-      reason: 'snapshot_not_fresh',
-    );
     final htmlResult = await _htmlClient.getMobilePage(
       path: '/forum.php',
       queryParameters: <String, String>{
@@ -146,15 +135,6 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
         'tid=$tid page=$page type=${error.type.name} '
             'status=${error.statusCode ?? '-'} message=${_oneLine(error.message)}',
       );
-      _recordPageCacheEvent(
-        event: 'refresh_failed',
-        descriptor: documentDescriptor,
-        reason: error.type.name,
-        fields: <String, Object?>{
-          'message': error.message,
-          if (error.statusCode != null) 'statusCode': error.statusCode,
-        },
-      );
       final cached = await _parseCachedDocument(
         descriptor: documentDescriptor,
         snapshotDescriptor: snapshotDescriptor,
@@ -165,12 +145,6 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
         _logNative(
           'cached_document_fallback_success',
           'tid=$tid page=$page ${_formatThreadData(cached)}',
-        );
-        _recordPageCacheEvent(
-          event: 'stale',
-          descriptor: documentDescriptor,
-          reason: 'network_failed_document_fallback',
-          hit: true,
         );
         return ApiSuccess(cached);
       }
@@ -202,11 +176,6 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
       );
       await _putDocument(descriptor: documentDescriptor, html: html);
       await _putSnapshot(descriptor: snapshotDescriptor, data: data);
-      _recordPageCacheEvent(
-        event: 'refresh_succeeded',
-        descriptor: documentDescriptor,
-        fields: <String, Object?>{'bodyBytes': html.length},
-      );
       return ApiSuccess(data);
     } catch (error, stackTrace) {
       final diagnosticFields = htmlDiagnostic?.toLogFields() ?? 'no-html-probe';
@@ -332,28 +301,6 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
     }
   }
 
-  void _recordPageCacheEvent({
-    required String event,
-    required DocumentCacheDescriptor descriptor,
-    String? reason,
-    bool? hit,
-    Map<String, Object?> fields = const <String, Object?>{},
-  }) {
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: event,
-        namespace: CacheNamespace.document,
-        bucket: StorageBucket.pageCache,
-        cacheKey: descriptor.cacheKey,
-        ownerType: descriptor.ownerType,
-        ownerId: descriptor.ownerId,
-        hit: hit,
-        reason: reason,
-        fields: fields,
-      ),
-    );
-  }
-
   Future<ThreadDetailData?> _getFreshSnapshot(
     SnapshotCacheDescriptor descriptor,
   ) async {
@@ -475,7 +422,6 @@ final threadRepositoryProvider = Provider<ThreadRepository>((ref) {
     htmlClient: ref.watch(yamiboHtmlClientProvider),
     documentCacheService: ref.watch(documentCacheServiceProvider),
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
-    diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
   );
 });
 

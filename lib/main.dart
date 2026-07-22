@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/y300_app.dart';
@@ -6,8 +5,6 @@ import 'package:y300/core/media/global_image_cache_tuner.dart';
 import 'package:y300/core/preferences/legacy_cache_root_preference_migrator.dart';
 import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/core/preferences/preferences_store.dart';
-import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
-import 'package:y300/features/library_shared/data/repositories/sync_diagnostic_settings_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,20 +19,9 @@ Future<void> main() async {
   } catch (_) {
     // Cache-root retirement is retryable and must never block app startup.
   }
-  final settings = SharedPrefsSyncDiagnosticSettingsRepository(
-    preferencesStore: preferencesStore,
-  );
-  final manualModeEnabled = kDebugMode
-      ? await settings.loadManualModeEnabled()
-      : false;
   runApp(
     ProviderScope(
-      overrides: [
-        preferencesStoreProvider.overrideWithValue(preferencesStore),
-        syncDiagnosticInitialManualModeProvider.overrideWithValue(
-          manualModeEnabled,
-        ),
-      ],
+      overrides: [preferencesStoreProvider.overrideWithValue(preferencesStore)],
       child: const Y300App(),
     ),
   );

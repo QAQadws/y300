@@ -112,12 +112,6 @@ abstract final class PreferenceKeys {
   static const replyStickerLastGroupId = PreferenceKey<String>(
     PreferenceKeyNames.replyStickerLastGroupId,
   );
-  static const syncDiagnosticManualMode = PreferenceKey<bool>(
-    PreferenceKeyNames.syncDiagnosticManualMode,
-  );
-  static const threadDetailScrollDiagnosticEnabled = PreferenceKey<bool>(
-    PreferenceKeyNames.threadDetailScrollDiagnosticEnabled,
-  );
 
   static const legacyThreadTextFontScale = PreferenceKey<double>(
     PreferenceKeyNames.legacyThreadTextFontScale,

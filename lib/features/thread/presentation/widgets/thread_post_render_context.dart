@@ -4,7 +4,6 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
-import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -81,8 +80,6 @@ class ThreadPostRenderContext {
     this.imageRefererFor = _emptyImageReferer,
     ThreadDetailRenderEntryPlanner? renderPlanner,
     ThreadPostImageDimensionLookup? dimensionLookup,
-    ThreadDetailDiagnosticRecorder diagnosticRecorder =
-        const NoopThreadDetailDiagnosticRecorder(),
     this.onImageLayoutShift,
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
@@ -96,7 +93,6 @@ class ThreadPostRenderContext {
                  dimensionLookup: dimensionLookup,
                ),
              ),
-             diagnosticRecorder: diagnosticRecorder,
            );
 
   final ThreadDetailNativePalette palette;

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
@@ -19,9 +18,7 @@ import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
-import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
-import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
 void main() {
@@ -112,6 +109,14 @@ void main() {
     expect(
       find.byKey(const Key('more-html-renderer-prototype-entry')),
       findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('more-thread-detail-diagnostic-switch')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('more-thread-detail-diagnostic-copy-entry')),
+      findsNothing,
     );
     await _scrollUntilVisibleIfNeeded(
       tester,
@@ -328,87 +333,6 @@ void main() {
     );
   });
 
-  testWidgets(
-    'MorePage shows and controls thread detail diagnostics in diagnostic mode',
-    (tester) async {
-      final syncController = _FakeSyncDiagnosticModeController(enabled: true);
-      final threadController = _FakeThreadDetailDiagnosticController(
-        exportedText: 'entry build log',
-      );
-      final copiedTexts = <String>[];
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (call) async {
-          if (call.method == 'Clipboard.setData') {
-            final data = Map<String, dynamic>.from(call.arguments as Map);
-            copiedTexts.add(data['text'] as String);
-          }
-          return null;
-        },
-      );
-      addTearDown(() {
-        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          null,
-        );
-      });
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            authRepositoryProvider.overrideWithValue(
-              _FakeAuthRepository(isLoggedIn: false),
-            ),
-            forumModeSettingsRepositoryProvider.overrideWithValue(
-              _FakeForumModeSettingsRepository(),
-            ),
-            syncDiagnosticModeControllerProvider.overrideWith(
-              () => syncController,
-            ),
-            threadDetailDiagnosticControllerProvider.overrideWith(
-              () => threadController,
-            ),
-            appAppearanceControllerProvider.overrideWith(
-              () => _FakeAppAppearanceController(),
-            ),
-          ],
-          child: const MaterialApp(home: MorePage()),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await _scrollUntilVisibleIfNeeded(
-        tester,
-        find.byKey(const Key('more-thread-detail-diagnostic-switch')),
-      );
-      await tester.drag(find.byType(ListView), const Offset(0, -80));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const Key('more-thread-detail-diagnostic-switch')),
-        findsOneWidget,
-      );
-      await tester.tap(
-        find.byKey(const Key('more-thread-detail-diagnostic-switch')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(threadController.enabled, isTrue);
-      expect(
-        find.byKey(const Key('thread-detail-html-first-renderer-switch')),
-        findsNothing,
-      );
-      final copyEntry = find.byKey(
-        const Key('more-thread-detail-diagnostic-copy-entry'),
-      );
-      await tester.scrollUntilVisible(copyEntry, 160);
-      await tester.tap(copyEntry);
-      await tester.pumpAndSettle();
-
-      expect(copiedTexts.single, 'entry build log');
-      expect(find.text('帖子详情诊断日志已复制'), findsOneWidget);
-    },
-  );
-
   testWidgets('MorePage opens appearance drawer and changes theme mode', (
     tester,
   ) async {
@@ -604,51 +528,6 @@ class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
       throw StateError('save failed');
     }
     mode = nextMode;
-  }
-}
-
-class _FakeSyncDiagnosticModeController extends SyncDiagnosticModeController {
-  _FakeSyncDiagnosticModeController({bool enabled = false})
-    : _enabled = enabled;
-
-  var toggleCount = 0;
-  var _enabled = false;
-
-  @override
-  Future<bool> build() async {
-    return _enabled;
-  }
-
-  @override
-  Future<bool> toggle() async {
-    toggleCount++;
-    _enabled = !_enabled;
-    state = AsyncData(_enabled);
-    return _enabled;
-  }
-}
-
-class _FakeThreadDetailDiagnosticController
-    extends ThreadDetailDiagnosticController {
-  _FakeThreadDetailDiagnosticController({this.exportedText = ''});
-
-  final String exportedText;
-  var enabled = false;
-
-  @override
-  Future<bool> build() async {
-    return enabled;
-  }
-
-  @override
-  Future<void> setEnabled(bool enabled) async {
-    this.enabled = enabled;
-    state = AsyncData(enabled);
-  }
-
-  @override
-  String exportText() {
-    return exportedText;
   }
 }
 

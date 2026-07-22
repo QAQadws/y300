@@ -13,10 +13,6 @@ abstract final class AppStorageKeys {
   static const String appThemePreference =
       PreferenceKeyNames.appThemePreference;
   static const String forumShellMode = PreferenceKeyNames.forumShellMode;
-  static const String syncDiagnosticManualMode =
-      PreferenceKeyNames.syncDiagnosticManualMode;
-  static const String threadDetailScrollDiagnosticEnabled =
-      PreferenceKeyNames.threadDetailScrollDiagnosticEnabled;
   static const String replyStickerLastGroupId =
       PreferenceKeyNames.replyStickerLastGroupId;
 }

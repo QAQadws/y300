@@ -6,7 +6,6 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/core/network/yamibo/yamibo.dart';
-import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
 
 final loggerProvider = Provider<Logger>((ref) {
   return Logger();
@@ -39,7 +38,6 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(
     cookieStore: ref.watch(cookieStoreProvider),
     logger: ref.watch(loggerProvider),
-    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
     sessionStore: ref.watch(yamiboSessionStoreProvider),
     sessionExtractor: ref.watch(yamiboSessionExtractorProvider),
     yamiboApiClient: ref.watch(yamiboApiClientProvider),
@@ -50,7 +48,6 @@ final yamiboHttpGatewayProvider = Provider<YamiboHttpGateway>((ref) {
   return YamiboHttpGateway(
     cookieStore: ref.watch(cookieStoreProvider),
     logger: ref.watch(loggerProvider),
-    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
     sessionStore: ref.watch(yamiboSessionStoreProvider),
     sessionExtractor: ref.watch(yamiboSessionExtractorProvider),
   );

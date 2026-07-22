@@ -2,15 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/history/data/services/debug_history_diagnostic_recorder.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_diagnostic_recorder.dart';
-import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 
 void main() {
   test('debug diagnostics contain only the bounded metadata contract', () {
     final lines = <String>[];
-    final recorder = DebugHistoryDiagnosticRecorder(
-      structuredRecorder: const NoopSyncDiagnosticRecorder(),
-      lineWriter: lines.add,
-    );
+    final recorder = DebugHistoryDiagnosticRecorder(lineWriter: lines.add);
 
     recorder.recordWrite(
       targetType: HistoryTargetType.thread,

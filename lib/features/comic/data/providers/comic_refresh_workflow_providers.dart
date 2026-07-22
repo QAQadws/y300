@@ -9,53 +9,55 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/library_shared/data/providers/sync_diagnostic_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
-final comicRefreshOutcomeApplierProvider =
-    Provider<ComicRefreshOutcomeApplier>((ref) {
-  return DefaultComicRefreshOutcomeApplier(
-    repository: ref.watch(comicRepositoryProvider),
-    firstEpisodeCoverPromoter: ref.watch(comicFirstEpisodeCoverServiceProvider),
-    shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
-  );
-});
+final comicRefreshOutcomeApplierProvider = Provider<ComicRefreshOutcomeApplier>(
+  (ref) {
+    return DefaultComicRefreshOutcomeApplier(
+      repository: ref.watch(comicRepositoryProvider),
+      firstEpisodeCoverPromoter: ref.watch(
+        comicFirstEpisodeCoverServiceProvider,
+      ),
+      shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
+    );
+  },
+);
 final comicSearchRefreshQueueRepositoryProvider =
     Provider<ComicSearchRefreshQueueRepository>((ref) {
-  return LocalComicSearchRefreshQueueRepository.lazy(() => ComicLocalDb.open());
-});
+      return LocalComicSearchRefreshQueueRepository.lazy(
+        () => ComicLocalDb.open(),
+      );
+    });
 
 final comicSearchRefreshQueueServiceProvider =
     Provider<ComicSearchRefreshQueueService>((ref) {
-  final service = ComicSearchRefreshQueueService(
-    queueRepository: ref.watch(comicSearchRefreshQueueRepositoryProvider),
-    refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
-    refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
-    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
-  );
-  ref.onDispose(service.dispose);
-  return service;
-});
+      final service = ComicSearchRefreshQueueService(
+        queueRepository: ref.watch(comicSearchRefreshQueueRepositoryProvider),
+        refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
+        refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
+      );
+      ref.onDispose(service.dispose);
+      return service;
+    });
 
 final comicSearchRefreshQueueSnapshotProvider =
     Provider<ValueListenable<ComicSearchRefreshQueueSnapshot>>((ref) {
-  return ref.watch(comicSearchRefreshQueueServiceProvider).snapshot;
-});
+      return ref.watch(comicSearchRefreshQueueServiceProvider).snapshot;
+    });
 
 final comicFavoriteAutoRefreshCoordinatorProvider =
     Provider<ComicFavoriteAutoRefreshCoordinator>((ref) {
-  final repository = ref.watch(comicRepositoryProvider);
-  return ComicFavoriteAutoRefreshCoordinator(
-    refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
-    searchQueue: ref.watch(comicSearchRefreshQueueServiceProvider),
-    refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
-    shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
-    catalogMissPolicy: ref.watch(comicCatalogMissPolicyProvider),
-    titleAnalyzer: ref.watch(comicTitleAnalyzerProvider),
-    diagnosticRecorder: ref.watch(syncDiagnosticRecorderProvider),
-    catalogUrlUpdater: repository,
-    comicDetailLoader: (comicId) {
-      return repository.getComicDetail(comicId: comicId);
-    },
-  );
-});
+      final repository = ref.watch(comicRepositoryProvider);
+      return ComicFavoriteAutoRefreshCoordinator(
+        refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
+        searchQueue: ref.watch(comicSearchRefreshQueueServiceProvider),
+        refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
+        shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
+        catalogMissPolicy: ref.watch(comicCatalogMissPolicyProvider),
+        titleAnalyzer: ref.watch(comicTitleAnalyzerProvider),
+        catalogUrlUpdater: repository,
+        comicDetailLoader: (comicId) {
+          return repository.getComicDetail(comicId: comicId);
+        },
+      );
+    });

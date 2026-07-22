@@ -30,7 +30,7 @@ class MorePage extends ConsumerStatefulWidget {
 }
 
 class _MorePageState extends ConsumerState<MorePage> {
-  final MoreDebugTools _debugTools = MoreDebugTools();
+  final MoreDebugTools _debugTools = const MoreDebugTools();
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +135,7 @@ class _MorePageState extends ConsumerState<MorePage> {
               );
             },
           ),
-          ..._debugTools.buildTiles(context, ref),
+          ..._debugTools.buildTiles(context),
           ListTile(
             key: const Key('more-about-entry'),
             leading: const Icon(Icons.info_outline),

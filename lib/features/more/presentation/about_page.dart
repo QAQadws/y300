@@ -6,7 +6,6 @@ import 'package:y300/features/app_update/presentation/app_release_notes_page.dar
 import 'package:y300/features/app_update/presentation/widgets/app_update_check_tile.dart';
 import 'package:y300/features/more/data/about_providers.dart';
 import 'package:y300/features/more/domain/models/about_app_info.dart';
-import 'package:y300/features/more/presentation/more_debug_tools.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class AboutPage extends ConsumerStatefulWidget {
@@ -23,8 +22,6 @@ class AboutPage extends ConsumerStatefulWidget {
 class _AboutPageState extends ConsumerState<AboutPage> {
   static const AppVersionCodec _versionCodec = AppVersionCodec();
 
-  final MoreDebugTools _debugTools = MoreDebugTools();
-
   @override
   Widget build(BuildContext context) {
     final appInfo = ref.watch(aboutAppInfoProvider);
@@ -39,10 +36,7 @@ class _AboutPageState extends ConsumerState<AboutPage> {
               key: const Key('about-page-list'),
               padding: const EdgeInsets.only(bottom: 32),
               children: [
-                _AboutHeader(
-                  appInfo: appInfo.value,
-                  onIconTap: () => _debugTools.handleAboutTap(context, ref),
-                ),
+                _AboutHeader(appInfo: appInfo.value),
                 const _AboutSectionLabel('版本'),
                 const AppUpdateCheckTile(showVersionSubtitle: false),
                 const Divider(height: 1, indent: 16, endIndent: 16),
@@ -109,10 +103,9 @@ class _AboutPageState extends ConsumerState<AboutPage> {
 }
 
 class _AboutHeader extends StatelessWidget {
-  const _AboutHeader({required this.appInfo, required this.onIconTap});
+  const _AboutHeader({required this.appInfo});
 
   final AboutAppInfo? appInfo;
-  final VoidCallback onIconTap;
 
   @override
   Widget build(BuildContext context) {
@@ -120,16 +113,11 @@ class _AboutHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
       child: Column(
         children: [
-          GestureDetector(
-            key: const Key('about-app-icon-tap-target'),
-            behavior: HitTestBehavior.opaque,
-            onTap: onIconTap,
-            child: Image.asset(
-              'assets/app_icon_transparent.png',
-              width: 88,
-              height: 88,
-              filterQuality: FilterQuality.medium,
-            ),
+          Image.asset(
+            'assets/app_icon_transparent.png',
+            width: 88,
+            height: 88,
+            filterQuality: FilterQuality.medium,
           ),
           const SizedBox(height: 14),
           Text('Y300', style: Theme.of(context).textTheme.headlineSmall),

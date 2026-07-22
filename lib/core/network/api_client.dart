@@ -4,7 +4,6 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/discuz_response.dart';
-import 'package:y300/core/network/network_diagnostic_recorder.dart';
 import 'package:y300/core/network/yamibo/yamibo.dart';
 
 /// Backward-compatible API facade for existing repositories.
@@ -15,7 +14,6 @@ class ApiClient {
   ApiClient({
     required CookieStore cookieStore,
     required Logger logger,
-    NetworkDiagnosticRecorder? diagnosticRecorder,
     YamiboSessionStore? sessionStore,
     YamiboSessionExtractor? sessionExtractor,
     Dio? dio,
@@ -29,7 +27,6 @@ class ApiClient {
              gateway: YamiboHttpGateway(
                cookieStore: cookieStore,
                logger: logger,
-               diagnosticRecorder: diagnosticRecorder,
                sessionStore: sessionStore,
                sessionExtractor: sessionExtractor,
                dio:

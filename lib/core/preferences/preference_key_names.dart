@@ -52,9 +52,6 @@ abstract final class PreferenceKeyNames {
   static const downloadStorageDirectory = 'download_storage_dir';
 
   static const replyStickerLastGroupId = 'reply_sticker_last_group_id';
-  static const syncDiagnosticManualMode = 'sync_diagnostic_manual_mode';
-  static const threadDetailScrollDiagnosticEnabled =
-      'thread_detail_scroll_diagnostic_enabled';
 
   static const legacyThreadTextFontScale = 'thread_text_font_scale';
   static const legacyThreadTextLineHeightScale =

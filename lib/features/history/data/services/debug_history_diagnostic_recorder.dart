@@ -1,18 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_diagnostic_recorder.dart';
-import 'package:y300/features/library_shared/domain/services/sync_diagnostic_recorder.dart';
 
 typedef HistoryDiagnosticLineWriter = void Function(String line);
 
 class DebugHistoryDiagnosticRecorder implements HistoryDiagnosticRecorder {
-  DebugHistoryDiagnosticRecorder({
-    required SyncDiagnosticRecorder structuredRecorder,
-    HistoryDiagnosticLineWriter? lineWriter,
-  }) : _structuredRecorder = structuredRecorder,
-       _lineWriter = lineWriter ?? debugPrint;
+  DebugHistoryDiagnosticRecorder({HistoryDiagnosticLineWriter? lineWriter})
+    : _lineWriter = lineWriter ?? debugPrint;
 
-  final SyncDiagnosticRecorder _structuredRecorder;
   final HistoryDiagnosticLineWriter _lineWriter;
 
   @override
@@ -71,7 +66,6 @@ class DebugHistoryDiagnosticRecorder implements HistoryDiagnosticRecorder {
   }
 
   void _record({required String event, required Map<String, Object?> fields}) {
-    _structuredRecorder.record(scope: 'history', event: event, fields: fields);
     final details = fields.entries
         .map((entry) => '${entry.key}=${entry.value}')
         .join(' ');

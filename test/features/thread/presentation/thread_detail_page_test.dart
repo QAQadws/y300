@@ -31,7 +31,6 @@ import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_diagnostic_recorder.dart';
 import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
-import 'package:y300/features/library_shared/presentation/controllers/sync_diagnostic_mode_controller.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -60,18 +59,14 @@ import 'package:y300/features/tags/domain/models/yamibo_tag_thread_page.dart';
 import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/providers/thread_favorite_providers.dart';
-import 'package:y300/features/thread/data/repositories/thread_detail_diagnostic_settings_repository.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
-import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
@@ -407,7 +402,13 @@ void main() {
       expect(find.text('子子子车'), findsOneWidget);
       expect(find.text('我很赞同'), findsOneWidget);
       expect(find.text('查看全部评分'), findsOneWidget);
-      expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('thread-post-comment-header')),
+          matching: find.byIcon(Icons.keyboard_arrow_down),
+        ),
+        findsNothing,
+      );
 
       await tester.tap(find.byKey(const Key('thread-post-comment-header')));
       await tester.pump();
@@ -1477,77 +1478,6 @@ void main() {
             .length,
         lessThanOrEqualTo(3),
       );
-    });
-
-    testWidgets('records thread detail diagnostic events when enabled', (
-      tester,
-    ) async {
-      final recorder = InMemoryThreadDetailDiagnosticRecorder(enabled: true);
-      final repository = _FakeThreadRepository((tid, page) async {
-        return ApiSuccess(
-          _threadDetailData(
-            tid: tid,
-            posts: [
-              ThreadPost(
-                pid: 'p1',
-                author: 'alice',
-                authorId: '1',
-                message:
-                    '<p>正文</p>'
-                    '<img file="data/attachment/forum/page-1.jpg" />',
-                number: 1,
-                isFirst: true,
-                dateline: 'today',
-              ),
-            ],
-          ),
-        );
-      });
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            ..._threadDetailOverrides(repository),
-            threadDetailDiagnosticRecorderProvider.overrideWithValue(recorder),
-            threadDetailDiagnosticSettingsRepositoryProvider.overrideWithValue(
-              _FakeThreadDetailDiagnosticSettingsRepository(enabled: true),
-            ),
-          ],
-          child: const MaterialApp(
-            home: ThreadDetailPage(tid: '100', subject: '测试主题'),
-          ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump();
-
-      final events = recorder.snapshot();
-      expect(
-        events.any(
-          (event) =>
-              event.type == ThreadDetailDiagnosticEventType.renderPlanCreate &&
-              event.pid == 'p1',
-        ),
-        isTrue,
-      );
-      expect(
-        events.any(
-          (event) =>
-              event.type == ThreadDetailDiagnosticEventType.entryBuild &&
-              event.entryKey == 'thread-post-card-entry-p1',
-        ),
-        isTrue,
-      );
-      expect(
-        events.any(
-          (event) =>
-              event.type ==
-                  ThreadDetailDiagnosticEventType.htmlFirstImageDiagnostics &&
-              event.message.contains('html-first-preload'),
-        ),
-        isTrue,
-      );
-      expect(recorder.exportText(), contains('html-first-preload'));
     });
 
     testWidgets('stretches whole post card segments to the same width', (
@@ -3310,7 +3240,7 @@ void main() {
       expect(commentRepository.loadedUrl, isNull);
     });
 
-    testWidgets('diagnostic post actions do not expose HTML-first comparison', (
+    testWidgets('post actions do not expose HTML-first comparison', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -3332,9 +3262,7 @@ void main() {
         );
       });
 
-      await tester.pumpWidget(
-        _buildTestApp(repository, diagnosticModeEnabled: true),
-      );
+      await tester.pumpWidget(_buildTestApp(repository));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
@@ -4293,7 +4221,6 @@ Widget _buildTestApp(
   ForumWebViewDriverFactory? forumWebViewDriverFactory,
   ForumHtmlReaderPreferencesRepository? forumHtmlReaderPreferencesRepository,
   TextConverter Function(TextConversionMode mode)? textConverterFactory,
-  bool diagnosticModeEnabled = false,
   HistoryVisitRecorder? historyVisitRecorder,
   HistoryDiagnosticRecorder? historyDiagnosticRecorder,
   Widget? home,
@@ -4317,7 +4244,6 @@ Widget _buildTestApp(
       forumHtmlReaderPreferencesRepository:
           forumHtmlReaderPreferencesRepository,
       textConverterFactory: textConverterFactory,
-      diagnosticModeEnabled: diagnosticModeEnabled,
       historyVisitRecorder: historyVisitRecorder,
       historyDiagnosticRecorder: historyDiagnosticRecorder,
     ),
@@ -4344,7 +4270,6 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   ForumWebViewDriverFactory? forumWebViewDriverFactory,
   ForumHtmlReaderPreferencesRepository? forumHtmlReaderPreferencesRepository,
   TextConverter Function(TextConversionMode mode)? textConverterFactory,
-  bool diagnosticModeEnabled = false,
   HistoryVisitRecorder? historyVisitRecorder,
   HistoryDiagnosticRecorder? historyDiagnosticRecorder,
 }) {
@@ -4408,9 +4333,6 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
     yamiboTagThreadPageRepositoryProvider.overrideWithValue(
       tagThreadPageRepository ?? _FakeYamiboTagThreadPageRepository(),
-    ),
-    syncDiagnosticModeControllerProvider.overrideWith(
-      () => _FakeSyncDiagnosticModeController(enabled: diagnosticModeEnabled),
     ),
     composerDraftRepositoryProvider.overrideWithValue(
       _MemoryComposerDraftRepository(),
@@ -4558,17 +4480,6 @@ class _ControlledExpandingTextConverter implements TextConverter {
   }
 }
 
-class _FakeSyncDiagnosticModeController extends SyncDiagnosticModeController {
-  _FakeSyncDiagnosticModeController({required this.enabled});
-
-  final bool enabled;
-
-  @override
-  Future<bool> build() async {
-    return enabled;
-  }
-}
-
 class _NoopImageCacheService implements ImageCacheService {
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
@@ -4612,21 +4523,6 @@ class _NoopImageCacheService implements ImageCacheService {
 
   @override
   Future<void> clearUnprotected() async {}
-}
-
-class _FakeThreadDetailDiagnosticSettingsRepository
-    implements ThreadDetailDiagnosticSettingsRepository {
-  _FakeThreadDetailDiagnosticSettingsRepository({this.enabled = false});
-
-  bool enabled;
-
-  @override
-  Future<bool> loadScrollDiagnosticEnabled() async => enabled;
-
-  @override
-  Future<void> setScrollDiagnosticEnabled(bool enabled) async {
-    this.enabled = enabled;
-  }
 }
 
 class _RecordingImageCacheService extends _NoopImageCacheService {

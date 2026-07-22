@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
-import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -11,26 +10,19 @@ class LocalDocumentCacheService
     implements DocumentCacheService, CacheBudgetParticipant {
   LocalDocumentCacheService(
     Future<Database> dbFuture, {
-    CacheDiagnosticRecorder diagnosticRecorder =
-        const NoopCacheDiagnosticRecorder(),
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
   }) : _dbFutureFactory = (() => dbFuture),
-       _mutationReporter = mutationReporter,
-       _diagnosticRecorder = diagnosticRecorder;
+       _mutationReporter = mutationReporter;
 
   LocalDocumentCacheService.lazy(
     Future<Database> Function() dbFutureFactory, {
-    CacheDiagnosticRecorder diagnosticRecorder =
-        const NoopCacheDiagnosticRecorder(),
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
   }) : _dbFutureFactory = dbFutureFactory,
-       _mutationReporter = mutationReporter,
-       _diagnosticRecorder = diagnosticRecorder;
+       _mutationReporter = mutationReporter;
 
   final Future<Database> Function() _dbFutureFactory;
   Future<Database>? _dbFuture;
   final CacheMutationReporter _mutationReporter;
-  final CacheDiagnosticRecorder _diagnosticRecorder;
 
   Future<Database> get _db => _dbFuture ??= _dbFutureFactory();
 
@@ -44,24 +36,9 @@ class LocalDocumentCacheService
       limit: 1,
     );
     if (rows.isEmpty) {
-      _recordDocumentEvent(
-        event: 'miss',
-        cacheKey: cacheKey,
-        reason: 'document_missing',
-        hit: false,
-      );
       return null;
     }
     final document = _fromRow(rows.first);
-    _recordDocumentEvent(
-      event: 'hit',
-      cacheKey: cacheKey,
-      ownerType: document.ownerType,
-      ownerId: document.ownerId,
-      reason: 'document_found',
-      hit: true,
-      fields: <String, Object?>{'bodyBytes': utf8.encode(document.body).length},
-    );
     return document;
   }
 
@@ -88,17 +65,6 @@ class LocalDocumentCacheService
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     _mutationReporter.reportMutation(CacheNamespace.document);
-    _recordDocumentEvent(
-      event: 'write',
-      cacheKey: document.cacheKey,
-      ownerType: document.ownerType,
-      ownerId: document.ownerId,
-      reason: 'document_put',
-      fields: <String, Object?>{
-        'bodyBytes': utf8.encode(document.body).length,
-        'requestProfile': document.requestProfile.id,
-      },
-    );
   }
 
   @override
@@ -118,19 +84,11 @@ class LocalDocumentCacheService
     required String ownerId,
   }) async {
     final db = await _db;
-    final deleted = await db.delete(
+    return db.delete(
       ComicLocalDb.cachedDocumentsTable,
       where: 'owner_type = ? AND owner_id = ?',
       whereArgs: <Object>[ownerType.id, ownerId],
     );
-    _recordDocumentEvent(
-      event: 'prune',
-      ownerType: ownerType,
-      ownerId: ownerId,
-      reason: 'owner_deleted',
-      fields: <String, Object?>{'deleted': deleted},
-    );
-    return deleted;
   }
 
   @override
@@ -139,38 +97,21 @@ class LocalDocumentCacheService
     required String ownerIdPrefix,
   }) async {
     final db = await _db;
-    final deleted = await db.delete(
+    return db.delete(
       ComicLocalDb.cachedDocumentsTable,
       where: 'owner_type = ? AND owner_id LIKE ?',
       whereArgs: <Object>[ownerType.id, '$ownerIdPrefix%'],
     );
-    _recordDocumentEvent(
-      event: 'prune',
-      ownerType: ownerType,
-      ownerId: ownerIdPrefix,
-      reason: 'owner_prefix_deleted',
-      fields: <String, Object?>{'deleted': deleted},
-    );
-    return deleted;
   }
 
   @override
   Future<int> deleteOlderThan(DateTime cutoff) async {
     final db = await _db;
-    final deleted = await db.delete(
+    return db.delete(
       ComicLocalDb.cachedDocumentsTable,
       where: 'updated_at < ?',
       whereArgs: <Object>[cutoff.millisecondsSinceEpoch],
     );
-    _recordDocumentEvent(
-      event: 'prune',
-      reason: 'older_than_cutoff',
-      fields: <String, Object?>{
-        'deleted': deleted,
-        'cutoff': cutoff.toUtc().toIso8601String(),
-      },
-    );
-    return deleted;
   }
 
   @override
@@ -344,29 +285,5 @@ class LocalDocumentCacheService
       'blog' => '日志',
       _ => ownerType.isEmpty ? '页面' : ownerType,
     };
-  }
-
-  void _recordDocumentEvent({
-    required String event,
-    String? cacheKey,
-    CacheOwnerType? ownerType,
-    String? ownerId,
-    String? reason,
-    bool? hit,
-    Map<String, Object?> fields = const <String, Object?>{},
-  }) {
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: event,
-        namespace: CacheNamespace.document,
-        bucket: StorageBucket.pageCache,
-        cacheKey: cacheKey,
-        ownerType: ownerType,
-        ownerId: ownerId,
-        hit: hit,
-        reason: reason,
-        fields: fields,
-      ),
-    );
   }
 }

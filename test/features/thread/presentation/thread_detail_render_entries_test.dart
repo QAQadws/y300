@@ -3,8 +3,6 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
-import 'package:y300/features/thread/domain/services/thread_detail_diagnostic_recorder.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
@@ -365,35 +363,6 @@ void main() {
             .plainText,
         '正文',
       );
-    });
-
-    test('records render plan creation diagnostics', () {
-      final recorder = InMemoryThreadDetailDiagnosticRecorder(enabled: true);
-      final planner = ThreadDetailRenderEntryPlanner(
-        diagnosticRecorder: recorder,
-      );
-      final post = ThreadPost(
-        pid: 'p-diagnostic',
-        author: 'alice',
-        authorId: '1',
-        message: '<p>正文</p>',
-        number: 1,
-        isFirst: true,
-        dateline: 'today',
-      );
-
-      planner.planFor(post);
-      planner.planFor(post);
-
-      final events = recorder.snapshot();
-      expect(
-        events.where(
-          (event) =>
-              event.type == ThreadDetailDiagnosticEventType.renderPlanCreate,
-        ),
-        hasLength(1),
-      );
-      expect(events.single.pid, 'p-diagnostic');
     });
   });
 }

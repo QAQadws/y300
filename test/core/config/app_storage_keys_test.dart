@@ -11,14 +11,6 @@ void main() {
     expect(AppStorageKeys.appThemePreference, 'app_theme_preference');
     expect(AppStorageKeys.forumShellMode, 'forum_shell_mode');
     expect(
-      AppStorageKeys.syncDiagnosticManualMode,
-      'sync_diagnostic_manual_mode',
-    );
-    expect(
-      AppStorageKeys.threadDetailScrollDiagnosticEnabled,
-      'thread_detail_scroll_diagnostic_enabled',
-    );
-    expect(
       AppStorageKeys.replyStickerLastGroupId,
       'reply_sticker_last_group_id',
     );

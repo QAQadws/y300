@@ -16,7 +16,7 @@
 - `lib/app`：应用顶层装配；`navigation` 负责跨 feature 路由，`settings` 负责外观设置，`theme` 负责主题 token、语义色和组件主题。
 - `lib/core/config`：应用配置、稳定存储 key 和技术性存储 key。
 - `lib/core/media`：封面裁剪/焦点、图片降采样、显示 provider 和 Flutter 图片内存缓存调优。
-- `lib/core/network`：共享网络基础设施，包括 `ApiResult`、Yamibo JSON/HTML gateway、Cookie 与会话/formhash 存储、WebView Cookie 同步、图片请求头、URL 解析和网络诊断。
+- `lib/core/network`：共享网络基础设施，包括 `ApiResult`、Yamibo JSON/HTML gateway、Cookie 与会话/formhash 存储、WebView Cookie 同步、图片请求头和 URL 解析。
 - `lib/core/preferences`：类型化偏好 key、SharedPreferences 访问、provider 和旧偏好迁移。
 - `lib/core/utils`：跨模块使用的小型解析工具和通用工具。
 - `lib/features`：按业务能力拆分的 feature；跨漫画/小说/收藏的书架能力位于 `library_shared`，跨图片阅读器能力位于 `reader_shared`，发帖/回复共用编辑器能力位于 `composer_shared`。
@@ -34,15 +34,15 @@
 
 - `app_update`：Gitee Release 更新检查、版本/校验和解析、APK 下载与校验、后台下载事件、安装权限、安装/外部打开和更新弹窗协调。
 - `auth`：API 与 WebView 登录、认证会话恢复/校验、formhash provider、登录进度和认证状态 controller。
-- `cache`：统一可再生磁盘缓存。负责图片、原始 HTML、解析快照、受保护封面、retention 分类、统一容量预算/LRU 裁剪、写入通知、缓存诊断/统计和论坛图片预加载。
+- `cache`：统一可再生磁盘缓存。负责图片、原始 HTML、解析快照、受保护封面、retention 分类、统一容量预算/LRU 裁剪、写入通知、静态容量统计/手动导出和论坛图片预加载。
 - `comic`：漫画数据、书架、详情和阅读器。负责帖子解析、标题分析、章节发现与 TID 顺序、刷新/搜索 fallback、重复合并、封面与阅读进度、评论页、持久化下载队列、单章 CBZ 产物和下载图片限速。
 - `composer_shared`：发帖与回复共用编辑器基础设施。负责 Quill/BBCode 转换、预览、草稿与附件持久化、串行图片上传、表情目录、编辑偏好、通用 controller 基类和错误呈现。
 - `favorites`：论坛收藏同步与收藏书架。负责远端/本地收藏、首次同步限流、详情上下文加载、取消收藏、内容 ingest 注册表，以及把收藏帖子导入漫画或小说。
 - `forum`：论坛壳、解析模式首页/版块列表和 WebView 模式。负责模式偏好、论坛 HTML/快照解析、WebView driver/runtime、Cookie bootstrap、网络/视觉策略、链接路由和论坛收藏入口。
-- `history`：浏览记录数据库、记录/查询/分组/清理/保留策略、诊断和记录页；记录类型覆盖论坛、帖子、漫画与小说。
+- `history`：浏览记录数据库、记录/查询/分组/清理/保留策略、Debug 日志和记录页；记录类型覆盖论坛、帖子、漫画与小说。
 - `image_loading`：通用应用图片 source/provider/cache manager、预取接口和 `AppImage` 展示封装；不要与业务化的 `cache` 所有权/retention 规则混为一层。
 - `library_shared`：漫画、小说、收藏共用的书架/详情/选择模式抽象。包含模块 adapter、统一 controller/page、排序筛选、视图偏好、书架状态、刷新总线、任务进度/通知、批量阅读状态、封面预热和作品清理契约。
-- `more`：更多页、外观入口、数据与存储页、统一缓存上限设置、清理/统计/诊断导出和 Debug 工具。
+- `more`：更多页、关于页、外观入口、数据与存储页、统一缓存上限设置、清理/统计/手动导出和 Debug 原型工具。
 - `novel`：小说数据、书架、详情和阅读器。负责来源元数据与章节同步/恢复、帖子章节网关、`version=1` 正文解析、HTML-first 纵向渲染、全新混合分页、分页缓存/取消/性能策略、唯一阅读进度、书签/搜索和显示偏好。
 - `posting`：新主题发布流程。负责发帖表单 metadata、版块/类型/标签/特殊主题与投票建模、payload/响应解析，并在 `composer_shared` 之上提供发帖 controller/page。
 - `profile`：当前用户与指定用户资料、消息中心、日志列表/详情及对应 HTML 解析；同时承接需要认证资料的页面入口。
@@ -52,7 +52,7 @@
 - `startup`：六栏懒加载主壳、跨书架选择操作，以及启动后的 best-effort 任务编排，包括缓存预算维护、漫画刷新/下载队列恢复、系统通知初始化、草稿附件维护和 Yamibo 会话预热。
 - `storage`：下载根目录选择、目录/文件名规范化、原子 JSON 写入、漫画 CBZ 定位和下载存储模型；不负责具体业务下载队列。
 - `tags`：论坛标签索引与查询、标签主题列表 HTML 解析及标签主题页；为帖子内容分类和漫画/小说识别提供元数据。
-- `thread`：帖子详情核心。负责 JSON/HTML repository、HTML 快照与诊断、内容分类、HTML-first 正文准备/主题适配/缓存图片、原生帖子页、投票/评分/点评/收藏/回复动作、楼层定位、历史记录和帖子图片阅读器桥接。
+- `thread`：帖子详情核心。负责 JSON/HTML repository、HTML 快照、内容分类、HTML-first 正文准备/主题适配/缓存图片、原生帖子页、投票/评分/点评/收藏/回复动作、楼层定位、历史记录和帖子图片阅读器桥接。
 
 ### 跨模块流转说明
 

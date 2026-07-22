@@ -28,7 +28,6 @@ import 'package:y300/features/thread/data/repositories/thread_post_comment_repos
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_diagnostic_event.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
@@ -36,7 +35,6 @@ import 'package:y300/features/thread/domain/services/thread_post_body_render_pla
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
-import 'package:y300/features/thread/presentation/thread_detail_diagnostic_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
 import 'package:y300/features/thread/presentation/mappers/thread_history_visit_mapper.dart';
 import 'package:y300/features/thread/presentation/services/thread_history_commit_guard.dart';
@@ -92,7 +90,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     _scrollController = ScrollController();
     _quickScrollCoordinator = ThreadDetailQuickScrollCoordinator(
       scrollController: _scrollController,
-      onNavigation: _recordQuickScrollNavigation,
     );
     _activateTargetHighlight(widget.targetPid);
   }
@@ -129,10 +126,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         ThreadDetailPageState.initial(tid: widget.tid, subject: widget.subject);
     final imageHeaderBuilder = ref.watch(
       imageRequestHeaderBuilderForRefererProvider(_imageRefererFor(state)),
-    );
-    ref.watch(threadDetailDiagnosticControllerProvider);
-    final diagnosticRecorder = ref.watch(
-      threadDetailDiagnosticRecorderProvider,
     );
     final htmlFirstPrecacheService = ref.watch(
       forumImagePrecacheServiceProvider,
@@ -281,7 +274,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                         onOpenPostActions: (post, plan) {
                           _openPostActions(args, state, controller, post, plan);
                         },
-                        diagnosticRecorder: diagnosticRecorder,
                         htmlImagePrecacheService: htmlFirstPrecacheService,
                         onTogglePollOption: controller.togglePollOption,
                         onSubmitPollVote: controller.submitPollVote,
@@ -336,24 +328,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       }
       _quickScrollCoordinator.updateMetrics(_scrollController.position);
     });
-  }
-
-  void _recordQuickScrollNavigation({
-    required ThreadDetailQuickScrollTarget target,
-    required bool animated,
-    required double sourceOffset,
-    required double targetOffset,
-  }) {
-    _recordScrollDiagnostic(
-      type: animated
-          ? ThreadDetailDiagnosticEventType.scrollAnimate
-          : ThreadDetailDiagnosticEventType.scrollJump,
-      scrollOffset: sourceOffset,
-      message:
-          'quick scroll ${target.name} '
-          '${sourceOffset.toStringAsFixed(1)} -> '
-          '${targetOffset.toStringAsFixed(1)}',
-    );
   }
 
   void _scheduleHistoryVisit({
@@ -478,11 +452,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     if ((position.pixels - targetOffset).abs() < 1) {
       return;
     }
-    _recordScrollDiagnostic(
-      type: ThreadDetailDiagnosticEventType.scrollAnimate,
-      scrollOffset: position.pixels,
-      message: 'page action scroll top -> ${targetOffset.toStringAsFixed(1)}',
-    );
     await _scrollController.animateTo(
       targetOffset,
       duration: const Duration(milliseconds: 220),
@@ -695,7 +664,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         builder: (_) => ThreadImageReaderPage(
           request: readerRequest,
           imageHeaderBuilder: _latestImageHeaderBuilder,
-          diagnosticRecorder: ref.read(threadDetailDiagnosticRecorderProvider),
         ),
       ),
     );
@@ -824,24 +792,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         setState(() => _highlightPostPid = null);
       }
     });
-  }
-
-  void _recordScrollDiagnostic({
-    required ThreadDetailDiagnosticEventType type,
-    String? pid,
-    double? scrollOffset,
-    required String message,
-  }) {
-    final recorder = ref.read(threadDetailDiagnosticRecorderProvider);
-    if (!recorder.enabled) {
-      return;
-    }
-    recorder.record(
-      type: type,
-      pid: pid,
-      scrollOffset: scrollOffset,
-      message: message,
-    );
   }
 
   void _openForumLink(String url) {
