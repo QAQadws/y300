@@ -87,6 +87,7 @@ class ReaderZoomableImage extends StatefulWidget {
     this.maxScale = 4,
     this.doubleTapScale = 2,
     this.behavior = ReaderZoomBehavior.bounded,
+    this.resetToken,
     this.onZoomStateChanged,
   });
 
@@ -98,6 +99,7 @@ class ReaderZoomableImage extends StatefulWidget {
   final double maxScale;
   final double doubleTapScale;
   final ReaderZoomBehavior behavior;
+  final Object? resetToken;
   final ValueChanged<bool>? onZoomStateChanged;
 
   @override
@@ -144,6 +146,7 @@ class _ReaderZoomableImageState extends State<ReaderZoomableImage> {
       maxScale: widget.maxScale,
       doubleTapScale: widget.doubleTapScale,
       behavior: widget.behavior,
+      resetToken: widget.resetToken,
       onZoomStateChanged: widget.onZoomStateChanged,
       child: widget.child,
     );
@@ -185,6 +188,7 @@ class ReaderZoomSurface extends StatefulWidget {
     this.maxScale = 4,
     this.doubleTapScale = 2,
     this.behavior = ReaderZoomBehavior.bounded,
+    this.resetToken,
     this.onZoomStateChanged,
   });
 
@@ -196,6 +200,7 @@ class ReaderZoomSurface extends StatefulWidget {
   final double maxScale;
   final double doubleTapScale;
   final ReaderZoomBehavior behavior;
+  final Object? resetToken;
   final ValueChanged<bool>? onZoomStateChanged;
 
   @override
@@ -249,6 +254,9 @@ class _ReaderZoomSurfaceState extends State<ReaderZoomSurface>
         widget.activePageIndexListenable) {
       oldWidget.activePageIndexListenable?.removeListener(_onActivePageChanged);
       widget.activePageIndexListenable?.addListener(_onActivePageChanged);
+    }
+    if (oldWidget.resetToken != widget.resetToken) {
+      _resetToRestingState();
     }
     _onActivePageChanged();
   }

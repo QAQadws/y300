@@ -15,6 +15,7 @@ import 'package:y300/features/reader_shared/presentation/continuous_image/contin
 import 'package:y300/features/reader_shared/presentation/engine/reader_capability.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_display_settings_sheet.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_page_indicator_overlay.dart';
+import 'package:y300/features/reader_shared/presentation/engine/reader_paged_image_fit_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_position_state.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_vertical_position_driver.dart';
@@ -61,6 +62,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   late final ValueNotifier<bool> _zoomGate;
   late final ValueNotifier<int> _activePagedIndex;
   ScrollHoldController? _pagedZoomScrollHold;
+  final Map<int, bool> _pagedHorizontalOverflowByIndex = <int, bool>{};
+  final Map<String, double> _resolvedPagedAspectRatioByItemId =
+      <String, double>{};
 
   int _lastKnownIndex = 0;
   ReaderSequencePosition _pagedPosition = const ReaderSequencePosition.image(0);
@@ -321,7 +325,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         items: items,
         mode: ContinuousImageReaderMode.horizontal,
         pageController: pageController,
-        horizontalPhysics: const PageScrollPhysics(),
+        horizontalPhysics: _pagedHorizontalOverflowActive(preferences)
+            ? const NeverScrollableScrollPhysics()
+            : const PageScrollPhysics(),
         reverse: preferences.readerMode == ReaderModePreference.rtl,
         onPageChanged: pageController == null
             ? null
@@ -355,6 +361,13 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     ReaderPreferences preferences, {
     required bool paged,
   }) {
+    final ownerId = item.ownerId;
+    final sessionGeneration = _readerSessionGeneration;
+    final pageController = _pageController;
+    final aspectRatio = paged
+        ? _resolvedPagedAspectRatioByItemId[item.id] ??
+              _layoutResolver.resolveInitialHint(item: item).aspectRatio
+        : null;
     final sessionBinding = _imageSessionStore.bindingFor(
       item,
       initialLocalPath: _capability.initialLocalPathFor(item),
@@ -365,11 +378,19 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         item: item,
         index: index,
         paged: paged,
-        fit: _imageFitFor(preferences.pageFit, paged: paged),
+        fit: _imageFitFor(preferences.pageFit),
         sessionBinding: sessionBinding,
         expectedDisplaySize: _expectedImageDisplaySize(
           preferences,
           paged: paged,
+          aspectRatio: aspectRatio,
+        ),
+        onDimensionsResolved: (size) => _onImageDimensionsResolved(
+          ownerId: ownerId,
+          sessionGeneration: sessionGeneration,
+          itemId: item.id,
+          paged: paged,
+          size: size,
         ),
         onRetry: () => unawaited(_retrySessionImage(index)),
       ),
@@ -377,14 +398,149 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (!paged) {
       return image;
     }
+    final fittedImage = ReaderPagedImageFitSurface(
+      key: ValueKey<String>(
+        'reader-paged-fit-$ownerId-${item.id}-'
+        '${preferences.pageFit.name}-${preferences.readerMode.name}',
+      ),
+      ownerId: ownerId,
+      itemId: item.id,
+      pageIndex: index,
+      pageFit: preferences.pageFit,
+      readerMode: preferences.readerMode,
+      aspectRatio: aspectRatio!,
+      onHorizontalOverflowChanged: (hasOverflow) {
+        _onPagedHorizontalOverflowChanged(
+          ownerId: ownerId,
+          sessionGeneration: sessionGeneration,
+          pageIndex: index,
+          hasOverflow: hasOverflow,
+        );
+      },
+      onEdgeTurnRequested: (intent) {
+        _onPagedEdgeTurnRequested(
+          ownerId: ownerId,
+          sessionGeneration: sessionGeneration,
+          sourcePageIndex: index,
+          expectedPageController: pageController,
+          intent: intent,
+        );
+      },
+      child: image,
+    );
     return ReaderZoomableImage(
       key: ValueKey<String>('reader-zoom-surface-${item.id}'),
       gestureCoordinator: _gestureCoordinator,
       activePageIndexListenable: _activePagedIndex,
       pageIndex: index,
+      resetToken: '${preferences.pageFit.name}:${preferences.readerMode.name}',
       onZoomStateChanged: (isZoomed) =>
           _onPagedImageZoomStateChanged(index, isZoomed),
-      child: image,
+      child: fittedImage,
+    );
+  }
+
+  bool _pagedHorizontalOverflowActive(ReaderPreferences preferences) {
+    if (preferences.pageFit != ReaderPageFitPreference.fitHeight ||
+        !_pagedPosition.isImage) {
+      return false;
+    }
+    final activeIndex = _pagedPosition.index;
+    return activeIndex != null &&
+        _pagedHorizontalOverflowByIndex[activeIndex] == true;
+  }
+
+  void _onImageDimensionsResolved({
+    required String ownerId,
+    required int sessionGeneration,
+    required String itemId,
+    required bool paged,
+    required Size size,
+  }) {
+    if (!paged ||
+        !mounted ||
+        _lastOwnerId != ownerId ||
+        _capability.content.ownerId != ownerId ||
+        _readerSessionGeneration != sessionGeneration ||
+        !size.width.isFinite ||
+        !size.height.isFinite ||
+        size.width <= 0 ||
+        size.height <= 0) {
+      return;
+    }
+    final aspectRatio = size.width / size.height;
+    final previous = _resolvedPagedAspectRatioByItemId[itemId];
+    if (previous != null && (previous - aspectRatio).abs() < 0.0001) {
+      return;
+    }
+    _resolvedPagedAspectRatioByItemId[itemId] = aspectRatio;
+    setState(() {});
+  }
+
+  void _onPagedHorizontalOverflowChanged({
+    required String ownerId,
+    required int sessionGeneration,
+    required int pageIndex,
+    required bool hasOverflow,
+  }) {
+    if (!mounted ||
+        _lastOwnerId != ownerId ||
+        _capability.content.ownerId != ownerId ||
+        _readerSessionGeneration != sessionGeneration) {
+      return;
+    }
+    final previous = _pagedHorizontalOverflowByIndex[pageIndex] == true;
+    if (hasOverflow) {
+      _pagedHorizontalOverflowByIndex[pageIndex] = true;
+    } else {
+      _pagedHorizontalOverflowByIndex.remove(pageIndex);
+    }
+    if (previous == hasOverflow ||
+        !_pagedPosition.isImage ||
+        _pagedPosition.index != pageIndex) {
+      return;
+    }
+    setState(() {});
+  }
+
+  void _onPagedEdgeTurnRequested({
+    required String ownerId,
+    required int sessionGeneration,
+    required int sourcePageIndex,
+    required PageController? expectedPageController,
+    required ReaderPageTurnIntent intent,
+  }) {
+    final pageController = _pageController;
+    final content = _capability.content;
+    if (!mounted ||
+        _zoomGate.value ||
+        expectedPageController == null ||
+        !identical(pageController, expectedPageController) ||
+        !expectedPageController.hasClients ||
+        _lastOwnerId != ownerId ||
+        content.ownerId != ownerId ||
+        _readerSessionGeneration != sessionGeneration ||
+        !_pagedPosition.isImage ||
+        _pagedPosition.index != sourcePageIndex ||
+        _activePagedIndex.value != sourcePageIndex) {
+      return;
+    }
+    final currentPage = expectedPageController.page;
+    if (currentPage == null || (currentPage - sourcePageIndex).abs() > 0.5) {
+      return;
+    }
+    final delta = intent == ReaderPageTurnIntent.next ? 1 : -1;
+    final target = sourcePageIndex + delta;
+    if (target < 0 || target >= _pagedPageCount(content.length)) {
+      return;
+    }
+    if (target < content.length) {
+      _promoteSessionSeekTarget(target);
+    }
+    expectedPageController.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
     );
   }
 
@@ -634,16 +790,14 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     return false;
   }
 
-  BoxFit _imageFitFor(ReaderPageFitPreference fit, {required bool paged}) {
+  BoxFit _imageFitFor(ReaderPageFitPreference fit) {
     switch (fit) {
       case ReaderPageFitPreference.fitWidth:
-        return paged ? BoxFit.contain : BoxFit.fitWidth;
+        return BoxFit.fitWidth;
       case ReaderPageFitPreference.fitHeight:
         return BoxFit.fitHeight;
       case ReaderPageFitPreference.contain:
         return BoxFit.contain;
-      case ReaderPageFitPreference.original:
-        return BoxFit.none;
     }
   }
 
@@ -704,6 +858,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _reportedTailSurfaceKeys.clear();
     _reportedAdvanceSurfaceKeys.clear();
     _reportedAdjacentPreloadKeys.clear();
+    _pagedHorizontalOverflowByIndex.clear();
+    _resolvedPagedAspectRatioByItemId.clear();
     _pagedPosition = ReaderSequencePosition.image(initialIndex);
     _setZoomGate(false, paged: false);
     _activePagedIndex.value = initialIndex;
@@ -1287,6 +1443,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         pageIndex != content.initialIndex) {
       return;
     }
+    final wasOnImage = _pagedPosition.isImage;
     final position = _pagedPositionForPage(pageIndex, content.length);
     if (!position.isImage) {
       _hideReaderMenuForContentMotion();
@@ -1320,6 +1477,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       sessionGeneration: _readerSessionGeneration,
     );
     if (pageIndex == _lastKnownIndex) {
+      if (!wasOnImage && mounted) {
+        setState(() {});
+      }
       return;
     }
     final previousIndex = _lastKnownIndex;
@@ -1788,16 +1948,33 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   Size _expectedImageDisplaySize(
     ReaderPreferences preferences, {
     required bool paged,
+    double? aspectRatio,
   }) {
     final mediaSize = MediaQuery.sizeOf(context);
     if (!paged) {
       return mediaSize;
     }
     final inset = preferences.pageSpacing.clamp(0.0, 48.0).toDouble() * 2;
-    return Size(
+    final viewport = Size(
       (mediaSize.width - inset).clamp(1.0, double.infinity).toDouble(),
       (mediaSize.height - inset).clamp(1.0, double.infinity).toDouble(),
     );
+    final ratio = aspectRatio;
+    if (ratio == null || !ratio.isFinite || ratio <= 0) {
+      return viewport;
+    }
+    switch (preferences.pageFit) {
+      case ReaderPageFitPreference.fitWidth:
+        return Size(viewport.width, viewport.width / ratio);
+      case ReaderPageFitPreference.fitHeight:
+        return Size(viewport.height * ratio, viewport.height);
+      case ReaderPageFitPreference.contain:
+        return applyBoxFit(
+          BoxFit.contain,
+          Size(ratio, 1),
+          viewport,
+        ).destination;
+    }
   }
 
   void _recordSessionPreloadScheduled(

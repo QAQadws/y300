@@ -64,11 +64,7 @@ final class ReaderPreferencesSnapshotCodec {
         ReaderModePreference.values,
         defaults.readerMode,
       ),
-      pageFit: _enumByName(
-        pageFit,
-        ReaderPageFitPreference.values,
-        defaults.pageFit,
-      ),
+      pageFit: _pageFitByName(pageFit, defaults.pageFit),
       background: _enumByName(
         background,
         ReaderBackgroundPreference.values,
@@ -90,5 +86,17 @@ final class ReaderPreferencesSnapshotCodec {
       }
     }
     return fallback;
+  }
+
+  ReaderPageFitPreference _pageFitByName(
+    Object? raw,
+    ReaderPageFitPreference fallback,
+  ) {
+    // `original` used BoxFit.none inside a fixed viewport. Keep accepting the
+    // persisted value, but migrate it to the inspectable full-image mode.
+    if (raw == 'original') {
+      return ReaderPageFitPreference.contain;
+    }
+    return _enumByName(raw, ReaderPageFitPreference.values, fallback);
   }
 }

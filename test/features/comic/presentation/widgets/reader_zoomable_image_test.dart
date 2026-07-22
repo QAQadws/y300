@@ -6,6 +6,7 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_
 
 Widget _hostZoomableImage({
   ReaderZoomBehavior behavior = ReaderZoomBehavior.bounded,
+  Object? resetToken,
   ValueChanged<bool>? onZoomStateChanged,
   Widget? child,
 }) {
@@ -17,6 +18,7 @@ Widget _hostZoomableImage({
           height: 240,
           child: ReaderZoomableImage(
             behavior: behavior,
+            resetToken: resetToken,
             onZoomStateChanged: onZoomStateChanged,
             child: child ?? Container(color: Colors.blue),
           ),
@@ -80,6 +82,39 @@ void main() {
       _readBoundedTransform(tester).transform.getMaxScaleOnAxis(),
       closeTo(1, 0.001),
     );
+  });
+
+  testWidgets('reset token returns a zoomed surface to resting state', (
+    tester,
+  ) async {
+    final states = <bool>[];
+    await tester.pumpWidget(
+      _hostZoomableImage(
+        resetToken: 'fit-width',
+        onZoomStateChanged: states.add,
+      ),
+    );
+    final target = find.byType(ReaderZoomableImage);
+
+    await tester.tapAt(tester.getCenter(target));
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.tapAt(tester.getCenter(target));
+    await tester.pumpAndSettle();
+    expect(_readBoundedTransform(tester).transform.getMaxScaleOnAxis(), 2);
+
+    await tester.pumpWidget(
+      _hostZoomableImage(
+        resetToken: 'fit-height',
+        onZoomStateChanged: states.add,
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      _readBoundedTransform(tester).transform.getMaxScaleOnAxis(),
+      closeTo(1, 0.001),
+    );
+    expect(states, <bool>[true, false]);
   });
 
   testWidgets('stable transform stays out of the gesture arena at rest', (

@@ -142,6 +142,7 @@ class ReaderImageBuildSpec {
     required this.fit,
     required this.sessionBinding,
     required this.expectedDisplaySize,
+    required this.onDimensionsResolved,
     required this.onRetry,
   });
 
@@ -153,6 +154,7 @@ class ReaderImageBuildSpec {
   final BoxFit fit;
   final ReaderImageSessionBinding sessionBinding;
   final Size expectedDisplaySize;
+  final ValueChanged<Size> onDimensionsResolved;
   final VoidCallback onRetry;
 }
 

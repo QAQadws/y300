@@ -11,7 +11,7 @@ library;
 /// - `ltr` / `rtl`：单页横向翻页（左到右 / 右到左）。
 enum ReaderModePreference { vertical, ltr, rtl }
 
-enum ReaderPageFitPreference { fitWidth, fitHeight, contain, original }
+enum ReaderPageFitPreference { fitWidth, fitHeight, contain }
 
 enum ReaderBackgroundPreference { followTheme, black, white, gray }
 

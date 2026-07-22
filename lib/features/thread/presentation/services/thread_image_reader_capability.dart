@@ -133,6 +133,7 @@ class ThreadImageReaderCapability extends ReaderCapability {
         ),
       ),
       errorPlaceholder: const Center(child: Icon(Icons.broken_image_outlined)),
+      onImageResolved: spec.onDimensionsResolved,
     );
   }
 }

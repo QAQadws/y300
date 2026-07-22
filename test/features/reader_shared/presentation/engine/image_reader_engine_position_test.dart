@@ -67,6 +67,145 @@ void main() {
       isTrue,
     );
   });
+
+  testWidgets(
+    'height-fit wide page pans internally and only edge turn saves progress',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const <String, Object>{
+        'reader_pref_mode': 'ltr',
+        'reader_pref_page_fit': 'fitHeight',
+      });
+      tester.view.physicalSize = const Size(600, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final capability = _RecordingPagedCapability();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumImagePrecacheServiceProvider.overrideWithValue(
+              _NoopForumImagePrecacheService(),
+            ),
+          ],
+          child: MaterialApp(home: ImageReaderEngine(capability: capability)),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      final activeSurface = find.byKey(
+        const ValueKey<String>(
+          'reader-paged-fit-paged-owner-paged-owner:1-fitHeight-ltr',
+        ),
+      );
+      expect(activeSurface, findsOneWidget);
+      expect(
+        tester.widget<PageView>(find.byType(PageView)).physics,
+        isA<NeverScrollableScrollPhysics>(),
+      );
+      final innerScroll = find.descendant(
+        of: activeSurface,
+        matching: find.byType(SingleChildScrollView),
+      );
+      final innerController = tester
+          .widget<SingleChildScrollView>(innerScroll)
+          .controller!;
+
+      await tester.drag(innerScroll, const Offset(-120, 0));
+      await tester.pump();
+      expect(innerController.offset, greaterThan(0));
+      expect(capability.progressIndexes, isEmpty);
+
+      innerController.jumpTo(innerController.position.maxScrollExtent);
+      await tester.drag(innerScroll, const Offset(-80, 0));
+      await tester.pumpAndSettle();
+
+      expect(capability.progressIndexes, <int>[2]);
+    },
+  );
+
+  testWidgets('vertical mode does not build the paged fit surface', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const <String, Object>{
+      'reader_pref_mode': 'vertical',
+      'reader_pref_page_fit': 'fitWidth',
+    });
+    tester.view.physicalSize = const Size(600, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          forumImagePrecacheServiceProvider.overrideWithValue(
+            _NoopForumImagePrecacheService(),
+          ),
+        ],
+        child: MaterialApp(
+          home: ImageReaderEngine(capability: _RecordingPagedCapability()),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(ReaderPagedImageFitSurface), findsNothing);
+    expect(find.byType(PageView), findsNothing);
+  });
+
+  testWidgets('decoded dimensions replace a paged fallback aspect ratio', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const <String, Object>{
+      'reader_pref_mode': 'ltr',
+      'reader_pref_page_fit': 'fitHeight',
+    });
+    tester.view.physicalSize = const Size(600, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final capability = _DecodedDimensionCapability();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          forumImagePrecacheServiceProvider.overrideWithValue(
+            _NoopForumImagePrecacheService(),
+          ),
+        ],
+        child: MaterialApp(home: ImageReaderEngine(capability: capability)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    final surface = find.byKey(
+      const ValueKey<String>(
+        'reader-paged-fit-decoded-owner-decoded-item-fitHeight-ltr',
+      ),
+    );
+    expect(
+      find.descendant(
+        of: surface,
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<PageView>(find.byType(PageView)).physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
+    expect(
+      capability.expectedDisplaySizes.last.width,
+      greaterThan(tester.view.physicalSize.width),
+    );
+  });
 }
 
 class _ThrowingSeekCapability extends ReaderCapability {
@@ -117,6 +256,120 @@ class _ThrowingSeekCapability extends ReaderCapability {
   @override
   Future<void> onSeek({required int index, required double offset}) {
     throw StateError('seek failed');
+  }
+
+  @override
+  ImageCacheRequest cacheRequestFor(ContinuousImageItem item) {
+    return ImageCacheRequest(
+      cacheKey: item.cacheKey,
+      sourceUrl: item.url,
+      ownerType: ImageCacheOwnerType.thread,
+      ownerId: item.ownerId,
+      role: ImageCacheRole.threadInline,
+      imageIndex: item.index,
+      retentionClass: ImageRetentionClass.recentReader,
+    );
+  }
+}
+
+class _RecordingPagedCapability extends ReaderCapability {
+  final List<int> progressIndexes = <int>[];
+
+  @override
+  ReaderContent get content => ReaderContent(
+    ownerId: 'paged-owner',
+    initialIndex: 1,
+    items: List<ContinuousImageItem>.generate(3, (index) {
+      return ContinuousImageItem(
+        ownerId: 'paged-owner',
+        id: 'paged-owner:$index',
+        url: 'https://img.test/paged-$index.jpg',
+        cacheKey: 'reader/paged-$index',
+        index: index,
+        sourceKind: ContinuousImageSourceKind.threadImageReader,
+        knownWidth: 1200,
+        knownHeight: 400,
+      );
+    }),
+  );
+
+  @override
+  ImageRequestHeaderBuilder? get imageHeaderBuilder => null;
+
+  @override
+  ReaderTitleSpec titleFor(ReaderEngineContext context) {
+    return ReaderTitleSpec(
+      title: 'reader',
+      subtitle: '${context.currentIndex + 1} / ${context.totalCount}',
+    );
+  }
+
+  @override
+  Widget buildImageContent(BuildContext context, ReaderImageBuildSpec spec) {
+    return ColoredBox(
+      color: Colors.black,
+      child: Center(child: Text('${spec.index}')),
+    );
+  }
+
+  @override
+  void onScrollProgress({required int index, required double offset}) {
+    progressIndexes.add(index);
+  }
+
+  @override
+  ImageCacheRequest cacheRequestFor(ContinuousImageItem item) {
+    return ImageCacheRequest(
+      cacheKey: item.cacheKey,
+      sourceUrl: item.url,
+      ownerType: ImageCacheOwnerType.thread,
+      ownerId: item.ownerId,
+      role: ImageCacheRole.threadInline,
+      imageIndex: item.index,
+      retentionClass: ImageRetentionClass.recentReader,
+    );
+  }
+}
+
+class _DecodedDimensionCapability extends ReaderCapability {
+  bool _reportedDimensions = false;
+  final List<Size> expectedDisplaySizes = <Size>[];
+
+  @override
+  ReaderContent get content => const ReaderContent(
+    ownerId: 'decoded-owner',
+    initialIndex: 0,
+    items: <ContinuousImageItem>[
+      ContinuousImageItem(
+        ownerId: 'decoded-owner',
+        id: 'decoded-item',
+        url: 'https://img.test/decoded.jpg',
+        cacheKey: 'reader/decoded',
+        index: 0,
+        sourceKind: ContinuousImageSourceKind.threadImageReader,
+        fallbackAspectRatio: 0.7,
+      ),
+    ],
+  );
+
+  @override
+  ImageRequestHeaderBuilder? get imageHeaderBuilder => null;
+
+  @override
+  ReaderTitleSpec titleFor(ReaderEngineContext context) {
+    return const ReaderTitleSpec(title: 'reader', subtitle: '1 / 1');
+  }
+
+  @override
+  Widget buildImageContent(BuildContext context, ReaderImageBuildSpec spec) {
+    expectedDisplaySizes.add(spec.expectedDisplaySize);
+    if (!_reportedDimensions) {
+      _reportedDimensions = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        spec.onDimensionsResolved(const Size(1200, 400));
+      });
+    }
+    return const ColoredBox(color: Colors.black);
   }
 
   @override

@@ -232,8 +232,6 @@ class _ReaderDisplaySettingsContentState
         return '高度';
       case ReaderPageFitPreference.contain:
         return '屏幕';
-      case ReaderPageFitPreference.original:
-        return '原始';
     }
   }
 

@@ -10,7 +10,7 @@ void main() {
   test('v1 snapshot round-trips all fields with stable enum names', () {
     const source = ReaderPreferences(
       readerMode: ReaderModePreference.rtl,
-      pageFit: ReaderPageFitPreference.original,
+      pageFit: ReaderPageFitPreference.contain,
       background: ReaderBackgroundPreference.gray,
       pageSpacing: 7.5,
       showPageIndicator: false,
@@ -22,7 +22,7 @@ void main() {
 
     expect(json['schemaVersion'], 1);
     expect(json['readerMode'], 'rtl');
-    expect(json['pageFit'], 'original');
+    expect(json['pageFit'], 'contain');
     expect(json['background'], 'gray');
     expect(json['pageSpacing'], 7.5);
     expect(json['showPageIndicator'], isFalse);
@@ -31,6 +31,32 @@ void main() {
     expect(decoded.background, source.background);
     expect(decoded.pageSpacing, source.pageSpacing);
     expect(decoded.showPageIndicator, source.showPageIndicator);
+  });
+
+  test('removed original fit migrates to contain in v1 snapshots', () {
+    final decoded = codec.decode(
+      jsonEncode(<String, Object>{
+        'schemaVersion': 1,
+        'readerMode': 'rtl',
+        'pageFit': 'original',
+        'background': 'black',
+        'pageSpacing': 0,
+        'showPageIndicator': true,
+      }),
+    );
+
+    expect(decoded.pageFit, ReaderPageFitPreference.contain);
+  });
+
+  test('supported page fits never encode the removed original value', () {
+    for (final pageFit in ReaderPageFitPreference.values) {
+      final encoded = codec.encode(
+        ReaderPreferences.defaults().copyWith(pageFit: pageFit),
+      );
+      final json = jsonDecode(encoded) as Map<String, dynamic>;
+
+      expect(json['pageFit'], isNot('original'));
+    }
   });
 
   test('v1 snapshot normalizes invalid fields independently', () {

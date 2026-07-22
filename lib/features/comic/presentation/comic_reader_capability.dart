@@ -349,13 +349,16 @@ class ComicReaderCapability extends ReaderCapability {
         onRetry: spec.onRetry,
       ),
       headerBuilder: imageHeaderBuilder,
-      onImageResolved: (size) => controller.onImageResolved(
-        imageIndex: spec.index,
-        imageUrl: imageUrl,
-        width: size.width.round(),
-        height: size.height.round(),
-        expectedEpisodeId: viewState.episodeId,
-      ),
+      onImageResolved: (size) {
+        spec.onDimensionsResolved(size);
+        controller.onImageResolved(
+          imageIndex: spec.index,
+          imageUrl: imageUrl,
+          width: size.width.round(),
+          height: size.height.round(),
+          expectedEpisodeId: viewState.episodeId,
+        );
+      },
       onImageFailed: () => controller.onImageDisplayFailed(
         imageIndex: spec.index,
         imageUrl: imageUrl,

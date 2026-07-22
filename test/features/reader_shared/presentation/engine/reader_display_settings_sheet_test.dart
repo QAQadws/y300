@@ -26,11 +26,12 @@ void main() {
       ),
     );
 
-    expect(find.byType(OutlinedButton), findsNWidgets(11));
+    expect(find.byType(OutlinedButton), findsNWidgets(10));
     expect(find.text('垂直'), findsOneWidget);
     expect(find.text('LTR'), findsOneWidget);
     expect(find.text('宽度'), findsOneWidget);
     expect(find.text('主题'), findsOneWidget);
+    expect(find.text('原始'), findsNothing);
 
     final selectedButtonFinder = find.ancestor(
       of: find.text('LTR'),

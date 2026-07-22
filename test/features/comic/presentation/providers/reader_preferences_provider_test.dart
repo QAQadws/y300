@@ -38,7 +38,7 @@ void main() {
     final value = await repository.load();
 
     expect(value.readerMode, ReaderModePreference.rtl);
-    expect(value.pageFit, ReaderPageFitPreference.original);
+    expect(value.pageFit, ReaderPageFitPreference.contain);
     expect(value.background, ReaderBackgroundPreference.gray);
     expect(value.pageSpacing, 12.5);
     expect(value.showPageIndicator, isFalse);
