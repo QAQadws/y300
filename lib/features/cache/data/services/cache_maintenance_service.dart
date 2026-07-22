@@ -1,4 +1,6 @@
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
+import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -8,11 +10,12 @@ import 'package:y300/features/cache/domain/services/protected_cover_cache_mainte
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 
 class DefaultCacheMaintenanceService implements CacheMaintenanceService {
-  const DefaultCacheMaintenanceService({
+  DefaultCacheMaintenanceService({
     required ImageCacheService imageCacheService,
     required DocumentCacheService documentCacheService,
     required ParsedSnapshotCacheService snapshotCacheService,
     required StorageAccountingService storageAccountingService,
+    required CacheBudgetCoordinator cacheBudgetCoordinator,
     ProtectedCoverCacheMaintenance? protectedCoverMaintenance,
     bool Function(CachedImageRecord record)? protectedCoverOwnerExists,
     CacheDiagnosticRecorder diagnosticRecorder =
@@ -22,6 +25,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
        _documentCacheService = documentCacheService,
        _snapshotCacheService = snapshotCacheService,
        _storageAccountingService = storageAccountingService,
+       _cacheBudgetCoordinator = cacheBudgetCoordinator,
        _protectedCoverMaintenance = protectedCoverMaintenance,
        _protectedCoverOwnerExists = protectedCoverOwnerExists,
        _diagnosticRecorder = diagnosticRecorder,
@@ -31,6 +35,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
   final DocumentCacheService _documentCacheService;
   final ParsedSnapshotCacheService _snapshotCacheService;
   final StorageAccountingService _storageAccountingService;
+  final CacheBudgetCoordinator _cacheBudgetCoordinator;
   final ProtectedCoverCacheMaintenance? _protectedCoverMaintenance;
   final bool Function(CachedImageRecord record)? _protectedCoverOwnerExists;
   final CacheDiagnosticRecorder _diagnosticRecorder;
@@ -43,15 +48,17 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
     var deletedSnapshots = 0;
     var deletedProtectedCoverRecords = 0;
     var deletedImagesByRole = 0;
+    var deletedRegularEntries = 0;
+    var deletedBytes = 0;
+    var failedParticipantIds = const <String>[];
 
     switch (request.scope) {
       case CacheClearScope.defaultCache:
-        await _imageCacheService.clearUnprotected();
+        final budget = await _cacheBudgetCoordinator.clearRegular();
         imageCacheCleared = true;
-        deletedDocuments = await _documentCacheService.deleteOlderThan(
-          _clearAllCutoff,
-        );
-        deletedSnapshots = await _snapshotCacheService.deleteExpired(_now());
+        deletedRegularEntries = budget.deletedEntries;
+        deletedBytes = budget.deletedBytes;
+        failedParticipantIds = budget.failedParticipantIds;
         deletedProtectedCoverRecords =
             await _runProtectedCoverMaintenanceIfConfigured();
         break;
@@ -68,19 +75,11 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
         );
         break;
       case CacheClearScope.userCleanup:
-        deletedDocuments = await _documentCacheService.deleteOlderThan(
-          _clearAllCutoff,
-        );
-        deletedSnapshots = await _snapshotCacheService.deleteExpired(
-          _clearAllCutoff,
-        );
-        final roles = request.imageCacheRoles.isEmpty
-            ? _defaultUserCleanupRoles
-            : request.imageCacheRoles;
-        deletedImagesByRole = await _imageCacheService.clearUnprotectedByRoles(
-          roles: roles,
-        );
+        final budget = await _cacheBudgetCoordinator.clearRegular();
         imageCacheCleared = true;
+        deletedRegularEntries = budget.deletedEntries;
+        deletedBytes = budget.deletedBytes;
+        failedParticipantIds = budget.failedParticipantIds;
         break;
     }
 
@@ -90,6 +89,9 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
       deletedSnapshots: deletedSnapshots,
       deletedProtectedCoverRecords: deletedProtectedCoverRecords,
       deletedImagesByRole: deletedImagesByRole,
+      deletedRegularEntries: deletedRegularEntries,
+      deletedBytes: deletedBytes,
+      failedParticipantIds: failedParticipantIds,
     );
     _diagnosticRecorder.record(
       CacheDiagnosticEvent(
@@ -103,6 +105,9 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
           'deletedSnapshots': result.deletedSnapshots,
           'deletedProtectedCoverRecords': result.deletedProtectedCoverRecords,
           'deletedImagesByRole': result.deletedImagesByRole,
+          'deletedRegularEntries': result.deletedRegularEntries,
+          'deletedBytes': result.deletedBytes,
+          'failedParticipantIds': result.failedParticipantIds.join(','),
           'deletedEntries': result.deletedEntries,
         },
       ),
@@ -112,7 +117,6 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
 
   @override
   Future<CachePruneResult> prune(CachePruneRequest request) async {
-    await _imageCacheService.pruneToLimit(maxBytes: request.imageCacheMaxBytes);
     final now = _now();
     final deletedDocuments = await _documentCacheService.deleteOlderThan(
       now.subtract(request.documentMaxAge),
@@ -121,10 +125,16 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
     final deletedProtectedCoverRecords = request.runProtectedCoverMaintenance
         ? await _runProtectedCoverMaintenanceIfConfigured()
         : 0;
+    final budget = await _cacheBudgetCoordinator.pruneToLimit(
+      maxBytes: request.maxCacheBytes,
+    );
     final result = CachePruneResult(
       deletedDocuments: deletedDocuments,
       deletedSnapshots: deletedSnapshots,
       deletedProtectedCoverRecords: deletedProtectedCoverRecords,
+      deletedCacheEntries: budget.deletedEntries,
+      deletedBytes: budget.deletedBytes,
+      failedParticipantIds: budget.failedParticipantIds,
     );
     _diagnosticRecorder.record(
       CacheDiagnosticEvent(
@@ -133,11 +143,14 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
         bucket: StorageBucket.pageCache,
         reason: 'scheduled_or_limit',
         fields: <String, Object?>{
-          'imageCacheMaxBytes': request.imageCacheMaxBytes,
+          'maxCacheBytes': request.maxCacheBytes,
           'documentMaxAgeDays': request.documentMaxAge.inDays,
           'deletedDocuments': result.deletedDocuments,
           'deletedSnapshots': result.deletedSnapshots,
           'deletedProtectedCoverRecords': result.deletedProtectedCoverRecords,
+          'deletedCacheEntries': result.deletedCacheEntries,
+          'deletedBytes': result.deletedBytes,
+          'failedParticipantIds': result.failedParticipantIds.join(','),
           'deletedEntries': result.deletedEntries,
         },
       ),
@@ -148,6 +161,11 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
   @override
   Future<StorageUsageReport> usageAfterMaintenance() {
     return _storageAccountingService.loadUsageReport();
+  }
+
+  @override
+  Future<CacheCapacityReport> loadCapacityReport() {
+    return _cacheBudgetCoordinator.loadReport();
   }
 
   Future<int> _runProtectedCoverMaintenanceIfConfigured() async {
@@ -164,11 +182,3 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
 
   DateTime get _clearAllCutoff => DateTime(9999, 12, 31);
 }
-
-/// [CacheClearScope.userCleanup] 默认清理的非保护图片 role：
-/// 漫画页、帖子内联图、帖子附件图。封面/头像/表情/已下载等不在内。
-const List<ImageCacheRole> _defaultUserCleanupRoles = <ImageCacheRole>[
-  ImageCacheRole.comicPage,
-  ImageCacheRole.threadInline,
-  ImageCacheRole.threadAttachment,
-];

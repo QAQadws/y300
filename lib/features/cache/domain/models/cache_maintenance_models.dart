@@ -1,19 +1,12 @@
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 
 enum CacheClearScope { defaultCache, imageCache, pageCache, userCleanup }
 
 class CacheClearRequest {
-  const CacheClearRequest({
-    this.scope = CacheClearScope.defaultCache,
-    this.imageCacheRoles = const <ImageCacheRole>[],
-  });
+  const CacheClearRequest({this.scope = CacheClearScope.defaultCache});
 
   final CacheClearScope scope;
-
-  /// 仅 [CacheClearScope.userCleanup] 使用：指定要清理的非保护图片 role。
-  /// 为空时由 service 用默认集合（漫画页 / 帖子图片 / 帖子附件图）。
-  final List<ImageCacheRole> imageCacheRoles;
 }
 
 class CacheClearResult {
@@ -23,6 +16,9 @@ class CacheClearResult {
     required this.deletedSnapshots,
     required this.deletedProtectedCoverRecords,
     this.deletedImagesByRole = 0,
+    this.deletedRegularEntries = 0,
+    this.deletedBytes = 0,
+    this.failedParticipantIds = const <String>[],
   });
 
   final bool imageCacheCleared;
@@ -32,22 +28,28 @@ class CacheClearResult {
 
   /// [CacheClearScope.userCleanup] 按 role 清理的图片条数。
   final int deletedImagesByRole;
+  final int deletedRegularEntries;
+  final int deletedBytes;
+  final List<String> failedParticipantIds;
+
+  bool get isPartial => failedParticipantIds.isNotEmpty;
 
   int get deletedEntries =>
       deletedDocuments +
       deletedSnapshots +
       deletedProtectedCoverRecords +
-      deletedImagesByRole;
+      deletedImagesByRole +
+      deletedRegularEntries;
 }
 
 class CachePruneRequest {
   const CachePruneRequest({
-    required this.imageCacheMaxBytes,
+    required this.maxCacheBytes,
     this.documentMaxAge = const Duration(days: 30),
     this.runProtectedCoverMaintenance = true,
   });
 
-  final int imageCacheMaxBytes;
+  final int maxCacheBytes;
   final Duration documentMaxAge;
   final bool runProtectedCoverMaintenance;
 }
@@ -57,14 +59,25 @@ class CachePruneResult {
     required this.deletedDocuments,
     required this.deletedSnapshots,
     required this.deletedProtectedCoverRecords,
+    this.deletedCacheEntries = 0,
+    this.deletedBytes = 0,
+    this.failedParticipantIds = const <String>[],
   });
 
   final int deletedDocuments;
   final int deletedSnapshots;
   final int deletedProtectedCoverRecords;
+  final int deletedCacheEntries;
+  final int deletedBytes;
+  final List<String> failedParticipantIds;
+
+  bool get isPartial => failedParticipantIds.isNotEmpty;
 
   int get deletedEntries =>
-      deletedDocuments + deletedSnapshots + deletedProtectedCoverRecords;
+      deletedDocuments +
+      deletedSnapshots +
+      deletedProtectedCoverRecords +
+      deletedCacheEntries;
 }
 
 abstract class CacheMaintenanceService {
@@ -73,4 +86,6 @@ abstract class CacheMaintenanceService {
   Future<CachePruneResult> prune(CachePruneRequest request);
 
   Future<StorageUsageReport> usageAfterMaintenance();
+
+  Future<CacheCapacityReport> loadCapacityReport();
 }

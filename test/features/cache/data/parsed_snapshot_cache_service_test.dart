@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -295,6 +296,56 @@ void main() {
       isNotNull,
     );
   });
+
+  test('snapshot cache participates in unified capacity cleanup', () async {
+    const dbName = 'parsed_snapshot_cache_budget_test.db';
+    await deleteDatabase(dbName);
+    final db = await ComicLocalDb.open(databaseName: dbName);
+    final reporter = _RecordingMutationReporter();
+    final service = LocalParsedSnapshotCacheService(
+      Future.value(db),
+      mutationReporter: reporter,
+      now: () => DateTime(2026, 1, 1),
+    );
+    addTearDown(() async {
+      await db.close();
+      await deleteDatabase(dbName);
+    });
+    const descriptor = SnapshotCacheDescriptor(
+      cacheKey: 'budget-snapshot',
+      ownerType: CacheOwnerType.thread,
+      ownerId: 'tid=1',
+      snapshotType: 'test.snapshot',
+    );
+
+    await service.put(
+      descriptor,
+      'cached',
+      const _StringSnapshotCodec(),
+      policy: const SnapshotCachePolicy(
+        freshFor: Duration(minutes: 5),
+        keepStaleFor: Duration(days: 1),
+      ),
+    );
+
+    final usage = await service.loadUsage();
+    final candidates = await service.loadEvictionCandidates();
+    expect(usage.budgetedBytes, greaterThan(0));
+    expect(candidates.single.cacheKey, descriptor.cacheKey);
+    expect(reporter.namespaces, <CacheNamespace>[CacheNamespace.snapshot]);
+    final cleared = await service.clearRegular();
+    expect(cleared.deletedEntries, 1);
+    expect(cleared.deletedBytes, usage.budgetedBytes);
+  });
+}
+
+class _RecordingMutationReporter implements CacheMutationReporter {
+  final List<CacheNamespace> namespaces = <CacheNamespace>[];
+
+  @override
+  void reportMutation(CacheNamespace namespace) {
+    namespaces.add(namespace);
+  }
 }
 
 class _StringSnapshotCodec implements SnapshotCodec<String> {

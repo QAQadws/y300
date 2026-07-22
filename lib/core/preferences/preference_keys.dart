@@ -90,6 +90,9 @@ abstract final class PreferenceKeys {
   static const imageCacheMaxBytes = PreferenceKey<int>(
     PreferenceKeyNames.imageCacheMaxBytes,
   );
+  static const cacheMaxBytesV1 = PreferenceKey<int>(
+    PreferenceKeyNames.cacheMaxBytesV1,
+  );
   static const legacyComicCacheDirectory = PreferenceKey<String>(
     PreferenceKeyNames.legacyComicCacheDirectory,
   );

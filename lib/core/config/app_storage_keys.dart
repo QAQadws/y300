@@ -7,6 +7,7 @@ import 'package:y300/core/preferences/preference_key_names.dart';
 abstract final class AppStorageKeys {
   static const String imageCacheMaxBytes =
       PreferenceKeyNames.imageCacheMaxBytes;
+  static const String cacheMaxBytesV1 = PreferenceKeyNames.cacheMaxBytesV1;
   static const String downloadStorageDirectory =
       PreferenceKeyNames.downloadStorageDirectory;
   static const String appThemePreference =

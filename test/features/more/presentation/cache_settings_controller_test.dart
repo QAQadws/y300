@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -214,12 +215,41 @@ void main() {
     final value = container.read(dataStorageControllerProvider).value!;
     expect(maintenance.clearImageCacheCalls, 1);
     expect(maintenance.lastClearScope, CacheClearScope.userCleanup);
-    expect(value.imageCacheUsageBytes, 0);
-    expect(value.hint, contains('浏览记录已保留'));
+    expect(value.clearableCacheBytes, 0);
+    expect(value.hint, contains('用户数据已保留'));
+  });
+
+  test('clearCache reports partial participant failure', () async {
+    final maintenance = _FakeCacheMaintenanceService(clearFailure: true);
+    final container = ProviderContainer(
+      overrides: [
+        dataStorageSettingsRepositoryProvider.overrideWithValue(
+          _FakeDataStorageSettingsRepository(defaultPath: 'C:/default-storage'),
+        ),
+        cacheMaintenanceServiceProvider.overrideWithValue(maintenance),
+        storageAccountingServiceProvider.overrideWithValue(
+          _FakeStorageAccountingService(),
+        ),
+        downloadStorageServiceProvider.overrideWithValue(
+          _FakeDownloadStorageService(rootPath: 'C:/default-storage'),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final subscription = _keepDataStorageControllerAlive(container);
+    addTearDown(subscription.close);
+
+    await container.read(dataStorageControllerProvider.future);
+    await container.read(dataStorageControllerProvider.notifier).clearCache();
+
+    expect(
+      container.read(dataStorageControllerProvider).value!.hint,
+      '部分缓存清理失败，请稍后重试',
+    );
   });
 
   test(
-    'update image cache max clamps value, saves it and prunes cache',
+    'update unified cache max clamps value, saves it and prunes cache',
     () async {
       final repo = _FakeDataStorageSettingsRepository(
         defaultPath: 'C:/default-storage',
@@ -248,34 +278,30 @@ void main() {
       await container.read(dataStorageControllerProvider.future);
       await container
           .read(dataStorageControllerProvider.notifier)
-          .updateImageCacheMaxBytes(4096 * 1024 * 1024);
+          .updateCacheMaxBytes(4096 * 1024 * 1024);
 
       final value = container.read(dataStorageControllerProvider).value!;
-      expect(
-        repo.maxBytes,
-        DataStorageSettingsRepositoryImpl.maxImageCacheMaxBytes,
-      );
+      expect(repo.maxBytes, DataStorageSettingsRepositoryImpl.maxCacheMaxBytes);
       expect(
         maintenance.lastPruneMaxBytes,
-        DataStorageSettingsRepositoryImpl.maxImageCacheMaxBytes,
+        DataStorageSettingsRepositoryImpl.maxCacheMaxBytes,
       );
       expect(
-        value.imageCacheMaxBytes,
-        DataStorageSettingsRepositoryImpl.maxImageCacheMaxBytes,
+        value.cacheMaxBytes,
+        DataStorageSettingsRepositoryImpl.maxCacheMaxBytes,
       );
     },
   );
 
   test('reload usage refreshes report through storage accounting', () async {
     final accounting = _FakeStorageAccountingService(imageUsageBytes: 512);
+    final maintenance = _FakeCacheMaintenanceService(imageUsageBytes: 512);
     final container = ProviderContainer(
       overrides: [
         dataStorageSettingsRepositoryProvider.overrideWithValue(
           _FakeDataStorageSettingsRepository(defaultPath: 'C:/default-storage'),
         ),
-        cacheMaintenanceServiceProvider.overrideWithValue(
-          _FakeCacheMaintenanceService(),
-        ),
+        cacheMaintenanceServiceProvider.overrideWithValue(maintenance),
         storageAccountingServiceProvider.overrideWithValue(accounting),
         cacheDiagnosticExportServiceProvider.overrideWithValue(
           _FakeCacheDiagnosticExportService(),
@@ -291,10 +317,11 @@ void main() {
 
     await container.read(dataStorageControllerProvider.future);
     accounting.imageUsageBytes = 2048;
+    maintenance.imageUsageBytes = 2048;
     await container.read(dataStorageControllerProvider.notifier).reloadUsage();
 
     final value = container.read(dataStorageControllerProvider).value!;
-    expect(value.imageCacheUsageBytes, 2048);
+    expect(value.clearableCacheBytes, 2048);
     expect(value.hint, '存储统计已刷新');
   });
 
@@ -366,7 +393,7 @@ class _FakeDataStorageSettingsRepository
   final String _defaultPath;
   String? _customPath;
   final String? _pickedPath;
-  int maxBytes = DataStorageSettingsRepositoryImpl.defaultImageCacheMaxBytes;
+  int maxBytes = DataStorageSettingsRepositoryImpl.defaultCacheMaxBytes;
 
   String? get customPath => _customPath;
 
@@ -385,14 +412,14 @@ class _FakeDataStorageSettingsRepository
   }
 
   @override
-  Future<int> getImageCacheMaxBytes() async => maxBytes;
+  Future<int> getCacheMaxBytes() async => maxBytes;
 
   @override
-  Future<void> setImageCacheMaxBytes(int bytes) async {
+  Future<void> setCacheMaxBytes(int bytes) async {
     maxBytes = bytes
         .clamp(
-          DataStorageSettingsRepositoryImpl.minImageCacheMaxBytes,
-          DataStorageSettingsRepositoryImpl.maxImageCacheMaxBytes,
+          DataStorageSettingsRepositoryImpl.minCacheMaxBytes,
+          DataStorageSettingsRepositoryImpl.maxCacheMaxBytes,
         )
         .toInt();
   }
@@ -468,7 +495,6 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   }) async {
     return null;
   }
-
 }
 
 class _FakeStorageLocationRepository implements StorageLocationRepository {
@@ -595,9 +621,13 @@ class _FakeCacheDiagnosticExportService
 }
 
 class _FakeCacheMaintenanceService implements CacheMaintenanceService {
-  _FakeCacheMaintenanceService({this.imageUsageBytes = 0});
+  _FakeCacheMaintenanceService({
+    this.imageUsageBytes = 0,
+    this.clearFailure = false,
+  });
 
   int imageUsageBytes;
+  final bool clearFailure;
   int clearImageCacheCalls = 0;
   CacheClearScope? lastClearScope;
   int? lastPruneMaxBytes;
@@ -616,14 +646,17 @@ class _FakeCacheMaintenanceService implements CacheMaintenanceService {
       deletedDocuments: 0,
       deletedSnapshots: 0,
       deletedProtectedCoverRecords: 0,
+      failedParticipantIds: clearFailure
+          ? const <String>['document']
+          : const <String>[],
     );
   }
 
   @override
   Future<CachePruneResult> prune(CachePruneRequest request) async {
-    lastPruneMaxBytes = request.imageCacheMaxBytes;
-    if (imageUsageBytes > request.imageCacheMaxBytes) {
-      imageUsageBytes = request.imageCacheMaxBytes;
+    lastPruneMaxBytes = request.maxCacheBytes;
+    if (imageUsageBytes > request.maxCacheBytes) {
+      imageUsageBytes = request.maxCacheBytes;
     }
     return const CachePruneResult(
       deletedDocuments: 0,
@@ -643,6 +676,16 @@ class _FakeCacheMaintenanceService implements CacheMaintenanceService {
           clearable: true,
         ),
       ],
+      calculatedAt: DateTime(2026, 6, 27),
+    );
+  }
+
+  @override
+  Future<CacheCapacityReport> loadCapacityReport() async {
+    return CacheCapacityReport(
+      clearableBytes: imageUsageBytes,
+      budgetedBytes: imageUsageBytes,
+      longTermBytes: 0,
       calculatedAt: DateTime(2026, 6, 27),
     );
   }

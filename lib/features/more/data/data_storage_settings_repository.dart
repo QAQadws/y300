@@ -16,9 +16,9 @@ abstract class DataStorageSettingsRepository {
 
   Future<String?> pickDirectory();
 
-  Future<int> getImageCacheMaxBytes();
+  Future<int> getCacheMaxBytes();
 
-  Future<void> setImageCacheMaxBytes(int bytes);
+  Future<void> setCacheMaxBytes(int bytes);
 }
 
 class DataStorageSettingsRepositoryImpl
@@ -29,9 +29,16 @@ class DataStorageSettingsRepositoryImpl
   }) : _storageLocationRepository = storageLocationRepository,
        _preferencesStore = preferencesStore ?? SharedPreferencesStore();
 
-  static const int minImageCacheMaxBytes = 128 * 1024 * 1024;
-  static const int defaultImageCacheMaxBytes = 512 * 1024 * 1024;
-  static const int maxImageCacheMaxBytes = 2048 * 1024 * 1024;
+  static const int minCacheMaxBytes = 128 * 1024 * 1024;
+  static const int defaultCacheMaxBytes = 512 * 1024 * 1024;
+  static const int maxCacheMaxBytes = 2048 * 1024 * 1024;
+
+  @Deprecated('Use minCacheMaxBytes.')
+  static const int minImageCacheMaxBytes = minCacheMaxBytes;
+  @Deprecated('Use defaultCacheMaxBytes.')
+  static const int defaultImageCacheMaxBytes = defaultCacheMaxBytes;
+  @Deprecated('Use maxCacheMaxBytes.')
+  static const int maxImageCacheMaxBytes = maxCacheMaxBytes;
 
   final StorageLocationRepository _storageLocationRepository;
   final PreferencesStore _preferencesStore;
@@ -57,25 +64,35 @@ class DataStorageSettingsRepositoryImpl
   }
 
   @override
-  Future<int> getImageCacheMaxBytes() async {
-    final value = await _preferencesStore.read(
+  Future<int> getCacheMaxBytes() async {
+    final current = await _preferencesStore.read(
+      PreferenceKeys.cacheMaxBytesV1,
+    );
+    if (current != null) {
+      return _normalizeCacheMaxBytes(current);
+    }
+    final legacy = await _preferencesStore.read(
       PreferenceKeys.imageCacheMaxBytes,
     );
-    if (value == null || value <= 0) {
-      return defaultImageCacheMaxBytes;
+    if (legacy == null) {
+      return defaultCacheMaxBytes;
     }
-    return _normalizeImageCacheMaxBytes(value);
+    final migrated = legacy <= 0
+        ? defaultCacheMaxBytes
+        : _normalizeCacheMaxBytes(legacy);
+    await _preferencesStore.write(PreferenceKeys.cacheMaxBytesV1, migrated);
+    return migrated;
   }
 
   @override
-  Future<void> setImageCacheMaxBytes(int bytes) async {
+  Future<void> setCacheMaxBytes(int bytes) async {
     await _preferencesStore.write(
-      PreferenceKeys.imageCacheMaxBytes,
-      _normalizeImageCacheMaxBytes(bytes),
+      PreferenceKeys.cacheMaxBytesV1,
+      _normalizeCacheMaxBytes(bytes),
     );
   }
 
-  int _normalizeImageCacheMaxBytes(int bytes) {
-    return bytes.clamp(minImageCacheMaxBytes, maxImageCacheMaxBytes).toInt();
+  int _normalizeCacheMaxBytes(int bytes) {
+    return bytes.clamp(minCacheMaxBytes, maxCacheMaxBytes).toInt();
   }
 }

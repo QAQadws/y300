@@ -1,18 +1,22 @@
 import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 
-class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
+class LocalParsedSnapshotCacheService
+    implements ParsedSnapshotCacheService, CacheBudgetParticipant {
   LocalParsedSnapshotCacheService(
     Future<Database> dbFuture, {
     CacheDiagnosticRecorder diagnosticRecorder =
         const NoopCacheDiagnosticRecorder(),
+    CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
     DateTime Function()? now,
   }) : _dbFutureFactory = (() => dbFuture),
+       _mutationReporter = mutationReporter,
        _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
@@ -20,13 +24,16 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
     Future<Database> Function() dbFutureFactory, {
     CacheDiagnosticRecorder diagnosticRecorder =
         const NoopCacheDiagnosticRecorder(),
+    CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
     DateTime Function()? now,
   }) : _dbFutureFactory = dbFutureFactory,
+       _mutationReporter = mutationReporter,
        _diagnosticRecorder = diagnosticRecorder,
        _now = now ?? DateTime.now;
 
   final Future<Database> Function() _dbFutureFactory;
   Future<Database>? _dbFuture;
+  final CacheMutationReporter _mutationReporter;
   final CacheDiagnosticRecorder _diagnosticRecorder;
   final DateTime Function() _now;
 
@@ -151,6 +158,7 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _mutationReporter.reportMutation(CacheNamespace.snapshot);
     _recordSnapshotEvent(
       event: 'write',
       descriptor: descriptor,
@@ -279,6 +287,74 @@ class LocalParsedSnapshotCacheService implements ParsedSnapshotCacheService {
       bytes: total,
       clearable: total > 0,
       slices: slices,
+    );
+  }
+
+  @override
+  String get participantId => 'snapshot';
+
+  @override
+  Future<CacheParticipantUsage> loadUsage() async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT COALESCE(SUM(payload_bytes), 0) AS total
+      FROM ${ComicLocalDb.cachedSnapshotsTable}
+      ''');
+    final bytes = rows.first['total'] as int? ?? 0;
+    return CacheParticipantUsage(clearableBytes: bytes, budgetedBytes: bytes);
+  }
+
+  @override
+  Future<List<CacheEvictionCandidate>> loadEvictionCandidates() async {
+    final db = await _db;
+    final rows = await db.query(
+      ComicLocalDb.cachedSnapshotsTable,
+      columns: const <String>[
+        'cache_key',
+        'payload_bytes',
+        'last_accessed_at',
+        'updated_at',
+      ],
+      orderBy: 'COALESCE(last_accessed_at, updated_at) ASC, cache_key ASC',
+    );
+    return rows
+        .map((row) {
+          return CacheEvictionCandidate(
+            participantId: participantId,
+            cacheKey: row['cache_key'] as String,
+            bytes: row['payload_bytes'] as int? ?? 0,
+            lastAccessedAt:
+                _toDateTime(row['last_accessed_at']) ??
+                _toDateTime(row['updated_at']) ??
+                DateTime.fromMillisecondsSinceEpoch(0),
+            priority: CacheEvictionPriority.parsedSnapshot,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Future<bool> deleteCandidate(CacheEvictionCandidate candidate) async {
+    if (candidate.participantId != participantId) {
+      return false;
+    }
+    final db = await _db;
+    final deleted = await db.delete(
+      ComicLocalDb.cachedSnapshotsTable,
+      where: 'cache_key = ?',
+      whereArgs: <Object>[candidate.cacheKey],
+    );
+    return deleted > 0;
+  }
+
+  @override
+  Future<CacheParticipantClearResult> clearRegular() async {
+    final usage = await loadUsage();
+    final db = await _db;
+    final deleted = await db.delete(ComicLocalDb.cachedSnapshotsTable);
+    return CacheParticipantClearResult(
+      deletedEntries: deleted,
+      deletedBytes: usage.clearableBytes,
     );
   }
 

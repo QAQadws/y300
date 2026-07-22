@@ -10,22 +10,19 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  test(
-    'image cache limit uses the stable default when storage is empty',
-    () async {
-      final repository = DataStorageSettingsRepositoryImpl(
-        storageLocationRepository: _FakeStorageLocationRepository(),
-      );
+  test('cache limit uses the stable default when storage is empty', () async {
+    final repository = DataStorageSettingsRepositoryImpl(
+      storageLocationRepository: _FakeStorageLocationRepository(),
+    );
 
-      expect(
-        await repository.getImageCacheMaxBytes(),
-        DataStorageSettingsRepositoryImpl.defaultImageCacheMaxBytes,
-      );
-    },
-  );
+    expect(
+      await repository.getCacheMaxBytes(),
+      DataStorageSettingsRepositoryImpl.defaultCacheMaxBytes,
+    );
+  });
 
   test(
-    'image cache limit reads, normalizes, and writes the stable key',
+    'cache limit migrates and normalizes the legacy image-only key',
     () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'image_cache_max_bytes': 64 * 1024 * 1024,
@@ -35,16 +32,38 @@ void main() {
       );
 
       expect(
-        await repository.getImageCacheMaxBytes(),
-        DataStorageSettingsRepositoryImpl.minImageCacheMaxBytes,
+        await repository.getCacheMaxBytes(),
+        DataStorageSettingsRepositoryImpl.minCacheMaxBytes,
       );
 
-      await repository.setImageCacheMaxBytes(4096 * 1024 * 1024);
+      final migratedPrefs = await SharedPreferences.getInstance();
+      expect(
+        migratedPrefs.getInt('storage.cache.max_bytes.v1'),
+        DataStorageSettingsRepositoryImpl.minCacheMaxBytes,
+      );
+
+      await repository.setCacheMaxBytes(4096 * 1024 * 1024);
       final prefs = await SharedPreferences.getInstance();
       expect(
-        prefs.getInt('image_cache_max_bytes'),
-        DataStorageSettingsRepositoryImpl.maxImageCacheMaxBytes,
+        prefs.getInt('storage.cache.max_bytes.v1'),
+        DataStorageSettingsRepositoryImpl.maxCacheMaxBytes,
       );
+      expect(prefs.getInt('image_cache_max_bytes'), 64 * 1024 * 1024);
+    },
+  );
+
+  test(
+    'new unified cache limit takes precedence over the legacy key',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'storage.cache.max_bytes.v1': 768 * 1024 * 1024,
+        'image_cache_max_bytes': 256 * 1024 * 1024,
+      });
+      final repository = DataStorageSettingsRepositoryImpl(
+        storageLocationRepository: _FakeStorageLocationRepository(),
+      );
+
+      expect(await repository.getCacheMaxBytes(), 768 * 1024 * 1024);
     },
   );
 }

@@ -25,6 +25,7 @@ class _StorageUsageOverview extends StatelessWidget {
         '缓存与数据总览',
         style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
       ),
+      subtitle: Text('应用数据总计：${formatDataStorageBytes(report.totalBytes)}'),
       children: [
         const SizedBox(height: 4),
         for (final section in report.sections) ...[

@@ -54,22 +54,22 @@ class DataStoragePage extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '总计：${formatDataStorageBytes(viewState.usageReport.totalBytes)}',
-                key: const Key('data-storage-usage-total'),
+                formatDataStorageBytes(viewState.clearableCacheBytes),
+                key: const Key('data-storage-clearable-cache-size'),
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
               buildDataStorageDebugOverview(viewState.usageReport),
               const SizedBox(height: 8),
-              _ImageCacheLimitControl(
-                valueBytes: viewState.imageCacheMaxBytes,
+              _CacheLimitControl(
+                valueBytes: viewState.cacheMaxBytes,
                 enabled: !viewState.isUpdating,
                 onCommit: (bytes) => ref
                     .read(dataStorageControllerProvider.notifier)
-                    .updateImageCacheMaxBytes(bytes),
+                    .updateCacheMaxBytes(bytes),
               ),
               Text(
-                '清理页面缓存（帖子列表/详情）与漫画页、帖子图片缓存；浏览记录、封面、头像、表情和已下载内容不会被清除。',
+                '清理 HTML、解析快照与常规图片缓存；长期缓存、封面、下载和用户数据会保留。',
                 key: const Key('data-storage-cache-hint'),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -138,8 +138,8 @@ class DataStoragePage extends ConsumerWidget {
   }
 }
 
-class _ImageCacheLimitControl extends StatefulWidget {
-  const _ImageCacheLimitControl({
+class _CacheLimitControl extends StatefulWidget {
+  const _CacheLimitControl({
     required this.valueBytes,
     required this.enabled,
     required this.onCommit,
@@ -154,11 +154,10 @@ class _ImageCacheLimitControl extends StatefulWidget {
   final ValueChanged<int> onCommit;
 
   @override
-  State<_ImageCacheLimitControl> createState() =>
-      _ImageCacheLimitControlState();
+  State<_CacheLimitControl> createState() => _CacheLimitControlState();
 }
 
-class _ImageCacheLimitControlState extends State<_ImageCacheLimitControl> {
+class _CacheLimitControlState extends State<_CacheLimitControl> {
   late double _valueMb;
   late int _committedMb;
   bool _dragging = false;
@@ -170,7 +169,7 @@ class _ImageCacheLimitControlState extends State<_ImageCacheLimitControl> {
   }
 
   @override
-  void didUpdateWidget(_ImageCacheLimitControl oldWidget) {
+  void didUpdateWidget(_CacheLimitControl oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.enabled) {
       _dragging = false;
@@ -188,13 +187,13 @@ class _ImageCacheLimitControlState extends State<_ImageCacheLimitControl> {
       children: [
         Text(
           '最大缓存：$valueMb MB',
-          key: const Key('data-storage-image-cache-max-label'),
+          key: const Key('data-storage-cache-max-label'),
         ),
         Slider(
-          key: const Key('data-storage-image-cache-max-slider'),
+          key: const Key('data-storage-cache-max-slider'),
           value: _valueMb,
-          min: _ImageCacheLimitControl._minMb,
-          max: _ImageCacheLimitControl._maxMb,
+          min: _CacheLimitControl._minMb,
+          max: _CacheLimitControl._maxMb,
           divisions: 15,
           label: '$valueMb MB',
           onChangeStart: widget.enabled ? (_) => _dragging = true : null,
@@ -214,14 +213,14 @@ class _ImageCacheLimitControlState extends State<_ImageCacheLimitControl> {
       return;
     }
     _committedMb = nextMb;
-    widget.onCommit(nextMb * _ImageCacheLimitControl._megabyte);
+    widget.onCommit(nextMb * _CacheLimitControl._megabyte);
   }
 
   void _syncFromBytes(int bytes) {
-    final megabytes = (bytes / _ImageCacheLimitControl._megabyte)
+    final megabytes = (bytes / _CacheLimitControl._megabyte)
         .round()
         .toDouble()
-        .clamp(_ImageCacheLimitControl._minMb, _ImageCacheLimitControl._maxMb)
+        .clamp(_CacheLimitControl._minMb, _CacheLimitControl._maxMb)
         .toDouble();
     _valueMb = megabytes;
     _committedMb = megabytes.round();

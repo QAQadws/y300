@@ -7,6 +7,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
@@ -44,7 +45,10 @@ class CacheManagerImageFileDownloader implements ImageFileDownloader {
 }
 
 class DefaultImageCacheService
-    implements ImageCacheService, ImageCacheDimensionRecorder {
+    implements
+        ImageCacheService,
+        ImageCacheDimensionRecorder,
+        CacheBudgetParticipant {
   DefaultImageCacheService({
     required ImageCacheRepository repository,
     required Future<BaseCacheManager> cacheManagerFuture,
@@ -52,6 +56,7 @@ class DefaultImageCacheService
     ImageRequestHeaderBuilder? headerBuilder,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
     ImageFileDownloader downloader = const CacheManagerImageFileDownloader(),
+    CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
     CacheDiagnosticRecorder diagnosticRecorder =
         const NoopCacheDiagnosticRecorder(),
   }) : _repository = repository,
@@ -60,6 +65,7 @@ class DefaultImageCacheService
        _headerBuilder = headerBuilder,
        _urlResolver = urlResolver,
        _downloader = downloader,
+       _mutationReporter = mutationReporter,
        _diagnosticRecorder = diagnosticRecorder;
 
   final ImageCacheRepository _repository;
@@ -68,6 +74,7 @@ class DefaultImageCacheService
   final ImageRequestHeaderBuilder? _headerBuilder;
   final SiteUrlResolver _urlResolver;
   final ImageFileDownloader _downloader;
+  final CacheMutationReporter _mutationReporter;
   final CacheDiagnosticRecorder _diagnosticRecorder;
   final Map<String, Future<CachedImageResult>> _ensureTasks =
       <String, Future<CachedImageResult>>{};
@@ -224,6 +231,7 @@ class DefaultImageCacheService
           height: sourceChanged ? null : existing?.height,
         ),
       );
+      _mutationReporter.reportMutation(CacheNamespace.image);
       _recordImageEvent(
         event: 'write',
         request: request,
@@ -442,16 +450,13 @@ class DefaultImageCacheService
       await clearUnprotected();
       return;
     }
-    var usage = await calculateUsageBytes();
+    var usage = (await loadUsage()).budgetedBytes;
     if (usage <= maxBytes) {
       return;
     }
-    // 容量压力下先淘汰 ephemeral，再在仍超限时才动 sticky（轮播图/表情/版块顶部
-    // 图等长期缓存）。protected（封面/已下载）始终不参与（仓储已按 protected=0 过滤）。
     final records = await _repository.listUnprotectedByAccessTime();
-    final ordered = _ephemeralFirst(records);
     var deleted = 0;
-    for (final record in ordered) {
+    for (final record in records.where(_isRegularRecord)) {
       await _deleteRecord(record);
       deleted += 1;
       usage -= record.bytes;
@@ -476,40 +481,7 @@ class DefaultImageCacheService
 
   @override
   Future<void> clearUnprotected() async {
-    // “一键清理”只清可清缓存（ephemeral），保留 sticky 长期缓存，使发帖预览/
-    // 论坛首屏不因普通清理立即退化（对齐缓存方案 §11.1）。
-    final records = await _repository.listUnprotectedByAccessTime();
-    final clearable = records
-        .where(
-          (record) => record.retentionClass == ImageRetentionClass.ephemeral,
-        )
-        .toList(growable: false);
-    for (final record in clearable) {
-      await _deleteRecord(record);
-    }
-    _diagnosticRecorder.record(
-      CacheDiagnosticEvent(
-        event: 'prune',
-        namespace: CacheNamespace.image,
-        bucket: StorageBucket.imageCache,
-        reason: 'clear_unprotected',
-        fields: <String, Object?>{'deleted': clearable.length},
-      ),
-    );
-  }
-
-  /// 按“ephemeral 优先、sticky 其次”排序（各自仍保持调用方传入的 LRU 顺序）。
-  List<CachedImageRecord> _ephemeralFirst(List<CachedImageRecord> records) {
-    final ephemeral = <CachedImageRecord>[];
-    final sticky = <CachedImageRecord>[];
-    for (final record in records) {
-      if (record.retentionClass == ImageRetentionClass.sticky) {
-        sticky.add(record);
-      } else {
-        ephemeral.add(record);
-      }
-    }
-    return <CachedImageRecord>[...ephemeral, ...sticky];
+    await clearRegular();
   }
 
   @override
@@ -538,6 +510,102 @@ class DefaultImageCacheService
       ),
     );
     return records.length;
+  }
+
+  @override
+  String get participantId => 'image';
+
+  @override
+  Future<CacheParticipantUsage> loadUsage() async {
+    final groups = await _repository.calculateUsageGroups();
+    var regularBytes = 0;
+    var longTermBytes = 0;
+    for (final group in groups) {
+      if (group.protected || _isProtectedRetention(group.retentionClass)) {
+        continue;
+      }
+      if (group.retentionClass == ImageRetentionClass.sticky.dbValue) {
+        longTermBytes += group.bytes;
+      } else {
+        regularBytes += group.bytes;
+      }
+    }
+    return CacheParticipantUsage(
+      clearableBytes: regularBytes,
+      budgetedBytes: regularBytes,
+      longTermBytes: longTermBytes,
+    );
+  }
+
+  @override
+  Future<List<CacheEvictionCandidate>> loadEvictionCandidates() async {
+    final records = await _repository.listUnprotectedByAccessTime();
+    return records
+        .where(_isRegularRecord)
+        .map((record) {
+          return CacheEvictionCandidate(
+            participantId: participantId,
+            cacheKey: record.cacheKey,
+            bytes: record.bytes,
+            lastAccessedAt: record.lastAccessedAt ?? record.updatedAt,
+            priority: record.retentionClass == ImageRetentionClass.recentReader
+                ? CacheEvictionPriority.recentReaderImage
+                : CacheEvictionPriority.regularImage,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Future<bool> deleteCandidate(CacheEvictionCandidate candidate) async {
+    if (candidate.participantId != participantId) {
+      return false;
+    }
+    final record = await _repository.getByKey(candidate.cacheKey);
+    if (record == null || !_isRegularRecord(record)) {
+      return false;
+    }
+    await _deleteRecord(record);
+    return true;
+  }
+
+  @override
+  Future<CacheParticipantClearResult> clearRegular() async {
+    final records = await _repository.listUnprotectedByAccessTime();
+    final clearable = records.where(_isRegularRecord).toList(growable: false);
+    var deletedBytes = 0;
+    for (final record in clearable) {
+      await _deleteRecord(record);
+      deletedBytes += record.bytes;
+    }
+    _diagnosticRecorder.record(
+      CacheDiagnosticEvent(
+        event: 'prune',
+        namespace: CacheNamespace.image,
+        bucket: StorageBucket.imageCache,
+        reason: 'clear_regular',
+        fields: <String, Object?>{
+          'deleted': clearable.length,
+          'deletedBytes': deletedBytes,
+        },
+      ),
+    );
+    return CacheParticipantClearResult(
+      deletedEntries: clearable.length,
+      deletedBytes: deletedBytes,
+    );
+  }
+
+  bool _isRegularRecord(CachedImageRecord record) {
+    return !record.protected &&
+        record.retentionClass != ImageRetentionClass.sticky &&
+        record.retentionClass != ImageRetentionClass.protected &&
+        record.retentionClass != ImageRetentionClass.downloaded;
+  }
+
+  bool _isProtectedRetention(String retentionClass) {
+    return retentionClass == ImageRetentionClass.protected.dbValue ||
+        retentionClass == ImageRetentionClass.downloaded.dbValue;
   }
 
   CachedImageRecord _recordFromRequest(

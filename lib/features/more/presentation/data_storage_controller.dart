@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
@@ -10,9 +11,9 @@ import 'package:y300/features/storage/domain/download_storage_service.dart';
 
 class DataStorageViewState {
   const DataStorageViewState({
-    required this.imageCacheUsageBytes,
+    required this.clearableCacheBytes,
     required this.usageReport,
-    required this.imageCacheMaxBytes,
+    required this.cacheMaxBytes,
     required this.storagePath,
     required this.defaultStoragePath,
     required this.customStoragePath,
@@ -20,14 +21,20 @@ class DataStorageViewState {
     this.hint,
   });
 
-  final int imageCacheUsageBytes;
+  final int clearableCacheBytes;
   final StorageUsageReport usageReport;
-  final int imageCacheMaxBytes;
+  final int cacheMaxBytes;
   final String storagePath;
   final String defaultStoragePath;
   final String? customStoragePath;
   final bool isUpdating;
   final String? hint;
+
+  @Deprecated('Use clearableCacheBytes instead.')
+  int get imageCacheUsageBytes => clearableCacheBytes;
+
+  @Deprecated('Use cacheMaxBytes instead.')
+  int get imageCacheMaxBytes => cacheMaxBytes;
 
   @Deprecated('Use defaultStoragePath instead.')
   String get defaultDirectory => defaultStoragePath;
@@ -39,9 +46,9 @@ class DataStorageViewState {
   String get effectiveDirectory => storagePath;
 
   DataStorageViewState copyWith({
-    int? imageCacheUsageBytes,
+    int? clearableCacheBytes,
     StorageUsageReport? usageReport,
-    int? imageCacheMaxBytes,
+    int? cacheMaxBytes,
     String? storagePath,
     String? defaultStoragePath,
     String? customStoragePath,
@@ -51,9 +58,9 @@ class DataStorageViewState {
     bool clearHint = false,
   }) {
     return DataStorageViewState(
-      imageCacheUsageBytes: imageCacheUsageBytes ?? this.imageCacheUsageBytes,
+      clearableCacheBytes: clearableCacheBytes ?? this.clearableCacheBytes,
       usageReport: usageReport ?? this.usageReport,
-      imageCacheMaxBytes: imageCacheMaxBytes ?? this.imageCacheMaxBytes,
+      cacheMaxBytes: cacheMaxBytes ?? this.cacheMaxBytes,
       storagePath: storagePath ?? this.storagePath,
       defaultStoragePath: defaultStoragePath ?? this.defaultStoragePath,
       customStoragePath: clearCustomStoragePath
@@ -96,13 +103,14 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     _storageAccountingService = ref.read(storageAccountingServiceProvider);
     _downloadStorageService = ref.read(downloadStorageServiceProvider);
     final base = await _loadStorageState();
-    final usageReport = await _storageAccountingService.loadUsageReport();
-    final maxBytes = await _repository.getImageCacheMaxBytes();
+    final usageReport = await _loadDiagnosticUsageReport();
+    final capacityReport = await _cacheMaintenanceService.loadCapacityReport();
+    final maxBytes = await _repository.getCacheMaxBytes();
 
     return DataStorageViewState(
-      imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
+      clearableCacheBytes: capacityReport.clearableBytes,
       usageReport: usageReport,
-      imageCacheMaxBytes: maxBytes,
+      cacheMaxBytes: maxBytes,
       storagePath: base.storagePath,
       defaultStoragePath: base.defaultStoragePath,
       customStoragePath: base.customStoragePath,
@@ -116,19 +124,22 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
       return;
     }
     state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
-    await _cacheMaintenanceService.clear(
+    final result = await _cacheMaintenanceService.clear(
       const CacheClearRequest(scope: CacheClearScope.userCleanup),
     );
-    final usageReport = await _cacheMaintenanceService.usageAfterMaintenance();
+    final usageReport = await _loadDiagnosticUsageReport(
+      afterMaintenance: true,
+    );
+    final capacityReport = await _cacheMaintenanceService.loadCapacityReport();
     if (!ref.mounted) {
       return;
     }
     state = AsyncData(
       current.copyWith(
-        imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
+        clearableCacheBytes: capacityReport.clearableBytes,
         usageReport: usageReport,
         isUpdating: false,
-        hint: '已清理页面缓存与漫画/帖子图片缓存，浏览记录已保留',
+        hint: result.isPartial ? '部分缓存清理失败，请稍后重试' : '已清理常规缓存，长期缓存、下载与用户数据已保留',
       ),
     );
   }
@@ -136,30 +147,38 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
   @Deprecated('Use clearCache instead.')
   Future<void> clearImageCache() => clearCache();
 
-  Future<void> updateImageCacheMaxBytes(int bytes) async {
+  Future<void> updateCacheMaxBytes(int bytes) async {
     final current = state.value;
     if (current == null || current.isUpdating) {
       return;
     }
     state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
-    await _repository.setImageCacheMaxBytes(bytes);
-    final maxBytes = await _repository.getImageCacheMaxBytes();
+    await _repository.setCacheMaxBytes(bytes);
+    final maxBytes = await _repository.getCacheMaxBytes();
     await _cacheMaintenanceService.prune(
-      CachePruneRequest(imageCacheMaxBytes: maxBytes),
+      CachePruneRequest(maxCacheBytes: maxBytes),
     );
-    final usageReport = await _cacheMaintenanceService.usageAfterMaintenance();
+    final usageReport = await _loadDiagnosticUsageReport(
+      afterMaintenance: true,
+    );
+    final capacityReport = await _cacheMaintenanceService.loadCapacityReport();
     if (!ref.mounted) {
       return;
     }
     state = AsyncData(
       current.copyWith(
-        imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
+        clearableCacheBytes: capacityReport.clearableBytes,
         usageReport: usageReport,
-        imageCacheMaxBytes: maxBytes,
+        cacheMaxBytes: maxBytes,
         isUpdating: false,
-        hint: '图片缓存上限已更新',
+        hint: '最大缓存已更新',
       ),
     );
+  }
+
+  @Deprecated('Use updateCacheMaxBytes instead.')
+  Future<void> updateImageCacheMaxBytes(int bytes) {
+    return updateCacheMaxBytes(bytes);
   }
 
   Future<void> chooseStorageDirectory() async {
@@ -234,13 +253,14 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
       return;
     }
     state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
-    final usageReport = await _storageAccountingService.loadUsageReport();
+    final usageReport = await _loadDiagnosticUsageReport();
+    final capacityReport = await _cacheMaintenanceService.loadCapacityReport();
     if (!ref.mounted) {
       return;
     }
     state = AsyncData(
       current.copyWith(
-        imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
+        clearableCacheBytes: capacityReport.clearableBytes,
         usageReport: usageReport,
         isUpdating: false,
         hint: '存储统计已刷新',
@@ -255,6 +275,7 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     }
     state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
     final usageReport = await _storageAccountingService.loadUsageReport();
+    final capacityReport = await _cacheMaintenanceService.loadCapacityReport();
     final result = await _cacheDiagnosticExportService.exportUsageReport(
       usageReport,
     );
@@ -263,7 +284,7 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     }
     state = AsyncData(
       current.copyWith(
-        imageCacheUsageBytes: _imageCacheUsageBytes(usageReport),
+        clearableCacheBytes: capacityReport.clearableBytes,
         usageReport: usageReport,
         isUpdating: false,
         hint: '缓存诊断已导出：${result.path}',
@@ -284,13 +305,20 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     );
   }
 
-  int _imageCacheUsageBytes(StorageUsageReport report) {
-    for (final section in report.sections) {
-      if (section.bucket == StorageBucket.imageCache) {
-        return section.bytes;
-      }
+  Future<StorageUsageReport> _loadDiagnosticUsageReport({
+    bool afterMaintenance = false,
+  }) {
+    if (!kDebugMode) {
+      return Future<StorageUsageReport>.value(
+        StorageUsageReport.fromSections(
+          sections: const <StorageUsageSection>[],
+          calculatedAt: DateTime.now(),
+        ),
+      );
     }
-    return 0;
+    return afterMaintenance
+        ? _cacheMaintenanceService.usageAfterMaintenance()
+        : _storageAccountingService.loadUsageReport();
   }
 }
 

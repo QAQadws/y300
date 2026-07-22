@@ -42,6 +42,7 @@ abstract final class PreferenceKeyNames {
       'library.shelf.favorite.migration_version';
 
   static const imageCacheMaxBytes = 'image_cache_max_bytes';
+  static const cacheMaxBytesV1 = 'storage.cache.max_bytes.v1';
   static const legacyComicCacheDirectory = 'comic_cache_dir';
   static const legacyCacheRootMigrationVersion =
       'storage.cache_root.migration_version';

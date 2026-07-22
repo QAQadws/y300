@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
+import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_recorder.dart';
+import 'package:y300/features/cache/data/services/cache_mutation_bus.dart';
 import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
 import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
@@ -14,6 +18,7 @@ import 'package:y300/features/cache/data/services/protected_cover_file_store.dar
 import 'package:y300/features/cache/data/services/storage_accounting_service.dart';
 import 'package:y300/features/cache/data/services/storage_usage_adapters.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
@@ -54,6 +59,12 @@ final imageCacheRepositoryProvider = Provider<ImageCacheRepository>((ref) {
   return LocalImageCacheRepository.lazy(() => ComicLocalDb.open());
 });
 
+final cacheMutationBusProvider = Provider<CacheMutationBus>((ref) {
+  final bus = CacheMutationBus();
+  ref.onDispose(() => unawaited(bus.dispose()));
+  return bus;
+});
+
 final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
   return LocalDocumentCacheService.lazy(
     // The thread repository can be created by a widget test before the
@@ -62,6 +73,7 @@ final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
     // session rather than a new open attempt per cache operation.
     () => ComicLocalDb.open(),
     diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
+    mutationReporter: ref.watch(cacheMutationBusProvider),
   );
 });
 
@@ -70,6 +82,7 @@ final parsedSnapshotCacheServiceProvider = Provider<ParsedSnapshotCacheService>(
     return LocalParsedSnapshotCacheService.lazy(
       () => ComicLocalDb.open(),
       diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
+      mutationReporter: ref.watch(cacheMutationBusProvider),
     );
   },
 );
@@ -102,6 +115,7 @@ final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
     cacheManagerFuture: ref.watch(imageCacheManagerProvider.future),
     directoryResolver: ref.watch(imageCacheDirectoryResolverProvider),
     headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+    mutationReporter: ref.watch(cacheMutationBusProvider),
     diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
   );
 });
@@ -151,11 +165,25 @@ final cacheMaintenanceServiceProvider = Provider<CacheMaintenanceService>((
     documentCacheService: ref.watch(documentCacheServiceProvider),
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
     storageAccountingService: ref.watch(storageAccountingServiceProvider),
+    cacheBudgetCoordinator: ref.watch(cacheBudgetCoordinatorProvider),
     protectedCoverMaintenance: ref.watch(
       protectedCoverCacheMaintenanceProvider,
     ),
     protectedCoverOwnerExists: (_) => true,
     diagnosticRecorder: ref.watch(cacheDiagnosticRecorderProvider),
+  );
+});
+
+final cacheBudgetCoordinatorProvider = Provider<CacheBudgetCoordinator>((ref) {
+  final services = <Object>[
+    ref.watch(imageCacheServiceProvider),
+    ref.watch(documentCacheServiceProvider),
+    ref.watch(parsedSnapshotCacheServiceProvider),
+  ];
+  return CacheBudgetCoordinator(
+    participants: services.whereType<CacheBudgetParticipant>().toList(
+      growable: false,
+    ),
   );
 });
 

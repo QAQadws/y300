@@ -6,6 +6,7 @@ import 'package:y300/core/preferences/preference_keys.dart';
 void main() {
   test('active SharedPreferences compatibility aliases remain stable', () {
     expect(AppStorageKeys.imageCacheMaxBytes, 'image_cache_max_bytes');
+    expect(AppStorageKeys.cacheMaxBytesV1, 'storage.cache.max_bytes.v1');
     expect(AppStorageKeys.downloadStorageDirectory, 'download_storage_dir');
     expect(AppStorageKeys.appThemePreference, 'app_theme_preference');
     expect(AppStorageKeys.forumShellMode, 'forum_shell_mode');

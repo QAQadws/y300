@@ -1,28 +1,35 @@
 import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 
-class LocalDocumentCacheService implements DocumentCacheService {
+class LocalDocumentCacheService
+    implements DocumentCacheService, CacheBudgetParticipant {
   LocalDocumentCacheService(
     Future<Database> dbFuture, {
     CacheDiagnosticRecorder diagnosticRecorder =
         const NoopCacheDiagnosticRecorder(),
+    CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
   }) : _dbFutureFactory = (() => dbFuture),
+       _mutationReporter = mutationReporter,
        _diagnosticRecorder = diagnosticRecorder;
 
   LocalDocumentCacheService.lazy(
     Future<Database> Function() dbFutureFactory, {
     CacheDiagnosticRecorder diagnosticRecorder =
         const NoopCacheDiagnosticRecorder(),
+    CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
   }) : _dbFutureFactory = dbFutureFactory,
+       _mutationReporter = mutationReporter,
        _diagnosticRecorder = diagnosticRecorder;
 
   final Future<Database> Function() _dbFutureFactory;
   Future<Database>? _dbFuture;
+  final CacheMutationReporter _mutationReporter;
   final CacheDiagnosticRecorder _diagnosticRecorder;
 
   Future<Database> get _db => _dbFuture ??= _dbFutureFactory();
@@ -80,6 +87,7 @@ class LocalDocumentCacheService implements DocumentCacheService {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _mutationReporter.reportMutation(CacheNamespace.document);
     _recordDocumentEvent(
       event: 'write',
       cacheKey: document.cacheKey,
@@ -195,6 +203,74 @@ class LocalDocumentCacheService implements DocumentCacheService {
       bytes: total,
       clearable: total > 0,
       slices: slices,
+    );
+  }
+
+  @override
+  String get participantId => 'document';
+
+  @override
+  Future<CacheParticipantUsage> loadUsage() async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT COALESCE(SUM(body_bytes), 0) AS total
+      FROM ${ComicLocalDb.cachedDocumentsTable}
+      ''');
+    final bytes = rows.first['total'] as int? ?? 0;
+    return CacheParticipantUsage(clearableBytes: bytes, budgetedBytes: bytes);
+  }
+
+  @override
+  Future<List<CacheEvictionCandidate>> loadEvictionCandidates() async {
+    final db = await _db;
+    final rows = await db.query(
+      ComicLocalDb.cachedDocumentsTable,
+      columns: const <String>[
+        'cache_key',
+        'body_bytes',
+        'last_accessed_at',
+        'updated_at',
+      ],
+      orderBy: 'COALESCE(last_accessed_at, updated_at) ASC, cache_key ASC',
+    );
+    return rows
+        .map((row) {
+          return CacheEvictionCandidate(
+            participantId: participantId,
+            cacheKey: row['cache_key'] as String,
+            bytes: row['body_bytes'] as int? ?? 0,
+            lastAccessedAt:
+                _toDateTime(row['last_accessed_at']) ??
+                _toDateTime(row['updated_at']) ??
+                DateTime.fromMillisecondsSinceEpoch(0),
+            priority: CacheEvictionPriority.document,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Future<bool> deleteCandidate(CacheEvictionCandidate candidate) async {
+    if (candidate.participantId != participantId) {
+      return false;
+    }
+    final db = await _db;
+    final deleted = await db.delete(
+      ComicLocalDb.cachedDocumentsTable,
+      where: 'cache_key = ?',
+      whereArgs: <Object>[candidate.cacheKey],
+    );
+    return deleted > 0;
+  }
+
+  @override
+  Future<CacheParticipantClearResult> clearRegular() async {
+    final usage = await loadUsage();
+    final db = await _db;
+    final deleted = await db.delete(ComicLocalDb.cachedDocumentsTable);
+    return CacheParticipantClearResult(
+      deletedEntries: deleted,
+      deletedBytes: usage.clearableBytes,
     );
   }
 

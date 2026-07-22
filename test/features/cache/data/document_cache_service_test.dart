@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
@@ -171,4 +172,65 @@ void main() {
       expect(await service.getByKey('new'), isNotNull);
     },
   );
+
+  test(
+    'document cache participates in unified capacity and LRU cleanup',
+    () async {
+      const dbName = 'document_cache_budget_test.db';
+      await deleteDatabase(dbName);
+      final db = await ComicLocalDb.open(databaseName: dbName);
+      final reporter = _RecordingMutationReporter();
+      final service = LocalDocumentCacheService(
+        Future.value(db),
+        mutationReporter: reporter,
+      );
+      addTearDown(() async {
+        await db.close();
+        await deleteDatabase(dbName);
+      });
+
+      Future<void> put(String key, String body, DateTime updatedAt) {
+        return service.put(
+          CachedDocument(
+            cacheKey: key,
+            ownerType: CacheOwnerType.thread,
+            ownerId: key,
+            sourceUrl: 'https://bbs.yamibo.com/$key',
+            body: body,
+            fetchedAt: updatedAt,
+            updatedAt: updatedAt,
+          ),
+        );
+      }
+
+      await put('older', 'abc', DateTime(2026, 1, 1));
+      await put('newer', 'defgh', DateTime(2026, 1, 2));
+
+      final usage = await service.loadUsage();
+      final candidates = await service.loadEvictionCandidates();
+      expect(usage.budgetedBytes, 8);
+      expect(candidates.map((candidate) => candidate.cacheKey), <String>[
+        'older',
+        'newer',
+      ]);
+      expect(reporter.namespaces, <CacheNamespace>[
+        CacheNamespace.document,
+        CacheNamespace.document,
+      ]);
+
+      expect(await service.deleteCandidate(candidates.first), isTrue);
+      final cleared = await service.clearRegular();
+      expect(cleared.deletedEntries, 1);
+      expect(cleared.deletedBytes, 5);
+    },
+  );
+}
+
+class _RecordingMutationReporter implements CacheMutationReporter {
+  final List<CacheNamespace> namespaces = <CacheNamespace>[];
+
+  @override
+  void reportMutation(CacheNamespace namespace) {
+    namespaces.add(namespace);
+  }
 }

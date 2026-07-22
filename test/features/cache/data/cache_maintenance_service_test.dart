@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
+import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -12,35 +14,44 @@ void main() {
     final imageCache = _FakeImageCacheService();
     final documentCache = _FakeDocumentCacheService(deleteOlderThanResult: 2);
     final snapshotCache = _FakeSnapshotCacheService(deleteExpiredResult: 3);
+    final participant = _FakeBudgetParticipant(bytes: 128, entryCount: 3);
     final service = DefaultCacheMaintenanceService(
       imageCacheService: imageCache,
       documentCacheService: documentCache,
       snapshotCacheService: snapshotCache,
       storageAccountingService: const _FakeStorageAccountingService(),
+      cacheBudgetCoordinator: CacheBudgetCoordinator(
+        participants: <CacheBudgetParticipant>[participant],
+      ),
       now: () => DateTime(2026, 6, 27),
     );
 
     final result = await service.clear(const CacheClearRequest());
 
-    expect(imageCache.clearUnprotectedCalls, 1);
+    expect(imageCache.clearUnprotectedCalls, 0);
     expect(result.imageCacheCleared, isTrue);
-    expect(result.deletedDocuments, 2);
-    expect(result.deletedSnapshots, 3);
+    expect(result.deletedDocuments, 0);
+    expect(result.deletedSnapshots, 0);
+    expect(result.deletedRegularEntries, 3);
+    expect(result.deletedBytes, 128);
     expect(result.deletedProtectedCoverRecords, 0);
   });
 
   test(
-    'clear userCleanup clears documents+snapshots and only default image roles',
+    'clear userCleanup delegates to all regular cache participants',
     () async {
-      final imageCache = _FakeImageCacheService()
-        ..clearUnprotectedByRolesResult = 7;
+      final imageCache = _FakeImageCacheService();
       final documentCache = _FakeDocumentCacheService(deleteOlderThanResult: 4);
       final snapshotCache = _FakeSnapshotCacheService(deleteExpiredResult: 5);
+      final participant = _FakeBudgetParticipant(bytes: 512, entryCount: 7);
       final service = DefaultCacheMaintenanceService(
         imageCacheService: imageCache,
         documentCacheService: documentCache,
         snapshotCacheService: snapshotCache,
         storageAccountingService: const _FakeStorageAccountingService(),
+        cacheBudgetCoordinator: CacheBudgetCoordinator(
+          participants: <CacheBudgetParticipant>[participant],
+        ),
         now: () => DateTime(2026, 6, 27),
       );
 
@@ -48,51 +59,45 @@ void main() {
         const CacheClearRequest(scope: CacheClearScope.userCleanup),
       );
 
-      // 页面缓存被清。
-      expect(documentCache.lastDeleteOlderThan, DateTime(9999, 12, 31));
-      expect(snapshotCache.lastDeleteExpiredAt, DateTime(9999, 12, 31));
-      expect(result.deletedDocuments, 4);
-      expect(result.deletedSnapshots, 5);
-
-      // 图片缓存按默认 role 清，且不走全集清理。
+      expect(documentCache.lastDeleteOlderThan, isNull);
+      expect(snapshotCache.lastDeleteExpiredAt, isNull);
+      expect(result.deletedDocuments, 0);
+      expect(result.deletedSnapshots, 0);
       expect(imageCache.clearUnprotectedCalls, 0);
-      expect(imageCache.clearUnprotectedByRolesCalls, 1);
-      expect(
-        imageCache.lastClearedRoles,
-        [
-          ImageCacheRole.comicPage,
-          ImageCacheRole.threadInline,
-          ImageCacheRole.threadAttachment,
-        ],
-      );
+      expect(imageCache.clearUnprotectedByRolesCalls, 0);
       expect(result.imageCacheCleared, isTrue);
-      expect(result.deletedImagesByRole, 7);
+      expect(result.deletedRegularEntries, 7);
+      expect(result.deletedBytes, 512);
     },
   );
 
   test(
-    'prune applies image limit, document age and expired snapshot cleanup',
+    'prune applies unified limit, document age and expired snapshot cleanup',
     () async {
       final imageCache = _FakeImageCacheService();
       final documentCache = _FakeDocumentCacheService(deleteOlderThanResult: 4);
       final snapshotCache = _FakeSnapshotCacheService(deleteExpiredResult: 5);
       final now = DateTime(2026, 6, 27, 12);
+      final participant = _FakeBudgetParticipant(bytes: 2048, entryCount: 2);
       final service = DefaultCacheMaintenanceService(
         imageCacheService: imageCache,
         documentCacheService: documentCache,
         snapshotCacheService: snapshotCache,
         storageAccountingService: const _FakeStorageAccountingService(),
+        cacheBudgetCoordinator: CacheBudgetCoordinator(
+          participants: <CacheBudgetParticipant>[participant],
+        ),
         now: () => now,
       );
 
       final result = await service.prune(
         const CachePruneRequest(
-          imageCacheMaxBytes: 1024,
+          maxCacheBytes: 1024,
           documentMaxAge: Duration(days: 7),
         ),
       );
 
-      expect(imageCache.lastPruneMaxBytes, 1024);
+      expect(imageCache.lastPruneMaxBytes, isNull);
       expect(
         documentCache.lastDeleteOlderThan,
         now.subtract(const Duration(days: 7)),
@@ -100,8 +105,61 @@ void main() {
       expect(snapshotCache.lastDeleteExpiredAt, now);
       expect(result.deletedDocuments, 4);
       expect(result.deletedSnapshots, 5);
+      expect(result.deletedCacheEntries, 2);
+      expect(result.deletedBytes, 2048);
     },
   );
+}
+
+class _FakeBudgetParticipant implements CacheBudgetParticipant {
+  _FakeBudgetParticipant({required this.bytes, required this.entryCount});
+
+  int bytes;
+  final int entryCount;
+
+  @override
+  String get participantId => 'fake';
+
+  @override
+  Future<CacheParticipantUsage> loadUsage() async {
+    return CacheParticipantUsage(clearableBytes: bytes, budgetedBytes: bytes);
+  }
+
+  @override
+  Future<List<CacheEvictionCandidate>> loadEvictionCandidates() async {
+    if (bytes <= 0) {
+      return const <CacheEvictionCandidate>[];
+    }
+    final each = bytes ~/ entryCount;
+    return List<CacheEvictionCandidate>.generate(entryCount, (index) {
+      final candidateBytes = index == entryCount - 1
+          ? bytes - (each * index)
+          : each;
+      return CacheEvictionCandidate(
+        participantId: participantId,
+        cacheKey: 'fake-$index',
+        bytes: candidateBytes,
+        lastAccessedAt: DateTime(2026, 1, index + 1),
+        priority: CacheEvictionPriority.regularImage,
+      );
+    });
+  }
+
+  @override
+  Future<bool> deleteCandidate(CacheEvictionCandidate candidate) async {
+    bytes -= candidate.bytes;
+    return true;
+  }
+
+  @override
+  Future<CacheParticipantClearResult> clearRegular() async {
+    final deletedBytes = bytes;
+    bytes = 0;
+    return CacheParticipantClearResult(
+      deletedEntries: entryCount,
+      deletedBytes: deletedBytes,
+    );
+  }
 }
 
 class _FakeImageCacheService implements ImageCacheService {

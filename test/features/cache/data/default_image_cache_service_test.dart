@@ -458,6 +458,17 @@ void main() {
         retentionClass: ImageRetentionClass.sticky,
         createdAt: DateTime(2026, 1, 1),
         updatedAt: DateTime(2026, 1, 1),
+      )
+      ..records['avatar-1'] = CachedImageRecord(
+        cacheKey: 'avatar-1',
+        ownerType: ImageCacheOwnerType.profile.dbValue,
+        ownerId: 'uid-1',
+        role: ImageCacheRole.avatar.dbValue,
+        bytes: 3,
+        protected: false,
+        retentionClass: ImageRetentionClass.recentReader,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
       );
     final service = DefaultImageCacheService(
       repository: repository,
@@ -465,14 +476,20 @@ void main() {
       directoryResolver: const ImageCacheDirectoryResolver(),
     );
 
+    final usage = await service.loadUsage();
+    expect(usage.budgetedBytes, 6);
+    expect(usage.clearableBytes, 6);
+    expect(usage.longTermBytes, 3);
+
     await service.clearUnprotected();
 
-    // ephemeral 被清，sticky 保留。
+    // 常规与 recentReader 被清，sticky 保留。
     expect(repository.records.containsKey('thread-1'), isFalse);
+    expect(repository.records.containsKey('avatar-1'), isFalse);
     expect(repository.records.containsKey('smiley-1'), isTrue);
   });
 
-  test('pruneToLimit evicts ephemeral before sticky', () async {
+  test('pruneToLimit excludes sticky from the regular cache budget', () async {
     final repository = _MemoryImageCacheRepository()
       ..records['smiley-1'] = CachedImageRecord(
         cacheKey: 'smiley-1',
@@ -505,8 +522,8 @@ void main() {
       directoryResolver: const ImageCacheDirectoryResolver(),
     );
 
-    // 总 200，限 150 -> 需删 1 个。应删 ephemeral 的 thread-1，保留 sticky。
-    await service.pruneToLimit(maxBytes: 150);
+    // 常规缓存 100，长期缓存 100 不计入额度。限额 50 时只删常规缓存。
+    await service.pruneToLimit(maxBytes: 50);
 
     expect(repository.records.containsKey('thread-1'), isFalse);
     expect(repository.records.containsKey('smiley-1'), isTrue);
@@ -570,7 +587,17 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
 
   @override
   Future<List<ImageCacheUsageGroup>> calculateUsageGroups() async {
-    return const <ImageCacheUsageGroup>[];
+    return records.values
+        .map((record) {
+          return ImageCacheUsageGroup(
+            ownerType: record.ownerType,
+            role: record.role,
+            retentionClass: record.retentionClass.dbValue,
+            protected: record.protected,
+            bytes: record.bytes,
+          );
+        })
+        .toList(growable: false);
   }
 
   @override

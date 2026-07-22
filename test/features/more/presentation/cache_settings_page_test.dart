@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -54,7 +55,7 @@ void main() {
 
     expect(find.byType(Scaffold), findsOneWidget);
     expect(
-      find.byKey(const Key('data-storage-image-cache-max-slider')),
+      find.byKey(const Key('data-storage-cache-max-slider')),
       findsOneWidget,
     );
     await tester.scrollUntilVisible(
@@ -99,16 +100,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final slider = find.byKey(const Key('data-storage-image-cache-max-slider'));
+    final slider = find.byKey(const Key('data-storage-cache-max-slider'));
     final gesture = await tester.startGesture(tester.getCenter(slider));
     await gesture.moveBy(const Offset(80, 0));
     await tester.pump();
 
-    expect(repo.setImageCacheMaxBytesCalls, 0);
+    expect(repo.setCacheMaxBytesCalls, 0);
 
     await gesture.up();
     await tester.pumpAndSettle();
-    expect(repo.setImageCacheMaxBytesCalls, 1);
+    expect(repo.setCacheMaxBytesCalls, 1);
   });
 
   testWidgets(
@@ -157,7 +158,7 @@ void main() {
     },
   );
 
-  testWidgets('DataStoragePage renders storage usage report sections', (
+  testWidgets('DataStoragePage separates clearable cache from total storage', (
     tester,
   ) async {
     final repo = _FakeDataStorageSettingsRepository(
@@ -171,7 +172,7 @@ void main() {
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           cacheMaintenanceServiceProvider.overrideWithValue(
-            _FakeCacheMaintenanceService(),
+            _FakeCacheMaintenanceService(clearableBytes: 1024),
           ),
           storageAccountingServiceProvider.overrideWithValue(
             _FakeStorageAccountingService(
@@ -234,6 +235,12 @@ void main() {
                       ),
                     ],
                   ),
+                  StorageUsageSection(
+                    bucket: StorageBucket.download,
+                    label: '下载内容',
+                    bytes: 1024 * 1024,
+                    clearable: false,
+                  ),
                 ],
               ),
             ),
@@ -255,20 +262,28 @@ void main() {
       find.byKey(const Key('data-storage-usage-overview')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('data-storage-usage-total')), findsOneWidget);
+    expect(
+      find.byKey(const Key('data-storage-clearable-cache-size')),
+      findsOneWidget,
+    );
     expect(find.text('缓存与数据总览'), findsOneWidget);
-    expect(find.text('总计：7.0 KB'), findsOneWidget);
-    expect(find.textContaining('浏览记录、封面'), findsOneWidget);
+    expect(find.text('1.0 KB'), findsOneWidget);
+    expect(find.text('应用数据总计：1.0 MB'), findsOneWidget);
+    expect(find.textContaining('长期缓存、封面'), findsOneWidget);
     expect(
       tester
           .widget<ExpansionTile>(
             find.byKey(const Key('data-storage-usage-overview')),
           )
           .subtitle,
-      isNull,
+      isNotNull,
     );
     expect(
-      tester.getTopLeft(find.byKey(const Key('data-storage-usage-total'))).dy,
+      tester
+          .getTopLeft(
+            find.byKey(const Key('data-storage-clearable-cache-size')),
+          )
+          .dy,
       greaterThan(
         tester.getTopLeft(find.byKey(const Key('data-storage-cache-usage'))).dy,
       ),
@@ -460,15 +475,14 @@ void main() {
         ],
       ),
     );
+    final maintenance = _FakeCacheMaintenanceService(clearableBytes: 1024);
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          cacheMaintenanceServiceProvider.overrideWithValue(
-            _FakeCacheMaintenanceService(),
-          ),
+          cacheMaintenanceServiceProvider.overrideWithValue(maintenance),
           storageAccountingServiceProvider.overrideWithValue(accounting),
           cacheDiagnosticExportServiceProvider.overrideWithValue(
             _FakeCacheDiagnosticExportService(),
@@ -497,6 +511,7 @@ void main() {
         ),
       ],
     );
+    maintenance.clearableBytes = 2048;
     await tester.tap(reloadButton);
     await tester.pumpAndSettle();
 
@@ -507,11 +522,11 @@ void main() {
     );
     expect(find.text('存储统计已刷新'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.byKey(const Key('data-storage-usage-total')),
+      find.byKey(const Key('data-storage-clearable-cache-size')),
       -120,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('总计：2.0 KB'), findsOneWidget);
+    expect(find.text('2.0 KB'), findsOneWidget);
   });
 
   testWidgets('DataStoragePage exports cache diagnostics', (tester) async {
@@ -609,8 +624,8 @@ class _FakeDataStorageSettingsRepository
   final String _defaultPath;
   String? _customPath;
   final String? pickedPath;
-  int _maxBytes = DataStorageSettingsRepositoryImpl.defaultImageCacheMaxBytes;
-  int setImageCacheMaxBytesCalls = 0;
+  int _maxBytes = DataStorageSettingsRepositoryImpl.defaultCacheMaxBytes;
+  int setCacheMaxBytesCalls = 0;
 
   String? get customPath => _customPath;
 
@@ -629,11 +644,11 @@ class _FakeDataStorageSettingsRepository
   }
 
   @override
-  Future<int> getImageCacheMaxBytes() async => _maxBytes;
+  Future<int> getCacheMaxBytes() async => _maxBytes;
 
   @override
-  Future<void> setImageCacheMaxBytes(int bytes) async {
-    setImageCacheMaxBytesCalls += 1;
+  Future<void> setCacheMaxBytes(int bytes) async {
+    setCacheMaxBytesCalls += 1;
     _maxBytes = bytes;
   }
 }
@@ -699,7 +714,6 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   }) async {
     return null;
   }
-
 }
 
 class _FakeImageCacheService implements ImageCacheService {
@@ -774,6 +788,10 @@ class _FakeStorageAccountingService implements StorageAccountingService {
 }
 
 class _FakeCacheMaintenanceService implements CacheMaintenanceService {
+  _FakeCacheMaintenanceService({this.clearableBytes = 0});
+
+  int clearableBytes;
+
   @override
   Future<CacheClearResult> clear(CacheClearRequest request) async {
     return const CacheClearResult(
@@ -796,6 +814,16 @@ class _FakeCacheMaintenanceService implements CacheMaintenanceService {
   @override
   Future<StorageUsageReport> usageAfterMaintenance() async {
     return _usageReport();
+  }
+
+  @override
+  Future<CacheCapacityReport> loadCapacityReport() async {
+    return CacheCapacityReport(
+      clearableBytes: clearableBytes,
+      budgetedBytes: clearableBytes,
+      longTermBytes: 0,
+      calculatedAt: DateTime(2026, 6, 27),
+    );
   }
 }
 

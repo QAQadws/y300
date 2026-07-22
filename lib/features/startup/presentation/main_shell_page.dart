@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/history_entry_router.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/data/services/cache_budget_scheduler.dart';
+import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/comic/data/providers/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
@@ -16,13 +19,35 @@ import 'package:y300/features/library_shared/presentation/selection/selection_ac
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
+import 'package:y300/features/more/presentation/data_storage_controller.dart';
 import 'package:y300/features/novel/presentation/novel_tab_page.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 
 final mainShellBackgroundTaskStarterProvider =
     Provider<Future<void> Function()>((ref) {
-      return () => ref.read(comicSearchRefreshQueueServiceProvider).start();
+      return () async {
+        await ref.read(mainShellCacheBudgetSchedulerProvider).start();
+        await ref.read(comicSearchRefreshQueueServiceProvider).start();
+      };
     });
+
+final mainShellCacheBudgetSchedulerProvider = Provider<CacheBudgetScheduler>((
+  ref,
+) {
+  final scheduler = CacheBudgetScheduler(
+    source: ref.watch(cacheMutationBusProvider),
+    enforce: () async {
+      final maxBytes = await ref
+          .read(dataStorageSettingsRepositoryProvider)
+          .getCacheMaxBytes();
+      await ref
+          .read(cacheMaintenanceServiceProvider)
+          .prune(CachePruneRequest(maxCacheBytes: maxBytes));
+    },
+  );
+  ref.onDispose(() => unawaited(scheduler.dispose()));
+  return scheduler;
+});
 
 /// Best-effort startup hook for the system task notification service. Failures
 /// (including a denied permission) must never block the shell, so callers run
