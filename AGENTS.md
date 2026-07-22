@@ -4,51 +4,70 @@
 
 ## 项目背景
 
-本仓库是 Y300 Flutter/Dart 应用。项目包含论坛、收藏、漫画、小说、书架、搜索、帖子详情和本地持久化等功能模块。进入本仓库工作时，必须先理解相关模块的既有写法，并让改动贴合当前架构。
+本仓库是面向 Yamibo 论坛内容的 Y300 Flutter/Dart 客户端。主壳包含论坛、收藏、漫画、小说、记录和更多六个入口，覆盖登录与会话、论坛原生解析/WebView 浏览、HTML-first 帖子详情、发帖与回复、搜索与标签、收藏同步、漫画/小说书架与阅读器、漫画离线下载队列、应用更新、缓存与数据管理等完整流程。
+
+应用同时使用 SQLite、SharedPreferences 和文件系统保存业务数据、阅读状态、偏好、下载及可再生缓存。网络侧统一维护 Cookie、Discuz formhash 与 Yamibo 会话，阅读和同步流程普遍包含缓存、取消、single-flight、generation/owner 隔离及失败恢复。进入仓库工作时，必须先理解目标 feature、共享契约和持久化边界的既有写法，并让改动贴合当前架构与兼容策略。
 
 ## `lib` 架构地图
 
-应用按功能模块组织代码，通用基础设施放在 `core`，跨功能 UI 和契约放在 `shared` 与 `library_shared`，Riverpod provider 是主要依赖组合方式。
+应用按功能模块组织代码：通用基础设施放在 `core`，应用级装配放在 `app`，业务能力放在 `features`，无单一业务归属的 UI 放在 `shared`。Riverpod provider 是主要依赖组合和生命周期管理方式。
 
-- `lib/main.dart`：Flutter 入口文件。
-- `lib/app`：应用顶层装配，例如 `Y300App`。
-- `lib/core/config`：全局配置常量。
-- `lib/core/network`：共享网络基础设施，包括 API client、cookie store、logger、请求头构建和网络 provider。
+- `lib/main.dart`：Flutter 入口、全局初始化和启动前兼容维护。
+- `lib/app`：应用顶层装配；`navigation` 负责跨 feature 路由，`settings` 负责外观设置，`theme` 负责主题 token、语义色和组件主题。
+- `lib/core/config`：应用配置、稳定存储 key 和技术性存储 key。
+- `lib/core/media`：封面裁剪/焦点、图片降采样、显示 provider 和 Flutter 图片内存缓存调优。
+- `lib/core/network`：共享网络基础设施，包括 `ApiResult`、Yamibo JSON/HTML gateway、Cookie 与会话/formhash 存储、WebView Cookie 同步、图片请求头、URL 解析和网络诊断。
+- `lib/core/preferences`：类型化偏好 key、SharedPreferences 访问、provider 和旧偏好迁移。
 - `lib/core/utils`：跨模块使用的小型解析工具和通用工具。
-- `lib/shared/widgets`：不属于单一功能模块的可复用 UI 组件，尤其是书架相关展示组件。
+- `lib/features`：按业务能力拆分的 feature；跨漫画/小说/收藏的书架能力位于 `library_shared`，跨图片阅读器能力位于 `reader_shared`，发帖/回复共用编辑器能力位于 `composer_shared`。
+- `lib/shared/widgets`：不属于单一 feature 的轻量可复用 UI，包括论坛原生 surface、头像、瞬时反馈和书架视觉组件。
 
 大多数 feature 模块采用轻量 Clean Architecture 分层：
 
-- `data`：repository、API/data-source 实现、本地持久化、Riverpod provider、DTO 和集成服务。
-- `domain`：稳定模型、契约、业务服务、分类器、解析器，以及不应依赖 Flutter Widget 的领域逻辑。
-- `presentation`：页面、controller、adapter、视图状态和 UI 组合。
+- `data`：repository/API/data-source 实现、本地持久化、DTO/codec、平台集成服务和 Riverpod provider。
+- `domain`：稳定模型、repository/服务契约、业务策略、分类器和解析器；原则上不依赖 Flutter Widget。
+- `presentation`：页面、controller、adapter、视图状态、Widget，以及必须依赖 Flutter 布局/渲染的阅读与 HTML 展示服务。
+
+依赖方向优先保持 `presentation -> domain <- data`，由 provider 在边界处装配实现。跨 feature 调用应优先经过公开 contract、service、adapter、bus 或 use case，不直接穿透另一个模块的私有数据库/页面状态。
 
 ### 功能模块职责
 
-- `auth`：登录流程、认证 repository 和登录 controller。
-- `cache`：图片缓存、受保护封面缓存、缓存维护和缓存相关 UI 辅助能力。
-- `comic`：漫画书架、详情和阅读器模块。负责漫画 repository、本地漫画数据库访问、解析服务、章节发现/刷新、重复漫画合并、下载、阅读偏好、封面提升，以及漫画搜索刷新队列。
-- `favorites`：论坛收藏同步和收藏书架模块。负责远端收藏 API、本地收藏缓存、收藏内容导入漫画/小说、收藏同步进度，以及收藏导入后的漫画自动刷新。
-- `forum`：论坛首页和版块帖子列表浏览。
-- `history`：历史记录相关页面展示。
-- `library_shared`：漫画、小说、收藏共用的书架/详情抽象。包含模块 adapter、书架状态持久化、刷新总线、排序/筛选模型、统一书架/详情 controller 和可复用页面。
-- `more`：更多页、设置和数据存储管理。
-- `novel`：小说书架、详情和阅读器模块。负责小说 repository、帖子网关、章节发现、下载、封面缓存写入和小说阅读 controller。
-- `profile`：当前用户/profile repository，包括搜索、回复、收藏等动作所需的 formhash 获取。
-- `reply`：论坛回复提交模型、repository 抽象和 API 实现。
-- `search`：Discuz 论坛搜索服务、HTML 解析器、搜索调度/限流和搜索页 UI。
-- `startup`：主壳页面和启动后的后台任务编排。
-- `storage`：下载/存储位置模型、repository 和文件系统服务抽象。
-- `tags`：论坛标签加载和查询服务，用于判断帖子内容类型。
-- `thread`：帖子详情数据/repository、内容分类器、帖子详情页/controller、回复入口和帖子收藏动作服务。
+- `app_update`：Gitee Release 更新检查、版本/校验和解析、APK 下载与校验、后台下载事件、安装权限、安装/外部打开和更新弹窗协调。
+- `auth`：API 与 WebView 登录、认证会话恢复/校验、formhash provider、登录进度和认证状态 controller。
+- `cache`：统一可再生磁盘缓存。负责图片、原始 HTML、解析快照、受保护封面、retention 分类、统一容量预算/LRU 裁剪、写入通知、缓存诊断/统计和论坛图片预加载。
+- `comic`：漫画数据、书架、详情和阅读器。负责帖子解析、标题分析、章节发现与 TID 顺序、刷新/搜索 fallback、重复合并、封面与阅读进度、评论页、持久化下载队列、单章 CBZ 产物和下载图片限速。
+- `composer_shared`：发帖与回复共用编辑器基础设施。负责 Quill/BBCode 转换、预览、草稿与附件持久化、串行图片上传、表情目录、编辑偏好、通用 controller 基类和错误呈现。
+- `favorites`：论坛收藏同步与收藏书架。负责远端/本地收藏、首次同步限流、详情上下文加载、取消收藏、内容 ingest 注册表，以及把收藏帖子导入漫画或小说。
+- `forum`：论坛壳、解析模式首页/版块列表和 WebView 模式。负责模式偏好、论坛 HTML/快照解析、WebView driver/runtime、Cookie bootstrap、网络/视觉策略、链接路由和论坛收藏入口。
+- `history`：浏览记录数据库、记录/查询/分组/清理/保留策略、诊断和记录页；记录类型覆盖论坛、帖子、漫画与小说。
+- `image_loading`：通用应用图片 source/provider/cache manager、预取接口和 `AppImage` 展示封装；不要与业务化的 `cache` 所有权/retention 规则混为一层。
+- `library_shared`：漫画、小说、收藏共用的书架/详情/选择模式抽象。包含模块 adapter、统一 controller/page、排序筛选、视图偏好、书架状态、刷新总线、任务进度/通知、批量阅读状态、封面预热和作品清理契约。
+- `more`：更多页、外观入口、数据与存储页、统一缓存上限设置、清理/统计/诊断导出和 Debug 工具。
+- `novel`：小说数据、书架、详情和阅读器。负责来源元数据与章节同步/恢复、帖子章节网关、`version=1` 正文解析、HTML-first 纵向渲染、全新混合分页、分页缓存/取消/性能策略、唯一阅读进度、书签/搜索和显示偏好。
+- `posting`：新主题发布流程。负责发帖表单 metadata、版块/类型/标签/特殊主题与投票建模、payload/响应解析，并在 `composer_shared` 之上提供发帖 controller/page。
+- `profile`：当前用户与指定用户资料、消息中心、日志列表/详情及对应 HTML 解析；同时承接需要认证资料的页面入口。
+- `reader_shared`：漫画与帖子图片阅读共用引擎。负责连续/横向分页阅读、owner 会话隔离、真实可见位置、预加载窗口、图片 preparation、长图切片、缩放/手势、阅读偏好、简繁转换、性能诊断和图片导出。
+- `reply`：帖子回复与楼层回复。负责回复表单准备、草稿校验、Discuz API 提交，并在 `composer_shared` 之上提供回复 controller/page。
+- `search`：Discuz 搜索 HTML 解析、搜索服务、请求调度、限流和搜索页。
+- `startup`：六栏懒加载主壳、跨书架选择操作，以及启动后的 best-effort 任务编排，包括缓存预算维护、漫画刷新/下载队列恢复、系统通知初始化、草稿附件维护和 Yamibo 会话预热。
+- `storage`：下载根目录选择、目录/文件名规范化、原子 JSON 写入、漫画 CBZ 定位和下载存储模型；不负责具体业务下载队列。
+- `tags`：论坛标签索引与查询、标签主题列表 HTML 解析及标签主题页；为帖子内容分类和漫画/小说识别提供元数据。
+- `thread`：帖子详情核心。负责 JSON/HTML repository、HTML 快照与诊断、内容分类、HTML-first 正文准备/主题适配/缓存图片、原生帖子页、投票/评分/点评/收藏/回复动作、楼层定位、历史记录和帖子图片阅读器桥接。
 
 ### 跨模块流转说明
 
-- 帖子详情由 `ThreadContentClassifier` 根据 fid/typeid/tag 元数据判断内容类型，tag 数据来自 `tags`。
-- 收藏同步可以把帖子导入漫画或小说模块，然后通过 `LibraryShelfRefreshBus` 发出书架刷新信号。
-- 漫画刷新分层执行：先做当前帖/目录发现，直接发现不足时再进入搜索 fallback 或持久化漫画搜索刷新队列。
-- 统一书架和统一详情页应依赖 `library_shared` 的 adapter 契约，而不是直接依赖具体漫画/小说/收藏 repository。
-- 搜索请求默认应经过搜索调度器和限流器；只有已有明确理由和既有模式时，才直接使用底层 raw service。
+- 所有 Yamibo API/HTML 请求优先经 `core/network` 的 client 或 `YamiboHttpGateway` 发起，并共享 Cookie、`YamiboSessionStore` 与 formhash。WebView 登录/浏览产生的 Cookie 通过同步服务回写；feature 不应各自维护第二套会话。
+- 论坛壳根据持久化模式进入解析模式或 WebView。受管站内链接由 forum router 分流到原生帖子、发帖、回复、用户资料等页面；无法原生承接的流程保留 WebView 边界。
+- 帖子详情通过 `ThreadContentClassifier` 使用 fid/typeid/tag 判断内容类型，tag 数据来自 `tags`。正文进入 `thread` 的 HTML-first pipeline，统一处理 DOM、主题颜色、图片来源、折叠块和渲染缓存；漫画评论与小说正文优先复用该渲染能力，不另建低质量 HTML 子集。
+- 收藏同步由 `favorites` 保存远端条目，再通过 ingest registry 调用 `comic`/`novel` 的导入服务。成功导入、刷新、删除或阅读状态变化后，通过 `LibraryShelfRefreshBus` 和共享状态 repository 通知对应书架，而不是直接操作页面 controller。
+- 漫画刷新先做当前帖/目录发现与增量合并，直接发现不足时再进入搜索 fallback 或持久化搜索刷新队列。漫画下载入口只向 `ComicDownloadQueue` 入队，worker 串行调用下载服务并写入 CBZ；队列和搜索刷新队列均由 `startup` 恢复。
+- 统一书架和统一详情页依赖 `library_shared` 的 `ShelfModuleAdapter`、`DetailModuleAdapter`、选择动作和 purge 契约，不直接依赖漫画/小说/收藏的私有 repository。跨模块长任务通过 `LibraryTaskProgressHub` 与通知桥接发布进度。
+- 漫画与帖子图片阅读通过 capability/adapter 接入 `reader_shared` 的 `ImageReaderEngine`；图片缓存与预加载通过 `cache` 服务完成。owner/session generation 是章节或帖子切换的异步边界，旧回调不得污染新内容。
+- 小说纵向正文复用 HTML-first 渲染准备，分页模式由 `novel` 自己的文档模型、分类器和混合分页器负责；复杂 HTML 测量属于 presentation 布局能力。小说请求固定使用 `version=1`，不得改成 `version=4`。
+- `posting` 与 `reply` 只实现各自表单准备和提交语义，编辑器、草稿、附件上传、表情与 BBCode 由 `composer_shared` 统一维护；认证凭据来自 `auth`/共享 Yamibo 会话。
+- 页面访问由 `history` 的 mapper/recorder 统一落库，`app/navigation` 的 `HistoryEntryRouter` 再按记录类型打开论坛、帖子、漫画或小说目标。
+- 图片、HTML 文档和解析快照写入后通过 `CacheMutationBus` 通知统一预算调度器；“更多/数据与存储”只通过缓存维护与容量契约统计或清理，不扫描并误删下载和用户数据。
+- 搜索请求默认经过搜索调度器和限流器；只有已有明确理由和既有模式时，才直接使用底层 raw service。应用更新使用独立的 Gitee release/checksum/download 边界，不复用论坛搜索或漫画下载队列。
 
 ## 强制约束
 Flutter 系列命令和dart系列指令是无法在Codex沙箱内跑的，
