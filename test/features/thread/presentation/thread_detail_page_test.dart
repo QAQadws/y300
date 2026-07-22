@@ -102,6 +102,72 @@ void main() {
       );
     });
 
+    testWidgets(
+      'quick scroll button moves within the loaded page without fetching',
+      (tester) async {
+        var requestCount = 0;
+        final repository = _FakeThreadRepository((tid, page, query) async {
+          requestCount++;
+          return ApiSuccess(
+            _threadDetailData(
+              tid: tid,
+              posts: [
+                _post(
+                  pid: 'quick-scroll-post',
+                  author: 'alice',
+                  authorId: '1',
+                  number: 1,
+                  isFirst: true,
+                  message: List<String>.generate(
+                    160,
+                    (index) => '<p>当前分页长正文第 $index 段</p>',
+                  ).join(),
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 360));
+        await tester.pumpAndSettle();
+
+        final button = find.byKey(
+          const Key('thread-detail-quick-scroll-button'),
+        );
+        expect(button, findsOneWidget);
+        expect(find.byTooltip('滚动到底部'), findsOneWidget);
+        expect(requestCount, 1);
+
+        final list = tester.widget<ListView>(
+          find.byKey(const Key('thread-detail-list')),
+        );
+        final scrollController = list.controller!;
+        expect(scrollController.position.pixels, 0);
+
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+
+        expect(
+          scrollController.position.pixels,
+          closeTo(scrollController.position.maxScrollExtent, 0.5),
+        );
+        expect(find.byTooltip('滚动到顶部'), findsOneWidget);
+        expect(requestCount, 1);
+
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+
+        expect(
+          scrollController.position.pixels,
+          closeTo(scrollController.position.minScrollExtent, 0.5),
+        );
+        expect(find.byTooltip('滚动到底部'), findsOneWidget);
+        expect(requestCount, 1);
+      },
+    );
+
     testWidgets('shows posts and switches thread pages', (tester) async {
       var callCount = 0;
       final repository = _FakeThreadRepository((tid, page, query) async {

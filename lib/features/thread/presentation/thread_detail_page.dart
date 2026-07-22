@@ -40,10 +40,12 @@ import 'package:y300/features/thread/presentation/thread_detail_diagnostic_contr
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
 import 'package:y300/features/thread/presentation/mappers/thread_history_visit_mapper.dart';
 import 'package:y300/features/thread/presentation/services/thread_history_commit_guard.dart';
+import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_prewarmer.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_button.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 
@@ -69,9 +71,11 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
 
 class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   late final ScrollController _scrollController;
+  late final ThreadDetailQuickScrollCoordinator _quickScrollCoordinator;
   Timer? _highlightClearTimer;
   String? _highlightPostPid;
   ImageRequestHeaderBuilder? _latestImageHeaderBuilder;
+  bool _quickScrollMetricsSyncScheduled = false;
 
   /// 跨重建保留的图片真实尺寸快照，供 render plan 锁定首帧高度（防上滑回溯）。
   final ThreadPostImageDimensionStore _imageDimensionStore =
@@ -86,6 +90,10 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _quickScrollCoordinator = ThreadDetailQuickScrollCoordinator(
+      scrollController: _scrollController,
+      onNavigation: _recordQuickScrollNavigation,
+    );
     _activateTargetHighlight(widget.targetPid);
   }
 
@@ -100,6 +108,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   @override
   void dispose() {
     _highlightClearTimer?.cancel();
+    _quickScrollCoordinator.dispose();
     _scrollController.dispose();
     _imageDimensionStore.dispose();
     super.dispose();
@@ -148,6 +157,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     );
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
     _schedulePrewarmImageDimensions(state);
+    if (state.posts.isNotEmpty) {
+      _scheduleQuickScrollMetricsSync();
+    }
     _scheduleHistoryVisit(
       asyncState: asyncState,
       state: state,
@@ -220,57 +232,127 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: (asyncState.isLoading && state.posts.isEmpty)
-                ? const SizedBox.shrink()
-                : state.errorMessage != null && state.posts.isEmpty
-                ? _ThreadErrorView(
-                    message: state.errorMessage!,
-                    onRetry: controller.refresh,
-                  )
-                : ThreadDetailContent(
-                    state: state,
-                    scrollController: _scrollController,
-                    highlightPostPid: _highlightPostPid,
-                    targetPid: widget.targetPid,
-                    imageHeaderBuilder: imageHeaderBuilder,
-                    imageReferer: _imageRefererFor(state),
-                    imageDimensionStore: _imageDimensionStore,
-                    onLoadPreviousPage: () {
-                      unawaited(
-                        _runPageActionAndScrollTop(controller.loadPreviousPage),
-                      );
-                    },
-                    onLoadNextPage: () {
-                      unawaited(
-                        _runPageActionAndScrollTop(controller.loadNextPage),
-                      );
-                    },
-                    onLoadPageNumber: (page) {
-                      unawaited(
-                        _runPageActionAndScrollTop(
-                          () => controller.loadPage(page),
-                        ),
-                      );
-                    },
-                    onOpenAuthorProfile: _openAuthorProfile,
-                    onOpenCommentAuthorProfile: _openCommentAuthorProfile,
-                    onCopyActionUrl: _copyActionUrl,
-                    onOpenPostLink: _openForumLink,
-                    onOpenPostImages: _openPostImages,
-                    onOpenPostActions: (post, plan) {
-                      _openPostActions(args, state, controller, post, plan);
-                    },
-                    diagnosticRecorder: diagnosticRecorder,
-                    htmlImagePrecacheService: htmlFirstPrecacheService,
-                    onTogglePollOption: controller.togglePollOption,
-                    onSubmitPollVote: controller.submitPollVote,
-                  ),
+      body: NotificationListener<ScrollMetricsNotification>(
+        onNotification: _handleQuickScrollMetricsNotification,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: _handleQuickScrollNotification,
+          child: Column(
+            children: [
+              Expanded(
+                child: (asyncState.isLoading && state.posts.isEmpty)
+                    ? const SizedBox.shrink()
+                    : state.errorMessage != null && state.posts.isEmpty
+                    ? _ThreadErrorView(
+                        message: state.errorMessage!,
+                        onRetry: controller.refresh,
+                      )
+                    : ThreadDetailContent(
+                        state: state,
+                        scrollController: _scrollController,
+                        highlightPostPid: _highlightPostPid,
+                        targetPid: widget.targetPid,
+                        imageHeaderBuilder: imageHeaderBuilder,
+                        imageReferer: _imageRefererFor(state),
+                        imageDimensionStore: _imageDimensionStore,
+                        onLoadPreviousPage: () {
+                          unawaited(
+                            _runPageActionAndScrollTop(
+                              controller.loadPreviousPage,
+                            ),
+                          );
+                        },
+                        onLoadNextPage: () {
+                          unawaited(
+                            _runPageActionAndScrollTop(controller.loadNextPage),
+                          );
+                        },
+                        onLoadPageNumber: (page) {
+                          unawaited(
+                            _runPageActionAndScrollTop(
+                              () => controller.loadPage(page),
+                            ),
+                          );
+                        },
+                        onOpenAuthorProfile: _openAuthorProfile,
+                        onOpenCommentAuthorProfile: _openCommentAuthorProfile,
+                        onCopyActionUrl: _copyActionUrl,
+                        onOpenPostLink: _openForumLink,
+                        onOpenPostImages: _openPostImages,
+                        onOpenPostActions: (post, plan) {
+                          _openPostActions(args, state, controller, post, plan);
+                        },
+                        diagnosticRecorder: diagnosticRecorder,
+                        htmlImagePrecacheService: htmlFirstPrecacheService,
+                        onTogglePollOption: controller.togglePollOption,
+                        onSubmitPollVote: controller.submitPollVote,
+                      ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: ThreadDetailQuickScrollButton(
+          coordinator: _quickScrollCoordinator,
+          hasContent: state.posts.isNotEmpty,
+          backgroundColor: palette.cardElevated,
+          foregroundColor: palette.title,
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  bool _handleQuickScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) {
+      return false;
+    }
+    if (notification case UserScrollNotification(:final direction)) {
+      _quickScrollCoordinator.updateUserDirection(direction);
+    }
+    _quickScrollCoordinator.updateMetrics(notification.metrics);
+    return false;
+  }
+
+  bool _handleQuickScrollMetricsNotification(
+    ScrollMetricsNotification notification,
+  ) {
+    if (notification.depth == 0) {
+      _quickScrollCoordinator.updateMetrics(notification.metrics);
+    }
+    return false;
+  }
+
+  void _scheduleQuickScrollMetricsSync() {
+    if (_quickScrollMetricsSyncScheduled) {
+      return;
+    }
+    _quickScrollMetricsSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _quickScrollMetricsSyncScheduled = false;
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+      _quickScrollCoordinator.updateMetrics(_scrollController.position);
+    });
+  }
+
+  void _recordQuickScrollNavigation({
+    required ThreadDetailQuickScrollTarget target,
+    required bool animated,
+    required double sourceOffset,
+    required double targetOffset,
+  }) {
+    _recordScrollDiagnostic(
+      type: animated
+          ? ThreadDetailDiagnosticEventType.scrollAnimate
+          : ThreadDetailDiagnosticEventType.scrollJump,
+      scrollOffset: sourceOffset,
+      message:
+          'quick scroll ${target.name} '
+          '${sourceOffset.toStringAsFixed(1)} -> '
+          '${targetOffset.toStringAsFixed(1)}',
     );
   }
 
