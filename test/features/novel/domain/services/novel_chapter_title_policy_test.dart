@@ -2,6 +2,8 @@ import 'package:characters/characters.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_title_policy.dart';
 
+import '../../test_support/novel_title_fixtures.dart';
+
 void main() {
   const policy = FirstMeaningfulSentenceNovelChapterTitlePolicy();
 
@@ -17,6 +19,15 @@ void main() {
   test('uses a newline as a sentence boundary', () {
     expect(_title(policy, '没有句号的第一行\n第二行'), '没有句号的第一行');
   });
+
+  for (final fixture in novelChapterTitleFixtures) {
+    test('preserves chapter heading punctuation: ${fixture.id}', () {
+      expect(
+        _title(policy, fixture.normalizedCandidate),
+        fixture.expectedTitle,
+      );
+    });
+  }
 
   test('ignores standalone and inline Discuz edit notices', () {
     expect(_title(policy, '本帖最后由 咕哒子鸭 于 2025-5-4 19:36 编辑\n正文第一句。'), '正文第一句。');

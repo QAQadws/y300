@@ -24,25 +24,57 @@ class NovelTitleFixture {
   final String? note;
 }
 
+class NovelChapterTitleFixture {
+  const NovelChapterTitleFixture({
+    required this.id,
+    required this.rawHtml,
+    required this.normalizedCandidate,
+    required this.expectedTitle,
+  });
+
+  final String id;
+  final String rawHtml;
+  final String normalizedCandidate;
+  final String expectedTitle;
+}
+
+/// Real chapter-heading samples used by both title-policy and HTML-pipeline
+/// tests so parser regressions are verified at both responsibility boundaries.
+const novelChapterTitleFixtures = <NovelChapterTitleFixture>[
+  NovelChapterTitleFixture(
+    id: 'decimal-act-number-after-edit-notice',
+    rawHtml: '''
+      <i class="pstatus"> 本帖最后由 没有太阳的晴日 于 2026-1-18 08:47 编辑 </i><br>
+      <br>
+      <div align="center"><font face="宋体">ACT13.5　现实中真的会发生这种事吗？</font></div>
+      <font face="Arial">&nbsp;&nbsp;</font><br>
+      <font face="Arial">「到啦——！」</font><br>
+    ''',
+    normalizedCandidate: 'ACT13.5 现实中真的会发生这种事吗？',
+    expectedTitle: 'ACT13.5 现实中真的会发生这种事吗？',
+  ),
+];
+
 /// 用户在 2026-06-15 提供的样例 + 常见边界。
 const novelTitleFixtures = <NovelTitleFixture>[
   NovelTitleFixture(
     id: 'zhafan-yachitsu',
     raw: '[渣翻] （やちつ）醉酒上床的对象竟是前女友（2026.6.15 更新 第22话）',
-    expectedSanitized:
-        '（やちつ）醉酒上床的对象竟是前女友（2026.6.15 更新 第22话）',
+    expectedSanitized: '（やちつ）醉酒上床的对象竟是前女友（2026.6.15 更新 第22话）',
     note: '一个前导方括号；全角圆括号包裹的译者名应当保留',
   ),
   NovelTitleFixture(
     id: 'haneda-uka',
-    raw: '[个人翻译][长篇][羽田宇佐]一周一次买下同班同学的那些事'
+    raw:
+        '[个人翻译][长篇][羽田宇佐]一周一次买下同班同学的那些事'
         '（2026.6.14更新至第420话）',
     expectedSanitized: '一周一次买下同班同学的那些事（2026.6.14更新至第420话）',
     note: '三连前导方括号都应剥掉',
   ),
   NovelTitleFixture(
     id: 'rino-yimei',
-    raw: '【個人翻譯】【莉乃】單戀的同班同學成了我的義妹'
+    raw:
+        '【個人翻譯】【莉乃】單戀的同班同學成了我的義妹'
         '(2026.6.15更新至第12話)',
     expectedSanitized: '單戀的同班同學成了我的義妹(2026.6.15更新至第12話)',
     note: '中文方头括号也要识别',
@@ -54,16 +86,19 @@ const novelTitleFixtures = <NovelTitleFixture>[
   ),
   NovelTitleFixture(
     id: 'inukai-anzu',
-    raw: '【自翻】【文庫版】【犬甘あんず】敗給了性格惡劣的天才青梅，'
+    raw:
+        '【自翻】【文庫版】【犬甘あんず】敗給了性格惡劣的天才青梅，'
         '初體驗全部被奪走這件事 第四卷 【完結】',
-    expectedSanitized: '敗給了性格惡劣的天才青梅，初體驗全部被奪走這件事 '
+    expectedSanitized:
+        '敗給了性格惡劣的天才青梅，初體驗全部被奪走這件事 '
         '第四卷 【完結】',
     note: '尾部的【完結】不能被剥掉，只剥前导三个【...】',
   ),
   // ↓ 用户在 2026-06-15 二轮提供的样例：含全角方括号 ［］ (U+FF3B/U+FF3D)。
   NovelTitleFixture(
     id: 'harukawa-rei',
-    raw: '［搬运+翻译］［春川　レイ］ 转生女仆，但大小姐的样子有点怪 '
+    raw:
+        '［搬运+翻译］［春川　レイ］ 转生女仆，但大小姐的样子有点怪 '
         '10.2更新至番外6',
     expectedSanitized: '转生女仆，但大小姐的样子有点怪 10.2更新至番外6',
     note: '两个前导全角方括号；译者名内含全角空格 U+3000 也要正常剥掉',
@@ -76,10 +111,12 @@ const novelTitleFixtures = <NovelTitleFixture>[
   ),
   NovelTitleFixture(
     id: '4ka-chigusa',
-    raw: '［自译］［4kaえんぴつ/千種みのり］【完结】【单行本已发售】'
+    raw:
+        '［自译］［4kaえんぴつ/千種みのり］【完结】【单行本已发售】'
         '来购买成人用品的优等生1上（2026/2/28番外③）',
     expectedSanitized: '来购买成人用品的优等生1上（2026/2/28番外③）',
-    note: '四个前导括号（2 全角 + 2 中文方头）全剥；'
+    note:
+        '四个前导括号（2 全角 + 2 中文方头）全剥；'
         '前导【完结】可以剥，但与 inukai-anzu 末尾【完結】对照：只剥前导。',
   ),
 ];

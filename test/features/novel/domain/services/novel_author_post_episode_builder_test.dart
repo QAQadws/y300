@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/services/novel_author_post_episode_builder.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
+import '../../test_support/novel_title_fixtures.dart';
+
 void main() {
   const builder = DefaultNovelAuthorPostEpisodeBuilder();
 
@@ -300,6 +302,22 @@ void main() {
     );
 
     expect(draft?.episodeTitle, 'ACT05 知道别人穿什么胖次究竟想干嘛？');
+  });
+
+  test('preserves a decimal ACT number in the first prose heading', () {
+    final fixture = novelChapterTitleFixtures.singleWhere(
+      (item) => item.id == 'decimal-act-number-after-edit-notice',
+    );
+    final draft = builder.build(
+      novelId: 'novel:55:521519',
+      tid: '521519',
+      publisherId: '406769',
+      post: _post(pid: '41569751', number: 13, message: fixture.rawHtml),
+      authorFilteredPage: 1,
+      orderIndex: 12,
+    );
+
+    expect(draft?.episodeTitle, fixture.expectedTitle);
   });
 
   test('expands verified attach placeholders and accepts image-only posts', () {

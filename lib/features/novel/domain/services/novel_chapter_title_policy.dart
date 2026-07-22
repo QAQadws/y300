@@ -23,7 +23,9 @@ class FirstMeaningfulSentenceNovelChapterTitlePolicy
     r'^(?:本帖最后由|本帖最後由).+?(?:编辑|編輯)\s*',
   );
   static final RegExp _sentenceEnd = RegExp(
-    r'^(.*?(?:……|…{2,}|\.{3,}|[。！？!?；;.])[”’」』】》]*)',
+    // A dot followed by a digit belongs to decimal-like chapter numbers such
+    // as `ACT13.5`; treating it as punctuation would truncate the heading.
+    r'^(.*?(?:……|…{2,}|\.{3,}|[。！？!?；;]|\.(?![0-9]))[”’」』】》]*)',
     dotAll: true,
   );
 
