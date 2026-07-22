@@ -9,6 +9,9 @@ abstract final class PreferenceKeys {
   static const appThemePreference = PreferenceKey<String>(
     PreferenceKeyNames.appThemePreference,
   );
+  static const appNavigationSnapshotV1 = PreferenceKey<String>(
+    PreferenceKeyNames.appNavigationSnapshotV1,
+  );
   static const forumShellMode = PreferenceKey<String>(
     PreferenceKeyNames.forumShellMode,
   );

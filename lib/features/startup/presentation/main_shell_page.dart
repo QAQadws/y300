@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/history_entry_router.dart';
+import 'package:y300/app/navigation/main_navigation_settings.dart';
+import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
+import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/data/services/cache_budget_scheduler.dart';
@@ -105,7 +108,7 @@ final mainShellYamiboSessionWarmupProvider = Provider<Future<void> Function()>((
   };
 });
 
-/// 应用主壳：承载论坛、收藏、漫画、小说、记录、更多六栏 Tab。
+/// 应用主壳：承载可配置业务入口和固定的“更多”入口。
 class MainShellPage extends ConsumerStatefulWidget {
   const MainShellPage({super.key});
 
@@ -114,8 +117,8 @@ class MainShellPage extends ConsumerStatefulWidget {
 }
 
 class _MainShellPageState extends ConsumerState<MainShellPage> {
-  int _currentIndex = 0;
-  final Set<int> _builtIndexes = <int>{0};
+  MainShellDestination? _currentDestination;
+  final Set<MainShellDestination> _builtDestinations = <MainShellDestination>{};
 
   @override
   void initState() {
@@ -142,8 +145,32 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     // 启动进度->系统通知桥接，让收藏同步/漫画搜索等待进入通知栏。
     ref.watch(libraryTaskNotificationBridgeProvider);
     final selectionHost = ref.watch(shelfSelectionHostControllerProvider);
+    final navigationState = ref
+        .watch(mainNavigationSettingsControllerProvider)
+        .value;
+    if (navigationState == null) {
+      return const Scaffold(
+        body: SizedBox.expand(key: Key('main-shell-navigation-loading')),
+      );
+    }
+    final settings = navigationState.settings;
+    final visibleDestinations = settings.visibleDestinations;
+    final visibleSet = visibleDestinations.toSet();
+    _builtDestinations.removeWhere(
+      (destination) => !visibleSet.contains(destination),
+    );
+    final currentDestination = _resolveCurrentDestination(settings);
+    _currentDestination = currentDestination;
+    _builtDestinations.add(currentDestination);
+
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _buildIndexedPages()),
+      body: IndexedStack(
+        index: MainShellDestination.values.indexOf(currentDestination),
+        children: _buildIndexedPages(
+          settings,
+          currentDestination: currentDestination,
+        ),
+      ),
       bottomNavigationBar: ListenableBuilder(
         listenable: selectionHost,
         builder: (context, _) {
@@ -171,55 +198,19 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                   )
                 : NavigationBar(
                     key: const ValueKey<String>('main-shell-navigation-bar'),
-                    selectedIndex: _currentIndex,
+                    selectedIndex: visibleDestinations.indexOf(
+                      currentDestination,
+                    ),
                     onDestinationSelected: (index) {
+                      final destination = visibleDestinations[index];
                       setState(() {
-                        _currentIndex = index;
-                        _builtIndexes.add(index);
+                        _currentDestination = destination;
+                        _builtDestinations.add(destination);
                       });
                     },
-                    destinations: const [
-                      NavigationDestination(
-                        icon: Icon(Icons.forum_outlined),
-                        selectedIcon: Icon(Icons.forum),
-                        label: '论坛',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.explore_outlined),
-                        selectedIcon: Icon(Icons.explore),
-                        label: '收藏',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.collections_bookmark_outlined),
-                        selectedIcon: Icon(Icons.collections_bookmark),
-                        label: '漫画',
-                      ),
-                      NavigationDestination(
-                        icon: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Center(
-                            child: Icon(Icons.local_library_outlined),
-                          ),
-                        ),
-                        selectedIcon: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Center(child: Icon(Icons.local_library)),
-                        ),
-                        label: '小说',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.history_outlined),
-                        selectedIcon: Icon(Icons.history),
-                        label: '记录',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.more_horiz_outlined),
-                        selectedIcon: Icon(Icons.more_horiz),
-                        label: '更多',
-                      ),
-                    ],
+                    destinations: visibleDestinations
+                        .map(_buildNavigationDestination)
+                        .toList(growable: false),
                   ),
           );
         },
@@ -397,36 +388,71 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       ..showSnackBar(SnackBar(content: Text(trimmed)));
   }
 
-  List<Widget> _buildIndexedPages() {
-    return List<Widget>.generate(_pageCount, (index) {
-      if (_builtIndexes.contains(index)) {
-        final isActive = index == _currentIndex;
-        return TickerMode(
-          enabled: isActive,
-          child: _buildPage(index, isActive: isActive),
-        );
-      }
-      return const SizedBox.shrink();
-    });
+  MainShellDestination _resolveCurrentDestination(
+    MainNavigationSettings settings,
+  ) {
+    final current = _currentDestination;
+    if (current != null && settings.visibleDestinations.contains(current)) {
+      return current;
+    }
+    return settings.visibleManagedDestinations.first;
   }
 
-  int get _pageCount => 6;
+  NavigationDestination _buildNavigationDestination(
+    MainShellDestination destination,
+  ) {
+    return NavigationDestination(
+      icon: _buildNavigationIcon(destination.icon),
+      selectedIcon: _buildNavigationIcon(destination.selectedIcon),
+      label: destination.displayLabel,
+    );
+  }
+
+  Widget _buildNavigationIcon(IconData icon) {
+    return SizedBox(width: 24, height: 24, child: Center(child: Icon(icon)));
+  }
+
+  List<Widget> _buildIndexedPages(
+    MainNavigationSettings settings, {
+    required MainShellDestination currentDestination,
+  }) {
+    return MainShellDestination.values
+        .map((destination) {
+          if (!settings.isVisible(destination) ||
+              !_builtDestinations.contains(destination)) {
+            return SizedBox.shrink(
+              key: ValueKey<String>('main-shell-empty-${destination.name}'),
+            );
+          }
+          final isActive = destination == currentDestination;
+          return KeyedSubtree(
+            key: ValueKey<String>('main-shell-page-${destination.name}'),
+            child: TickerMode(
+              enabled: isActive,
+              child: _buildPage(destination, isActive: isActive),
+            ),
+          );
+        })
+        .toList(growable: false);
+  }
 
   static const String _createCategorySelectionSentinel =
       '__create-selection-category__';
 
-  Widget _buildPage(int index, {required bool isActive}) {
-    return switch (index) {
-      0 => ForumShellPage(isActive: isActive),
-      1 => FavoriteShelfPage(isActive: isActive),
-      2 => ComicTabPage(isActive: isActive),
-      3 => NovelTabPage(isActive: isActive),
-      4 => HistoryPage(
+  Widget _buildPage(
+    MainShellDestination destination, {
+    required bool isActive,
+  }) {
+    return switch (destination) {
+      MainShellDestination.forum => ForumShellPage(isActive: isActive),
+      MainShellDestination.favorites => FavoriteShelfPage(isActive: isActive),
+      MainShellDestination.comic => ComicTabPage(isActive: isActive),
+      MainShellDestination.novel => NovelTabPage(isActive: isActive),
+      MainShellDestination.history => HistoryPage(
         onOpenEntry: ref.read(historyEntryRouterProvider).open,
         imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       ),
-      5 => const MorePage(),
-      _ => const SizedBox.shrink(),
+      MainShellDestination.more => const MorePage(),
     };
   }
 }

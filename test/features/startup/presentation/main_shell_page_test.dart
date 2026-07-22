@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/app/navigation/main_navigation_settings.dart';
+import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
+import 'package:y300/app/navigation/main_navigation_settings_repository.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
@@ -118,7 +121,7 @@ void main() {
       ),
     );
 
-    await tester.pump();
+    await _pumpMainShellReady(tester);
 
     expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
     final initialNavigationBar = tester.widget<NavigationBar>(
@@ -135,14 +138,15 @@ void main() {
       '记录',
       '更多',
     ]);
-    expect((destinations[1].icon as Icon).icon, Icons.explore_outlined);
-    expect((destinations[1].selectedIcon! as Icon).icon, Icons.explore);
-    expect((destinations[4].icon as Icon).icon, Icons.history_outlined);
-    expect((destinations[4].selectedIcon! as Icon).icon, Icons.history);
+    expect(_navigationIconData(destinations[1].icon), Icons.explore_outlined);
+    expect(_navigationIconData(destinations[1].selectedIcon!), Icons.explore);
+    expect(_navigationIconData(destinations[4].icon), Icons.history_outlined);
+    expect(_navigationIconData(destinations[4].selectedIcon!), Icons.history);
     final initialStack = tester.widget<IndexedStack>(find.byType(IndexedStack));
     expect(initialStack.children, hasLength(6));
-    expect(initialStack.children.whereType<TickerMode>(), hasLength(1));
-    expect((initialStack.children.first as TickerMode).enabled, isTrue);
+    final initialTickerModes = _builtTickerModes(initialStack);
+    expect(initialTickerModes, hasLength(1));
+    expect(initialTickerModes.single.enabled, isTrue);
     expect(tester.takeException(), isNull);
 
     textScale.value = 1;
@@ -179,14 +183,135 @@ void main() {
     final fullyBuiltStack = tester.widget<IndexedStack>(
       find.byType(IndexedStack),
     );
-    expect(fullyBuiltStack.children.whereType<TickerMode>(), hasLength(6));
+    final fullyBuiltTickerModes = _builtTickerModes(fullyBuiltStack);
+    expect(fullyBuiltTickerModes, hasLength(6));
     expect(
-      fullyBuiltStack.children.cast<TickerMode>().map(
-        (tickerMode) => tickerMode.enabled,
-      ),
+      fullyBuiltTickerModes.map((tickerMode) => tickerMode.enabled),
       <bool>[false, false, false, false, false, true],
     );
   });
+
+  testWidgets(
+    'MainShellPage applies custom order with stable lazy destination slots',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      final webViewDriver = _FakeForumWebViewDriver();
+      final navigationRepository = _FakeMainNavigationSettingsRepository(
+        MainNavigationSettings(
+          managedOrder: const <MainShellDestination>[
+            MainShellDestination.novel,
+            MainShellDestination.comic,
+            MainShellDestination.forum,
+            MainShellDestination.favorites,
+            MainShellDestination.history,
+          ],
+          hiddenDestinations: const <MainShellDestination>{
+            MainShellDestination.forum,
+            MainShellDestination.history,
+          },
+        ),
+      );
+      addTearDown(queueSnapshot.dispose);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mainNavigationSettingsRepositoryProvider.overrideWithValue(
+              navigationRepository,
+            ),
+            comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
+            novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _FakeLibraryStateRepository(),
+            ),
+            localFavoriteRepositoryProvider.overrideWith(
+              (ref) => _FakeLocalFavoriteRepository(),
+            ),
+            favoriteSyncServiceProvider.overrideWith(
+              (ref) => _FakeFavoriteSyncService(),
+            ),
+            comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+              queueSnapshot,
+            ),
+            mainShellBackgroundTaskStarterProvider.overrideWithValue(
+              () async {},
+            ),
+            mainShellNotificationInitializerProvider.overrideWithValue(
+              () async {},
+            ),
+            mainShellReplyDraftAttachmentMaintenanceStarterProvider
+                .overrideWithValue(() async {}),
+            mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
+            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(),
+            ),
+            forumWebViewDriverFactoryProvider.overrideWithValue(
+              () => webViewDriver,
+            ),
+            cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+            historyRepositoryProvider.overrideWithValue(
+              const _FakeHistoryRepository(),
+            ),
+          ],
+          child: const MaterialApp(home: MainShellPage()),
+        ),
+      );
+
+      await _pumpMainShellReady(tester);
+
+      expect(_navigationLabels(tester), <String>['小说', '漫画', '收藏', '更多']);
+      expect(_selectedNavigationIndex(tester), 0);
+      expect(find.byKey(const Key('main-shell-page-novel')), findsOneWidget);
+      expect(find.byKey(const Key('main-shell-page-forum')), findsNothing);
+
+      await tester.tap(find.text('漫画').last);
+      await _pumpShellTab(tester);
+      final comicPageFinder = find.byKey(const Key('main-shell-page-comic'));
+      final originalComicElement = tester.element(comicPageFinder);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MainShellPage)),
+      );
+      final controller = container.read(
+        mainNavigationSettingsControllerProvider.notifier,
+      );
+
+      await controller.reorder(1, 0);
+      await tester.pump();
+
+      expect(_navigationLabels(tester), <String>['漫画', '小说', '收藏', '更多']);
+      expect(_selectedNavigationIndex(tester), 0);
+      expect(tester.element(comicPageFinder), same(originalComicElement));
+
+      await controller.setVisibility(MainShellDestination.comic, false);
+      await tester.pump();
+
+      expect(_navigationLabels(tester), <String>['小说', '收藏', '更多']);
+      expect(_selectedNavigationIndex(tester), 0);
+      expect(comicPageFinder, findsNothing);
+      expect(find.byKey(const Key('main-shell-page-novel')), findsOneWidget);
+
+      await controller.setVisibility(MainShellDestination.comic, true);
+      await tester.pump();
+
+      expect(_navigationLabels(tester), <String>['漫画', '小说', '收藏', '更多']);
+      expect(_selectedNavigationIndex(tester), 1);
+      expect(comicPageFinder, findsNothing);
+
+      await tester.tap(find.text('漫画').last);
+      await _pumpShellTab(tester);
+
+      expect(comicPageFinder, findsOneWidget);
+      expect(
+        tester.element(comicPageFinder),
+        isNot(same(originalComicElement)),
+      );
+    },
+  );
 
   testWidgets('Novel tab icon changes after tap', (tester) async {
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
@@ -731,6 +856,49 @@ Future<void> _pumpShellTab(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 300));
 }
 
+Future<void> _pumpMainShellReady(WidgetTester tester) async {
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.pump();
+    if (find
+        .byKey(const Key('main-shell-navigation-loading'))
+        .evaluate()
+        .isEmpty) {
+      // The selected destination can have its own async settings provider.
+      // Give that child one frame after the shell configuration is ready.
+      await tester.pump();
+      return;
+    }
+  }
+  fail('Main shell navigation settings did not finish loading');
+}
+
+List<TickerMode> _builtTickerModes(IndexedStack stack) {
+  return stack.children
+      .whereType<KeyedSubtree>()
+      .map((subtree) => subtree.child)
+      .whereType<TickerMode>()
+      .toList(growable: false);
+}
+
+List<String> _navigationLabels(WidgetTester tester) {
+  return tester
+      .widget<NavigationBar>(find.byType(NavigationBar))
+      .destinations
+      .cast<NavigationDestination>()
+      .map((destination) => destination.label)
+      .toList(growable: false);
+}
+
+int _selectedNavigationIndex(WidgetTester tester) {
+  return tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
+}
+
+IconData? _navigationIconData(Widget widget) {
+  final box = widget as SizedBox;
+  final center = box.child! as Center;
+  return (center.child! as Icon).icon;
+}
+
 ShelfSelectionHostDelegate _selectionDelegate({
   Future<SelectionActionResult> Function(
     SelectionActionExecutionRequest request,
@@ -775,6 +943,21 @@ class _FakeHistoryRepository implements HistoryRepository {
   @override
   Stream<HistoryChange> watchChanges() {
     return const Stream<HistoryChange>.empty();
+  }
+}
+
+class _FakeMainNavigationSettingsRepository
+    implements MainNavigationSettingsRepository {
+  _FakeMainNavigationSettingsRepository(this.settings);
+
+  MainNavigationSettings settings;
+
+  @override
+  Future<MainNavigationSettings> load() async => settings;
+
+  @override
+  Future<void> save(MainNavigationSettings settings) async {
+    this.settings = settings;
   }
 }
 

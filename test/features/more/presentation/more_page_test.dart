@@ -79,6 +79,12 @@ void main() {
     expect(find.byKey(const Key('more-appearance-entry')), findsOneWidget);
     expect(find.text('外观与文字'), findsOneWidget);
     expect(find.text('当前：浅色'), findsOneWidget);
+    expect(
+      find.byKey(const Key('more-navigation-management-entry')),
+      findsOneWidget,
+    );
+    expect(find.text('导航栏管理'), findsOneWidget);
+    expect(find.text('已显示 5 项'), findsOneWidget);
     expect(find.byKey(const Key('more-cache-settings-entry')), findsNothing);
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
@@ -135,6 +141,8 @@ void main() {
 
     final entry = find.byKey(const Key('more-html-renderer-prototype-entry'));
     await _scrollUntilVisibleIfNeeded(tester, entry);
+    await tester.drag(find.byType(ListView), const Offset(0, -80));
+    await tester.pumpAndSettle();
     await tester.tap(entry);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));

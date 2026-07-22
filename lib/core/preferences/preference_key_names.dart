@@ -1,6 +1,7 @@
 /// Raw names behind the typed preference registry and compatibility aliases.
 abstract final class PreferenceKeyNames {
   static const appThemePreference = 'app_theme_preference';
+  static const appNavigationSnapshotV1 = 'app.navigation.snapshot.v1';
   static const forumShellMode = 'forum_shell_mode';
 
   static const forumHtmlReaderFontScale = 'forum_html_reader_font_scale';

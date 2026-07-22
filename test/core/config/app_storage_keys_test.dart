@@ -34,6 +34,10 @@ void main() {
 
   test('typed registry owns scalar, legacy, and snapshot names', () {
     expect(PreferenceKeys.appThemePreference.name, 'app_theme_preference');
+    expect(
+      PreferenceKeys.appNavigationSnapshotV1.name,
+      'app.navigation.snapshot.v1',
+    );
     expect(PreferenceKeys.forumShellMode.name, 'forum_shell_mode');
     expect(PreferenceKeys.imageReaderSnapshotV1.name, 'reader.image.v1');
     expect(

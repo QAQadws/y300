@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/core/config/app_config.dart';
@@ -18,6 +19,7 @@ import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
 import 'package:y300/features/more/presentation/more_debug_tools.dart';
+import 'package:y300/features/more/presentation/navigation_management_page.dart';
 
 class MorePage extends ConsumerStatefulWidget {
   const MorePage({super.key});
@@ -41,6 +43,11 @@ class _MorePageState extends ConsumerState<MorePage> {
         ref.watch(appAppearanceControllerProvider).asData?.value ??
         AppAppearanceSettings.defaults();
     final downloadQueueSnapshot = ref.watch(comicDownloadQueueSnapshotProvider);
+    final navigationState = ref
+        .watch(mainNavigationSettingsControllerProvider)
+        .value;
+    final visibleNavigationCount =
+        navigationState?.settings.visibleManagedDestinations.length ?? 5;
 
     return Scaffold(
       appBar: AppBar(title: const Text('更多')),
@@ -79,6 +86,21 @@ class _MorePageState extends ConsumerState<MorePage> {
               '当前：${appearanceSettings.themePreference.displayLabel}',
             ),
             onTap: () => _showAppearanceSettingsSheet(context),
+          ),
+          ListTile(
+            key: const Key('more-navigation-management-entry'),
+            leading: const Icon(Icons.view_week_outlined),
+            title: const Text('导航栏管理'),
+            subtitle: Text('已显示 $visibleNavigationCount 项'),
+            onTap: navigationState == null
+                ? null
+                : () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const NavigationManagementPage(),
+                      ),
+                    );
+                  },
           ),
           ListTile(
             key: const Key('more-data-storage-entry'),
