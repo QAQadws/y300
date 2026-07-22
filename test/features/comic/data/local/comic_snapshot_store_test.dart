@@ -27,68 +27,71 @@ void main() {
       store = ComicSnapshotStore(dbFuture);
     });
 
-    test('queryShelfSnapshot aggregates unread read downloaded and tags', () async {
-      await repository.addToShelf(
-        comicId: 'yamibo:900',
-        tid: '900',
-        fid: '30',
-        title: 'Aggregate Comic',
-        parsedPost: const ParsedComicPost(
-          imageUrls: <String>[],
-          episodeLinks: <ComicEpisodeLink>[
-            ComicEpisodeLink(
-              url: 'thread-901-1-1.html',
-              rawText: '1',
-              episodeTitle: 'chapter 1',
-            ),
-            ComicEpisodeLink(
-              url: 'thread-902-1-1.html',
-              rawText: '2',
-              episodeTitle: 'chapter 2',
-            ),
-          ],
-          plainTextSummary: 'summary',
-          inferredAuthor: 'authorS',
-        ),
-      );
+    test(
+      'queryShelfSnapshot aggregates unread read downloaded and tags',
+      () async {
+        await repository.addToShelf(
+          comicId: 'yamibo:900',
+          tid: '900',
+          fid: '30',
+          title: 'Aggregate Comic',
+          parsedPost: const ParsedComicPost(
+            imageUrls: <String>[],
+            episodeLinks: <ComicEpisodeLink>[
+              ComicEpisodeLink(
+                url: 'thread-901-1-1.html',
+                rawText: '1',
+                episodeTitle: 'chapter 1',
+              ),
+              ComicEpisodeLink(
+                url: 'thread-902-1-1.html',
+                rawText: '2',
+                episodeTitle: 'chapter 2',
+              ),
+            ],
+            plainTextSummary: 'summary',
+            inferredAuthor: 'authorS',
+          ),
+        );
 
-      final stateRepository = LocalLibraryStateRepository(dbFuture);
-      await stateRepository.upsertEpisodeState(
-        moduleKey: LibraryModuleKey.comic,
-        episodeId: 'yamibo:900:901',
-        workId: 'yamibo:900',
-        isRead: false,
-        isDownloaded: true,
-      );
-      await stateRepository.upsertEpisodeState(
-        moduleKey: LibraryModuleKey.comic,
-        episodeId: 'yamibo:900:902',
-        workId: 'yamibo:900',
-        isRead: true,
-      );
-      final tagId = await stateRepository.createTag(name: 'follow');
-      await stateRepository.bindTagToWork(
-        moduleKey: LibraryModuleKey.comic,
-        workId: 'yamibo:900',
-        tagId: tagId,
-      );
+        final stateRepository = LocalLibraryStateRepository(dbFuture);
+        await stateRepository.upsertEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: 'yamibo:900:901',
+          workId: 'yamibo:900',
+          isRead: false,
+          isDownloaded: true,
+        );
+        await stateRepository.upsertEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: 'yamibo:900:902',
+          workId: 'yamibo:900',
+          isRead: true,
+        );
+        final tagId = await stateRepository.createTag(name: 'follow');
+        await stateRepository.bindTagToWork(
+          moduleKey: LibraryModuleKey.comic,
+          workId: 'yamibo:900',
+          tagId: tagId,
+        );
 
-      final snapshot = await store.queryShelfSnapshot(
-        filters: LibraryFilterSet.defaults,
-        sortOption: LibraryShelfSortOption.defaults,
-        keyword: '',
-      );
-      final item = snapshot.itemsByCategory['default']!.single;
+        final snapshot = await store.queryShelfSnapshot(
+          filters: LibraryFilterSet.defaults,
+          sortOption: LibraryShelfSortOption.defaults,
+          keyword: '',
+        );
+        final item = snapshot.itemsByCategory['default']!.single;
 
-      expect(snapshot.categories.single.categoryId, 'default');
-      expect(snapshot.visibleMatchCountByCategory['default'], 1);
-      expect(item.title, 'Aggregate Comic');
-      expect(item.unreadCount, 1);
-      expect(item.readChapterCount, 1);
-      expect(item.totalChapterCount, 2);
-      expect(item.isDownloaded, isTrue);
-      expect(item.hasTags, isTrue);
-    });
+        expect(snapshot.categories.single.categoryId, 'default');
+        expect(snapshot.visibleMatchCountByCategory['default'], 1);
+        expect(item.title, 'Aggregate Comic');
+        expect(item.unreadCount, 1);
+        expect(item.readChapterCount, 1);
+        expect(item.totalChapterCount, 2);
+        expect(item.isDownloaded, isTrue);
+        expect(item.hasTags, isTrue);
+      },
+    );
 
     test('getShelfWorkStats treats missing episode state as unread', () async {
       await repository.addToShelf(
@@ -133,6 +136,37 @@ void main() {
       expect(stats.readCount, 1);
       expect(stats.unreadCount, 2);
       expect(stats.downloadedCount, 0);
+    });
+
+    test('queryShelfSnapshot preserves custom cover focus', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:920',
+        tid: '920',
+        fid: '30',
+        title: 'Focused Cover Comic',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: 'summary',
+        ),
+      );
+      await repository.updateCustomCoverFromLocalFile(
+        comicId: 'yamibo:920',
+        localCoverPath: 'cache/custom-cover.jpg',
+        focusX: 0.75,
+        focusY: -0.5,
+      );
+
+      final snapshot = await store.queryShelfSnapshot(
+        filters: LibraryFilterSet.defaults,
+        sortOption: LibraryShelfSortOption.defaults,
+        keyword: '',
+      );
+      final item = snapshot.itemsByCategory['default']!.single;
+
+      expect(item.customCoverLocalPath, 'cache/custom-cover.jpg');
+      expect(item.customCoverFocusX, 0.75);
+      expect(item.customCoverFocusY, -0.5);
     });
   });
 }

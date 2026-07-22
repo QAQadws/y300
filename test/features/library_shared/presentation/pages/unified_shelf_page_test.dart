@@ -411,6 +411,45 @@ void main() {
     );
   });
 
+  testWidgets('grid and list covers use the custom focal alignment', (
+    tester,
+  ) async {
+    Future<void> pumpShelf(LibraryDisplayMode displayMode) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: UnifiedShelfPage(
+              adapter: _FakeShelfAdapter(
+                initialDisplayMode: displayMode,
+                itemsByCategory: {
+                  'default': [
+                    _item(
+                      workId: 'focused',
+                      title: 'Focused Comic',
+                      customCoverLocalPath: 'cache/custom-cover.jpg',
+                      customCoverFocusX: 0.75,
+                      customCoverFocusY: -0.5,
+                    ),
+                  ],
+                },
+              ),
+              onOpenWork: (context, workId) async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<ShelfCoverImage>(find.byType(ShelfCoverImage)).alignment,
+        const Alignment(0.75, -0.5),
+      );
+    }
+
+    await pumpShelf(LibraryDisplayMode.grid);
+    await pumpShelf(LibraryDisplayMode.list);
+  });
+
   testWidgets('unread badge renders shelf aggregate count', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -1121,6 +1160,9 @@ LibraryWorkItem _item({
   required String workId,
   required String title,
   String? coverImageUrl,
+  String? customCoverLocalPath,
+  double? customCoverFocusX,
+  double? customCoverFocusY,
   int unreadCount = 1,
   bool hasBookmarks = false,
 }) {
@@ -1129,6 +1171,9 @@ LibraryWorkItem _item({
     categoryId: 'default',
     title: title,
     coverImageUrl: coverImageUrl,
+    customCoverLocalPath: customCoverLocalPath,
+    customCoverFocusX: customCoverFocusX,
+    customCoverFocusY: customCoverFocusY,
     unreadCount: unreadCount,
     totalChapterCount: 3,
     readChapterCount: 2,

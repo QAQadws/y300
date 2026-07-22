@@ -18,8 +18,7 @@ class ComicSnapshotStore {
   }) async {
     final db = await _dbFuture;
     final categories = await _loadLibraryCategories(db);
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       WITH chapter_stats AS (
         SELECT
           e.comic_id AS work_id,
@@ -69,6 +68,8 @@ class ComicSnapshotStore {
         c.custom_cover_image_url,
         c.cover_local_path,
         c.custom_cover_local_path,
+        c.custom_cover_focus_x,
+        c.custom_cover_focus_y,
         c.updated_at AS work_updated_at,
         COALESCE(cs.total_count, 0) AS total_count,
         COALESCE(cs.unread_count, 0) AS unread_count,
@@ -88,15 +89,16 @@ class ComicSnapshotStore {
       LEFT JOIN work_state ws
         ON ws.work_id = c.comic_id
       ORDER BY si.category_id ASC, si.sort_order ASC, si.added_at DESC
-    ''',
-    );
+    ''');
 
     final sourceByCategory = <String, List<LibraryWorkItem>>{
-      for (final category in categories) category.categoryId: <LibraryWorkItem>[],
+      for (final category in categories)
+        category.categoryId: <LibraryWorkItem>[],
     };
     for (final row in rows) {
       final item = rowToLibraryWorkItem(row);
-      sourceByCategory.putIfAbsent(item.categoryId, () => <LibraryWorkItem>[])
+      sourceByCategory
+          .putIfAbsent(item.categoryId, () => <LibraryWorkItem>[])
           .add(item);
     }
 
@@ -109,8 +111,9 @@ class ComicSnapshotStore {
     return LibraryShelfSnapshot(
       categories: categories,
       itemsByCategory: queried,
-      visibleMatchCountByCategory:
-          LibraryShelfQueryUtils.countByCategory(queried),
+      visibleMatchCountByCategory: LibraryShelfQueryUtils.countByCategory(
+        queried,
+      ),
     );
   }
 
@@ -163,10 +166,12 @@ class ComicSnapshotStore {
   }
 
   LibraryWorkItem rowToLibraryWorkItem(Map<String, Object?> row) {
-    final customSource =
-        _normalizeNullable(row['custom_cover_image_url'] as String?);
-    final customLocal =
-        _normalizeNullable(row['custom_cover_local_path'] as String?);
+    final customSource = _normalizeNullable(
+      row['custom_cover_image_url'] as String?,
+    );
+    final customLocal = _normalizeNullable(
+      row['custom_cover_local_path'] as String?,
+    );
     final hasPendingCustomCover = customSource != null && customLocal == null;
     final unreadCount = row['unread_count'] as int? ?? 0;
     final readCount = row['read_count'] as int? ?? 0;
@@ -180,12 +185,14 @@ class ComicSnapshotStore {
       ),
       coverImageUrl: row['cover_image_url'] as String?,
       customCoverImageUrl: customSource,
-      coverLocalPath:
-          hasPendingCustomCover ? null : row['cover_local_path'] as String?,
+      coverLocalPath: hasPendingCustomCover
+          ? null
+          : row['cover_local_path'] as String?,
       customCoverLocalPath: customLocal,
+      customCoverFocusX: (row['custom_cover_focus_x'] as num?)?.toDouble(),
+      customCoverFocusY: (row['custom_cover_focus_y'] as num?)?.toDouble(),
       unreadCount: unreadCount,
-      totalChapterCount:
-          row['total_count'] as int? ?? unreadCount + readCount,
+      totalChapterCount: row['total_count'] as int? ?? unreadCount + readCount,
       readChapterCount: readCount,
       addedAt: DateTime.fromMillisecondsSinceEpoch(
         row['added_at'] as int? ?? 0,

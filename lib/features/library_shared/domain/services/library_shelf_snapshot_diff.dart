@@ -93,6 +93,8 @@ class LibraryShelfSnapshotDiffer {
         a.customCoverImageUrl == b.customCoverImageUrl &&
         a.coverLocalPath == b.coverLocalPath &&
         a.customCoverLocalPath == b.customCoverLocalPath &&
+        a.customCoverFocusX == b.customCoverFocusX &&
+        a.customCoverFocusY == b.customCoverFocusY &&
         a.unreadCount == b.unreadCount &&
         a.totalChapterCount == b.totalChapterCount &&
         a.readChapterCount == b.readChapterCount &&

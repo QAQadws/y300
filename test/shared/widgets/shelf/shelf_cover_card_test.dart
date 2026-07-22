@@ -97,4 +97,52 @@ void main() {
 
     expect(fallback.color, palette.coverPlaceholderBackground);
   });
+
+  testWidgets('ShelfCoverCard applies focus only to custom covers', (
+    tester,
+  ) async {
+    final alignments = <AlignmentGeometry>[];
+
+    Future<void> pumpCard({
+      String? customCoverLocalPath,
+      double? focusX,
+      double? focusY,
+    }) {
+      return tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 120,
+              height: 180,
+              child: ShelfCoverCard(
+                title: 'Focused Cover',
+                coverImageUrl: 'https://example.com/cover.jpg',
+                customCoverLocalPath: customCoverLocalPath,
+                customCoverFocusX: focusX,
+                customCoverFocusY: focusY,
+                onTap: () {},
+                coverLayerBuilder: (context, config) {
+                  alignments.add(config.alignment);
+                  return config.placeholder;
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpCard(
+      customCoverLocalPath: 'cache/custom-cover.jpg',
+      focusX: 0.75,
+      focusY: -0.5,
+    );
+    expect(alignments.last, const Alignment(0.75, -0.5));
+
+    await pumpCard(focusX: 0.75, focusY: -0.5);
+    expect(alignments.last, Alignment.center);
+
+    await pumpCard(customCoverLocalPath: 'cache/custom-cover.jpg', focusX: 1);
+    expect(alignments.last, Alignment.center);
+  });
 }
