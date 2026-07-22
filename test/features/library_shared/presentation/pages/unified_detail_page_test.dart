@@ -948,7 +948,7 @@ void main() {
         find.byKey(const Key('unified-detail-chapter-toolbar')),
         findsOneWidget,
       );
-      expect(find.text('全部章节 · 共 2 章'), findsOneWidget);
+      expect(find.text('共2章'), findsOneWidget);
       expect(find.text('全部章节'), findsNothing);
 
       await tester.tap(find.byKey(const Key('unified-detail-appbar-filter')));
@@ -1080,7 +1080,7 @@ void main() {
     );
 
     final toolbar = find.byKey(const Key('unified-detail-chapter-toolbar'));
-    expect(find.text('全部章节 · 共 2 章'), findsOneWidget);
+    expect(find.text('共2章'), findsOneWidget);
     expect(find.text('全部章节'), findsNothing);
     expect(
       find.descendant(of: toolbar, matching: find.byIcon(Icons.filter_list)),

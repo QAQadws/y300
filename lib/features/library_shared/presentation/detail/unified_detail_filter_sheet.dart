@@ -27,7 +27,7 @@ class UnifiedDetailChapterToolbar extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '全部章节 · 共 $chapterCount 章',
+                  '共$chapterCount章',
                   key: const Key('unified-detail-chapter-heading'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

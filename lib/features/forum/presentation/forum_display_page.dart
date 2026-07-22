@@ -64,7 +64,13 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
-        title: _ForumDisplayAppBarTitle(state: state),
+        titleSpacing: 0,
+        title: Padding(
+          padding: const EdgeInsetsDirectional.only(
+            start: NavigationToolbar.kMiddleSpacing,
+          ),
+          child: _ForumDisplayAppBarTitle(state: state),
+        ),
         actions: [
           if (searchFid != null)
             IconButton(
@@ -335,11 +341,13 @@ class _ForumDisplayAppBarTitle extends StatelessWidget {
           style: textStyle.copyWith(fontSize: 11, fontWeight: FontWeight.w600),
           child: Row(
             key: const Key('forum-display-appbar-stats'),
-            mainAxisSize: MainAxisSize.max,
+            mainAxisSize: MainAxisSize.min,
             children: [
               _AppBarStatText(label: '今日', value: state.todayPosts),
               const SizedBox(width: 10),
-              _AppBarStatText(label: '主题', value: state.totalThreads),
+              Flexible(
+                child: _AppBarStatText(label: '主题', value: state.totalThreads),
+              ),
               const SizedBox(width: 10),
               _AppBarStatText(label: '排名', value: state.rank),
             ],
@@ -358,13 +366,7 @@ class _AppBarStatText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Flexible(
-      child: Text(
-        '$label $value',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
+    return Text('$label $value', maxLines: 1, overflow: TextOverflow.ellipsis);
   }
 }
 

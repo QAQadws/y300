@@ -847,6 +847,13 @@ void main() {
       expect(find.text('今日 3'), findsOneWidget);
       expect(find.text('主题 52718'), findsOneWidget);
       expect(find.text('排名 1'), findsOneWidget);
+      final stats = find.byKey(const Key('forum-display-appbar-stats'));
+      final intrinsicStatsWidth =
+          tester.getSize(find.text('今日 3')).width +
+          tester.getSize(find.text('主题 52718')).width +
+          tester.getSize(find.text('排名 1')).width +
+          20;
+      expect(tester.getSize(stats).width, closeTo(intrinsicStatsWidth, 0.01));
       expect(find.text('发帖'), findsNothing);
       expect(
         find.byKey(const Key('forum-display-top-entries')),
@@ -887,6 +894,57 @@ void main() {
       final threadBadgeDecoration = _decorationAroundText(tester, '投票');
       expect(threadBadgeDecoration.boxShadow, isNotNull);
       expect(threadBadgeDecoration.boxShadow, isNotEmpty);
+    });
+
+    testWidgets('app bar gives the thread count all remaining width', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(300, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repository = _FakeForumDisplayRepository((_, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 72611,
+            todayPosts: 137,
+            rank: 2,
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      final stats = find.byKey(const Key('forum-display-appbar-stats'));
+      final flexibleStats = find.descendant(
+        of: stats,
+        matching: find.byType(Flexible),
+      );
+      expect(flexibleStats, findsOneWidget);
+      expect(
+        find.descendant(of: flexibleStats, matching: find.text('主题 72611')),
+        findsOneWidget,
+      );
+      final usedStatsWidth =
+          tester.getSize(find.text('今日 137')).width +
+          tester.getSize(find.text('主题 72611')).width +
+          tester.getSize(find.text('排名 2')).width +
+          20;
+      expect(usedStatsWidth, closeTo(tester.getSize(stats).width, 0.01));
+      expect(
+        tester.getRect(stats).right,
+        closeTo(
+          tester
+              .getRect(find.byKey(const Key('forum-display-search-button')))
+              .left,
+          0.01,
+        ),
+      );
     });
 
     testWidgets('aligns thread tags to the same right edge', (tester) async {
@@ -1210,6 +1268,8 @@ ForumDisplayData _displayData({
   required int page,
   required int total,
   required List<ForumThreadSummary> threads,
+  int todayPosts = 3,
+  int rank = 1,
   List<ForumDisplayTopEntry>? topEntries,
   String? headImageUrl,
   List<ForumDisplaySubForum>? subForums,
@@ -1222,8 +1282,8 @@ ForumDisplayData _displayData({
     perPage: 1,
     totalThreads: total,
     headImageUrl: headImageUrl,
-    todayPosts: 3,
-    rank: 1,
+    todayPosts: todayPosts,
+    rank: rank,
     lastPage: lastPage,
     previousPageUrl: page > 1
         ? 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&page=${page - 1}&mobile=2'
