@@ -32,6 +32,7 @@ void main() {
     final controller = ComicCommentSessionController(
       key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
       loader: loader,
+      maxAutomaticAttempts: 1,
     );
     addTearDown(controller.dispose);
 
@@ -42,6 +43,44 @@ void main() {
 
     expect(loader.calls, 2);
     expect(controller.state.result?.status, ComicCommentLoadStatus.success);
+  });
+
+  test('automatic load retries one transient first-page failure', () async {
+    final delays = <Duration>[];
+    final loader = _FakeCommentLoader(<ComicCommentLoadResult>[
+      _failureResult(),
+      _successResult(),
+    ]);
+    final controller = ComicCommentSessionController(
+      key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
+      loader: loader,
+      automaticRetryDelay: const Duration(milliseconds: 500),
+      delay: (duration) async => delays.add(duration),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.load();
+
+    expect(loader.calls, 2);
+    expect(delays, const <Duration>[Duration(milliseconds: 500)]);
+    expect(controller.state.result?.status, ComicCommentLoadStatus.success);
+  });
+
+  test('automatic load does not retry a non-transient failure', () async {
+    final loader = _FakeCommentLoader(<ComicCommentLoadResult>[
+      _failureResult(errorCode: ComicCommentLoadErrorCode.unauthorized),
+    ]);
+    final controller = ComicCommentSessionController(
+      key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
+      loader: loader,
+      delay: (_) async {},
+    );
+    addTearDown(controller.dispose);
+
+    await controller.load();
+
+    expect(loader.calls, 1);
+    expect(controller.state.result?.status, ComicCommentLoadStatus.failure);
   });
 
   test(
@@ -108,14 +147,17 @@ ComicCommentLoadResult _successResult() {
   );
 }
 
-ComicCommentLoadResult _failureResult() {
-  return const ComicCommentLoadResult(
+ComicCommentLoadResult _failureResult({
+  ComicCommentLoadErrorCode errorCode =
+      ComicCommentLoadErrorCode.firstPageUnavailable,
+}) {
+  return ComicCommentLoadResult(
     sourceTid: '573279',
     status: ComicCommentLoadStatus.failure,
     items: <ComicCommentItem>[],
     loadedPages: <int>{},
     expectedPages: 0,
-    errorCode: ComicCommentLoadErrorCode.firstPageUnavailable,
+    errorCode: errorCode,
     errorMessage: '请求失败',
   );
 }

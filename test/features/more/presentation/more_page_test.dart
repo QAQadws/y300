@@ -83,6 +83,9 @@ void main() {
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
     expect(find.text('管理图片缓存与下载位置'), findsOneWidget);
+    expect(find.byKey(const Key('more-download-queue-entry')), findsOneWidget);
+    expect(find.text('下载队列'), findsOneWidget);
+    expect(find.text('暂无下载任务'), findsOneWidget);
     await _scrollUntilVisibleIfNeeded(
       tester,
       find.byKey(const Key('more-check-update-entry')),
@@ -412,6 +415,8 @@ void main() {
         tester,
         find.byKey(const Key('more-thread-detail-diagnostic-switch')),
       );
+      await tester.drag(find.byType(ListView), const Offset(0, -80));
+      await tester.pumpAndSettle();
       expect(
         find.byKey(const Key('more-thread-detail-diagnostic-switch')),
         findsOneWidget,

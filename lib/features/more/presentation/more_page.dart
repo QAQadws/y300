@@ -11,6 +11,9 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/app_update/presentation/widgets/app_update_check_tile.dart';
+import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
+import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
+import 'package:y300/features/comic/presentation/comic_download_queue_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
@@ -37,6 +40,7 @@ class _MorePageState extends ConsumerState<MorePage> {
     final appearanceSettings =
         ref.watch(appAppearanceControllerProvider).asData?.value ??
         AppAppearanceSettings.defaults();
+    final downloadQueueSnapshot = ref.watch(comicDownloadQueueSnapshotProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('更多')),
@@ -89,6 +93,24 @@ class _MorePageState extends ConsumerState<MorePage> {
               );
             },
           ),
+          ValueListenableBuilder<ComicDownloadQueueSnapshot>(
+            valueListenable: downloadQueueSnapshot,
+            builder: (context, snapshot, _) {
+              return ListTile(
+                key: const Key('more-download-queue-entry'),
+                leading: const Icon(Icons.downloading_outlined),
+                title: const Text('下载队列'),
+                subtitle: Text(_downloadQueueSummary(snapshot)),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ComicDownloadQueuePage(),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
           const ListTile(
             key: Key('more-reader-settings-placeholder'),
             leading: Icon(Icons.menu_book_outlined),
@@ -107,6 +129,26 @@ class _MorePageState extends ConsumerState<MorePage> {
         ],
       ),
     );
+  }
+
+  String _downloadQueueSummary(ComicDownloadQueueSnapshot snapshot) {
+    final active = snapshot.activeEntry;
+    if (active != null) {
+      final total = active.totalImages;
+      final progress = total == null || total <= 0
+          ? '正在解析图片'
+          : '${active.completedImages}/$total';
+      final waiting = snapshot.waitingCount;
+      return '正在下载《${active.comicTitle}》 ${active.episodeTitle} · '
+          '$progress${waiting > 0 ? ' · 等待 $waiting' : ''}';
+    }
+    if (snapshot.waitingCount > 0) {
+      return '等待下载 · ${snapshot.waitingCount} 个任务';
+    }
+    if (snapshot.failedCount > 0) {
+      return '${snapshot.failedCount} 个任务下载失败';
+    }
+    return '暂无下载任务';
   }
 
   Future<void> _showAppearanceSettingsSheet(BuildContext context) {

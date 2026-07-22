@@ -4,12 +4,14 @@ import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
+import 'package:y300/features/comic/domain/services/comic_download_execution.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/storage/data/storage_location_repository.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
@@ -20,6 +22,214 @@ void main() {
     () async {
       final temp = await io.Directory.systemTemp.createTemp(
         'y300-comic-download-test-',
+      );
+      addTearDown(() async {
+        if (await temp.exists()) {
+          await temp.delete(recursive: true);
+        }
+      });
+      final image1 = io.File(p.join(temp.path, 'source-1.jpg'))
+        ..writeAsBytesSync(<int>[1, 2, 3]);
+      final image2 = io.File(p.join(temp.path, 'source-2.png'))
+        ..writeAsBytesSync(<int>[4, 5, 6]);
+      final repository = _ComicDownloadRepositoryFake();
+      final governor = _RecordingGovernor();
+      final service = DefaultComicDownloadService(
+        repository: repository,
+        readerServiceFuture: Future<ComicReaderService>.value(
+          _ComicReaderServiceFake(<String, String>{
+            'https://img.test/1.jpg': image1.path,
+            'https://img.test/2.png': image2.path,
+          }),
+        ),
+        storageService: DefaultDownloadStorageService(
+          locationRepository: _FakeStorageLocationRepository(temp.path),
+        ),
+        imageRequestGovernor: governor,
+      );
+      final observer = _RecordingProgressObserver();
+
+      final result = await service.downloadEpisode(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:101',
+        observer: observer,
+      );
+
+      expect(await io.File(result.cbzPath).exists(), isTrue);
+      final archive = ZipDecoder().decodeBytes(
+        await io.File(result.cbzPath).readAsBytes(),
+      );
+      expect(
+        archive.files.map((file) => file.name),
+        containsAll(<String>['001.jpg', '002.png']),
+      );
+
+      final meta = await io.File(
+        p.join(temp.path, 'comics', '测试漫画-${_fnv('yamibo:100')}', 'meta.json'),
+      ).readAsString();
+      expect(meta, contains('"contentType": "comic"'));
+      expect(meta, contains('"cbzFile": "001-第1话.cbz"'));
+      expect(
+        repository.cacheWrites.where((item) => item.cacheStatus == 'done'),
+        hasLength(2),
+      );
+      expect(observer.values, <String>['0/2', '1/2', '2/2']);
+      expect(governor.waitCount, 2);
+      expect(
+        await service.hasValidEpisodeDownload(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:101',
+        ),
+        isTrue,
+      );
+      await io.File(result.cbzPath).writeAsBytes(<int>[1, 2, 3], flush: true);
+      expect(
+        await service.hasValidEpisodeDownload(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:101',
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test('cache hits report progress without consuming network turns', () async {
+    final temp = await io.Directory.systemTemp.createTemp(
+      'y300-comic-download-cache-test-',
+    );
+    addTearDown(() async {
+      if (await temp.exists()) {
+        await temp.delete(recursive: true);
+      }
+    });
+    final image1 = io.File(p.join(temp.path, 'cached-1.jpg'))
+      ..writeAsBytesSync(<int>[1, 2, 3]);
+    final image2 = io.File(p.join(temp.path, 'cached-2.png'))
+      ..writeAsBytesSync(<int>[4, 5, 6]);
+    final governor = _RecordingGovernor();
+    final reader = _ComicReaderServiceFake(const <String, String>{});
+    final service = DefaultComicDownloadService(
+      repository: _ComicDownloadRepositoryFake(),
+      readerServiceFuture: Future<ComicReaderService>.value(reader),
+      storageService: DefaultDownloadStorageService(
+        locationRepository: _FakeStorageLocationRepository(temp.path),
+      ),
+      imageCacheService: _ImageCacheServiceFake(<String>[
+        image1.path,
+        image2.path,
+      ]),
+      imageRequestGovernor: governor,
+    );
+    final observer = _RecordingProgressObserver();
+
+    await service.downloadEpisode(
+      comicId: 'yamibo:100',
+      episodeId: 'yamibo:100:101',
+      observer: observer,
+    );
+
+    expect(observer.values, <String>['0/2', '1/2', '2/2']);
+    expect(governor.waitCount, 0);
+    expect(reader.cacheCalls, 0);
+  });
+
+  test(
+    'cancellation removes temporary files and never commits a CBZ',
+    () async {
+      final temp = await io.Directory.systemTemp.createTemp(
+        'y300-comic-download-cancel-test-',
+      );
+      addTearDown(() async {
+        if (await temp.exists()) {
+          await temp.delete(recursive: true);
+        }
+      });
+      final image1 = io.File(p.join(temp.path, 'source-1.jpg'))
+        ..writeAsBytesSync(<int>[1, 2, 3]);
+      final image2 = io.File(p.join(temp.path, 'source-2.jpg'))
+        ..writeAsBytesSync(<int>[4, 5, 6]);
+      final token = ComicDownloadCancellationToken();
+      final observer = _CancelAfterFirstImageObserver(token);
+      final service = DefaultComicDownloadService(
+        repository: _ComicDownloadRepositoryFake(),
+        readerServiceFuture: Future<ComicReaderService>.value(
+          _ComicReaderServiceFake(<String, String>{
+            'https://img.test/1.jpg': image1.path,
+            'https://img.test/2.png': image2.path,
+          }),
+        ),
+        storageService: DefaultDownloadStorageService(
+          locationRepository: _FakeStorageLocationRepository(temp.path),
+        ),
+        imageRequestGovernor: _RecordingGovernor(),
+      );
+
+      await expectLater(
+        service.downloadEpisode(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:101',
+          observer: observer,
+          cancellationToken: token,
+        ),
+        throwsA(isA<ComicDownloadCanceledException>()),
+      );
+
+      final generatedFiles = temp
+          .listSync(recursive: true)
+          .whereType<io.File>()
+          .map((file) => file.path)
+          .where((path) => path.endsWith('.cbz') || path.endsWith('.part'));
+      expect(generatedFiles, isEmpty);
+      expect(observer.values, <String>['0/2', '1/2']);
+    },
+  );
+
+  test('cover and page network downloads share the same governor', () async {
+    final temp = await io.Directory.systemTemp.createTemp(
+      'y300-comic-download-cover-limit-test-',
+    );
+    addTearDown(() async {
+      if (await temp.exists()) {
+        await temp.delete(recursive: true);
+      }
+    });
+    final cover = io.File(p.join(temp.path, 'source-cover.jpg'))
+      ..writeAsBytesSync(<int>[7, 8, 9]);
+    final image1 = io.File(p.join(temp.path, 'source-1.jpg'))
+      ..writeAsBytesSync(<int>[1, 2, 3]);
+    final image2 = io.File(p.join(temp.path, 'source-2.png'))
+      ..writeAsBytesSync(<int>[4, 5, 6]);
+    final governor = _RecordingGovernor();
+    final service = DefaultComicDownloadService(
+      repository: _ComicDownloadRepositoryFake(
+        coverImageUrl: 'https://img.test/cover.jpg',
+      ),
+      readerServiceFuture: Future<ComicReaderService>.value(
+        _ComicReaderServiceFake(<String, String>{
+          'https://img.test/cover.jpg': cover.path,
+          'https://img.test/1.jpg': image1.path,
+          'https://img.test/2.png': image2.path,
+        }),
+      ),
+      storageService: DefaultDownloadStorageService(
+        locationRepository: _FakeStorageLocationRepository(temp.path),
+      ),
+      imageRequestGovernor: governor,
+    );
+
+    await service.downloadEpisode(
+      comicId: 'yamibo:100',
+      episodeId: 'yamibo:100:101',
+    );
+
+    expect(governor.waitCount, 3);
+  });
+
+  test(
+    'concurrent reader extraction shares one immutable generation',
+    () async {
+      final temp = await io.Directory.systemTemp.createTemp(
+        'y300-comic-download-extraction-test-',
       );
       addTearDown(() async {
         if (await temp.exists()) {
@@ -42,31 +252,41 @@ void main() {
         storageService: DefaultDownloadStorageService(
           locationRepository: _FakeStorageLocationRepository(temp.path),
         ),
+        imageRequestGovernor: _RecordingGovernor(),
+        readerExtractionRoot: io.Directory(p.join(temp.path, 'reader-cache')),
       );
 
-      final result = await service.downloadEpisode(
+      await service.downloadEpisode(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
+      final results = await Future.wait(
+        List<Future<List<ComicEpisodeImageItem>>>.generate(
+          8,
+          (_) => service.getDownloadedEpisodeImages(
+            comicId: 'yamibo:100',
+            episodeId: 'yamibo:100:101',
+          ),
+        ),
+      );
 
-      expect(await io.File(result.cbzPath).exists(), isTrue);
-      final archive = ZipDecoder().decodeBytes(
-        await io.File(result.cbzPath).readAsBytes(),
-      );
-      expect(
-        archive.files.map((file) => file.name),
-        containsAll(<String>['001.jpg', '002.png']),
-      );
-
-      final meta = await io.File(
-        p.join(temp.path, 'comics', '测试漫画-${_fnv('yamibo:100')}', 'meta.json'),
-      ).readAsString();
-      expect(meta, contains('"contentType": "comic"'));
-      expect(meta, contains('"cbzFile": "001-第1话.cbz"'));
-      expect(
-        repository.cacheWrites.where((item) => item.cacheStatus == 'done'),
-        hasLength(2),
-      );
+      expect(results, everyElement(hasLength(2)));
+      final paths = results
+          .expand((items) => items.map((item) => item.localPath))
+          .whereType<String>()
+          .toSet();
+      expect(paths, hasLength(2));
+      for (final path in paths) {
+        expect(await io.File(path).exists(), isTrue);
+      }
+      final stagingDirectories =
+          await io.Directory(
+            p.join(temp.path, 'reader-cache'),
+          ).list(recursive: true).where((entry) {
+            return entry is io.Directory &&
+                p.basename(entry.path).startsWith('.extracting-');
+          }).toList();
+      expect(stagingDirectories, isEmpty);
     },
   );
 }
@@ -95,10 +315,82 @@ class _FakeStorageLocationRepository implements StorageLocationRepository {
   Future<void> setCustomStorageRoot(String? path) async {}
 }
 
+class _RecordingGovernor implements ComicDownloadImageRequestGovernor {
+  var waitCount = 0;
+
+  @override
+  Future<void> waitForTurn() async {
+    waitCount += 1;
+  }
+}
+
+class _RecordingProgressObserver implements ComicDownloadProgressObserver {
+  final List<String> values = <String>[];
+
+  @override
+  Future<void> onImagesResolved(int totalImages) async {
+    values.add('0/$totalImages');
+  }
+
+  @override
+  Future<void> onImageCompleted({
+    required int completedImages,
+    required int totalImages,
+  }) async {
+    values.add('$completedImages/$totalImages');
+  }
+}
+
+final class _CancelAfterFirstImageObserver extends _RecordingProgressObserver {
+  _CancelAfterFirstImageObserver(this.token);
+
+  final ComicDownloadCancellationToken token;
+
+  @override
+  Future<void> onImageCompleted({
+    required int completedImages,
+    required int totalImages,
+  }) async {
+    await super.onImageCompleted(
+      completedImages: completedImages,
+      totalImages: totalImages,
+    );
+    if (completedImages == 1) {
+      token.cancel();
+    }
+  }
+}
+
+final class _ImageCacheServiceFake implements ImageCacheService {
+  _ImageCacheServiceFake(this.paths);
+
+  final List<String> paths;
+  var _readIndex = 0;
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async {
+    if (_readIndex >= paths.length) {
+      return null;
+    }
+    final path = paths[_readIndex++];
+    return CachedImageResult(
+      success: true,
+      cacheKey: cacheKey,
+      localPath: path,
+      bytes: io.File(path).lengthSync(),
+      fromCache: true,
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _ComicReaderServiceFake implements ComicReaderService {
   _ComicReaderServiceFake(this.pathsByUrl);
 
   final Map<String, String> pathsByUrl;
+  var cacheCalls = 0;
 
   @override
   Future<ComicImageCacheResult> cacheImage({
@@ -111,6 +403,7 @@ class _ComicReaderServiceFake implements ComicReaderService {
     int? imageIndex,
     bool protected = false,
   }) async {
+    cacheCalls += 1;
     return ComicImageCacheResult(
       success: true,
       localPath: pathsByUrl[imageUrl],
@@ -140,6 +433,9 @@ class _CacheWrite {
 
 class _ComicDownloadRepositoryFake
     implements ComicRepository, ComicEpisodeImageCacheMetadataWriter {
+  _ComicDownloadRepositoryFake({this.coverImageUrl});
+
+  final String? coverImageUrl;
   final List<_CacheWrite> cacheWrites = <_CacheWrite>[];
 
   @override
@@ -153,7 +449,7 @@ class _ComicDownloadRepositoryFake
       title: '测试漫画',
       author: '作者',
       translationGroup: '组',
-      coverImageUrl: null,
+      coverImageUrl: coverImageUrl,
       updatedAt: DateTime(2026, 5, 10),
       episodeCount: 1,
     );

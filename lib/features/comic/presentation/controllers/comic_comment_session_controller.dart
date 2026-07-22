@@ -53,12 +53,21 @@ class ComicCommentSessionController extends ChangeNotifier {
   ComicCommentSessionController({
     required ComicCommentSessionKey key,
     required ComicCommentLoader loader,
+    this.maxAutomaticAttempts = 2,
+    this.automaticRetryDelay = const Duration(milliseconds: 500),
+    Future<void> Function(Duration duration)? delay,
   }) : _key = key,
        _loader = loader,
+       _delay = delay ?? ((duration) => Future<void>.delayed(duration)),
+       assert(maxAutomaticAttempts > 0),
+       assert(automaticRetryDelay >= Duration.zero),
        _state = ComicCommentSessionState.initial(key);
 
   final ComicCommentSessionKey _key;
   final ComicCommentLoader _loader;
+  final int maxAutomaticAttempts;
+  final Duration automaticRetryDelay;
+  final Future<void> Function(Duration duration) _delay;
 
   ComicCommentSessionState _state;
   ComicCommentCancellationToken? _activeToken;
@@ -94,22 +103,39 @@ class ComicCommentSessionController extends ChangeNotifier {
     );
     notifyListeners();
 
-    ComicCommentLoadResult result;
-    try {
-      result = await _loader.loadAll(
-        sourceTid: _key.sourceTid,
-        cancellationToken: token,
-      );
-    } catch (_) {
-      result = ComicCommentLoadResult(
-        sourceTid: _key.sourceTid,
-        status: ComicCommentLoadStatus.failure,
-        items: const <ComicCommentItem>[],
-        loadedPages: const <int>{},
-        expectedPages: 0,
-        errorCode: ComicCommentLoadErrorCode.firstPageUnavailable,
-        errorMessage: '回帖加载失败',
-      );
+    ComicCommentLoadResult? result;
+    final attemptLimit = force ? 1 : maxAutomaticAttempts;
+    for (var attempt = 1; attempt <= attemptLimit; attempt += 1) {
+      try {
+        result = await _loader.loadAll(
+          sourceTid: _key.sourceTid,
+          cancellationToken: token,
+        );
+      } catch (_) {
+        result = ComicCommentLoadResult(
+          sourceTid: _key.sourceTid,
+          status: ComicCommentLoadStatus.failure,
+          items: const <ComicCommentItem>[],
+          loadedPages: const <int>{},
+          expectedPages: 0,
+          errorCode: ComicCommentLoadErrorCode.firstPageUnavailable,
+          errorMessage: '回帖加载失败',
+        );
+      }
+
+      if (!_isCurrent(generation, token)) {
+        return;
+      }
+      if (attempt >= attemptLimit || !result.isTransientFailure) {
+        break;
+      }
+      await Future.any<void>(<Future<void>>[
+        _delay(automaticRetryDelay),
+        token.whenCancelled,
+      ]);
+      if (!_isCurrent(generation, token)) {
+        return;
+      }
     }
 
     if (!_isCurrent(generation, token)) {
@@ -119,7 +145,7 @@ class ComicCommentSessionController extends ChangeNotifier {
     _state = ComicCommentSessionState(
       key: _key,
       isLoading: false,
-      result: result,
+      result: result!,
     );
     notifyListeners();
   }

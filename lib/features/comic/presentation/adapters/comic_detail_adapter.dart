@@ -1,11 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart';
+import 'package:y300/features/comic/domain/services/comic_download_queue.dart';
 import 'package:y300/features/comic/domain/services/comic_incremental_episode_discovery.dart';
 import 'package:y300/features/comic/domain/services/comic_catalog_url_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
@@ -37,6 +40,7 @@ class ComicDetailAdapter
         DetailModuleAdapter,
         DetailChapterReadStateAdapter,
         DetailChapterDownloadAdapter,
+        DetailChapterDownloadActivityAdapter,
         DetailMetadataEditor,
         DetailCatalogEditor,
         DetailCoverEditor {
@@ -47,6 +51,7 @@ class ComicDetailAdapter
     ComicFirstEpisodeCoverService? firstEpisodeCoverService,
     ComicRefreshOutcomeApplier? refreshOutcomeApplier,
     ComicDownloadService? downloadService,
+    ComicDownloadQueue? downloadQueue,
     ImageCacheService? imageCacheService,
     BulkDownloadUseCase? bulkDownloadUseCase,
     ComicIncrementalEpisodeDiscovery? incrementalDiscovery,
@@ -60,6 +65,7 @@ class ComicDetailAdapter
        _firstEpisodeCoverService = firstEpisodeCoverService,
        _refreshOutcomeApplier = refreshOutcomeApplier,
        _downloadService = downloadService,
+       _downloadQueue = downloadQueue,
        _coverCacheService = LibraryCoverCacheService(imageCacheService),
        _bulkDownloadUseCase = bulkDownloadUseCase,
        _incrementalDiscovery = incrementalDiscovery,
@@ -77,6 +83,7 @@ class ComicDetailAdapter
   final ComicFirstEpisodeCoverService? _firstEpisodeCoverService;
   final ComicRefreshOutcomeApplier? _refreshOutcomeApplier;
   final ComicDownloadService? _downloadService;
+  final ComicDownloadQueue? _downloadQueue;
   final LibraryCoverCacheService _coverCacheService;
   final BulkDownloadUseCase? _bulkDownloadUseCase;
   final ComicIncrementalEpisodeDiscovery? _incrementalDiscovery;
@@ -85,6 +92,26 @@ class ComicDetailAdapter
   final ComicTitleAnalyzer _titleAnalyzer;
   final ComicCatalogUrlPolicy _catalogUrlPolicy;
   final LibraryStateRepository _stateRepository;
+
+  @override
+  Listenable? get chapterDownloadActivityListenable => _downloadQueue?.snapshot;
+
+  @override
+  bool isChapterDownloadActive({
+    required String workId,
+    required String episodeId,
+  }) {
+    final queue = _downloadQueue;
+    if (queue == null) {
+      return false;
+    }
+    return queue.snapshot.value.entries.any(
+      (entry) =>
+          entry.comicId == workId &&
+          entry.episodeId == episodeId &&
+          entry.isActive,
+    );
+  }
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
@@ -345,6 +372,7 @@ class ComicDetailAdapter
     required String workId,
     required String episodeId,
   }) async {
+    await _downloadQueue?.cancelEpisode(workId, episodeId);
     await _downloadService?.deleteEpisodeDownload(
       comicId: workId,
       episodeId: episodeId,
@@ -365,38 +393,54 @@ class ComicDetailAdapter
       await bulkDownloadUseCase.downloadComics(<String>{workId});
       return;
     }
+    final queue = _downloadQueue;
+    if (queue == null) {
+      throw UnsupportedError('漫画下载队列不可用');
+    }
+    final detail = await _repository.getComicDetail(comicId: workId);
     final episodes = await _repository.getComicEpisodes(
       comicId: workId,
       descending: false,
     );
-    for (final episode in episodes) {
-      await markChapterDownloaded(
-        workId: workId,
-        episodeId: episode.episodeId,
-        isDownloaded: true,
-      );
-    }
+    await queue.enqueueTargets(
+      episodes.map(
+        (episode) => _downloadTarget(
+          workId: workId,
+          comicTitle: detail?.title,
+          episode: episode,
+        ),
+      ),
+    );
   }
 
   @override
   Future<void> downloadUnread({required String workId}) async {
+    final queue = _downloadQueue;
+    if (queue == null) {
+      throw UnsupportedError('漫画下载队列不可用');
+    }
+    final detail = await _repository.getComicDetail(comicId: workId);
     final episodes = await _repository.getComicEpisodes(
       comicId: workId,
       descending: false,
     );
+    final targets = <ComicDownloadTarget>[];
     for (final episode in episodes) {
       final state = await _stateRepository.getEpisodeState(
         moduleKey: LibraryModuleKey.comic,
         episodeId: episode.episodeId,
       );
       if (!(state?.isRead ?? false)) {
-        await markChapterDownloaded(
-          workId: workId,
-          episodeId: episode.episodeId,
-          isDownloaded: true,
+        targets.add(
+          _downloadTarget(
+            workId: workId,
+            comicTitle: detail?.title,
+            episode: episode,
+          ),
         );
       }
     }
+    await queue.enqueueTargets(targets);
   }
 
   @override
@@ -523,17 +567,61 @@ class ComicDetailAdapter
     required bool isDownloaded,
   }) async {
     if (isDownloaded) {
-      await _downloadService?.downloadEpisode(
+      final queue = _downloadQueue;
+      if (queue == null) {
+        throw UnsupportedError('漫画下载队列不可用');
+      }
+      final detail = await _repository.getComicDetail(comicId: workId);
+      final episodes = await _repository.getComicEpisodes(
         comicId: workId,
-        episodeId: episodeId,
+        descending: false,
       );
+      final episode = episodes
+          .where((item) => item.episodeId == episodeId)
+          .firstOrNull;
+      if (episode == null) {
+        throw StateError('漫画章节不存在');
+      }
+      await queue.enqueueTargets(<ComicDownloadTarget>[
+        _downloadTarget(
+          workId: workId,
+          comicTitle: detail?.title,
+          episode: episode,
+        ),
+      ]);
+      return;
     }
+    await _downloadQueue?.cancelEpisode(workId, episodeId);
+    await _downloadService?.deleteEpisodeDownload(
+      comicId: workId,
+      episodeId: episodeId,
+    );
     await _stateRepository.upsertEpisodeState(
       moduleKey: LibraryModuleKey.comic,
       episodeId: episodeId,
       workId: workId,
-      isDownloaded: isDownloaded,
-      downloadedAt: isDownloaded ? DateTime.now() : null,
+      isDownloaded: false,
+      downloadedAt: null,
+    );
+  }
+
+  ComicDownloadTarget _downloadTarget({
+    required String workId,
+    required String? comicTitle,
+    required ComicEpisodeItem episode,
+  }) {
+    final normalizedComicTitle = comicTitle?.trim();
+    final normalizedEpisodeTitle = episode.episodeTitle?.trim();
+    return ComicDownloadTarget(
+      comicId: workId,
+      episodeId: episode.episodeId,
+      comicTitle: normalizedComicTitle == null || normalizedComicTitle.isEmpty
+          ? workId
+          : normalizedComicTitle,
+      episodeTitle:
+          normalizedEpisodeTitle == null || normalizedEpisodeTitle.isEmpty
+          ? episode.sourceTid
+          : normalizedEpisodeTitle,
     );
   }
 

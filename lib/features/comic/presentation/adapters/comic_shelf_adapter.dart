@@ -466,19 +466,16 @@ class ComicShelfAdapter
     }
     final normalizedWorkIds = _normalizedWorkIds(request.workIds);
     final result = await useCase.downloadComics(normalizedWorkIds);
-    final failedCount =
-        result.failedComicIds.length +
-        (request.workIds.length - normalizedWorkIds.length);
-    final message = switch ((result.downloadedEpisodeCount, failedCount)) {
-      (0, 0) => 'No downloadable episodes were found',
-      (_, 0) => 'Downloaded ${result.downloadedEpisodeCount} episodes',
-      _ =>
-        'Downloaded ${result.downloadedEpisodeCount} episodes, failed $failedCount',
-    };
+    final invalidCount = request.workIds.length - normalizedWorkIds.length;
+    final message = result.enqueuedCount > 0
+        ? '已将 ${result.enqueuedCount} 个章节加入下载队列'
+        : result.deduplicatedCount > 0
+        ? '所选章节已在下载队列中'
+        : '没有需要下载的章节';
     return SelectionActionResult(
       message: message,
-      changed: result.downloadedEpisodeCount > 0,
-      failedCount: failedCount,
+      changed: result.enqueuedCount > 0 || result.deduplicatedCount > 0,
+      failedCount: invalidCount,
     );
   }
 

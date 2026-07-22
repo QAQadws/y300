@@ -726,10 +726,10 @@ class _FakeBulkDownloadUseCase implements BulkDownloadUseCase {
   Future<BulkDownloadResult> downloadComics(Set<String> comicIds) async {
     lastComicIds = comicIds;
     return BulkDownloadResult(
-      requestedComicIds: comicIds.toList(growable: false),
-      completedComicIds: comicIds.toList(growable: false),
-      failedComicIds: const <String>[],
-      downloadedEpisodeCount: 3,
+      requestedCount: 3,
+      enqueuedCount: 3,
+      deduplicatedCount: 0,
+      skippedDownloadedCount: 0,
     );
   }
 }

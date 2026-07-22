@@ -1,12 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
+import 'package:y300/features/comic/domain/services/comic_download_queue.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_incremental_episode_discovery.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
@@ -475,7 +478,7 @@ void main() {
     ]);
   });
 
-  test('downloadUnread keeps per-episode fallback behavior', () async {
+  test('downloadUnread only enqueues unread episodes', () async {
     final stateRepository = _RecordingLibraryStateRepository(
       episodeStates: <String, LibraryEpisodeState>{
         'comic:1:120': LibraryEpisodeState(
@@ -486,14 +489,69 @@ void main() {
         ),
       },
     );
+    final queue = _RecordingComicDownloadQueue();
     final adapter = ComicDetailAdapter(
       _FakeComicRepository(),
       stateRepository: stateRepository,
+      downloadQueue: queue,
     );
 
     await adapter.downloadUnread(workId: 'comic:1');
 
-    expect(stateRepository.downloadedEpisodeIds, <String>['comic:1:90']);
+    expect(queue.targets.map((target) => target.episodeId), <String>[
+      'comic:1:90',
+    ]);
+    expect(stateRepository.downloadedEpisodeIds, isEmpty);
+  });
+
+  test('single chapter download only enqueues the selected episode', () async {
+    final stateRepository = _RecordingLibraryStateRepository();
+    final queue = _RecordingComicDownloadQueue();
+    final adapter = ComicDetailAdapter(
+      _FakeComicRepository(),
+      stateRepository: stateRepository,
+      downloadQueue: queue,
+    );
+
+    await adapter.markChapterDownloaded(
+      workId: 'comic:1',
+      episodeId: 'comic:1:120',
+      isDownloaded: true,
+    );
+
+    expect(queue.targets, hasLength(1));
+    expect(queue.targets.single.comicId, 'comic:1');
+    expect(queue.targets.single.episodeId, 'comic:1:120');
+    expect(queue.targets.single.comicTitle, 'Test Comic');
+    expect(queue.targets.single.episodeTitle, '后续');
+    expect(stateRepository.downloadedEpisodeIds, isEmpty);
+  });
+
+  test('chapter download activity follows active queue statuses', () {
+    final queue = _RecordingComicDownloadQueue();
+    final adapter = ComicDetailAdapter(
+      _FakeComicRepository(),
+      stateRepository: _FakeLibraryStateRepository(),
+      downloadQueue: queue,
+    );
+
+    queue.setStatus(ComicDownloadQueueStatus.pending);
+    expect(
+      adapter.isChapterDownloadActive(
+        workId: 'comic:1',
+        episodeId: 'comic:1:120',
+      ),
+      isTrue,
+    );
+
+    queue.setStatus(ComicDownloadQueueStatus.failed);
+    expect(
+      adapter.isChapterDownloadActive(
+        workId: 'comic:1',
+        episodeId: 'comic:1:120',
+      ),
+      isFalse,
+    );
   });
 
   test('loadChapters sorts comic sources by numeric tid', () async {
@@ -1450,12 +1508,75 @@ class _RecordingBulkDownloadUseCase implements BulkDownloadUseCase {
   Future<BulkDownloadResult> downloadComics(Set<String> comicIds) async {
     requestedComicIds.add(Set<String>.from(comicIds));
     return BulkDownloadResult(
-      requestedComicIds: comicIds.toList(growable: false),
-      completedComicIds: comicIds.toList(growable: false),
-      failedComicIds: const <String>[],
-      downloadedEpisodeCount: 0,
+      requestedCount: comicIds.length,
+      enqueuedCount: 0,
+      deduplicatedCount: 0,
+      skippedDownloadedCount: 0,
     );
   }
+}
+
+class _RecordingComicDownloadQueue implements ComicDownloadQueue {
+  final ValueNotifier<ComicDownloadQueueSnapshot> _snapshot =
+      ValueNotifier<ComicDownloadQueueSnapshot>(
+        ComicDownloadQueueSnapshot.empty,
+      );
+  final List<ComicDownloadTarget> targets = <ComicDownloadTarget>[];
+
+  void setStatus(ComicDownloadQueueStatus status) {
+    final now = DateTime(2026, 7, 22);
+    _snapshot.value = ComicDownloadQueueSnapshot(
+      entries: <ComicDownloadQueueEntry>[
+        ComicDownloadQueueEntry(
+          id: 1,
+          comicId: 'comic:1',
+          episodeId: 'comic:1:120',
+          comicTitle: 'Test Comic',
+          episodeTitle: '后续',
+          status: status,
+          completedImages: 0,
+          totalImages: null,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ],
+    );
+  }
+
+  @override
+  ValueListenable<ComicDownloadQueueSnapshot> get snapshot => _snapshot;
+
+  @override
+  Future<ComicDownloadEnqueueResult> enqueueTargets(
+    Iterable<ComicDownloadTarget> targets,
+  ) async {
+    final entries = targets.toList(growable: false);
+    this.targets.addAll(entries);
+    return ComicDownloadEnqueueResult(
+      requestedCount: entries.length,
+      enqueuedCount: entries.length,
+      deduplicatedCount: 0,
+      skippedDownloadedCount: 0,
+    );
+  }
+
+  @override
+  Future<void> cancel(int taskId) async {}
+
+  @override
+  Future<void> cancelComic(String comicId) async {}
+
+  @override
+  Future<void> cancelEpisode(String comicId, String episodeId) async {}
+
+  @override
+  Future<void> remove(int taskId) async {}
+
+  @override
+  Future<void> retry(int taskId) async {}
+
+  @override
+  Future<void> start() async {}
 }
 
 class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {

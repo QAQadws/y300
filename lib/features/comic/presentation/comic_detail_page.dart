@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
 import 'package:y300/features/comic/data/use_cases/bulk_download_use_case_providers.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
@@ -40,6 +41,7 @@ class ComicDetailPage extends ConsumerWidget {
       ),
       refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
       downloadService: ref.watch(comicDownloadServiceProvider),
+      downloadQueue: ref.watch(comicDownloadQueueProvider),
       imageCacheService: ref.watch(imageCacheServiceProvider),
       bulkDownloadUseCase: ref.watch(bulkDownloadUseCaseProvider),
       incrementalDiscovery: ref.watch(comicIncrementalEpisodeDiscoveryProvider),

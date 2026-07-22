@@ -7,6 +7,7 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/data/services/cache_budget_scheduler.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
+import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
 import 'package:y300/features/comic/data/providers/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
@@ -26,10 +27,27 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 final mainShellBackgroundTaskStarterProvider =
     Provider<Future<void> Function()>((ref) {
       return () async {
-        await ref.read(mainShellCacheBudgetSchedulerProvider).start();
-        await ref.read(comicSearchRefreshQueueServiceProvider).start();
+        await Future.wait<void>(<Future<void>>[
+          _startBackgroundTaskSafely(
+            ref.read(mainShellCacheBudgetSchedulerProvider).start,
+          ),
+          _startBackgroundTaskSafely(
+            ref.read(comicSearchRefreshQueueServiceProvider).start,
+          ),
+          _startBackgroundTaskSafely(
+            ref.read(comicDownloadQueueProvider).start,
+          ),
+        ]);
       };
     });
+
+Future<void> _startBackgroundTaskSafely(Future<void> Function() starter) async {
+  try {
+    await starter();
+  } catch (_) {
+    // Independent startup maintenance must not make the main shell unusable.
+  }
+}
 
 final mainShellCacheBudgetSchedulerProvider = Provider<CacheBudgetScheduler>((
   ref,

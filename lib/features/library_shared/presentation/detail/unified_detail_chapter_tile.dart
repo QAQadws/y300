@@ -95,7 +95,11 @@ class UnifiedDetailChapterTile extends StatelessWidget {
               if (onToggleDownload != null) ...[
                 const SizedBox(width: 8),
                 IconButton(
-                  tooltip: chapter.isDownloaded ? '已下载，点击删除下载' : '下载该章节',
+                  tooltip: isDownloading
+                      ? '正在下载'
+                      : chapter.isDownloaded
+                      ? '已下载，点击删除下载'
+                      : '下载该章节',
                   iconSize: downloadIconSize,
                   onPressed: isDownloading ? null : onToggleDownload,
                   icon: isDownloading

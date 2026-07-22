@@ -78,6 +78,21 @@ class ComicCommentLoadResult {
 
   bool get hasItems => items.isNotEmpty;
 
+  /// Whether an automatic first-load retry can reasonably recover.
+  ///
+  /// Authentication, rate-limit and payload-shape failures need user action
+  /// or a longer delay, so retrying them immediately would only duplicate the
+  /// request. Network/timeout-style first-page failures are transient and get
+  /// one bounded retry from the reader session.
+  bool get isTransientFailure {
+    if (status != ComicCommentLoadStatus.failure) {
+      return false;
+    }
+    return errorCode == ComicCommentLoadErrorCode.firstPageUnavailable ||
+        errorCode == ComicCommentLoadErrorCode.pageUnavailable ||
+        errorCode == ComicCommentLoadErrorCode.pageTimeout;
+  }
+
   static ComicCommentLoadResult fromPages({
     required String sourceTid,
     required List<ThreadReplyPage> pages,

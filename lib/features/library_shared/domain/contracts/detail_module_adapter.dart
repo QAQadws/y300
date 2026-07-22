@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
@@ -135,6 +136,19 @@ abstract interface class DetailChapterDownloadAdapter {
   Future<void> downloadUnread({required String workId});
 
   Future<void> downloadAll({required String workId});
+}
+
+/// Optional queue-backed activity state for chapter download controls.
+///
+/// Enqueuing is intentionally short-lived, while the button busy state must
+/// remain active until the background task succeeds, fails, or is canceled.
+abstract interface class DetailChapterDownloadActivityAdapter {
+  Listenable? get chapterDownloadActivityListenable;
+
+  bool isChapterDownloadActive({
+    required String workId,
+    required String episodeId,
+  });
 }
 
 /// 作品元数据编辑能力。

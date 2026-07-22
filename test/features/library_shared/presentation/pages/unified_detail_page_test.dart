@@ -1360,6 +1360,59 @@ void main() {
   });
 
   testWidgets(
+    'UnifiedDetailPage keeps spinner until the queued chapter finishes',
+    (tester) async {
+      final adapter = _QueuedDownloadDetailAdapter();
+      final refreshBus = LibraryShelfRefreshBus();
+      addTearDown(() {
+        adapter.dispose();
+        refreshBus.dispose();
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedDetailPage(
+            adapter: adapter,
+            workId: 'work-1',
+            shelfRefreshBus: refreshBus,
+            onOpenReader: (context, target) async {},
+            onOpenThread: (context, target) async {},
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byTooltip('下载该章节'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('下载该章节'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byTooltip('正在下载'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('已加入下载队列'), findsNothing);
+
+      adapter.complete('e1');
+      refreshBus.notify(
+        modules: const <LibraryModuleKey>{LibraryModuleKey.comic},
+        reason: 'comic_download_completed',
+        source: LibraryMutationSource.bulkDownload,
+        workId: 'work-1',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('正在下载'), findsNothing);
+      expect(find.byTooltip('已下载，点击删除下载'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    },
+  );
+
+  testWidgets(
     'UnifiedDetailPage omits chapter progress badge when progress is null',
     (tester) async {
       final adapter = _FakeDetailAdapter();
@@ -1951,6 +2004,44 @@ class _FakeDetailAdapter
   @override
   Future<List<LibraryCategory>> loadCategories() async {
     return const [];
+  }
+}
+
+final class _QueuedDownloadDetailAdapter extends _FakeDetailAdapter
+    implements DetailChapterDownloadActivityAdapter {
+  _QueuedDownloadDetailAdapter() : super(module: LibraryModuleKey.comic);
+
+  final ValueNotifier<Set<String>> _activeEpisodeIds =
+      ValueNotifier<Set<String>>(<String>{});
+
+  @override
+  Listenable get chapterDownloadActivityListenable => _activeEpisodeIds;
+
+  @override
+  bool isChapterDownloadActive({
+    required String workId,
+    required String episodeId,
+  }) {
+    return _activeEpisodeIds.value.contains(episodeId);
+  }
+
+  @override
+  Future<void> markChapterDownloaded({
+    required String workId,
+    required String episodeId,
+    required bool isDownloaded,
+  }) async {
+    lastDownloadedEpisodeId = episodeId;
+    _activeEpisodeIds.value = <String>{episodeId};
+  }
+
+  void complete(String episodeId) {
+    isDownloaded = true;
+    _activeEpisodeIds.value = <String>{};
+  }
+
+  void dispose() {
+    _activeEpisodeIds.dispose();
   }
 }
 

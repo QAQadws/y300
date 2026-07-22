@@ -12,6 +12,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
+import 'package:y300/features/comic/domain/services/comic_download_execution.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -1057,6 +1058,8 @@ class _NoopComicDownloadService implements ComicDownloadService {
   Future<DownloadedComicEpisode> downloadEpisode({
     required String comicId,
     required String episodeId,
+    ComicDownloadProgressObserver? observer,
+    ComicDownloadCancellationToken? cancellationToken,
   }) {
     throw UnimplementedError();
   }

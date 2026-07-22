@@ -87,6 +87,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   bool _showCollapsedTitle = false;
   int _lastHandledRefreshSignalSequence = 0;
   final Set<String> _downloadingEpisodeIds = <String>{};
+  Listenable? _chapterDownloadActivityListenable;
   final RouteContentPresentationGuard _contentPresentationGuard =
       RouteContentPresentationGuard();
 
@@ -98,6 +99,13 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   bool get _supportsChapterDownloads => _downloadAdapter != null;
+
+  DetailChapterDownloadActivityAdapter? get _downloadActivityAdapter {
+    final adapter = widget.adapter;
+    return adapter is DetailChapterDownloadActivityAdapter
+        ? adapter as DetailChapterDownloadActivityAdapter
+        : null;
+  }
 
   DetailChapterReadStateAdapter? get _readStateAdapter {
     final adapter = widget.adapter;
@@ -117,6 +125,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     );
     _scrollController = ScrollController()..addListener(_handleScroll);
     widget.shelfRefreshBus?.signal.addListener(_handleShelfRefreshSignal);
+    _bindChapterDownloadActivity();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _controller.initialize();
@@ -131,6 +140,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   @override
   void dispose() {
     widget.shelfRefreshBus?.signal.removeListener(_handleShelfRefreshSignal);
+    _chapterDownloadActivityListenable?.removeListener(
+      _handleChapterDownloadActivityChanged,
+    );
     _scrollController
       ..removeListener(_handleScroll)
       ..dispose();
@@ -146,6 +158,38 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       );
       widget.shelfRefreshBus?.signal.addListener(_handleShelfRefreshSignal);
     }
+    if (!identical(oldWidget.adapter, widget.adapter)) {
+      _bindChapterDownloadActivity();
+    }
+  }
+
+  void _bindChapterDownloadActivity() {
+    final next = _downloadActivityAdapter?.chapterDownloadActivityListenable;
+    if (identical(next, _chapterDownloadActivityListenable)) {
+      return;
+    }
+    _chapterDownloadActivityListenable?.removeListener(
+      _handleChapterDownloadActivityChanged,
+    );
+    _chapterDownloadActivityListenable = next;
+    next?.addListener(_handleChapterDownloadActivityChanged);
+  }
+
+  void _handleChapterDownloadActivityChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  bool _isChapterDownloading(String episodeId) {
+    if (_downloadingEpisodeIds.contains(episodeId)) {
+      return true;
+    }
+    return _downloadActivityAdapter?.isChapterDownloadActive(
+          workId: widget.workId,
+          episodeId: episodeId,
+        ) ??
+        false;
   }
 
   void _handleScroll() {
@@ -408,9 +452,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         ),
                         chapter: chapter,
                         subtitle: _chapterSubtitle(chapter),
-                        isDownloading: _downloadingEpisodeIds.contains(
-                          chapter.episodeId,
-                        ),
+                        isDownloading: _isChapterDownloading(chapter.episodeId),
                         downloadIconSize: _chapterDownloadIconSize,
                         onTap: () => _openChapter(chapter),
                         onLongPress: () => _showChapterActions(chapter),
@@ -471,7 +513,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   Future<void> _toggleChapterDownload(LibraryChapterItem chapter) async {
-    if (_downloadingEpisodeIds.contains(chapter.episodeId)) {
+    if (_isChapterDownloading(chapter.episodeId)) {
       return;
     }
 
@@ -534,12 +576,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     try {
       if (value == 'download-unread') {
         await downloadAdapter.downloadUnread(workId: widget.workId);
-        _showDetailSnackBar('已开始下载未读章节');
         return;
       }
       if (value == 'download-all') {
         await downloadAdapter.downloadAll(workId: widget.workId);
-        _showDetailSnackBar('已开始下载全部章节');
       }
     } catch (error) {
       if (mounted) {

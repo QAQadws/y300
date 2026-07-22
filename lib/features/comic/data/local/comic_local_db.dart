@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 35;
+  static const int dbVersion = 36;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -36,6 +36,7 @@ class ComicLocalDb {
   static const String cachedSnapshotsTable = 'cached_snapshots';
   static const String comicSearchRefreshQueueTable =
       'comic_search_refresh_queue';
+  static const String comicDownloadQueueTable = 'comic_download_queue';
   static const String novelSourceStateTable = 'novel_source_state';
   static const String novelEpisodeSyncStagingTable =
       'novel_episode_sync_staging';
@@ -102,6 +103,9 @@ class ComicLocalDb {
     }
     if (oldVersion < 35 && newVersion >= 35) {
       await _upgradeFrom34To35(db);
+    }
+    if (oldVersion < 36 && newVersion >= 36) {
+      await _upgradeFrom35To36(db);
     }
   }
 
@@ -217,6 +221,10 @@ class ComicLocalDb {
       column: 'page_count',
       definition: 'INTEGER',
     );
+  }
+
+  static Future<void> _upgradeFrom35To36(Database db) async {
+    await _createComicDownloadQueueTable(db);
   }
 
   static Future<void> _addColumnIfMissing(
@@ -357,6 +365,7 @@ class ComicLocalDb {
     await _createDocumentCacheTables(db);
     await _createSnapshotCacheTables(db);
     await _createComicSearchRefreshQueueTable(db);
+    await _createComicDownloadQueueTable(db);
   }
 
   static Future<void> _createSettingsTable(Database db) async {
@@ -969,6 +978,31 @@ class ComicLocalDb {
     );
   }
 
+  static Future<void> _createComicDownloadQueueTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $comicDownloadQueueTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        comic_id TEXT NOT NULL,
+        episode_id TEXT NOT NULL,
+        comic_title TEXT NOT NULL,
+        episode_title TEXT NOT NULL,
+        status TEXT NOT NULL,
+        completed_images INTEGER NOT NULL DEFAULT 0,
+        total_images INTEGER,
+        last_error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(comic_id, episode_id),
+        FOREIGN KEY (comic_id) REFERENCES $comicsTable(comic_id) ON DELETE CASCADE,
+        FOREIGN KEY (episode_id) REFERENCES $episodesTable(episode_id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_comic_download_queue_status ON '
+      '$comicDownloadQueueTable(status, created_at, id)',
+    );
+  }
+
   /// 开发期数据库策略：不维护复杂的历史兼容迁移。
   ///
   /// 当前 App 仍处于开发阶段，旧本地库可以安全丢弃。升级/降级时先删除
@@ -984,6 +1018,7 @@ class ComicLocalDb {
   static const List<String> _managedTablesInDropOrder = <String>[
     novelEpisodeSyncStagingTable,
     novelSourceStateTable,
+    comicDownloadQueueTable,
     comicSearchRefreshQueueTable,
     cachedSnapshotsTable,
     cachedDocumentsTable,
