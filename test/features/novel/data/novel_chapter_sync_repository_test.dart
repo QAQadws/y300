@@ -29,6 +29,7 @@ void main() {
     ).saveFromFavoriteDetail(
       seed: const NovelSourceSeed(fid: '55', tid: '521519'),
       metadata: _metadata(),
+      favoriteAddedAt: DateTime(2026, 7, 1),
     );
     repository = SqfliteNovelChapterSyncRepository(Future<Database>.value(db));
   });

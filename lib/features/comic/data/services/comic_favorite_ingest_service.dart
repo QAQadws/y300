@@ -9,6 +9,7 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 abstract class ComicFavoriteIngestService {
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
     String? sourceTagName,
     FavoriteSyncExecutionContext? executionContext,
   });
@@ -16,18 +17,19 @@ abstract class ComicFavoriteIngestService {
   Future<void> removeFromShelf({required String workId});
 }
 
-class RepositoryComicFavoriteIngestService implements ComicFavoriteIngestService {
+class RepositoryComicFavoriteIngestService
+    implements ComicFavoriteIngestService {
   RepositoryComicFavoriteIngestService({
-    required ComicRepository repository,
+    required ComicFavoriteIngestRepository repository,
     required ComicParserService parserService,
     required ComicSubjectParser subjectParser,
     required ComicPostAggregationService aggregationService,
-  })  : _repository = repository,
-        _parserService = parserService,
-        _subjectParser = subjectParser,
-        _aggregationService = aggregationService;
+  }) : _repository = repository,
+       _parserService = parserService,
+       _subjectParser = subjectParser,
+       _aggregationService = aggregationService;
 
-  final ComicRepository _repository;
+  final ComicFavoriteIngestRepository _repository;
   final ComicParserService _parserService;
   final ComicSubjectParser _subjectParser;
   final ComicPostAggregationService _aggregationService;
@@ -35,41 +37,45 @@ class RepositoryComicFavoriteIngestService implements ComicFavoriteIngestService
   @override
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
     String? sourceTagName,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
     final comicId = buildComicWorkId(detail.tid);
     final aggregation = _aggregationService.build(detail.posts);
-    if (aggregation.parseMessage.isEmpty && aggregation.attachmentImageUrls.isEmpty) {
-      await _repository.addToShelf(
+    if (aggregation.parseMessage.isEmpty &&
+        aggregation.attachmentImageUrls.isEmpty) {
+      await _repository.addFavoriteToShelf(
         comicId: comicId,
         tid: detail.tid,
         fid: detail.fid,
         sourceTypeId: detail.typeid,
         sourceTagName: sourceTagName,
         title: detail.subject,
+        favoriteAddedAt: favoriteAddedAt,
         parsedPost: ParsedComicPost.empty.copyWith(
           subjectMetadata: _subjectParser.parse(detail.subject),
         ),
       );
       return comicId;
     }
-    final parsed = _parserService.parseInput(
-      ComicPostParseInput(
-        messageHtml: aggregation.parseMessage,
-        attachmentImageUrls: aggregation.attachmentImageUrls,
-      ),
-    ).copyWith(
-          subjectMetadata: _subjectParser.parse(detail.subject),
-        );
+    final parsed = _parserService
+        .parseInput(
+          ComicPostParseInput(
+            messageHtml: aggregation.parseMessage,
+            attachmentImageUrls: aggregation.attachmentImageUrls,
+          ),
+        )
+        .copyWith(subjectMetadata: _subjectParser.parse(detail.subject));
 
-    await _repository.addToShelf(
+    await _repository.addFavoriteToShelf(
       comicId: comicId,
       tid: detail.tid,
       fid: detail.fid,
       sourceTypeId: detail.typeid,
       sourceTagName: sourceTagName,
       title: detail.subject,
+      favoriteAddedAt: favoriteAddedAt,
       parsedPost: parsed,
     );
     return comicId;

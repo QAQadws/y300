@@ -1621,6 +1621,7 @@ class _FakeComicIngestService implements ComicFavoriteIngestService {
   @override
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
     String? sourceTagName,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
@@ -1700,6 +1701,7 @@ class _FakeNovelIngestService implements NovelFavoriteIngestService {
   @override
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
     String? sourceTagName,
   }) async {
     upsertedTids.add(detail.tid);

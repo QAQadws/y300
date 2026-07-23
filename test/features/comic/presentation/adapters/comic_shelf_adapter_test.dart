@@ -24,7 +24,7 @@ import 'package:y300/features/library_shared/domain/services/shelf_category_assi
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
-  test('ComicShelfAdapter defaults to ascending favorite date', () {
+  test('ComicShelfAdapter defaults to newest favorite first', () {
     final adapter = ComicShelfAdapter(
       _FakeComicRepository(shelfItems: const <ComicShelfItem>[]),
       stateRepository: _FakeLibraryStateRepository(),
@@ -36,7 +36,7 @@ void main() {
     );
     expect(
       adapter.capabilities.defaultSortOption.direction,
-      LibrarySortDirection.asc,
+      LibrarySortDirection.desc,
     );
   });
 

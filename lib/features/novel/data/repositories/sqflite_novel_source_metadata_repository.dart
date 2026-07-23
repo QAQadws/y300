@@ -26,6 +26,7 @@ class SqfliteNovelSourceMetadataRepository
   Future<void> saveFromFavoriteDetail({
     required NovelSourceSeed seed,
     required NovelSourceMetadata metadata,
+    required DateTime favoriteAddedAt,
   }) async {
     final novelId = _requireText(metadata.novelId, 'metadata.novelId');
     final tid = _requireText(metadata.tid, 'metadata.tid');
@@ -125,7 +126,7 @@ class SqfliteNovelSourceMetadataRepository
         await txn.insert(ComicLocalDb.novelShelfItemsTable, <String, Object?>{
           'category_id': _defaultCategoryId,
           'novel_id': novelId,
-          'added_at': ingestedAt,
+          'added_at': favoriteAddedAt.millisecondsSinceEpoch,
           'sort_order': sortOrder,
         });
       }

@@ -157,7 +157,7 @@ void main() {
       );
       expect(
         adapter.capabilities.defaultSortOption.direction,
-        LibrarySortDirection.asc,
+        LibrarySortDirection.desc,
       );
       expect(adapter.capabilities.availableSortFields, <LibraryShelfSortField>[
         LibraryShelfSortField.chapterCount,

@@ -14,6 +14,7 @@ void main() {
       final parser = _RecordingParser();
       final repository = _RecordingMetadataRepository();
       final now = DateTime(2026, 7, 13, 18);
+      final favoriteAddedAt = DateTime(2026, 7, 1, 9);
       final service = DefaultNovelSourceMetadataIngestService(
         parser: parser,
         repository: repository,
@@ -24,6 +25,7 @@ void main() {
       final result = await service.ingestFromFavoriteDetail(
         seed: seed,
         detail: detail,
+        favoriteAddedAt: favoriteAddedAt,
       );
 
       expect(parser.callCount, 1);
@@ -32,6 +34,7 @@ void main() {
       expect(repository.callCount, 1);
       expect(identical(repository.metadata.single, result), isTrue);
       expect(repository.seeds.single.tid, '200');
+      expect(repository.favoriteAddedAts, <DateTime>[favoriteAddedAt]);
     },
   );
 
@@ -47,6 +50,7 @@ void main() {
       parserFailureService.ingestFromFavoriteDetail(
         seed: const NovelSourceSeed(fid: '49', tid: '200'),
         detail: _detail(),
+        favoriteAddedAt: DateTime(2026, 7, 1),
       ),
       throwsA(isA<FormatException>()),
     );
@@ -64,6 +68,7 @@ void main() {
       repositoryFailureService.ingestFromFavoriteDetail(
         seed: const NovelSourceSeed(fid: '49', tid: '200'),
         detail: _detail(),
+        favoriteAddedAt: DateTime(2026, 7, 1),
       ),
       throwsA(isA<StateError>()),
     );
@@ -80,9 +85,11 @@ void main() {
         removeFromShelf: ({required workId}) async => removed.add(workId),
       );
       final detail = _detail();
+      final favoriteAddedAt = DateTime(2026, 7, 1);
 
       final workId = await service.upsertFromThreadDetail(
         detail: detail,
+        favoriteAddedAt: favoriteAddedAt,
         sourceTagName: '原创',
       );
       await service.removeFromShelf(workId: workId);
@@ -92,6 +99,7 @@ void main() {
       expect(identical(metadataIngest.details.single, detail), isTrue);
       expect(metadataIngest.seeds.single.typeid, '293');
       expect(metadataIngest.seeds.single.tagName, '原创');
+      expect(metadataIngest.favoriteAddedAts, <DateTime>[favoriteAddedAt]);
       expect(removed, <String>['novel:49:200']);
     },
   );
@@ -128,16 +136,19 @@ class _RecordingMetadataRepository implements NovelSourceMetadataRepository {
   final Object? error;
   final List<NovelSourceSeed> seeds = <NovelSourceSeed>[];
   final List<NovelSourceMetadata> metadata = <NovelSourceMetadata>[];
+  final List<DateTime> favoriteAddedAts = <DateTime>[];
   int callCount = 0;
 
   @override
   Future<void> saveFromFavoriteDetail({
     required NovelSourceSeed seed,
     required NovelSourceMetadata metadata,
+    required DateTime favoriteAddedAt,
   }) async {
     callCount++;
     seeds.add(seed);
     this.metadata.add(metadata);
+    favoriteAddedAts.add(favoriteAddedAt);
     final failure = error;
     if (failure != null) {
       throw failure;
@@ -149,16 +160,19 @@ class _RecordingMetadataIngestService
     implements NovelSourceMetadataIngestService {
   final List<NovelSourceSeed> seeds = <NovelSourceSeed>[];
   final List<ThreadDetailData> details = <ThreadDetailData>[];
+  final List<DateTime> favoriteAddedAts = <DateTime>[];
   int callCount = 0;
 
   @override
   Future<NovelSourceMetadata> ingestFromFavoriteDetail({
     required NovelSourceSeed seed,
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
   }) async {
     callCount++;
     seeds.add(seed);
     details.add(detail);
+    favoriteAddedAts.add(favoriteAddedAt);
     return _metadata();
   }
 }

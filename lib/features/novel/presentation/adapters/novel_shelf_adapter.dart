@@ -90,10 +90,6 @@ class NovelShelfAdapter
   ShelfModuleCapabilities get capabilities => const ShelfModuleCapabilities(
     supportsReadState: false,
     supportsBookmarkFilter: true,
-    defaultSortOption: LibraryShelfSortOption(
-      field: LibraryShelfSortField.favoriteAddedAt,
-      direction: LibrarySortDirection.asc,
-    ),
   );
 
   @override

@@ -6,10 +6,7 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 
 class ComicDetailStore {
-  ComicDetailStore(
-    this._dbFuture, {
-    ComicSubjectParser? subjectParser,
-  });
+  ComicDetailStore(this._dbFuture, {ComicSubjectParser? subjectParser});
 
   final Future<Database> _dbFuture;
 
@@ -291,10 +288,8 @@ class ComicDetailStore {
       sourceAuthor: row['source_author'] as String?,
       customAuthor: row['custom_author'] as String?,
       translationGroup: row['translation_group'] as String?,
-      sourceTranslationGroup:
-          row['source_translation_group'] as String?,
-      customTranslationGroup:
-          row['custom_translation_group'] as String?,
+      sourceTranslationGroup: row['source_translation_group'] as String?,
+      customTranslationGroup: row['custom_translation_group'] as String?,
       customSearchTitle: row['custom_search_title'] as String?,
       coverImageUrl: row['cover_image_url'] as String?,
       customCoverImageUrl: row['custom_cover_image_url'] as String?,
@@ -310,9 +305,7 @@ class ComicDetailStore {
       customCoverFocusY: (row['custom_cover_focus_y'] as num?)?.toDouble(),
       catalogUrl: row['catalog_url'] as String?,
       customCatalogUrl: row['custom_catalog_url'] as String?,
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(
-        row['updated_at'] as int,
-      ),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
       episodeCount: row['episode_count'] as int? ?? 0,
     );
   }
@@ -347,9 +340,7 @@ class ComicDetailStore {
     );
     final customTitle = normalizeNullable(existing?.customTitle);
     final customAuthor = normalizeNullable(existing?.customAuthor);
-    final customGroup = normalizeNullable(
-      existing?.customTranslationGroup,
-    );
+    final customGroup = normalizeNullable(existing?.customTranslationGroup);
     final comic = ComicRecord(
       comicId: comicId,
       sourceTid: tid,
@@ -398,10 +389,17 @@ class ComicDetailStore {
       customCatalogUrl: existing?.customCatalogUrl,
     );
 
-    await executor.insert(
+    if (existing == null) {
+      await executor.insert(ComicLocalDb.comicsTable, comic.toMap());
+      return;
+    }
+
+    final values = comic.toMap()..remove('comic_id');
+    await executor.update(
       ComicLocalDb.comicsTable,
-      comic.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      values,
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
     );
   }
 

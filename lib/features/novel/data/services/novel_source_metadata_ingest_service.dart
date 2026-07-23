@@ -9,6 +9,7 @@ abstract interface class NovelSourceMetadataIngestService {
   Future<NovelSourceMetadata> ingestFromFavoriteDetail({
     required NovelSourceSeed seed,
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
   });
 }
 
@@ -30,13 +31,18 @@ class DefaultNovelSourceMetadataIngestService
   Future<NovelSourceMetadata> ingestFromFavoriteDetail({
     required NovelSourceSeed seed,
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
   }) async {
     final metadata = _parser.parseFirstPost(
       seed: seed,
       detail: detail,
       ingestedAt: _clock(),
     );
-    await _repository.saveFromFavoriteDetail(seed: seed, metadata: metadata);
+    await _repository.saveFromFavoriteDetail(
+      seed: seed,
+      metadata: metadata,
+      favoriteAddedAt: favoriteAddedAt,
+    );
     return metadata;
   }
 }

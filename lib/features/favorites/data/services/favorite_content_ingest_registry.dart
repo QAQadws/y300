@@ -24,6 +24,7 @@ class ComicFavoriteContentIngestHandler
     final workId = await _ingestService.upsertFromThreadDetail(
       detail: context.detail,
       sourceTagName: context.tagName,
+      favoriteAddedAt: request.favoriteAddedAt,
       executionContext: request.options.executionContext,
     );
     // 阶段 3：handler 只声明后处理任务，实际执行交给 LibraryPostIngestTaskRunner。
@@ -73,6 +74,7 @@ class NovelFavoriteContentIngestHandler
     final workId = await _ingestService.upsertFromThreadDetail(
       detail: context.detail,
       sourceTagName: context.tagName,
+      favoriteAddedAt: request.favoriteAddedAt,
     );
     return FavoriteContentIngestResult(
       kind: kind,

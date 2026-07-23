@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_ingest_service.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
+import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/providers/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
@@ -14,8 +15,13 @@ import 'package:y300/features/novel/data/providers/novel_providers.dart';
 
 final comicFavoriteIngestServiceProvider = Provider<ComicFavoriteIngestService>(
   (ref) {
+    final repository = ref.watch(comicRepositoryProvider);
+    if (repository is! ComicFavoriteIngestRepository) {
+      throw StateError('Comic repository does not support favorite ingest');
+    }
+    final favoriteRepository = repository as ComicFavoriteIngestRepository;
     return RepositoryComicFavoriteIngestService(
-      repository: ref.watch(comicRepositoryProvider),
+      repository: favoriteRepository,
       parserService: ref.watch(comicParserServiceProvider),
       subjectParser: ref.watch(comicSubjectParserProvider),
       aggregationService: ref.watch(comicPostAggregationServiceProvider),

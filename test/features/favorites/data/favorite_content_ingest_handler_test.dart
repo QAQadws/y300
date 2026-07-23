@@ -28,10 +28,14 @@ void main() {
             typeid: '398',
             kind: ThreadContentKind.comic,
             tagName: '韩国漫画',
+            dateline: DateTime(2025, 12, 31),
           ),
         );
 
         expect(ingestService.upsertedTids, <String>['100']);
+        expect(ingestService.favoriteAddedAts, <DateTime>[
+          DateTime(2025, 12, 31),
+        ]);
         expect(result.kind, ThreadContentKind.comic);
         expect(result.workId, 'yamibo:100');
 
@@ -122,6 +126,7 @@ void main() {
       );
 
       expect(ingestService.upsertedTids, <String>['200']);
+      expect(ingestService.favoriteAddedAts, <DateTime>[DateTime(2026, 1, 1)]);
       expect(result.kind, ThreadContentKind.novel);
       expect(result.workId, 'novel:49:200');
 
@@ -208,6 +213,7 @@ FavoriteContentIngestRequest _request({
   required ThreadContentKind kind,
   String typeid = '',
   String? tagName,
+  DateTime? dateline,
   FavoriteIngestOptions options = const FavoriteIngestOptions(),
 }) {
   return FavoriteContentIngestRequest(
@@ -217,6 +223,7 @@ FavoriteContentIngestRequest _request({
         favid: 'fav-$tid',
         title: '收藏$tid',
         replies: 0,
+        dateline: dateline,
         sourceTagName: tagName,
         contentKind: kind,
         firstSeenAt: DateTime(2026, 1, 1),
@@ -243,15 +250,18 @@ FavoriteContentIngestRequest _request({
 
 class _FakeComicIngestService implements ComicFavoriteIngestService {
   final List<String> upsertedTids = <String>[];
+  final List<DateTime> favoriteAddedAts = <DateTime>[];
   final List<String> removedWorkIds = <String>[];
 
   @override
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
     String? sourceTagName,
     FavoriteSyncExecutionContext? executionContext,
   }) async {
     upsertedTids.add(detail.tid);
+    favoriteAddedAts.add(favoriteAddedAt);
     return 'yamibo:${detail.tid}';
   }
 
@@ -263,15 +273,18 @@ class _FakeComicIngestService implements ComicFavoriteIngestService {
 
 class _FakeNovelIngestService implements NovelFavoriteIngestService {
   final List<String> upsertedTids = <String>[];
+  final List<DateTime> favoriteAddedAts = <DateTime>[];
   final List<ThreadDetailData> receivedDetails = <ThreadDetailData>[];
   final List<String> removedWorkIds = <String>[];
 
   @override
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
     String? sourceTagName,
   }) async {
     upsertedTids.add(detail.tid);
+    favoriteAddedAts.add(favoriteAddedAt);
     receivedDetails.add(detail);
     return 'novel:${detail.fid}:${detail.tid}';
   }

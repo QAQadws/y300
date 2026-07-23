@@ -120,12 +120,8 @@ class ComicShelfAdapter
   String get moduleTitle => _moduleTitle;
 
   @override
-  ShelfModuleCapabilities get capabilities => const ShelfModuleCapabilities(
-    defaultSortOption: LibraryShelfSortOption(
-      field: LibraryShelfSortField.favoriteAddedAt,
-      direction: LibrarySortDirection.asc,
-    ),
-  );
+  ShelfModuleCapabilities get capabilities =>
+      const ShelfModuleCapabilities.defaults();
 
   @override
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.grid;

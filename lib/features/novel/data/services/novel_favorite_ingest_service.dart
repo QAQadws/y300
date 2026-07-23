@@ -8,6 +8,7 @@ typedef NovelFavoriteShelfRemover =
 abstract class NovelFavoriteIngestService {
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
     String? sourceTagName,
   });
 
@@ -28,6 +29,7 @@ class RepositoryNovelFavoriteIngestService
   @override
   Future<String> upsertFromThreadDetail({
     required ThreadDetailData detail,
+    required DateTime favoriteAddedAt,
     String? sourceTagName,
   }) async {
     final metadata = await _metadataIngestService.ingestFromFavoriteDetail(
@@ -38,6 +40,7 @@ class RepositoryNovelFavoriteIngestService
         tagName: sourceTagName,
       ),
       detail: detail,
+      favoriteAddedAt: favoriteAddedAt,
     );
     return metadata.novelId;
   }

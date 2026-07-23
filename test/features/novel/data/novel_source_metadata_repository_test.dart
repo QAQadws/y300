@@ -43,6 +43,7 @@ void main() {
           tagName: '長篇連載',
         ),
         metadata: _metadata(),
+        favoriteAddedAt: DateTime(2026, 7, 1),
       );
 
       final works = await db.query(
@@ -67,6 +68,10 @@ void main() {
       );
       expect(shelfRows, hasLength(1));
       expect(shelfRows.single['category_id'], 'default');
+      expect(
+        shelfRows.single['added_at'],
+        DateTime(2026, 7, 1).millisecondsSinceEpoch,
+      );
 
       final episodes = await db.query(
         ComicLocalDb.workEpisodesTable,
@@ -99,6 +104,7 @@ void main() {
         tagName: '長篇連載',
       ),
       metadata: _metadata(),
+      favoriteAddedAt: DateTime(2026, 7, 1),
     );
     await db.update(
       ComicLocalDb.worksTable,
@@ -130,6 +136,7 @@ void main() {
         coverImageUrl: null,
         ingestedAt: DateTime(2026, 7, 14),
       ),
+      favoriteAddedAt: DateTime(2026, 7, 14),
     );
 
     final work = (await db.query(
@@ -158,6 +165,13 @@ void main() {
     expect(sourceState?.publisherName, 'INCSKY16');
     expect(sourceState?.sourceIntro, '来源简介');
     expect(sourceState?.catalogEntries.single.pid, '40213902');
+    final shelfAddedAt = (await db.query(
+      ComicLocalDb.novelShelfItemsTable,
+      columns: const <String>['added_at'],
+      where: 'novel_id = ?',
+      whereArgs: const <Object?>['novel:55:521519'],
+    )).single['added_at'];
+    expect(shelfAddedAt, DateTime(2026, 7, 1).millisecondsSinceEpoch);
 
     await repository.saveFromFavoriteDetail(
       seed: const NovelSourceSeed(fid: '55', tid: '521519'),
@@ -168,6 +182,7 @@ void main() {
         catalogEntries: const <NovelSourceCatalogEntry>[],
         coverImageUrl: null,
       ),
+      favoriteAddedAt: DateTime(2026, 7, 15),
     );
     final titleAfterMissingSource = (await db.query(
       ComicLocalDb.worksTable,
@@ -194,6 +209,7 @@ void main() {
         repository.saveFromFavoriteDetail(
           seed: const NovelSourceSeed(fid: '55', tid: '521519'),
           metadata: _metadata(),
+          favoriteAddedAt: DateTime(2026, 7, 1),
         ),
         throwsA(anything),
       );

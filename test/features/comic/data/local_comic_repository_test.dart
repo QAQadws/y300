@@ -255,6 +255,35 @@ void main() {
       expect(items.length, 1);
     });
 
+    test('favorite ingest keeps the original remote favorite date', () async {
+      const parsed = ParsedComicPost(
+        imageUrls: <String>[],
+        episodeLinks: <ComicEpisodeLink>[],
+        plainTextSummary: '摘要',
+      );
+      final originalAddedAt = DateTime(2026, 7, 1, 9);
+
+      await repository.addFavoriteToShelf(
+        comicId: 'yamibo:favorite-date',
+        tid: 'favorite-date',
+        fid: '30',
+        title: '收藏时间漫画',
+        parsedPost: parsed,
+        favoriteAddedAt: originalAddedAt,
+      );
+      await repository.addFavoriteToShelf(
+        comicId: 'yamibo:favorite-date',
+        tid: 'favorite-date',
+        fid: '30',
+        title: '收藏时间漫画',
+        parsedPost: parsed,
+        favoriteAddedAt: DateTime(2026, 7, 20),
+      );
+
+      final item = (await repository.getShelfItems()).single;
+      expect(item.addedAt, originalAddedAt);
+    });
+
     test(
       'custom catalog overrides source without being replaced by ingest',
       () async {

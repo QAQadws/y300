@@ -21,6 +21,7 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 class LocalComicRepository
     implements
         ComicRepository,
+        ComicFavoriteIngestRepository,
         ComicReadingProgressResetter,
         ComicWorkReadingStateResetter,
         ComicCatalogOverrideRepository,
@@ -238,6 +239,51 @@ class LocalComicRepository
     String? sourceTagName,
     required String title,
     required ParsedComicPost parsedPost,
+  }) {
+    return _addToShelf(
+      comicId: comicId,
+      tid: tid,
+      fid: fid,
+      sourceTypeId: sourceTypeId,
+      sourceTagName: sourceTagName,
+      title: title,
+      parsedPost: parsedPost,
+      addedAt: DateTime.now(),
+    );
+  }
+
+  @override
+  Future<void> addFavoriteToShelf({
+    required String comicId,
+    required String tid,
+    required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
+    required String title,
+    required ParsedComicPost parsedPost,
+    required DateTime favoriteAddedAt,
+  }) {
+    return _addToShelf(
+      comicId: comicId,
+      tid: tid,
+      fid: fid,
+      sourceTypeId: sourceTypeId,
+      sourceTagName: sourceTagName,
+      title: title,
+      parsedPost: parsedPost,
+      addedAt: favoriteAddedAt,
+    );
+  }
+
+  Future<void> _addToShelf({
+    required String comicId,
+    required String tid,
+    required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
+    required String title,
+    required ParsedComicPost parsedPost,
+    required DateTime addedAt,
   }) async {
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -279,7 +325,7 @@ class LocalComicRepository
         txn,
         categoryId: _defaultCategoryId,
         comicId: comicId,
-        addedAt: now,
+        addedAt: addedAt.millisecondsSinceEpoch,
       );
     });
   }

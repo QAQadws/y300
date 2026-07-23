@@ -22,6 +22,22 @@ abstract interface class ComicWorkReadingStateResetter {
   Future<void> resetComicReadingState({required String comicId});
 }
 
+/// 收藏同步专用写入端口，确保书架时间来自远端收藏记录而不是解析顺序。
+abstract interface class ComicFavoriteIngestRepository {
+  Future<void> addFavoriteToShelf({
+    required String comicId,
+    required String tid,
+    required String fid,
+    String? sourceTypeId,
+    String? sourceTagName,
+    required String title,
+    required ParsedComicPost parsedPost,
+    required DateTime favoriteAddedAt,
+  });
+
+  Future<void> removeFromShelf({required String comicId});
+}
+
 /// 漫画仓库：封装书架数据访问，屏蔽具体存储实现。
 abstract class ComicRepository implements CatalogUrlUpdater {
   Future<List<ComicShelfCategory>> getCategories();

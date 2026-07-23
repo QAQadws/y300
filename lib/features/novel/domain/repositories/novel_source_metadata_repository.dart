@@ -5,5 +5,6 @@ abstract interface class NovelSourceMetadataRepository {
   Future<void> saveFromFavoriteDetail({
     required NovelSourceSeed seed,
     required NovelSourceMetadata metadata,
+    required DateTime favoriteAddedAt,
   });
 }

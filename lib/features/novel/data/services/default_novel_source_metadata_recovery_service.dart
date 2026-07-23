@@ -60,7 +60,11 @@ class DefaultNovelSourceMetadataRecoveryService
       detail: detail,
       ingestedAt: _clock(),
     );
-    await _repository.saveFromFavoriteDetail(seed: seed, metadata: metadata);
+    await _repository.saveFromFavoriteDetail(
+      seed: seed,
+      metadata: metadata,
+      favoriteAddedAt: metadata.ingestedAt,
+    );
     return metadata;
   }
 }
