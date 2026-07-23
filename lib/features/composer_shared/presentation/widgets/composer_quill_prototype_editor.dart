@@ -2,13 +2,16 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_quill/quill_delta.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_size_mapping.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_typing_style_snapshot.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_color_picker_sheet.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_link_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_group_panel.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 
@@ -28,7 +31,7 @@ bool _defaultQuillAttachFileExists(File file) {
   return file.existsSync();
 }
 
-enum ComposerQuillToolPanel { format, align, link, sticker }
+enum ComposerQuillToolPanel { format, align, sticker }
 
 class ComposerQuillPrototypeEditor extends StatelessWidget {
   const ComposerQuillPrototypeEditor({
@@ -151,6 +154,9 @@ class _ComposerQuillEditorSurfaceState
       <ComposerImageAttachment>[];
   double _lastKeyboardHeight = 0;
   double? _pendingKeyboardToolbarOffset;
+  ComposerQuillTypingStyleSnapshot? _pendingTypingStyleSnapshot;
+  int _editorTapGeneration = 0;
+  bool _isWaitingForKeyboardDismissForPanel = false;
 
   @override
   void initState() {
@@ -165,6 +171,7 @@ class _ComposerQuillEditorSurfaceState
           selection: const TextSelection.collapsed(offset: 0),
         );
     _focusNode = FocusNode();
+    _focusNode.addListener(_handleEditorFocusChanged);
     _scrollController = ScrollController();
     _controller.addListener(_handleDocumentChanged);
     _bbCodeText = widget.bbCode ?? _codec.encodeDocument(_controller.document);
@@ -180,6 +187,7 @@ class _ComposerQuillEditorSurfaceState
     if (_ownsController) {
       _controller.dispose();
     }
+    _focusNode.removeListener(_handleEditorFocusChanged);
     _focusNode.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -194,8 +202,12 @@ class _ComposerQuillEditorSurfaceState
         _pendingKeyboardToolbarOffset = null;
       }
     }
-    final panelHeight = _activePanel == null ? 0.0 : _toolPanelHeight(context);
-    final toolbarOffset = _activePanel == null
+    final visiblePanel =
+        _isWaitingForKeyboardDismissForPanel && keyboardHeight > 0
+        ? null
+        : _activePanel;
+    final panelHeight = visiblePanel == null ? 0.0 : _toolPanelHeight(context);
+    final toolbarOffset = visiblePanel == null
         ? keyboardHeight > 0
               ? keyboardHeight
               : _pendingKeyboardToolbarOffset ?? 0.0
@@ -215,6 +227,8 @@ class _ComposerQuillEditorSurfaceState
         config: QuillEditorConfig(
           placeholder: widget.hintText,
           padding: const EdgeInsets.all(12),
+          onTapDown: _handleEditorTapDown,
+          onTapUp: _handleEditorTapUp,
           embedBuilders: [
             _StickerEmbedBuilder(stickers: _stickerLookupItems()),
             _AttachEmbedBuilder(
@@ -245,7 +259,7 @@ class _ComposerQuillEditorSurfaceState
                   : SingleChildScrollView(child: editor),
             ),
           ),
-          if (_activePanel != null)
+          if (visiblePanel != null)
             Positioned(
               left: 0,
               right: 0,
@@ -270,11 +284,10 @@ class _ComposerQuillEditorSurfaceState
               onAlignPressed: () =>
                   _toggleToolPanel(ComposerQuillToolPanel.align),
               onQuotePressed: _toggleQuote,
-              onLinkPressed: () =>
-                  _toggleToolPanel(ComposerQuillToolPanel.link),
+              onLinkPressed: () => _openLinkSheet(context),
               onStickerPressed: () =>
                   _toggleToolPanel(ComposerQuillToolPanel.sticker),
-              onImagePressed: () => _insertImage(context),
+              onImagePressed: () => _handleImagePressed(context),
             ),
           ),
         ],
@@ -288,14 +301,11 @@ class _ComposerQuillEditorSurfaceState
         keyPrefix: widget.keyPrefix,
         controller: _controller,
         embedded: true,
+        onTypingStyleChanged: _captureTypingStyleSnapshot,
       ),
       ComposerQuillToolPanel.align => _AlignPanel(
         keyPrefix: widget.keyPrefix,
         onSelected: _applyAlign,
-      ),
-      ComposerQuillToolPanel.link => _LinkPanel(
-        keyPrefix: widget.keyPrefix,
-        onSubmitted: _applyLink,
       ),
       ComposerQuillToolPanel.sticker => ComposerStickerGroupPanel(
         keyPrefix: widget.keyPrefix,
@@ -360,6 +370,60 @@ class _ComposerQuillEditorSurfaceState
     return 56 + MediaQuery.paddingOf(context).bottom;
   }
 
+  bool _handleEditorTapDown(
+    TapDownDetails details,
+    TextPosition Function(Offset offset) getPositionForOffset,
+  ) {
+    _editorTapGeneration += 1;
+    _closeToolPanelForEditorInput();
+    return false;
+  }
+
+  bool _handleEditorTapUp(
+    TapUpDetails details,
+    TextPosition Function(Offset offset) getPositionForOffset,
+  ) {
+    final generation = _editorTapGeneration;
+    final snapshot = _pendingTypingStyleSnapshot;
+    if (snapshot == null) {
+      return false;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _editorTapGeneration) {
+        return;
+      }
+      final selection = _controller.selection;
+      final documentEnd = (_controller.document.length - 1).clamp(
+        0,
+        _controller.document.length,
+      );
+      if (selection.isCollapsed && selection.extentOffset == documentEnd) {
+        snapshot.restore(_controller);
+      }
+      _pendingTypingStyleSnapshot = null;
+    });
+    return false;
+  }
+
+  void _handleEditorFocusChanged() {
+    if (!_focusNode.hasFocus || _activePanel == null) {
+      return;
+    }
+    _closeToolPanelForEditorInput();
+  }
+
+  void _captureTypingStyleSnapshot() {
+    _pendingTypingStyleSnapshot = _controller.selection.isCollapsed
+        ? ComposerQuillTypingStyleSnapshot.capture(_controller)
+        : null;
+  }
+
+  void _restoreTypingStyleSnapshot() {
+    final snapshot = _pendingTypingStyleSnapshot;
+    _pendingTypingStyleSnapshot = null;
+    snapshot?.restore(_controller);
+  }
+
   void _toggleToolPanel(ComposerQuillToolPanel panel) {
     if (!widget.enabled) {
       return;
@@ -368,25 +432,42 @@ class _ComposerQuillEditorSurfaceState
       final panelHeight = _toolPanelHeight(context);
       setState(() {
         _activePanel = null;
+        _isWaitingForKeyboardDismissForPanel = false;
         _pendingKeyboardToolbarOffset = panelHeight;
       });
+      _restoreTypingStyleSnapshot();
       _focusNode.requestFocus();
       return;
     }
     _pendingKeyboardToolbarOffset = null;
+    _isWaitingForKeyboardDismissForPanel =
+        MediaQuery.viewInsetsOf(context).bottom > 0;
     FocusScope.of(context).unfocus();
     setState(() {
       _activePanel = panel;
     });
   }
 
-  void _closeToolPanel() {
+  void _closeToolPanelForEditorInput() {
     if (_activePanel == null) {
       return;
     }
+    final panelHeight = _toolPanelHeight(context);
     setState(() {
       _activePanel = null;
+      _isWaitingForKeyboardDismissForPanel = false;
+      _pendingKeyboardToolbarOffset = panelHeight;
     });
+  }
+
+  void _resetTransientInteractionState() {
+    _editorTapGeneration += 1;
+    _pendingTypingStyleSnapshot = null;
+    _pendingKeyboardToolbarOffset = null;
+    _isWaitingForKeyboardDismissForPanel = false;
+    if (_activePanel != null) {
+      setState(() => _activePanel = null);
+    }
   }
 
   void _applyAlign(String align) {
@@ -406,7 +487,31 @@ class _ComposerQuillEditorSurfaceState
     }
   }
 
-  void _applyLink(_LinkDraft link) {
+  Future<void> _openLinkSheet(BuildContext context) async {
+    if (!widget.enabled) {
+      return;
+    }
+    _closeToolPanelForEditorInput();
+    FocusScope.of(context).unfocus();
+    final link = await showComposerLinkSheet(
+      context: context,
+      keyPrefix: widget.keyPrefix,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (link != null) {
+      _applyLink(link);
+    }
+    _restoreTypingStyleSnapshot();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _focusNode.requestFocus();
+      }
+    });
+  }
+
+  void _applyLink(ComposerLinkDraft link) {
     if (!widget.enabled) {
       return;
     }
@@ -473,6 +578,12 @@ class _ComposerQuillEditorSurfaceState
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
     if (keyboardHeight > 0) {
       _lastKeyboardHeight = keyboardHeight;
+      if (_activePanel != null && !_isWaitingForKeyboardDismissForPanel) {
+        _activePanel = null;
+        _pendingKeyboardToolbarOffset = null;
+      }
+    } else {
+      _isWaitingForKeyboardDismissForPanel = false;
     }
   }
 
@@ -480,9 +591,12 @@ class _ComposerQuillEditorSurfaceState
   void didUpdateWidget(covariant ComposerQuillEditorSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      _closeToolPanel();
+      _resetTransientInteractionState();
     }
     if (oldWidget.bbCode != widget.bbCode) {
+      if (widget.bbCode != null && widget.bbCode != _bbCodeText) {
+        _resetTransientInteractionState();
+      }
       _syncExternalBbCode();
     }
     _dropTransientAttachmentsNowOwnedByWidget();
@@ -590,7 +704,17 @@ class _ComposerQuillEditorSurfaceState
       return;
     }
     _rememberTransientAttachment(attachment!);
-    _insertEmbed(composerQuillAttachEmbed(aid));
+    _insertEmbed(composerQuillAttachEmbed(aid), requestFocus: false);
+  }
+
+  Future<void> _handleImagePressed(BuildContext context) async {
+    _closeToolPanelForEditorInput();
+    await _insertImage(context);
+    if (!mounted) {
+      return;
+    }
+    _restoreTypingStyleSnapshot();
+    _focusNode.requestFocus();
   }
 
   void _rememberTransientAttachment(ComposerImageAttachment attachment) {
@@ -637,6 +761,7 @@ class _ComposerQuillEditorSurfaceState
     if (!widget.enabled) {
       return;
     }
+    _closeToolPanelForEditorInput();
     final line = _currentLine();
     if (line == null) {
       return;
@@ -644,6 +769,7 @@ class _ComposerQuillEditorSurfaceState
     final isQuoted = _isLineQuoted(line);
     if (!isQuoted && _isEmptyUnquotedBoundaryAfterQuote(line)) {
       _startQuoteAfterBoundaryLine(line);
+      _restoreTypingStyleSnapshot();
       _focusNode.requestFocus();
       return;
     }
@@ -656,6 +782,7 @@ class _ComposerQuillEditorSurfaceState
             : Attribute.blockQuote,
       );
     }
+    _restoreTypingStyleSnapshot();
     _focusNode.requestFocus();
   }
 
@@ -854,108 +981,6 @@ class _AlignPanel extends StatelessWidget {
   }
 }
 
-class _LinkPanel extends StatefulWidget {
-  const _LinkPanel({required this.keyPrefix, required this.onSubmitted});
-
-  final String keyPrefix;
-  final ValueChanged<_LinkDraft> onSubmitted;
-
-  @override
-  State<_LinkPanel> createState() => _LinkPanelState();
-}
-
-class _LinkPanelState extends State<_LinkPanel> {
-  final _urlController = TextEditingController();
-  final _labelController = TextEditingController();
-  String? _urlErrorText;
-  String? _labelErrorText;
-
-  @override
-  void dispose() {
-    _urlController.dispose();
-    _labelController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: Column(
-        key: Key('${widget.keyPrefix}-link-sheet'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('添加链接', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          TextField(
-            key: Key('${widget.keyPrefix}-link-url-input'),
-            controller: _urlController,
-            keyboardType: TextInputType.url,
-            textInputAction: TextInputAction.next,
-            decoration: InputDecoration(
-              labelText: '链接',
-              hintText: 'https://example.com',
-              errorText: _urlErrorText,
-              border: const OutlineInputBorder(),
-            ),
-            onChanged: (_) => _clearUrlError(),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            key: Key('${widget.keyPrefix}-link-label-input'),
-            controller: _labelController,
-            textInputAction: TextInputAction.done,
-            decoration: InputDecoration(
-              labelText: '链接文字',
-              hintText: '显示文字',
-              errorText: _labelErrorText,
-              border: const OutlineInputBorder(),
-            ),
-            onChanged: (_) => _clearLabelError(),
-            onSubmitted: (_) => _submit(),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              key: Key('${widget.keyPrefix}-link-use-button'),
-              onPressed: _submit,
-              child: const Text('使用'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _clearUrlError() {
-    if (_urlErrorText != null) {
-      setState(() => _urlErrorText = null);
-    }
-  }
-
-  void _clearLabelError() {
-    if (_labelErrorText != null) {
-      setState(() => _labelErrorText = null);
-    }
-  }
-
-  void _submit() {
-    final url = _urlController.text.trim();
-    final label = _labelController.text.trim();
-    setState(() {
-      _urlErrorText = url.isEmpty ? '请输入链接' : null;
-      _labelErrorText = label.isEmpty ? '请输入链接文字' : null;
-    });
-    if (url.isEmpty || label.isEmpty) {
-      return;
-    }
-    widget.onSubmitted(_LinkDraft(url: url, label: label));
-    _urlController.clear();
-    _labelController.clear();
-  }
-}
-
 class _ToolbarButton extends StatelessWidget {
   const _ToolbarButton({
     super.key,
@@ -979,17 +1004,28 @@ class _FormatSheet extends StatefulWidget {
     required this.keyPrefix,
     required this.controller,
     this.embedded = false,
+    this.onTypingStyleChanged,
   });
 
   final String keyPrefix;
   final QuillController controller;
   final bool embedded;
+  final VoidCallback? onTypingStyleChanged;
 
   @override
   State<_FormatSheet> createState() => _FormatSheetState();
 }
 
 class _FormatSheetState extends State<_FormatSheet> {
+  static final List<Attribute> _clearableAttributes = <Attribute>[
+    Attribute.bold,
+    Attribute.italic,
+    Attribute.underline,
+    Attribute.strikeThrough,
+    Attribute.size,
+    Attribute.color,
+    Attribute.background,
+  ];
   static const _textColorPalette = <Color>[
     Color(0xff000000),
     Color(0xffffffff),
@@ -1047,37 +1083,57 @@ class _FormatSheetState extends State<_FormatSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            Row(
               children: [
-                _FormatIconToggle(
-                  key: Key('${widget.keyPrefix}-format-bold-toggle'),
-                  icon: Icons.format_bold,
-                  tooltip: '加粗',
-                  selected: _isAttributeActive(Attribute.bold),
-                  onSelected: (_) => _toggleAttribute(Attribute.bold),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _FormatIconToggle(
+                          key: Key('${widget.keyPrefix}-format-bold-toggle'),
+                          icon: Icons.format_bold,
+                          tooltip: '加粗',
+                          selected: _isAttributeActive(Attribute.bold),
+                          onSelected: (_) => _toggleAttribute(Attribute.bold),
+                        ),
+                        const SizedBox(width: 8),
+                        _FormatIconToggle(
+                          key: Key('${widget.keyPrefix}-format-italic-toggle'),
+                          icon: Icons.format_italic,
+                          tooltip: '斜体',
+                          selected: _isAttributeActive(Attribute.italic),
+                          onSelected: (_) => _toggleAttribute(Attribute.italic),
+                        ),
+                        const SizedBox(width: 8),
+                        _FormatIconToggle(
+                          key: Key(
+                            '${widget.keyPrefix}-format-underline-toggle',
+                          ),
+                          icon: Icons.format_underline,
+                          tooltip: '下划线',
+                          selected: _isAttributeActive(Attribute.underline),
+                          onSelected: (_) =>
+                              _toggleAttribute(Attribute.underline),
+                        ),
+                        const SizedBox(width: 8),
+                        _FormatIconToggle(
+                          key: Key('${widget.keyPrefix}-format-strike-toggle'),
+                          icon: Icons.format_strikethrough,
+                          tooltip: '删除线',
+                          selected: _isAttributeActive(Attribute.strikeThrough),
+                          onSelected: (_) =>
+                              _toggleAttribute(Attribute.strikeThrough),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                _FormatIconToggle(
-                  key: Key('${widget.keyPrefix}-format-italic-toggle'),
-                  icon: Icons.format_italic,
-                  tooltip: '斜体',
-                  selected: _isAttributeActive(Attribute.italic),
-                  onSelected: (_) => _toggleAttribute(Attribute.italic),
-                ),
-                _FormatIconToggle(
-                  key: Key('${widget.keyPrefix}-format-underline-toggle'),
-                  icon: Icons.format_underline,
-                  tooltip: '下划线',
-                  selected: _isAttributeActive(Attribute.underline),
-                  onSelected: (_) => _toggleAttribute(Attribute.underline),
-                ),
-                _FormatIconToggle(
-                  key: Key('${widget.keyPrefix}-format-strike-toggle'),
-                  icon: Icons.format_strikethrough,
-                  tooltip: '删除线',
-                  selected: _isAttributeActive(Attribute.strikeThrough),
-                  onSelected: (_) => _toggleAttribute(Attribute.strikeThrough),
+                const SizedBox(width: 8),
+                TextButton(
+                  key: Key('${widget.keyPrefix}-format-clear-state-button'),
+                  onPressed: _hasClearableStyle ? _clearAllStyles : null,
+                  child: const Text('清除状态'),
                 ),
               ],
             ),
@@ -1207,6 +1263,20 @@ class _FormatSheetState extends State<_FormatSheet> {
         ?.value;
   }
 
+  bool get _hasClearableStyle {
+    final controller = widget.controller;
+    if (controller.selection.isCollapsed) {
+      return _containsClearableStyle(controller.getSelectionStyle());
+    }
+    return controller.getAllSelectionStyles().any(_containsClearableStyle);
+  }
+
+  bool _containsClearableStyle(Style style) {
+    return _clearableAttributes.any(
+      (attribute) => style.attributes[attribute.key]?.value != null,
+    );
+  }
+
   void _toggleAttribute(Attribute attribute) {
     _runQuillMutationWithoutKeyboard(() {
       widget.controller.formatSelection(
@@ -1242,10 +1312,34 @@ class _FormatSheetState extends State<_FormatSheet> {
     });
   }
 
+  void _clearAllStyles() {
+    _runQuillMutationWithoutKeyboard(() {
+      final controller = widget.controller;
+      final selection = controller.selection;
+      if (selection.isCollapsed) {
+        var style = controller.toggledStyle;
+        for (final attribute in _clearableAttributes) {
+          style = style.put(Attribute.clone(attribute, null));
+        }
+        controller.forceToggledStyle(style);
+        return;
+      }
+
+      final clearedAttributes = <String, dynamic>{
+        for (final attribute in _clearableAttributes) attribute.key: null,
+      };
+      final delta = Delta()
+        ..retain(selection.start)
+        ..retain(selection.end - selection.start, clearedAttributes);
+      controller.compose(delta, selection, ChangeSource.local);
+    });
+  }
+
   void _runQuillMutationWithoutKeyboard(VoidCallback mutation) {
     widget.controller.skipRequestKeyboard = true;
     try {
       mutation();
+      widget.onTypingStyleChanged?.call();
     } finally {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
@@ -1410,13 +1504,6 @@ class _ColorSwatchButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _LinkDraft {
-  const _LinkDraft({required this.url, required this.label});
-
-  final String url;
-  final String label;
 }
 
 class _StickerEmbedBuilder extends EmbedBuilder {

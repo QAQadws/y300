@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -85,6 +86,11 @@ void main() {
       const Key('test-quill-format-strike-toggle'),
       Icons.format_strikethrough,
     );
+    expect(
+      find.byKey(const Key('test-quill-format-clear-state-button')),
+      findsOneWidget,
+    );
+    _expectClearStateOnFormatRow(tester);
     _expectSizeControlsStayOnOneLine(tester);
 
     await tester.tap(find.byKey(const Key('test-quill-format-button')));
@@ -123,6 +129,29 @@ void main() {
       expect(keyboardGap, greaterThan(260));
     },
   );
+
+  testWidgets('an externally opened keyboard dismisses the active tool panel', (
+    tester,
+  ) async {
+    final controller = QuillController.basic();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(_buildEditor(controller: controller));
+
+    await tester.tap(find.byKey(const Key('test-quill-format-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('test-quill-tool-panel')), findsOneWidget);
+
+    await tester.pumpWidget(
+      _buildEditor(
+        controller: controller,
+        viewInsets: const EdgeInsets.only(bottom: 320),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('test-quill-tool-panel')), findsNothing);
+    expect(_toolbarBottomGap(tester), greaterThan(260));
+  });
 
   testWidgets('format sheet applies selected text formatting immediately', (
     tester,
@@ -230,6 +259,77 @@ void main() {
 
     expect(find.byKey(const Key('test-quill-tool-panel')), findsNothing);
     expect(editorFocusNode.hasFocus, isTrue);
+  });
+
+  testWidgets(
+    'tapping a normal editor position closes tools and adopts nearby style',
+    (tester) async {
+      final controller = QuillController.basic();
+      addTearDown(controller.dispose);
+      controller.replaceText(
+        0,
+        0,
+        '普通斜体',
+        const TextSelection.collapsed(offset: 0),
+      );
+      controller.formatText(2, 2, Attribute.italic);
+
+      await tester.pumpWidget(_buildEditor(controller: controller));
+      await tester.tap(find.byKey(const Key('test-quill-format-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('test-quill-format-bold-toggle')));
+      await tester.pump();
+
+      _dispatchEditorTap(tester, controller: controller, offset: 3);
+      await tester.pump();
+
+      expect(find.byKey(const Key('test-quill-tool-panel')), findsNothing);
+      expect(controller.toggledStyle.isEmpty, isTrue);
+      expect(
+        controller.getSelectionStyle().attributes[Attribute.italic.key]?.value,
+        isTrue,
+      );
+      expect(
+        controller.getSelectionStyle().attributes[Attribute.bold.key],
+        isNull,
+      );
+
+      await tester.tap(find.byKey(const Key('test-quill-format-button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('test-quill-tool-panel')), findsOneWidget);
+    },
+  );
+
+  testWidgets('tapping document end restores the explicitly selected style', (
+    tester,
+  ) async {
+    final controller = QuillController.basic();
+    addTearDown(controller.dispose);
+    controller.replaceText(
+      0,
+      0,
+      '普通末尾',
+      const TextSelection.collapsed(offset: 0),
+    );
+    controller.formatText(2, 2, Attribute.italic);
+    controller.formatText(2, 2, Attribute.clone(Attribute.color, '#d32f2f'));
+
+    await tester.pumpWidget(_buildEditor(controller: controller));
+    await tester.tap(find.byKey(const Key('test-quill-format-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('test-quill-format-bold-toggle')));
+    await tester.pump();
+
+    _dispatchEditorTap(tester, controller: controller, offset: 4);
+    await tester.pump();
+    controller.replaceText(4, 0, '新', const TextSelection.collapsed(offset: 5));
+    await tester.pump();
+
+    final insertedStyle = controller.document.collectStyle(4, 1).attributes;
+    expect(find.byKey(const Key('test-quill-tool-panel')), findsNothing);
+    expect(insertedStyle[Attribute.bold.key]?.value, isTrue);
+    expect(insertedStyle[Attribute.italic.key], isNull);
+    expect(insertedStyle[Attribute.color.key], isNull);
   });
 
   testWidgets(
@@ -418,6 +518,101 @@ void main() {
     expect(latest, '文字');
   });
 
+  testWidgets(
+    'clear state removes every managed style from a mixed selection',
+    (tester) async {
+      final controller = QuillController.basic();
+      addTearDown(controller.dispose);
+      String latest = '';
+
+      await tester.pumpWidget(
+        _buildEditor(
+          controller: controller,
+          onBbCodeChanged: (value) => latest = value,
+        ),
+      );
+      controller.replaceText(
+        0,
+        0,
+        '甲乙',
+        const TextSelection.collapsed(offset: 2),
+      );
+      controller.formatText(0, 1, Attribute.bold);
+      controller.formatText(0, 1, Attribute.italic);
+      controller.formatText(0, 1, Attribute.underline);
+      controller.formatText(0, 1, Attribute.strikeThrough);
+      controller.formatText(0, 1, Attribute.clone(Attribute.size, '18'));
+      controller.formatText(0, 1, Attribute.clone(Attribute.color, '#d32f2f'));
+      controller.formatText(
+        0,
+        1,
+        Attribute.clone(Attribute.background, '#fff3b0'),
+      );
+      controller.formatText(
+        0,
+        1,
+        Attribute.clone(Attribute.link, 'https://example.com'),
+      );
+      controller.updateSelection(
+        const TextSelection(baseOffset: 0, extentOffset: 2),
+        ChangeSource.local,
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('test-quill-format-button')));
+      await tester.pumpAndSettle();
+      final clearButton = tester.widget<TextButton>(
+        find.byKey(const Key('test-quill-format-clear-state-button')),
+      );
+      expect(clearButton.onPressed, isNotNull);
+      await tester.tap(
+        find.byKey(const Key('test-quill-format-clear-state-button')),
+      );
+      await tester.pump();
+
+      expect(latest, '[url=https://example.com]甲[/url]乙');
+    },
+  );
+
+  testWidgets('clear state isolates future input at a collapsed caret', (
+    tester,
+  ) async {
+    final controller = QuillController.basic();
+    addTearDown(controller.dispose);
+    controller.replaceText(
+      0,
+      0,
+      '末尾',
+      const TextSelection.collapsed(offset: 2),
+    );
+    controller.formatText(0, 2, Attribute.bold);
+    controller.formatText(0, 2, Attribute.italic);
+    controller.formatText(0, 2, Attribute.clone(Attribute.size, '18'));
+    controller.formatText(0, 2, Attribute.clone(Attribute.color, '#d32f2f'));
+    controller.updateSelection(
+      const TextSelection.collapsed(offset: 2),
+      ChangeSource.local,
+    );
+
+    await tester.pumpWidget(_buildEditor(controller: controller));
+    await tester.tap(find.byKey(const Key('test-quill-format-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('test-quill-format-clear-state-button')),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('test-quill-format-button')));
+    await tester.pump();
+    controller.replaceText(2, 0, '新', const TextSelection.collapsed(offset: 3));
+    await tester.pump();
+
+    final insertedStyle = controller.document.collectStyle(2, 1).attributes;
+    expect(insertedStyle[Attribute.bold.key], isNull);
+    expect(insertedStyle[Attribute.italic.key], isNull);
+    expect(insertedStyle[Attribute.size.key], isNull);
+    expect(insertedStyle[Attribute.color.key], isNull);
+  });
+
   testWidgets('size 3 exports normal Discuz size only when selected', (
     tester,
   ) async {
@@ -471,6 +666,14 @@ void main() {
 
     await tester.tap(find.byKey(const Key('test-quill-link-button')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('test-quill-tool-panel')), findsNothing);
+    final linkUrlEditable = tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(const Key('test-quill-link-url-input')),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect(linkUrlEditable.focusNode.hasFocus, isTrue);
     await tester.enterText(
       find.byKey(const Key('test-quill-link-url-input')),
       'https://example.com',
@@ -483,6 +686,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(latest, '[url=https://example.com]示例[/url]');
+  });
+
+  testWidgets('cancelling link sheet returns focus without changing content', (
+    tester,
+  ) async {
+    final controller = QuillController.basic();
+    addTearDown(controller.dispose);
+    controller.replaceText(
+      0,
+      0,
+      '正文',
+      const TextSelection.collapsed(offset: 2),
+    );
+
+    await tester.pumpWidget(_buildEditor(controller: controller));
+    await tester.tap(find.byKey(const Key('test-quill-link-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('test-quill-link-cancel-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('test-quill-link-sheet')), findsNothing);
+    expect(_editorFocusNode(tester).hasFocus, isTrue);
+    expect(controller.document.toPlainText(), '正文\n');
   });
 
   testWidgets(
@@ -840,6 +1066,31 @@ FocusNode _editorFocusNode(WidgetTester tester) {
   return tester.widget<QuillEditor>(find.byType(QuillEditor)).focusNode;
 }
 
+void _dispatchEditorTap(
+  WidgetTester tester, {
+  required QuillController controller,
+  required int offset,
+}) {
+  final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+  TextPosition positionResolver(Offset _) => TextPosition(offset: offset);
+  final details = TapDownDetails(
+    globalPosition: Offset.zero,
+    kind: PointerDeviceKind.touch,
+  );
+  expect(editor.config.onTapDown!(details, positionResolver), isFalse);
+  expect(
+    editor.config.onTapUp!(
+      TapUpDetails(globalPosition: Offset.zero, kind: PointerDeviceKind.touch),
+      positionResolver,
+    ),
+    isFalse,
+  );
+  controller.updateSelection(
+    TextSelection.collapsed(offset: offset),
+    ChangeSource.local,
+  );
+}
+
 double _toolbarBottomGap(WidgetTester tester) {
   final scaffoldBottom = tester.getBottomLeft(find.byType(Scaffold)).dy;
   final toolbarBottom = tester
@@ -871,6 +1122,17 @@ void _expectSizeControlsStayOnOneLine(WidgetTester tester) {
         .dy;
     expect(top, firstTop);
   }
+}
+
+void _expectClearStateOnFormatRow(WidgetTester tester) {
+  final strikeCenter = tester.getCenter(
+    find.byKey(const Key('test-quill-format-strike-toggle')),
+  );
+  final clearCenter = tester.getCenter(
+    find.byKey(const Key('test-quill-format-clear-state-button')),
+  );
+  expect(clearCenter.dx, greaterThan(strikeCenter.dx));
+  expect(clearCenter.dy, closeTo(strikeCenter.dy, 2));
 }
 
 Widget _buildEditor({

@@ -132,6 +132,30 @@ void main() {
     expect(find.text('请输入链接文字'), findsOneWidget);
   });
 
+  testWidgets('ComposerBbCodeToolbar link sheet reserves keyboard inset', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildToolbar(
+        onCommandSelected: (_) {},
+        viewInsets: const EdgeInsets.only(bottom: 280),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('reply-composer-link-button')));
+    await tester.pumpAndSettle();
+
+    final scrollView = tester.widget<SingleChildScrollView>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('reply-composer-link-sheet')),
+            matching: find.byType(SingleChildScrollView),
+          )
+          .first,
+    );
+    expect((scrollView.padding! as EdgeInsets).bottom, 296);
+  });
+
   testWidgets('ComposerBbCodeToolbar does not insert size on dismissal', (
     tester,
   ) async {
@@ -196,8 +220,15 @@ void main() {
 
 Widget _buildToolbar({
   required ValueChanged<ComposerBbCodeCommand> onCommandSelected,
+  EdgeInsets viewInsets = EdgeInsets.zero,
 }) {
   return MaterialApp(
+    builder: (context, child) {
+      return MediaQuery(
+        data: MediaQuery.of(context).copyWith(viewInsets: viewInsets),
+        child: child!,
+      );
+    },
     home: Scaffold(
       body: ComposerBbCodeToolbar(
         onStickerPressed: () {},

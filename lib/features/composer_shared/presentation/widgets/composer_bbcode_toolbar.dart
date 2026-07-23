@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_color_picker_sheet.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_link_sheet.dart';
 
 class ComposerBbCodeToolbar extends StatelessWidget {
   const ComposerBbCodeToolbar({
@@ -125,11 +126,9 @@ class ComposerBbCodeToolbar extends StatelessWidget {
   }
 
   Future<void> _showLinkSheet(BuildContext context) async {
-    final link = await showModalBottomSheet<_ComposerLinkDraft>(
+    final link = await showComposerLinkSheet(
       context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (_) => _LinkSheet(keyPrefix: keyPrefix),
+      keyPrefix: keyPrefix,
     );
     if (link == null) {
       return;
@@ -237,132 +236,6 @@ class _SizeSheet extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _ComposerLinkDraft {
-  const _ComposerLinkDraft({required this.url, required this.label});
-
-  final String url;
-  final String label;
-}
-
-class _LinkSheet extends StatefulWidget {
-  const _LinkSheet({required this.keyPrefix});
-
-  final String keyPrefix;
-
-  @override
-  State<_LinkSheet> createState() => _LinkSheetState();
-}
-
-class _LinkSheetState extends State<_LinkSheet> {
-  final _urlController = TextEditingController();
-  final _labelController = TextEditingController();
-  String? _urlErrorText;
-  String? _labelErrorText;
-
-  @override
-  void dispose() {
-    _urlController.dispose();
-    _labelController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    return SafeArea(
-      top: false,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottomInset),
-        child: Column(
-          key: Key('${widget.keyPrefix}-link-sheet'),
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('添加链接', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            TextField(
-              key: Key('${widget.keyPrefix}-link-url-input'),
-              controller: _urlController,
-              autofocus: true,
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.next,
-              decoration: InputDecoration(
-                labelText: '链接',
-                hintText: 'https://example.com',
-                errorText: _urlErrorText,
-                border: const OutlineInputBorder(),
-              ),
-              onChanged: (_) => _clearUrlError(),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              key: Key('${widget.keyPrefix}-link-label-input'),
-              controller: _labelController,
-              textInputAction: TextInputAction.done,
-              decoration: InputDecoration(
-                labelText: '链接文字',
-                hintText: '显示给别人看的文字',
-                errorText: _labelErrorText,
-                border: const OutlineInputBorder(),
-              ),
-              onChanged: (_) => _clearLabelError(),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  key: Key('${widget.keyPrefix}-link-cancel-button'),
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('取消'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  key: Key('${widget.keyPrefix}-link-use-button'),
-                  onPressed: _submit,
-                  child: const Text('使用'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _clearUrlError() {
-    if (_urlErrorText == null) {
-      return;
-    }
-    setState(() {
-      _urlErrorText = null;
-    });
-  }
-
-  void _clearLabelError() {
-    if (_labelErrorText == null) {
-      return;
-    }
-    setState(() {
-      _labelErrorText = null;
-    });
-  }
-
-  void _submit() {
-    final url = _urlController.text.trim();
-    final label = _labelController.text.trim();
-    setState(() {
-      _urlErrorText = url.isEmpty ? '请输入链接' : null;
-      _labelErrorText = label.isEmpty ? '请输入链接文字' : null;
-    });
-    if (url.isEmpty || label.isEmpty) {
-      return;
-    }
-    Navigator.of(context).pop(_ComposerLinkDraft(url: url, label: label));
   }
 }
 

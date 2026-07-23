@@ -11,11 +11,7 @@
   <img alt="Development status" src="https://img.shields.io/badge/status-active%20development-orange">
 </p>
 
-> **主视觉图片占位**
->
-> 建议路径：`.github/assets/readme/hero.png`<br>
-> 建议内容：论坛、书架、漫画阅读器和小说阅读器的组合界面。<br>
-> 建议尺寸：`1600 x 900` 或其他 16:9 图片。添加图片后，用实际图片替换本占位块。
+
 
 Y300 将论坛浏览、收藏同步、漫画管理和小说阅读整合在一个客户端中。项目当前以 Android 为主要运行与发布平台，重视本地数据管理、阅读体验以及对 Discuz/Yamibo 页面结构的兼容
 
@@ -61,17 +57,6 @@ Y300 将论坛浏览、收藏同步、漫画管理和小说阅读整合在一个
 - 支持浅色、深色及跟随系统的应用外观
 - 支持应用内检查更新与 Android 安装流程
 
-## 界面预览
-
-| 论坛与帖子 | 书架与详情 |
-| --- | --- |
-| **图片占位**：`.github/assets/readme/forum.png`<br>建议展示论坛首页或原生帖子详情。 | **图片占位**：`.github/assets/readme/library.png`<br>建议展示漫画/小说书架与作品详情。 |
-
-| 漫画阅读器 | 小说阅读器 |
-| --- | --- |
-| **图片占位**：`.github/assets/readme/comic-reader.png`<br>建议展示阅读工具栏、进度和章节导航。 | **图片占位**：`.github/assets/readme/novel-reader.png`<br>建议同时展示滚动与分页阅读效果。 |
-
-建议截图隐藏用户名、UID、Cookie、私信、草稿以及其他账号相关信息
 
 
 ## 下载与安装

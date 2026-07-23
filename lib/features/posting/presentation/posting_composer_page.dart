@@ -844,7 +844,7 @@ class _PostingMessageEditor extends StatelessWidget {
         attachFileExists: renderer is FlutterBbCodeForumRenderer
             ? renderer.attachFileExists
             : null,
-        hintText: '请注意图片仅在本地保存24小时',
+        hintText: '请注意上传的图片仅在本地保存24小时',
         expand: true,
         contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
         onBbCodeChanged: onMessageChanged,
@@ -859,7 +859,7 @@ class _PostingMessageEditor extends StatelessWidget {
         inputKey: const Key('posting-composer-message-input'),
         controller: messageController,
         enabled: enabled,
-        hintText: '请注意图片仅在本地保存24小时',
+        hintText: '请注意上传的图片仅在本地保存24小时',
         onChanged: onMessageChanged,
       ),
     };
