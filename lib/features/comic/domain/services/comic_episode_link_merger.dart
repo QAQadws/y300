@@ -12,9 +12,8 @@ abstract class ComicEpisodeLinkMerger {
   List<ComicEpisodeLink> sort(List<ComicEpisodeLink> links);
 
   List<ComicEpisodeLink> fromSearchCandidates(
-    List<ComicSearchCandidate> candidates, {
-    required String excludeTid,
-  });
+    List<ComicSearchCandidate> candidates,
+  );
 }
 
 class DefaultComicEpisodeLinkMerger implements ComicEpisodeLinkMerger {
@@ -67,9 +66,8 @@ class DefaultComicEpisodeLinkMerger implements ComicEpisodeLinkMerger {
 
   @override
   List<ComicEpisodeLink> fromSearchCandidates(
-    List<ComicSearchCandidate> candidates, {
-    required String excludeTid,
-  }) {
+    List<ComicSearchCandidate> candidates,
+  ) {
     final sortedCandidates = candidates.toList()
       ..sort((a, b) {
         final episodeOrder = _compareEpisodeOrder(a.item.title, b.item.title);
@@ -83,25 +81,27 @@ class DefaultComicEpisodeLinkMerger implements ComicEpisodeLinkMerger {
         return a.searchIndex.compareTo(b.searchIndex);
       });
 
-    return merge(
-      const <ComicEpisodeLink>[],
-      sortedCandidates
-          .where((candidate) => candidate.item.tid.trim() != excludeTid)
-          .map(_episodeLinkFromSearchItem)
-          .toList(growable: false),
-    );
+    final links = <ComicEpisodeLink>[];
+    for (final candidate in sortedCandidates) {
+      final link = _episodeLinkFromSearchItem(candidate);
+      if (link != null) {
+        links.add(link);
+      }
+    }
+    return merge(const <ComicEpisodeLink>[], links);
   }
 
-  ComicEpisodeLink _episodeLinkFromSearchItem(ComicSearchCandidate candidate) {
+  ComicEpisodeLink? _episodeLinkFromSearchItem(ComicSearchCandidate candidate) {
     final item = candidate.item;
     final metadata = _subjectParser.parse(item.title);
     final episodeLabel = metadata.episodeLabel?.trim();
+    if (episodeLabel == null || episodeLabel.isEmpty) {
+      return null;
+    }
     return ComicEpisodeLink(
       url: item.url.trim(),
       rawText: item.title,
-      episodeTitle: episodeLabel == null || episodeLabel.isEmpty
-          ? item.title
-          : episodeLabel,
+      episodeTitle: episodeLabel,
     );
   }
 

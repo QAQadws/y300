@@ -395,35 +395,17 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       }
       final searchCandidateLinks = _episodeLinkMerger.fromSearchCandidates(
         candidates,
-        excludeTid: sourceTid,
       );
-      if (collectedLinks.isEmpty && searchCandidateLinks.isEmpty) {
+      final mergedSearchLinks = _episodeLinkMerger.merge(
+        collectedLinks,
+        searchCandidateLinks,
+        preferSupplement: true,
+      );
+      if (mergedSearchLinks.isEmpty) {
         continue;
       }
-      if (collectedLinks.isEmpty) {
-        return _SearchFallbackResult(
-          links: searchCandidateLinks,
-          usedSearch: true,
-        );
-      }
-      if (searchCandidateLinks.length > collectedLinks.length) {
-        // Discuz search results are themselves same-series thread entries. When
-        // catalog/recursive parsing only finds a partial set, preserve those
-        // matched entries instead of losing newer chapters from the search page.
-        return _SearchFallbackResult(
-          links: _episodeLinkMerger.sort(
-            _episodeLinkMerger.merge(
-              collectedLinks,
-              searchCandidateLinks,
-              preferSupplement: true,
-            ),
-          ),
-          usedSearch: true,
-          catalogUrl: collectedCatalogUrl,
-        );
-      }
       return _SearchFallbackResult(
-        links: _episodeLinkMerger.sort(collectedLinks),
+        links: _episodeLinkMerger.sort(mergedSearchLinks),
         usedSearch: true,
         catalogUrl: collectedCatalogUrl,
       );
