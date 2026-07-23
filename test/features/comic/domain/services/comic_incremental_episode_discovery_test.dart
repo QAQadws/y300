@@ -5,28 +5,43 @@ import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_pa
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_incremental_episode_discovery.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
+import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 void main() {
   group('ComicIncrementalEpisodeDiscovery', () {
     group('discoverDirectIncremental', () {
-      test('returns new tids not in knownTids without network calls', () {
-        var fetchCallCount = 0;
+      test('returns only new tids without requesting their details', () async {
+        final requestedTids = <String>[];
         final service = ComicIncrementalEpisodeDiscovery(
           fetchThreadDetail: (tid) async {
-            fetchCallCount++;
-            return const ApiFailure<ThreadDetailData>(
-              ApiError(type: ApiErrorType.business, message: 'should not be called'),
+            requestedTids.add(tid);
+            return ApiSuccess<ThreadDetailData>(
+              _thread(tid: tid, subject: '测试漫画', message: ''),
             );
           },
-          opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+          opPostParser: ComicConsecutiveOpPostParser(
+            engine: ComicPostParsingEngine(),
+          ),
         );
 
         final links = <ComicEpisodeLink>[
-          const ComicEpisodeLink(url: 'https://bbs.yamibo.com/thread-101-1-1.html', rawText: '第1话'),
-          const ComicEpisodeLink(url: 'https://bbs.yamibo.com/thread-102-1-1.html', rawText: '第2话'),
-          const ComicEpisodeLink(url: 'https://bbs.yamibo.com/thread-103-1-1.html', rawText: '第3话'),
-          const ComicEpisodeLink(url: 'https://bbs.yamibo.com/thread-104-1-1.html', rawText: '第4话'),
+          const ComicEpisodeLink(
+            url: 'https://bbs.yamibo.com/thread-101-1-1.html',
+            rawText: '第1话',
+          ),
+          const ComicEpisodeLink(
+            url: 'https://bbs.yamibo.com/thread-102-1-1.html',
+            rawText: '第2话',
+          ),
+          const ComicEpisodeLink(
+            url: 'https://bbs.yamibo.com/thread-103-1-1.html',
+            rawText: '第3话',
+          ),
+          const ComicEpisodeLink(
+            url: 'https://bbs.yamibo.com/thread-104-1-1.html',
+            rawText: '第4话',
+          ),
         ];
 
         final result = service.discoverDirectIncremental(
@@ -37,19 +52,32 @@ void main() {
         expect(result, hasLength(2));
         expect(result[0].url, contains('thread-103-1-1.html'));
         expect(result[1].url, contains('thread-104-1-1.html'));
-        expect(fetchCallCount, 0);
+        expect(requestedTids, isEmpty);
       });
 
-      test('returns empty when all links are known', () {
+      test('returns empty without requests when all links are known', () async {
+        var fetchCallCount = 0;
         final service = ComicIncrementalEpisodeDiscovery(
-          fetchThreadDetail: (tid) async =>
-              const ApiFailure<ThreadDetailData>(ApiError(type: ApiErrorType.business, message: '')),
-          opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+          fetchThreadDetail: (tid) async {
+            fetchCallCount++;
+            return const ApiFailure<ThreadDetailData>(
+              ApiError(type: ApiErrorType.business, message: ''),
+            );
+          },
+          opPostParser: ComicConsecutiveOpPostParser(
+            engine: ComicPostParsingEngine(),
+          ),
         );
 
         final links = <ComicEpisodeLink>[
-          const ComicEpisodeLink(url: 'https://bbs.yamibo.com/thread-101-1-1.html', rawText: '第1话'),
-          const ComicEpisodeLink(url: 'https://bbs.yamibo.com/thread-102-1-1.html', rawText: '第2话'),
+          const ComicEpisodeLink(
+            url: 'https://bbs.yamibo.com/thread-101-1-1.html',
+            rawText: '第1话',
+          ),
+          const ComicEpisodeLink(
+            url: 'https://bbs.yamibo.com/thread-102-1-1.html',
+            rawText: '第2话',
+          ),
         ];
 
         final result = service.discoverDirectIncremental(
@@ -58,18 +86,29 @@ void main() {
         );
 
         expect(result, isEmpty);
+        expect(fetchCallCount, 0);
       });
 
-      test('skips links with unextractable tid without crashing', () {
+      test('skips links with unextractable tid without crashing', () async {
         final service = ComicIncrementalEpisodeDiscovery(
-          fetchThreadDetail: (tid) async =>
-              const ApiFailure<ThreadDetailData>(ApiError(type: ApiErrorType.business, message: '')),
-          opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+          fetchThreadDetail: (tid) async => ApiSuccess<ThreadDetailData>(
+            _thread(tid: tid, subject: '测试漫画', message: ''),
+          ),
+          opPostParser: ComicConsecutiveOpPostParser(
+            engine: ComicPostParsingEngine(),
+          ),
+          recursiveRequestGovernor: _immediateRecursiveGovernor(),
         );
 
         final links = <ComicEpisodeLink>[
-          const ComicEpisodeLink(url: 'https://example.com/not-a-thread-url', rawText: '无关链接'),
-          const ComicEpisodeLink(url: 'https://bbs.yamibo.com/thread-200-1-1.html', rawText: '第1话'),
+          const ComicEpisodeLink(
+            url: 'https://example.com/not-a-thread-url',
+            rawText: '无关链接',
+          ),
+          const ComicEpisodeLink(
+            url: 'https://bbs.yamibo.com/thread-200-1-1.html',
+            rawText: '第1话',
+          ),
         ];
 
         final result = service.discoverDirectIncremental(
@@ -81,10 +120,69 @@ void main() {
         expect(result, hasLength(1));
         expect(result[0].url, contains('thread-200-1-1.html'));
       });
+
+      test('does not dynamically filter direct candidates', () async {
+        final requestedTids = <String>[];
+        final details = <String, ThreadDetailData>{
+          '201': _thread(
+            tid: '201',
+            subject: '测试漫画 第1话',
+            message: '',
+            typeid: '398',
+          ),
+          '202': _thread(
+            tid: '202',
+            subject: '漫画版公告',
+            message: '',
+            typeid: '65',
+          ),
+          '203': _thread(
+            tid: '203',
+            subject: '小说帖子',
+            message: '',
+            fid: '49',
+            typeid: '293',
+          ),
+        };
+        final service = ComicIncrementalEpisodeDiscovery(
+          fetchThreadDetail: (tid) async {
+            requestedTids.add(tid);
+            final detail = details[tid];
+            return detail == null
+                ? const ApiFailure<ThreadDetailData>(
+                    ApiError(type: ApiErrorType.network, message: 'offline'),
+                  )
+                : ApiSuccess<ThreadDetailData>(detail);
+          },
+          opPostParser: ComicConsecutiveOpPostParser(
+            engine: ComicPostParsingEngine(),
+          ),
+        );
+
+        final result = service.discoverDirectIncremental(
+          currentLinks: const <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-200-1-1.html', rawText: '已知'),
+            ComicEpisodeLink(url: 'thread-201-1-1.html', rawText: '第1话'),
+            ComicEpisodeLink(url: 'thread-202-1-1.html', rawText: '第2话'),
+            ComicEpisodeLink(url: 'thread-203-1-1.html', rawText: '第3话'),
+            ComicEpisodeLink(url: 'thread-204-1-1.html', rawText: '第4话'),
+          ],
+          knownTids: <String>{'200'},
+        );
+
+        expect(result.map((link) => link.url), <String>[
+          'thread-201-1-1.html',
+          'thread-202-1-1.html',
+          'thread-203-1-1.html',
+          'thread-204-1-1.html',
+        ]);
+        expect(requestedTids, isEmpty);
+      });
     });
 
     group('discoverRecursiveIncremental', () {
       test('follows previous-episode links and stops at known tid', () async {
+        final recursiveGovernor = _RecordingRecursiveRequestGovernor();
         final service = ComicIncrementalEpisodeDiscovery(
           fetchThreadDetail: _fakeThreadFetcher(
             detailsByTid: <String, ThreadDetailData>{
@@ -105,7 +203,10 @@ void main() {
               ),
             },
           ),
-          opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+          opPostParser: ComicConsecutiveOpPostParser(
+            engine: ComicPostParsingEngine(),
+          ),
+          recursiveRequestGovernor: recursiveGovernor,
         );
 
         final result = await service.discoverRecursiveIncremental(
@@ -118,6 +219,7 @@ void main() {
         expect(result[0].rawText, '测试漫画 第5话');
         expect(result[1].url, contains('tid=499'));
         expect(result[1].rawText, '测试漫画 第4话');
+        expect(recursiveGovernor.scheduledCount, 2);
       });
 
       test('stops when maxRecursiveDepth is reached', () async {
@@ -134,7 +236,10 @@ void main() {
 
         final service = ComicIncrementalEpisodeDiscovery(
           fetchThreadDetail: _fakeThreadFetcher(detailsByTid: details),
-          opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+          opPostParser: ComicConsecutiveOpPostParser(
+            engine: ComicPostParsingEngine(),
+          ),
+          recursiveRequestGovernor: _immediateRecursiveGovernor(),
           maxRecursiveDepth: 3,
         );
 
@@ -151,7 +256,10 @@ void main() {
           fetchThreadDetail: (tid) async => const ApiFailure<ThreadDetailData>(
             ApiError(type: ApiErrorType.network, message: 'connection error'),
           ),
-          opPostParser: ComicConsecutiveOpPostParser(engine: ComicPostParsingEngine()),
+          opPostParser: ComicConsecutiveOpPostParser(
+            engine: ComicPostParsingEngine(),
+          ),
+          recursiveRequestGovernor: _immediateRecursiveGovernor(),
         );
 
         final result = await service.discoverRecursiveIncremental(
@@ -161,6 +269,34 @@ void main() {
 
         expect(result, isEmpty);
       });
+
+      test('does not add or follow an ineligible thread', () async {
+        final requestedTids = <String>[];
+        final service = ComicIncrementalEpisodeDiscovery(
+          fetchThreadDetail: (tid) async {
+            requestedTids.add(tid);
+            return ApiSuccess<ThreadDetailData>(
+              _thread(
+                tid: tid,
+                subject: '漫画版公告',
+                message: '<a href="thread-499-1-1.html">上一话</a>',
+                typeid: '65',
+              ),
+            );
+          },
+          opPostParser: ComicConsecutiveOpPostParser(
+            engine: ComicPostParsingEngine(),
+          ),
+        );
+
+        final result = await service.discoverRecursiveIncremental(
+          startTid: '500',
+          knownTids: <String>{},
+        );
+
+        expect(result, isEmpty);
+        expect(requestedTids, <String>['500']);
+      });
     });
   });
 }
@@ -169,10 +305,13 @@ ThreadDetailData _thread({
   required String tid,
   required String subject,
   required String message,
+  String fid = '30',
+  String typeid = '',
 }) {
   return ThreadDetailData(
     tid: tid,
-    fid: '30',
+    fid: fid,
+    typeid: typeid,
     subject: subject,
     author: 'op',
     replies: 0,
@@ -205,4 +344,19 @@ ThreadDetailFetcher _fakeThreadFetcher({
     }
     return ApiSuccess<ThreadDetailData>(detail);
   };
+}
+
+ComicRecursiveThreadRequestGovernor _immediateRecursiveGovernor() {
+  return DefaultComicRecursiveThreadRequestGovernor(cooldown: Duration.zero);
+}
+
+class _RecordingRecursiveRequestGovernor
+    implements ComicRecursiveThreadRequestGovernor {
+  int scheduledCount = 0;
+
+  @override
+  Future<T> schedule<T>(Future<T> Function() request) {
+    scheduledCount++;
+    return request();
+  }
 }

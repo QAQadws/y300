@@ -7,6 +7,8 @@ import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/catalog_thread_html_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
+import 'package:y300/features/comic/domain/services/comic_recursive_thread_eligibility_policy.dart';
+import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
@@ -62,6 +64,9 @@ class YamiboCatalogHtmlFetcher implements CatalogHtmlFetcher {
   Future<String?> fetchHtml(String url) async {
     try {
       final normalized = _tagPageParsing.normalizeCatalogEntryUrl(url);
+      if (!_tagPageParsing.isTagCatalogUrl(normalized)) {
+        return null;
+      }
       final uri = Uri.tryParse(normalized);
       if (uri == null || !uri.hasScheme) {
         return null;
@@ -94,6 +99,9 @@ class ComicEpisodeDiscoveryService {
     YamiboTagPageParsing? tagPageParsing,
     ForumPostDomExtractor? domExtractor,
     ForumThreadUrlParser? urlParser,
+    ComicRecursiveThreadEligibilityPolicy eligibilityPolicy =
+        const DefaultComicRecursiveThreadEligibilityPolicy(),
+    ComicRecursiveThreadRequestGovernor? recursiveRequestGovernor,
     EpisodeDiscoveryConfig config = const EpisodeDiscoveryConfig(),
   }) : _fetchThreadDetail = fetchThreadDetail,
        _opPostParser = opPostParser,
@@ -110,6 +118,10 @@ class ComicEpisodeDiscoveryService {
              urlParser: urlParser ?? const ForumThreadUrlParser(),
            ),
        _urlParser = urlParser ?? const ForumThreadUrlParser(),
+       _eligibilityPolicy = eligibilityPolicy,
+       _recursiveRequestGovernor =
+           recursiveRequestGovernor ??
+           DefaultComicRecursiveThreadRequestGovernor(),
        _config = config;
 
   static final RegExp _subjectEpisodeNoPattern = RegExp(
@@ -124,6 +136,8 @@ class ComicEpisodeDiscoveryService {
   final CatalogThreadHtmlParser _catalogThreadHtmlParser;
   final ForumPostDomExtractor _domExtractor;
   final ForumThreadUrlParser _urlParser;
+  final ComicRecursiveThreadEligibilityPolicy _eligibilityPolicy;
+  final ComicRecursiveThreadRequestGovernor _recursiveRequestGovernor;
   final EpisodeDiscoveryConfig _config;
 
   Future<EpisodeDiscoveryResult> discoverFromTid(String tid) async {
@@ -150,11 +164,12 @@ class ComicEpisodeDiscoveryService {
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
   }) async {
+    final activeThreadCache = threadCache ?? ComicThreadDetailCache();
     final root = await _fetchAndParse(
       tid,
       governor: governor,
       preloadedDetail: preloadedRootDetail,
-      threadCache: threadCache,
+      threadCache: activeThreadCache,
     );
     if (root == null) {
       return const EpisodeDiscoveryResult(
@@ -179,25 +194,37 @@ class ComicEpisodeDiscoveryService {
       }
     }
 
-    if (_isDirectEnough(root.parsed.episodeLinks)) {
+    final directLinks = root.parsed.episodeLinks;
+    if (_isDirectEnough(directLinks)) {
       return EpisodeDiscoveryResult(
         strategy: EpisodeDiscoveryStrategy.direct,
-        episodeLinks: root.parsed.episodeLinks,
+        episodeLinks: directLinks,
         catalogUrl: root.parsed.catalogUrl,
       );
     }
 
-    final recursiveLinks = await _discoverRecursive(
-      root,
-      governor: governor,
-      threadCache: threadCache,
-    );
-    if (recursiveLinks.length > root.parsed.episodeLinks.length) {
-      return EpisodeDiscoveryResult(
-        strategy: EpisodeDiscoveryStrategy.recursive,
-        episodeLinks: recursiveLinks,
-        catalogUrl: root.parsed.catalogUrl,
+    List<ComicEpisodeLink>? recursiveLinks;
+    if (_shouldTryRecursive(root)) {
+      final candidateSession = _ComicRecursiveCandidateValidationSession(
+        policy: _eligibilityPolicy,
+        loader: (candidateTid) => _fetchAndParse(
+          candidateTid,
+          governor: governor,
+          threadCache: activeThreadCache,
+          isRecursiveRequest: true,
+        ),
       );
+      recursiveLinks = await _discoverRecursive(
+        root,
+        candidateSession: candidateSession,
+      );
+      if (recursiveLinks.length > directLinks.length) {
+        return EpisodeDiscoveryResult(
+          strategy: EpisodeDiscoveryStrategy.recursive,
+          episodeLinks: recursiveLinks,
+          catalogUrl: root.parsed.catalogUrl,
+        );
+      }
     }
 
     if (allowCatalogFallback) {
@@ -215,8 +242,10 @@ class ComicEpisodeDiscoveryService {
     }
 
     return EpisodeDiscoveryResult(
-      strategy: EpisodeDiscoveryStrategy.direct,
-      episodeLinks: root.parsed.episodeLinks,
+      strategy: recursiveLinks == null
+          ? EpisodeDiscoveryStrategy.direct
+          : EpisodeDiscoveryStrategy.recursive,
+      episodeLinks: recursiveLinks ?? directLinks,
       catalogUrl: root.parsed.catalogUrl,
     );
   }
@@ -247,73 +276,66 @@ class ComicEpisodeDiscoveryService {
 
   Future<List<ComicEpisodeLink>> _discoverRecursive(
     _ParsedThreadRoot root, {
-    FavoriteFirstSyncRequestGovernor? governor,
-    ComicThreadDetailCache? threadCache,
+    required _ComicRecursiveCandidateValidationSession candidateSession,
   }) async {
-    if (!_shouldTryRecursive(root)) {
-      return root.parsed.episodeLinks;
-    }
-
     final queue = Queue<String>();
-    final visited = <String>{root.detail.tid};
+    final scheduled = <String>{root.detail.tid};
     final merged = <String, ComicEpisodeLink>{};
+    final preferredLinks = <String, ComicEpisodeLink>{};
     var depth = 0;
     var consecutiveFailures = 0;
 
-    void addLinks(List<ComicEpisodeLink> links) {
+    void rememberLinks(List<ComicEpisodeLink> links) {
       for (final link in links) {
         final linkTid = _extractTidFromUrl(link.url);
         if (linkTid == null) {
           continue;
         }
-        merged.putIfAbsent(linkTid, () => link);
+        preferredLinks.putIfAbsent(linkTid, () => link);
       }
     }
 
-    void addWeakTidCandidates(Iterable<String> tids) {
-      for (final candidateTid in tids) {
-        merged.putIfAbsent(
-          candidateTid,
-          () => ComicEpisodeLink(
-            url:
-                '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$candidateTid',
-            rawText: '上一话',
-            episodeTitle: null,
-          ),
-        );
-      }
-    }
-
-    addLinks(root.parsed.episodeLinks);
-    addWeakTidCandidates(root.recursiveTidCandidates);
-    for (final candidateTid in root.recursiveTidCandidates) {
-      if (visited.add(candidateTid)) {
+    void enqueue(String candidateTid) {
+      if (scheduled.add(candidateTid)) {
         queue.add(candidateTid);
       }
+    }
+
+    rememberLinks(root.parsed.episodeLinks);
+    for (final candidateTid in root.recursiveTidCandidates) {
+      enqueue(candidateTid);
     }
 
     while (queue.isNotEmpty &&
         depth < _config.maxRecursiveDepth &&
         consecutiveFailures < _config.maxConsecutiveFailures) {
       final currentTid = queue.removeFirst();
-      final parsed = await _fetchAndParse(
-        currentTid,
-        governor: governor,
-        threadCache: threadCache,
-      );
+      final resolution = await candidateSession.resolve(currentTid);
       depth += 1;
-      if (parsed == null) {
+      if (resolution.status == _CandidateValidationStatus.failed) {
         consecutiveFailures += 1;
         continue;
       }
       consecutiveFailures = 0;
+      if (resolution.status == _CandidateValidationStatus.rejected) {
+        continue;
+      }
 
-      addLinks(parsed.parsed.episodeLinks);
-      addWeakTidCandidates(parsed.recursiveTidCandidates);
+      final parsed = resolution.parsed!;
+      merged.putIfAbsent(
+        currentTid,
+        () =>
+            preferredLinks[currentTid] ??
+            ComicEpisodeLink(
+              url:
+                  '${AppConfig.siteBaseUrl}/forum.php?mod=viewthread&tid=$currentTid',
+              rawText: '上一话',
+              episodeTitle: null,
+            ),
+      );
+      rememberLinks(parsed.parsed.episodeLinks);
       for (final nextTid in parsed.recursiveTidCandidates) {
-        if (visited.add(nextTid)) {
-          queue.add(nextTid);
-        }
+        enqueue(nextTid);
       }
     }
 
@@ -327,6 +349,9 @@ class ComicEpisodeDiscoveryService {
     if (catalogUrl == null || catalogUrl.isEmpty) {
       return const <ComicEpisodeLink>[];
     }
+    if (!_tagPageParsing.isTagCatalogUrl(catalogUrl)) {
+      return const <ComicEpisodeLink>[];
+    }
 
     final queue = Queue<String>();
     final visitedPages = <String>{};
@@ -338,7 +363,8 @@ class ComicEpisodeDiscoveryService {
 
     while (queue.isNotEmpty && visitedPages.length < _config.maxCatalogPages) {
       final pageUrl = queue.removeFirst();
-      if (!visitedPages.add(pageUrl)) {
+      if (!_tagPageParsing.isTagCatalogUrl(pageUrl) ||
+          !visitedPages.add(pageUrl)) {
         continue;
       }
       final html = await _runCatalogRequest(
@@ -399,6 +425,7 @@ class ComicEpisodeDiscoveryService {
     FavoriteFirstSyncRequestGovernor? governor,
     ThreadDetailData? preloadedDetail,
     ComicThreadDetailCache? threadCache,
+    bool isRecursiveRequest = false,
   }) async {
     if (preloadedDetail != null && preloadedDetail.tid == tid) {
       threadCache?.store(preloadedDetail);
@@ -438,6 +465,7 @@ class ComicEpisodeDiscoveryService {
     }
     final result = await _runThreadRequest(
       governor: governor,
+      isRecursiveRequest: isRecursiveRequest,
       action: () => _fetchThreadDetail(tid),
     );
     return result.when(
@@ -511,15 +539,23 @@ class ComicEpisodeDiscoveryService {
 
   Future<T> _runThreadRequest<T>({
     required FavoriteFirstSyncRequestGovernor? governor,
+    required bool isRecursiveRequest,
     required Future<T> Function() action,
   }) {
-    if (governor == null) {
-      return action();
+    Future<T> runWithFavoriteGovernor() {
+      if (governor == null) {
+        return action();
+      }
+      return governor.run(
+        kind: FavoriteFirstSyncRequestKind.comicThreadDetail,
+        action: action,
+      );
     }
-    return governor.run(
-      kind: FavoriteFirstSyncRequestKind.comicThreadDetail,
-      action: action,
-    );
+
+    if (!isRecursiveRequest) {
+      return runWithFavoriteGovernor();
+    }
+    return _recursiveRequestGovernor.schedule(runWithFavoriteGovernor);
   }
 
   Future<T> _runCatalogRequest<T>({
@@ -565,4 +601,52 @@ class _ParsedThreadRoot {
   final ThreadDetailData detail;
   final ParsedComicPost parsed;
   final List<String> recursiveTidCandidates;
+}
+
+typedef _CandidateThreadLoader =
+    Future<_ParsedThreadRoot?> Function(String tid);
+
+enum _CandidateValidationStatus { eligible, rejected, failed }
+
+class _CandidateValidationResolution {
+  const _CandidateValidationResolution({required this.status, this.parsed});
+
+  final _CandidateValidationStatus status;
+  final _ParsedThreadRoot? parsed;
+}
+
+class _ComicRecursiveCandidateValidationSession {
+  _ComicRecursiveCandidateValidationSession({
+    required ComicRecursiveThreadEligibilityPolicy policy,
+    required _CandidateThreadLoader loader,
+  }) : _policy = policy,
+       _loader = loader;
+
+  final ComicRecursiveThreadEligibilityPolicy _policy;
+  final _CandidateThreadLoader _loader;
+  final Map<String, Future<_CandidateValidationResolution>> _resolutions =
+      <String, Future<_CandidateValidationResolution>>{};
+
+  Future<_CandidateValidationResolution> resolve(String tid) {
+    final normalizedTid = tid.trim();
+    return _resolutions.putIfAbsent(normalizedTid, () => _load(normalizedTid));
+  }
+
+  Future<_CandidateValidationResolution> _load(String tid) async {
+    final parsed = await _loader(tid);
+    if (parsed == null) {
+      return const _CandidateValidationResolution(
+        status: _CandidateValidationStatus.failed,
+      );
+    }
+    if (!_policy.allows(fid: parsed.detail.fid, typeid: parsed.detail.typeid)) {
+      return const _CandidateValidationResolution(
+        status: _CandidateValidationStatus.rejected,
+      );
+    }
+    return _CandidateValidationResolution(
+      status: _CandidateValidationStatus.eligible,
+      parsed: parsed,
+    );
+  }
 }

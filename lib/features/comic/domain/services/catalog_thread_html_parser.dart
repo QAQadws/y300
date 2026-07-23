@@ -47,11 +47,26 @@ class CatalogThreadHtmlParser {
     final candidates = <String, _EntryCandidate>{};
 
     for (final row in document.querySelectorAll('tr')) {
-      for (final anchor in row.querySelectorAll('a')) {
+      var foundSubject = false;
+      for (final anchor in row.querySelectorAll('th a[href]')) {
+        foundSubject =
+            _collectCandidate(
+              candidates: candidates,
+              anchor: anchor,
+              pageUrl: pageUrl,
+              isInsideTh: true,
+            ) ||
+            foundSubject;
+      }
+      if (foundSubject) {
+        continue;
+      }
+      for (final anchor in row.querySelectorAll('a[href]')) {
         _collectCandidate(
           candidates: candidates,
           anchor: anchor,
           pageUrl: pageUrl,
+          isInsideTh: false,
         );
       }
     }
@@ -65,6 +80,7 @@ class CatalogThreadHtmlParser {
           candidates: candidates,
           anchor: anchor,
           pageUrl: pageUrl,
+          isInsideTh: anchor.parent?.localName == 'th',
         );
       }
     }
@@ -91,30 +107,31 @@ class CatalogThreadHtmlParser {
     );
   }
 
-  void _collectCandidate({
+  bool _collectCandidate({
     required Map<String, _EntryCandidate> candidates,
     required html_dom.Element anchor,
     required String pageUrl,
+    required bool isInsideTh,
   }) {
     final href = (anchor.attributes['href'] ?? '').trim();
     if (href.isEmpty) {
-      return;
+      return false;
     }
 
     final normalizedUrl = _tagPageParsing.resolveUrl(href, pageUrl);
     if (normalizedUrl == null) {
-      return;
+      return false;
     }
     final tid = _tagPageParsing.extractTidFromThreadUrl(normalizedUrl);
     if (tid == null) {
-      return;
+      return false;
     }
 
-    final subject = anchor.text.trim();
-    final score = _scoreAnchor(
-      anchorText: subject,
-      isInsideTh: anchor.parent?.localName == 'th',
-    );
+    final subject = anchor.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (!_isLikelySubject(subject)) {
+      return false;
+    }
+    final score = _scoreAnchor(anchorText: subject, isInsideTh: isInsideTh);
     final current = candidates[tid];
     if (current == null ||
         score > current.score ||
@@ -126,6 +143,17 @@ class CatalogThreadHtmlParser {
         score: score,
       );
     }
+    return true;
+  }
+
+  bool _isLikelySubject(String text) {
+    if (text.isEmpty || RegExp(r'^\d+$').hasMatch(text)) {
+      return false;
+    }
+    if (RegExp(r'^(?:https?://|www\.)', caseSensitive: false).hasMatch(text)) {
+      return false;
+    }
+    return !RegExp(r'^(?:参与人数|參與人數)\s*\d+$').hasMatch(text);
   }
 
   int _scoreAnchor({required String anchorText, required bool isInsideTh}) {

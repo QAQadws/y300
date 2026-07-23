@@ -31,11 +31,25 @@ class YamiboTagPagePagination {
 
 class YamiboTagPageParsing {
   static final RegExp _threadPathPattern = RegExp(
-    r'thread-(\d+)-\d+-\d+\.html',
+    r'(?:^|/)thread-(\d+)-\d+-\d+\.html$',
     caseSensitive: false,
   );
+  static final RegExp _numericIdPattern = RegExp(r'^\d+$');
 
   const YamiboTagPageParsing();
+
+  bool isTagCatalogUrl(String url) {
+    final normalized = resolveUrl(url, '${AppConfig.siteBaseUrl}/');
+    final uri = Uri.tryParse(normalized ?? '');
+    if (uri == null || !_isYamiboHttpUri(uri)) {
+      return false;
+    }
+    final id = _rawQueryValue(uri.query, 'id')?.trim();
+    return uri.path.toLowerCase().endsWith('/misc.php') &&
+        _rawQueryValue(uri.query, 'mod')?.toLowerCase() == 'tag' &&
+        id != null &&
+        _numericIdPattern.hasMatch(id);
+  }
 
   String normalizeCatalogEntryUrl(String rawUrl) {
     final parsed = Uri.tryParse(rawUrl.trim());
@@ -79,13 +93,49 @@ class YamiboTagPageParsing {
   }
 
   String? extractTidFromThreadUrl(String url) {
-    final uri = Uri.tryParse(url);
-    final queryTid = uri?.queryParameters['tid']?.trim();
-    if (queryTid != null && queryTid.isNotEmpty) {
+    final normalized = resolveUrl(url, '${AppConfig.siteBaseUrl}/');
+    final uri = Uri.tryParse(normalized ?? '');
+    if (uri == null || !_isYamiboHttpUri(uri)) {
+      return null;
+    }
+
+    final threadMatch = _threadPathPattern.firstMatch(uri.path);
+    if (threadMatch != null) {
+      return threadMatch.group(1);
+    }
+
+    final queryTid = _rawQueryValue(uri.query, 'tid')?.trim();
+    if (uri.path.toLowerCase().endsWith('/forum.php') &&
+        _rawQueryValue(uri.query, 'mod')?.toLowerCase() == 'viewthread' &&
+        queryTid != null &&
+        _numericIdPattern.hasMatch(queryTid)) {
       return queryTid;
     }
-    final match = _threadPathPattern.firstMatch(url);
-    return match?.group(1);
+    return null;
+  }
+
+  bool _isYamiboHttpUri(Uri uri) {
+    final siteUri = Uri.parse(AppConfig.siteBaseUrl);
+    return (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.toLowerCase() == siteUri.host.toLowerCase();
+  }
+
+  String? _rawQueryValue(String rawQuery, String key) {
+    if (rawQuery.isEmpty) {
+      return null;
+    }
+    final lowerKey = key.toLowerCase();
+    for (final part in rawQuery.split(RegExp(r'[&;]'))) {
+      final separatorIndex = part.indexOf('=');
+      if (separatorIndex <= 0) {
+        continue;
+      }
+      if (part.substring(0, separatorIndex).trim().toLowerCase() != lowerKey) {
+        continue;
+      }
+      return part.substring(separatorIndex + 1);
+    }
+    return null;
   }
 
   YamiboTagPagePagination parsePagination({

@@ -69,6 +69,28 @@ void main() {
       expect(result.entries[1].subject, '好事多磨 第2话');
     });
 
+    test('rejects utility links and url-looking thread labels', () {
+      final parser = CatalogThreadHtmlParser();
+      final result = parser.parse(
+        pageUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=20686',
+        html: '''
+<table>
+<tr><th>
+<a href="forum.php?mod=viewthread&amp;tid=475263">https://bbs.yamibo.com/forum.php?mod=viewthread&amp;tid=475263&amp;fromuid=691344</a>
+<a href="misc.php?mod=misc&amp;action=viewratings&amp;tid=475263">参与人数 9</a>
+</th></tr>
+<tr><th>
+<a href="forum.php?mod=viewthread&amp;tid=475264">正确章节 第2话</a>
+</th></tr>
+</table>
+''',
+      );
+
+      expect(result.entries, hasLength(1));
+      expect(result.entries.single.tid, '475264');
+      expect(result.entries.single.subject, '正确章节 第2话');
+    });
+
     test('extracts current and total pages from pagination block', () {
       final parser = CatalogThreadHtmlParser();
       final result = parser.parse(

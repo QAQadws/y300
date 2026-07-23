@@ -18,6 +18,8 @@ import 'package:y300/features/comic/domain/services/comic_episode_discovery_serv
 import 'package:y300/features/comic/domain/services/comic_incremental_episode_discovery.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_link_merger.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_refresh_service.dart';
+import 'package:y300/features/comic/domain/services/comic_recursive_thread_eligibility_policy.dart';
+import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_detector.dart';
@@ -45,6 +47,16 @@ final comicDetectorProvider = Provider<ComicDetector>((ref) {
 final comicParserServiceProvider = Provider<ComicParserService>((ref) {
   return HtmlComicParserService();
 });
+
+final comicRecursiveThreadEligibilityPolicyProvider =
+    Provider<ComicRecursiveThreadEligibilityPolicy>((ref) {
+      return const DefaultComicRecursiveThreadEligibilityPolicy();
+    });
+
+final comicRecursiveThreadRequestGovernorProvider =
+    Provider<ComicRecursiveThreadRequestGovernor>((ref) {
+      return DefaultComicRecursiveThreadRequestGovernor();
+    });
 
 final comicTitleAnalyzerProvider = Provider<ComicTitleAnalyzer>((ref) {
   return const PetitComicTitleAnalyzer();
@@ -504,6 +516,12 @@ final comicEpisodeDiscoveryServiceProvider =
         catalogHtmlFetcher: YamiboCatalogHtmlFetcher(
           htmlClient: ref.watch(yamiboHtmlClientProvider),
         ),
+        eligibilityPolicy: ref.watch(
+          comicRecursiveThreadEligibilityPolicyProvider,
+        ),
+        recursiveRequestGovernor: ref.watch(
+          comicRecursiveThreadRequestGovernorProvider,
+        ),
       );
     });
 
@@ -516,6 +534,12 @@ final comicIncrementalEpisodeDiscoveryProvider =
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
           imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
+        ),
+        eligibilityPolicy: ref.watch(
+          comicRecursiveThreadEligibilityPolicyProvider,
+        ),
+        recursiveRequestGovernor: ref.watch(
+          comicRecursiveThreadRequestGovernorProvider,
         ),
       );
     });

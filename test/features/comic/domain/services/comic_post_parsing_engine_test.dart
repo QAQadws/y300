@@ -35,6 +35,21 @@ void main() {
       );
     });
 
+    test('recognizes additional catalog keywords on Yamibo tag links', () {
+      final engine = ComicPostParsingEngine();
+
+      for (final keyword in <String>['索引', '合集', '合輯']) {
+        final result = engine.parse(
+          messageHtml:
+              '<a href="https://bbs.yamibo.com/misc.php?mod=tag&id=20686">$keyword</a>',
+        );
+
+        expect(result.catalogLinks, <String>[
+          'https://bbs.yamibo.com/misc.php?mod=tag&id=20686',
+        ], reason: 'keyword=$keyword');
+      }
+    });
+
     test('marks Yamibo tag elevator links as catalog links', () {
       final engine = ComicPostParsingEngine();
       final result = engine.parse(
@@ -47,16 +62,36 @@ void main() {
       ]);
     });
 
-    test('keeps tag catalog links parseable with legacy encoded noise', () {
+    test('requires catalog text even when the link is a Yamibo tag page', () {
       final engine = ComicPostParsingEngine();
       final result = engine.parse(
         messageHtml:
             '<a href="https://bbs.yamibo.com/misc.php?mod=tag&amp;amp;id=18235&amp;amp;highlight=%BC%AB%CF%DEOL">系列</a>',
       );
 
-      expect(result.catalogLinks, <String>[
-        'https://bbs.yamibo.com/misc.php?mod=tag&id=18235&highlight=%BC%AB%CF%DEOL',
-      ]);
+      expect(result.catalogLinks, isEmpty);
+    });
+
+    test('does not treat catalog text on a thread link as a catalog', () {
+      final engine = ComicPostParsingEngine();
+      final result = engine.parse(
+        messageHtml:
+            '<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&amp;tid=571564">目录+1~5话</a>',
+      );
+
+      expect(result.catalogLinks, isEmpty);
+    });
+
+    test('rejects tag-shaped catalog links without a valid Yamibo tag id', () {
+      final engine = ComicPostParsingEngine();
+      final result = engine.parse(
+        messageHtml: '''
+<a href="https://bbs.yamibo.com/misc.php?mod=tag">目录</a>
+<a href="https://example.com/misc.php?mod=tag&amp;id=20686">合集</a>
+''',
+      );
+
+      expect(result.catalogLinks, isEmpty);
     });
 
     test('cluster rule promotes sequential numeric links', () {

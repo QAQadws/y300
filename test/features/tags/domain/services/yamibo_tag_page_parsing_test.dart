@@ -49,6 +49,40 @@ void main() {
       );
     });
 
+    test('recognizes only valid Yamibo tag catalog urls', () {
+      expect(
+        parsing.isTagCatalogUrl(
+          'https://bbs.yamibo.com/misc.php?mod=tag&id=21920',
+        ),
+        isTrue,
+      );
+      expect(
+        parsing.isTagCatalogUrl('https://bbs.yamibo.com/misc.php?mod=tag'),
+        isFalse,
+      );
+      expect(
+        parsing.isTagCatalogUrl(
+          'https://example.com/misc.php?mod=tag&id=21920',
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects action and external urls that merely contain tid', () {
+      expect(
+        parsing.extractTidFromThreadUrl(
+          'https://bbs.yamibo.com/misc.php?mod=misc&action=viewratings&tid=558976',
+        ),
+        isNull,
+      );
+      expect(
+        parsing.extractTidFromThreadUrl(
+          'https://example.com/forum.php?mod=viewthread&tid=558976',
+        ),
+        isNull,
+      );
+    });
+
     test('parses current total next and previous pagination urls', () {
       final document = html_parser.parse('''
 <div class="pg">

@@ -2,6 +2,7 @@ import 'dart:collection';
 
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
 import 'package:y300/features/comic/domain/models/comic_post_parsing_models.dart';
+import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 /// Phase-1 parser engine:
@@ -13,7 +14,9 @@ class ComicPostParsingEngine {
   ComicPostParsingEngine({
     List<ComicPostParsingRule>? rules,
     ForumPostDomExtractor? domExtractor,
+    YamiboTagPageParsing tagPageParsing = const YamiboTagPageParsing(),
   }) : _domExtractor = domExtractor ?? const ForumPostDomExtractor(),
+       _tagPageParsing = tagPageParsing,
        _rules =
            rules ??
            <ComicPostParsingRule>[
@@ -32,11 +35,12 @@ class ComicPostParsingEngine {
     caseSensitive: false,
   );
   static final RegExp _catalogTextPattern = RegExp(
-    r'(目录|目錄|电梯|電梯|catalog|contents)',
+    r'(目录|目錄|索引|合集|合輯|电梯|電梯|catalog|contents)',
     caseSensitive: false,
   );
 
   final ForumPostDomExtractor _domExtractor;
+  final YamiboTagPageParsing _tagPageParsing;
   final List<ComicPostParsingRule> _rules;
 
   EpisodeExtractionResult parse({required String messageHtml}) {
@@ -147,38 +151,8 @@ class ComicPostParsingEngine {
   }
 
   bool _isCatalogAnchor({required String text, required String normalizedUrl}) {
-    if (_catalogTextPattern.hasMatch(text.trim())) {
-      return true;
-    }
-
-    final uri = Uri.tryParse(normalizedUrl);
-    if (uri == null) {
-      return false;
-    }
-    // Yamibo comic posts often label tag catalog links as "电梯/電梯".
-    // Treat tag pages as catalog candidates even if the visible text is terse.
-    return uri.path.toLowerCase().endsWith('misc.php') &&
-        _rawQueryValue(uri.query, 'mod')?.toLowerCase() == 'tag' &&
-        (_rawQueryValue(uri.query, 'id')?.trim().isNotEmpty ?? false);
-  }
-
-  String? _rawQueryValue(String rawQuery, String key) {
-    if (rawQuery.isEmpty) {
-      return null;
-    }
-    final lowerKey = key.toLowerCase();
-    for (final part in rawQuery.split(RegExp(r'[&;]'))) {
-      final separatorIndex = part.indexOf('=');
-      if (separatorIndex <= 0) {
-        continue;
-      }
-      final rawKey = part.substring(0, separatorIndex).trim().toLowerCase();
-      if (rawKey != lowerKey) {
-        continue;
-      }
-      return part.substring(separatorIndex + 1);
-    }
-    return null;
+    return _catalogTextPattern.hasMatch(text.trim()) &&
+        _tagPageParsing.isTagCatalogUrl(normalizedUrl);
   }
 
   List<int?> _detectSequentialGroups(List<ParsedAnchor> anchors) {

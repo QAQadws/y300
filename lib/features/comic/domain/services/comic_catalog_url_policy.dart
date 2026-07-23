@@ -36,6 +36,9 @@ class ComicCatalogUrlPolicy {
     if (uri.host.toLowerCase() != siteUri.host.toLowerCase()) {
       throw FormatException('目录 URL 必须来自 ${siteUri.host}');
     }
+    if (!_tagPageParsing.isTagCatalogUrl(uri.toString())) {
+      throw const FormatException('请输入 Yamibo 标签目录 URL');
+    }
     return uri.removeFragment().toString();
   }
 }
