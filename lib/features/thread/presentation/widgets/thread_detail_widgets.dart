@@ -23,6 +23,7 @@ import 'package:y300/features/thread/domain/services/thread_post_resource_layout
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
@@ -216,7 +217,12 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       child: ListView.builder(
         key: const Key('thread-detail-list'),
         controller: widget.scrollController,
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+        padding: EdgeInsets.fromLTRB(
+          ForumContentSpacing.pageHorizontal,
+          10,
+          ForumContentSpacing.pageHorizontal,
+          14,
+        ),
         scrollCacheExtent: const ScrollCacheExtent.pixels(900),
         itemCount: entries.length,
         itemBuilder: (context, index) {
@@ -235,7 +241,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     return SizedBox.expand(
       key: _viewportKey,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: ForumContentSpacing.pageHorizontal,
+        ),
         child: CustomScrollView(
           key: const Key('thread-detail-list'),
           controller: widget.scrollController,

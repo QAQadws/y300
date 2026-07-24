@@ -6,7 +6,6 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
@@ -1076,7 +1075,6 @@ ProviderContainer _buildContainer({
   ReplyRepository? replyRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
-  ComposerUploadNotificationService? uploadNotificationService,
 }) {
   return ProviderContainer(
     overrides: [
@@ -1094,9 +1092,6 @@ ProviderContainer _buildContainer({
       ),
       composerImageUploadCoordinatorProvider.overrideWithValue(
         imageUploadCoordinator ?? _FakeReplyImageUploadCoordinator(),
-      ),
-      composerUploadNotificationServiceProvider.overrideWithValue(
-        uploadNotificationService ?? _FakeReplyUploadNotificationService(),
       ),
     ],
   );
@@ -1288,29 +1283,6 @@ class _FakeReplyImageUploadCoordinator
       ComposerImageUploadEventType.completed =>
         ComposerImageUploadEvent.completed(total: event.total),
     };
-  }
-}
-
-class _FakeReplyUploadNotificationService
-    implements ComposerUploadNotificationService {
-  final List<String> calls = <String>[];
-
-  @override
-  Future<void> clear() async {
-    calls.add('clear');
-  }
-
-  @override
-  Future<void> showFailure({
-    required int failedCount,
-    required int total,
-  }) async {
-    calls.add('failure:$failedCount/$total');
-  }
-
-  @override
-  Future<void> showProgress({required int current, required int total}) async {
-    calls.add('progress:$current/$total');
   }
 }
 

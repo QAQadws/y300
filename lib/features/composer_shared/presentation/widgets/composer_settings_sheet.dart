@@ -61,3 +61,36 @@ class ComposerSettingsSwitchTile extends StatelessWidget {
     );
   }
 }
+
+class ComposerSettingsActionTile extends StatelessWidget {
+  const ComposerSettingsActionTile({
+    super.key,
+    required this.tileKey,
+    required this.icon,
+    required this.title,
+    required this.onPressed,
+    this.destructive = false,
+  });
+
+  final Key tileKey;
+  final IconData icon;
+  final String title;
+  final VoidCallback? onPressed;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = destructive && onPressed != null
+        ? Theme.of(context).colorScheme.error
+        : null;
+    return ListTile(
+      key: tileKey,
+      leading: Icon(icon, color: color),
+      title: Text(title, style: color == null ? null : TextStyle(color: color)),
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      enabled: onPressed != null,
+      onTap: onPressed,
+    );
+  }
+}

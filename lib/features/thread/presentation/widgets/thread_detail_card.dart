@@ -35,7 +35,12 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
       onLongPress: () => onOpenPostActions(post, plan),
       child: Container(
         key: Key('thread-post-card-${post.pid}'),
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+        padding: EdgeInsets.fromLTRB(
+          ForumContentSpacing.postBodyHorizontal,
+          10,
+          ForumContentSpacing.postBodyHorizontal,
+          0,
+        ),
         decoration: _cardSegmentDecoration(
           palette: palette,
           highlighted: highlighted,
@@ -139,7 +144,12 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
       behavior: HitTestBehavior.translucent,
       onLongPress: () => onOpenPostActions(post, plan),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+        padding: EdgeInsets.fromLTRB(
+          ForumContentSpacing.postBodyHorizontal,
+          8,
+          ForumContentSpacing.postBodyHorizontal,
+          0,
+        ),
         decoration: _cardSegmentDecoration(
           palette: palette,
           highlighted: highlighted,
@@ -220,7 +230,12 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
       onLongPress: () => onOpenPostActions(post, plan),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: EdgeInsets.fromLTRB(10, hasFooterContent ? 10 : 0, 10, 10),
+        padding: EdgeInsets.fromLTRB(
+          ForumContentSpacing.postBodyHorizontal,
+          hasFooterContent ? 10 : 0,
+          ForumContentSpacing.postBodyHorizontal,
+          10,
+        ),
         decoration: _cardSegmentDecoration(
           palette: palette,
           highlighted: highlighted,
@@ -557,7 +572,12 @@ class ThreadPostCard extends StatelessWidget {
     final card = Container(
       key: Key('thread-post-card-${post.pid}'),
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 11),
+      padding: EdgeInsets.fromLTRB(
+        ForumContentSpacing.postBodyHorizontal,
+        10,
+        ForumContentSpacing.postBodyHorizontal,
+        11,
+      ),
       decoration: highlighted
           ? _highlightedCardDecoration(resolvedPalette)
           : _cardDecoration(resolvedPalette),

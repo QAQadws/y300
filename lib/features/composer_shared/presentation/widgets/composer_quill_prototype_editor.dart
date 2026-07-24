@@ -14,6 +14,7 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_bbco
 import 'package:y300/features/composer_shared/presentation/widgets/composer_link_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_group_panel.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
 typedef ComposerQuillImagePicker =
     Future<ComposerImageAttachment?> Function(BuildContext context);
@@ -50,7 +51,12 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
     this.keyPrefix = 'composer-quill-prototype',
     this.minHeight = 220,
     this.expand = false,
-    this.contentPadding = const EdgeInsets.all(16),
+    this.contentPadding = const EdgeInsets.fromLTRB(
+      ForumContentSpacing.composerQuillSurfaceHorizontal,
+      8,
+      ForumContentSpacing.composerQuillSurfaceHorizontal,
+      16,
+    ),
   });
 
   final QuillController? controller;
@@ -111,7 +117,12 @@ class ComposerQuillEditorSurface extends StatefulWidget {
     this.expand = false,
     this.enabled = true,
     this.hintText = '请开始输入',
-    this.contentPadding = const EdgeInsets.all(16),
+    this.contentPadding = const EdgeInsets.fromLTRB(
+      ForumContentSpacing.composerQuillSurfaceHorizontal,
+      8,
+      ForumContentSpacing.composerQuillSurfaceHorizontal,
+      16,
+    ),
   });
 
   final QuillController? controller;

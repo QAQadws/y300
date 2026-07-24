@@ -34,7 +34,6 @@ import 'package:y300/features/history/domain/services/history_visit_recorder.dar
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
@@ -79,6 +78,7 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.da
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 void main() {
@@ -190,6 +190,10 @@ void main() {
 
         final list = tester.widget<ListView>(
           find.byKey(const Key('thread-detail-list')),
+        );
+        expect(
+          (list.padding! as EdgeInsets).left,
+          ForumContentSpacing.pageHorizontal,
         );
         final scrollController = list.controller!;
         expect(scrollController.position.pixels, 0);
@@ -4573,9 +4577,6 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     composerImageUploadCoordinatorProvider.overrideWithValue(
       _NoopComposerImageUploadCoordinator(),
     ),
-    composerUploadNotificationServiceProvider.overrideWithValue(
-      _NoopComposerUploadNotificationService(),
-    ),
   ];
 }
 
@@ -5446,21 +5447,6 @@ class _NoopComposerImageUploadCoordinator
   }) {
     return const Stream<ComposerImageUploadEvent>.empty();
   }
-}
-
-class _NoopComposerUploadNotificationService
-    implements ComposerUploadNotificationService {
-  @override
-  Future<void> clear() async {}
-
-  @override
-  Future<void> showFailure({
-    required int failedCount,
-    required int total,
-  }) async {}
-
-  @override
-  Future<void> showProgress({required int current, required int total}) async {}
 }
 
 class _FakeNovelRepository implements NovelRepository {

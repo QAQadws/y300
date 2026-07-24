@@ -3,12 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_image_attachment_queue.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
@@ -36,7 +34,8 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
   bool _didNotifyRestoredDraft = false;
   bool _allowPopWithoutConfirm = false;
   String? _lastAppliedStateMessage;
-  Set<String> _notifiedUploadedAttachmentIds = const <String>{};
+  final ComposerUploadFeedbackTracker _uploadFeedbackTracker =
+      ComposerUploadFeedbackTracker();
 
   @override
   void initState() {
@@ -229,30 +228,18 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     if (shouldNotifyRestoredDraft) {
       _didNotifyRestoredDraft = true;
     }
-    final uploadedIds = uploadedComposerImageAttachmentIds(
-      state.imageAttachments,
-    );
-    final newUploadedIds = uploadedIds.difference(
-      _notifiedUploadedAttachmentIds,
-    );
-    _notifiedUploadedAttachmentIds = uploadedIds;
-    if (!shouldNotifyRestoredDraft && newUploadedIds.isEmpty) {
+    final messages = <String>[
+      if (shouldNotifyRestoredDraft) '已恢复未发送草稿',
+      ..._uploadFeedbackTracker.update(state),
+    ];
+    if (messages.isEmpty) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
       }
-      if (shouldNotifyRestoredDraft) {
-        showComposerSnackBar(context, '已恢复未发送草稿');
-        return;
-      }
-      for (final attachment in state.imageAttachments) {
-        if (newUploadedIds.contains(attachment.localId)) {
-          showComposerSnackBar(context, '${attachment.fileName} 已上传');
-          return;
-        }
-      }
+      showComposerSnackBar(context, messages.join('\n'));
     });
   }
 
@@ -323,7 +310,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (_) {
+      builder: (sheetContext) {
         return Consumer(
           builder: (context, ref, _) {
             final sheetState = ref.watch(provider).value;
@@ -331,6 +318,11 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
                 sheetState != null &&
                 !sheetState.isSubmitting &&
                 !sheetState.isPreparing;
+            final canReset =
+                sheetState != null &&
+                !sheetState.isSubmitting &&
+                sheetState.hasDraftContent;
+            final notifier = ref.read(provider.notifier);
             return ComposerSettingsSheet(
               key: const Key('reply-composer-settings-sheet'),
               title: '更多设置',
@@ -339,8 +331,21 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
                   tileKey: const Key('reply-composer-use-signature-switch'),
                   title: '使用个人签名',
                   value: sheetState?.useSignature ?? false,
-                  onChanged: ref.read(provider.notifier).toggleUseSignature,
+                  onChanged: notifier.toggleUseSignature,
                   enabled: enabled,
+                ),
+                const Divider(),
+                ComposerSettingsActionTile(
+                  tileKey: const Key('reply-composer-reset-draft-button'),
+                  icon: Icons.restart_alt,
+                  title: '重置草稿',
+                  destructive: true,
+                  onPressed: canReset
+                      ? () {
+                          Navigator.of(sheetContext).pop();
+                          unawaited(_confirmResetDraft(notifier));
+                        }
+                      : null,
                 ),
               ],
             );
@@ -348,6 +353,44 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
         );
       },
     );
+  }
+
+  Future<void> _confirmResetDraft(ReplyComposerController controller) async {
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) {
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final colorScheme = Theme.of(dialogContext).colorScheme;
+        return AlertDialog(
+          title: const Text('重置草稿？'),
+          content: const Text('当前编辑内容和已选图片将被清空，且无法恢复。'),
+          actions: [
+            TextButton(
+              key: const Key('reply-composer-reset-cancel-button'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              key: const Key('reply-composer-reset-confirm-button'),
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.error,
+                foregroundColor: colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('重置'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted || confirmed != true) {
+      return;
+    }
+    await controller.resetDraft();
   }
 }
 
@@ -378,9 +421,6 @@ class _ReplyComposerBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleAttachments = visibleComposerImageAttachments(
-      state.imageAttachments,
-    );
     final editor = _ReplyMessageEditor(
       surface: editorSurface,
       state: state,
@@ -392,7 +432,7 @@ class _ReplyComposerBody extends StatelessWidget {
       onMessageChanged: onMessageChanged,
       onImagePressed: onImagePressed,
     );
-    final topFeedback = _buildFeedbackWidgets(context, visibleAttachments);
+    final topFeedback = _buildFeedbackWidgets(context);
     if (editorSurface == ComposerSurfacePreference.quill) {
       return SafeArea(
         bottom: false,
@@ -418,19 +458,16 @@ class _ReplyComposerBody extends StatelessWidget {
         children: [
           ..._buildLeadingFeedbackWidgets(context),
           editor,
-          ..._buildTrailingFeedbackWidgets(context, visibleAttachments),
+          ..._buildTrailingFeedbackWidgets(context),
         ],
       ),
     );
   }
 
-  List<Widget> _buildFeedbackWidgets(
-    BuildContext context,
-    List<ComposerImageAttachment> visibleAttachments,
-  ) {
+  List<Widget> _buildFeedbackWidgets(BuildContext context) {
     return [
       ..._buildLeadingFeedbackWidgets(context),
-      ..._buildTrailingFeedbackWidgets(context, visibleAttachments),
+      ..._buildTrailingFeedbackWidgets(context),
     ];
   }
 
@@ -440,37 +477,11 @@ class _ReplyComposerBody extends StatelessWidget {
         _ReplyReferenceStatus(state: state, onRetryPrepare: onRetryPrepare),
         const SizedBox(height: 12),
       ],
-      if (state.imageUploadError != null &&
-          state.imageUploadError!.trim().isNotEmpty) ...[
-        Text(
-          state.imageUploadError!,
-          key: const Key('reply-composer-image-error'),
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
-        ),
-        const SizedBox(height: 12),
-      ],
     ];
   }
 
-  List<Widget> _buildTrailingFeedbackWidgets(
-    BuildContext context,
-    List<ComposerImageAttachment> visibleAttachments,
-  ) {
+  List<Widget> _buildTrailingFeedbackWidgets(BuildContext context) {
     return [
-      if (visibleAttachments.isNotEmpty) ...[
-        const SizedBox(height: 12),
-        ComposerImageAttachmentQueue(
-          containerKey: const Key('reply-composer-image-queue'),
-          uploadCountKey: const Key('reply-composer-image-upload-count'),
-          uploadProgressKey: const Key('reply-composer-image-upload-progress'),
-          tileKeyBuilder: (attachment) =>
-              Key('reply-composer-image-attachment-${attachment.localId}'),
-          attachments: visibleAttachments,
-          isUploadingImages: state.isUploadingImages,
-          imageUploadCurrent: state.imageUploadCurrent,
-          imageUploadTotal: state.imageUploadTotal,
-        ),
-      ],
       if (state.errorMessage != null &&
           state.errorMessage!.trim().isNotEmpty) ...[
         const SizedBox(height: 8),

@@ -29,4 +29,7 @@ abstract class ComposerStateBase {
   final int imageUploadTotal;
   final String? errorMessage;
   final String? imageUploadError;
+
+  bool get hasDraftContent =>
+      message.trim().isNotEmpty || imageAttachments.isNotEmpty;
 }

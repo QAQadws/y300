@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
@@ -64,6 +63,65 @@ void main() {
 
       expect((await draftRepository.loadDraft(args.identity))?.message, '正文');
     });
+
+    test(
+      'resetDraft clears persisted content, preserves signature, and ignores late upload events',
+      () async {
+        final draftRepository = _MemoryDraftRepository();
+        final coordinator = _ControllableUploadCoordinator();
+        addTearDown(coordinator.close);
+        final args = _TestArgs(fid: '33', tid: '572063');
+        final container = _buildContainer(
+          draftRepository: draftRepository,
+          imagePicker: _FakeImagePicker(
+            images: const [
+              ComposerPickedImage(
+                path: '/gallery/first.jpg',
+                fileName: 'first.jpg',
+                mimeType: 'image/jpeg',
+                originalIndex: 0,
+              ),
+            ],
+          ),
+          imageUploadCoordinator: coordinator,
+        );
+        addTearDown(container.dispose);
+        _keepAlive(container, args);
+        await container.read(_testControllerProvider(args).future);
+        final controller = container.read(
+          _testControllerProvider(args).notifier,
+        );
+
+        controller.toggleUseSignature(false);
+        controller.updateMessage('正文');
+        await controller.pickImages();
+        coordinator.emitStarted();
+        await _drain();
+        await controller.flushDraft();
+
+        expect(
+          container.read(_testControllerProvider(args)).value?.imageAttachments,
+          hasLength(1),
+        );
+        expect(await draftRepository.loadDraft(args.identity), isNotNull);
+
+        await controller.resetDraft();
+        coordinator.emitUploaded(aid: 'late-aid');
+        coordinator.emitCompleted();
+        await _drain();
+
+        final state = container.read(_testControllerProvider(args)).value!;
+        expect(state.message, isEmpty);
+        expect(state.imageAttachments, isEmpty);
+        expect(state.isUploadingImages, isFalse);
+        expect(state.imageUploadCurrent, 0);
+        expect(state.imageUploadTotal, 0);
+        expect(state.useSignature, isFalse);
+        expect(state.restoredDraft, isFalse);
+        expect(coordinator.cancelled, isTrue);
+        expect(await draftRepository.loadDraft(args.identity), isNull);
+      },
+    );
 
     test(
       'image upload event flow appends attach code and saves draft',

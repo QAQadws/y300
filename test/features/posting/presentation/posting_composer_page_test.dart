@@ -8,7 +8,6 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
@@ -324,6 +323,66 @@ void main() {
     expect(find.text('已恢复未发送的草稿，请注意已恢复的主题标签'), findsOneWidget);
     expect(find.text('已恢复未发送草稿'), findsNothing);
   });
+
+  testWidgets(
+    'PostingComposerPage resets persisted title and message after confirmation',
+    (tester) async {
+      const identity = ComposerDraftIdentity.newThread(fid: '33');
+      final draftRepository = _MemoryDraftRepository();
+      await draftRepository.saveDraft(
+        ComposerDraftSnapshot(
+          identity: identity,
+          subject: '草稿标题',
+          message: '草稿正文',
+          useSignature: false,
+          updatedAt: DateTime.now(),
+          extras: const <String, String>{'tags': '标签一'},
+        ),
+      );
+      await tester.pumpWidget(
+        _buildPage(
+          draftRepository: draftRepository,
+          metadataRepository: _FakeMetadataRepository.success(_metadata()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _enterPostingSourceMode(tester);
+
+      await tester.tap(find.byKey(const Key('posting-composer-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('posting-composer-reset-draft-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('重置草稿？'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const Key('posting-composer-reset-confirm-button')),
+      );
+      await tester.pumpAndSettle();
+
+      final subjectField = tester.widget<TextField>(
+        find.byKey(const Key('posting-composer-subject-input')),
+      );
+      final messageField = tester.widget<TextField>(
+        find.byKey(const Key('posting-composer-message-input')),
+      );
+      expect(subjectField.controller?.text, isEmpty);
+      expect(messageField.controller?.text, isEmpty);
+      expect(await draftRepository.loadDraft(identity), isNull);
+
+      await tester.tap(find.byKey(const Key('posting-composer-more-button')));
+      await tester.pumpAndSettle();
+      final signatureSwitch = tester.widget<SwitchListTile>(
+        find.byKey(const Key('posting-composer-use-signature-switch')),
+      );
+      expect(signatureSwitch.value, isFalse);
+      final resetTile = tester.widget<ListTile>(
+        find.byKey(const Key('posting-composer-reset-draft-button')),
+      );
+      expect(resetTile.enabled, isFalse);
+    },
+  );
 
   testWidgets('PostingComposerPage moves posting options into more sheet', (
     tester,
@@ -962,59 +1021,52 @@ void main() {
     },
   );
 
-  testWidgets(
-    'PostingComposerPage uploads picked image and shows transient message',
-    (tester) async {
-      final imagePicker = _FakeImagePicker(
-        images: const [
-          ComposerPickedImage(
-            path: '/gallery/first.jpg',
-            fileName: 'first.jpg',
-            mimeType: 'image/jpeg',
-            originalIndex: 0,
-          ),
-        ],
-      );
-      final uploadCoordinator = _FakeUploadCoordinator(
-        events: [
-          ComposerImageUploadEvent.uploaded(
-            localId: '',
-            current: 1,
-            total: 1,
-            uploadedImage: ComposerUploadedImage(
-              localId: '',
-              aid: '777',
-              uploadedAt: DateTime.now(),
-            ),
-          ),
-          const ComposerImageUploadEvent.completed(total: 1),
-        ],
-      );
-      await tester.pumpWidget(
-        _buildPage(
-          imagePicker: imagePicker,
-          imageUploadCoordinator: uploadCoordinator,
-          metadataRepository: _FakeMetadataRepository.success(_metadata()),
+  testWidgets('PostingComposerPage reports uploaded image with SnackBar', (
+    tester,
+  ) async {
+    final imagePicker = _FakeImagePicker(
+      images: const [
+        ComposerPickedImage(
+          path: '/gallery/first.jpg',
+          fileName: 'first.jpg',
+          mimeType: 'image/jpeg',
+          originalIndex: 0,
         ),
-      );
-      await tester.pumpAndSettle();
+      ],
+    );
+    final uploadCoordinator = _FakeUploadCoordinator(
+      events: [
+        ComposerImageUploadEvent.uploaded(
+          localId: '',
+          current: 1,
+          total: 1,
+          uploadedImage: ComposerUploadedImage(
+            localId: '',
+            aid: '777',
+            uploadedAt: DateTime.now(),
+          ),
+        ),
+        const ComposerImageUploadEvent.completed(total: 1),
+      ],
+    );
+    await tester.pumpWidget(
+      _buildPage(
+        imagePicker: imagePicker,
+        imageUploadCoordinator: uploadCoordinator,
+        metadataRepository: _FakeMetadataRepository.success(_metadata()),
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const Key('posting-composer-image-queue')),
-        findsNothing,
-      );
-      await tester.tap(find.byKey(const Key('posting-composer-image-button')));
-      await tester.pump();
-      await tester.pump();
+    expect(find.byKey(const Key('posting-composer-image-queue')), findsNothing);
+    await tester.tap(find.byKey(const Key('posting-composer-image-button')));
+    await tester.pump();
+    await tester.pump();
 
-      expect(imagePicker.pickCallCount, 1);
-      expect(
-        find.byKey(const Key('posting-composer-image-queue')),
-        findsNothing,
-      );
-      expect(find.text('first.jpg 已上传'), findsOneWidget);
-    },
-  );
+    expect(imagePicker.pickCallCount, 1);
+    expect(find.byKey(const Key('posting-composer-image-queue')), findsNothing);
+    expect(find.text('first.jpg 已上传'), findsOneWidget);
+  });
 
   testWidgets('PostingComposerPage submits and pops sent result', (
     tester,

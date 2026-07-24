@@ -3,7 +3,6 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/composer_shared/data/services/composer_attachment_remote_data_source.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_attachment_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
-import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/data/repositories/discuz_composer_attachment_repository.dart';
 import 'package:y300/features/composer_shared/data/repositories/sticker_catalog_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
@@ -97,11 +96,6 @@ final composerImageUploadCoordinatorProvider =
       return SerialComposerImageUploadCoordinator(
         repository: ref.read(composerAttachmentRepositoryProvider),
       );
-    });
-
-final composerUploadNotificationServiceProvider =
-    Provider<ComposerUploadNotificationService>((_) {
-      return FlutterLocalComposerUploadNotificationService();
     });
 
 final forumBbCodeRendererProvider = Provider<ForumBbCodeRenderer>((ref) {

@@ -4,6 +4,7 @@ import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcod
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_context_menu.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_toolbar.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
 class ComposerBbCodeSourceEditor extends StatelessWidget {
   const ComposerBbCodeSourceEditor({
@@ -16,6 +17,9 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
     this.inputKey,
     this.hintText = '源码',
     this.minLines = 12,
+    this.contentPadding = const EdgeInsets.symmetric(
+      horizontal: ForumContentSpacing.composerSourceEditorHorizontal,
+    ),
   });
 
   static const _insertionService = ComposerBbCodeInsertionService();
@@ -41,12 +45,13 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
   final Key? inputKey;
   final String hintText;
   final int minLines;
+  final EdgeInsetsGeometry contentPadding;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       key: viewKey ?? Key('$keyPrefix-view'),
-      padding: EdgeInsets.zero,
+      padding: contentPadding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

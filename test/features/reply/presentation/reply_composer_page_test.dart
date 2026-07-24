@@ -14,7 +14,6 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
@@ -278,7 +277,7 @@ void main() {
     expect(toggledSwitchTile.value, isTrue);
   });
 
-  testWidgets('ReplyComposerPage restores uploaded image without fixed queue', (
+  testWidgets('ReplyComposerPage restores uploaded image without upload UI', (
     tester,
   ) async {
     final args = _threadArgs();
@@ -310,6 +309,85 @@ void main() {
       find.byKey(const Key('composer-quill-attach-123456')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('ReplyComposerPage resets persisted content after confirmation', (
+    tester,
+  ) async {
+    final args = _threadArgs();
+    final draftRepository = _MemoryReplyDraftRepository();
+    await draftRepository.saveDraft(
+      ReplyDraftSnapshot(
+        identity: args.identity,
+        message: '正文\n[attach]123456[/attach]',
+        useSignature: false,
+        updatedAt: DateTime.now(),
+        imageAttachments: [
+          _uploadedAttachment(
+            localId: 'image-1',
+            aid: '123456',
+            uploadedAt: DateTime.now(),
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildPage(args: args, draftRepository: draftRepository),
+    );
+    await tester.pumpAndSettle();
+    await _openReplySourceEditor(tester);
+
+    await tester.tap(find.byKey(const Key('reply-composer-more-button')));
+    await tester.pumpAndSettle();
+    final resetTile = tester.widget<ListTile>(
+      find.byKey(const Key('reply-composer-reset-draft-button')),
+    );
+    expect(resetTile.enabled, isTrue);
+
+    await tester.tap(
+      find.byKey(const Key('reply-composer-reset-draft-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('重置草稿？'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const Key('reply-composer-reset-cancel-button')),
+    );
+    await tester.pumpAndSettle();
+    var messageField = tester.widget<TextField>(
+      find.byKey(const Key('reply-composer-message-input')),
+    );
+    expect(messageField.controller?.text, contains('正文'));
+
+    await tester.tap(find.byKey(const Key('reply-composer-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('reply-composer-reset-draft-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('reply-composer-reset-confirm-button')),
+    );
+    await tester.pumpAndSettle();
+
+    messageField = tester.widget<TextField>(
+      find.byKey(const Key('reply-composer-message-input')),
+    );
+    expect(messageField.controller?.text, isEmpty);
+    expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
+    expect(await draftRepository.loadDraft(args.identity), isNull);
+
+    await tester.tap(find.byKey(const Key('reply-composer-more-button')));
+    await tester.pumpAndSettle();
+    final signatureSwitch = tester.widget<SwitchListTile>(
+      find.byKey(const Key('reply-composer-use-signature-switch')),
+    );
+    expect(signatureSwitch.value, isFalse);
+    final disabledResetTile = tester.widget<ListTile>(
+      find.byKey(const Key('reply-composer-reset-draft-button')),
+    );
+    expect(disabledResetTile.enabled, isFalse);
   });
 
   testWidgets('ReplyComposerPage restores uploaded attach embed', (
@@ -630,7 +708,9 @@ void main() {
     );
   });
 
-  testWidgets('ReplyComposerPage shows picked image queue', (tester) async {
+  testWidgets('ReplyComposerPage does not show fixed upload queue', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _buildPage(
         imagePicker: _FakeReplyImagePicker(
@@ -655,15 +735,9 @@ void main() {
     await tester.tap(find.byKey(const Key('reply-composer-image-button')));
     await tester.pump();
 
-    expect(find.byKey(const Key('reply-composer-image-queue')), findsOneWidget);
-    expect(find.text('first.jpg'), findsOneWidget);
-    expect(find.textContaining('image/jpeg'), findsOneWidget);
-    expect(find.textContaining('上传中'), findsOneWidget);
-    expect(
-      find.byKey(const Key('reply-composer-image-upload-progress')),
-      findsOneWidget,
-    );
-    expect(find.text('第 1/1 张'), findsOneWidget);
+    expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
+    expect(find.text('first.jpg'), findsNothing);
+    expect(find.textContaining('上传中'), findsNothing);
   });
 
   testWidgets('ReplyComposerPage uploads image and appends attach code', (
@@ -843,6 +917,7 @@ void main() {
       await tester.pump();
 
       expect(find.textContaining('上传失败'), findsWidgets);
+      expect(find.byKey(const Key('reply-composer-image-error')), findsNothing);
       await _openReplySourceEditor(tester);
       final sourceField = tester.widget<TextField>(
         find.byKey(const Key('reply-composer-message-input')),
@@ -982,9 +1057,6 @@ Widget _buildPage({
       composerImageUploadCoordinatorProvider.overrideWithValue(
         imageUploadCoordinator ?? _FakeReplyImageUploadCoordinator(),
       ),
-      composerUploadNotificationServiceProvider.overrideWithValue(
-        _FakeReplyUploadNotificationService(),
-      ),
       forumBbCodeRendererProvider.overrideWithValue(_testRenderer),
       stickerGroupsProvider.overrideWith((_) async => stickerGroups),
       stickerPickerPreferencesRepositoryProvider.overrideWithValue(
@@ -1074,9 +1146,6 @@ Widget _buildLauncher({
       composerImagePickerProvider.overrideWithValue(_FakeReplyImagePicker()),
       composerImageUploadCoordinatorProvider.overrideWithValue(
         _FakeReplyImageUploadCoordinator(),
-      ),
-      composerUploadNotificationServiceProvider.overrideWithValue(
-        _FakeReplyUploadNotificationService(),
       ),
       forumBbCodeRendererProvider.overrideWithValue(_testRenderer),
       stickerGroupsProvider.overrideWith((_) async => stickerGroups),
@@ -1437,21 +1506,6 @@ class _FakeReplyImageUploadCoordinator
       };
     }
   }
-}
-
-class _FakeReplyUploadNotificationService
-    implements ComposerUploadNotificationService {
-  @override
-  Future<void> clear() async {}
-
-  @override
-  Future<void> showFailure({
-    required int failedCount,
-    required int total,
-  }) async {}
-
-  @override
-  Future<void> showProgress({required int current, required int total}) async {}
 }
 
 class _FakeReplyRepository implements ReplyRepository {

@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
@@ -19,7 +18,7 @@ import 'package:y300/features/composer_shared/presentation/controllers/composer_
 ///
 /// 这里集中处理通用流程：
 /// - 草稿 prune / 恢复 / 防抖落盘 / 显式 flush / 显式 discard
-/// - 图片选择 + 串行上传事件流分发（含通知栏进度）
+/// - 图片选择 + 串行上传事件流分发
 /// - submit 调度：sanitize 过期附件 → preflight 校验 → 子类 performSubmit
 ///   → 成功删草稿、失败保留草稿
 ///
@@ -69,16 +68,16 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
   // ── 基类内部状态 ─────────────────────────────────────────────
   Timer? _saveTimer;
+  Future<void> _draftWriteTail = Future<void>.value();
   ComposerDraftRepository? _draftRepository;
   ComposerImagePicker? _imagePicker;
   ComposerImageUploadCoordinator? _imageUploadCoordinator;
-  ComposerUploadNotificationService? _uploadNotificationService;
   ComposerAttachBbCodeService? _attachBbCodeService;
   final ComposerDraftAttachmentSanitizer _draftAttachmentSanitizer =
       const ComposerDraftAttachmentSanitizer();
   TState? _latestState;
   StreamSubscription<ComposerImageUploadEvent>? _imageUploadSubscription;
-  Set<String> _activeUploadLocalIds = const <String>{};
+  int _uploadGeneration = 0;
 
   TState? get latestState => _latestState;
   ComposerAttachBbCodeService get attachBbCodeService =>
@@ -89,15 +88,14 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     _draftRepository = ref.read(composerDraftRepositoryProvider);
     _imagePicker = ref.read(composerImagePickerProvider);
     _imageUploadCoordinator = ref.read(composerImageUploadCoordinatorProvider);
-    _uploadNotificationService = ref.read(
-      composerUploadNotificationServiceProvider,
-    );
     _attachBbCodeService = ref.read(composerAttachBbCodeServiceProvider);
 
     ref.onDispose(() {
       _saveTimer?.cancel();
+      _uploadGeneration += 1;
       _imageUploadCoordinator?.cancel();
       unawaited(_imageUploadSubscription?.cancel());
+      _imageUploadSubscription = null;
       final current = _latestState;
       if (current != null) {
         unawaited(_saveSnapshot(current));
@@ -134,6 +132,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   /// 子类钩子：提交成功后基类已经清空 message / 附件，子类可以在此把
   /// 业务专属字段（如发帖标题、所选分类）也重置到"空白"。默认 no-op。
   TState resetAfterSuccess(TState value) => value;
+
+  /// 用户主动重置草稿时，子类清空自己的业务字段。默认只清空通用字段。
+  TState resetDraftContent(TState value) => value;
 
   // ── 通用 mutators ─────────────────────────────────────────────
   void updateMessage(String value) {
@@ -190,7 +191,52 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   Future<void> discardDraft() async {
     _saveTimer?.cancel();
     _saveTimer = null;
-    await _draftRepository?.deleteDraft(draftIdentity);
+    final repository = _draftRepository;
+    if (repository == null) {
+      return;
+    }
+    await _enqueueDraftWrite(() => repository.deleteDraft(draftIdentity));
+  }
+
+  Future<void> resetDraft() async {
+    final current = state.value ?? _latestState;
+    if (current == null || current.isSubmitting) {
+      return;
+    }
+
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    _uploadGeneration += 1;
+    _imageUploadCoordinator?.cancel();
+    final subscription = _imageUploadSubscription;
+    _imageUploadSubscription = null;
+    await subscription?.cancel();
+
+    final reset = resetDraftContent(
+      applyPatch(
+        current,
+        const ComposerStatePatch(
+          message: '',
+          restoredDraft: false,
+          imageAttachments: <ComposerImageAttachment>[],
+          isUploadingImages: false,
+          imageUploadCurrent: 0,
+          imageUploadTotal: 0,
+          clearErrorMessage: true,
+          clearImageUploadError: true,
+        ),
+      ),
+    );
+    _setDataState(reset);
+    final repository = _draftRepository;
+    if (repository != null) {
+      try {
+        await _enqueueDraftWrite(() => repository.deleteDraft(draftIdentity));
+      } catch (_) {
+        // 保持 UI 已清空，并通过空快照再次尝试移除持久化草稿。
+        _scheduleDraftSave();
+      }
+    }
   }
 
   void _scheduleDraftSave() {
@@ -213,21 +259,33 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   }
 
   Future<void> _saveSnapshot(TState value) async {
+    final repository = _draftRepository;
+    if (repository == null) {
+      return;
+    }
+    final snapshot = ComposerDraftSnapshot(
+      identity: draftIdentity,
+      message: value.message,
+      subject: draftSubjectFor(value),
+      extras: draftExtrasFor(value),
+      useSignature: value.useSignature,
+      updatedAt: DateTime.now(),
+      imageAttachments: value.imageAttachments,
+    );
     try {
-      await _draftRepository?.saveDraft(
-        ComposerDraftSnapshot(
-          identity: draftIdentity,
-          message: value.message,
-          subject: draftSubjectFor(value),
-          extras: draftExtrasFor(value),
-          useSignature: value.useSignature,
-          updatedAt: DateTime.now(),
-          imageAttachments: value.imageAttachments,
-        ),
-      );
+      await _enqueueDraftWrite(() => repository.saveDraft(snapshot));
     } catch (_) {
       // 草稿保存失败不阻断编辑或发送，用户仍可继续完成当前编辑。
     }
+  }
+
+  Future<void> _enqueueDraftWrite(Future<void> Function() operation) {
+    final next = _draftWriteTail.then((_) => operation());
+    _draftWriteTail = next.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return next;
   }
 
   // ── 图片选择 + 上传事件分发 ──────────────────────────────────
@@ -297,22 +355,22 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     if (attachments.isEmpty) {
       return;
     }
+    final generation = ++_uploadGeneration;
     unawaited(_imageUploadSubscription?.cancel());
-    _activeUploadLocalIds = attachments
-        .map((attachment) => attachment.localId)
-        .toSet();
     final stream = _imageUploadCoordinator!.uploadInOrder(
       fid: uploadFid,
       attachments: attachments,
     );
     _imageUploadSubscription = stream.listen(
-      _handleImageUploadEvent,
+      (event) => _handleImageUploadEvent(event, generation),
       onError: (Object error, StackTrace stackTrace) {
+        if (generation != _uploadGeneration) {
+          return;
+        }
         final current = state.value ?? _latestState;
         if (current == null) {
           return;
         }
-        _activeUploadLocalIds = const <String>{};
         _setDataState(
           applyPatch(
             current,
@@ -326,7 +384,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     );
   }
 
-  void _handleImageUploadEvent(ComposerImageUploadEvent event) {
+  void _handleImageUploadEvent(ComposerImageUploadEvent event, int generation) {
+    if (generation != _uploadGeneration) {
+      return;
+    }
     final current = state.value ?? _latestState;
     if (current == null) {
       return;
@@ -348,12 +409,6 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             ),
           ),
         );
-        unawaited(
-          _uploadNotificationService?.showProgress(
-            current: event.current,
-            total: event.total,
-          ),
-        );
         break;
       case ComposerImageUploadEventType.progress:
         _setDataState(
@@ -364,12 +419,6 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
               imageUploadCurrent: event.current,
               imageUploadTotal: event.total,
             ),
-          ),
-        );
-        unawaited(
-          _uploadNotificationService?.showProgress(
-            current: event.current,
-            total: event.total,
           ),
         );
         break;
@@ -402,12 +451,6 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           ),
         );
         _scheduleDraftSave();
-        unawaited(
-          _uploadNotificationService?.showProgress(
-            current: event.current,
-            total: event.total,
-          ),
-        );
         break;
       case ComposerImageUploadEventType.failed:
         _setDataState(
@@ -429,14 +472,6 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
         );
         break;
       case ComposerImageUploadEventType.completed:
-        final failedCount = (state.value ?? current).imageAttachments
-            .where(
-              (attachment) =>
-                  _activeUploadLocalIds.contains(attachment.localId) &&
-                  attachment.status == ComposerImageAttachmentStatus.failed,
-            )
-            .length;
-        _activeUploadLocalIds = const <String>{};
         _setDataState(
           applyPatch(
             current,
@@ -447,16 +482,6 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             ),
           ),
         );
-        if (failedCount > 0) {
-          unawaited(
-            _uploadNotificationService?.showFailure(
-              failedCount: failedCount,
-              total: event.total,
-            ),
-          );
-        } else {
-          unawaited(_uploadNotificationService?.clear());
-        }
         break;
     }
   }

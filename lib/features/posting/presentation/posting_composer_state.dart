@@ -135,6 +135,19 @@ class PostingComposerState extends ComposerStateBase {
   /// segmented 切到普通帖时由 controller 负责清空。
   final NewThreadPollDraft? poll;
 
+  @override
+  bool get hasDraftContent =>
+      super.hasDraftContent ||
+      subject.trim().isNotEmpty ||
+      (selectedTypeId?.trim().isNotEmpty ?? false) ||
+      allowNoticeAuthor ||
+      bbCodeOff ||
+      smileyOff ||
+      parseUrlOff ||
+      tags.isNotEmpty ||
+      special != NewThreadSpecial.normal ||
+      poll != null;
+
   bool get canPickImages => !isSubmitting && !isUploadingImages;
 
   bool get canSubmit {

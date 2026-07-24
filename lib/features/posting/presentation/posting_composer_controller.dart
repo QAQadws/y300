@@ -148,6 +148,15 @@ class PostingComposerController
 
   @override
   PostingComposerState resetAfterSuccess(PostingComposerState value) {
+    return _resetDraftFields(value);
+  }
+
+  @override
+  PostingComposerState resetDraftContent(PostingComposerState value) {
+    return _resetDraftFields(value);
+  }
+
+  PostingComposerState _resetDraftFields(PostingComposerState value) {
     return value.copyWith(
       subject: '',
       clearSelectedTypeId: true,

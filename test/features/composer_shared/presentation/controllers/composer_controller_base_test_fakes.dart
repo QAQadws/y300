@@ -258,19 +258,57 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
   }
 }
 
-class _NoopUploadNotificationService
-    implements ComposerUploadNotificationService {
-  @override
-  Future<void> clear() async {}
+class _ControllableUploadCoordinator implements ComposerImageUploadCoordinator {
+  final StreamController<ComposerImageUploadEvent> _events =
+      StreamController<ComposerImageUploadEvent>.broadcast();
+  String? _localId;
+  bool cancelled = false;
 
   @override
-  Future<void> showFailure({
-    required int failedCount,
-    required int total,
-  }) async {}
+  void cancel() {
+    cancelled = true;
+  }
 
   @override
-  Future<void> showProgress({required int current, required int total}) async {}
+  Stream<ComposerImageUploadEvent> uploadInOrder({
+    required String fid,
+    required List<ComposerImageAttachment> attachments,
+  }) {
+    cancelled = false;
+    _localId = attachments.single.localId;
+    return _events.stream;
+  }
+
+  void emitStarted() {
+    _events.add(
+      ComposerImageUploadEvent.started(
+        localId: _localId!,
+        current: 1,
+        total: 1,
+      ),
+    );
+  }
+
+  void emitUploaded({required String aid}) {
+    _events.add(
+      ComposerImageUploadEvent.uploaded(
+        localId: _localId!,
+        current: 1,
+        total: 1,
+        uploadedImage: ComposerUploadedImage(
+          localId: _localId!,
+          aid: aid,
+          uploadedAt: DateTime.now(),
+        ),
+      ),
+    );
+  }
+
+  void emitCompleted() {
+    _events.add(const ComposerImageUploadEvent.completed(total: 1));
+  }
+
+  Future<void> close() => _events.close();
 }
 
 ProviderContainer _buildContainer({
@@ -292,9 +330,6 @@ ProviderContainer _buildContainer({
       ),
       composerImageUploadCoordinatorProvider.overrideWithValue(
         imageUploadCoordinator ?? _FakeUploadCoordinator(),
-      ),
-      composerUploadNotificationServiceProvider.overrideWithValue(
-        _NoopUploadNotificationService(),
       ),
     ],
   );

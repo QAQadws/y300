@@ -69,9 +69,6 @@ ProviderContainer _buildContainer({
       composerImageUploadCoordinatorProvider.overrideWithValue(
         imageUploadCoordinator ?? _FakeUploadCoordinator(),
       ),
-      composerUploadNotificationServiceProvider.overrideWithValue(
-        _NoopUploadNotificationService(),
-      ),
       postingFormMetadataRepositoryProvider.overrideWithValue(
         metadataRepository ??
             _FakeMetadataRepository.success(_metadataNoTypes()),
@@ -306,19 +303,4 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
       };
     }
   }
-}
-
-class _NoopUploadNotificationService
-    implements ComposerUploadNotificationService {
-  @override
-  Future<void> clear() async {}
-
-  @override
-  Future<void> showFailure({
-    required int failedCount,
-    required int total,
-  }) async {}
-
-  @override
-  Future<void> showProgress({required int current, required int total}) async {}
 }

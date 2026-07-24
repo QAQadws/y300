@@ -15,10 +15,71 @@ import 'package:y300/features/composer_shared/domain/models/composer_attachment_
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_sticker_image_cache_loader.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
 void main() {
+  testWidgets('composer surfaces align with native forum body spacing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 240,
+            child: ComposerQuillEditorSurface(
+              key: const Key('spacing-quill-surface'),
+              keyPrefix: 'spacing-quill',
+              minHeight: 120,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final quillSurface = tester.widget<ComposerQuillEditorSurface>(
+      find.byKey(const Key('spacing-quill-surface')),
+    );
+    final quillPadding = quillSurface.contentPadding.resolve(TextDirection.ltr);
+    expect(
+      quillPadding.left + ForumContentSpacing.quillInnerHorizontal,
+      ForumContentSpacing.readableBodyHorizontal,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: SizedBox(
+              width: 400,
+              child: ComposerBbCodeSourceEditor(
+                viewKey: const Key('spacing-source-editor'),
+                inputKey: const Key('spacing-source-input'),
+                controller: TextEditingController(),
+                enabled: true,
+                onChanged: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final sourcePadding = tester.widget<Padding>(
+      find.byKey(const Key('spacing-source-editor')),
+    );
+    final resolvedSourcePadding = sourcePadding.padding.resolve(
+      TextDirection.ltr,
+    );
+    expect(
+      resolvedSourcePadding.left + ForumContentSpacing.composerPageHorizontal,
+      ForumContentSpacing.readableBodyHorizontal,
+    );
+  });
+
   testWidgets('ComposerQuillPrototypeEditor exposes WYSIWYG toolbar', (
     tester,
   ) async {

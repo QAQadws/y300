@@ -3,13 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_image_attachment_queue.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
@@ -52,7 +50,8 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
   bool _allowPopWithoutConfirm = false;
   String? _lastAppliedStateMessage;
   String? _lastAppliedStateSubject;
-  Set<String> _notifiedUploadedAttachmentIds = const <String>{};
+  final ComposerUploadFeedbackTracker _uploadFeedbackTracker =
+      ComposerUploadFeedbackTracker();
 
   @override
   void initState() {
@@ -289,39 +288,21 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     if (shouldNotifyRestoredDraft) {
       _didNotifyRestoredDraft = true;
     }
-    final uploadedIds = uploadedComposerImageAttachmentIds(
-      state.imageAttachments,
-    );
-    final newUploadedIds = uploadedIds.difference(
-      _notifiedUploadedAttachmentIds,
-    );
-    _notifiedUploadedAttachmentIds = uploadedIds;
-    if (!shouldNotifyMetadataLoading &&
-        !shouldNotifyRestoredDraft &&
-        newUploadedIds.isEmpty) {
+    final uploadMessages = _uploadFeedbackTracker.update(state);
+    final messages = <String>[
+      if (shouldNotifyRestoredDraft)
+        state.tags.isNotEmpty ? '已恢复未发送的草稿，请注意已恢复的主题标签' : '已恢复未发送草稿',
+      if (shouldNotifyMetadataLoading) '正在加载发帖表单',
+      ...uploadMessages,
+    ];
+    if (messages.isEmpty) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
       }
-      if (shouldNotifyRestoredDraft) {
-        final message = state.tags.isNotEmpty
-            ? '已恢复未发送的草稿，请注意已恢复的主题标签'
-            : '已恢复未发送草稿';
-        showComposerSnackBar(context, message);
-        return;
-      }
-      if (shouldNotifyMetadataLoading) {
-        showComposerSnackBar(context, '正在加载发帖表单');
-        return;
-      }
-      for (final attachment in state.imageAttachments) {
-        if (newUploadedIds.contains(attachment.localId)) {
-          showComposerSnackBar(context, '${attachment.fileName} 已上传');
-          return;
-        }
-      }
+      showComposerSnackBar(context, messages.join('\n'));
     });
   }
 
@@ -399,12 +380,16 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (_) {
+      builder: (sheetContext) {
         return Consumer(
           builder: (context, ref, _) {
             final sheetState = ref.watch(provider).value;
             final enabled = sheetState != null && !sheetState.isSubmitting;
             final notifier = ref.read(provider.notifier);
+            final canReset =
+                sheetState != null &&
+                !sheetState.isSubmitting &&
+                sheetState.hasDraftContent;
             return ComposerSettingsSheet(
               key: const Key('posting-composer-settings-sheet'),
               title: '更多设置',
@@ -456,12 +441,63 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
                   onChanged: notifier.updateParseUrlOff,
                   enabled: enabled,
                 ),
+                const Divider(),
+                ComposerSettingsActionTile(
+                  tileKey: const Key('posting-composer-reset-draft-button'),
+                  icon: Icons.restart_alt,
+                  title: '重置草稿',
+                  destructive: true,
+                  onPressed: canReset
+                      ? () {
+                          Navigator.of(sheetContext).pop();
+                          unawaited(_confirmResetDraft(notifier));
+                        }
+                      : null,
+                ),
               ],
             );
           },
         );
       },
     );
+  }
+
+  Future<void> _confirmResetDraft(PostingComposerController controller) async {
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) {
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final colorScheme = Theme.of(dialogContext).colorScheme;
+        return AlertDialog(
+          title: const Text('重置草稿？'),
+          content: const Text('当前编辑内容和已选图片将被清空，且无法恢复。'),
+          actions: [
+            TextButton(
+              key: const Key('posting-composer-reset-cancel-button'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              key: const Key('posting-composer-reset-confirm-button'),
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.error,
+                foregroundColor: colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('重置'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted || confirmed != true) {
+      return;
+    }
+    await controller.resetDraft();
   }
 }
 
@@ -542,9 +578,6 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
 
   @override
   Widget build(BuildContext context) {
-    final visibleAttachments = visibleComposerImageAttachments(
-      widget.state.imageAttachments,
-    );
     final editor = _PostingMessageEditor(
       surface: widget.editorSurface,
       state: widget.state,
@@ -570,10 +603,7 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     ..._buildFormFields(context),
-                    ..._buildTrailingFeedbackWidgets(
-                      context,
-                      visibleAttachments,
-                    ),
+                    ..._buildTrailingFeedbackWidgets(context),
                   ],
                 ),
               ),
@@ -595,7 +625,7 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
               currentLength: widget.state.message.length,
               maxLength: widget.state.metadata!.maxMessageLength,
             ),
-          ..._buildTrailingFeedbackWidgets(context, visibleAttachments),
+          ..._buildTrailingFeedbackWidgets(context),
         ],
       ),
     );
@@ -607,15 +637,6 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
     return [
       _buildMetadataBanner(),
       _buildMetadataSpacer(),
-      if (state.imageUploadError != null &&
-          state.imageUploadError!.trim().isNotEmpty) ...[
-        Text(
-          state.imageUploadError!,
-          key: const Key('posting-composer-image-error'),
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
-        ),
-        const SizedBox(height: 12),
-      ],
       ThreadSubjectField(
         fieldKey: const Key('posting-composer-subject-input'),
         counterTextKey: const Key('posting-composer-subject-counter'),
@@ -739,28 +760,9 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
     );
   }
 
-  List<Widget> _buildTrailingFeedbackWidgets(
-    BuildContext context,
-    List<ComposerImageAttachment> visibleAttachments,
-  ) {
+  List<Widget> _buildTrailingFeedbackWidgets(BuildContext context) {
     final state = widget.state;
     return [
-      if (visibleAttachments.isNotEmpty) ...[
-        const SizedBox(height: 12),
-        ComposerImageAttachmentQueue(
-          containerKey: const Key('posting-composer-image-queue'),
-          uploadCountKey: const Key('posting-composer-image-upload-count'),
-          uploadProgressKey: const Key(
-            'posting-composer-image-upload-progress',
-          ),
-          tileKeyBuilder: (attachment) =>
-              Key('posting-composer-image-attachment-${attachment.localId}'),
-          attachments: visibleAttachments,
-          isUploadingImages: state.isUploadingImages,
-          imageUploadCurrent: state.imageUploadCurrent,
-          imageUploadTotal: state.imageUploadTotal,
-        ),
-      ],
       if (state.errorMessage != null &&
           state.errorMessage!.trim().isNotEmpty) ...[
         const SizedBox(height: 8),
@@ -846,7 +848,6 @@ class _PostingMessageEditor extends StatelessWidget {
             : null,
         hintText: '请注意上传的图片仅在本地保存24小时',
         expand: true,
-        contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
         onBbCodeChanged: onMessageChanged,
         onImagePressed: (_) async {
           await onImagePressed();

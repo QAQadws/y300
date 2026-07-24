@@ -6,7 +6,6 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/data/services/composer_upload_notification_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
@@ -245,6 +244,70 @@ void main() {
       expect(state.allowNoticeAuthor, isFalse);
       expect(await draftRepository.loadDraft(args.identity), isNull);
     });
+
+    test(
+      'resetDraft clears posting fields while preserving signature and metadata',
+      () async {
+        final draftRepository = _MemoryDraftRepository();
+        final args = _args();
+        final container = _buildContainer(
+          draftRepository: draftRepository,
+          metadataRepository: _FakeMetadataRepository.success(
+            _metadataWithTypes(typeRequired: false),
+          ),
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(postingComposerControllerProvider(args).future);
+        await _drain();
+        final controller = container.read(
+          postingComposerControllerProvider(args).notifier,
+        );
+
+        controller.toggleUseSignature(false);
+        controller.updateSubject('标题');
+        controller.updateMessage('正文');
+        controller.updateSelectedTypeId('111');
+        controller.updateAllowNoticeAuthor(true);
+        controller.updateBbCodeOff(true);
+        controller.updateSmileyOff(true);
+        controller.updateParseUrlOff(true);
+        controller.updateTags(const <String>['百合']);
+        controller.updateSpecial(NewThreadSpecial.poll);
+        controller.updatePollOptions(const <String>['A', 'B']);
+        await controller.flushDraft();
+
+        expect(await draftRepository.loadDraft(args.identity), isNotNull);
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value
+              ?.hasDraftContent,
+          isTrue,
+        );
+
+        await controller.resetDraft();
+
+        final state = container
+            .read(postingComposerControllerProvider(args))
+            .value!;
+        expect(state.subject, isEmpty);
+        expect(state.message, isEmpty);
+        expect(state.selectedTypeId, isNull);
+        expect(state.allowNoticeAuthor, isFalse);
+        expect(state.bbCodeOff, isFalse);
+        expect(state.smileyOff, isFalse);
+        expect(state.parseUrlOff, isFalse);
+        expect(state.tags, isEmpty);
+        expect(state.special, NewThreadSpecial.normal);
+        expect(state.poll, isNull);
+        expect(state.useSignature, isFalse);
+        expect(state.metadata, isNotNull);
+        expect(state.hasDraftContent, isFalse);
+        expect(await draftRepository.loadDraft(args.identity), isNull);
+      },
+    );
 
     test('failed submit keeps draft with subject and extras', () async {
       final draftRepository = _MemoryDraftRepository();
