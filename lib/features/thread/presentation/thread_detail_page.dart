@@ -277,6 +277,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                         htmlImagePrecacheService: htmlFirstPrecacheService,
                         onTogglePollOption: controller.togglePollOption,
                         onSubmitPollVote: controller.submitPollVote,
+                        onLoadAllRatings: controller.loadAllRatings,
                       ),
               ),
             ],

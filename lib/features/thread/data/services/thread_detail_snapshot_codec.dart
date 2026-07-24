@@ -217,6 +217,7 @@ class ThreadDetailSnapshotCodec implements SnapshotCodec<ThreadDetailData> {
       'reason': value.reason,
       'userId': value.userId,
       'avatarUrl': value.avatarUrl,
+      'dateline': value.dateline,
     };
   }
 
@@ -227,6 +228,7 @@ class ThreadDetailSnapshotCodec implements SnapshotCodec<ThreadDetailData> {
       reason: ParseUtils.asString(map['reason']),
       userId: _nullableString(map['userId']),
       avatarUrl: _nullableString(map['avatarUrl']),
+      dateline: _nullableString(map['dateline']),
     );
   }
 

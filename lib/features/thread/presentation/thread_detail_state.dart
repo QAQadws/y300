@@ -1,5 +1,40 @@
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+
+enum ThreadPostRatingsLoadStatus { idle, loading, loaded, failure }
+
+final class ThreadPostRatingsViewState {
+  const ThreadPostRatingsViewState({
+    required this.status,
+    this.details,
+    this.errorMessage,
+  });
+
+  const ThreadPostRatingsViewState.idle()
+    : status = ThreadPostRatingsLoadStatus.idle,
+      details = null,
+      errorMessage = null;
+
+  const ThreadPostRatingsViewState.loading()
+    : status = ThreadPostRatingsLoadStatus.loading,
+      details = null,
+      errorMessage = null;
+
+  const ThreadPostRatingsViewState.loaded(ThreadPostRatingDetails value)
+    : status = ThreadPostRatingsLoadStatus.loaded,
+      details = value,
+      errorMessage = null;
+
+  const ThreadPostRatingsViewState.failure(String message)
+    : status = ThreadPostRatingsLoadStatus.failure,
+      details = null,
+      errorMessage = message;
+
+  final ThreadPostRatingsLoadStatus status;
+  final ThreadPostRatingDetails? details;
+  final String? errorMessage;
+}
 
 class ThreadDetailPageState {
   const ThreadDetailPageState({
@@ -35,6 +70,7 @@ class ThreadDetailPageState {
     required this.selectedPollOptionIds,
     required this.isPollVoteSubmitting,
     required this.pollVoteHint,
+    this.ratingsByPostId = const <String, ThreadPostRatingsViewState>{},
     required this.replyText,
     required this.isReplySubmitting,
     required this.replyHint,
@@ -73,6 +109,7 @@ class ThreadDetailPageState {
   final Set<String> selectedPollOptionIds;
   final bool isPollVoteSubmitting;
   final String? pollVoteHint;
+  final Map<String, ThreadPostRatingsViewState> ratingsByPostId;
   final String replyText;
   final bool isReplySubmitting;
   final String? replyHint;
@@ -160,6 +197,7 @@ class ThreadDetailPageState {
     Set<String>? selectedPollOptionIds,
     bool? isPollVoteSubmitting,
     String? pollVoteHint,
+    Map<String, ThreadPostRatingsViewState>? ratingsByPostId,
     String? replyText,
     bool? isReplySubmitting,
     String? replyHint,
@@ -229,6 +267,7 @@ class ThreadDetailPageState {
       pollVoteHint: clearPollVoteHint
           ? null
           : (pollVoteHint ?? this.pollVoteHint),
+      ratingsByPostId: ratingsByPostId ?? this.ratingsByPostId,
       replyText: replyText ?? this.replyText,
       isReplySubmitting: isReplySubmitting ?? this.isReplySubmitting,
       replyHint: clearReplyHint ? null : (replyHint ?? this.replyHint),

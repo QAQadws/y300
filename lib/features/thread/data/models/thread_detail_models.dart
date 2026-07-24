@@ -76,6 +76,7 @@ class ThreadPostRating {
     required this.reason,
     this.userId,
     this.avatarUrl,
+    this.dateline,
   });
 
   final String userName;
@@ -83,6 +84,7 @@ class ThreadPostRating {
   final String reason;
   final String? userId;
   final String? avatarUrl;
+  final String? dateline;
 }
 
 class ThreadPostRatingSummary {

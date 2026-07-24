@@ -137,6 +137,7 @@ void main() {
                   avatarUrl: 'bob-avatar',
                   score: '+2',
                   reason: '好',
+                  dateline: '2026-7-24 10:00',
                 ),
               ],
             ),
@@ -193,6 +194,10 @@ void main() {
       expect(decoded.posts.single.pid, '41562047');
       expect(decoded.posts.single.poll!.options.single.colorHex, '#E92725');
       expect(decoded.posts.single.ratingSummary!.ratings.single.reason, '好');
+      expect(
+        decoded.posts.single.ratingSummary!.ratings.single.dateline,
+        '2026-7-24 10:00',
+      );
       expect(decoded.posts.single.comments.single.message, '点评');
       expect(decoded.posts.single.tagLinks.single.tagId, '20674');
       expect(decoded.posts.single.attachmentImages.single.attachment, 'a.jpg');

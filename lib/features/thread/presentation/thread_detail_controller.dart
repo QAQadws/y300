@@ -12,6 +12,7 @@ import 'package:y300/features/thread/data/providers/thread_favorite_providers.da
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
+import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -56,6 +57,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
   ThreadDetailController(this._args);
 
   final ThreadDetailArgs _args;
+  final Map<String, Object> _ratingsLoadTokens = <String, Object>{};
+  var _ratingsContentGeneration = 0;
 
   @override
   FutureOr<ThreadDetailPageState> build() async {
@@ -386,6 +389,78 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     );
   }
 
+  Future<void> loadAllRatings(ThreadPost post) async {
+    final current = state.value;
+    final pid = post.pid.trim();
+    final viewAllUrl = post.ratingSummary?.viewAllUrl?.trim();
+    if (current == null ||
+        pid.isEmpty ||
+        viewAllUrl == null ||
+        viewAllUrl.isEmpty) {
+      return;
+    }
+    final existing = current.ratingsByPostId[pid];
+    if (existing?.status == ThreadPostRatingsLoadStatus.loading ||
+        existing?.status == ThreadPostRatingsLoadStatus.loaded) {
+      return;
+    }
+
+    final token = Object();
+    final contentGeneration = _ratingsContentGeneration;
+    _ratingsLoadTokens[pid] = token;
+    state = AsyncData(
+      current.copyWith(
+        ratingsByPostId: Map<String, ThreadPostRatingsViewState>.unmodifiable(
+          <String, ThreadPostRatingsViewState>{
+            ...current.ratingsByPostId,
+            pid: const ThreadPostRatingsViewState.loading(),
+          },
+        ),
+      ),
+    );
+
+    final result = await ref
+        .read(threadPostRatingsRepositoryProvider)
+        .loadAll(viewAllUrl);
+    if (!ref.mounted ||
+        contentGeneration != _ratingsContentGeneration ||
+        !identical(_ratingsLoadTokens[pid], token)) {
+      return;
+    }
+
+    final latest = state.value;
+    final activePost = latest == null
+        ? null
+        : _findPostByPid(latest.posts, pid);
+    final activeUrl = activePost?.ratingSummary?.viewAllUrl?.trim();
+    if (latest == null ||
+        latest.tid != current.tid ||
+        activeUrl != viewAllUrl ||
+        latest.ratingsByPostId[pid]?.status !=
+            ThreadPostRatingsLoadStatus.loading) {
+      _ratingsLoadTokens.remove(pid);
+      return;
+    }
+
+    final nextViewState = switch (result) {
+      ApiSuccess<ThreadPostRatingDetails>(:final data) =>
+        ThreadPostRatingsViewState.loaded(data),
+      ApiFailure<ThreadPostRatingDetails>(:final error) =>
+        ThreadPostRatingsViewState.failure(error.message),
+    };
+    state = AsyncData(
+      latest.copyWith(
+        ratingsByPostId: Map<String, ThreadPostRatingsViewState>.unmodifiable(
+          <String, ThreadPostRatingsViewState>{
+            ...latest.ratingsByPostId,
+            pid: nextViewState,
+          },
+        ),
+      ),
+    );
+    _ratingsLoadTokens.remove(pid);
+  }
+
   Future<ApiResult<ThreadPostRateForm>> loadRateForm(ThreadPost post) async {
     final current = state.value;
     final rateUrl = post.rateUrl?.trim();
@@ -404,6 +479,15 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
             referer: _rateReferer(current, post),
           ),
         );
+  }
+
+  ThreadPost? _findPostByPid(List<ThreadPost> posts, String pid) {
+    for (final post in posts) {
+      if (post.pid.trim() == pid) {
+        return post;
+      }
+    }
+    return null;
   }
 
   Future<ApiResult<ThreadPostRateResult>> submitPostRate(
@@ -573,6 +657,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     required List<ThreadPost> previous,
     required Map<String, String> queryParameters,
   }) async {
+    _ratingsContentGeneration += 1;
+    _ratingsLoadTokens.clear();
     _logNative(
       'controller_load',
       'tid=${_args.tid} page=$page previous=${previous.length} '

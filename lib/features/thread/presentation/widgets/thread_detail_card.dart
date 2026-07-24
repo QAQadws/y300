@@ -186,11 +186,11 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
     required this.highlighted,
     required this.imageHeaderBuilder,
     required this.onOpenPostActions,
-    required this.onCopyActionUrl,
     required this.onOpenPostLink,
     required this.onOpenCommentAuthorProfile,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
+    required this.onLoadAllRatings,
     required this.palette,
   });
 
@@ -201,12 +201,12 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
-  final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
   final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
+  final ValueChanged<ThreadPost> onLoadAllRatings;
   final ThreadDetailNativePalette palette;
 
   @override
@@ -255,8 +255,11 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
                 const SizedBox(height: 10),
               ThreadPostRatingSection(
                 summary: post.ratingSummary!,
+                viewState:
+                    state.ratingsByPostId[post.pid.trim()] ??
+                    const ThreadPostRatingsViewState.idle(),
                 palette: palette,
-                onCopyActionUrl: onCopyActionUrl,
+                onLoadAllRatings: () => onLoadAllRatings(post),
               ),
             ],
           ],
@@ -285,10 +288,10 @@ class _ThreadPostCardEntry extends StatefulWidget {
     required this.onHtmlFirstImageFallbackAspectRatio,
     required this.onHtmlFirstBlockImageResolved,
     required this.onOpenPostActions,
-    required this.onCopyActionUrl,
     required this.onOpenCommentAuthorProfile,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
+    required this.onLoadAllRatings,
     required this.onPostBuilt,
   });
 
@@ -322,11 +325,11 @@ class _ThreadPostCardEntry extends StatefulWidget {
   onHtmlFirstBlockImageResolved;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
-  final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
+  final ValueChanged<ThreadPost> onLoadAllRatings;
   final ValueChanged<int>? onPostBuilt;
 
   @override
@@ -394,11 +397,11 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           highlighted: widget.highlighted,
           imageHeaderBuilder: widget.imageHeaderBuilder,
           onOpenPostActions: widget.onOpenPostActions,
-          onCopyActionUrl: widget.onCopyActionUrl,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
           onTogglePollOption: widget.onTogglePollOption,
           onSubmitPollVote: widget.onSubmitPollVote,
+          onLoadAllRatings: widget.onLoadAllRatings,
           palette: widget.palette,
         ),
       ],
@@ -485,6 +488,7 @@ class ThreadPostCard extends StatelessWidget {
     this.onOpenPostImages,
     this.onTogglePollOption,
     this.onSubmitPollVote,
+    this.onLoadAllRatings,
     required this.palette,
     this.onOpenCommentAuthorProfile,
     this.onOpenPostActions,
@@ -504,6 +508,7 @@ class ThreadPostCard extends StatelessWidget {
   final void Function(ThreadPoll poll, ThreadPollOption option)?
   onTogglePollOption;
   final ValueChanged<ThreadPoll>? onSubmitPollVote;
+  final ValueChanged<ThreadPost>? onLoadAllRatings;
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPostCommentEntry>? onOpenCommentAuthorProfile;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)?
@@ -671,8 +676,13 @@ class ThreadPostCard extends StatelessWidget {
             const SizedBox(height: 10),
             ThreadPostRatingSection(
               summary: post.ratingSummary!,
+              viewState:
+                  detailState?.ratingsByPostId[post.pid.trim()] ??
+                  const ThreadPostRatingsViewState.idle(),
               palette: resolvedPalette,
-              onCopyActionUrl: onCopyActionUrl ?? (_, _) {},
+              onLoadAllRatings: onLoadAllRatings == null
+                  ? null
+                  : () => onLoadAllRatings!(post),
             ),
           ],
         ],

@@ -61,6 +61,7 @@ class ThreadDetailContent extends StatefulWidget {
     this.onScrollStabilizerEvent,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
+    this.onLoadAllRatings,
   });
 
   final ThreadDetailPageState state;
@@ -91,6 +92,7 @@ class ThreadDetailContent extends StatefulWidget {
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
+  final ValueChanged<ThreadPost>? onLoadAllRatings;
 
   @override
   State<ThreadDetailContent> createState() => _ThreadDetailContentState();
@@ -399,10 +401,10 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
               _fallbackAspectRatioForBlockImage,
           onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
           onOpenPostActions: widget.onOpenPostActions,
-          onCopyActionUrl: widget.onCopyActionUrl,
           onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
           onTogglePollOption: widget.onTogglePollOption,
           onSubmitPollVote: widget.onSubmitPollVote,
+          onLoadAllRatings: widget.onLoadAllRatings ?? _ignoreRatingLoad,
           onPostBuilt: _handlePostBuilt,
         );
       case ThreadDetailRenderEntryKind.postHeader:
@@ -455,11 +457,11 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           highlighted: entry.post!.pid == widget.highlightPostPid,
           imageHeaderBuilder: widget.imageHeaderBuilder,
           onOpenPostActions: widget.onOpenPostActions,
-          onCopyActionUrl: widget.onCopyActionUrl,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
           onTogglePollOption: widget.onTogglePollOption,
           onSubmitPollVote: widget.onSubmitPollVote,
+          onLoadAllRatings: widget.onLoadAllRatings ?? _ignoreRatingLoad,
           palette: palette,
         );
       case ThreadDetailRenderEntryKind.pagination:
@@ -489,6 +491,8 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     // Entries before CustomScrollView.center grow into negative scroll space;
     // applying the legacy positive-offset compensation would move the target.
   }
+
+  void _ignoreRatingLoad(ThreadPost _) {}
 
   void _copyHtmlFirstImageUrl(ThreadPost post, ForumHtmlImageRequest request) {
     widget.onCopyActionUrl('${post.number}# 图片', request.url);

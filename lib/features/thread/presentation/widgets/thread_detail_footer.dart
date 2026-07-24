@@ -415,13 +415,15 @@ class ThreadPostRatingSection extends StatefulWidget {
   const ThreadPostRatingSection({
     super.key,
     required this.summary,
+    required this.viewState,
     required this.palette,
-    required this.onCopyActionUrl,
+    this.onLoadAllRatings,
   });
 
   final ThreadPostRatingSummary summary;
+  final ThreadPostRatingsViewState viewState;
   final ThreadDetailNativePalette palette;
-  final void Function(String label, String url) onCopyActionUrl;
+  final VoidCallback? onLoadAllRatings;
 
   @override
   State<ThreadPostRatingSection> createState() =>
@@ -434,8 +436,9 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final effectiveSummary = _effectiveSummary();
     final collapsedSummary = _ThreadPostRatingCollapseSummary.from(
-      widget.summary,
+      effectiveSummary,
     );
     return Container(
       key: const Key('thread-post-rating-section'),
@@ -467,71 +470,162 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
             onTap: () => setState(() => _expanded = !_expanded),
           ),
           if (_expanded)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        widget.summary.participantText.isEmpty
-                            ? '参与人数'
-                            : widget.summary.participantText,
-                        style: textTheme.labelSmall?.copyWith(
-                          color: widget.palette.muted,
-                          fontWeight: FontWeight.w800,
+            Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              child: Semantics(
+                button: _canRequestAllRatings,
+                label: _semanticsLabel,
+                child: InkWell(
+                  key: const Key('thread-post-rating-body'),
+                  onTap: _canRequestAllRatings ? widget.onLoadAllRatings : null,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                effectiveSummary.participantText.isEmpty
+                                    ? '参与人数'
+                                    : effectiveSummary.participantText,
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: widget.palette.muted,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                effectiveSummary.scoreText.isEmpty
+                                    ? '积分'
+                                    : effectiveSummary.scoreText,
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: widget.palette.muted,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                '理由',
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: widget.palette.muted,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        widget.summary.scoreText.isEmpty
-                            ? '积分'
-                            : widget.summary.scoreText,
-                        style: textTheme.labelSmall?.copyWith(
-                          color: widget.palette.muted,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        '理由',
-                        style: textTheme.labelSmall?.copyWith(
-                          color: widget.palette.muted,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                for (final rating in widget.summary.ratings) ...[
-                  const SizedBox(height: 6),
-                  ThreadPostRatingRow(rating: rating, palette: widget.palette),
-                ],
-                if (widget.summary.viewAllUrl?.trim().isNotEmpty == true) ...[
-                  const SizedBox(height: 7),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: ThreadRatingLinkButton(
-                      label: '查看全部评分',
-                      palette: widget.palette,
-                      onPressed: () => widget.onCopyActionUrl(
-                        '查看全部评分',
-                        widget.summary.viewAllUrl!,
-                      ),
+                        for (final rating in effectiveSummary.ratings) ...[
+                          const SizedBox(height: 6),
+                          ThreadPostRatingRow(
+                            rating: rating,
+                            palette: widget.palette,
+                          ),
+                        ],
+                        _buildLoadStatus(context),
+                      ],
                     ),
                   ),
-                ],
-              ],
+                ),
+              ),
             ),
         ],
       ),
     );
+  }
+
+  ThreadPostRatingSummary _effectiveSummary() {
+    final details = widget.viewState.details;
+    if (details == null) {
+      return widget.summary;
+    }
+    return ThreadPostRatingSummary(
+      participantText: '参与人数 ${details.participantCount}',
+      scoreText: details.totalScoreText,
+      ratings: details.ratings,
+      viewAllUrl: widget.summary.viewAllUrl,
+    );
+  }
+
+  bool get _canRequestAllRatings {
+    final hasUrl = widget.summary.viewAllUrl?.trim().isNotEmpty == true;
+    final status = widget.viewState.status;
+    return hasUrl &&
+        widget.onLoadAllRatings != null &&
+        status != ThreadPostRatingsLoadStatus.loading &&
+        status != ThreadPostRatingsLoadStatus.loaded;
+  }
+
+  String? get _semanticsLabel {
+    if (!_canRequestAllRatings) {
+      return null;
+    }
+    return widget.viewState.status == ThreadPostRatingsLoadStatus.failure
+        ? '重试加载完整评分'
+        : '展开完整评分';
+  }
+
+  Widget _buildLoadStatus(BuildContext context) {
+    switch (widget.viewState.status) {
+      case ThreadPostRatingsLoadStatus.idle:
+        return const SizedBox.shrink();
+      case ThreadPostRatingsLoadStatus.loading:
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 9, bottom: 2),
+            child: SizedBox(
+              key: const Key('thread-post-rating-loading-indicator'),
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.2,
+                color: widget.palette.accent,
+              ),
+            ),
+          ),
+        );
+      case ThreadPostRatingsLoadStatus.loaded:
+        return const SizedBox.shrink();
+      case ThreadPostRatingsLoadStatus.failure:
+        return Padding(
+          padding: const EdgeInsets.only(top: 5),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.viewState.errorMessage?.trim().isNotEmpty == true
+                      ? widget.viewState.errorMessage!
+                      : '完整评分加载失败',
+                  key: const Key('thread-post-rating-load-error'),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: widget.palette.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              IconButton(
+                key: const Key('thread-post-rating-retry-button'),
+                tooltip: '重试加载完整评分',
+                visualDensity: VisualDensity.compact,
+                onPressed: widget.onLoadAllRatings,
+                icon: Icon(
+                  Icons.refresh,
+                  size: 18,
+                  color: widget.palette.accent,
+                ),
+              ),
+            ],
+          ),
+        );
+    }
   }
 }
 
@@ -553,14 +647,30 @@ class ThreadPostRatingRow extends StatelessWidget {
       children: [
         Expanded(
           flex: 2,
-          child: Text(
-            rating.userName.isEmpty ? '用户' : rating.userName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: textTheme.labelSmall?.copyWith(
-              color: palette.bodyText,
-              fontWeight: FontWeight.w700,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                rating.userName.isEmpty ? '用户' : rating.userName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.labelSmall?.copyWith(
+                  color: palette.bodyText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (rating.dateline?.trim().isNotEmpty == true)
+                Text(
+                  rating.dateline!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.labelSmall?.copyWith(
+                    color: palette.muted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+            ],
           ),
         ),
         Expanded(
@@ -586,41 +696,6 @@ class ThreadPostRatingRow extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class ThreadRatingLinkButton extends StatelessWidget {
-  const ThreadRatingLinkButton({
-    super.key,
-    required this.label,
-    required this.palette,
-    required this.onPressed,
-  });
-
-  final String label;
-  final ThreadDetailNativePalette palette;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: palette.accent,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

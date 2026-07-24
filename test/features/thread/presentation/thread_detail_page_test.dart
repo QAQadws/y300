@@ -62,6 +62,7 @@ import 'package:y300/features/thread/data/providers/thread_favorite_providers.da
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
+import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
@@ -94,6 +95,19 @@ void main() {
       expect(
         detailPalette.chipBackground,
         displayPalette.surfaceContainerHigh.withValues(alpha: 0.42),
+      );
+    });
+
+    test('dark content accent uses a readable color-scheme role', () {
+      final theme = AppTheme.dark();
+      final palette = ThreadDetailNativePalette.resolve(theme);
+
+      expect(palette.accent, theme.colorScheme.primary);
+      expect(palette.onAccent, theme.colorScheme.onPrimary);
+      expect(palette.accent, isNot(theme.appBarTheme.backgroundColor));
+      expect(
+        _contrastRatio(palette.accent, palette.panelBackground),
+        greaterThanOrEqualTo(4.5),
       );
     });
 
@@ -163,8 +177,155 @@ void main() {
       },
     );
 
+    testWidgets('keeps rating preview on failure and retries inline', (
+      tester,
+    ) async {
+      final ratingsRepository = _FakeThreadPostRatingsRepository(
+        results: <ApiResult<ThreadPostRatingDetails>>[
+          const ApiFailure<ThreadPostRatingDetails>(
+            ApiError(type: ApiErrorType.network, message: '完整评分加载失败'),
+          ),
+          const ApiSuccess<ThreadPostRatingDetails>(
+            ThreadPostRatingDetails(
+              participantCount: 2,
+              totalScoreText: '积分 +5 点',
+              ratings: <ThreadPostRating>[
+                ThreadPostRating(userName: '预览用户', score: '+2', reason: '预览理由'),
+                ThreadPostRating(
+                  userName: '完整评分用户',
+                  score: '+3',
+                  reason: '补充评分',
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: <ThreadPost>[
+              _post(
+                pid: '1',
+                author: 'alice',
+                authorId: '1',
+                number: 1,
+                isFirst: true,
+                message: '<p>正文</p>',
+                ratingSummary: const ThreadPostRatingSummary(
+                  participantText: '参与人数 1',
+                  scoreText: '积分 +2',
+                  viewAllUrl:
+                      'https://bbs.yamibo.com/forum.php?mod=misc&action=viewratings&tid=100&pid=1',
+                  ratings: <ThreadPostRating>[
+                    ThreadPostRating(
+                      userName: '预览用户',
+                      score: '+2',
+                      reason: '预览理由',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, postRatingsRepository: ratingsRepository),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('thread-post-rating-body')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('预览用户'), findsOneWidget);
+      expect(find.text('预览理由'), findsOneWidget);
+      expect(find.text('完整评分加载失败'), findsOneWidget);
+      expect(find.text('完整评分用户'), findsNothing);
+      expect(ratingsRepository.loadCount, 1);
+
+      await tester.tap(
+        find.byKey(const Key('thread-post-rating-retry-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('完整评分加载失败'), findsNothing);
+      expect(find.text('完整评分用户'), findsOneWidget);
+      expect(find.text('参与人数 2'), findsOneWidget);
+      expect(ratingsRepository.loadCount, 2);
+    });
+
+    testWidgets('discards a rating response from an older page generation', (
+      tester,
+    ) async {
+      final ratingsRepository = _ControlledThreadPostRatingsRepository();
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: <ThreadPost>[
+              _post(
+                pid: '1',
+                author: 'alice',
+                authorId: '1',
+                number: 1,
+                isFirst: true,
+                message: '<p>正文</p>',
+                ratingSummary: const ThreadPostRatingSummary(
+                  participantText: '参与人数 1',
+                  scoreText: '积分 +2',
+                  viewAllUrl:
+                      'https://bbs.yamibo.com/forum.php?mod=misc&action=viewratings&tid=100&pid=1',
+                  ratings: <ThreadPostRating>[
+                    ThreadPostRating(
+                      userName: '预览用户',
+                      score: '+2',
+                      reason: '预览理由',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, postRatingsRepository: ratingsRepository),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('thread-post-rating-body')));
+      await tester.pump();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ThreadDetailPage)),
+      );
+      const args = ThreadDetailArgs(tid: '100', subject: '测试主题');
+      await container
+          .read(threadDetailControllerProvider(args).notifier)
+          .refresh();
+      await tester.pump();
+
+      ratingsRepository.completeSuccess();
+      await tester.pumpAndSettle();
+
+      expect(find.text('预览用户'), findsOneWidget);
+      expect(find.text('完整评分用户'), findsNothing);
+      expect(
+        container
+            .read(threadDetailControllerProvider(args))
+            .value
+            ?.ratingsByPostId,
+        isEmpty,
+      );
+      expect(ratingsRepository.loadCount, 1);
+    });
+
     testWidgets('shows posts and switches thread pages', (tester) async {
       var callCount = 0;
+      final ratingsRepository = _FakeThreadPostRatingsRepository();
       final repository = _FakeThreadRepository((tid, page, query) async {
         callCount++;
         if (page == 1) {
@@ -226,7 +387,7 @@ void main() {
                     participantText: '参与人数 1',
                     scoreText: '积分 +2',
                     viewAllUrl:
-                        'https://bbs.yamibo.com/forum.php?mod=misc&action=viewratings',
+                        'https://bbs.yamibo.com/forum.php?mod=misc&action=viewratings&tid=100&pid=1',
                     ratings: <ThreadPostRating>[
                       ThreadPostRating(
                         userName: '子子子车',
@@ -288,7 +449,9 @@ void main() {
         );
       });
 
-      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpWidget(
+        _buildTestApp(repository, postRatingsRepository: ratingsRepository),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
@@ -401,7 +564,11 @@ void main() {
       expect(find.text('积分 +2'), findsOneWidget);
       expect(find.text('子子子车'), findsOneWidget);
       expect(find.text('我很赞同'), findsOneWidget);
-      expect(find.text('查看全部评分'), findsOneWidget);
+      expect(find.text('查看全部评分'), findsNothing);
+      expect(
+        find.byKey(const Key('thread-post-rating-load-all-indicator')),
+        findsNothing,
+      );
       expect(
         find.descendant(
           of: find.byKey(const Key('thread-post-comment-header')),
@@ -457,7 +624,27 @@ void main() {
       expect(find.text('参与人数 1'), findsOneWidget);
       expect(find.text('积分 +2'), findsOneWidget);
       expect(find.text('子子子车'), findsOneWidget);
-      expect(find.text('查看全部评分'), findsOneWidget);
+      expect(find.text('查看全部评分'), findsNothing);
+      await tester.tap(find.byKey(const Key('thread-post-rating-body')));
+      await tester.tap(find.byKey(const Key('thread-post-rating-body')));
+      await tester.pump();
+      expect(
+        find.byKey(const Key('thread-post-rating-loading-indicator')),
+        findsOneWidget,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('完整评分用户'), findsOneWidget);
+      expect(find.text('2026-7-24 10:00'), findsOneWidget);
+      expect(find.text('参与人数 2'), findsOneWidget);
+      expect(find.text('积分 +5 点'), findsOneWidget);
+      expect(ratingsRepository.loadCount, 1);
+
+      await tester.tap(find.byKey(const Key('thread-post-rating-header')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('thread-post-rating-header')));
+      await tester.pump();
+      expect(find.text('完整评分用户'), findsOneWidget);
+      expect(ratingsRepository.loadCount, 1);
       expect(find.byKey(const Key('thread-replies-header')), findsNothing);
       expect(find.text('全部回复'), findsNothing);
       expect(find.byKey(const Key('thread-reply-input')), findsNothing);
@@ -4211,6 +4398,7 @@ Widget _buildTestApp(
   NovelRepository? novelRepository,
   ThreadFavoriteActionService? favoriteActionService,
   ThreadPostRateRepository? postRateRepository,
+  ThreadPostRatingsRepository? postRatingsRepository,
   ThreadPostCommentRepository? postCommentRepository,
   ThreadPollVoteRepository? pollVoteRepository,
   YamiboTagThreadPageRepository? tagThreadPageRepository,
@@ -4233,6 +4421,7 @@ Widget _buildTestApp(
       novelRepository: novelRepository,
       favoriteActionService: favoriteActionService,
       postRateRepository: postRateRepository,
+      postRatingsRepository: postRatingsRepository,
       postCommentRepository: postCommentRepository,
       pollVoteRepository: pollVoteRepository,
       tagThreadPageRepository: tagThreadPageRepository,
@@ -4260,6 +4449,7 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   NovelRepository? novelRepository,
   ThreadFavoriteActionService? favoriteActionService,
   ThreadPostRateRepository? postRateRepository,
+  ThreadPostRatingsRepository? postRatingsRepository,
   ThreadPostCommentRepository? postCommentRepository,
   ThreadPollVoteRepository? pollVoteRepository,
   YamiboTagThreadPageRepository? tagThreadPageRepository,
@@ -4310,6 +4500,9 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     ),
     threadPostRateRepositoryProvider.overrideWithValue(
       postRateRepository ?? _FakeThreadPostRateRepository(),
+    ),
+    threadPostRatingsRepositoryProvider.overrideWithValue(
+      postRatingsRepository ?? _FakeThreadPostRatingsRepository(),
     ),
     threadPostCommentRepositoryProvider.overrideWithValue(
       postCommentRepository ?? _FakeThreadPostCommentRepository(),
@@ -4585,6 +4778,7 @@ ThreadPost _post({
   required int number,
   required String message,
   bool isFirst = false,
+  ThreadPostRatingSummary? ratingSummary,
 }) {
   return ThreadPost(
     pid: pid,
@@ -4594,6 +4788,7 @@ ThreadPost _post({
     number: number,
     isFirst: isFirst,
     dateline: 'today',
+    ratingSummary: ratingSummary,
   );
 }
 
@@ -4616,6 +4811,18 @@ Finder _appBarTitleText(String text) {
 
 double _centerDxOf(WidgetTester tester, Finder finder) {
   return tester.getCenter(finder).dx;
+}
+
+double _contrastRatio(Color foreground, Color background) {
+  final foregroundLuminance = foreground.computeLuminance();
+  final backgroundLuminance = background.computeLuminance();
+  final lighter = foregroundLuminance > backgroundLuminance
+      ? foregroundLuminance
+      : backgroundLuminance;
+  final darker = foregroundLuminance > backgroundLuminance
+      ? backgroundLuminance
+      : foregroundLuminance;
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 Finder _richTextContaining(String text) {
@@ -4963,6 +5170,74 @@ class _FakeThreadPostRateRepository implements ThreadPostRateRepository {
     lastDraft = draft;
     return const ApiSuccess<ThreadPostRateResult>(
       ThreadPostRateResult(message: '评分成功'),
+    );
+  }
+}
+
+class _FakeThreadPostRatingsRepository implements ThreadPostRatingsRepository {
+  _FakeThreadPostRatingsRepository({
+    List<ApiResult<ThreadPostRatingDetails>> results =
+        const <ApiResult<ThreadPostRatingDetails>>[],
+  }) : _results = List<ApiResult<ThreadPostRatingDetails>>.from(results);
+
+  final List<ApiResult<ThreadPostRatingDetails>> _results;
+  int loadCount = 0;
+  String? loadedUrl;
+
+  @override
+  Future<ApiResult<ThreadPostRatingDetails>> loadAll(String viewAllUrl) async {
+    loadCount += 1;
+    loadedUrl = viewAllUrl;
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+    if (_results.isNotEmpty) {
+      return _results.removeAt(0);
+    }
+    return const ApiSuccess<ThreadPostRatingDetails>(
+      ThreadPostRatingDetails(
+        participantCount: 2,
+        totalScoreText: '积分 +5 点',
+        ratings: <ThreadPostRating>[
+          ThreadPostRating(
+            userName: '子子子车',
+            userId: '736594',
+            score: '+2',
+            reason: '我很赞同',
+          ),
+          ThreadPostRating(
+            userName: '完整评分用户',
+            score: '+3',
+            reason: '补充评分',
+            dateline: '2026-7-24 10:00',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ControlledThreadPostRatingsRepository
+    implements ThreadPostRatingsRepository {
+  final _result = Completer<ApiResult<ThreadPostRatingDetails>>();
+  int loadCount = 0;
+
+  @override
+  Future<ApiResult<ThreadPostRatingDetails>> loadAll(String viewAllUrl) {
+    loadCount += 1;
+    return _result.future;
+  }
+
+  void completeSuccess() {
+    _result.complete(
+      const ApiSuccess<ThreadPostRatingDetails>(
+        ThreadPostRatingDetails(
+          participantCount: 2,
+          totalScoreText: '积分 +5 点',
+          ratings: <ThreadPostRating>[
+            ThreadPostRating(userName: '预览用户', score: '+2', reason: '预览理由'),
+            ThreadPostRating(userName: '完整评分用户', score: '+3', reason: '补充评分'),
+          ],
+        ),
+      ),
     );
   }
 }
