@@ -642,15 +642,15 @@ class ThreadPostRatingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          flex: 2,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 2,
+              child: Text(
                 rating.userName.isEmpty ? '用户' : rating.userName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -659,42 +659,42 @@ class ThreadPostRatingRow extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              if (rating.dateline?.trim().isNotEmpty == true)
-                Text(
-                  rating.dateline!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: textTheme.labelSmall?.copyWith(
-                    color: palette.muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                  ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                rating.score,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.labelSmall?.copyWith(
+                  color: palette.accent,
+                  fontWeight: FontWeight.w800,
                 ),
-            ],
-          ),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Text(
+                rating.reason,
+                style: textTheme.labelSmall?.copyWith(
+                  color: palette.softText,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
         ),
-        Expanded(
-          flex: 2,
-          child: Text(
-            rating.score,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+        if (rating.dateline?.trim().isNotEmpty == true) ...[
+          const SizedBox(height: 2),
+          Text(
+            rating.dateline!,
             style: textTheme.labelSmall?.copyWith(
-              color: palette.accent,
-              fontWeight: FontWeight.w800,
+              color: palette.muted,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
             ),
           ),
-        ),
-        Expanded(
-          flex: 3,
-          child: Text(
-            rating.reason,
-            style: textTheme.labelSmall?.copyWith(
-              color: palette.softText,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
+        ],
       ],
     );
   }

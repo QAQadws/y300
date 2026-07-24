@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/rendering.dart' show RenderParagraph, ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter/services.dart';
@@ -108,6 +108,45 @@ void main() {
       expect(
         _contrastRatio(palette.accent, palette.panelBackground),
         greaterThanOrEqualTo(4.5),
+      );
+    });
+
+    testWidgets('rating date uses the full row width on narrow screens', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(240, 400);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final theme = AppTheme.dark();
+      final palette = ThreadDetailNativePalette.resolve(theme);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: Scaffold(
+            body: ThreadPostRatingRow(
+              rating: const ThreadPostRating(
+                userName: 'narrow-screen-user',
+                score: '+2',
+                reason: '评分理由',
+                dateline: '2026-7-24 10:00',
+              ),
+              palette: palette,
+            ),
+          ),
+        ),
+      );
+
+      final dateFinder = find.text('2026-7-24 10:00');
+      final dateText = tester.widget<Text>(dateFinder);
+      final dateParagraph = tester.renderObject<RenderParagraph>(dateFinder);
+      expect(dateText.maxLines, isNull);
+      expect(dateText.overflow, isNull);
+      expect(dateParagraph.didExceedMaxLines, isFalse);
+      expect(
+        tester.getTopLeft(dateFinder).dy,
+        greaterThan(tester.getTopLeft(find.text('+2')).dy),
       );
     });
 
