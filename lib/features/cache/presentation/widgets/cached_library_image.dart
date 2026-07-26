@@ -34,6 +34,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     this.showDelayedLoadingIndicator = false,
     this.loadingIndicatorDelay = const Duration(milliseconds: 300),
     this.loadingIndicatorColor,
+    this.retryToken = 0,
   });
 
   final ImageCacheRequest? request;
@@ -55,6 +56,10 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   final bool showDelayedLoadingIndicator;
   final Duration loadingIndicatorDelay;
   final Color? loadingIndicatorColor;
+
+  /// 重试代次。自增会重跑一次"缓存查询 → ensureCached → 远端兜底"整条流程，
+  /// 并透传给 [LibraryCachedImage] 重建解码；失败可能出在其中任一段。
+  final int retryToken;
 
   @override
   ConsumerState<CachedLibraryImage> createState() => _CachedLibraryImageState();
@@ -86,7 +91,8 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     }
     if (oldWidget.request?.cacheKey != widget.request?.cacheKey ||
         oldWidget.request?.sourceUrl != widget.request?.sourceUrl ||
-        oldWidget.preferredLocalPath != widget.preferredLocalPath) {
+        oldWidget.preferredLocalPath != widget.preferredLocalPath ||
+        oldWidget.retryToken != widget.retryToken) {
       _restartCacheFlow();
     }
   }
@@ -115,6 +121,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
         placeholder: widget.placeholder,
         errorPlaceholder: widget.errorPlaceholder,
         headerBuilder: widget.headerBuilder,
+        retryToken: widget.retryToken,
         onImageResolved: (size) =>
             _handleImageResolved(request, size, generation),
         onRemoteImageResolved: () => _handleRemoteImageResolved(generation),

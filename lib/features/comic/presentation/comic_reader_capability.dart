@@ -5,6 +5,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
@@ -340,10 +341,9 @@ class ComicReaderCapability extends ReaderCapability {
       expectedDisplaySize: spec.expectedDisplaySize,
       width: spec.paged ? null : double.infinity,
       placeholder: _ComicReaderImagePlaceholder(paged: spec.paged),
-      errorPlaceholder: _ComicReaderImageErrorPlaceholder(
-        imageUrl: imageUrl,
-        paged: spec.paged,
+      errorPlaceholder: ImageRetryPlaceholder(
         onRetry: spec.onRetry,
+        retryButtonKey: ValueKey<String>('comic-reader-retry-$imageUrl'),
       ),
       headerBuilder: imageHeaderBuilder,
       loadingIndicatorColor: spec.loadingIndicatorColor,
@@ -394,7 +394,6 @@ class ComicReaderCapability extends ReaderCapability {
     }
   }
 }
-
 class _ComicReaderImagePreparationSink implements ReaderImagePreparationSink {
   const _ComicReaderImagePreparationSink(this.controller);
 
@@ -422,45 +421,6 @@ class _ComicReaderImagePlaceholder extends StatelessWidget {
     return ColoredBox(
       color: chromePalette.imageLoadingPlaceholderBackground,
       child: const SizedBox.shrink(),
-    );
-  }
-}
-
-class _ComicReaderImageErrorPlaceholder extends StatelessWidget {
-  const _ComicReaderImageErrorPlaceholder({
-    required this.imageUrl,
-    required this.paged,
-    required this.onRetry,
-  });
-
-  final String imageUrl;
-  final bool paged;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final content = Column(
-      mainAxisSize: paged ? MainAxisSize.min : MainAxisSize.max,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Text('图片加载失败'),
-        const SizedBox(height: 8),
-        OutlinedButton(
-          key: ValueKey<String>('comic-reader-retry-$imageUrl'),
-          onPressed: onRetry,
-          child: const Text('重试'),
-        ),
-      ],
-    );
-    if (paged) {
-      return Center(child: content);
-    }
-    return AspectRatio(
-      aspectRatio: 3 / 4,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: content,
-      ),
     );
   }
 }

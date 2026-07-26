@@ -595,6 +595,40 @@ void main() {
     expect(cacheService.requests.single.cacheKey, image.request?.cacheKey);
   });
 
+  testWidgets('failed thread image offers a retry that reruns the cache flow', (
+    tester,
+  ) async {
+    final cacheService = _RecordingImageCacheService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
+              sourceId: 'retryable-thread-image',
+              threadId: '573279',
+              html:
+                  '<img src="data/attachment/forum/page-1.jpg" '
+                  'width="640" height="480">',
+            ),
+          ),
+        ),
+      ),
+    );
+    // 测试环境的 HttpClient 对所有请求返回失败，图片必然走到失败占位。
+    await tester.pumpAndSettle();
+
+    expect(find.text('图片加载失败'), findsOneWidget);
+    expect(cacheService.requests, hasLength(1));
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '重试'));
+    await tester.pumpAndSettle();
+
+    expect(cacheService.requests, hasLength(2));
+  });
+
   testWidgets('builds image load specs before resolving cache requests', (
     tester,
   ) async {

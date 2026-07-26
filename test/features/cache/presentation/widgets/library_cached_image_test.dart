@@ -159,6 +159,139 @@ void main() {
     expect(find.byKey(const Key('placeholder')), findsNothing);
     expect(find.byType(RawImage), findsOneWidget);
   });
+
+  testWidgets('bumping retryToken re-resolves a failed remote image', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 3, height: 5, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final provider = _FailThenSucceedImageProvider(testImage);
+
+    Widget build(int retryToken) {
+      return MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 120,
+            height: 200,
+            child: LibraryCachedImage(
+              imageUrl: 'https://bbs.yamibo.com/data/attachment/retry.jpg',
+              remoteImageProviderOverride: provider,
+              fit: BoxFit.cover,
+              placeholder: const SizedBox(key: Key('placeholder')),
+              errorPlaceholder: const SizedBox(key: Key('error')),
+              retryToken: retryToken,
+            ),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(build(0));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('error')), findsOneWidget);
+    expect(provider.loadCount, 1);
+
+    // 失败后驱逐是异步微任务，先放行一帧再重试，模拟真实用户点击时序。
+    await tester.pump();
+
+    await tester.pumpWidget(build(1));
+    await tester.pump();
+    await tester.pump();
+
+    expect(provider.loadCount, 2);
+    expect(find.byKey(const Key('error')), findsNothing);
+    expect(find.byType(RawImage), findsOneWidget);
+  });
+
+  testWidgets('retry also recovers an un-downscaled image', (tester) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 3, height: 5, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final provider = _FailThenSucceedImageProvider(testImage);
+
+    // 横向无界 → 解码目标为 none → provider 不被 ResizeImage 包装。这条路径下
+    // 失败的 completer 会滞留在图片缓存 pending 表中，只有显式驱逐才能重试。
+    Widget build(int retryToken) {
+      return MaterialApp(
+        home: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: LibraryCachedImage(
+            imageUrl: 'https://bbs.yamibo.com/data/attachment/bare.jpg',
+            remoteImageProviderOverride: provider,
+            fit: BoxFit.cover,
+            placeholder: const SizedBox(key: Key('placeholder')),
+            errorPlaceholder: const SizedBox(key: Key('error')),
+            retryToken: retryToken,
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(build(0));
+    await tester.pump();
+    await tester.pump();
+
+    final displayed = tester.widget<Image>(find.byType(Image));
+    expect(
+      displayed.image,
+      isA<_FailThenSucceedImageProvider>(),
+      reason: '该布局下不应发生降采样包装，否则这条用例没有覆盖到目标路径',
+    );
+    expect(provider.loadCount, 1);
+
+    await tester.pump();
+    await tester.pumpWidget(build(1));
+    await tester.pump();
+    await tester.pump();
+
+    expect(provider.loadCount, 2);
+    expect(find.byType(RawImage), findsOneWidget);
+  });
+
+  testWidgets('an unchanged retryToken does not reload a settled image', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 3, height: 5, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final provider = _CountingImageProvider(testImage);
+
+    Widget build() {
+      return MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 120,
+            height: 200,
+            child: LibraryCachedImage(
+              imageUrl: 'https://bbs.yamibo.com/data/attachment/stable.jpg',
+              remoteImageProviderOverride: provider,
+              fit: BoxFit.cover,
+              placeholder: const SizedBox(key: Key('placeholder')),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(build());
+    await tester.pump();
+    await tester.pump();
+    final settledCount = provider.loadCount;
+
+    await tester.pumpWidget(build());
+    await tester.pump();
+
+    expect(provider.loadCount, settledCount);
+  });
 }
 
 /// 解开降采样包裹，取底层真实 provider。
@@ -212,6 +345,61 @@ class _SynchronousImageProvider
   ) {
     return OneFrameImageStreamCompleter(
       SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
+    );
+  }
+}
+
+/// 第一次解码失败、之后成功，用来观察重试是否真的重新触发了一次解码。
+class _FailThenSucceedImageProvider
+    extends ImageProvider<_FailThenSucceedImageProvider> {
+  _FailThenSucceedImageProvider(this.image);
+
+  final ui.Image image;
+  int loadCount = 0;
+
+  @override
+  Future<_FailThenSucceedImageProvider> obtainKey(
+    ImageConfiguration configuration,
+  ) {
+    return SynchronousFuture<_FailThenSucceedImageProvider>(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    _FailThenSucceedImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    loadCount += 1;
+    if (loadCount == 1) {
+      return OneFrameImageStreamCompleter(
+        Future<ImageInfo>.error(StateError('boom')),
+      );
+    }
+    return OneFrameImageStreamCompleter(
+      SynchronousFuture<ImageInfo>(ImageInfo(image: image.clone())),
+    );
+  }
+}
+
+class _CountingImageProvider extends ImageProvider<_CountingImageProvider> {
+  _CountingImageProvider(this.image);
+
+  final ui.Image image;
+  int loadCount = 0;
+
+  @override
+  Future<_CountingImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<_CountingImageProvider>(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    _CountingImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    loadCount += 1;
+    return OneFrameImageStreamCompleter(
+      SynchronousFuture<ImageInfo>(ImageInfo(image: image.clone())),
     );
   }
 }

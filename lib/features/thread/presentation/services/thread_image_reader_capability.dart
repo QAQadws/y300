@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/domain/export/reader_image_export.dart';
@@ -126,7 +127,14 @@ class ThreadImageReaderCapability extends ReaderCapability {
       width: spec.paged ? null : double.infinity,
       headerBuilder: imageHeaderBuilder,
       placeholder: const SizedBox.shrink(),
-      errorPlaceholder: const Center(child: Icon(Icons.broken_image_outlined)),
+      // 失败位不自带宽高比：竖向连续模式由 ContinuousImageReaderSlot 按布局提示
+      // 预留 minHeight，这里再套比例会顶掉预留高度，滑块 seek 就会落偏。
+      errorPlaceholder: ImageRetryPlaceholder(
+        onRetry: spec.onRetry,
+        retryButtonKey: ValueKey<String>(
+          'thread-image-reader-retry-${spec.item.id}',
+        ),
+      ),
       loadingIndicatorColor: spec.loadingIndicatorColor,
       onImageResolved: spec.onDimensionsResolved,
     );

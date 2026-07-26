@@ -11,6 +11,7 @@ import 'package:y300/features/cache/domain/services/forum_image_dimension_index.
 import 'package:y300/features/cache/domain/services/forum_image_layout_hint_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -299,6 +300,7 @@ class _ForumHtmlCachedBlockImageViewState
 
   ForumImageLayoutHint? _cachedHint;
   String? _loadedCacheKey;
+  int _retryToken = 0;
 
   ForumImageLayoutHint get _hint => _cachedHint ?? widget.initialHint;
 
@@ -327,14 +329,22 @@ class _ForumHtmlCachedBlockImageViewState
       request: widget.request,
       fit: BoxFit.fitWidth,
       placeholder: const _ForumHtmlImageSurface(),
-      errorPlaceholder: const _ForumHtmlImageErrorPlaceholder(
-        icon: Icons.broken_image_outlined,
+      errorPlaceholder: _ForumHtmlImageErrorPlaceholder(
+        cacheKey: widget.request.cacheKey,
+        onRetry: _retryImage,
       ),
       showDelayedLoadingIndicator: true,
       headerBuilder: widget.imageHeaderBuilder,
       onImageResolved: _handleImageResolved,
+      retryToken: _retryToken,
     );
     return AspectRatio(aspectRatio: hint.aspectRatio ?? 0.7, child: image);
+  }
+
+  void _retryImage() {
+    setState(() {
+      _retryToken += 1;
+    });
   }
 
   void _handleImageResolved(Size size) {
@@ -548,17 +558,21 @@ class _ForumHtmlCachedStickerImageViewState
 }
 
 class _ForumHtmlImageErrorPlaceholder extends StatelessWidget {
-  const _ForumHtmlImageErrorPlaceholder({required this.icon});
+  const _ForumHtmlImageErrorPlaceholder({
+    required this.cacheKey,
+    required this.onRetry,
+  });
 
-  final IconData icon;
+  final String cacheKey;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
+    // 正文内联图的失败位受宽高比约束，高度可能只剩几十像素，密度由占位自行降级。
     return _ForumHtmlImageSurface(
-      child: Icon(
-        icon,
-        size: 20,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      child: ImageRetryPlaceholder(
+        onRetry: onRetry,
+        retryButtonKey: ValueKey<String>('thread-post-image-retry-$cacheKey'),
       ),
     );
   }

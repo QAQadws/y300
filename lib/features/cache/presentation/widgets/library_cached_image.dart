@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
@@ -35,6 +36,7 @@ class LibraryCachedImage extends StatefulWidget {
     this.onImageResolved,
     this.onRemoteImageResolved,
     this.onImageFailed,
+    this.retryToken = 0,
   });
 
   final String? localPath;
@@ -58,6 +60,12 @@ class LibraryCachedImage extends StatefulWidget {
   final VoidCallback? onRemoteImageResolved;
   final VoidCallback? onImageFailed;
 
+  /// 重试代次。调用方自增即可让本控件重新解码一次同一来源。
+  ///
+  /// 失败重试必须换掉 [Image] 元素：provider 相等时 `Image` 不会重新 resolve，
+  /// 仅靠 setState 无法把已失败的流拉回来。
+  final int retryToken;
+
   @override
   State<LibraryCachedImage> createState() => _LibraryCachedImageState();
 }
@@ -72,6 +80,8 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
   bool _remoteResolveScheduled = false;
   String? _reportedImageIdentity;
   String? _reportedFailureIdentity;
+  String? _evictedFailureIdentity;
+  int _retryEpoch = 0;
 
   /// 本帧解码目标（宽度优先策略结果），供网络分支与 contain 文件分支复用。
   /// 本帧显示框尺寸与 DPR，供 cover 感知降采样解析复用。
@@ -88,14 +98,23 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
         oldWidget.remoteImageProviderOverride !=
             widget.remoteImageProviderOverride ||
         oldWidget.headerBuilder != widget.headerBuilder) {
-      _headersFuture = null;
-      _headersUrl = null;
-      _headersBuilder = null;
-      _remoteResolved = false;
-      _remoteResolveScheduled = false;
-      _reportedImageIdentity = null;
-      _reportedFailureIdentity = null;
+      _resetLoadState();
     }
+    if (oldWidget.retryToken != widget.retryToken) {
+      _retryEpoch += 1;
+      _resetLoadState();
+    }
+  }
+
+  void _resetLoadState() {
+    _headersFuture = null;
+    _headersUrl = null;
+    _headersBuilder = null;
+    _remoteResolved = false;
+    _remoteResolveScheduled = false;
+    _reportedImageIdentity = null;
+    _reportedFailureIdentity = null;
+    _evictedFailureIdentity = null;
   }
 
   @override
@@ -121,7 +140,11 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
           displaySize: _displaySize,
           devicePixelRatio: _devicePixelRatio,
         );
-        return _buildContent(context);
+        // 带上重试代次：换 key 才能丢掉已失败的 Image 元素与其 ImageStream。
+        return KeyedSubtree(
+          key: ValueKey<int>(_retryEpoch),
+          child: _buildContent(context),
+        );
       },
     );
   }
@@ -190,6 +213,7 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
             return widget.placeholder;
           },
           errorBuilder: (context, error, stackTrace) {
+            _evictFailedProvider(displayProvider, 'file:${file.path}');
             _markImageFailed('file:${file.path}');
             return _errorPlaceholder;
           },
@@ -281,10 +305,25 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
       },
       errorBuilder: (context, error, stackTrace) {
         _markRemoteResolved();
+        _evictFailedProvider(displayProvider, 'remote:$remote');
         _markImageFailed('remote:$remote');
         return _errorPlaceholder;
       },
     );
+  }
+
+  /// 失败即从 Flutter 图片缓存驱逐，否则重试可能拿回同一个已失败的 completer。
+  ///
+  /// 未降采样时（无界宽度 → [ImageDecodeTarget.none]，provider 不被 `ResizeImage`
+  /// 包装）失败的 completer 会留在图片缓存的 pending 表里，新监听者加入时被立刻
+  /// 重放同一个异常，重试恒为空转。必须用真正被 resolve 的 display provider：
+  /// 包装后缓存 key 是复合 key，驱逐内层 provider 不会命中它。
+  void _evictFailedProvider(ImageProvider provider, String identity) {
+    if (_evictedFailureIdentity == identity) {
+      return;
+    }
+    _evictedFailureIdentity = identity;
+    unawaited(provider.evict().catchError((Object _) => false));
   }
 
   void _reportImageResolved(ImageProvider provider, String identity) {
