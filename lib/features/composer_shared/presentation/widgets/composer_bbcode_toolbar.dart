@@ -8,12 +8,14 @@ class ComposerBbCodeToolbar extends StatelessWidget {
     super.key,
     required this.onStickerPressed,
     required this.onCommandSelected,
+    this.onImagePressed,
     this.enabled = true,
     this.keyPrefix = 'reply-composer',
   });
 
   final VoidCallback onStickerPressed;
   final ValueChanged<ComposerBbCodeCommand> onCommandSelected;
+  final VoidCallback? onImagePressed;
   final bool enabled;
   final String keyPrefix;
 
@@ -84,6 +86,14 @@ class ComposerBbCodeToolbar extends StatelessWidget {
               onCommandSelected(composerQuoteBbCodeCommand);
             },
           ),
+          if (onImagePressed != null)
+            _ToolbarIconButton(
+              buttonKey: Key('$keyPrefix-image-button'),
+              tooltip: '图片',
+              enabled: enabled,
+              icon: Icons.image_outlined,
+              onPressed: onImagePressed!,
+            ),
         ],
       ),
     );

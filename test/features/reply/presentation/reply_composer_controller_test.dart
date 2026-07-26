@@ -7,6 +7,7 @@ import 'package:y300/features/composer_shared/data/repositories/composer_draft_r
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
@@ -187,12 +188,18 @@ void main() {
         replyComposerControllerProvider(args).notifier,
       );
 
-      await controller.pickImages();
+      await controller.pickImages(
+        insertionAnchor: const ComposerInsertionAnchor(
+          baseRevision: 0,
+          selection: ComposerSelection(start: 0, end: 0),
+          mode: ComposerEditorMode.source,
+        ),
+      );
       await _drainMicrotasks();
       await controller.flushDraft();
 
       final saved = await draftRepository.loadDraft(args.identity);
-      expect(saved?.message, '[attach]123456[/attach]');
+      expect(saved?.message, '[attach]123456[/attach]\n');
       expect(saved?.imageAttachments, hasLength(1));
       expect(saved?.imageAttachments.single.aid, '123456');
       expect(
@@ -654,9 +661,16 @@ void main() {
         addTearDown(subscription.close);
         await container.read(replyComposerControllerProvider(args).future);
 
-        await container
-            .read(replyComposerControllerProvider(args).notifier)
-            .pickImages();
+        final controller = container.read(
+          replyComposerControllerProvider(args).notifier,
+        );
+        await controller.pickImages(
+          insertionAnchor: const ComposerInsertionAnchor(
+            baseRevision: 0,
+            selection: ComposerSelection(start: 0, end: 0),
+            mode: ComposerEditorMode.source,
+          ),
+        );
         await _drainMicrotasks();
 
         final state = container
@@ -672,7 +686,7 @@ void main() {
           ReplyImageAttachmentStatus.uploaded,
           ReplyImageAttachmentStatus.uploaded,
         ]);
-        expect(state.message, '[attach]111[/attach]\n[attach]222[/attach]');
+        expect(state.message, '[attach]111[/attach]\n[attach]222[/attach]\n');
       },
     );
 
@@ -753,9 +767,16 @@ void main() {
         addTearDown(subscription.close);
         await container.read(replyComposerControllerProvider(args).future);
 
-        await container
-            .read(replyComposerControllerProvider(args).notifier)
-            .pickImages();
+        final controller = container.read(
+          replyComposerControllerProvider(args).notifier,
+        );
+        await controller.pickImages(
+          insertionAnchor: const ComposerInsertionAnchor(
+            baseRevision: 0,
+            selection: ComposerSelection(start: 0, end: 0),
+            mode: ComposerEditorMode.source,
+          ),
+        );
         await _drainMicrotasks();
 
         final state = container
@@ -765,7 +786,7 @@ void main() {
           ReplyImageAttachmentStatus.failed,
           ReplyImageAttachmentStatus.uploaded,
         ]);
-        expect(state.message, '[attach]222[/attach]');
+        expect(state.message, '[attach]222[/attach]\n');
         expect(state.imageUploadError, '第一张失败');
       },
     );

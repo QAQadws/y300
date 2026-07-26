@@ -6,10 +6,13 @@ import 'package:y300/features/composer_shared/data/services/composer_image_picke
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_sanitizer.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_message_insertion_service.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_message_revision_tracker.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
@@ -78,6 +81,11 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   TState? _latestState;
   StreamSubscription<ComposerImageUploadEvent>? _imageUploadSubscription;
   int _uploadGeneration = 0;
+  final ComposerMessageInsertionService _messageInsertionService =
+      const ComposerMessageInsertionService();
+  final ComposerMessageRevisionTracker _messageRevisionTracker =
+      ComposerMessageRevisionTracker();
+  _ComposerUploadBatch? _activeUploadBatch;
 
   TState? get latestState => _latestState;
   ComposerAttachBbCodeService get attachBbCodeService =>
@@ -112,6 +120,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       preferences: preferences,
     );
     _latestState = initial;
+    _messageRevisionTracker.reset(
+      source: initial.message,
+      revision: initial.messageRevision,
+    );
     onAfterBuild(initial);
     return initial;
   }
@@ -142,10 +154,19 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     if (current == null) {
       return;
     }
+    _messageRevisionTracker.recordChange(
+      previousSource: current.message,
+      nextSource: value,
+    );
     _setDataState(
       applyPatch(
         current,
-        ComposerStatePatch(message: value, clearErrorMessage: true),
+        ComposerStatePatch(
+          message: value,
+          messageRevision: _messageRevisionTracker.revision,
+          clearLastMessageMutation: true,
+          clearErrorMessage: true,
+        ),
       ),
     );
     _scheduleDraftSave();
@@ -207,6 +228,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     _saveTimer?.cancel();
     _saveTimer = null;
     _uploadGeneration += 1;
+    _activeUploadBatch = null;
     _imageUploadCoordinator?.cancel();
     final subscription = _imageUploadSubscription;
     _imageUploadSubscription = null;
@@ -215,8 +237,12 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     final reset = resetDraftContent(
       applyPatch(
         current,
-        const ComposerStatePatch(
+        ComposerStatePatch(
           message: '',
+          messageRevision: current.messageRevision + 1,
+          clearLastMessageMutation: true,
+          pendingAttachmentAids: <String>[],
+          clearPendingAttachmentMessage: true,
           restoredDraft: false,
           imageAttachments: <ComposerImageAttachment>[],
           isUploadingImages: false,
@@ -228,6 +254,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       ),
     );
     _setDataState(reset);
+    _messageRevisionTracker.reset(
+      source: '',
+      revision: current.messageRevision + 1,
+    );
     final repository = _draftRepository;
     if (repository != null) {
       try {
@@ -294,7 +324,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     return !state.isSubmitting && !state.isUploadingImages;
   }
 
-  Future<void> pickImages() async {
+  Future<void> pickImages({ComposerInsertionAnchor? insertionAnchor}) async {
     final current = state.value;
     if (current == null || !canPickImages(current)) {
       return;
@@ -336,6 +366,13 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             clearImageUploadError: true,
           ),
         ),
+      );
+      _activeUploadBatch = _ComposerUploadBatch(
+        anchor: insertionAnchor,
+        localIds: [
+          for (final attachment in attachments.skip(existingCount))
+            attachment.localId,
+        ],
       );
       _startImageUpload(
         attachments.skip(existingCount).toList(growable: false),
@@ -380,6 +417,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             ),
           ),
         );
+        _settleSuccessfulUploadsAsPending(generation);
       },
     );
   }
@@ -427,15 +465,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
         if (uploadedImage == null) {
           return;
         }
-        final nextMessage = attachBbCodeService.appendAttachCodes(
-          current.message,
-          [uploadedImage.aid],
-        );
         _setDataState(
           applyPatch(
             current,
             ComposerStatePatch(
-              message: nextMessage,
               imageAttachments: _replaceAttachmentStatus(
                 current.imageAttachments,
                 localId: event.localId,
@@ -447,10 +480,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
               isUploadingImages: true,
               imageUploadCurrent: event.current,
               imageUploadTotal: event.total,
+              clearLastMessageMutation: true,
             ),
           ),
         );
-        _scheduleDraftSave();
         break;
       case ComposerImageUploadEventType.failed:
         _setDataState(
@@ -482,8 +515,149 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             ),
           ),
         );
+        _finishUploadBatch(generation);
         break;
     }
+  }
+
+  /// Inserts successful uploads only after the whole batch is settled. This
+  /// keeps selection mapping deterministic and preserves the picker order.
+  void _finishUploadBatch(int generation) {
+    if (generation != _uploadGeneration) {
+      return;
+    }
+    final batch = _activeUploadBatch;
+    _activeUploadBatch = null;
+    final current = state.value ?? _latestState;
+    if (batch == null || current == null) {
+      return;
+    }
+    final aids = _successfulAidsForBatch(current, batch);
+    if (aids.isEmpty) {
+      return;
+    }
+    final anchor = batch.anchor;
+    final resolved = anchor == null
+        ? null
+        : _messageRevisionTracker.resolve(anchor);
+    if (resolved == null) {
+      _setPendingAttachments(current, aids);
+      return;
+    }
+    _insertAidsAtAnchor(current, resolved, aids);
+  }
+
+  void _settleSuccessfulUploadsAsPending(int generation) {
+    if (generation != _uploadGeneration) {
+      return;
+    }
+    final batch = _activeUploadBatch;
+    _activeUploadBatch = null;
+    final current = state.value ?? _latestState;
+    if (batch == null || current == null) {
+      return;
+    }
+    final aids = _successfulAidsForBatch(current, batch);
+    if (aids.isNotEmpty) {
+      _setPendingAttachments(current, aids);
+    }
+  }
+
+  List<String> _successfulAidsForBatch(
+    TState current,
+    _ComposerUploadBatch batch,
+  ) {
+    final byLocalId = <String, ComposerImageAttachment>{
+      for (final attachment in current.imageAttachments)
+        attachment.localId: attachment,
+    };
+    final seen = <String>{};
+    return [
+      for (final localId in batch.localIds)
+        if (byLocalId[localId] case final attachment?)
+          if (attachment.canEnterSubmitPayload &&
+              seen.add(attachment.aid!.trim()))
+            attachment.aid!.trim(),
+    ];
+  }
+
+  void _setPendingAttachments(TState current, List<String> aids) {
+    final existing = current.pendingAttachmentAids.toSet();
+    final merged = <String>[
+      ...current.pendingAttachmentAids,
+      for (final aid in aids)
+        if (existing.add(aid)) aid,
+    ];
+    _setDataState(
+      applyPatch(
+        current,
+        ComposerStatePatch(
+          pendingAttachmentAids: merged,
+          pendingAttachmentMessage: '图片已上传，请选择位置后点击图片按钮重新插入',
+          clearLastMessageMutation: true,
+        ),
+      ),
+    );
+    _scheduleDraftSave();
+  }
+
+  Future<void> insertPendingAttachments(ComposerInsertionAnchor anchor) async {
+    final current = state.value ?? _latestState;
+    if (current == null || current.pendingAttachmentAids.isEmpty) {
+      return;
+    }
+    final resolved = _messageRevisionTracker.resolve(anchor);
+    if (resolved == null) {
+      _setDataState(
+        applyPatch(
+          current,
+          const ComposerStatePatch(
+            pendingAttachmentMessage: '当前选区无法安全恢复，请重新选择位置',
+          ),
+        ),
+      );
+      return;
+    }
+    _insertAidsAtAnchor(current, resolved, current.pendingAttachmentAids);
+  }
+
+  void _insertAidsAtAnchor(
+    TState current,
+    ComposerInsertionAnchor anchor,
+    List<String> aids,
+  ) {
+    final mutation = _messageInsertionService.insertAttachmentBlock(
+      source: current.message,
+      selection: anchor.selection,
+      attachmentCodes: [
+        for (final aid in aids) attachBbCodeService.attachCode(aid),
+      ],
+      revision: _messageRevisionTracker.revision + 1,
+    );
+    _messageRevisionTracker.recordChange(
+      previousSource: current.message,
+      nextSource: mutation.nextSource,
+    );
+    _setDataState(
+      applyPatch(
+        current,
+        ComposerStatePatch(
+          message: mutation.nextSource,
+          messageRevision: _messageRevisionTracker.revision,
+          lastMessageMutation: ComposerTextMutation(
+            previousSource: mutation.previousSource,
+            nextSource: mutation.nextSource,
+            replacedSelection: mutation.replacedSelection,
+            resultSelection: mutation.resultSelection,
+            revision: _messageRevisionTracker.revision,
+          ),
+          pendingAttachmentAids: const <String>[],
+          clearPendingAttachmentMessage: true,
+          clearErrorMessage: true,
+        ),
+      ),
+    );
+    _scheduleDraftSave();
   }
 
   List<ComposerImageAttachment> _replaceAttachmentStatus(
@@ -561,10 +735,18 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           isSubmitting: false,
           message: '',
           imageAttachments: const <ComposerImageAttachment>[],
+          messageRevision: afterSubmit.messageRevision + 1,
+          pendingAttachmentAids: const <String>[],
+          clearLastMessageMutation: true,
+          clearPendingAttachmentMessage: true,
           clearErrorMessage: true,
         ),
       );
       _setDataState(resetAfterSuccess(reset));
+      _messageRevisionTracker.reset(
+        source: '',
+        revision: afterSubmit.messageRevision + 1,
+      );
       return ComposerSubmitInvocationResult.sent(outcome.successMessage ?? '');
     }
 
@@ -592,6 +774,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       ComposerStatePatch(
         message: result.message,
         imageAttachments: result.imageAttachments,
+        messageRevision: current.message == result.message
+            ? current.messageRevision
+            : _recordMessageChange(current.message, result.message),
+        clearLastMessageMutation: true,
         clearImageUploadError: true,
       ),
     );
@@ -622,6 +808,14 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     return resolved;
   }
 
+  int _recordMessageChange(String previousSource, String nextSource) {
+    _messageRevisionTracker.recordChange(
+      previousSource: previousSource,
+      nextSource: nextSource,
+    );
+    return _messageRevisionTracker.revision;
+  }
+
   // ── 内部 ─────────────────────────────────────────────────────
   /// 子类直接写 state 的入口（被业务专属字段更新使用，例如 reply 的 preparation）。
   ///
@@ -633,4 +827,11 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   }
 
   void _setDataState(TState value) => setStateValue(value);
+}
+
+class _ComposerUploadBatch {
+  const _ComposerUploadBatch({required this.anchor, required this.localIds});
+
+  final ComposerInsertionAnchor? anchor;
+  final List<String> localIds;
 }

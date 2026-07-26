@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_context_menu.dart';
@@ -12,6 +15,8 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
     required this.controller,
     required this.enabled,
     required this.onChanged,
+    this.messageRevision = 0,
+    this.onImagePressed,
     this.keyPrefix = 'composer-source',
     this.viewKey,
     this.inputKey,
@@ -40,6 +45,8 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
   final TextEditingController controller;
   final bool enabled;
   final ValueChanged<String> onChanged;
+  final int messageRevision;
+  final ComposerImageInsertCallback? onImagePressed;
   final String keyPrefix;
   final Key? viewKey;
   final Key? inputKey;
@@ -62,6 +69,11 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
               _pickSticker(context);
             },
             onCommandSelected: _insertCommand,
+            onImagePressed: onImagePressed == null
+                ? null
+                : () {
+                    unawaited(_pickImage());
+                  },
           ),
           const SizedBox(height: 12),
           TextField(
@@ -90,6 +102,27 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
     if (sticker != null) {
       _insertSticker(sticker);
     }
+  }
+
+  Future<void> _pickImage() async {
+    final callback = onImagePressed;
+    if (callback == null || !enabled) {
+      return;
+    }
+    final selection = controller.selection;
+    final textLength = controller.text.length;
+    final start = selection.isValid ? selection.start : textLength;
+    final end = selection.isValid ? selection.end : textLength;
+    await callback(
+      ComposerInsertionAnchor(
+        baseRevision: messageRevision,
+        selection: ComposerSelection(
+          start: start.clamp(0, textLength).toInt(),
+          end: end.clamp(0, textLength).toInt(),
+        ),
+        mode: ComposerEditorMode.source,
+      ),
+    );
   }
 
   void _insertCommand(ComposerBbCodeCommand command) {

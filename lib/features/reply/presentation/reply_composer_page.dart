@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
@@ -162,7 +163,15 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
               controller.updateMessage(value);
             },
             onRetryPrepare: controller.retryPreparePostReply,
-            onImagePressed: controller.pickImages,
+            onImagePressed: (anchor) {
+              if (state.pendingAttachmentAids.isNotEmpty) {
+                if (anchor == null) {
+                  return Future<void>.value();
+                }
+                return controller.insertPendingAttachments(anchor);
+              }
+              return controller.pickImages(insertionAnchor: anchor);
+            },
           ),
         ),
       ),
@@ -200,16 +209,16 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
   }
 
   void _syncMessageController(ReplyComposerState state) {
+    final selection = _selectionForMessage(state);
     if (_didApplyRestoredDraft) {
       if (_lastAppliedStateMessage == state.message ||
           _messageController.text == state.message) {
         _lastAppliedStateMessage = state.message;
         return;
       }
-      final nextOffset = state.message.length;
       _messageController.value = TextEditingValue(
         text: state.message,
-        selection: TextSelection.collapsed(offset: nextOffset),
+        selection: selection,
       );
       _lastAppliedStateMessage = state.message;
       return;
@@ -220,6 +229,17 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
       selection: TextSelection.collapsed(offset: state.message.length),
     );
     _lastAppliedStateMessage = state.message;
+  }
+
+  TextSelection _selectionForMessage(ReplyComposerState state) {
+    final mutation = state.lastMessageMutation;
+    if (mutation != null && mutation.revision == state.messageRevision) {
+      final offset = mutation.resultSelection.start
+          .clamp(0, state.message.length)
+          .toInt();
+      return TextSelection.collapsed(offset: offset);
+    }
+    return TextSelection.collapsed(offset: state.message.length);
   }
 
   void _scheduleTransientFeedback(ReplyComposerState state) {
@@ -417,7 +437,7 @@ class _ReplyComposerBody extends StatelessWidget {
   final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onMessageChanged;
   final VoidCallback onRetryPrepare;
-  final Future<void> Function() onImagePressed;
+  final ComposerImageInsertCallback onImagePressed;
 
   @override
   Widget build(BuildContext context) {
@@ -473,6 +493,15 @@ class _ReplyComposerBody extends StatelessWidget {
 
   List<Widget> _buildLeadingFeedbackWidgets(BuildContext context) {
     return [
+      if (state.pendingAttachmentMessage case final message?
+          when message.trim().isNotEmpty) ...[
+        ComposerStatusBanner.info(
+          key: const Key('reply-composer-pending-attachment'),
+          text: message,
+          maxLines: 2,
+        ),
+        const SizedBox(height: 12),
+      ],
       if (state.target.isPostReply) ...[
         _ReplyReferenceStatus(state: state, onRetryPrepare: onRetryPrepare),
         const SizedBox(height: 12),
@@ -516,7 +545,7 @@ class _ReplyMessageEditor extends StatelessWidget {
   final String? initialStickerGroupId;
   final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onMessageChanged;
-  final Future<void> Function() onImagePressed;
+  final ComposerImageInsertCallback onImagePressed;
 
   @override
   Widget build(BuildContext context) {
@@ -543,10 +572,9 @@ class _ReplyMessageEditor extends StatelessWidget {
         hintText: '输入回复内容',
         expand: true,
         onBbCodeChanged: onMessageChanged,
-        onImagePressed: (_) async {
-          await onImagePressed();
-          return null;
-        },
+        messageRevision: state.messageRevision,
+        lastMessageMutation: state.lastMessageMutation,
+        onImagePressed: onImagePressed,
       ),
       ComposerSurfacePreference.source => ComposerBbCodeSourceEditor(
         keyPrefix: 'reply-composer',
@@ -554,6 +582,8 @@ class _ReplyMessageEditor extends StatelessWidget {
         inputKey: const Key('reply-composer-message-input'),
         controller: messageController,
         enabled: enabled,
+        messageRevision: state.messageRevision,
+        onImagePressed: onImagePressed,
         hintText: '输入回复内容',
         onChanged: onMessageChanged,
       ),

@@ -28,6 +28,10 @@ class _TestComposerState extends ComposerStateBase {
     required super.isUploadingImages,
     required super.imageUploadCurrent,
     required super.imageUploadTotal,
+    super.messageRevision,
+    super.lastMessageMutation,
+    super.pendingAttachmentAids,
+    super.pendingAttachmentMessage,
     super.errorMessage,
     super.imageUploadError,
   });
@@ -60,6 +64,15 @@ class _TestComposerState extends ComposerStateBase {
       isUploadingImages: patch.isUploadingImages ?? isUploadingImages,
       imageUploadCurrent: patch.imageUploadCurrent ?? imageUploadCurrent,
       imageUploadTotal: patch.imageUploadTotal ?? imageUploadTotal,
+      messageRevision: patch.messageRevision ?? messageRevision,
+      lastMessageMutation: patch.clearLastMessageMutation
+          ? null
+          : patch.lastMessageMutation ?? lastMessageMutation,
+      pendingAttachmentAids:
+          patch.pendingAttachmentAids ?? pendingAttachmentAids,
+      pendingAttachmentMessage: patch.clearPendingAttachmentMessage
+          ? null
+          : patch.pendingAttachmentMessage ?? pendingAttachmentMessage,
       errorMessage: patch.clearErrorMessage
           ? null
           : patch.errorMessage ?? errorMessage,

@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_size_mapping.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_selection_adapter.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_typing_style_snapshot.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_color_picker_sheet.dart';
@@ -15,9 +17,6 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_link
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_group_panel.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
-
-typedef ComposerQuillImagePicker =
-    Future<ComposerImageAttachment?> Function(BuildContext context);
 
 Widget _defaultQuillAttachImageBuilder(File file, Key key) {
   return Image.file(
@@ -41,6 +40,8 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
     this.initialBbCode,
     this.onBbCodeChanged,
     this.onImagePressed,
+    this.messageRevision = 0,
+    this.lastMessageMutation,
     this.stickers = const <StickerItem>[],
     this.stickerGroups = const <StickerGroup>[],
     this.initialStickerGroupId,
@@ -62,7 +63,9 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
   final QuillController? controller;
   final String? initialBbCode;
   final ValueChanged<String>? onBbCodeChanged;
-  final ComposerQuillImagePicker? onImagePressed;
+  final ComposerImageInsertCallback? onImagePressed;
+  final int messageRevision;
+  final ComposerTextMutation? lastMessageMutation;
   final List<StickerItem> stickers;
   final List<StickerGroup> stickerGroups;
   final String? initialStickerGroupId;
@@ -82,6 +85,8 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
       initialBbCode: initialBbCode,
       onBbCodeChanged: onBbCodeChanged,
       onImagePressed: onImagePressed,
+      messageRevision: messageRevision,
+      lastMessageMutation: lastMessageMutation,
       stickers: stickers,
       stickerGroups: stickerGroups,
       initialStickerGroupId: initialStickerGroupId,
@@ -105,6 +110,8 @@ class ComposerQuillEditorSurface extends StatefulWidget {
     this.initialBbCode,
     this.onBbCodeChanged,
     this.onImagePressed,
+    this.messageRevision = 0,
+    this.lastMessageMutation,
     this.stickers = const <StickerItem>[],
     this.stickerGroups = const <StickerGroup>[],
     this.initialStickerGroupId,
@@ -129,7 +136,9 @@ class ComposerQuillEditorSurface extends StatefulWidget {
   final String? bbCode;
   final String? initialBbCode;
   final ValueChanged<String>? onBbCodeChanged;
-  final ComposerQuillImagePicker? onImagePressed;
+  final ComposerImageInsertCallback? onImagePressed;
+  final int messageRevision;
+  final ComposerTextMutation? lastMessageMutation;
   final List<StickerItem> stickers;
   final List<StickerGroup> stickerGroups;
   final String? initialStickerGroupId;
@@ -153,6 +162,7 @@ class ComposerQuillEditorSurface extends StatefulWidget {
 class _ComposerQuillEditorSurfaceState
     extends State<ComposerQuillEditorSurface> {
   static const _codec = ComposerQuillBbCodeCodec();
+  static const _selectionAdapter = ComposerQuillSelectionAdapter();
 
   late final QuillController _controller;
   late final bool _ownsController;
@@ -160,9 +170,8 @@ class _ComposerQuillEditorSurfaceState
   late final ScrollController _scrollController;
   String _bbCodeText = '';
   bool _isApplyingExternalBbCode = false;
+  String? _ignoredExternalDocumentEncoding;
   ComposerQuillToolPanel? _activePanel;
-  final List<ComposerImageAttachment> _transientImageAttachments =
-      <ComposerImageAttachment>[];
   double _lastKeyboardHeight = 0;
   double? _pendingKeyboardToolbarOffset;
   ComposerQuillTypingStyleSnapshot? _pendingTypingStyleSnapshot;
@@ -173,14 +182,18 @@ class _ComposerQuillEditorSurfaceState
   void initState() {
     super.initState();
     _ownsController = widget.controller == null;
-    _controller =
-        widget.controller ??
-        QuillController(
-          document: _initialBbCode().isEmpty
-              ? Document()
-              : _codec.decodeDocument(_initialBbCode()),
-          selection: const TextSelection.collapsed(offset: 0),
-        );
+    if (widget.controller != null) {
+      _controller = widget.controller!;
+    } else {
+      final document = _initialBbCode().isEmpty
+          ? Document()
+          : _codec.decodeDocument(_initialBbCode());
+      final offset = (document.length - 1).clamp(0, document.length).toInt();
+      _controller = QuillController(
+        document: document,
+        selection: TextSelection.collapsed(offset: offset),
+      );
+    }
     _focusNode = FocusNode();
     _focusNode.addListener(_handleEditorFocusChanged);
     _scrollController = ScrollController();
@@ -353,19 +366,7 @@ class _ComposerQuillEditorSurfaceState
   }
 
   List<ComposerImageAttachment> _mergedImageAttachments() {
-    if (_transientImageAttachments.isEmpty) {
-      return widget.imageAttachments;
-    }
-    final seenAids = <String>{
-      for (final attachment in widget.imageAttachments)
-        if (attachment.hasAid) attachment.aid!.trim(),
-    };
-    return [
-      ...widget.imageAttachments,
-      for (final attachment in _transientImageAttachments)
-        if (attachment.hasAid && !seenAids.contains(attachment.aid!.trim()))
-          attachment,
-    ];
+    return widget.imageAttachments;
   }
 
   double _toolPanelHeight(BuildContext context) {
@@ -604,13 +605,13 @@ class _ComposerQuillEditorSurfaceState
     if (oldWidget.controller != widget.controller) {
       _resetTransientInteractionState();
     }
-    if (oldWidget.bbCode != widget.bbCode) {
+    if (oldWidget.bbCode != widget.bbCode ||
+        oldWidget.lastMessageMutation != widget.lastMessageMutation) {
       if (widget.bbCode != null && widget.bbCode != _bbCodeText) {
         _resetTransientInteractionState();
       }
       _syncExternalBbCode();
     }
-    _dropTransientAttachmentsNowOwnedByWidget();
   }
 
   void _handleDocumentChanged() {
@@ -618,6 +619,13 @@ class _ComposerQuillEditorSurfaceState
       return;
     }
     final next = _codec.encodeDocument(_controller.document);
+    final ignoredEncoding = _ignoredExternalDocumentEncoding;
+    if (ignoredEncoding != null) {
+      if (next == ignoredEncoding) {
+        return;
+      }
+      _ignoredExternalDocumentEncoding = null;
+    }
     if (next == _bbCodeText) {
       return;
     }
@@ -633,65 +641,31 @@ class _ComposerQuillEditorSurfaceState
     if (external == null || external == _bbCodeText) {
       return;
     }
-    if (_tryInsertAppendedAttach(external)) {
-      return;
-    }
-    _applyExternalDocument(_codec.decodeDocument(external), external);
-  }
-
-  bool _tryInsertAppendedAttach(String external) {
-    if (!_isPlainAttachAppend(_bbCodeText, external)) {
-      return false;
-    }
-    final selection = _controller.selection;
     final document = _codec.decodeDocument(external);
-    _isApplyingExternalBbCode = true;
-    try {
-      _controller.document = document;
-      final maxOffset = (document.length - 1).clamp(0, document.length).toInt();
-      _controller.updateSelection(
-        selection.isValid
-            ? TextSelection(
-                baseOffset: selection.baseOffset.clamp(0, maxOffset).toInt(),
-                extentOffset: selection.extentOffset
-                    .clamp(0, maxOffset)
-                    .toInt(),
-              )
-            : TextSelection.collapsed(offset: maxOffset),
-        ChangeSource.local,
+    TextSelection? selection;
+    final mutation = widget.lastMessageMutation;
+    if (mutation != null && mutation.revision == widget.messageRevision) {
+      selection = _selectionAdapter.toQuillSelection(
+        source: external,
+        document: document,
+        selection: mutation.resultSelection,
       );
-      _bbCodeText = external;
-    } finally {
-      _isApplyingExternalBbCode = false;
     }
-    setState(() {});
-    return true;
+    _applyExternalDocument(document, external, selection: selection);
   }
 
-  bool _isPlainAttachAppend(String current, String next) {
-    if (current.isEmpty) {
-      return RegExp(
-        r'^\s*\[attach\][^\[]+\[/attach\]\s*$',
-        caseSensitive: false,
-      ).hasMatch(next);
-    }
-    if (!next.startsWith(current)) {
-      return false;
-    }
-    final appended = next.substring(current.length);
-    return RegExp(
-      r'^\s*\[attach\][^\[]+\[/attach\]\s*$',
-      caseSensitive: false,
-    ).hasMatch(appended);
-  }
-
-  void _applyExternalDocument(Document document, String bbCode) {
+  void _applyExternalDocument(
+    Document document,
+    String bbCode, {
+    TextSelection? selection,
+  }) {
     _isApplyingExternalBbCode = true;
+    _ignoredExternalDocumentEncoding = _codec.encodeDocument(document);
     try {
       _controller.document = document;
       final offset = document.length <= 0 ? 0 : document.length - 1;
       _controller.updateSelection(
-        TextSelection.collapsed(offset: offset),
+        selection ?? TextSelection.collapsed(offset: offset),
         ChangeSource.local,
       );
       _bbCodeText = bbCode;
@@ -701,53 +675,37 @@ class _ComposerQuillEditorSurfaceState
     setState(() {});
   }
 
-  Future<void> _insertImage(BuildContext context) async {
+  Future<void> _insertImage() async {
     if (!widget.enabled) {
       return;
     }
-    final picker = widget.onImagePressed;
-    if (picker == null) {
+    final callback = widget.onImagePressed;
+    if (callback == null) {
       return;
     }
-    final attachment = await picker(context);
-    final aid = attachment?.aid?.trim();
-    if (aid == null || aid.isEmpty) {
-      return;
-    }
-    _rememberTransientAttachment(attachment!);
-    _insertEmbed(composerQuillAttachEmbed(aid), requestFocus: false);
+    final sourceSelection = _selectionAdapter.toSourceSelection(
+      source: _bbCodeText,
+      document: _controller.document,
+      selection: _controller.selection,
+    );
+    final anchor = sourceSelection == null
+        ? null
+        : ComposerInsertionAnchor(
+            baseRevision: widget.messageRevision,
+            selection: sourceSelection,
+            mode: ComposerEditorMode.quill,
+          );
+    await callback(anchor);
   }
 
   Future<void> _handleImagePressed(BuildContext context) async {
     _closeToolPanelForEditorInput();
-    await _insertImage(context);
+    await _insertImage();
     if (!mounted) {
       return;
     }
     _restoreTypingStyleSnapshot();
     _focusNode.requestFocus();
-  }
-
-  void _rememberTransientAttachment(ComposerImageAttachment attachment) {
-    final aid = attachment.aid?.trim();
-    if (aid == null || aid.isEmpty) {
-      return;
-    }
-    _transientImageAttachments.removeWhere((item) => item.aid?.trim() == aid);
-    _transientImageAttachments.add(attachment);
-  }
-
-  void _dropTransientAttachmentsNowOwnedByWidget() {
-    if (_transientImageAttachments.isEmpty) {
-      return;
-    }
-    final widgetAids = <String>{
-      for (final attachment in widget.imageAttachments)
-        if (attachment.hasAid) attachment.aid!.trim(),
-    };
-    _transientImageAttachments.removeWhere(
-      (attachment) => widgetAids.contains(attachment.aid?.trim()),
-    );
   }
 
   void _insertEmbed(Embeddable embed, {bool requestFocus = true}) {

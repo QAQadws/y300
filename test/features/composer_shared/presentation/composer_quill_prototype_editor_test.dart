@@ -12,7 +12,11 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_message_insertion_service.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_selection_adapter.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_sticker_image_cache_loader.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
@@ -918,7 +922,10 @@ void main() {
       _buildEditor(
         controller: controller,
         onBbCodeChanged: (value) => latest = value,
-        onImagePressed: (_) async => _uploadedAttachment(),
+        onImagePressed: (anchor) async {
+          _insertTestAttachment(controller, anchor);
+        },
+        imageAttachments: [_uploadedAttachment()],
         attachImageBuilder: _buildTestAttachPreviewImage,
         attachFileExists: _testAttachFileExists,
         stickerGroups: _stickerGroups(),
@@ -934,7 +941,7 @@ void main() {
     await tester.tap(find.byKey(const Key('test-quill-image-button')));
     await tester.pumpAndSettle();
 
-    expect(latest, '{:9_656:}[attach]123456[/attach]');
+    expect(latest, '{:9_656:}\n[attach]123456[/attach]');
     final stickerImage = tester.widget<ComposerStickerImage>(
       find.byKey(const Key('composer-quill-sticker-{:9_656:}')),
     );
@@ -1066,7 +1073,10 @@ void main() {
       _buildEditor(
         controller: controller,
         onBbCodeChanged: (value) => latest = value,
-        onImagePressed: (_) async => _uploadedAttachment(),
+        onImagePressed: (anchor) async {
+          _insertTestAttachment(controller, anchor);
+        },
+        imageAttachments: [_uploadedAttachment()],
         stickerGroups: _stickerGroups(),
       ),
     );
@@ -1089,7 +1099,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(latest, '[attach]123456[/attach]后续');
+    expect(latest, '\n后续[attach]123456[/attach]');
   });
 }
 
@@ -1199,7 +1209,9 @@ void _expectClearStateOnFormatRow(WidgetTester tester) {
 Widget _buildEditor({
   QuillController? controller,
   ValueChanged<String>? onBbCodeChanged,
-  ComposerQuillImagePicker? onImagePressed,
+  ComposerImageInsertCallback? onImagePressed,
+  List<ComposerImageAttachment> imageAttachments =
+      const <ComposerImageAttachment>[],
   ForumAttachPreviewImageBuilder? attachImageBuilder,
   ForumAttachPreviewFileExists? attachFileExists,
   List<StickerItem> stickers = const <StickerItem>[],
@@ -1238,6 +1250,7 @@ Widget _buildEditor({
             controller: controller,
             onBbCodeChanged: onBbCodeChanged,
             onImagePressed: onImagePressed,
+            imageAttachments: imageAttachments,
             attachImageBuilder: attachImageBuilder,
             attachFileExists: attachFileExists,
             stickers: stickers,
@@ -1248,6 +1261,57 @@ Widget _buildEditor({
         ),
       ),
     ),
+  );
+}
+
+ComposerImageAttachment _uploadedAttachment() {
+  return ComposerImageAttachment(
+    localId: 'local-123456',
+    localPath: '/gallery/123456.png',
+    fileName: '123456.png',
+    mimeType: 'image/png',
+    order: 0,
+    status: ComposerImageAttachmentStatus.uploaded,
+    aid: '123456',
+    uploadedAt: DateTime.utc(2026, 7, 4),
+  );
+}
+
+void _insertTestAttachment(
+  QuillController controller,
+  ComposerInsertionAnchor? anchor,
+) {
+  if (anchor == null) {
+    return;
+  }
+  const codec = ComposerQuillBbCodeCodec();
+  const insertionService = ComposerMessageInsertionService();
+  const selectionAdapter = ComposerQuillSelectionAdapter();
+  final source = codec.encodeDocument(controller.document);
+  final sourceSelection = selectionAdapter.toSourceSelection(
+    source: source,
+    document: controller.document,
+    selection: controller.selection,
+  );
+  if (sourceSelection == null) {
+    return;
+  }
+  final mutation = insertionService.insertAttachmentBlock(
+    source: source,
+    selection: sourceSelection,
+    attachmentCodes: const ['[attach]123456[/attach]'],
+    revision: 1,
+  );
+  final document = codec.decodeDocument(mutation.nextSource);
+  controller.document = document;
+  final selection = selectionAdapter.toQuillSelection(
+    source: mutation.nextSource,
+    document: document,
+    selection: mutation.resultSelection,
+  );
+  controller.updateSelection(
+    selection ?? TextSelection.collapsed(offset: document.length - 1),
+    ChangeSource.local,
   );
 }
 
@@ -1285,19 +1349,6 @@ StickerItem _stickerWith({
     imagePath: imagePath,
     imageUrl: 'https://bbs.yamibo.com/static/image/smiley/$imagePath',
     cacheKey: cacheKey,
-  );
-}
-
-ComposerImageAttachment _uploadedAttachment() {
-  return ComposerImageAttachment(
-    localId: 'local-123456',
-    localPath: '/gallery/123456.png',
-    fileName: '123456.png',
-    mimeType: 'image/png',
-    order: 0,
-    status: ComposerImageAttachmentStatus.uploaded,
-    aid: '123456',
-    uploadedAt: DateTime.utc(2026, 7, 4),
   );
 }
 

@@ -1,4 +1,5 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 
 /// 编辑器通用状态字段。
 ///
@@ -15,6 +16,10 @@ abstract class ComposerStateBase {
     required this.isUploadingImages,
     required this.imageUploadCurrent,
     required this.imageUploadTotal,
+    this.messageRevision = 0,
+    this.lastMessageMutation,
+    this.pendingAttachmentAids = const <String>[],
+    this.pendingAttachmentMessage,
     this.errorMessage,
     this.imageUploadError,
   });
@@ -27,6 +32,10 @@ abstract class ComposerStateBase {
   final bool isUploadingImages;
   final int imageUploadCurrent;
   final int imageUploadTotal;
+  final int messageRevision;
+  final ComposerTextMutation? lastMessageMutation;
+  final List<String> pendingAttachmentAids;
+  final String? pendingAttachmentMessage;
   final String? errorMessage;
   final String? imageUploadError;
 

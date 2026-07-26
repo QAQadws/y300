@@ -1,4 +1,5 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -65,6 +66,10 @@ class ReplyComposerState extends ComposerStateBase {
     required super.isUploadingImages,
     required super.imageUploadCurrent,
     required super.imageUploadTotal,
+    super.messageRevision,
+    super.lastMessageMutation,
+    super.pendingAttachmentAids,
+    super.pendingAttachmentMessage,
     this.preparation,
     this.preparationError,
     super.errorMessage,
@@ -81,6 +86,10 @@ class ReplyComposerState extends ComposerStateBase {
     bool isUploadingImages = false,
     int imageUploadCurrent = 0,
     int imageUploadTotal = 0,
+    int messageRevision = 0,
+    ComposerTextMutation? lastMessageMutation,
+    List<String> pendingAttachmentAids = const <String>[],
+    String? pendingAttachmentMessage,
     ReplyPreparation? preparation,
     String? preparationError,
   }) {
@@ -95,6 +104,10 @@ class ReplyComposerState extends ComposerStateBase {
       isUploadingImages: isUploadingImages,
       imageUploadCurrent: imageUploadCurrent,
       imageUploadTotal: imageUploadTotal,
+      messageRevision: messageRevision,
+      lastMessageMutation: lastMessageMutation,
+      pendingAttachmentAids: pendingAttachmentAids,
+      pendingAttachmentMessage: pendingAttachmentMessage,
       preparation: preparation,
       preparationError: preparationError,
     );
@@ -127,6 +140,10 @@ class ReplyComposerState extends ComposerStateBase {
     bool? isUploadingImages,
     int? imageUploadCurrent,
     int? imageUploadTotal,
+    int? messageRevision,
+    ComposerTextMutation? lastMessageMutation,
+    List<String>? pendingAttachmentAids,
+    String? pendingAttachmentMessage,
     ReplyPreparation? preparation,
     String? preparationError,
     String? errorMessage,
@@ -135,6 +152,8 @@ class ReplyComposerState extends ComposerStateBase {
     bool clearPreparationError = false,
     bool clearErrorMessage = false,
     bool clearImageUploadError = false,
+    bool clearLastMessageMutation = false,
+    bool clearPendingAttachmentMessage = false,
   }) {
     return ReplyComposerState(
       target: target,
@@ -147,6 +166,15 @@ class ReplyComposerState extends ComposerStateBase {
       isUploadingImages: isUploadingImages ?? this.isUploadingImages,
       imageUploadCurrent: imageUploadCurrent ?? this.imageUploadCurrent,
       imageUploadTotal: imageUploadTotal ?? this.imageUploadTotal,
+      messageRevision: messageRevision ?? this.messageRevision,
+      lastMessageMutation: clearLastMessageMutation
+          ? null
+          : lastMessageMutation ?? this.lastMessageMutation,
+      pendingAttachmentAids:
+          pendingAttachmentAids ?? this.pendingAttachmentAids,
+      pendingAttachmentMessage: clearPendingAttachmentMessage
+          ? null
+          : pendingAttachmentMessage ?? this.pendingAttachmentMessage,
       preparation: clearPreparation ? null : preparation ?? this.preparation,
       preparationError: clearPreparationError
           ? null

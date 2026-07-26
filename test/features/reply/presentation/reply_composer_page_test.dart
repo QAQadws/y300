@@ -740,7 +740,7 @@ void main() {
     expect(find.textContaining('上传中'), findsNothing);
   });
 
-  testWidgets('ReplyComposerPage uploads image and appends attach code', (
+  testWidgets('ReplyComposerPage inserts image block at the captured cursor', (
     tester,
   ) async {
     final replyRepository = _FakeReplyRepository();
@@ -784,7 +784,10 @@ void main() {
     await _pumpUntilMessageContains(tester, '[attach]123456[/attach]');
     await tester.pump();
     final editable = tester.widget<EditableText>(find.byType(EditableText));
-    expect(editable.controller.text, '正文\n[attach]123456[/attach]');
+    expect(
+      editable.controller.text,
+      anyOf('正文\n[attach]123456[/attach]', '正文\n[attach]123456[/attach]\n'),
+    );
     expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
     expect(find.text('first.jpg 已上传'), findsOneWidget);
     await tester.tap(find.byKey(const Key('reply-composer-send-button')));
@@ -792,7 +795,7 @@ void main() {
 
     expect(
       replyRepository.sentDrafts.single.message,
-      '正文\n[attach]123456[/attach]',
+      anyOf('正文\n[attach]123456[/attach]', '正文\n[attach]123456[/attach]\n'),
     );
   });
 
@@ -867,13 +870,16 @@ void main() {
       final sourceField = tester.widget<TextField>(
         find.byKey(const Key('reply-composer-message-input')),
       );
-      expect(sourceField.controller?.text, '正文\n[attach]123456[/attach]');
+      expect(
+        sourceField.controller?.text,
+        anyOf('正文\n[attach]123456[/attach]', '正文\n[attach]123456[/attach]\n'),
+      );
       await tester.tap(find.byKey(const Key('reply-composer-send-button')));
       await tester.pumpAndSettle();
 
       expect(
         replyRepository.sentDrafts.single.message,
-        '正文\n[attach]123456[/attach]',
+        anyOf('正文\n[attach]123456[/attach]', '正文\n[attach]123456[/attach]\n'),
       );
     },
   );

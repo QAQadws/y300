@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
@@ -195,7 +196,15 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
             onPollExpirationDaysChanged: controller.updatePollExpirationDays,
             onPollOvertChanged: controller.updatePollOvert,
             onPollVisibilityPollChanged: controller.updatePollVisibilityPoll,
-            onImagePressed: controller.pickImages,
+            onImagePressed: (anchor) {
+              if (state.pendingAttachmentAids.isNotEmpty) {
+                if (anchor == null) {
+                  return Future<void>.value();
+                }
+                return controller.insertPendingAttachments(anchor);
+              }
+              return controller.pickImages(insertionAnchor: anchor);
+            },
           ),
         ),
       ),
@@ -245,6 +254,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
   }
 
   void _syncTextControllers(PostingComposerState state) {
+    final selection = _selectionForMessage(state);
     if (_didApplyRestoredDraft) {
       // 标题
       if (_lastAppliedStateSubject != state.subject &&
@@ -260,7 +270,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
           _messageController.text != state.message) {
         _messageController.value = TextEditingValue(
           text: state.message,
-          selection: TextSelection.collapsed(offset: state.message.length),
+          selection: selection,
         );
       }
       _lastAppliedStateMessage = state.message;
@@ -277,6 +287,17 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     );
     _lastAppliedStateSubject = state.subject;
     _lastAppliedStateMessage = state.message;
+  }
+
+  TextSelection _selectionForMessage(PostingComposerState state) {
+    final mutation = state.lastMessageMutation;
+    if (mutation != null && mutation.revision == state.messageRevision) {
+      final offset = mutation.resultSelection.start
+          .clamp(0, state.message.length)
+          .toInt();
+      return TextSelection.collapsed(offset: offset);
+    }
+    return TextSelection.collapsed(offset: state.message.length);
   }
 
   void _scheduleTransientFeedback(PostingComposerState state) {
@@ -546,7 +567,7 @@ class _PostingComposerBody extends StatefulWidget {
   final ValueChanged<int> onPollExpirationDaysChanged;
   final ValueChanged<bool> onPollOvertChanged;
   final ValueChanged<bool> onPollVisibilityPollChanged;
-  final Future<void> Function() onImagePressed;
+  final ComposerImageInsertCallback onImagePressed;
 
   @override
   State<_PostingComposerBody> createState() => _PostingComposerBodyState();
@@ -635,6 +656,15 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
     final state = widget.state;
     final disabled = state.isSubmitting;
     return [
+      if (state.pendingAttachmentMessage case final message?
+          when message.trim().isNotEmpty) ...[
+        ComposerStatusBanner.info(
+          key: const Key('posting-composer-pending-attachment'),
+          text: message,
+          maxLines: 2,
+        ),
+        const SizedBox(height: 12),
+      ],
       _buildMetadataBanner(),
       _buildMetadataSpacer(),
       ThreadSubjectField(
@@ -823,7 +853,7 @@ class _PostingMessageEditor extends StatelessWidget {
   final String? initialStickerGroupId;
   final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onMessageChanged;
-  final Future<void> Function() onImagePressed;
+  final ComposerImageInsertCallback onImagePressed;
 
   @override
   Widget build(BuildContext context) {
@@ -849,10 +879,9 @@ class _PostingMessageEditor extends StatelessWidget {
         hintText: '请注意上传的图片仅在本地保存24小时',
         expand: true,
         onBbCodeChanged: onMessageChanged,
-        onImagePressed: (_) async {
-          await onImagePressed();
-          return null;
-        },
+        messageRevision: state.messageRevision,
+        lastMessageMutation: state.lastMessageMutation,
+        onImagePressed: onImagePressed,
       ),
       ComposerSurfacePreference.source => ComposerBbCodeSourceEditor(
         keyPrefix: 'posting-composer',
@@ -860,6 +889,8 @@ class _PostingMessageEditor extends StatelessWidget {
         inputKey: const Key('posting-composer-message-input'),
         controller: messageController,
         enabled: enabled,
+        messageRevision: state.messageRevision,
+        onImagePressed: onImagePressed,
         hintText: '请注意上传的图片仅在本地保存24小时',
         onChanged: onMessageChanged,
       ),

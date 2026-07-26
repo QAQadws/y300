@@ -7,6 +7,7 @@ import 'package:y300/features/composer_shared/data/repositories/composer_draft_r
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
@@ -407,13 +408,23 @@ void main() {
         );
         controller.updateSubject('标题');
         controller.updateMessage('正文');
-        await controller.pickImages();
+        final beforeUpload = controller.latestState!;
+        await controller.pickImages(
+          insertionAnchor: ComposerInsertionAnchor(
+            baseRevision: beforeUpload.messageRevision,
+            selection: ComposerSelection(
+              start: beforeUpload.message.length,
+              end: beforeUpload.message.length,
+            ),
+            mode: ComposerEditorMode.source,
+          ),
+        );
         await _drain();
 
         final state = container
             .read(postingComposerControllerProvider(args))
             .value!;
-        expect(state.message, '正文\n[attach]777[/attach]');
+        expect(state.message, '正文\n[attach]777[/attach]\n');
         expect(state.imageAttachments.single.aid, '777');
 
         final result = await controller.submit();

@@ -6,6 +6,7 @@ import 'package:y300/features/composer_shared/data/repositories/composer_draft_r
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
@@ -94,7 +95,17 @@ void main() {
 
         controller.toggleUseSignature(false);
         controller.updateMessage('正文');
-        await controller.pickImages();
+        final beforeUpload = controller.latestState!;
+        await controller.pickImages(
+          insertionAnchor: ComposerInsertionAnchor(
+            baseRevision: beforeUpload.messageRevision,
+            selection: ComposerSelection(
+              start: beforeUpload.message.length,
+              end: beforeUpload.message.length,
+            ),
+            mode: ComposerEditorMode.source,
+          ),
+        );
         coordinator.emitStarted();
         await _drain();
         await controller.flushDraft();
@@ -123,45 +134,111 @@ void main() {
       },
     );
 
+    test('image upload event inserts attach code and saves draft', () async {
+      final draftRepository = _MemoryDraftRepository();
+      final imagePicker = _FakeImagePicker(
+        images: const [
+          ComposerPickedImage(
+            path: '/gallery/first.jpg',
+            fileName: 'first.jpg',
+            mimeType: 'image/jpeg',
+            originalIndex: 0,
+          ),
+        ],
+      );
+      final coordinator = _FakeUploadCoordinator(
+        events: [
+          const ComposerImageUploadEvent.started(
+            localId: '',
+            current: 1,
+            total: 1,
+          ),
+          ComposerImageUploadEvent.uploaded(
+            localId: '',
+            current: 1,
+            total: 1,
+            uploadedImage: ComposerUploadedImage(
+              localId: '',
+              aid: '789',
+              uploadedAt: DateTime.utc(2026, 6, 8),
+            ),
+          ),
+          const ComposerImageUploadEvent.completed(total: 1),
+        ],
+      );
+      final args = _TestArgs(fid: '33', tid: '572063');
+      final container = _buildContainer(
+        draftRepository: draftRepository,
+        imagePicker: imagePicker,
+        imageUploadCoordinator: coordinator,
+      );
+      addTearDown(container.dispose);
+      _keepAlive(container, args);
+      await container.read(_testControllerProvider(args).future);
+      final controller = container.read(_testControllerProvider(args).notifier);
+
+      final beforeUpload = container.read(_testControllerProvider(args)).value!;
+      await controller.pickImages(
+        insertionAnchor: ComposerInsertionAnchor(
+          baseRevision: beforeUpload.messageRevision,
+          selection: ComposerSelection(
+            start: beforeUpload.message.length,
+            end: beforeUpload.message.length,
+          ),
+          mode: ComposerEditorMode.source,
+        ),
+      );
+      await _drain();
+      await controller.flushDraft();
+
+      final state = container.read(_testControllerProvider(args)).value!;
+      expect(state.message, '[attach]789[/attach]\n');
+      expect(
+        state.lastMessageMutation?.resultSelection,
+        ComposerSelection(
+          start: state.message.length,
+          end: state.message.length,
+        ),
+      );
+      expect(state.imageAttachments.single.aid, '789');
+      expect(
+        state.imageAttachments.single.status,
+        ComposerImageAttachmentStatus.uploaded,
+      );
+      final saved = await draftRepository.loadDraft(args.identity);
+      expect(saved?.imageAttachments.single.aid, '789');
+    });
+
     test(
-      'image upload event flow appends attach code and saves draft',
+      'upload without an anchor stays pending until a new position is chosen',
       () async {
-        final draftRepository = _MemoryDraftRepository();
-        final imagePicker = _FakeImagePicker(
-          images: const [
-            ComposerPickedImage(
-              path: '/gallery/first.jpg',
-              fileName: 'first.jpg',
-              mimeType: 'image/jpeg',
-              originalIndex: 0,
-            ),
-          ],
-        );
-        final coordinator = _FakeUploadCoordinator(
-          events: [
-            const ComposerImageUploadEvent.started(
-              localId: '',
-              current: 1,
-              total: 1,
-            ),
-            ComposerImageUploadEvent.uploaded(
-              localId: '',
-              current: 1,
-              total: 1,
-              uploadedImage: ComposerUploadedImage(
-                localId: '',
-                aid: '789',
-                uploadedAt: DateTime.utc(2026, 6, 8),
-              ),
-            ),
-            const ComposerImageUploadEvent.completed(total: 1),
-          ],
-        );
         final args = _TestArgs(fid: '33', tid: '572063');
         final container = _buildContainer(
-          draftRepository: draftRepository,
-          imagePicker: imagePicker,
-          imageUploadCoordinator: coordinator,
+          imagePicker: _FakeImagePicker(
+            images: const [
+              ComposerPickedImage(
+                path: '/gallery/pending.jpg',
+                fileName: 'pending.jpg',
+                mimeType: 'image/jpeg',
+                originalIndex: 0,
+              ),
+            ],
+          ),
+          imageUploadCoordinator: _FakeUploadCoordinator(
+            events: [
+              ComposerImageUploadEvent.uploaded(
+                localId: '',
+                current: 1,
+                total: 1,
+                uploadedImage: ComposerUploadedImage(
+                  localId: '',
+                  aid: '790',
+                  uploadedAt: DateTime.utc(2026, 6, 8),
+                ),
+              ),
+              const ComposerImageUploadEvent.completed(total: 1),
+            ],
+          ),
         );
         addTearDown(container.dispose);
         _keepAlive(container, args);
@@ -172,19 +249,68 @@ void main() {
 
         await controller.pickImages();
         await _drain();
-        await controller.flushDraft();
 
-        final state = container.read(_testControllerProvider(args)).value!;
-        expect(state.message, '[attach]789[/attach]');
-        expect(state.imageAttachments.single.aid, '789');
-        expect(
-          state.imageAttachments.single.status,
-          ComposerImageAttachmentStatus.uploaded,
+        final pending = container.read(_testControllerProvider(args)).value!;
+        expect(pending.message, isEmpty);
+        expect(pending.pendingAttachmentAids, ['790']);
+
+        await controller.insertPendingAttachments(
+          ComposerInsertionAnchor(
+            baseRevision: pending.messageRevision,
+            selection: const ComposerSelection(start: 0, end: 0),
+            mode: ComposerEditorMode.source,
+          ),
         );
-        final saved = await draftRepository.loadDraft(args.identity);
-        expect(saved?.imageAttachments.single.aid, '789');
+
+        final inserted = container.read(_testControllerProvider(args)).value!;
+        expect(inserted.message, '[attach]790[/attach]\n');
+        expect(inserted.pendingAttachmentAids, isEmpty);
+        expect(inserted.pendingAttachmentMessage, isNull);
       },
     );
+
+    test('unsafe selection recovery keeps the uploaded aid pending', () async {
+      final args = _TestArgs(fid: '33', tid: '572063');
+      final coordinator = _ControllableUploadCoordinator();
+      addTearDown(coordinator.close);
+      final container = _buildContainer(
+        imagePicker: _FakeImagePicker(
+          images: const [
+            ComposerPickedImage(
+              path: '/gallery/unsafe.jpg',
+              fileName: 'unsafe.jpg',
+              mimeType: 'image/jpeg',
+              originalIndex: 0,
+            ),
+          ],
+        ),
+        imageUploadCoordinator: coordinator,
+      );
+      addTearDown(container.dispose);
+      _keepAlive(container, args);
+      await container.read(_testControllerProvider(args).future);
+      final controller = container.read(_testControllerProvider(args).notifier);
+      controller.updateMessage('你好世界');
+      final beforeUpload = controller.latestState!;
+      await controller.pickImages(
+        insertionAnchor: ComposerInsertionAnchor(
+          baseRevision: beforeUpload.messageRevision,
+          selection: const ComposerSelection(start: 2, end: 2),
+          mode: ComposerEditorMode.source,
+        ),
+      );
+      coordinator.emitStarted();
+      await _drain();
+      controller.updateMessage('新内容');
+      coordinator.emitUploaded(aid: '791');
+      coordinator.emitCompleted();
+      await _drain();
+
+      final state = container.read(_testControllerProvider(args)).value!;
+      expect(state.message, '新内容');
+      expect(state.message, isNot(contains('[attach]791[/attach]')));
+      expect(state.pendingAttachmentAids, ['791']);
+    });
 
     test(
       'preflight failure short-circuits submit and does not call performSubmit',

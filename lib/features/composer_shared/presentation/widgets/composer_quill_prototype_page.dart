@@ -3,9 +3,11 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_message_insertion_service.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_context_menu.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_toolbar.dart';
@@ -25,6 +27,7 @@ class _ComposerQuillPrototypePageState
     extends ConsumerState<ComposerQuillPrototypePage> {
   static const _codec = ComposerQuillBbCodeCodec();
   static const _insertionService = ComposerBbCodeInsertionService();
+  static const _messageInsertionService = ComposerMessageInsertionService();
 
   final QuillController _quillController = QuillController.basic();
   final TextEditingController _sourceController = TextEditingController();
@@ -205,9 +208,7 @@ class _ComposerQuillPrototypePageState
     );
   }
 
-  Future<ComposerImageAttachment?> _insertFakeUploadedImage(
-    BuildContext context,
-  ) async {
+  Future<void> _insertFakeUploadedImage(ComposerInsertionAnchor? anchor) async {
     final aid = (_nextAid++).toString();
     final attachment = ComposerImageAttachment(
       localId: 'quill-prototype-$aid',
@@ -221,11 +222,26 @@ class _ComposerQuillPrototypePageState
     );
     setState(() {
       _imageAttachments.add(attachment);
+      if (anchor != null) {
+        final mutation = _messageInsertionService.insertAttachmentBlock(
+          source: _bbCodeText,
+          selection: anchor.selection,
+          attachmentCodes: ['[attach]$aid[/attach]'],
+          revision: 0,
+        );
+        _bbCodeText = mutation.nextSource;
+        _sourceController.value = TextEditingValue(
+          text: _bbCodeText,
+          selection: TextSelection.collapsed(
+            offset: mutation.resultSelection.start,
+          ),
+        );
+        _quillController.document = _codec.decodeDocument(_bbCodeText);
+      }
     });
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text('已插入测试附件 $aid')));
-    return attachment;
   }
 }
 

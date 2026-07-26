@@ -1,5 +1,6 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
@@ -52,6 +53,10 @@ class PostingComposerState extends ComposerStateBase {
     required super.isUploadingImages,
     required super.imageUploadCurrent,
     required super.imageUploadTotal,
+    super.messageRevision,
+    super.lastMessageMutation,
+    super.pendingAttachmentAids,
+    super.pendingAttachmentMessage,
     required this.isLoadingMetadata,
     this.metadata,
     this.metadataError,
@@ -74,6 +79,10 @@ class PostingComposerState extends ComposerStateBase {
     bool useSignature = true,
     bool restoredDraft = false,
     List<ComposerImageAttachment> imageAttachments = const [],
+    int messageRevision = 0,
+    ComposerTextMutation? lastMessageMutation,
+    List<String> pendingAttachmentAids = const <String>[],
+    String? pendingAttachmentMessage,
     bool isLoadingMetadata = true,
     NewThreadFormMetadata? metadata,
     String? metadataError,
@@ -97,6 +106,10 @@ class PostingComposerState extends ComposerStateBase {
       isUploadingImages: false,
       imageUploadCurrent: 0,
       imageUploadTotal: 0,
+      messageRevision: messageRevision,
+      lastMessageMutation: lastMessageMutation,
+      pendingAttachmentAids: pendingAttachmentAids,
+      pendingAttachmentMessage: pendingAttachmentMessage,
       isLoadingMetadata: isLoadingMetadata,
       metadata: metadata,
       metadataError: metadataError,
@@ -205,6 +218,10 @@ class PostingComposerState extends ComposerStateBase {
     bool? isUploadingImages,
     int? imageUploadCurrent,
     int? imageUploadTotal,
+    int? messageRevision,
+    ComposerTextMutation? lastMessageMutation,
+    List<String>? pendingAttachmentAids,
+    String? pendingAttachmentMessage,
     bool? isLoadingMetadata,
     NewThreadFormMetadata? metadata,
     String? metadataError,
@@ -224,6 +241,8 @@ class PostingComposerState extends ComposerStateBase {
     bool clearPoll = false,
     bool clearErrorMessage = false,
     bool clearImageUploadError = false,
+    bool clearLastMessageMutation = false,
+    bool clearPendingAttachmentMessage = false,
   }) {
     return PostingComposerState(
       target: target,
@@ -236,6 +255,15 @@ class PostingComposerState extends ComposerStateBase {
       isUploadingImages: isUploadingImages ?? this.isUploadingImages,
       imageUploadCurrent: imageUploadCurrent ?? this.imageUploadCurrent,
       imageUploadTotal: imageUploadTotal ?? this.imageUploadTotal,
+      messageRevision: messageRevision ?? this.messageRevision,
+      lastMessageMutation: clearLastMessageMutation
+          ? null
+          : lastMessageMutation ?? this.lastMessageMutation,
+      pendingAttachmentAids:
+          pendingAttachmentAids ?? this.pendingAttachmentAids,
+      pendingAttachmentMessage: clearPendingAttachmentMessage
+          ? null
+          : pendingAttachmentMessage ?? this.pendingAttachmentMessage,
       isLoadingMetadata: isLoadingMetadata ?? this.isLoadingMetadata,
       metadata: clearMetadata ? null : metadata ?? this.metadata,
       metadataError: clearMetadataError
