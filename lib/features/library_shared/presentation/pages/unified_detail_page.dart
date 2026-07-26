@@ -10,6 +10,7 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_detail_controller.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_catalog_sheet.dart';
+import 'package:y300/features/library_shared/presentation/detail/unified_detail_chapter_management_sheet.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_chapter_tile.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_filter_sheet.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_header.dart';
@@ -122,6 +123,13 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     final adapter = widget.adapter;
     return adapter is DetailWorkReadingResetAdapter
         ? adapter as DetailWorkReadingResetAdapter
+        : null;
+  }
+
+  DetailChapterManagementAdapter? get _chapterManagementAdapter {
+    final adapter = widget.adapter;
+    return adapter is DetailChapterManagementAdapter
+        ? adapter as DetailChapterManagementAdapter
         : null;
   }
 
@@ -671,6 +679,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
@@ -844,12 +853,55 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       setState(() {});
                     },
                   ),
+                if (_chapterManagementAdapter != null)
+                  ListTile(
+                    key: const Key('unified-detail-chapter-management-action'),
+                    leading: const Icon(Icons.playlist_add_check),
+                    title: const Text('管理章节'),
+                    subtitle: const Text('显示/隐藏章节，手动添加或移除'),
+                    onTap: () async {
+                      if (!sheetContext.mounted) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                      await _showChapterManagementSheet();
+                    },
+                  ),
               ],
             ),
           ),
         );
       },
     );
+  }
+
+  Future<void> _showChapterManagementSheet() async {
+    final adapter = _chapterManagementAdapter;
+    if (adapter == null) {
+      return;
+    }
+    var changed = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return UnifiedDetailChapterManagementSheet(
+          workId: widget.workId,
+          adapter: adapter,
+          onChanged: () => changed = true,
+        );
+      },
+    );
+    // 章节可见性直接决定详情列表与阅读器导航，关闭后必须重新加载一次；
+    // 没有任何写入时跳过，避免长列表白重排一遍。
+    if (!changed || !mounted) {
+      return;
+    }
+    await _controller.reload();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _confirmAndResetWorkReadingState() async {

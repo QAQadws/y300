@@ -4,6 +4,7 @@ import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
 import 'package:y300/features/comic/data/local/comic_detail_store.dart';
 import 'package:y300/features/comic/data/local/comic_duplicate_merge_store.dart';
+import 'package:y300/features/comic/data/local/comic_episode_management_store.dart';
 import 'package:y300/features/comic/data/local/comic_episode_store.dart';
 import 'package:y300/features/comic/data/local/comic_reading_progress_store.dart';
 import 'package:y300/features/comic/data/local/comic_shelf_store.dart';
@@ -30,6 +31,7 @@ class LocalComicRepository
         ComicCoverCacheWriter,
         ComicFirstEpisodeCoverWriter,
         ComicDuplicateMergeRepository,
+        ComicEpisodeManagementRepository,
         ComicEpisodeImageCacheMetadataWriter {
   LocalComicRepository(
     this._dbFuture, {
@@ -56,6 +58,7 @@ class LocalComicRepository
       coverStore: _coverStore,
     );
     _snapshotStore = ComicSnapshotStore(_dbFuture);
+    _episodeManagementStore = ComicEpisodeManagementStore(_dbFuture);
   }
 
   static const String _defaultCategoryId = 'default';
@@ -71,6 +74,7 @@ class LocalComicRepository
   late final ComicReadingProgressStore _readingProgressStore;
   late final ComicDuplicateMergeStore _duplicateMergeStore;
   late final ComicSnapshotStore _snapshotStore;
+  late final ComicEpisodeManagementStore _episodeManagementStore;
 
   @override
   Future<List<ComicShelfCategory>> getCategories() {
@@ -369,6 +373,68 @@ class LocalComicRepository
   }
 
   @override
+  Future<List<ComicEpisodeItem>> getManagedComicEpisodes({
+    required String comicId,
+    bool descending = true,
+  }) {
+    return _episodeStore.getComicEpisodes(
+      comicId: comicId,
+      descending: descending,
+      includeHidden: true,
+    );
+  }
+
+  @override
+  Future<bool> addManualEpisode({
+    required String comicId,
+    required String sourceTid,
+    required String sourceUrl,
+    String? episodeTitle,
+  }) {
+    return _episodeManagementStore.addManualEpisode(
+      comicId: comicId,
+      sourceTid: sourceTid,
+      sourceUrl: sourceUrl,
+      episodeTitle: episodeTitle,
+    );
+  }
+
+  @override
+  Future<bool> removeManualEpisode({
+    required String comicId,
+    required String episodeId,
+  }) {
+    return _episodeManagementStore.removeManualEpisode(
+      comicId: comicId,
+      episodeId: episodeId,
+    );
+  }
+
+  @override
+  Future<void> setEpisodeHidden({
+    required String comicId,
+    required String episodeId,
+    required bool isHidden,
+  }) {
+    return _episodeManagementStore.setEpisodeHidden(
+      comicId: comicId,
+      episodeId: episodeId,
+      isHidden: isHidden,
+    );
+  }
+
+  @override
+  Future<int> setAllEpisodesHidden({
+    required String comicId,
+    required bool isHidden,
+  }) {
+    return _episodeManagementStore.setAllEpisodesHidden(
+      comicId: comicId,
+      isHidden: isHidden,
+    );
+  }
+
+  @override
   Future<List<ComicEpisodeImageItem>> getEpisodeImages({
     required String episodeId,
   }) {
@@ -497,9 +563,12 @@ class LocalComicRepository
 
   @override
   Future<Set<String>> getKnownEpisodeTids({required String comicId}) async {
+    // 增量发现要包含隐藏章节：隐藏只影响“是否展示给用户”，本地已经存在的
+    // tid 不应该被再次算作新章节而触发更新提示。
     final episodes = await _episodeStore.getComicEpisodes(
       comicId: comicId,
       descending: false,
+      includeHidden: true,
     );
     return episodes.map((e) => e.sourceTid).toSet();
   }

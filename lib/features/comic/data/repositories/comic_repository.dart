@@ -213,6 +213,44 @@ abstract class ComicCatalogOverrideRepository {
   });
 }
 
+/// 章节管理的可选持久化能力。
+///
+/// 与 [ComicRepository.getComicEpisodes] 分开：那条读路径服务于阅读，默认只
+/// 给出可见章节；这里服务于管理面板，需要看到并改写全部章节（含隐藏项）。
+abstract class ComicEpisodeManagementRepository {
+  /// 读取全部章节（包含隐藏项），仅供管理面板使用。
+  Future<List<ComicEpisodeItem>> getManagedComicEpisodes({
+    required String comicId,
+    bool descending = true,
+  });
+
+  /// 按 tid 手动添加章节；tid 已存在时返回 false。
+  Future<bool> addManualEpisode({
+    required String comicId,
+    required String sourceTid,
+    required String sourceUrl,
+    String? episodeTitle,
+  });
+
+  /// 移除手动章节；解析章节不可移除，返回 false。
+  Future<bool> removeManualEpisode({
+    required String comicId,
+    required String episodeId,
+  });
+
+  Future<void> setEpisodeHidden({
+    required String comicId,
+    required String episodeId,
+    required bool isHidden,
+  });
+
+  /// 批量切换全部章节的显示状态，返回实际改动行数。
+  Future<int> setAllEpisodesHidden({
+    required String comicId,
+    required bool isHidden,
+  });
+}
+
 abstract class ComicShelfSnapshotRepository {
   Future<LibraryShelfSnapshot> queryShelfSnapshot({
     required LibraryFilterSet filters,

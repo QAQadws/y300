@@ -30,6 +30,7 @@ class ComicSnapshotStore {
         LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} s
           ON s.content_type = 'comic'
          AND s.episode_id = e.episode_id
+        WHERE e.is_hidden = 0
         GROUP BY e.comic_id
       ),
       tag_stats AS (
@@ -132,7 +133,7 @@ class ComicSnapshotStore {
       LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} s
         ON s.content_type = 'comic'
        AND s.episode_id = e.episode_id
-      WHERE e.comic_id = ?
+      WHERE e.comic_id = ? AND e.is_hidden = 0
     ''',
       <Object>[comicId],
     );

@@ -1,0 +1,78 @@
+import 'package:y300/core/config/app_config.dart';
+import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+
+/// 手动添加章节的解析结果。
+class ManualEpisodeTarget {
+  const ManualEpisodeTarget({required this.tid, required this.sourceUrl});
+
+  /// 帖子 tid，章节写库后作为 `source_tid`，阅读器的接口请求与原帖跳转都复用它。
+  final String tid;
+
+  /// 归一化后的帖子地址，仅用于展示与回溯来源。
+  final String sourceUrl;
+}
+
+/// 校验并归一化用户手动输入的章节地址。
+///
+/// 用户可能从站内任意位置复制链接（网页版 forum.php、伪静态 thread-*.html、
+/// 移动端 api/mobile），三种形态携带的有效信息只有 tid。这里统一收敛成 tid，
+/// 让下游完全不必关心用户从哪一种页面复制的。
+class ComicManualEpisodeUrlPolicy {
+  const ComicManualEpisodeUrlPolicy({
+    ForumThreadUrlParser threadUrlParser = const ForumThreadUrlParser(),
+  }) : _threadUrlParser = threadUrlParser;
+
+  final ForumThreadUrlParser _threadUrlParser;
+
+  static final RegExp _tidPattern = RegExp(r'^[1-9][0-9]*$');
+
+  /// 解析输入，失败时抛出面向用户的 [FormatException]。
+  ManualEpisodeTarget parse(String rawInput) {
+    final value = rawInput.trim();
+    if (value.isEmpty) {
+      throw const FormatException('请输入帖子链接或 tid');
+    }
+
+    // 纯数字直接当 tid：输入里唯一有用的信息本来就是它，没必要强迫用户拼一个
+    // 完整链接再被解析回来。
+    if (_tidPattern.hasMatch(value)) {
+      return ManualEpisodeTarget(tid: value, sourceUrl: _viewThreadUrl(value));
+    }
+
+    final normalized = _threadUrlParser.normalizeHref(value);
+    if (normalized == null) {
+      throw const FormatException('链接格式无效，请检查后重试');
+    }
+
+    final uri = Uri.tryParse(normalized);
+    if (uri == null) {
+      throw const FormatException('链接格式无效，请检查后重试');
+    }
+    if (uri.hasScheme && uri.scheme != 'http' && uri.scheme != 'https') {
+      throw const FormatException('链接仅支持 http 或 https');
+    }
+
+    final siteHost = Uri.parse(AppConfig.siteBaseUrl).host;
+    if (uri.host.isNotEmpty &&
+        uri.host.toLowerCase() != siteHost.toLowerCase()) {
+      throw FormatException('链接必须来自 $siteHost');
+    }
+
+    if (!_threadUrlParser.isSupportedThreadUrl(normalized)) {
+      throw const FormatException('链接不是有效的帖子地址');
+    }
+
+    final tid = _threadUrlParser.extractTid(normalized);
+    if (tid == null || !_tidPattern.hasMatch(tid)) {
+      throw const FormatException('无法从链接中识别帖子 tid');
+    }
+    return ManualEpisodeTarget(tid: tid, sourceUrl: _viewThreadUrl(tid));
+  }
+
+  /// 统一回写成网页版帖子地址：入库地址与用户输入形态解耦，列表展示才稳定。
+  String _viewThreadUrl(String tid) {
+    return Uri.parse(
+      '${AppConfig.siteBaseUrl}/',
+    ).resolve('forum.php?mod=viewthread&tid=$tid').toString();
+  }
+}

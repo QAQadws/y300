@@ -114,6 +114,8 @@ class ComicEpisodeItem {
     required this.sourceUrl,
     required this.orderIndex,
     required this.publishTimeText,
+    this.isManual = false,
+    this.isHidden = false,
   });
 
   final String episodeId;
@@ -123,6 +125,12 @@ class ComicEpisodeItem {
   final String sourceUrl;
   final int orderIndex;
   final String? publishTimeText;
+
+  /// 用户手动添加的章节；解析章节为 false。只有手动章节可以被移除。
+  final bool isManual;
+
+  /// 用户隐藏的章节。隐藏章节默认不进入详情列表与阅读器章节导航。
+  final bool isHidden;
 }
 
 class ComicEpisodeRefreshResult {

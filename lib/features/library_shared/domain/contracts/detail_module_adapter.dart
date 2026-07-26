@@ -158,6 +158,80 @@ abstract interface class DetailChapterDownloadActivityAdapter {
   });
 }
 
+/// 章节管理面板中的一条章节。
+///
+/// 与 [LibraryChapterItem] 分开：列表项服务于阅读入口（已读/下载/书签），
+/// 这里服务于“章节从哪来、要不要显示、能不能删”，两组字段的生命周期不同。
+class DetailManagedChapter {
+  const DetailManagedChapter({
+    required this.episodeId,
+    required this.title,
+    required this.sourceTid,
+    required this.isManual,
+    required this.isHidden,
+  });
+
+  final String episodeId;
+  final String title;
+
+  /// 帖子 tid，同时是阅读器接口请求与原帖跳转的唯一入参。
+  final String sourceTid;
+
+  /// 用户手动添加的章节；只有它可以被移除。
+  final bool isManual;
+
+  /// 隐藏章节不出现在详情列表与阅读器章节导航中。
+  final bool isHidden;
+}
+
+class DetailChapterRemovalResult {
+  const DetailChapterRemovalResult({required this.removed, this.warning});
+
+  final bool removed;
+  final String? warning;
+}
+
+/// 章节管理可选能力。
+///
+/// 只有能区分“解析章节”与“手动添加章节”的模块实现该合同。统一详情页据此
+/// 在章节长按菜单里展示“管理章节”，共享页面不需要知道 tid 拼接规则。
+abstract interface class DetailChapterManagementAdapter {
+  /// 读取全部章节，包含隐藏项，按当前排序返回。
+  Future<List<DetailManagedChapter>> loadManagedChapters({
+    required String workId,
+  });
+
+  /// 按用户输入的帖子链接或 tid 添加手动章节。
+  ///
+  /// 输入非法时抛出 [FormatException]，其 message 直接面向用户展示；章节
+  /// 已存在时返回 false。
+  Future<bool> addManualChapter({
+    required String workId,
+    required String input,
+  });
+
+  /// 移除手动章节。解析章节不可移除，返回 removed=false。
+  ///
+  /// 数据库记录删除成功后，外部下载文件清理失败不会伪装成整个操作失败，
+  /// 通过 [DetailChapterRemovalResult.warning] 向 UI 暴露清理告警。
+  Future<DetailChapterRemovalResult> removeManualChapter({
+    required String workId,
+    required String episodeId,
+  });
+
+  Future<void> setChapterHidden({
+    required String workId,
+    required String episodeId,
+    required bool isHidden,
+  });
+
+  /// 一次性显示/隐藏全部章节。
+  Future<void> setAllChaptersHidden({
+    required String workId,
+    required bool isHidden,
+  });
+}
+
 /// 作品元数据编辑能力。
 ///
 /// 统一详情页只在 adapter 实现该接口时显示“编辑作品信息”。字段文案和

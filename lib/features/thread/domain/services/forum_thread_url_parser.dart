@@ -43,11 +43,16 @@ class ForumThreadUrlParser {
     final isThreadHtml = _threadPathPattern.hasMatch(effectiveUri.path);
     final rawQuery = effectiveUri.query;
     final rawMod = _rawQueryValue(rawQuery, 'mod');
+    final rawModule = _rawQueryValue(rawQuery, 'module');
     final rawTid = _rawQueryValue(rawQuery, 'tid');
     final rawFromuid = _rawQueryValue(rawQuery, 'fromuid');
     final isForumViewThread =
         effectiveUri.path.toLowerCase().endsWith('forum.php') &&
         rawMod?.toLowerCase() == 'viewthread' &&
+        (rawTid?.trim().isNotEmpty ?? false);
+    final isMobileViewThread =
+        effectiveUri.path.toLowerCase().endsWith('/api/mobile/index.php') &&
+        rawModule?.toLowerCase() == 'viewthread' &&
         (rawTid?.trim().isNotEmpty ?? false);
 
     String? normalizedQuery;
@@ -58,6 +63,12 @@ class ForumThreadUrlParser {
         'mod=viewthread',
         if (tid != null) 'tid=$tid',
         if (fromuid != null && fromuid.trim().isNotEmpty) 'fromuid=$fromuid',
+      ].join('&');
+    } else if (isMobileViewThread) {
+      final tid = rawTid?.trim();
+      normalizedQuery = <String>[
+        'module=viewthread',
+        if (tid != null) 'tid=$tid',
       ].join('&');
     } else if (isThreadHtml) {
       normalizedQuery = null;
@@ -91,10 +102,39 @@ class ForumThreadUrlParser {
       }
     }
 
+    if (uri != null &&
+        uri.path.toLowerCase().endsWith('/api/mobile/index.php') &&
+        _rawQueryValue(uri.query, 'module')?.toLowerCase() == 'viewthread') {
+      final tid = _rawQueryValue(uri.query, 'tid')?.trim();
+      if (tid != null && tid.isNotEmpty) {
+        return tid;
+      }
+    }
+
     return _extractTidFromDamagedHref(normalizedUrl);
   }
 
   bool isThreadUrl(String normalizedUrl) => extractTid(normalizedUrl) != null;
+
+  /// Returns true only for supported thread URL shapes, excluding the
+  /// legacy damaged-query fallback used by loose HTML link recovery.
+  bool isSupportedThreadUrl(String normalizedUrl) {
+    if (_threadPathPattern.hasMatch(normalizedUrl)) {
+      return true;
+    }
+    final uri = Uri.tryParse(normalizedUrl);
+    if (uri == null) {
+      return false;
+    }
+    final path = uri.path.toLowerCase();
+    if (path.endsWith('forum.php')) {
+      return _rawQueryValue(uri.query, 'mod')?.toLowerCase() == 'viewthread';
+    }
+    if (path.endsWith('/api/mobile/index.php')) {
+      return _rawQueryValue(uri.query, 'module')?.toLowerCase() == 'viewthread';
+    }
+    return false;
+  }
 
   String _viewThreadUrl(String tid) {
     final origin =

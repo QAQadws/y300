@@ -14,6 +14,7 @@ import 'package:y300/features/comic/domain/services/comic_catalog_url_policy.dar
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
+import 'package:y300/features/comic/domain/services/comic_manual_episode_url_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
@@ -44,6 +45,7 @@ class ComicDetailAdapter
         DetailChapterDownloadActivityAdapter,
         DetailMetadataEditor,
         DetailCatalogEditor,
+        DetailChapterManagementAdapter,
         DetailCoverEditor {
   ComicDetailAdapter(
     this._repository, {
@@ -60,6 +62,8 @@ class ComicDetailAdapter
     ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
     ComicTitleAnalyzer titleAnalyzer = const PetitComicTitleAnalyzer(),
     ComicCatalogUrlPolicy catalogUrlPolicy = const ComicCatalogUrlPolicy(),
+    ComicManualEpisodeUrlPolicy manualEpisodeUrlPolicy =
+        const ComicManualEpisodeUrlPolicy(),
     required LibraryStateRepository stateRepository,
   }) : _refreshService = refreshService,
        _searchQueue = searchQueue,
@@ -74,6 +78,7 @@ class ComicDetailAdapter
        _featureFlags = featureFlags,
        _titleAnalyzer = titleAnalyzer,
        _catalogUrlPolicy = catalogUrlPolicy,
+       _manualEpisodeUrlPolicy = manualEpisodeUrlPolicy,
        _stateRepository = stateRepository;
 
   static const ComicEpisodeSequence _episodeSequence = ComicEpisodeSequence();
@@ -92,6 +97,7 @@ class ComicDetailAdapter
   final ComicReaderFeatureFlags _featureFlags;
   final ComicTitleAnalyzer _titleAnalyzer;
   final ComicCatalogUrlPolicy _catalogUrlPolicy;
+  final ComicManualEpisodeUrlPolicy _manualEpisodeUrlPolicy;
   final LibraryStateRepository _stateRepository;
 
   @override
@@ -935,6 +941,110 @@ class ComicDetailAdapter
       comicId: workId,
       catalogUrl: normalized == source ? null : normalized,
     );
+  }
+
+  @override
+  Future<List<DetailManagedChapter>> loadManagedChapters({
+    required String workId,
+  }) async {
+    final episodes = await _episodeManagementRepository.getManagedComicEpisodes(
+      comicId: workId,
+      descending: false,
+    );
+    // 与详情列表同一套排序：管理面板里的顺序必须和用户在列表上看到的一致，
+    // 否则手动章节按 order_index 落到末尾会显得像插错了位置。
+    final ordered = _episodeSequence.order(episodes);
+    return ordered
+        .map(
+          (item) => DetailManagedChapter(
+            episodeId: item.episodeId,
+            title: item.episodeTitle?.trim().isNotEmpty == true
+                ? item.episodeTitle!.trim()
+                : '章节 ${item.sourceTid}',
+            sourceTid: item.sourceTid,
+            isManual: item.isManual,
+            isHidden: item.isHidden,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<bool> addManualChapter({
+    required String workId,
+    required String input,
+  }) async {
+    final target = _manualEpisodeUrlPolicy.parse(input);
+    return _episodeManagementRepository.addManualEpisode(
+      comicId: workId,
+      sourceTid: target.tid,
+      sourceUrl: target.sourceUrl,
+    );
+  }
+
+  @override
+  Future<DetailChapterRemovalResult> removeManualChapter({
+    required String workId,
+    required String episodeId,
+  }) async {
+    // 存储层先以 is_manual 做唯一准入判断并原子删除数据库状态；外部文件
+    // 不属于 SQLite 事务，清理失败时保留“章节已移除”的事实并返回告警。
+    final removed = await _episodeManagementRepository.removeManualEpisode(
+      comicId: workId,
+      episodeId: episodeId,
+    );
+    if (!removed) {
+      return const DetailChapterRemovalResult(removed: false);
+    }
+    String? warning;
+    try {
+      await _downloadQueue?.cancelEpisode(workId, episodeId);
+    } catch (error) {
+      warning ??= '下载任务清理失败';
+      debugPrint('[ComicEpisodeManagement] cancel download failed: $error');
+    }
+    try {
+      await _downloadService?.deleteEpisodeDownload(
+        comicId: workId,
+        episodeId: episodeId,
+      );
+    } catch (error) {
+      warning ??= '章节下载文件清理失败';
+      debugPrint('[ComicEpisodeManagement] delete download failed: $error');
+    }
+    return DetailChapterRemovalResult(removed: true, warning: warning);
+  }
+
+  @override
+  Future<void> setChapterHidden({
+    required String workId,
+    required String episodeId,
+    required bool isHidden,
+  }) {
+    return _episodeManagementRepository.setEpisodeHidden(
+      comicId: workId,
+      episodeId: episodeId,
+      isHidden: isHidden,
+    );
+  }
+
+  @override
+  Future<void> setAllChaptersHidden({
+    required String workId,
+    required bool isHidden,
+  }) {
+    return _episodeManagementRepository.setAllEpisodesHidden(
+      comicId: workId,
+      isHidden: isHidden,
+    );
+  }
+
+  ComicEpisodeManagementRepository get _episodeManagementRepository {
+    final repository = _repository;
+    if (repository is! ComicEpisodeManagementRepository) {
+      throw StateError('当前漫画仓储不支持章节管理');
+    }
+    return repository as ComicEpisodeManagementRepository;
   }
 
   @override

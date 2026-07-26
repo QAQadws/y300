@@ -262,7 +262,7 @@ class ComicDetailStore {
         COUNT(e.episode_id) AS episode_count
       FROM ${ComicLocalDb.comicsTable} c
       LEFT JOIN ${ComicLocalDb.episodesTable} e
-        ON c.comic_id = e.comic_id
+        ON c.comic_id = e.comic_id AND e.is_hidden = 0
       WHERE c.comic_id = ?
       GROUP BY c.comic_id
       LIMIT 1

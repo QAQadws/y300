@@ -135,6 +135,8 @@ class EpisodeRecord {
     required this.sourceUrl,
     required this.orderIndex,
     required this.publishTimeText,
+    this.isManual = false,
+    this.isHidden = false,
   });
 
   final String episodeId;
@@ -145,6 +147,12 @@ class EpisodeRecord {
   final int orderIndex;
   final String? publishTimeText;
 
+  /// 用户手动添加的章节。只有手动章节允许被移除。
+  final bool isManual;
+
+  /// 用户隐藏的章节。隐藏只影响展示与阅读导航，不删除任何数据。
+  final bool isHidden;
+
   Map<String, Object?> toMap() {
     return <String, Object?>{
       'episode_id': episodeId,
@@ -154,6 +162,8 @@ class EpisodeRecord {
       'source_url': sourceUrl,
       'order_index': orderIndex,
       'publish_time_text': publishTimeText,
+      'is_manual': isManual ? 1 : 0,
+      'is_hidden': isHidden ? 1 : 0,
     };
   }
 }

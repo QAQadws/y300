@@ -6,44 +6,56 @@ import 'package:y300/features/comic/data/local/comic_local_models.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 
 class ComicEpisodeStore {
   ComicEpisodeStore(
     this._dbFuture, {
     required ComicCoverStore coverStore,
     ComicSubjectParser? subjectParser,
-  })  : _coverStore = coverStore,
-        _subjectParser = subjectParser ?? const RuleBasedComicSubjectParser();
+    ForumThreadUrlParser? threadUrlParser,
+  }) : _coverStore = coverStore,
+       _subjectParser = subjectParser ?? const RuleBasedComicSubjectParser(),
+       _threadUrlParser = threadUrlParser ?? const ForumThreadUrlParser();
 
   final Future<Database> _dbFuture;
   final ComicCoverStore _coverStore;
   final ComicSubjectParser _subjectParser;
+  final ForumThreadUrlParser _threadUrlParser;
 
+  /// 读取章节列表。
+  ///
+  /// 默认过滤隐藏章节：隐藏语义是“对所有阅读路径都不出现”，在存储层统一
+  /// 兜底比让详情页、阅读器、下载各自记得过滤更可靠。章节管理面板显式传
+  /// [includeHidden] 才能看到全部章节。
   Future<List<ComicEpisodeItem>> getComicEpisodes({
     required String comicId,
     bool descending = true,
+    bool includeHidden = false,
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
       ComicLocalDb.episodesTable,
-      where: 'comic_id = ?',
+      where: includeHidden ? 'comic_id = ?' : 'comic_id = ? AND is_hidden = 0',
       whereArgs: <Object>[comicId],
       orderBy: 'order_index ${descending ? 'DESC' : 'ASC'}',
     );
 
-    return rows
-        .map(
-          (row) => ComicEpisodeItem(
-            episodeId: row['episode_id'] as String,
-            comicId: row['comic_id'] as String,
-            episodeTitle: row['episode_title'] as String?,
-            sourceTid: row['source_tid'] as String,
-            sourceUrl: row['source_url'] as String,
-            orderIndex: row['order_index'] as int,
-            publishTimeText: row['publish_time_text'] as String?,
-          ),
-        )
-        .toList(growable: false);
+    return rows.map(_mapEpisodeRow).toList(growable: false);
+  }
+
+  ComicEpisodeItem _mapEpisodeRow(Map<String, Object?> row) {
+    return ComicEpisodeItem(
+      episodeId: row['episode_id'] as String,
+      comicId: row['comic_id'] as String,
+      episodeTitle: row['episode_title'] as String?,
+      sourceTid: row['source_tid'] as String,
+      sourceUrl: row['source_url'] as String,
+      orderIndex: row['order_index'] as int,
+      publishTimeText: row['publish_time_text'] as String?,
+      isManual: (row['is_manual'] as int? ?? 0) == 1,
+      isHidden: (row['is_hidden'] as int? ?? 0) == 1,
+    );
   }
 
   Future<List<ComicEpisodeImageItem>> getEpisodeImages({
@@ -137,9 +149,7 @@ class ComicEpisodeStore {
     );
   }
 
-  Future<void> clearEpisodeImageCache({
-    required String episodeId,
-  }) async {
+  Future<void> clearEpisodeImageCache({required String episodeId}) async {
     final db = await _dbFuture;
     await db.update(
       ComicLocalDb.episodeImagesTable,
@@ -220,6 +230,7 @@ class ComicEpisodeStore {
     var updated = 0;
 
     await db.transaction((txn) async {
+      final hiddenEpisodeIds = await _loadHiddenEpisodeIds(txn, comicId);
       for (var index = 0; index < episodeLinks.length; index++) {
         final link = episodeLinks[index];
         final sourceTid = extractTid(link.url) ?? fallbackSourceTid;
@@ -241,6 +252,10 @@ class ComicEpisodeStore {
           sourceUrl: link.url,
           orderIndex: index,
           publishTimeText: null,
+          // 解析命中的章节按来源归属重写为解析章节：这条链接以后每次刷新都会
+          // 回来，再显示成“可移除的手动章节”只会给出移除不掉的假承诺。
+          isManual: false,
+          isHidden: hiddenEpisodeIds.contains(episodeId),
         );
 
         await txn.insert(
@@ -258,9 +273,7 @@ class ComicEpisodeStore {
 
       await txn.update(
         ComicLocalDb.comicsTable,
-        <String, Object?>{
-          'updated_at': DateTime.now().millisecondsSinceEpoch,
-        },
+        <String, Object?>{'updated_at': DateTime.now().millisecondsSinceEpoch},
         where: 'comic_id = ?',
         whereArgs: <Object>[comicId],
       );
@@ -283,6 +296,7 @@ class ComicEpisodeStore {
     required String fallbackSourceTid,
     required List<ComicEpisodeLink> episodeLinks,
   }) async {
+    final hiddenEpisodeIds = await _loadHiddenEpisodeIds(executor, comicId);
     for (var index = 0; index < episodeLinks.length; index++) {
       final link = episodeLinks[index];
       final sourceTid = extractTid(link.url) ?? fallbackSourceTid;
@@ -295,6 +309,8 @@ class ComicEpisodeStore {
         sourceUrl: link.url,
         orderIndex: index,
         publishTimeText: null,
+        isManual: false,
+        isHidden: hiddenEpisodeIds.contains(episodeId),
       );
 
       await executor.insert(
@@ -356,28 +372,26 @@ class ComicEpisodeStore {
     }
   }
 
+  /// 读取当前已隐藏的章节 id。
+  ///
+  /// 解析 upsert 用 `ConflictAlgorithm.replace` 整行覆盖，隐藏标记会被冲掉；
+  /// 刷新不应该把用户隐藏过的章节重新显示出来，所以写入前先取回该状态。
+  Future<Set<String>> _loadHiddenEpisodeIds(
+    DatabaseExecutor executor,
+    String comicId,
+  ) async {
+    final rows = await executor.query(
+      ComicLocalDb.episodesTable,
+      columns: <String>['episode_id'],
+      where: 'comic_id = ? AND is_hidden = 1',
+      whereArgs: <Object>[comicId],
+    );
+    return rows.map((row) => row['episode_id'] as String).toSet();
+  }
+
   String? extractTid(String url) {
-    final threadMatch = RegExp(
-      r'thread-(\d+)-\d+-\d+\.html',
-      caseSensitive: false,
-    ).firstMatch(url);
-    if (threadMatch != null) {
-      return threadMatch.group(1);
-    }
-
-    final viewthreadMatch = RegExp(
-      r'forum\.php\?[^#]*\bmod=viewthread\b[^#]*\btid=(\d+)',
-      caseSensitive: false,
-    ).firstMatch(url);
-    if (viewthreadMatch != null) {
-      return viewthreadMatch.group(1);
-    }
-
-    final damagedTidMatch = RegExp(
-      r'(^|[?&;])tid=(\d+)(?:[&#]|$)',
-      caseSensitive: false,
-    ).firstMatch(url);
-    return damagedTidMatch?.group(2);
+    final normalized = _threadUrlParser.normalizeHref(url);
+    return _threadUrlParser.extractTid(normalized ?? url);
   }
 
   String _resolveEpisodeTitleRaw(ComicEpisodeLink link) {
@@ -405,7 +419,8 @@ class ComicEpisodeStore {
     if (text.length < 16) {
       return false;
     }
-    final hasBracketGroup = (text.contains('【') && text.contains('】')) ||
+    final hasBracketGroup =
+        (text.contains('【') && text.contains('】')) ||
         (text.contains('[') && text.contains(']'));
     final hasEpisodeHint = text.contains('第') && text.contains('话');
     return hasBracketGroup || hasEpisodeHint;

@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 36;
+  static const int dbVersion = 37;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -106,6 +106,9 @@ class ComicLocalDb {
     }
     if (oldVersion < 36 && newVersion >= 36) {
       await _upgradeFrom35To36(db);
+    }
+    if (oldVersion < 37 && newVersion >= 37) {
+      await _upgradeFrom36To37(db);
     }
   }
 
@@ -227,6 +230,25 @@ class ComicLocalDb {
     await _createComicDownloadQueueTable(db);
   }
 
+  /// 章节管理：区分“解析章节”与“手动添加章节”，并支持隐藏而不删除。
+  ///
+  /// 两个标记都落在章节行上而不是独立表：隐藏与来源归属是章节自身属性，
+  /// 放在同一行才能让读取路径用一次查询同时完成过滤与归属判断。
+  static Future<void> _upgradeFrom36To37(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: episodesTable,
+      column: 'is_manual',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: episodesTable,
+      column: 'is_hidden',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+
   static Future<void> _addColumnIfMissing(
     Database db, {
     required String table,
@@ -285,6 +307,8 @@ class ComicLocalDb {
         source_url TEXT NOT NULL,
         order_index INTEGER NOT NULL,
         publish_time_text TEXT,
+        is_manual INTEGER NOT NULL DEFAULT 0,
+        is_hidden INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (comic_id) REFERENCES $comicsTable(comic_id) ON DELETE CASCADE
       )
     ''');
