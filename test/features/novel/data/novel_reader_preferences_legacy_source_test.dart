@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/novel/data/preferences/novel_reader_preferences_legacy_source.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -62,7 +63,7 @@ void main() {
     expect(loaded.conversionMode, NovelReaderConversionMode.toSimplified);
     expect(loaded.flowMode, NovelReaderFlowMode.pagedRtl);
     expect(loaded.paragraphSpacing, 10);
-    expect(loaded.pagePadding, 16);
+    expect(loaded.pagePadding, NovelReaderSpacing.pagedPagePadding);
     expect(loaded.fontFamily, 'system');
     expect(loaded.contentMaxWidth, 720);
     expect(loaded.firstLineIndent, 0);

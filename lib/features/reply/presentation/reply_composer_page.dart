@@ -16,6 +16,7 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_quil
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
 class ReplyComposerPage extends ConsumerStatefulWidget {
   const ReplyComposerPage({super.key, required this.args});
@@ -461,7 +462,12 @@ class _ReplyComposerBody extends StatelessWidget {
           children: [
             if (topFeedback.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                padding: const EdgeInsets.fromLTRB(
+                  ForumContentSpacing.composerPageHorizontal,
+                  ForumContentSpacing.composerPageVertical,
+                  ForumContentSpacing.composerPageHorizontal,
+                  0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: topFeedback,
@@ -474,7 +480,10 @@ class _ReplyComposerBody extends StatelessWidget {
     }
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(
+          horizontal: ForumContentSpacing.composerPageHorizontal,
+          vertical: ForumContentSpacing.composerPageVertical,
+        ),
         children: [
           ..._buildLeadingFeedbackWidgets(context),
           editor,

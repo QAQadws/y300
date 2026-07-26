@@ -219,9 +219,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         controller: widget.scrollController,
         padding: EdgeInsets.fromLTRB(
           ForumContentSpacing.pageHorizontal,
-          10,
+          ForumContentSpacing.listTop,
           ForumContentSpacing.pageHorizontal,
-          14,
+          ForumContentSpacing.listBottom,
         ),
         scrollCacheExtent: const ScrollCacheExtent.pixels(900),
         itemCount: entries.length,
@@ -262,7 +262,10 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
             ),
             SliverPadding(
               key: _targetCenterKey,
-              padding: const EdgeInsets.only(top: 10, bottom: 14),
+              padding: const EdgeInsets.only(
+                top: ForumContentSpacing.listTop,
+                bottom: ForumContentSpacing.listBottom,
+              ),
               sliver: _buildTargetEntrySliver(
                 entries: entries,
                 start: targetEntryIndex,
@@ -303,7 +306,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           );
           if (addPageTopPadding && entryIndex == 0) {
             child = Padding(
-              padding: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.only(
+                top: ForumContentSpacing.listTop,
+              ),
               child: child,
             );
           }

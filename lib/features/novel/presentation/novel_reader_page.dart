@@ -10,6 +10,7 @@ import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.d
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
@@ -619,10 +620,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           key: const Key('novel-reader-paragraph-list'),
           controller: _scrollController,
           padding: EdgeInsets.fromLTRB(
-            viewState.preferences.pagePadding,
-            viewState.preferences.pagePadding + chromeInsets.topInset,
-            viewState.preferences.pagePadding,
-            viewState.preferences.pagePadding +
+            NovelReaderSpacing.verticalPagePadding,
+            NovelReaderSpacing.verticalPagePadding + chromeInsets.topInset,
+            NovelReaderSpacing.verticalPagePadding,
+            NovelReaderSpacing.verticalPagePadding +
                 chromeInsets.persistentBottomInset,
           ),
           children: [

@@ -1,3 +1,5 @@
+import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
+
 enum NovelReaderThemePreset { light, sepia, dark, followSystem }
 
 enum NovelReaderFlowMode { vertical, pagedLtr, pagedRtl }
@@ -163,7 +165,7 @@ class NovelReaderPreferences {
       fontSize: 18.5,
       lineHeight: 1.6,
       paragraphSpacing: 10,
-      pagePadding: 16,
+      pagePadding: NovelReaderSpacing.pagedPagePadding,
       fontFamily: 'system',
       flowMode: NovelReaderFlowMode.vertical,
       themePreset: NovelReaderThemePreset.sepia,

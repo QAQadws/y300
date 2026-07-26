@@ -56,9 +56,9 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
     this.expand = false,
     this.contentPadding = const EdgeInsets.fromLTRB(
       ForumContentSpacing.composerQuillSurfaceHorizontal,
-      8,
+      ForumContentSpacing.composerBodyTop,
       ForumContentSpacing.composerQuillSurfaceHorizontal,
-      16,
+      ForumContentSpacing.composerBodyBottom,
     ),
   });
 
@@ -128,9 +128,9 @@ class ComposerQuillEditorSurface extends StatefulWidget {
     this.hintText = '请开始输入',
     this.contentPadding = const EdgeInsets.fromLTRB(
       ForumContentSpacing.composerQuillSurfaceHorizontal,
-      8,
+      ForumContentSpacing.composerBodyTop,
       ForumContentSpacing.composerQuillSurfaceHorizontal,
-      16,
+      ForumContentSpacing.composerBodyBottom,
     ),
   });
 

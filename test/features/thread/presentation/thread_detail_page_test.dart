@@ -1372,9 +1372,7 @@ void main() {
         final secondImage = find.byKey(
           const Key('thread-post-html-first-readable-image-p1-1'),
         );
-        await tester.ensureVisible(secondImage);
-        await tester.pump();
-        await tester.tap(secondImage);
+        await _tapVisibleTop(tester, secondImage);
         await tester.pumpAndSettle();
 
         expect(find.byType(ThreadImageReaderPage), findsOneWidget);
@@ -2584,7 +2582,7 @@ void main() {
       );
       expect(
         targetTop.dy,
-        closeTo(listTop.dy + 10, 28),
+        closeTo(listTop.dy + ForumContentSpacing.listTop, 28),
         reason: '目标楼层应贴近 AppBar 下方的列表顶部，而不是落在屏幕中部',
       );
       final scrollable = tester.state<ScrollableState>(
@@ -2600,7 +2598,10 @@ void main() {
       await tester.pumpAndSettle();
       final firstPost = find.byKey(const Key('thread-post-card-target-0'));
       expect(firstPost, findsOneWidget);
-      expect(tester.getTopLeft(firstPost).dy, closeTo(listTop.dy + 10, 1));
+      expect(
+        tester.getTopLeft(firstPost).dy,
+        closeTo(listTop.dy + ForumContentSpacing.listTop, 1),
+      );
     });
 
     testWidgets(
@@ -2673,7 +2674,10 @@ void main() {
         final targetTop = tester.getTopLeft(
           find.byKey(const Key('thread-post-card-target-second-post')),
         );
-        expect(targetTop.dy, closeTo(listTop.dy + 10, 28));
+        expect(
+          targetTop.dy,
+          closeTo(listTop.dy + ForumContentSpacing.listTop, 28),
+        );
         expect(_richTextContaining('第一话 姐姐的日记'), findsOneWidget);
         expect(historyRecorder.drafts, hasLength(1));
         expect(historyRecorder.drafts.single.target.id, '556943');
@@ -2761,13 +2765,19 @@ void main() {
         );
         double targetTop() => tester.getTopLeft(targetFinder).dy;
         double listTop() => tester.getTopLeft(listFinder).dy;
-        expect(targetTop(), closeTo(listTop() + 10, 1));
+        expect(
+          targetTop(),
+          closeTo(listTop() + ForumContentSpacing.listTop, 1),
+        );
         expect(scrollable.position.pixels, closeTo(0, 0.01));
         converter.release();
         await tester.pump();
         for (var index = 0; index < 10; index++) {
           await tester.pump(const Duration(milliseconds: 50));
-          expect(targetTop(), closeTo(listTop() + 10, 1));
+          expect(
+            targetTop(),
+            closeTo(listTop() + ForumContentSpacing.listTop, 1),
+          );
           expect(scrollable.position.pixels, closeTo(0, 0.01));
           expect(
             find.byKey(const Key('thread-target-post-positioning-indicator')),
@@ -2783,7 +2793,7 @@ void main() {
         expect(firstPostFinder, findsOneWidget);
         expect(
           tester.getTopLeft(firstPostFinder).dy,
-          closeTo(listTop() + 10, 1),
+          closeTo(listTop() + ForumContentSpacing.listTop, 1),
         );
       },
     );
@@ -4869,6 +4879,25 @@ Finder _richTextContaining(String text) {
   return find.byWidgetPredicate((widget) {
     return widget is RichText && widget.text.toPlainText().contains(text);
   });
+}
+
+/// Taps near a widget's visible top edge instead of its center.
+///
+/// `tester.tap` aims at the center, which lands outside the viewport whenever
+/// the target is taller than the remaining space — `ensureVisible` only
+/// guarantees partial visibility. Full-bleed post images hit that case.
+Future<void> _tapVisibleTop(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  final topLeft = tester.getTopLeft(finder);
+  final size = tester.getSize(finder);
+  final viewHeight =
+      tester.view.physicalSize.height / tester.view.devicePixelRatio;
+  final viewWidth =
+      tester.view.physicalSize.width / tester.view.devicePixelRatio;
+  final y = (topLeft.dy + 8).clamp(1.0, viewHeight - 1);
+  final x = (topLeft.dx + size.width / 2).clamp(1.0, viewWidth - 1);
+  await tester.tapAt(Offset(x, y));
 }
 
 Future<void> _longPressVisibleTop(WidgetTester tester, Finder finder) async {

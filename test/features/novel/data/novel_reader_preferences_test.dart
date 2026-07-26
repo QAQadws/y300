@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/preferences/novel_reader_preferences_snapshot_codec.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 
 void main() {
   test('NovelReaderPreferences.defaults uses the phase-0 baseline', () {
@@ -9,7 +10,7 @@ void main() {
     expect(defaults.fontSize, 18.5);
     expect(defaults.lineHeight, 1.6);
     expect(defaults.paragraphSpacing, 10);
-    expect(defaults.pagePadding, 16);
+    expect(defaults.pagePadding, NovelReaderSpacing.pagedPagePadding);
     expect(defaults.fontFamily, 'system');
     expect(defaults.flowMode, NovelReaderFlowMode.vertical);
     expect(defaults.themePreset, NovelReaderThemePreset.sepia);

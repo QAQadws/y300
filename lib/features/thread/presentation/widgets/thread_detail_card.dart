@@ -37,7 +37,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
         key: Key('thread-post-card-${post.pid}'),
         padding: EdgeInsets.fromLTRB(
           ForumContentSpacing.postBodyHorizontal,
-          10,
+          ForumContentSpacing.postCardHeaderTop,
           ForumContentSpacing.postBodyHorizontal,
           0,
         ),
@@ -146,7 +146,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.fromLTRB(
           ForumContentSpacing.postBodyHorizontal,
-          8,
+          ForumContentSpacing.postCardBodyTop,
           ForumContentSpacing.postBodyHorizontal,
           0,
         ),
@@ -229,12 +229,12 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
       behavior: HitTestBehavior.translucent,
       onLongPress: () => onOpenPostActions(post, plan),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
+        margin: const EdgeInsets.only(bottom: ForumContentSpacing.postCardGap),
         padding: EdgeInsets.fromLTRB(
           ForumContentSpacing.postBodyHorizontal,
-          hasFooterContent ? 10 : 0,
+          hasFooterContent ? ForumContentSpacing.postCardFooterTop : 0,
           ForumContentSpacing.postBodyHorizontal,
-          10,
+          ForumContentSpacing.postCardFooterBottom,
         ),
         decoration: _cardSegmentDecoration(
           palette: palette,
@@ -571,12 +571,12 @@ class ThreadPostCard extends StatelessWidget {
     }
     final card = Container(
       key: Key('thread-post-card-${post.pid}'),
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: ForumContentSpacing.postCardGap),
       padding: EdgeInsets.fromLTRB(
         ForumContentSpacing.postBodyHorizontal,
-        10,
+        ForumContentSpacing.postCardHeaderTop,
         ForumContentSpacing.postBodyHorizontal,
-        11,
+        ForumContentSpacing.postCardSingleBottom,
       ),
       decoration: highlighted
           ? _highlightedCardDecoration(resolvedPalette)

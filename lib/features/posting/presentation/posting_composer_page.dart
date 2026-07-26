@@ -22,6 +22,7 @@ import 'package:y300/features/posting/presentation/widgets/thread_special_switch
 import 'package:y300/features/posting/presentation/widgets/thread_subject_field.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_tags_field.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_type_selector.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
 /// 自制发帖页。
 ///
@@ -619,7 +620,12 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                padding: const EdgeInsets.fromLTRB(
+                  ForumContentSpacing.composerPageHorizontal,
+                  ForumContentSpacing.composerPageVertical,
+                  ForumContentSpacing.composerPageHorizontal,
+                  0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -636,7 +642,10 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
     }
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(
+          horizontal: ForumContentSpacing.composerPageHorizontal,
+          vertical: ForumContentSpacing.composerPageVertical,
+        ),
         children: [
           ..._buildFormFields(context),
           editor,

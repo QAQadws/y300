@@ -172,6 +172,9 @@ class _NovelReaderHtmlPagedSurfaceState
       style: widget.typography.body,
       child: LayoutBuilder(
         builder: (context, constraints) {
+          // Knob lives in NovelReaderSpacing.pagedPagePadding (via prefs
+          // defaults). Everything below derives the measured page box and the
+          // rendered Padding from this one value on purpose — see that doc.
           final pagePadding = widget.preferences.pagePadding
               .clamp(0.0, 96.0)
               .toDouble();
