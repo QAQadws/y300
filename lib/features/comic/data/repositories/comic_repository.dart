@@ -244,6 +244,14 @@ abstract class ComicEpisodeManagementRepository {
     required bool isHidden,
   });
 
+  /// 重命名章节；传入 null 或空白清除自定义名，章节名回退到来源名。
+  /// 章节不存在时返回 false。
+  Future<bool> setEpisodeCustomTitle({
+    required String comicId,
+    required String episodeId,
+    required String? customTitle,
+  });
+
   /// 批量切换全部章节的显示状态，返回实际改动行数。
   Future<int> setAllEpisodesHidden({
     required String comicId,

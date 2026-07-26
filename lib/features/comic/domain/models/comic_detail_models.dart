@@ -114,17 +114,27 @@ class ComicEpisodeItem {
     required this.sourceUrl,
     required this.orderIndex,
     required this.publishTimeText,
+    this.sourceEpisodeTitle,
+    this.customEpisodeTitle,
     this.isManual = false,
     this.isHidden = false,
   });
 
   final String episodeId;
   final String comicId;
+
+  /// 展示用章节名：自定义名优先，其次来源名。
   final String? episodeTitle;
   final String sourceTid;
   final String sourceUrl;
   final int orderIndex;
   final String? publishTimeText;
+
+  /// 解析得到的章节名。管理面板用它提示“清空后会退回哪个名字”。
+  final String? sourceEpisodeTitle;
+
+  /// 用户重命名的章节名；为空表示未自定义。
+  final String? customEpisodeTitle;
 
   /// 用户手动添加的章节；解析章节为 false。只有手动章节可以被移除。
   final bool isManual;

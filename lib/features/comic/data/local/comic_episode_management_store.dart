@@ -50,10 +50,12 @@ class ComicEpisodeManagementStore {
 
       await txn.insert(
         ComicLocalDb.episodesTable,
-        EpisodeRecord(
+        EpisodeRecord.resolved(
           episodeId: episodeId,
           comicId: comicId,
-          episodeTitle: _normalizeTitle(episodeTitle) ?? '章节 $sourceTid',
+          // 手动章节的“来源名”就是添加时的默认名。重命名同样写进 custom 列，
+          // 于是清空重命名会退回这个默认名，而不是退成空标题。
+          sourceEpisodeTitle: _normalizeTitle(episodeTitle) ?? '章节 $sourceTid',
           sourceTid: sourceTid,
           sourceUrl: sourceUrl,
           orderIndex: (maxOrder ?? -1) + 1,
@@ -134,6 +136,47 @@ class ComicEpisodeManagementStore {
         whereArgs: <Object>[episodeId, comicId],
       );
       await _touchComic(txn, comicId);
+    });
+  }
+
+  /// 重命名章节。传入 null 或空白清除自定义名，章节名回退到来源名。
+  ///
+  /// 只写 `custom_episode_title` 并同步展示列，`source_episode_title` 保持不动：
+  /// 来源名是解析结果，用户改名不该把它一起改掉，否则就再也回不去了。
+  /// 返回 false 表示章节不存在。
+  Future<bool> setEpisodeCustomTitle({
+    required String comicId,
+    required String episodeId,
+    required String? customTitle,
+  }) async {
+    final db = await _dbFuture;
+    return db.transaction<bool>((txn) async {
+      final rows = await txn.query(
+        ComicLocalDb.episodesTable,
+        columns: <String>['source_episode_title', 'source_tid'],
+        where: 'episode_id = ? AND comic_id = ?',
+        whereArgs: <Object>[episodeId, comicId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        return false;
+      }
+      final normalized = _normalizeTitle(customTitle);
+      final sourceTitle = rows.first['source_episode_title'] as String?;
+      await txn.update(
+        ComicLocalDb.episodesTable,
+        <String, Object?>{
+          'custom_episode_title': normalized,
+          'episode_title': resolveEpisodeDisplayTitle(
+            customEpisodeTitle: normalized,
+            sourceEpisodeTitle: sourceTitle,
+          ),
+        },
+        where: 'episode_id = ? AND comic_id = ?',
+        whereArgs: <Object>[episodeId, comicId],
+      );
+      await _touchComic(txn, comicId);
+      return true;
     });
   }
 

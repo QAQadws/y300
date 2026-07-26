@@ -135,9 +135,46 @@ class EpisodeRecord {
     required this.sourceUrl,
     required this.orderIndex,
     required this.publishTimeText,
+    this.sourceEpisodeTitle,
+    this.customEpisodeTitle,
     this.isManual = false,
     this.isHidden = false,
   });
+
+  /// 来源章节名与用户自定义章节名分开存，[episodeTitle] 存两者解析后的展示值。
+  ///
+  /// 与漫画标题同构：清空自定义名要能退回来源名，就必须留着来源名本身。
+  /// 展示值同时落库而不是每次读取时算，是为了让既有读取点（详情、阅读器导航、
+  /// 下载、统计）继续只认 `episode_title` 一列。
+  factory EpisodeRecord.resolved({
+    required String episodeId,
+    required String comicId,
+    required String sourceTid,
+    required String sourceUrl,
+    required int orderIndex,
+    required String? publishTimeText,
+    String? sourceEpisodeTitle,
+    String? customEpisodeTitle,
+    bool isManual = false,
+    bool isHidden = false,
+  }) {
+    return EpisodeRecord(
+      episodeId: episodeId,
+      comicId: comicId,
+      episodeTitle: resolveEpisodeDisplayTitle(
+        customEpisodeTitle: customEpisodeTitle,
+        sourceEpisodeTitle: sourceEpisodeTitle,
+      ),
+      sourceTid: sourceTid,
+      sourceUrl: sourceUrl,
+      orderIndex: orderIndex,
+      publishTimeText: publishTimeText,
+      sourceEpisodeTitle: sourceEpisodeTitle,
+      customEpisodeTitle: customEpisodeTitle,
+      isManual: isManual,
+      isHidden: isHidden,
+    );
+  }
 
   final String episodeId;
   final String comicId;
@@ -146,6 +183,12 @@ class EpisodeRecord {
   final String sourceUrl;
   final int orderIndex;
   final String? publishTimeText;
+
+  /// 解析得到的章节名。用户清空自定义名后回退到这里。
+  final String? sourceEpisodeTitle;
+
+  /// 用户重命名的章节名。为空表示未自定义。
+  final String? customEpisodeTitle;
 
   /// 用户手动添加的章节。只有手动章节允许被移除。
   final bool isManual;
@@ -158,6 +201,8 @@ class EpisodeRecord {
       'episode_id': episodeId,
       'comic_id': comicId,
       'episode_title': episodeTitle,
+      'source_episode_title': sourceEpisodeTitle,
+      'custom_episode_title': customEpisodeTitle,
       'source_tid': sourceTid,
       'source_url': sourceUrl,
       'order_index': orderIndex,
@@ -166,6 +211,25 @@ class EpisodeRecord {
       'is_hidden': isHidden ? 1 : 0,
     };
   }
+}
+
+/// 章节展示名：自定义优先，其次来源名，都为空时返回 null 交给上层兜底。
+///
+/// 返回 null 而不是就地拼一个「章节 tid」：兜底文案属于展示层策略，
+/// 现有读取点已各自处理空标题，存储层再塞一个默认值会盖掉它们的口径。
+String? resolveEpisodeDisplayTitle({
+  required String? customEpisodeTitle,
+  required String? sourceEpisodeTitle,
+}) {
+  final custom = customEpisodeTitle?.trim();
+  if (custom != null && custom.isNotEmpty) {
+    return custom;
+  }
+  final source = sourceEpisodeTitle?.trim();
+  if (source != null && source.isNotEmpty) {
+    return source;
+  }
+  return null;
 }
 
 class EpisodeImageRecord {

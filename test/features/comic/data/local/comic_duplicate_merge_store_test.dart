@@ -360,5 +360,76 @@ void main() {
       expect(episode.isHidden, isTrue);
       expect(episode.isManual, isFalse);
     });
+
+    test('mergeDuplicateGroup keeps a rename and still lets it fall back', () async {
+      // 重命名落在被合并掉的那一侧，来源名则是目标侧更短、来源侧更长。
+      await repository.addToShelf(
+        comicId: 'yamibo:rename-long-title',
+        tid: '8000',
+        fid: '30',
+        title: 'Long Duplicate Title',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(
+              url: 'thread-8001-1-1.html',
+              rawText: '8',
+              episodeTitle: '第八话 完整名',
+            ),
+          ],
+          plainTextSummary: '',
+        ),
+      );
+      await repository.addToShelf(
+        comicId: 'yamibo:rename',
+        tid: '8000',
+        fid: '30',
+        title: 'Short',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(
+              url: 'thread-8001-1-1.html',
+              rawText: '8',
+              episodeTitle: '8',
+            ),
+          ],
+          plainTextSummary: '',
+        ),
+      );
+      await repository.setEpisodeCustomTitle(
+        comicId: 'yamibo:rename-long-title',
+        episodeId: 'yamibo:rename-long-title:8001',
+        customTitle: '我改的名字',
+      );
+
+      final result = await store.mergeDuplicateGroup(
+        comicIds: const <String>{'yamibo:rename-long-title', 'yamibo:rename'},
+      );
+      expect(result.targetComicId, 'yamibo:rename');
+
+      final merged = await repository.getManagedComicEpisodes(
+        comicId: 'yamibo:rename',
+      );
+      final episode = merged.firstWhere((item) => item.sourceTid == '8001');
+      expect(episode.customEpisodeTitle, '我改的名字');
+      expect(episode.episodeTitle, '我改的名字');
+      // 来源名按“信息量更大者胜出”换成了来源侧那个，展示名要跟着重算，
+      // 否则清空重命名会退回一个已经被替换掉的旧来源名。
+      expect(episode.sourceEpisodeTitle, '第八话 完整名');
+
+      await repository.setEpisodeCustomTitle(
+        comicId: 'yamibo:rename',
+        episodeId: 'yamibo:rename:8001',
+        customTitle: null,
+      );
+      final restored = await repository.getManagedComicEpisodes(
+        comicId: 'yamibo:rename',
+      );
+      expect(
+        restored.firstWhere((item) => item.sourceTid == '8001').episodeTitle,
+        '第八话 完整名',
+      );
+    });
   });
 }

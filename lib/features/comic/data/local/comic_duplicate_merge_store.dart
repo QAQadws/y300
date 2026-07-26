@@ -281,19 +281,40 @@ class ComicDuplicateMergeStore {
     required Map<String, Object?> existing,
     required Map<String, Object?> incoming,
   }) async {
-    final existingTitle = _normalizeNullable(
-      existing['episode_title'] as String?,
+    final existingSourceTitle = _normalizeNullable(
+      existing['source_episode_title'] as String?,
     );
-    final incomingTitle = _normalizeNullable(
-      incoming['episode_title'] as String?,
+    final incomingSourceTitle = _normalizeNullable(
+      incoming['source_episode_title'] as String?,
     );
     final existingUrl = _normalizeNullable(existing['source_url'] as String?);
     final incomingUrl = _normalizeNullable(incoming['source_url'] as String?);
     final update = <String, Object?>{};
-    if (incomingTitle != null &&
-        (existingTitle == null ||
-            incomingTitle.length > existingTitle.length)) {
-      update['episode_title'] = incomingTitle;
+    // 沿用“信息量更大的来源名胜出”，但只作用在来源列上。
+    final sourceTitle =
+        (incomingSourceTitle != null &&
+            (existingSourceTitle == null ||
+                incomingSourceTitle.length > existingSourceTitle.length))
+        ? incomingSourceTitle
+        : existingSourceTitle;
+    if (sourceTitle != existingSourceTitle) {
+      update['source_episode_title'] = sourceTitle;
+    }
+    // 重命名是用户意图，两侧取其一保留；来源名换了也要重算展示名。
+    final customTitle =
+        _normalizeNullable(existing['custom_episode_title'] as String?) ??
+        _normalizeNullable(incoming['custom_episode_title'] as String?);
+    if (customTitle != _normalizeNullable(
+      existing['custom_episode_title'] as String?,
+    )) {
+      update['custom_episode_title'] = customTitle;
+    }
+    final displayTitle = resolveEpisodeDisplayTitle(
+      customEpisodeTitle: customTitle,
+      sourceEpisodeTitle: sourceTitle,
+    );
+    if (displayTitle != _normalizeNullable(existing['episode_title'] as String?)) {
+      update['episode_title'] = displayTitle;
     }
     if (incomingUrl != null && (existingUrl == null || existingUrl.isEmpty)) {
       update['source_url'] = incomingUrl;

@@ -169,10 +169,20 @@ class DetailManagedChapter {
     required this.sourceTid,
     required this.isManual,
     required this.isHidden,
+    this.sourceTitle,
+    this.customTitle,
   });
 
   final String episodeId;
+
+  /// 展示用章节名：自定义名优先，其次来源名。
   final String title;
+
+  /// 来源章节名。清空自定义名后会回退到它，面板据此提示用户。
+  final String? sourceTitle;
+
+  /// 用户重命名的章节名；为空表示未自定义。
+  final String? customTitle;
 
   /// 帖子 tid，同时是阅读器接口请求与原帖跳转的唯一入参。
   final String sourceTid;
@@ -229,6 +239,16 @@ abstract interface class DetailChapterManagementAdapter {
   Future<void> setAllChaptersHidden({
     required String workId,
     required bool isHidden,
+  });
+
+  /// 重命名章节。传入 null 或空白清除自定义名，章节名回退到来源名。
+  ///
+  /// 与“编辑作品信息”同一套语义：来源值只读，用户值可清空，清空即回退。
+  /// 手动章节的来源名是添加时的默认名，因此同样能被重命名和还原。
+  Future<void> renameChapter({
+    required String workId,
+    required String episodeId,
+    required String? customTitle,
   });
 }
 

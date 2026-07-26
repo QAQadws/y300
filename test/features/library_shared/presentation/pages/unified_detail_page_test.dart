@@ -2497,6 +2497,13 @@ class _ManageableDetailAdapter extends _FakeDetailAdapter
   }) async => const DetailChapterRemovalResult(removed: false);
 
   @override
+  Future<void> renameChapter({
+    required String workId,
+    required String episodeId,
+    required String? customTitle,
+  }) async {}
+
+  @override
   Future<void> setChapterHidden({
     required String workId,
     required String episodeId,

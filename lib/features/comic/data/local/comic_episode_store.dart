@@ -49,6 +49,8 @@ class ComicEpisodeStore {
       episodeId: row['episode_id'] as String,
       comicId: row['comic_id'] as String,
       episodeTitle: row['episode_title'] as String?,
+      sourceEpisodeTitle: row['source_episode_title'] as String?,
+      customEpisodeTitle: row['custom_episode_title'] as String?,
       sourceTid: row['source_tid'] as String,
       sourceUrl: row['source_url'] as String,
       orderIndex: row['order_index'] as int,
@@ -230,7 +232,7 @@ class ComicEpisodeStore {
     var updated = 0;
 
     await db.transaction((txn) async {
-      final hiddenEpisodeIds = await _loadHiddenEpisodeIds(txn, comicId);
+      final overrides = await _loadEpisodeUserOverrides(txn, comicId);
       for (var index = 0; index < episodeLinks.length; index++) {
         final link = episodeLinks[index];
         final sourceTid = extractTid(link.url) ?? fallbackSourceTid;
@@ -244,10 +246,12 @@ class ComicEpisodeStore {
           limit: 1,
         );
 
-        final record = EpisodeRecord(
+        final override = overrides[episodeId];
+        final record = EpisodeRecord.resolved(
           episodeId: episodeId,
           comicId: comicId,
-          episodeTitle: resolveEpisodeTitle(link),
+          sourceEpisodeTitle: resolveEpisodeTitle(link),
+          customEpisodeTitle: override?.customEpisodeTitle,
           sourceTid: sourceTid,
           sourceUrl: link.url,
           orderIndex: index,
@@ -255,7 +259,7 @@ class ComicEpisodeStore {
           // 解析命中的章节按来源归属重写为解析章节：这条链接以后每次刷新都会
           // 回来，再显示成“可移除的手动章节”只会给出移除不掉的假承诺。
           isManual: false,
-          isHidden: hiddenEpisodeIds.contains(episodeId),
+          isHidden: override?.isHidden ?? false,
         );
 
         await txn.insert(
@@ -296,21 +300,23 @@ class ComicEpisodeStore {
     required String fallbackSourceTid,
     required List<ComicEpisodeLink> episodeLinks,
   }) async {
-    final hiddenEpisodeIds = await _loadHiddenEpisodeIds(executor, comicId);
+    final overrides = await _loadEpisodeUserOverrides(executor, comicId);
     for (var index = 0; index < episodeLinks.length; index++) {
       final link = episodeLinks[index];
       final sourceTid = extractTid(link.url) ?? fallbackSourceTid;
       final episodeId = '$comicId:$sourceTid';
-      final episode = EpisodeRecord(
+      final override = overrides[episodeId];
+      final episode = EpisodeRecord.resolved(
         episodeId: episodeId,
         comicId: comicId,
-        episodeTitle: link.episodeTitle ?? link.rawText,
+        sourceEpisodeTitle: link.episodeTitle ?? link.rawText,
+        customEpisodeTitle: override?.customEpisodeTitle,
         sourceTid: sourceTid,
         sourceUrl: link.url,
         orderIndex: index,
         publishTimeText: null,
         isManual: false,
-        isHidden: hiddenEpisodeIds.contains(episodeId),
+        isHidden: override?.isHidden ?? false,
       );
 
       await executor.insert(
@@ -341,15 +347,16 @@ class ComicEpisodeStore {
     final defaultEpisodeId = '$comicId:$sourceTid';
     await executor.insert(
       ComicLocalDb.episodesTable,
-      EpisodeRecord(
+      EpisodeRecord.resolved(
         episodeId: defaultEpisodeId,
         comicId: comicId,
-        episodeTitle: episodeTitle,
+        sourceEpisodeTitle: episodeTitle,
         sourceTid: sourceTid,
         sourceUrl: '',
         orderIndex: 0,
         publishTimeText: null,
       ).toMap(),
+      // 只在缺行时插入，既有行上的自定义名与隐藏状态因此不会被这里覆盖。
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
 
@@ -372,21 +379,28 @@ class ComicEpisodeStore {
     }
   }
 
-  /// 读取当前已隐藏的章节 id。
+  /// 读取章节上属于用户的状态：隐藏标记与自定义章节名。
   ///
-  /// 解析 upsert 用 `ConflictAlgorithm.replace` 整行覆盖，隐藏标记会被冲掉；
-  /// 刷新不应该把用户隐藏过的章节重新显示出来，所以写入前先取回该状态。
-  Future<Set<String>> _loadHiddenEpisodeIds(
+  /// 解析 upsert 用 `ConflictAlgorithm.replace` 整行覆盖，这些列会被解析结果
+  /// 冲掉；刷新不应该把用户隐藏过的章节重新显示出来，也不应该把重命名改回
+  /// 来源名，所以写入前先取回来再一起写进新行。
+  Future<Map<String, _EpisodeUserOverrides>> _loadEpisodeUserOverrides(
     DatabaseExecutor executor,
     String comicId,
   ) async {
     final rows = await executor.query(
       ComicLocalDb.episodesTable,
-      columns: <String>['episode_id'],
-      where: 'comic_id = ? AND is_hidden = 1',
+      columns: <String>['episode_id', 'is_hidden', 'custom_episode_title'],
+      where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
     );
-    return rows.map((row) => row['episode_id'] as String).toSet();
+    return <String, _EpisodeUserOverrides>{
+      for (final row in rows)
+        row['episode_id'] as String: _EpisodeUserOverrides(
+          isHidden: (row['is_hidden'] as int? ?? 0) == 1,
+          customEpisodeTitle: row['custom_episode_title'] as String?,
+        ),
+    };
   }
 
   String? extractTid(String url) {
@@ -460,4 +474,15 @@ class ComicEpisodeStore {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
+}
+
+/// 章节行上属于用户的状态，解析刷新整行覆盖时必须原样带回。
+class _EpisodeUserOverrides {
+  const _EpisodeUserOverrides({
+    required this.isHidden,
+    this.customEpisodeTitle,
+  });
+
+  final bool isHidden;
+  final String? customEpisodeTitle;
 }

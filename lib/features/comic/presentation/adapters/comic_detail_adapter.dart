@@ -961,6 +961,14 @@ class ComicDetailAdapter
             title: item.episodeTitle?.trim().isNotEmpty == true
                 ? item.episodeTitle!.trim()
                 : '章节 ${item.sourceTid}',
+            // 来源名可能为空（早期解析没拿到标题），面板会退回展示同一个
+            // 「章节 tid」兜底文案，避免提示成“清空后会变成空标题”。
+            sourceTitle: item.sourceEpisodeTitle?.trim().isNotEmpty == true
+                ? item.sourceEpisodeTitle!.trim()
+                : null,
+            customTitle: item.customEpisodeTitle?.trim().isNotEmpty == true
+                ? item.customEpisodeTitle!.trim()
+                : null,
             sourceTid: item.sourceTid,
             isManual: item.isManual,
             isHidden: item.isHidden,
@@ -1036,6 +1044,19 @@ class ComicDetailAdapter
     return _episodeManagementRepository.setAllEpisodesHidden(
       comicId: workId,
       isHidden: isHidden,
+    );
+  }
+
+  @override
+  Future<void> renameChapter({
+    required String workId,
+    required String episodeId,
+    required String? customTitle,
+  }) async {
+    await _episodeManagementRepository.setEpisodeCustomTitle(
+      comicId: workId,
+      episodeId: episodeId,
+      customTitle: customTitle,
     );
   }
 

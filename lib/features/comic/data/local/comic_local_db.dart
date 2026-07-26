@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 37;
+  static const int dbVersion = 38;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -109,6 +109,9 @@ class ComicLocalDb {
     }
     if (oldVersion < 37 && newVersion >= 37) {
       await _upgradeFrom36To37(db);
+    }
+    if (oldVersion < 38 && newVersion >= 38) {
+      await _upgradeFrom37To38(db);
     }
   }
 
@@ -249,20 +252,57 @@ class ComicLocalDb {
     );
   }
 
+  /// 章节重命名：拆出「来源章节名」与「用户自定义章节名」两列。
+  ///
+  /// 与漫画标题同一套三列结构（source / custom / 解析后的展示值）：`episode_title`
+  /// 继续作为展示值，所有既有读取点不用改。存量行的标题都来自解析，因此直接
+  /// 回填为来源名——否则清空自定义名后会退成空标题，而不是退回原本的章节名。
+  static Future<void> _upgradeFrom37To38(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: episodesTable,
+      column: 'source_episode_title',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: episodesTable,
+      column: 'custom_episode_title',
+      definition: 'TEXT',
+    );
+    // 回填读的是 `episode_title`，历史库不保证有这一列（缺表、或早期精简
+    // schema），所以按列存在性判断而不是只判断表存在。
+    final columns = await _columnNames(db, episodesTable);
+    if (!columns.contains('episode_title') ||
+        !columns.contains('source_episode_title')) {
+      return;
+    }
+    await db.execute('''
+      UPDATE $episodesTable
+      SET source_episode_title = episode_title
+      WHERE source_episode_title IS NULL
+    ''');
+  }
+
+  /// 表的列名集合；表不存在时返回空集合。
+  ///
+  /// SQLite 里 `PRAGMA table_info` 对缺表和零列表返回同样的空结果，而零列表
+  /// 不存在，所以空集合可以直接当作「没有这张表」用。
+  static Future<Set<String>> _columnNames(Database db, String table) async {
+    final rows = await db.rawQuery('PRAGMA table_info($table)');
+    return rows.map((entry) => entry['name'] as String).toSet();
+  }
+
   static Future<void> _addColumnIfMissing(
     Database db, {
     required String table,
     required String column,
     required String definition,
   }) async {
-    final columns = await db.rawQuery('PRAGMA table_info($table)');
-    // 表不存在时 PRAGMA 返回空结果（SQLite 不存在零列的表）。漫画与小说共用这
-    // 一个库，升级链会跑在只建了对方表的历史库上，缺表时跳过而不是让 ALTER
-    // TABLE 抛错中断整条升级。
-    if (columns.isEmpty) {
-      return;
-    }
-    if (columns.any((entry) => entry['name'] == column)) {
+    final columns = await _columnNames(db, table);
+    // 漫画与小说共用这一个库，升级链会跑在只建了对方表的历史库上；缺表时跳过
+    // 而不是让 ALTER TABLE 抛错中断整条升级。
+    if (columns.isEmpty || columns.contains(column)) {
       return;
     }
     await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
@@ -309,6 +349,8 @@ class ComicLocalDb {
         episode_id TEXT PRIMARY KEY,
         comic_id TEXT NOT NULL,
         episode_title TEXT,
+        source_episode_title TEXT,
+        custom_episode_title TEXT,
         source_tid TEXT NOT NULL,
         source_url TEXT NOT NULL,
         order_index INTEGER NOT NULL,

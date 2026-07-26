@@ -362,22 +362,35 @@ class _UnifiedDetailChapterManagementSheetState
           ],
         ),
       ),
+      // 重命名对两种来源都开放；移除仍然只给手动章节。
       trailing: busy
           ? const SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : chapter.isManual
-          ? IconButton(
-              key: ValueKey<String>(
-                'unified-detail-chapter-management-remove-${chapter.episodeId}',
-              ),
-              tooltip: '移除该章节',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _bulkBusy ? null : () => _confirmRemove(chapter),
-            )
-          : null,
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: ValueKey<String>(
+                    'unified-detail-chapter-management-rename-${chapter.episodeId}',
+                  ),
+                  tooltip: '重命名该章节',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: _bulkBusy ? null : () => _promptRename(chapter),
+                ),
+                if (chapter.isManual)
+                  IconButton(
+                    key: ValueKey<String>(
+                      'unified-detail-chapter-management-remove-${chapter.episodeId}',
+                    ),
+                    tooltip: '移除该章节',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: _bulkBusy ? null : () => _confirmRemove(chapter),
+                  ),
+              ],
+            ),
     );
   }
 
@@ -454,6 +467,43 @@ class _UnifiedDetailChapterManagementSheetState
     } catch (error) {
       if (mounted) {
         _showMessage('更新显示状态失败：$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busyEpisodeIds.remove(chapter.episodeId));
+      }
+    }
+  }
+
+  Future<void> _promptRename(DetailManagedChapter chapter) async {
+    // 取消与「清空以恢复来源名」都会得到空标题，用包装对象区分二者：
+    // 返回 null = 用户取消，返回对象且 customTitle 为 null = 用户要求恢复。
+    final result = await showDialog<_ChapterRenameResult>(
+      context: context,
+      builder: (dialogContext) => _ChapterRenameDialog(chapter: chapter),
+    );
+    if (result == null || !mounted) {
+      return;
+    }
+    setState(() => _busyEpisodeIds.add(chapter.episodeId));
+    try {
+      await widget.adapter.renameChapter(
+        workId: widget.workId,
+        episodeId: chapter.episodeId,
+        customTitle: result.customTitle,
+      );
+      _notifyChanged();
+      // 重命名后的展示名由存储层按 custom/source 规则算出，这里重新读回而不是
+      // 在内存里拼一遍，避免面板和数据库对“该显示哪个名字”产生两套口径。
+      await _load();
+      if (mounted) {
+        _showMessage(
+          result.customTitle == null ? '已恢复来源章节名' : '已重命名章节',
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        _showMessage('重命名失败：$error');
       }
     } finally {
       if (mounted) {
@@ -546,6 +596,87 @@ class _UnifiedDetailChapterManagementSheetState
   void _showMessage(String message) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     messenger?.showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+/// 重命名结果。存在实例即表示用户点了保存；[customTitle] 为 null 表示恢复来源名。
+class _ChapterRenameResult {
+  const _ChapterRenameResult(this.customTitle);
+
+  final String? customTitle;
+}
+
+/// 章节重命名弹窗。
+///
+/// 与「编辑作品信息」同一套交互：输入框回填当前展示名，helper 说明清空后会
+/// 退回哪个来源名，因此“改名”和“还原”共用一个输入框，不需要额外的还原按钮。
+class _ChapterRenameDialog extends StatefulWidget {
+  const _ChapterRenameDialog({required this.chapter});
+
+  final DetailManagedChapter chapter;
+
+  @override
+  State<_ChapterRenameDialog> createState() => _ChapterRenameDialogState();
+}
+
+class _ChapterRenameDialogState extends State<_ChapterRenameDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // 回填展示名而不是只回填自定义名：未改名的章节也应该能在原名上小改，
+    // 而不是面对一个空输入框重新打字。
+    _controller = TextEditingController(text: widget.chapter.title);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sourceTitle = widget.chapter.sourceTitle;
+    return AlertDialog(
+      title: const Text('重命名章节'),
+      content: TextField(
+        key: const Key('unified-detail-chapter-management-rename-input'),
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          labelText: '章节名',
+          helperText: sourceTitle == null
+              ? '留空恢复默认章节名'
+              : '留空恢复来源章节名：$sourceTitle',
+          helperMaxLines: 3,
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const Key('unified-detail-chapter-management-rename-confirm'),
+          onPressed: _submit,
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
+
+  void _submit() {
+    final trimmed = _controller.text.trim();
+    // 原样保存回填的来源名不该被记成自定义名，否则来源以后改名了也再也跟不上。
+    // 与「配置目录」的 `normalized == source ? null : normalized` 同一套约定。
+    final custom = trimmed.isEmpty || trimmed == widget.chapter.sourceTitle
+        ? null
+        : trimmed;
+    Navigator.of(context).pop(_ChapterRenameResult(custom));
   }
 }
 

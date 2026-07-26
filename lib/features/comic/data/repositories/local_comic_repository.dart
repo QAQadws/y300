@@ -424,6 +424,19 @@ class LocalComicRepository
   }
 
   @override
+  Future<bool> setEpisodeCustomTitle({
+    required String comicId,
+    required String episodeId,
+    required String? customTitle,
+  }) {
+    return _episodeManagementStore.setEpisodeCustomTitle(
+      comicId: comicId,
+      episodeId: episodeId,
+      customTitle: customTitle,
+    );
+  }
+
+  @override
   Future<int> setAllEpisodesHidden({
     required String comicId,
     required bool isHidden,

@@ -163,6 +163,119 @@ void main() {
     );
   });
 
+  test('clearing a rename falls back to the parsed episode name', () async {
+    const episodeId = 'comic-management:600';
+    await repository.mergeEpisodesFromLinks(
+      comicId: 'comic-management',
+      fallbackSourceTid: '100',
+      episodeLinks: const <ComicEpisodeLink>[
+        ComicEpisodeLink(url: 'thread-600-1-1.html', rawText: '第一话 来源名'),
+      ],
+    );
+
+    expect(
+      await repository.setEpisodeCustomTitle(
+        comicId: 'comic-management',
+        episodeId: episodeId,
+        customTitle: '我改的名字',
+      ),
+      isTrue,
+    );
+    var episode = (await repository.getManagedComicEpisodes(
+      comicId: 'comic-management',
+    )).single;
+    expect(episode.episodeTitle, '我改的名字');
+    expect(episode.customEpisodeTitle, '我改的名字');
+    // 来源名必须原样留着，否则清空后无处可退。
+    expect(episode.sourceEpisodeTitle, '第一话 来源名');
+
+    await repository.setEpisodeCustomTitle(
+      comicId: 'comic-management',
+      episodeId: episodeId,
+      customTitle: '   ',
+    );
+    episode = (await repository.getManagedComicEpisodes(
+      comicId: 'comic-management',
+    )).single;
+    // 空白等同清空：章节名退回解析出的原名，而不是变成空标题。
+    expect(episode.customEpisodeTitle, isNull);
+    expect(episode.episodeTitle, '第一话 来源名');
+  });
+
+  test('a rename survives a parsed refresh that rewrites the row', () async {
+    const episodeId = 'comic-management:601';
+    const links = <ComicEpisodeLink>[
+      ComicEpisodeLink(url: 'thread-601-1-1.html', rawText: '第一话 来源名'),
+    ];
+    await repository.mergeEpisodesFromLinks(
+      comicId: 'comic-management',
+      fallbackSourceTid: '100',
+      episodeLinks: links,
+    );
+    await repository.setEpisodeCustomTitle(
+      comicId: 'comic-management',
+      episodeId: episodeId,
+      customTitle: '我改的名字',
+    );
+
+    await repository.mergeEpisodesFromLinks(
+      comicId: 'comic-management',
+      fallbackSourceTid: '100',
+      episodeLinks: const <ComicEpisodeLink>[
+        ComicEpisodeLink(url: 'thread-601-1-1.html', rawText: '来源改名了'),
+      ],
+    );
+
+    final episode = (await repository.getManagedComicEpisodes(
+      comicId: 'comic-management',
+    )).single;
+    // 刷新整行 replace 覆盖章节：重命名是用户意图不能被冲掉，
+    // 同时来源名要跟上最新解析结果，清空后才会退到新的来源名。
+    expect(episode.episodeTitle, '我改的名字');
+    expect(episode.sourceEpisodeTitle, '来源改名了');
+  });
+
+  test('manual episodes can be renamed and restored to the default', () async {
+    await repository.addManualEpisode(
+      comicId: 'comic-management',
+      sourceTid: '602',
+      sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=602',
+    );
+    const episodeId = 'comic-management:602';
+
+    await repository.setEpisodeCustomTitle(
+      comicId: 'comic-management',
+      episodeId: episodeId,
+      customTitle: '手动章节改名',
+    );
+    var episode = (await repository.getManagedComicEpisodes(
+      comicId: 'comic-management',
+    )).single;
+    expect(episode.episodeTitle, '手动章节改名');
+
+    await repository.setEpisodeCustomTitle(
+      comicId: 'comic-management',
+      episodeId: episodeId,
+      customTitle: null,
+    );
+    episode = (await repository.getManagedComicEpisodes(
+      comicId: 'comic-management',
+    )).single;
+    // 手动章节的“来源名”是添加时的默认名，清空后退回它而不是空标题。
+    expect(episode.episodeTitle, '章节 602');
+  });
+
+  test('renaming a missing episode reports failure', () async {
+    expect(
+      await repository.setEpisodeCustomTitle(
+        comicId: 'comic-management',
+        episodeId: 'comic-management:404',
+        customTitle: '不存在',
+      ),
+      isFalse,
+    );
+  });
+
   test('removing a manual episode clears reading and library state', () async {
     const episodeId = 'comic-management:300';
     await database.insert(ComicLocalDb.episodesTable, <String, Object?>{
