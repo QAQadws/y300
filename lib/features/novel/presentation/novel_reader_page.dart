@@ -9,14 +9,12 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
-import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
@@ -50,7 +48,6 @@ class NovelReaderPage extends ConsumerStatefulWidget {
   @override
   ConsumerState<NovelReaderPage> createState() => _NovelReaderPageState();
 }
-
 class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     with WidgetsBindingObserver {
   late final ScrollController _scrollController;
@@ -82,8 +79,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       NovelReaderPaginationMeasureCache();
   final NovelReaderPreparedChapterCache _preparedChapterCache =
       NovelReaderPreparedChapterCache();
-  int _anchorNavigationSerial = 0;
-  NovelReaderAnchorNavigationRequest? _pendingAnchorNavigationRequest;
   int _pageSeekSerial = 0;
   NovelReaderPageSeekRequest? _pendingPageSeekRequest;
   NovelReaderPaginationPosition? _pagedPosition;
@@ -316,22 +311,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           onPressed: () => _toggleEpisodeBookmark(viewState),
         ),
         ReaderToolbarAction(
-          id: 'search',
-          icon: Icons.search,
-          label: '搜索',
-          onPressed: () => _showSearchSheet(viewState),
-        ),
-        ReaderToolbarAction(
           id: 'open-thread',
           icon: Icons.open_in_new,
           label: '打开原帖',
           onPressed: () => _openSourceThread(viewState),
-        ),
-        ReaderToolbarAction(
-          id: 'more',
-          icon: Icons.more_vert,
-          label: '更多',
-          onPressed: () => _showReaderSnackBar('更多阅读操作将在后续阶段接入'),
         ),
       ],
     );
@@ -530,7 +513,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         progressSnapshot: viewState.progressSnapshot,
         chromeInsets: chromeInsets,
         semanticDocument: viewState.document,
-        navigationRequest: _pendingAnchorNavigationRequest,
         pageSeekRequest: _pendingPageSeekRequest,
         paginationCache: _paginationCache,
         paginationMeasureCache: _paginationMeasureCache,
@@ -1102,39 +1084,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     });
   }
 
-  Future<void> _showSearchSheet(NovelReaderViewState viewState) async {
-    _overlayController.hideMenu();
-    final controller = ref.read(novelReaderControllerProvider(_args).notifier);
-    await _runWithReaderSemanticsSuspended(() async {
-      final selected = await showModalBottomSheet<NovelReaderSearchResult>(
-        context: context,
-        showDragHandle: true,
-        isScrollControlled: true,
-        builder: (context) => NovelReaderSearchSheet(
-          initialKeyword: viewState.searchKeyword,
-          initialResults: viewState.searchResults,
-          onSearch: (keyword) {
-            controller.searchInCurrentChapter(keyword);
-            return ref
-                    .read(novelReaderControllerProvider(_args))
-                    .value
-                    ?.searchResults ??
-                const <NovelReaderSearchResult>[];
-          },
-          onClear: controller.clearSearch,
-        ),
-      );
-      if (selected == null) {
-        return;
-      }
-      if (!mounted) {
-        return;
-      }
-      controller.selectSearchResult(selected.resultId);
-      await _jumpToAnchor(selected.anchor);
-    });
-  }
-
   Future<void> _showDisplaySettingsSheet(
     NovelReaderViewState viewState,
     NovelReaderController controller,
@@ -1252,41 +1201,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         latest?.hasCurrentEpisodeBookmark ??
         !viewState.hasCurrentEpisodeBookmark;
     _showReaderSnackBar(isBookmarked ? '已添加书签' : '已移除书签');
-  }
-
-  Future<void> _jumpToAnchor(NovelReaderTextAnchor anchor) async {
-    final viewState = ref.read(novelReaderControllerProvider(_args)).value;
-    if (viewState == null) {
-      return;
-    }
-    if (anchor.episodeId != viewState.currentEpisode.episodeId) {
-      await _openDifferentEpisode(
-        () => ref
-            .read(novelReaderControllerProvider(_args).notifier)
-            .openEpisodeFromCatalog(anchor.episodeId),
-      );
-      if (!mounted) {
-        return;
-      }
-    }
-    final latest = ref.read(novelReaderControllerProvider(_args)).value;
-    if (latest == null || latest.currentEpisode.episodeId != anchor.episodeId) {
-      return;
-    }
-    if (latest.preferences.flowMode != NovelReaderFlowMode.vertical) {
-      setState(() {
-        _pendingAnchorNavigationRequest = NovelReaderAnchorNavigationRequest(
-          requestId: ++_anchorNavigationSerial,
-          anchor: anchor.copyWith(episodeId: latest.currentEpisode.episodeId),
-        );
-      });
-      _overlayController.hideMenu();
-      return;
-    }
-    if (_scrollController.hasClients) {
-      final max = _scrollController.position.maxScrollExtent;
-      _scrollController.jumpTo(anchor.scrollOffset.clamp(0.0, max).toDouble());
-    }
   }
 
   Future<void> _openSourceThread(NovelReaderViewState viewState) async {
@@ -1451,7 +1365,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     return typography.contentMaxWidth < 160 ? 160 : typography.contentMaxWidth;
   }
 }
-
 class NovelReaderChapterListSheet extends StatefulWidget {
   const NovelReaderChapterListSheet({super.key, required this.viewState});
 
@@ -1730,116 +1643,6 @@ class NovelReaderErrorView extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class NovelReaderSearchSheet extends StatefulWidget {
-  const NovelReaderSearchSheet({
-    super.key,
-    required this.initialKeyword,
-    required this.initialResults,
-    required this.onSearch,
-    required this.onClear,
-  });
-
-  final String initialKeyword;
-  final List<NovelReaderSearchResult> initialResults;
-  final List<NovelReaderSearchResult> Function(String keyword) onSearch;
-  final VoidCallback onClear;
-
-  @override
-  State<NovelReaderSearchSheet> createState() => _NovelReaderSearchSheetState();
-}
-
-class _NovelReaderSearchSheetState extends State<NovelReaderSearchSheet> {
-  late final TextEditingController _controller;
-  late List<NovelReaderSearchResult> _results;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialKeyword);
-    _results = widget.initialResults;
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.72,
-        ),
-        child: Column(
-          key: const Key('novel-reader-search-sheet'),
-          children: [
-            ReaderSheetTitle(title: '本章搜索'),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: TextField(
-                key: const Key('novel-reader-search-field'),
-                controller: _controller,
-                autofocus: true,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _controller.text.trim().isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () {
-                            _controller.clear();
-                            widget.onClear();
-                            setState(
-                              () =>
-                                  _results = const <NovelReaderSearchResult>[],
-                            );
-                          },
-                        ),
-                  hintText: '搜索当前章节',
-                  isDense: true,
-                ),
-                onChanged: (value) {
-                  setState(() {
-                    _results = widget.onSearch(value);
-                  });
-                },
-              ),
-            ),
-            Expanded(
-              child: _results.isEmpty
-                  ? const Center(
-                      key: Key('novel-reader-search-empty'),
-                      child: Text('没有搜索结果'),
-                    )
-                  : ListView.builder(
-                      itemCount: _results.length,
-                      itemBuilder: (context, index) {
-                        final result = _results[index];
-                        return ListTile(
-                          key: Key(
-                            'novel-reader-search-result-${result.resultId}',
-                          ),
-                          leading: Text('${index + 1}'),
-                          title: Text(
-                            result.snippet,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text('位置 ${result.anchor.textOffset}'),
-                          onTap: () => Navigator.of(context).pop(result),
-                        );
-                      },
-                    ),
-            ),
-          ],
         ),
       ),
     );
