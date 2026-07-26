@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
@@ -9,6 +10,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_diagnostics.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
@@ -62,6 +64,10 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.semanticDocument,
     this.navigationRequest,
     this.pageSeekRequest,
+    this.chapterEntryRequest,
+    this.onChapterEntryApplied,
+    this.previousChapterTitle,
+    this.nextChapterTitle,
     this.imageHeaderBuilder,
     this.onLinkTap,
     this.onOpenImage,
@@ -69,6 +75,8 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.onFallbackToVertical,
     this.onPositionChanged,
     this.onNavigationUnavailable,
+    this.onTurnToAdjacentChapter,
+    this.chapterTurnPolicy = const NovelReaderChapterTurnPolicy(),
     this.preferencesAdapter = const NovelHtmlReaderPreferencesAdapter(),
     this.preparer = const NovelHtmlChapterRenderPreparer(),
     this.preparationService,
@@ -94,6 +102,18 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final NovelReaderDocument? semanticDocument;
   final NovelReaderAnchorNavigationRequest? navigationRequest;
   final NovelReaderPageSeekRequest? pageSeekRequest;
+  final NovelReaderChapterEntryRequest? chapterEntryRequest;
+
+  /// Fired once [chapterEntryRequest] has actually been resolved into a page and
+  /// handed to the page view. The owner must retire the request in response:
+  /// while it is still armed the surface treats a chapter turn as in flight, and
+  /// a request that is never retired latches the gesture off for good.
+  final ValueChanged<NovelReaderChapterEntryRequest>? onChapterEntryApplied;
+
+  /// Neighbour titles are passed in as plain labels so the surface never has to
+  /// know about the episode list; a null title simply disables that direction.
+  final String? previousChapterTitle;
+  final String? nextChapterTitle;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
@@ -102,6 +122,12 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final ValueChanged<NovelReaderAnchorNavigationRequest>?
   onNavigationUnavailable;
+  /// Must report whether the turn was actually accepted. The surface locks the
+  /// gesture off while a turn is in flight and relies on the armed entry request
+  /// to unlock it, so a rejected turn has to say so — otherwise the lock waits
+  /// on a request that is never coming.
+  final NovelReaderChapterTurnHandler? onTurnToAdjacentChapter;
+  final NovelReaderChapterTurnPolicy chapterTurnPolicy;
   final NovelHtmlReaderPreferencesAdapter preferencesAdapter;
   final NovelHtmlChapterPreparer preparer;
   final NovelReaderHtmlPreparationService? preparationService;
@@ -145,6 +171,7 @@ class _NovelReaderHtmlPagedSurfaceState
   Timer? _fullPlanBudgetTimer;
   bool _planCompleted = false;
   int _cancelledPlanCount = 0;
+  int? _appliedChapterEntryRequestId;
 
   @override
   void initState() {
@@ -313,14 +340,29 @@ class _NovelReaderHtmlPagedSurfaceState
                     requestedPage: requestedPage,
                     isPlanComplete: isPlanComplete,
                   );
+                  final entryPage = _chapterEntryPageFor(
+                    plan: plan,
+                    isPlanComplete: isPlanComplete,
+                  );
+                  final entryIsPending = _hasPendingChapterEntry(
+                    plan: plan,
+                    entryPage: entryPage,
+                    isPlanComplete: isPlanComplete,
+                  );
+                  if (entryPage != null) {
+                    _scheduleChapterEntryApplied(widget.chapterEntryRequest!);
+                  }
                   final initialPage =
                       requestedPage ??
+                      entryPage ??
                       widget.restorePolicy.resolveAvailablePage(
                         plan: plan,
                         snapshot: widget.progressSnapshot,
                         isPlanComplete: isPlanComplete,
                       );
-                  if (navigationIsPending || initialPage == null) {
+                  if (navigationIsPending ||
+                      entryIsPending ||
+                      initialPage == null) {
                     return const _NovelReaderPaginationStateView(
                       key: Key('novel-reader-paged-restoring-position'),
                       icon: Icons.bookmark_outline,
@@ -377,6 +419,13 @@ class _NovelReaderHtmlPagedSurfaceState
                               NovelReaderFlowMode.pagedRtl,
                           showProgressIndicator:
                               widget.preferences.showProgressIndicator,
+                          previousChapterTitle: widget.previousChapterTitle,
+                          nextChapterTitle: widget.nextChapterTitle,
+                          chapterTurnPolicy: widget.chapterTurnPolicy,
+                          chapterTurnIsInFlight:
+                              widget.chapterEntryRequest != null,
+                          onTurnToAdjacentChapter:
+                              widget.onTurnToAdjacentChapter,
                           contentBottomInset:
                               pageIndicatorReservedHeight +
                               NovelReaderPagedIndicatorLayout
@@ -831,6 +880,53 @@ class _NovelReaderHtmlPagedSurfaceState
     return plan.pageIndexForAnchor(request.anchor);
   }
 
+  /// Resolves an edge entry into a page index. The `end` edge deliberately
+  /// waits for a complete plan: an incremental plan's last page is not yet the
+  /// chapter's last page, so landing on it would drop the reader mid-chapter.
+  int? _chapterEntryPageFor({
+    required NovelReaderPaginationPlan plan,
+    required bool isPlanComplete,
+  }) {
+    final request = widget.chapterEntryRequest;
+    if (request == null ||
+        request.episodeId != plan.episodeId ||
+        plan.pageCount <= 0) {
+      return null;
+    }
+    switch (request.edge) {
+      case NovelReaderChapterEdge.start:
+        return 0;
+      case NovelReaderChapterEdge.end:
+        return isPlanComplete ? plan.pageCount - 1 : null;
+    }
+  }
+
+  /// Retires an entry request that has been resolved into a page, once per
+  /// request id. Deferred to the end of the frame because this runs from `build`
+  /// and the owner reacts by calling `setState`.
+  void _scheduleChapterEntryApplied(NovelReaderChapterEntryRequest request) {
+    if (_appliedChapterEntryRequestId == request.requestId) return;
+    _appliedChapterEntryRequestId = request.requestId;
+    final callback = widget.onChapterEntryApplied;
+    if (callback == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      callback(request);
+    });
+  }
+
+  bool _hasPendingChapterEntry({
+    required NovelReaderPaginationPlan plan,
+    required int? entryPage,
+    required bool isPlanComplete,
+  }) {
+    final request = widget.chapterEntryRequest;
+    return !isPlanComplete &&
+        entryPage == null &&
+        request != null &&
+        request.episodeId == plan.episodeId;
+  }
+
   bool _hasPendingAnchorNavigation({
     required NovelReaderPaginationPlan plan,
     required int? requestedPage,
@@ -877,6 +973,11 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     this.targetPage,
     required this.reverse,
     required this.showProgressIndicator,
+    this.previousChapterTitle,
+    this.nextChapterTitle,
+    this.chapterTurnPolicy = const NovelReaderChapterTurnPolicy(),
+    this.chapterTurnIsInFlight = false,
+    this.onTurnToAdjacentChapter,
     required this.contentBottomInset,
     required this.theme,
     required this.htmlPreferences,
@@ -900,6 +1001,13 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final int? targetPage;
   final bool reverse;
   final bool showProgressIndicator;
+  final String? previousChapterTitle;
+  final String? nextChapterTitle;
+  final NovelReaderChapterTurnPolicy chapterTurnPolicy;
+
+  /// True while a chapter switch requested by this gesture is still running.
+  final bool chapterTurnIsInFlight;
+  final NovelReaderChapterTurnHandler? onTurnToAdjacentChapter;
   final double contentBottomInset;
   final ForumHtmlThemeContext theme;
   final ForumHtmlReaderPreferences htmlPreferences;
@@ -924,6 +1032,11 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   int _currentPage = 0;
   bool _reportedInitialPage = false;
   bool _hasUserNavigated = false;
+  final ValueNotifier<NovelReaderChapterTurnHint?> _chapterTurnHint =
+      ValueNotifier<NovelReaderChapterTurnHint?>(null);
+  double _forwardOverscroll = 0;
+  double _backwardOverscroll = 0;
+  bool _chapterTurnRequested = false;
 
   @override
   void initState() {
@@ -944,6 +1057,14 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   @override
   void didUpdateWidget(covariant _NovelReaderPagedPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // A turn that ends without replacing this chapter (it failed, or it landed
+    // back here) leaves this state alive, so release the latch on the falling
+    // edge instead of keeping the gesture off for good.
+    if (_chapterTurnRequested &&
+        oldWidget.chapterTurnIsInFlight &&
+        !widget.chapterTurnIsInFlight) {
+      _chapterTurnRequested = false;
+    }
     if (!oldWidget.isPageCountFinal && widget.isPageCountFinal) {
       final restoredPage = widget.initialPage
           .clamp(0, math.max(0, widget.plan.pageCount - 1))
@@ -991,6 +1112,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
 
   @override
   void dispose() {
+    _chapterTurnHint.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -1019,11 +1141,20 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         key: const Key('novel-reader-paged-page-session'),
         fit: StackFit.expand,
         children: [
-          PageView.builder(
+          NotificationListener<ScrollNotification>(
+            onNotification: _onScrollNotification,
+            child: PageView.builder(
             key: const Key('novel-reader-paged-page-view'),
             controller: _pageController,
             reverse: widget.reverse,
             allowImplicitScrolling: false,
+            // A chapter that fits on a single page has no scrollable extent, so
+            // the default physics would refuse the drag outright and the
+            // turn-past-the-edge gesture would be dead there. This only
+            // overrides `shouldAcceptUserOffset`; `Scrollable` still appends the
+            // platform physics underneath, so clamping/bouncing behaviour and
+            // page snapping are untouched.
+            physics: const AlwaysScrollableScrollPhysics(),
             itemCount: pageCount,
             onPageChanged: _onPageChanged,
             itemBuilder: (context, index) {
@@ -1053,6 +1184,11 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
                 ),
               );
             },
+            ),
+          ),
+          _NovelReaderChapterTurnHintOverlay(
+            hint: _chapterTurnHint,
+            bottomInset: widget.contentBottomInset,
           ),
           if (widget.showProgressIndicator)
             Positioned(
@@ -1089,6 +1225,170 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     _emitPosition(index);
   }
 
+  /// Turns a drag past either edge of the chapter into a chapter switch.
+  ///
+  /// Sign convention: `PageView` maps the *last* page to `maxScrollExtent`
+  /// regardless of [reverse] (reverse only flips the viewport axis direction,
+  /// not the child order), so positive overscroll always means "past the last
+  /// page" for both pagedLtr and pagedRtl.
+  ///
+  /// Only drag-driven overscroll counts. A ballistic settle after a fling also
+  /// reports overscroll on bouncing physics, and letting that commit would turn
+  /// a flick at the edge into an accidental chapter switch.
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) {
+      return false;
+    }
+    if (notification is ScrollStartNotification) {
+      _resetChapterTurnTracking();
+      return false;
+    }
+    if (notification is OverscrollNotification) {
+      if (notification.dragDetails == null) {
+        return false;
+      }
+      _accumulateOverscroll(notification.overscroll, notification.metrics);
+      return false;
+    }
+    if (notification is ScrollUpdateNotification) {
+      if (notification.dragDetails == null) {
+        return false;
+      }
+      // Bouncing physics move the position past the boundary instead of
+      // reporting an overscroll delta, so read the overshoot off the metrics.
+      final metrics = notification.metrics;
+      final beyondEnd = metrics.pixels - metrics.maxScrollExtent;
+      final beforeStart = metrics.minScrollExtent - metrics.pixels;
+      if (beyondEnd > 0) {
+        _observeOverscroll(forward: beyondEnd, metrics: metrics);
+      } else if (beforeStart > 0) {
+        _observeOverscroll(backward: beforeStart, metrics: metrics);
+      }
+      return false;
+    }
+    if (notification is ScrollEndNotification) {
+      _commitChapterTurnIfRequested(notification.metrics);
+      return false;
+    }
+    return false;
+  }
+
+  void _accumulateOverscroll(double overscroll, ScrollMetrics metrics) {
+    if (overscroll > 0) {
+      _observeOverscroll(
+        forward: _forwardOverscroll + overscroll,
+        metrics: metrics,
+      );
+    } else if (overscroll < 0) {
+      _observeOverscroll(
+        backward: _backwardOverscroll - overscroll,
+        metrics: metrics,
+      );
+    }
+  }
+
+  /// Keeps the peak pull in each direction. Clamping physics report deltas while
+  /// bouncing physics report absolute overshoot; taking the max makes both
+  /// sources agree on "how far did the reader actually pull".
+  void _observeOverscroll({
+    double? forward,
+    double? backward,
+    required ScrollMetrics metrics,
+  }) {
+    if (forward != null) {
+      _forwardOverscroll = math.max(_forwardOverscroll, forward);
+    }
+    if (backward != null) {
+      _backwardOverscroll = math.max(_backwardOverscroll, backward);
+    }
+    _updateChapterTurnHint(metrics);
+  }
+
+  void _resetChapterTurnTracking() {
+    _forwardOverscroll = 0;
+    _backwardOverscroll = 0;
+    _chapterTurnHint.value = null;
+  }
+
+  NovelReaderChapterEdge? _pendingChapterTurnEdge() {
+    if (_forwardOverscroll <= 0 && _backwardOverscroll <= 0) {
+      return null;
+    }
+    final edge = _forwardOverscroll >= _backwardOverscroll
+        ? NovelReaderChapterEdge.end
+        : NovelReaderChapterEdge.start;
+    return _chapterTitleFor(edge) == null ? null : edge;
+  }
+
+  String? _chapterTitleFor(NovelReaderChapterEdge edge) {
+    final title = switch (edge) {
+      NovelReaderChapterEdge.start => widget.previousChapterTitle,
+      NovelReaderChapterEdge.end => widget.nextChapterTitle,
+    };
+    final trimmed = title?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  double _overscrollFor(NovelReaderChapterEdge edge) {
+    return switch (edge) {
+      NovelReaderChapterEdge.start => _backwardOverscroll,
+      NovelReaderChapterEdge.end => _forwardOverscroll,
+    };
+  }
+
+  void _updateChapterTurnHint(ScrollMetrics metrics) {
+    if (!_canTurnChapter()) {
+      _chapterTurnHint.value = null;
+      return;
+    }
+    final edge = _pendingChapterTurnEdge();
+    if (edge == null) {
+      _chapterTurnHint.value = null;
+      return;
+    }
+    final distance = _overscrollFor(edge);
+    final viewportDimension = metrics.viewportDimension;
+    if (!widget.chapterTurnPolicy.shouldRevealHint(
+      overscrollDistance: distance,
+      viewportDimension: viewportDimension,
+    )) {
+      _chapterTurnHint.value = null;
+      return;
+    }
+    _chapterTurnHint.value = NovelReaderChapterTurnHint(
+      edge: edge,
+      chapterTitle: _chapterTitleFor(edge)!,
+      isReadyToCommit: widget.chapterTurnPolicy.shouldCommit(
+        overscrollDistance: distance,
+        viewportDimension: viewportDimension,
+      ),
+    );
+  }
+
+  bool _canTurnChapter() {
+    return widget.onTurnToAdjacentChapter != null &&
+        !widget.chapterTurnIsInFlight &&
+        !_chapterTurnRequested;
+  }
+
+  /// Latches only on an *accepted* turn. A declined turn must leave the gesture
+  /// armed: nothing is in flight, so no falling edge is coming to release it.
+  void _commitChapterTurnIfRequested(ScrollMetrics metrics) {
+    final edge = _pendingChapterTurnEdge();
+    final shouldTurn =
+        edge != null &&
+        _canTurnChapter() &&
+        widget.chapterTurnPolicy.shouldCommit(
+          overscrollDistance: _overscrollFor(edge),
+          viewportDimension: metrics.viewportDimension,
+        );
+    _resetChapterTurnTracking();
+    if (!shouldTurn) {
+      return;
+    }
+    _chapterTurnRequested = widget.onTurnToAdjacentChapter!(edge);
+  }
+
   void _onPageChanged(int index) {
     if (!mounted || index < 0 || index >= widget.plan.pageCount) {
       return;
@@ -1120,6 +1420,73 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         anchor: page.startAnchor.copyWith(pageIndex: index),
       ),
     );
+  }
+}
+
+class _NovelReaderChapterTurnHintOverlay extends StatelessWidget {
+  const _NovelReaderChapterTurnHintOverlay({
+    required this.hint,
+    required this.bottomInset,
+  });
+
+  final ValueListenable<NovelReaderChapterTurnHint?> hint;
+  final double bottomInset;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: bottomInset + NovelReaderChapterTurnHintLayout.bottomInset,
+      child: ValueListenableBuilder<NovelReaderChapterTurnHint?>(
+        valueListenable: hint,
+        builder: (context, value, _) {
+          if (value == null) {
+            return const SizedBox.shrink();
+          }
+          return Center(
+            child: DecoratedBox(
+              key: const Key('novel-reader-chapter-turn-hint'),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: NovelReaderChapterTurnHintLayout.backgroundOpacity,
+                ),
+                borderRadius: const BorderRadius.all(
+                  Radius.circular(
+                    NovelReaderChapterTurnHintLayout.cornerRadius,
+                  ),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal:
+                      NovelReaderChapterTurnHintLayout.horizontalPadding,
+                  vertical: NovelReaderChapterTurnHintLayout.verticalPadding,
+                ),
+                child: Text(
+                  _labelFor(value),
+                  key: const Key('novel-reader-chapter-turn-hint-text'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _labelFor(NovelReaderChapterTurnHint hint) {
+    final direction = hint.edge == NovelReaderChapterEdge.end ? '下一章' : '上一章';
+    if (!hint.isReadyToCommit) {
+      return '继续滑动进入$direction';
+    }
+    return '松手进入$direction · ${hint.chapterTitle}';
   }
 }
 

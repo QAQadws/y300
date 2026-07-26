@@ -16,6 +16,7 @@ import 'package:y300/features/novel/data/services/novel_reader_progress_diagnost
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
@@ -81,6 +82,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   final NovelReaderPreparedChapterCache _preparedChapterCache =
       NovelReaderPreparedChapterCache();
   int _pageSeekSerial = 0;
+  int _chapterEntrySerial = 0;
+  NovelReaderChapterEntryRequest? _pendingChapterEntryRequest;
   NovelReaderPageSeekRequest? _pendingPageSeekRequest;
   NovelReaderPaginationPosition? _pagedPosition;
   double? _progressSliderPreview;
@@ -177,6 +180,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               _pendingPageSeekRequest = null;
               _progressSliderPreview = null;
               _isProgressSeekInFlight = false;
+              // The owner flips exactly when a switched-to chapter arrives, so
+              // an entry request for *this* episode is the one that just landed
+              // and must survive. Anything else means the reader went somewhere
+              // that request no longer describes (catalog jump, mode switch).
+              if (_pendingChapterEntryRequest?.episodeId !=
+                  viewState.currentEpisode.episodeId) {
+                _pendingChapterEntryRequest = null;
+              }
             }
             if (_verticalRestoreOwner != restoreOwner) {
               _verticalRestoreOwner = restoreOwner;
@@ -515,6 +526,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         chromeInsets: chromeInsets,
         semanticDocument: viewState.document,
         pageSeekRequest: _pendingPageSeekRequest,
+        chapterEntryRequest: _pendingChapterEntryRequest,
+        onChapterEntryApplied: (request) =>
+            _retireChapterEntryRequest(requestId: request.requestId),
+        previousChapterTitle: viewState.previousEpisode?.episodeTitle,
+        nextChapterTitle: viewState.nextEpisode?.episodeTitle,
+        onTurnToAdjacentChapter: (edge) =>
+            _turnToAdjacentChapter(edge, viewState),
         paginationCache: _paginationCache,
         paginationMeasureCache: _paginationMeasureCache,
         preparedChapterCache: _preparedChapterCache,
@@ -906,7 +924,73 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
   }
 
-  Future<void> _openDifferentEpisode(Future<bool> Function() action) async {
+  /// Handles a page turn that ran past either end of the chapter.
+  ///
+  /// Forward lands on the next chapter's first page, which is the transition
+  /// default. Backward has to land on the previous chapter's *last* page, so it
+  /// arms an entry request that the paged surface resolves once that chapter's
+  /// plan is complete and its page count is known.
+  /// Returns whether the turn was accepted. The answer has to be synchronous:
+  /// the paged surface locks its gesture on the strength of it, and a decline
+  /// arms no entry request and therefore produces nothing that would unlock it.
+  bool _turnToAdjacentChapter(
+    NovelReaderChapterEdge edge,
+    NovelReaderViewState viewState,
+  ) {
+    if (viewState.transition != null) {
+      return false;
+    }
+    final target = edge == NovelReaderChapterEdge.end
+        ? viewState.nextEpisode
+        : viewState.previousEpisode;
+    if (target == null) {
+      return false;
+    }
+    final controller = ref.read(novelReaderControllerProvider(_args).notifier);
+    setState(() {
+      _pendingChapterEntryRequest = NovelReaderChapterEntryRequest(
+        requestId: ++_chapterEntrySerial,
+        episodeId: target.episodeId,
+        edge: edge == NovelReaderChapterEdge.end
+            ? NovelReaderChapterEdge.start
+            : NovelReaderChapterEdge.end,
+      );
+    });
+    unawaited(_runChapterTurn(edge, controller));
+    return true;
+  }
+
+  Future<void> _runChapterTurn(
+    NovelReaderChapterEdge edge,
+    NovelReaderController controller,
+  ) async {
+    final didSucceed = await _openDifferentEpisode(
+      edge == NovelReaderChapterEdge.end
+          ? controller.goToNextEpisode
+          : controller.goToPreviousEpisode,
+    );
+    if (!didSucceed) {
+      _retireChapterEntryRequest();
+    }
+  }
+
+  /// Retires the armed entry request, which is what re-arms the turn gesture.
+  /// Guarded by [requestId] so a stale completion cannot cancel a newer turn.
+  void _retireChapterEntryRequest({int? requestId}) {
+    if (!mounted) {
+      return;
+    }
+    final request = _pendingChapterEntryRequest;
+    if (request == null) {
+      return;
+    }
+    if (requestId != null && request.requestId != requestId) {
+      return;
+    }
+    setState(() => _pendingChapterEntryRequest = null);
+  }
+
+  Future<bool> _openDifferentEpisode(Future<bool> Function() action) async {
     await _saveVisibleProgressNow(reason: 'before_episode_switch');
     _hasRestoredOffset = false;
     if (_scrollController.hasClients) {
@@ -920,9 +1004,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _overlayController.hideMenu();
     final didSucceed = await action();
     if (!mounted || didSucceed) {
-      return;
+      return didSucceed;
     }
     _showReaderSnackBar('章节切换失败，已保留当前章节');
+    return false;
   }
 
   Future<void> _saveVisibleProgressNow({required String reason}) async {

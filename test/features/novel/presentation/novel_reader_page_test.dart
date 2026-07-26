@@ -1219,6 +1219,66 @@ void main() {
     expect(repository.readingProgress?.progressPercent, 0);
   });
 
+  testWidgets('NovelReaderPage turns chapters repeatedly by paged overscroll', (
+    tester,
+  ) async {
+    // The gesture used to work exactly once per visit to the reader: the entry
+    // request armed by the first turn was never retired, so it kept reporting a
+    // turn as in flight forever.
+    final repository = _FakeNovelRepository.threeEpisodes(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(_readerText('第一段。'), findsOneWidget);
+
+    final pageView = find.byKey(const Key('novel-reader-paged-page-view'));
+    await tester.drag(pageView, const Offset(-200, 0));
+    await tester.pumpAndSettle();
+
+    expect(_readerText('第三段。'), findsOneWidget);
+
+    await tester.drag(pageView, const Offset(-200, 0));
+    await tester.pumpAndSettle();
+
+    expect(_readerText('第五段。'), findsOneWidget);
+    expect(repository.readingProgress?.episodeId, 'novel:49:100:5003');
+  });
+
+  testWidgets('NovelReaderPage paged overscroll returns to the previous chapter', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        initialEpisodeId: 'novel:49:100:5002',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_readerText('第三段。'), findsOneWidget);
+
+    final pageView = find.byKey(const Key('novel-reader-paged-page-view'));
+    await tester.drag(pageView, const Offset(200, 0));
+    await tester.pumpAndSettle();
+
+    expect(_readerText('第一段。'), findsOneWidget);
+
+    // And forward again from there, proving neither direction latches.
+    await tester.drag(pageView, const Offset(-200, 0));
+    await tester.pumpAndSettle();
+
+    expect(_readerText('第三段。'), findsOneWidget);
+  });
+
   testWidgets('NovelReaderPage hides next chapter transition on last episode', (
     tester,
   ) async {
@@ -1873,8 +1933,10 @@ class _FakeNovelRepository implements NovelRepository {
     NovelReadingProgress? readingProgress,
     Duration chapterLoadDelay = Duration.zero,
     Set<String> failedEpisodeIds = const <String>{},
+    NovelReaderPreferences? preferences,
   }) {
     return _FakeNovelRepository(
+      preferences: preferences,
       episodes: _threeEpisodes(),
       contentsByEpisodeId: _contentsForParagraphs(const <String, List<String>>{
         'novel:49:100:5001': <String>['第一段。', '第二段。'],
