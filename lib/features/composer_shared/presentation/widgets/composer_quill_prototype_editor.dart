@@ -6,6 +6,8 @@ import 'package:flutter_quill/quill_delta.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_attach_token_promoter.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_size_mapping.dart';
@@ -163,6 +165,7 @@ class _ComposerQuillEditorSurfaceState
     extends State<ComposerQuillEditorSurface> {
   static const _codec = ComposerQuillBbCodeCodec();
   static const _selectionAdapter = ComposerQuillSelectionAdapter();
+  static const _attachTokenPromoter = ComposerQuillAttachTokenPromoter();
 
   late final QuillController _controller;
   late final bool _ownsController;
@@ -170,6 +173,8 @@ class _ComposerQuillEditorSurfaceState
   late final ScrollController _scrollController;
   String _bbCodeText = '';
   bool _isApplyingExternalBbCode = false;
+  bool _isPromotingAttachTokens = false;
+  bool _hasScheduledAttachTokenPromotion = false;
   String? _ignoredExternalDocumentEncoding;
   ComposerQuillToolPanel? _activePanel;
   double _lastKeyboardHeight = 0;
@@ -199,6 +204,8 @@ class _ComposerQuillEditorSurfaceState
     _scrollController = ScrollController();
     _controller.addListener(_handleDocumentChanged);
     _bbCodeText = widget.bbCode ?? _codec.encodeDocument(_controller.document);
+    // 外部直接塞进来的文档也可能带着字面 attach 代码。
+    _scheduleAttachTokenPromotion();
   }
 
   String _initialBbCode() {
@@ -618,6 +625,12 @@ class _ComposerQuillEditorSurfaceState
     if (_isApplyingExternalBbCode) {
       return;
     }
+    // 必须在下面的编码比较之前调度：剪切图片后原样打回 attach 代码时，
+    // 编码结果与剪切前完全相同，会命中 `next == _bbCodeText` 的提前返回，
+    // 但文档结构确实从 embed 退化成了纯文本。
+    if (!_isPromotingAttachTokens) {
+      _scheduleAttachTokenPromotion();
+    }
     final next = _codec.encodeDocument(_controller.document);
     final ignoredEncoding = _ignoredExternalDocumentEncoding;
     if (ignoredEncoding != null) {
@@ -633,6 +646,44 @@ class _ComposerQuillEditorSurfaceState
     widget.onBbCodeChanged?.call(next);
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  /// 把手打/粘贴出来的合法 attach 代码归一成图片节点。
+  ///
+  /// 放到帧末执行：避免在 Quill 的变更通知里回写文档，也让输入法组词先落定。
+  void _scheduleAttachTokenPromotion() {
+    if (_hasScheduledAttachTokenPromotion) {
+      return;
+    }
+    _hasScheduledAttachTokenPromotion = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _hasScheduledAttachTokenPromotion = false;
+      if (!mounted) {
+        return;
+      }
+      _promoteAttachTokens();
+    });
+  }
+
+  void _promoteAttachTokens() {
+    final promotion = _attachTokenPromoter.buildPromotion(
+      _controller.document,
+    );
+    if (promotion == null) {
+      return;
+    }
+    _isPromotingAttachTokens = true;
+    try {
+      // compose 会用 Delta.transformPosition 把光标从被替换掉的字面文本
+      // 迁移到 embed 之后，因此传入当前 selection 即可。
+      _controller.compose(
+        promotion,
+        _controller.selection,
+        ChangeSource.local,
+      );
+    } finally {
+      _isPromotingAttachTokens = false;
     }
   }
 
@@ -1525,6 +1576,8 @@ class _AttachEmbedBuilder extends EmbedBuilder {
     required this.attachFileExists,
   });
 
+  static const _grammar = ComposerAttachBbCodeGrammar();
+
   final List<ComposerImageAttachment> imageAttachments;
   final ForumAttachPreviewImageBuilder attachImageBuilder;
   final ForumAttachPreviewFileExists attachFileExists;
@@ -1537,15 +1590,21 @@ class _AttachEmbedBuilder extends EmbedBuilder {
 
   @override
   String toPlainText(Embed node) {
-    return '[attach]${node.value.data}[/attach]';
+    return _grammar.codeFor(node.value.data.toString());
   }
 
   @override
   Widget build(BuildContext context, EmbedContext embedContext) {
     final aid = embedContext.node.value.data.toString();
+    // 与 BBCode 预览侧 `_AttachPreviewTag` 同一口径：只有可进入提交载荷的
+    // 附件才渲染图片，其余（含未知 aid）退化成芯片。过期由草稿 sanitizer 统一处理。
     final attachment = imageAttachments
         .cast<ComposerImageAttachment?>()
-        .firstWhere((item) => item?.aid == aid, orElse: () => null);
+        .firstWhere(
+          (item) => item != null && item.canEnterSubmitPayload &&
+              item.aid!.trim() == aid,
+          orElse: () => null,
+        );
     if (attachment != null) {
       final file = File(attachment.previewPath);
       if (attachFileExists(file)) {

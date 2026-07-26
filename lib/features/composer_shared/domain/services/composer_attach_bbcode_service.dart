@@ -1,17 +1,23 @@
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
+
 /// 维护回复/发帖 message 中 `[attach]aid[/attach]` 片段的小型工具。
 ///
 /// 仅依赖纯字符串处理，不感知附件状态——所以同样适用于
 /// 草稿持久化中"附件过期 → 把对应的 attach 片段从 message 中删除"。
+///
+/// 这里的匹配刻意比 [ComposerAttachBbCodeGrammar] 宽松：提取与清理要兜住
+/// 历史草稿和服务端回传的非规范写法，严格文法只用于编辑器的结构判定。
 class ComposerAttachBbCodeService {
   const ComposerAttachBbCodeService();
 
+  static const _grammar = ComposerAttachBbCodeGrammar();
   static final RegExp _attachPattern = RegExp(
     r'\[attach\]([^\[]*)\[/attach\]',
     caseSensitive: false,
   );
 
   String attachCode(String aid) {
-    return '[attach]${aid.trim()}[/attach]';
+    return _grammar.codeFor(aid);
   }
 
   List<String> extractAttachAids(String message) {

@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
+
+const _attachGrammar = ComposerAttachBbCodeGrammar();
 
 /// Maps Quill's logical document offsets to raw BBCode offsets.
 ///
 /// BBCode formatting tags have no logical Quill width. Attachment and sticker
 /// tokens have width one in Quill and map to their complete raw token span.
+///
+/// Attachment token widths must stay in lockstep with the Quill BBCode codec,
+/// so both sides share [ComposerAttachBbCodeGrammar] instead of duplicating
+/// the pattern.
 class ComposerQuillSelectionAdapter {
   const ComposerQuillSelectionAdapter();
 
@@ -55,8 +62,8 @@ class _SourceIndex {
 
   void _build() {
     final tokenPattern = RegExp(
-      r'\[attach\][^\[]+\[/attach\]'
-      r'|\{:[^}]+:\}'
+      '${ComposerAttachBbCodeGrammar.tokenPatternSource}|'
+      r'\{:[^}]+:\}'
       r'|\[/?(?:b|i|u|s|quote)\]'
       r'|\[/?(?:color|backcolor|size|url|align)(?:=[^\]]+)?\]',
       caseSensitive: false,
@@ -65,8 +72,7 @@ class _SourceIndex {
     for (final match in tokenPattern.allMatches(source)) {
       _appendText(source.substring(rawOffset, match.start), rawOffset);
       final token = match.group(0)!;
-      if (RegExp(r'^\[attach\]', caseSensitive: false).hasMatch(token) ||
-          token.startsWith('{:')) {
+      if (_attachGrammar.isLegalCode(token) || token.startsWith('{:')) {
         _units.add(
           _LogicalUnit(
             logicalStart: _logicalLength,

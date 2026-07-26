@@ -153,6 +153,39 @@ void main() {
     );
   });
 
+  test('decodes a legal attach code into an atomic embed', () {
+    final document = codec.decodeDocument('[ATTACH]1626084[/attach]');
+    final json = document.toDelta().toJson();
+
+    expect(
+      json.any((operation) {
+        final insert = operation['insert'];
+        return insert is Map && insert['attach'] == '1626084';
+      }),
+      isTrue,
+    );
+    expect(codec.encodeDocument(document), '[attach]1626084[/attach]');
+  });
+
+  test('keeps illegal attach codes as editable text', () {
+    for (final source in const [
+      '[attach]abc[/attach]',
+      '[attach][/attach]',
+      '[attach] 12 [/attach]',
+    ]) {
+      final document = codec.decodeDocument(source);
+
+      expect(
+        document.toDelta().toJson().every(
+          (operation) => operation['insert'] is String,
+        ),
+        isTrue,
+        reason: '$source 不应变成 embed',
+      );
+      expect(codec.encodeDocument(document), source);
+    }
+  });
+
   test('maps Quill visual sizes to Discuz sizes and keeps legacy raw sizes', () {
     final delta = Delta()
       ..insert('一', {Attribute.size.key: '12'})

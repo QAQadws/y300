@@ -1,7 +1,10 @@
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_size_mapping.dart';
+
+const _attachGrammar = ComposerAttachBbCodeGrammar();
 
 class ComposerQuillBbCodeCodec {
   const ComposerQuillBbCodeCodec();
@@ -53,8 +56,10 @@ class ComposerQuillBbCodeCodec {
   Delta decodeDelta(String bbCode) {
     final builder = _DeltaBbCodeBuilder();
     final tagPattern = RegExp(
-      r'\[attach\][^\[]+\[/attach\]'
-      r'|\{:[^}]+:\}'
+      // 只有合法（纯数字 aid）的 attach 代码才是原子节点，
+      // 非法写法保持为可编辑文本，用户还能改回来。
+      '${ComposerAttachBbCodeGrammar.tokenPatternSource}|'
+      r'\{:[^}]+:\}'
       r'|\[/?(?:b|i|u|s|quote)\]'
       r'|\[/?(?:color|backcolor|size|url|align)(?:=[^\]]+)?\]',
       caseSensitive: false,
@@ -216,7 +221,7 @@ class ComposerQuillBbCodeCodec {
     }
     final aid = composerQuillEmbedData(data, composerQuillAttachEmbedType);
     if (aid != null && aid.trim().isNotEmpty) {
-      return '[attach]${aid.trim()}[/attach]';
+      return _attachGrammar.codeFor(aid);
     }
     return '';
   }
@@ -230,12 +235,9 @@ class _DeltaBbCodeBuilder {
 
   void appendToken(String token) {
     final lower = token.toLowerCase();
-    if (lower.startsWith('[attach]')) {
-      final aid = token.substring(8, token.length - 9).trim();
-      if (aid.isNotEmpty) {
-        _delta.insert(composerQuillAttachEmbedData(aid), _inlineAttributes());
-        _lineHasContent = true;
-      }
+    if (_attachGrammar.aidOf(token) case final aid?) {
+      _delta.insert(composerQuillAttachEmbedData(aid), _inlineAttributes());
+      _lineHasContent = true;
       return;
     }
     if (token.startsWith('{:') && token.endsWith(':}')) {
