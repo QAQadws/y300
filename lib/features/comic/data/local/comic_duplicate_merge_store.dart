@@ -304,15 +304,15 @@ class ComicDuplicateMergeStore {
     if (publishTimeText != null) {
       update['publish_time_text'] = publishTimeText;
     }
-    // A parsed source wins over a manual-only copy for removal permissions;
-    // hidden is user intent and must survive merging either side.
+    // A parsed source wins over a manual-only copy: once either side is
+    // parse-discovered the chapter comes back on every refresh, so keeping it
+    // removable would promise a deletion that cannot hold.
     final existingIsManual = (existing['is_manual'] as int? ?? 0) == 1;
     final incomingIsManual = (incoming['is_manual'] as int? ?? 0) == 1;
     if (existingIsManual && !incomingIsManual) {
       update['is_manual'] = 0;
-    } else if (!existingIsManual && incomingIsManual) {
-      update['is_manual'] = 0;
     }
+    // Hidden is user intent and must survive a merge from either side.
     final isHidden =
         (existing['is_hidden'] as int? ?? 0) == 1 ||
         (incoming['is_hidden'] as int? ?? 0) == 1;

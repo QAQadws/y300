@@ -256,6 +256,12 @@ class ComicLocalDb {
     required String definition,
   }) async {
     final columns = await db.rawQuery('PRAGMA table_info($table)');
+    // 表不存在时 PRAGMA 返回空结果（SQLite 不存在零列的表）。漫画与小说共用这
+    // 一个库，升级链会跑在只建了对方表的历史库上，缺表时跳过而不是让 ALTER
+    // TABLE 抛错中断整条升级。
+    if (columns.isEmpty) {
+      return;
+    }
     if (columns.any((entry) => entry['name'] == column)) {
       return;
     }

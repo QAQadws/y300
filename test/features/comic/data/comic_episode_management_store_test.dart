@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_models.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -88,6 +89,77 @@ void main() {
     expect(
       await repository.getManagedComicEpisodes(comicId: 'comic-management'),
       hasLength(1),
+    );
+  });
+
+  test('hiding survives a parsed refresh that rewrites the row', () async {
+    const episodeId = 'comic-management:400';
+    await repository.mergeEpisodesFromLinks(
+      comicId: 'comic-management',
+      fallbackSourceTid: '100',
+      episodeLinks: const <ComicEpisodeLink>[
+        ComicEpisodeLink(url: 'thread-400-1-1.html', rawText: '第一话'),
+      ],
+    );
+    await repository.setEpisodeHidden(
+      comicId: 'comic-management',
+      episodeId: episodeId,
+      isHidden: true,
+    );
+
+    final refreshed = await repository.mergeEpisodesFromLinks(
+      comicId: 'comic-management',
+      fallbackSourceTid: '100',
+      episodeLinks: const <ComicEpisodeLink>[
+        ComicEpisodeLink(url: 'thread-400-1-1.html', rawText: '第一话'),
+        ComicEpisodeLink(url: 'thread-401-1-1.html', rawText: '第二话'),
+      ],
+    );
+
+    // 刷新用整行 replace 覆盖章节，隐藏是用户意图，不能被解析结果冲掉。
+    expect(refreshed.totalCount, 1);
+    final managed = await repository.getManagedComicEpisodes(
+      comicId: 'comic-management',
+    );
+    expect(managed, hasLength(2));
+    expect(
+      managed.firstWhere((episode) => episode.episodeId == episodeId).isHidden,
+      isTrue,
+    );
+    expect(
+      managed
+          .firstWhere((episode) => episode.episodeId != episodeId)
+          .isHidden,
+      isFalse,
+    );
+  });
+
+  test('a manual episode rediscovered by parsing becomes parsed', () async {
+    await repository.addManualEpisode(
+      comicId: 'comic-management',
+      sourceTid: '500',
+      sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=500',
+    );
+
+    await repository.mergeEpisodesFromLinks(
+      comicId: 'comic-management',
+      fallbackSourceTid: '100',
+      episodeLinks: const <ComicEpisodeLink>[
+        ComicEpisodeLink(url: 'thread-500-1-1.html', rawText: '第一话'),
+      ],
+    );
+
+    // 来源每次刷新都会带回这条链接，继续标成手动只会给出移除不掉的假承诺。
+    final managed = await repository.getManagedComicEpisodes(
+      comicId: 'comic-management',
+    );
+    expect(managed.single.isManual, isFalse);
+    expect(
+      await repository.removeManualEpisode(
+        comicId: 'comic-management',
+        episodeId: 'comic-management:500',
+      ),
+      isFalse,
     );
   });
 

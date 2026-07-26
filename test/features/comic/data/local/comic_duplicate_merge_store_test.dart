@@ -310,5 +310,55 @@ void main() {
       expect(images[0]['image_url'], 'https://img.test/p1.jpg');
       expect(images[1]['image_url'], 'https://img.test/p2.jpg');
     });
+
+    test('mergeDuplicateGroup keeps hidden intent and demotes manual duplicates', () async {
+      await repository.addToShelf(
+        comicId: 'yamibo:merge-long-title',
+        tid: '7000',
+        fid: '30',
+        title: 'Long Duplicate Title',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[
+            ComicEpisodeLink(url: 'thread-7001-1-1.html', rawText: '1'),
+          ],
+          plainTextSummary: '',
+        ),
+      );
+      await repository.addToShelf(
+        comicId: 'yamibo:merge',
+        tid: '7000',
+        fid: '30',
+        title: 'Short',
+        parsedPost: const ParsedComicPost(
+          imageUrls: <String>[],
+          episodeLinks: <ComicEpisodeLink>[],
+          plainTextSummary: '',
+        ),
+      );
+      // 目标侧只手动添加了这一话，来源侧靠解析发现了同一个 tid。
+      await repository.addManualEpisode(
+        comicId: 'yamibo:merge',
+        sourceTid: '7001',
+        sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7001',
+      );
+      await repository.setEpisodeHidden(
+        comicId: 'yamibo:merge',
+        episodeId: 'yamibo:merge:7001',
+        isHidden: true,
+      );
+
+      final result = await store.mergeDuplicateGroup(
+        comicIds: const <String>{'yamibo:merge-long-title', 'yamibo:merge'},
+      );
+      expect(result.targetComicId, 'yamibo:merge');
+
+      final merged = await repository.getManagedComicEpisodes(
+        comicId: 'yamibo:merge',
+      );
+      final episode = merged.firstWhere((item) => item.sourceTid == '7001');
+      expect(episode.isHidden, isTrue);
+      expect(episode.isManual, isFalse);
+    });
   });
 }

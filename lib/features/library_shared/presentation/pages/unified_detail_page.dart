@@ -357,6 +357,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         value: 'configure-catalog',
                         child: Text('配置目录'),
                       ),
+                    // 章节长按之外的第二个入口：隐藏全部章节后列表为空，
+                    // 长按目标随之消失，只靠长按会把“全部显示”永久锁死。
+                    if (_chapterManagementAdapter != null)
+                      const PopupMenuItem(
+                        key: Key('unified-detail-manage-chapters'),
+                        value: 'manage-chapters',
+                        child: Text('管理章节'),
+                      ),
                     if (_supportsCoverEditing) ...[
                       const PopupMenuItem(
                         key: Key('unified-detail-set-cover'),
@@ -964,6 +972,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     }
     if (value == 'configure-catalog') {
       await _showCatalogConfigurationSheet();
+      return;
+    }
+    if (value == 'manage-chapters') {
+      await _showChapterManagementSheet();
       return;
     }
     if (value == 'set-custom-cover') {

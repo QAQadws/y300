@@ -1978,6 +1978,67 @@ void main() {
   );
 
   testWidgets(
+    'UnifiedDetailPage recovers from hide-all through the AppBar chapter manager',
+    (tester) async {
+      final adapter = _ManageableDetailAdapter();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UnifiedDetailPage(
+            adapter: adapter,
+            workId: 'work-1',
+            onOpenReader: (context, target) async {},
+            onOpenThread: (context, target) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('unified-detail-manage-chapters')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('unified-detail-chapter-management-sheet')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('unified-detail-chapter-management-hide-all')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('关闭'));
+      await tester.pumpAndSettle();
+
+      // 全部隐藏后章节列表为空，长按入口随之消失，只有 AppBar 菜单能救回来。
+      expect(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('unified-detail-manage-chapters')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('unified-detail-chapter-management-show-all')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('关闭'));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
     'UnifiedDetailPage reports delete download failures and keeps download state',
     (tester) async {
       final adapter = _FakeDetailAdapter(isDownloaded: true)
@@ -2376,6 +2437,82 @@ class _CatalogEditableDetailAdapter extends _FakeDetailAdapter
     String? catalogUrl,
   }) async {
     lastCatalogUrl = catalogUrl;
+  }
+}
+
+/// 隐藏状态由 adapter 自己维护，[loadChapters] 只返回可见章节——与真实
+/// 存储层「隐藏在读取边界过滤」的语义一致。
+class _ManageableDetailAdapter extends _FakeDetailAdapter
+    implements DetailChapterManagementAdapter {
+  _ManageableDetailAdapter() : super(module: LibraryModuleKey.comic);
+
+  final Map<String, bool> _hidden = <String, bool>{'e1': false};
+
+  @override
+  Future<List<LibraryChapterItem>> loadChapters({
+    required String workId,
+    required LibraryFilterSet filters,
+    required LibraryChapterSortOption sortOption,
+  }) async {
+    final chapters = await super.loadChapters(
+      workId: workId,
+      filters: filters,
+      sortOption: sortOption,
+    );
+    return chapters
+        .where((chapter) => _hidden[chapter.episodeId] != true)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<DetailManagedChapter>> loadManagedChapters({
+    required String workId,
+  }) async {
+    return _hidden.entries
+        .map(
+          (entry) => DetailManagedChapter(
+            episodeId: entry.key,
+            title: '第1章',
+            sourceTid: '100',
+            isManual: false,
+            isHidden: entry.value,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<bool> addManualChapter({
+    required String workId,
+    required String input,
+  }) async {
+    _hidden[input] = false;
+    return true;
+  }
+
+  @override
+  Future<DetailChapterRemovalResult> removeManualChapter({
+    required String workId,
+    required String episodeId,
+  }) async => const DetailChapterRemovalResult(removed: false);
+
+  @override
+  Future<void> setChapterHidden({
+    required String workId,
+    required String episodeId,
+    required bool isHidden,
+  }) async {
+    _hidden[episodeId] = isHidden;
+  }
+
+  @override
+  Future<void> setAllChaptersHidden({
+    required String workId,
+    required bool isHidden,
+  }) async {
+    for (final key in _hidden.keys.toList(growable: false)) {
+      _hidden[key] = isHidden;
+    }
   }
 }
 
