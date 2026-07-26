@@ -69,6 +69,8 @@ class ReplyComposerController
     }
   }
 
+  /// 必须转发 `ComposerStatePatch` 的每一个字段：漏掉任何一个都会让基类的
+  /// 通用流程静默失效（例如漏掉 messageRevision 会把光标插入退化成尾部追加）。
   @override
   ReplyComposerState applyPatch(
     ReplyComposerState current,
@@ -83,10 +85,16 @@ class ReplyComposerController
       isUploadingImages: patch.isUploadingImages,
       imageUploadCurrent: patch.imageUploadCurrent,
       imageUploadTotal: patch.imageUploadTotal,
+      messageRevision: patch.messageRevision,
+      lastMessageMutation: patch.lastMessageMutation,
+      pendingAttachmentAids: patch.pendingAttachmentAids,
+      pendingAttachmentMessage: patch.pendingAttachmentMessage,
       errorMessage: patch.errorMessage,
       imageUploadError: patch.imageUploadError,
       clearErrorMessage: patch.clearErrorMessage,
       clearImageUploadError: patch.clearImageUploadError,
+      clearLastMessageMutation: patch.clearLastMessageMutation,
+      clearPendingAttachmentMessage: patch.clearPendingAttachmentMessage,
     );
   }
 

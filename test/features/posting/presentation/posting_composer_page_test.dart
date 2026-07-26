@@ -1146,6 +1146,74 @@ void main() {
       expect(saved?.message, '草稿正文');
     },
   );
+
+  testWidgets(
+    'PostingComposerPage source editor inserts the image at a mid message caret',
+    (tester) async {
+      await tester.pumpWidget(
+        _buildPage(
+          imagePicker: _FakeImagePicker(
+            images: const [
+              ComposerPickedImage(
+                path: '/gallery/first.jpg',
+                fileName: 'first.jpg',
+                mimeType: 'image/jpeg',
+                originalIndex: 0,
+              ),
+            ],
+          ),
+          imageUploadCoordinator: _uploadedAidCoordinator('777'),
+          metadataRepository: _FakeMetadataRepository.success(_metadata()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _enterPostingSourceMode(tester);
+      await tester.enterText(
+        find.byKey(const Key('posting-composer-message-input')),
+        '第一行\n第二行',
+      );
+      await tester.pump();
+      final field = tester.widget<TextField>(
+        find.byKey(const Key('posting-composer-message-input')),
+      );
+      field.controller!.selection = const TextSelection.collapsed(offset: 3);
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('posting-composer-image-button')));
+      for (var i = 0; i < 12; i += 1) {
+        await tester.pump();
+        if (field.controller!.text.contains('[attach]777[/attach]')) {
+          break;
+        }
+      }
+      await tester.pump();
+
+      expect(field.controller!.text, '第一行\n[attach]777[/attach]\n第二行');
+      // 图片下一行的开头，也就是 `第二行` 的第一个字符前。
+      expect(
+        field.controller!.selection,
+        const TextSelection.collapsed(offset: 25),
+      );
+    },
+  );
+}
+
+_FakeUploadCoordinator _uploadedAidCoordinator(String aid) {
+  return _FakeUploadCoordinator(
+    events: [
+      ComposerImageUploadEvent.uploaded(
+        localId: '',
+        current: 1,
+        total: 1,
+        uploadedImage: ComposerUploadedImage(
+          localId: '',
+          aid: aid,
+          uploadedAt: DateTime(2026, 7, 26),
+        ),
+      ),
+      const ComposerImageUploadEvent.completed(total: 1),
+    ],
+  );
 }
 
 Future<void> _enterPostingSourceMode(WidgetTester tester) async {

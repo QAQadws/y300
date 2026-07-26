@@ -12,6 +12,7 @@ import 'package:y300/features/composer_shared/domain/models/composer_draft_model
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reply/data/repositories/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -1035,6 +1036,85 @@ void main() {
         );
       },
     );
+
+    // 漏转发任何一个字段都会让基类的通用流程静默失效。
+    test('applyPatch forwards every ComposerStatePatch field', () async {
+      final args = _threadArgs(tid: '572063');
+      final container = _buildContainer();
+      addTearDown(container.dispose);
+      final subscription = _keepComposerAlive(container, args);
+      addTearDown(subscription.close);
+
+      final initial = await container.read(
+        replyComposerControllerProvider(args).future,
+      );
+      final controller = container.read(
+        replyComposerControllerProvider(args).notifier,
+      );
+
+      final mutation = ComposerTextMutation(
+        previousSource: '旧',
+        nextSource: '新',
+        replacedSelection: const ComposerSelection(start: 0, end: 1),
+        resultSelection: const ComposerSelection(start: 1, end: 1),
+        revision: 9,
+      );
+      final applied = controller.applyPatch(
+        initial,
+        ComposerStatePatch(
+          message: '新正文',
+          useSignature: false,
+          isSubmitting: true,
+          restoredDraft: true,
+          imageAttachments: [
+            _attachmentWithStatus(
+              localId: 'local-1',
+              status: ComposerImageAttachmentStatus.local,
+              aid: '',
+            ),
+          ],
+          isUploadingImages: true,
+          imageUploadCurrent: 2,
+          imageUploadTotal: 3,
+          messageRevision: 7,
+          lastMessageMutation: mutation,
+          pendingAttachmentAids: const ['888'],
+          pendingAttachmentMessage: '待插入',
+          errorMessage: '错误',
+          imageUploadError: '上传错误',
+        ),
+      );
+
+      expect(applied.message, '新正文');
+      expect(applied.useSignature, isFalse);
+      expect(applied.isSubmitting, isTrue);
+      expect(applied.restoredDraft, isTrue);
+      expect(applied.imageAttachments.single.localId, 'local-1');
+      expect(applied.isUploadingImages, isTrue);
+      expect(applied.imageUploadCurrent, 2);
+      expect(applied.imageUploadTotal, 3);
+      expect(applied.messageRevision, 7);
+      expect(applied.lastMessageMutation, same(mutation));
+      expect(applied.pendingAttachmentAids, ['888']);
+      expect(applied.pendingAttachmentMessage, '待插入');
+      expect(applied.errorMessage, '错误');
+      expect(applied.imageUploadError, '上传错误');
+
+      final cleared = controller.applyPatch(
+        applied,
+        const ComposerStatePatch(
+          clearErrorMessage: true,
+          clearImageUploadError: true,
+          clearLastMessageMutation: true,
+          clearPendingAttachmentMessage: true,
+        ),
+      );
+
+      expect(cleared.errorMessage, isNull);
+      expect(cleared.imageUploadError, isNull);
+      expect(cleared.lastMessageMutation, isNull);
+      expect(cleared.pendingAttachmentMessage, isNull);
+    });
   });
 }
 
