@@ -82,14 +82,17 @@ void main() {
         'background': 0xFFF8F8E1,
         'surface': 0xFFFEF2DB,
         'foreground': 0xFF4F3A2A,
-        'link': 0xFF531104,
+        'accent': 0xFF531104,
         'muted': 0xFF7D6750,
       });
       expect(_threadPaletteSnapshot(dark), <String, int>{
         'background': 0xFF17110F,
         'surface': 0xFF241916,
         'foreground': 0xFFF6E8DD,
-        'link': 0xFF2A0903,
+        // 深色下 accent 走 scheme.primary 而不是 appBarBackground：后者是近黑的
+        // 0xFF2A0903，压在 0xFF241916 的卡片上等于看不见，而评分徽标、页脚图标
+        // 和投票条都用这个颜色。
+        'accent': 0xFFE8B884,
         'muted': 0xFFD7C2B6,
       });
     });
@@ -200,12 +203,17 @@ void main() {
   });
 }
 
+/// 帖子调色板快照。
+///
+/// `accent` 就是 `palette.accent` 原值，**不是**正文里链接最终的颜色：HTML 链接
+/// 会再经过 `ForumHtmlRenderThemeFactory._readableLink` 的对比度兜底。这一项原来
+/// 叫 `link`，会让 accent 的漂移看起来像链接对比度出了问题。
 Map<String, int> _threadPaletteSnapshot(ThreadDetailNativePalette palette) {
   return <String, int>{
     'background': palette.background.toARGB32(),
     'surface': palette.card.toARGB32(),
     'foreground': palette.bodyText.toARGB32(),
-    'link': palette.accent.toARGB32(),
+    'accent': palette.accent.toARGB32(),
     'muted': palette.muted.toARGB32(),
   };
 }

@@ -114,7 +114,7 @@ void main() {
     );
     expect(find.byKey(const Key('upgrader_alert_dialog')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('more-check-update-entry')));
+    await tester.tap(find.byKey(const Key('about-check-update-entry')));
     await tester.pumpAndSettle();
 
     expect(upgrader.state.versionInfo, isNotNull);
@@ -143,7 +143,7 @@ void main() {
     );
     expect(find.byKey(const Key('upgrader_alert_dialog')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('more-check-update-entry')));
+    await tester.tap(find.byKey(const Key('about-check-update-entry')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('upgrader_alert_dialog')), findsOneWidget);

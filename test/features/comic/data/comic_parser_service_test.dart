@@ -17,26 +17,54 @@ void main() {
 <img src="https://img.test/smilies/face.png" />
 <a href="https://bbs.yamibo.com/thread-100-1-1.html?from=foo">1</a>
 <a href="thread-101-1-1.html">\u7b2c2\u8bdd</a>
-<a href="https://bbs.yamibo.com/thread-200-1-1.html">\u76ee\u5f55</a>
+<a href="https://bbs.yamibo.com/misc.php?mod=tag&amp;id=20686">\u76ee\u5f55</a>
 ''',
       );
 
       expect(result.imageUrls.length, 1);
       expect(result.imageUrls.first, 'https://img.test/1.jpg');
-      expect(result.episodeLinks.length, 3);
+      expect(result.episodeLinks.length, 2);
       expect(
         result.episodeLinks.first.url,
         'https://bbs.yamibo.com/thread-100-1-1.html',
       );
       expect(result.episodeLinks.first.episodeTitle, '1');
-      expect(result.catalogUrl, 'https://bbs.yamibo.com/thread-200-1-1.html');
+      expect(
+        result.catalogUrl,
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=20686',
+      );
       expect(result.inferredAuthor, '\u6d4b\u8bd5\u7ec4');
       expect(
         result.plainTextSummary,
         contains('\u4f5c\u8005: \u6d4b\u8bd5\u7ec4'),
       );
       expect(result.parsingDebug, isNotNull);
-      expect(result.parsingDebug!.totalEpisodeLinks, 3);
+      expect(result.parsingDebug!.totalEpisodeLinks, 2);
+    });
+
+    test('catalog text on a plain thread link is neither catalog nor episode', () {
+      // \u76ee\u5f55 \u6587\u6848\u843d\u5728\u666e\u901a\u5e16\u5b50\u94fe\u63a5\u4e0a\u65f6\uff0c`_isCatalogAnchor` \u8981\u6c42\u300c\u76ee\u5f55\u6587\u6848 **\u4e14**
+      // \u662f tag \u76ee\u5f55 URL\u300d\uff0c\u6240\u4ee5\u5b83\u65e2\u4e0d\u7b97\u76ee\u5f55\u3001\u4e5f\u6ca1\u6709\u8bdd\u540d/\u5e8f\u53f7\u7279\u5f81\u53ef\u4ee5\u5347\u7ea7\u6210\u7ae0\u8282\uff0c
+      // \u4f1a\u88ab\u6574\u6761\u4e22\u6389\u3002\u8fd9\u4e2a\u5f62\u72b6\u771f\u5b9e\u5b58\u5728\uff0c\u6240\u4ee5\u628a\u5f53\u524d\u53e3\u5f84\u9501\u5728\u6d4b\u8bd5\u91cc\u2014\u2014\u5e16\u5b50\u672c\u8eab\u4ecd
+      // \u7136\u80fd\u88ab\u9012\u5f52\u53d1\u73b0\u635e\u56de\uff08`_collectRecursiveTidCandidates` \u76f4\u63a5\u626b DOM \u91cc\u7684
+      // tid\uff09\uff0c\u4e0d\u4f1a\u56e0\u4e3a\u8fd9\u91cc\u4e22\u5f03\u800c\u5f7b\u5e95\u770b\u4e0d\u89c1\u3002
+      final parser = HtmlComicParserService();
+      final result = parser.parse(
+        message: '''
+<a href="https://bbs.yamibo.com/thread-100-1-1.html">1</a>
+<a href="thread-101-1-1.html">\u7b2c2\u8bdd</a>
+<a href="https://bbs.yamibo.com/thread-200-1-1.html">\u76ee\u5f55</a>
+''',
+      );
+
+      expect(result.catalogUrl, isNull);
+      expect(
+        result.episodeLinks.map((link) => link.url).toList(),
+        <String>[
+          'https://bbs.yamibo.com/thread-100-1-1.html',
+          'https://bbs.yamibo.com/thread-101-1-1.html',
+        ],
+      );
     });
 
     test('extracts forum.php viewthread links including escaped ampersands', () {
@@ -165,14 +193,15 @@ void main() {
         message: '''
 <img src="https://img.test/a.jpg" />
 <a href="thread-101-1-1.html">01</a>
-<a href="https://bbs.yamibo.com/thread-200-1-1.html">\u76ee\u5f55</a>
+<a href="https://bbs.yamibo.com/misc.php?mod=tag&amp;id=20686">\u76ee\u5f55</a>
 ''',
       );
 
       final debug = result.parsingDebug;
       expect(debug, isNotNull);
       expect(debug!.totalAnchors, 2);
-      expect(debug.totalEpisodeLinks, 2);
+      // tag \u76ee\u5f55\u9875\u6ca1\u6709 tid\uff0c\u56e0\u6b64\u53ea\u7b97\u76ee\u5f55\u3001\u4e0d\u7b97\u7ae0\u8282\u3002
+      expect(debug.totalEpisodeLinks, 1);
       expect(debug.signals.isNotEmpty, true);
       expect(debug.signals.any((s) => s.message.contains('catalog hit')), true);
     });
