@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 
@@ -81,7 +82,7 @@ Widget _buildPanel({
   required List<ReaderToolbarAction> actions,
   bool includeProgress = true,
 }) {
-  return MaterialApp(
+  return LocalizedTestApp(
     home: Scaffold(
       body: Align(
         alignment: Alignment.bottomCenter,

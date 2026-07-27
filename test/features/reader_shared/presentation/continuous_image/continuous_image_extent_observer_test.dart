@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
@@ -18,7 +19,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Center(
           child: ContinuousImageExtentObserver(
             item: item,

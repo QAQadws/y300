@@ -1,6 +1,7 @@
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -44,7 +45,7 @@ void main() {
             _FakeDownloadStorageService(repo: repo),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           theme: AppTheme.dark(),
           home: const DataStoragePage(),
         ),
@@ -95,7 +96,7 @@ void main() {
             _FakeDownloadStorageService(repo: repo),
           ),
         ],
-        child: const MaterialApp(home: DataStoragePage()),
+        child: const LocalizedTestApp(home: DataStoragePage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -140,7 +141,7 @@ void main() {
               _FakeDownloadStorageService(repo: repo),
             ),
           ],
-          child: const MaterialApp(home: DataStoragePage()),
+          child: const LocalizedTestApp(home: DataStoragePage()),
         ),
       );
 
@@ -252,7 +253,7 @@ void main() {
             _FakeDownloadStorageService(repo: repo),
           ),
         ],
-        child: const MaterialApp(home: DataStoragePage()),
+        child: const LocalizedTestApp(home: DataStoragePage()),
       ),
     );
 
@@ -355,7 +356,7 @@ void main() {
             ),
             downloadStorageServiceProvider.overrideWithValue(storage),
           ],
-          child: const MaterialApp(home: DataStoragePage()),
+          child: const LocalizedTestApp(home: DataStoragePage()),
         ),
       );
 
@@ -420,7 +421,7 @@ void main() {
             _FakeDownloadStorageService(repo: repo),
           ),
         ],
-        child: const MaterialApp(home: DataStoragePage()),
+        child: const LocalizedTestApp(home: DataStoragePage()),
       ),
     );
 
@@ -491,7 +492,7 @@ void main() {
             _FakeDownloadStorageService(repo: repo),
           ),
         ],
-        child: const MaterialApp(home: DataStoragePage()),
+        child: const LocalizedTestApp(home: DataStoragePage()),
       ),
     );
 
@@ -552,7 +553,7 @@ void main() {
             _FakeDownloadStorageService(repo: repo),
           ),
         ],
-        child: const MaterialApp(home: DataStoragePage()),
+        child: const LocalizedTestApp(home: DataStoragePage()),
       ),
     );
 

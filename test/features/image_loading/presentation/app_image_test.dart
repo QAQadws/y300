@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -9,7 +10,7 @@ import 'package:y300/features/image_loading/presentation/app_image.dart';
 
 void main() {
   Widget wrap(Widget child) {
-    return ProviderScope(child: MaterialApp(home: child));
+    return ProviderScope(child: LocalizedTestApp(home: child));
   }
 
   testWidgets('shows placeholder when no local file and no network source', (

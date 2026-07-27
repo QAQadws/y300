@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -374,7 +375,7 @@ Widget _buildPanel({
   List<ComposerImageAttachment> imageAttachments =
       const <ComposerImageAttachment>[],
 }) {
-  return MaterialApp(
+  return LocalizedTestApp(
     theme: AppTheme.light(),
     home: ProviderScope(
       overrides: [

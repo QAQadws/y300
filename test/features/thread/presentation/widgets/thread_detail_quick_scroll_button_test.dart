@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_button.dart';
@@ -128,7 +129,7 @@ Widget _testShell({
   required double contentHeight,
   bool disableAnimations = false,
 }) {
-  return MaterialApp(
+  return LocalizedTestApp(
     home: MediaQuery(
       data: MediaQueryData(disableAnimations: disableAnimations),
       child: Scaffold(

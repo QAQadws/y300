@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/navigation/history_entry_router.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
@@ -249,7 +250,7 @@ void main() {
 }
 
 Widget _routerHarness({required ValueChanged<BuildContext> onContext}) {
-  return MaterialApp(
+  return LocalizedTestApp(
     home: Builder(
       builder: (context) {
         onContext(context);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
@@ -18,7 +19,7 @@ void main() {
       isDownloaded: true,
     );
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -140,7 +141,7 @@ void main() {
       final adapter = _FakeDetailAdapter();
       var presentationCount = 0;
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -188,7 +189,7 @@ void main() {
     (tester) async {
       final adapter = _EditableDetailAdapter();
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -268,7 +269,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: _FakeDetailAdapter(),
           workId: 'work-1',
@@ -295,7 +296,7 @@ void main() {
   ) async {
     final adapter = _CatalogEditableDetailAdapter();
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -348,7 +349,7 @@ void main() {
     (tester) async {
       final adapter = _CoverEditableDetailAdapter();
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -377,7 +378,7 @@ void main() {
     (tester) async {
       final adapter = _CoverEditableDetailAdapter();
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -400,7 +401,7 @@ void main() {
   ) async {
     final adapter = _CoverEditableDetailAdapter(hasCustomCover: true);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -431,7 +432,7 @@ void main() {
   ) async {
     final adapter = _CoverEditableDetailAdapter(hasSourceCover: true);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -469,7 +470,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
           scaffoldBackgroundColor: pageBackground,
@@ -540,7 +541,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
             scaffoldBackgroundColor: pageBackground,
@@ -577,7 +578,7 @@ void main() {
       final adapter = _FakeDetailAdapter();
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
             scaffoldBackgroundColor: pageBackground,
@@ -634,7 +635,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
             scaffoldBackgroundColor: pageBackground,
@@ -667,7 +668,7 @@ void main() {
     final adapter = _EditableDetailAdapter();
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: AppTheme.dark(),
         home: UnifiedDetailPage(
           adapter: adapter,
@@ -723,7 +724,7 @@ void main() {
           );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -759,7 +760,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -809,7 +810,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -862,7 +863,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -927,7 +928,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -1018,7 +1019,7 @@ void main() {
     final adapter = _FakeDetailAdapter(secondIsBookmarked: true);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1062,7 +1063,7 @@ void main() {
     final adapter = _FakeDetailAdapter(includeSecondChapter: true);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1110,7 +1111,7 @@ void main() {
       final adapter = _FakeDetailAdapter(includeSecondChapter: true);
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -1193,7 +1194,7 @@ void main() {
     final adapter = _FakeDetailAdapter();
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1274,7 +1275,7 @@ void main() {
     final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1315,7 +1316,7 @@ void main() {
       isRead: true,
     );
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1346,7 +1347,7 @@ void main() {
   ) async {
     final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1391,7 +1392,7 @@ void main() {
   ) async {
     final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Directionality(
           textDirection: TextDirection.rtl,
           child: UnifiedDetailPage(
@@ -1425,7 +1426,7 @@ void main() {
   ) async {
     final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1459,7 +1460,7 @@ void main() {
       failMarkRead: true,
     );
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1494,7 +1495,7 @@ void main() {
       isRead: true,
     );
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1547,7 +1548,7 @@ void main() {
     final adapter = _FakeDetailAdapter();
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1610,7 +1611,7 @@ void main() {
         refreshBus.dispose();
       });
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -1659,7 +1660,7 @@ void main() {
       final adapter = _FakeDetailAdapter();
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -1687,7 +1688,7 @@ void main() {
         queuePosition: 1,
       );
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1709,7 +1710,7 @@ void main() {
   ) async {
     final adapter = _FakeDetailAdapter();
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1738,7 +1739,7 @@ void main() {
       final adapter = _FakeDetailAdapter();
       var presentationCount = 0;
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -1784,7 +1785,7 @@ void main() {
     final adapter = _FakeDetailAdapter()..failLoadHeaderOnce = true;
     var presentationCount = 0;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: adapter,
           workId: 'work-1',
@@ -1819,7 +1820,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedDetailPage(
           adapter: _FakeDetailAdapter(),
           workId: 'work-1',
@@ -1844,7 +1845,7 @@ void main() {
     var presentationCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Builder(
           builder: (context) => Scaffold(
             body: Center(
@@ -1890,7 +1891,7 @@ void main() {
     (tester) async {
       final adapter = _FakeDetailAdapter();
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -1944,7 +1945,7 @@ void main() {
     (tester) async {
       final adapter = _FakeDetailAdapter()..failMarkDownload = true;
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -1982,7 +1983,7 @@ void main() {
     (tester) async {
       final adapter = _ManageableDetailAdapter();
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -2044,7 +2045,7 @@ void main() {
       final adapter = _FakeDetailAdapter(isDownloaded: true)
         ..failDeleteDownload = true;
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',

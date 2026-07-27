@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
@@ -55,7 +56,7 @@ void main() {
     late Widget content;
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: Builder(
               builder: (context) {
@@ -83,7 +84,7 @@ void main() {
 
     final sessionImage = content as ReaderSessionImage;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(body: Center(child: sessionImage.errorPlaceholder)),
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upgrader/upgrader.dart';
@@ -54,7 +55,7 @@ void main() {
               ),
             ),
           ],
-          child: const MaterialApp(home: AboutPage()),
+          child: const LocalizedTestApp(home: AboutPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -97,7 +98,7 @@ void main() {
           ),
           appUpdatePromptCoordinatorProvider.overrideWithValue(coordinator),
         ],
-        child: const MaterialApp(home: AboutPage()),
+        child: const LocalizedTestApp(home: AboutPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -122,7 +123,7 @@ void main() {
           ),
           appUpdatePromptCoordinatorProvider.overrideWithValue(coordinator),
         ],
-        child: const MaterialApp(home: AboutPage()),
+        child: const LocalizedTestApp(home: AboutPage()),
       ),
     );
     await tester.pumpAndSettle();

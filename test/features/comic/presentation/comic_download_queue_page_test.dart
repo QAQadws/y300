@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
@@ -44,7 +45,7 @@ void main() {
           comicDownloadQueueProvider.overrideWithValue(queue),
           comicDownloadQueueSnapshotProvider.overrideWithValue(snapshot),
         ],
-        child: const MaterialApp(home: ComicDownloadQueuePage()),
+        child: const LocalizedTestApp(home: ComicDownloadQueuePage()),
       ),
     );
 
@@ -86,7 +87,7 @@ void main() {
           ),
           comicDownloadQueueSnapshotProvider.overrideWithValue(snapshot),
         ],
-        child: const MaterialApp(home: ComicDownloadQueuePage()),
+        child: const LocalizedTestApp(home: ComicDownloadQueuePage()),
       ),
     );
 

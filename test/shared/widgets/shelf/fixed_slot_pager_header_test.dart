@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
@@ -11,7 +12,7 @@ void main() {
     const surface = Color(0xFF102030);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue).copyWith(surface: surface)),
         home: Scaffold(
           body: FixedSlotPagerHeader(
@@ -46,7 +47,7 @@ void main() {
     final palette = const ShelfThemePaletteResolver().resolve(theme);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: theme,
         home: Scaffold(
           body: FixedSlotPagerHeader(
@@ -89,7 +90,7 @@ void main() {
     addTearDown(pageController.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: SizedBox(
             width: 400,
@@ -122,7 +123,7 @@ void main() {
     addTearDown(pageController.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: FixedSlotPagerHeader(
             pageController: pageController,

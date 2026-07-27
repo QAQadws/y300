@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
@@ -9,7 +10,7 @@ void main() {
   testWidgets('shows loading, empty and failure states', (tester) async {
     await tester.pumpWidget(
       const ProviderScope(
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: ComicCommentListSurface(sourceTid: '573279', isLoading: true),
           ),
@@ -20,7 +21,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: ComicCommentListSurface(
               sourceTid: '573279',
@@ -34,7 +35,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: ComicCommentListSurface(
               sourceTid: '573279',
@@ -54,7 +55,7 @@ void main() {
     var retryCount = 0;
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: ComicCommentListSurface(
               sourceTid: '573279',
@@ -90,7 +91,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: ComicCommentListSurface(
               sourceTid: '573279',

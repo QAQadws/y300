@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
@@ -56,14 +57,14 @@ void main() {
 Widget _buildTestApp(AuthRepository repository) {
   return ProviderScope(
     overrides: [authRepositoryProvider.overrideWithValue(repository)],
-    child: const MaterialApp(home: LoginPage()),
+    child: const LocalizedTestApp(home: LoginPage()),
   );
 }
 
 Widget _buildPushFlowTestApp(AuthRepository repository) {
   return ProviderScope(
     overrides: [authRepositoryProvider.overrideWithValue(repository)],
-    child: const MaterialApp(home: _LoginHostPage()),
+    child: const LocalizedTestApp(home: _LoginHostPage()),
   );
 }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upgrader/upgrader.dart';
@@ -69,7 +70,7 @@ Future<void> _pumpTile(
       overrides: [
         appUpdatePromptCoordinatorProvider.overrideWithValue(coordinator),
       ],
-      child: const MaterialApp(home: Scaffold(body: AppUpdateCheckTile())),
+      child: const LocalizedTestApp(home: Scaffold(body: AppUpdateCheckTile())),
     ),
   );
   await tester.pump();

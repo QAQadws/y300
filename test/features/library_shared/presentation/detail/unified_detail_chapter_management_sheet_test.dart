@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_chapter_management_sheet.dart';
@@ -27,7 +28,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: Scaffold(
             body: UnifiedDetailChapterManagementSheet(
               workId: 'comic',
@@ -115,7 +116,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: UnifiedDetailChapterManagementSheet(
             workId: 'comic',
@@ -178,7 +179,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: UnifiedDetailChapterManagementSheet(
             workId: 'comic',
@@ -230,7 +231,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: UnifiedDetailChapterManagementSheet(
             workId: 'comic',

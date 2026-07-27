@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upgrader/upgrader.dart';
@@ -160,8 +161,9 @@ Future<void> _pumpHost(
       overrides: [
         appUpdatePromptCoordinatorProvider.overrideWithValue(coordinator),
       ],
-      child: MaterialApp(
+      child: LocalizedTestApp(
         locale: Locale('en'),
+        supportedLocales: const [Locale('en')],
         home: AppUpdateAlertHost(child: child),
       ),
     ),

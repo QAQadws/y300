@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
@@ -28,7 +29,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: SingleChildScrollView(
               child: AnimatedBuilder(
@@ -126,7 +127,7 @@ void main() {
     addTearDown(session.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: Builder(
             builder: (context) => tail.buildAdvance(

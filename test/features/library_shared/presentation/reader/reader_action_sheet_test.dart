@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 
@@ -13,7 +14,7 @@ void main() {
   ) async {
     _Action? selected;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Builder(
           builder: (context) => Scaffold(
             body: FilledButton(
@@ -63,7 +64,7 @@ void main() {
 
   testWidgets('ReaderActionSheet disables actions', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: ReaderActionSheet<_Action>(
             title: '更多',

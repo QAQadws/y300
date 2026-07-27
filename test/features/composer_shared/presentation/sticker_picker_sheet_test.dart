@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -64,7 +65,7 @@ void main() {
             _testStickerImageLoader(),
           ),
         ],
-        child: const MaterialApp(home: Scaffold(body: StickerPickerSheet())),
+        child: const LocalizedTestApp(home: Scaffold(body: StickerPickerSheet())),
       ),
     );
     await tester.pumpAndSettle();
@@ -94,7 +95,7 @@ void main() {
             _testStickerImageLoader(),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: _PickerLauncher(
             onSelected: (sticker) {
               selected = sticker;
@@ -175,7 +176,7 @@ Widget _buildSheet({
         _testStickerImageLoader(),
       ),
     ],
-    child: const MaterialApp(home: Scaffold(body: StickerPickerSheet())),
+    child: const LocalizedTestApp(home: Scaffold(body: StickerPickerSheet())),
   );
 }
 

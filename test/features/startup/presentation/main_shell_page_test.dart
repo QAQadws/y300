@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -102,7 +103,7 @@ void main() {
             const _FakeHistoryRepository(),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           builder: (context, child) {
             return ValueListenableBuilder<double>(
               valueListenable: textScale,
@@ -258,7 +259,7 @@ void main() {
               const _FakeHistoryRepository(),
             ),
           ],
-          child: const MaterialApp(home: MainShellPage()),
+          child: const LocalizedTestApp(home: MainShellPage()),
         ),
       );
 
@@ -350,7 +351,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: MainShellPage()),
+        child: const LocalizedTestApp(home: MainShellPage()),
       ),
     );
 
@@ -407,7 +408,7 @@ void main() {
             ),
             cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
           ],
-          child: MaterialApp(
+          child: LocalizedTestApp(
             theme: AppTheme.light(),
             home: const MainShellPage(),
           ),
@@ -469,7 +470,7 @@ void main() {
             ),
             cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
           ],
-          child: const MaterialApp(home: MainShellPage()),
+          child: const LocalizedTestApp(home: MainShellPage()),
         ),
       );
 
@@ -524,7 +525,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: MainShellPage()),
+        child: const LocalizedTestApp(home: MainShellPage()),
       ),
     );
 
@@ -576,7 +577,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: MainShellPage()),
+        child: const LocalizedTestApp(home: MainShellPage()),
       ),
     );
 
@@ -632,7 +633,7 @@ void main() {
             ),
             cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
           ],
-          child: const MaterialApp(home: MainShellPage()),
+          child: const LocalizedTestApp(home: MainShellPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -712,7 +713,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: MainShellPage()),
+        child: const LocalizedTestApp(home: MainShellPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -874,7 +875,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: MainShellPage()),
+        child: const LocalizedTestApp(home: MainShellPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -974,7 +975,7 @@ Future<void> _pumpSelectionShell(
         ),
         cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
       ],
-      child: const MaterialApp(home: MainShellPage()),
+      child: const LocalizedTestApp(home: MainShellPage()),
     ),
   );
   await tester.pumpAndSettle();

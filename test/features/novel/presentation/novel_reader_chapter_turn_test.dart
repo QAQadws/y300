@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
@@ -485,7 +486,7 @@ Widget _buildSurface({
     theme: theme,
     platformBrightness: Brightness.light,
   );
-  return MaterialApp(
+  return LocalizedTestApp(
     theme: theme,
     home: Scaffold(
       body: NovelReaderHtmlPagedSurface(

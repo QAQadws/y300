@@ -62,7 +62,7 @@ Widget _buildPage({
         _FakeStickerPickerPreferencesRepository(),
       ),
     ],
-    child: MaterialApp(
+    child: LocalizedTestApp(
       theme: theme,
       home: PostingComposerPage(args: args ?? _args()),
     ),
@@ -125,7 +125,9 @@ Widget _buildLauncher({
         _FakeStickerPickerPreferencesRepository(),
       ),
     ],
-    child: MaterialApp(
+    child: LocalizedTestApp(
+      locale: const Locale('en'),
+      supportedLocales: const [Locale('en')],
       theme: theme,
       home: _PostingComposerLauncher(
         args: args ?? _args(),

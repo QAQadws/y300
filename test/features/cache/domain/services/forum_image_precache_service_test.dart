@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -124,7 +125,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Builder(
           builder: (context) {
             unawaited(
@@ -184,7 +185,7 @@ Future<ForumImagePrecacheResult> _pumpAndPrecache(
 ) async {
   late Future<ForumImagePrecacheResult> future;
   await tester.pumpWidget(
-    MaterialApp(
+    LocalizedTestApp(
       home: Builder(
         builder: (context) {
           future = service.precacheDecoded(

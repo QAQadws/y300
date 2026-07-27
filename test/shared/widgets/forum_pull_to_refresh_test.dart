@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 
@@ -9,7 +10,7 @@ void main() {
       var refreshCount = 0;
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: Scaffold(
             body: ForumPullToRefresh(
               onRefresh: () async {
@@ -43,7 +44,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           theme: theme,
           home: Scaffold(
             body: ForumPullToRefresh(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
@@ -9,7 +10,7 @@ void main() {
   ) async {
     final extents = <ContinuousImageExtent>[];
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: ContinuousImageReaderView(
           items: _items,
           mode: ContinuousImageReaderMode.vertical,
@@ -41,7 +42,7 @@ void main() {
   ) async {
     final changed = <int>[];
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: ContinuousImageReaderView(
           items: _items,
           mode: ContinuousImageReaderMode.horizontal,
@@ -72,7 +73,7 @@ void main() {
     final controller = PageController();
     addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: ContinuousImageReaderView(
           items: _items,
           mode: ContinuousImageReaderMode.horizontal,
@@ -110,7 +111,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: ContinuousImageReaderView(
           items: _items,
           mode: ContinuousImageReaderMode.vertical,

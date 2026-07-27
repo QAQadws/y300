@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,7 +63,7 @@ void main() {
             queueSnapshot,
           ),
         ],
-        child: const MaterialApp(home: FavoriteShelfPage()),
+        child: const LocalizedTestApp(home: FavoriteShelfPage()),
       ),
     );
 
@@ -106,7 +107,7 @@ void main() {
             queueSnapshot,
           ),
         ],
-        child: const MaterialApp(home: FavoriteShelfPage()),
+        child: const LocalizedTestApp(home: FavoriteShelfPage()),
       ),
     );
     await tester.pump();
@@ -156,7 +157,7 @@ void main() {
             notificationService,
           ),
         ],
-        child: const MaterialApp(home: FavoriteShelfPage()),
+        child: const LocalizedTestApp(home: FavoriteShelfPage()),
       ),
     );
     await tester.pump();
@@ -199,7 +200,7 @@ void main() {
           ),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
         ],
-        child: const MaterialApp(home: FavoriteShelfPage()),
+        child: const LocalizedTestApp(home: FavoriteShelfPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -250,7 +251,7 @@ void main() {
           ),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
         ],
-        child: const MaterialApp(home: FavoriteShelfPage()),
+        child: const LocalizedTestApp(home: FavoriteShelfPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -319,7 +320,7 @@ void main() {
           ),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
         ],
-        child: const MaterialApp(home: FavoriteShelfPage()),
+        child: const LocalizedTestApp(home: FavoriteShelfPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -395,7 +396,7 @@ void main() {
             queueSnapshot,
           ),
         ],
-        child: const MaterialApp(home: FavoriteShelfPage()),
+        child: const LocalizedTestApp(home: FavoriteShelfPage()),
       ),
     );
 
@@ -443,7 +444,7 @@ void main() {
             queueSnapshot,
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: StatefulBuilder(
             builder: (context, setState) {
               hostSetState = setState;

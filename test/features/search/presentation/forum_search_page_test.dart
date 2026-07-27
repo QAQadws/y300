@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -21,7 +22,7 @@ import 'package:y300/features/search/presentation/forum_search_page.dart';
 void main() {
   testWidgets('ForumSearchPage builds dark theme chrome', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: AppTheme.dark(),
         home: ProviderScope(
           overrides: [
@@ -59,7 +60,7 @@ void main() {
           ),
           authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
         ],
-        child: const MaterialApp(home: ForumHomePage()),
+        child: const LocalizedTestApp(home: ForumHomePage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -93,7 +94,7 @@ void main() {
               queueSnapshot,
             ),
           ],
-          child: const MaterialApp(home: ForumSearchPage()),
+          child: const LocalizedTestApp(home: ForumSearchPage()),
         ),
       );
 
@@ -138,7 +139,7 @@ void main() {
               queueSnapshot,
             ),
           ],
-          child: const MaterialApp(home: ForumSearchPage()),
+          child: const LocalizedTestApp(home: ForumSearchPage()),
         ),
       );
 
@@ -174,7 +175,7 @@ void main() {
               queueSnapshot,
             ),
           ],
-          child: const MaterialApp(home: ForumSearchPage()),
+          child: const LocalizedTestApp(home: ForumSearchPage()),
         ),
       );
 

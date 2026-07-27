@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,7 +34,7 @@ void main() {
             _NoopForumImagePrecacheService(),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: ImageReaderEngine(
             capability: _ThrowingSeekCapability(recorder),
           ),
@@ -88,7 +89,7 @@ void main() {
               _NoopForumImagePrecacheService(),
             ),
           ],
-          child: MaterialApp(home: ImageReaderEngine(capability: capability)),
+          child: LocalizedTestApp(home: ImageReaderEngine(capability: capability)),
         ),
       );
       await tester.pump();
@@ -145,7 +146,7 @@ void main() {
             _NoopForumImagePrecacheService(),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: ImageReaderEngine(capability: _RecordingPagedCapability()),
         ),
       ),
@@ -173,7 +174,7 @@ void main() {
               _NoopForumImagePrecacheService(),
             ),
           ],
-          child: MaterialApp(home: ImageReaderEngine(capability: capability)),
+          child: LocalizedTestApp(home: ImageReaderEngine(capability: capability)),
         ),
       );
       await tester.pump();
@@ -208,7 +209,7 @@ void main() {
             _NoopForumImagePrecacheService(),
           ),
         ],
-        child: MaterialApp(home: ImageReaderEngine(capability: capability)),
+        child: LocalizedTestApp(home: ImageReaderEngine(capability: capability)),
       ),
     );
     await tester.pump();

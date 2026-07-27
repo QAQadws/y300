@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
@@ -39,7 +40,7 @@ void main() {
     final coordinator = _CompleteRecordingPaginationCoordinator();
 
     Widget buildSurface(ReaderChromeInsets insets) {
-      return MaterialApp(
+      return LocalizedTestApp(
         theme: theme,
         home: Scaffold(
           body: MediaQuery(
@@ -126,7 +127,7 @@ void main() {
     var fallbackCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: theme,
         home: Scaffold(
           body: NovelReaderHtmlPagedSurface(
@@ -191,7 +192,7 @@ void main() {
     var fallbackCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: theme,
         home: Scaffold(
           body: NovelReaderHtmlPagedSurface(
@@ -269,7 +270,7 @@ void main() {
     var fallbackCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: theme,
         home: Scaffold(
           body: NovelReaderHtmlPagedSurface(
@@ -350,7 +351,7 @@ void main() {
       final positions = <int>[];
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           theme: theme,
           home: Scaffold(
             body: NovelReaderHtmlPagedSurface(

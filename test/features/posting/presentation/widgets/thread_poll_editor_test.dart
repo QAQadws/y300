@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_poll_editor.dart';
 
 void main() {
   Widget wrap(Widget child) =>
-      MaterialApp(home: Scaffold(body: SingleChildScrollView(child: child)));
+      LocalizedTestApp(home: Scaffold(body: SingleChildScrollView(child: child)));
 
   testWidgets('renders existing options and reports add/remove', (tester) async {
     var lastOptions = const <String>['A', 'B'];

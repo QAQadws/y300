@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,7 +65,7 @@ void main() {
               _NoopImageCacheService(),
             ),
           ],
-          child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
+          child: const LocalizedTestApp(home: NovelDetailPage(novelId: 'novel:1')),
         ),
       );
 
@@ -146,7 +147,7 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
-        child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
+        child: const LocalizedTestApp(home: NovelDetailPage(novelId: 'novel:1')),
       ),
     );
 
@@ -229,7 +230,7 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
-        child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
+        child: const LocalizedTestApp(home: NovelDetailPage(novelId: 'novel:1')),
       ),
     );
 
@@ -569,7 +570,7 @@ Future<void> _pumpNovelDetail(
         if (threadRepository != null)
           threadRepositoryProvider.overrideWithValue(threadRepository),
       ],
-      child: const MaterialApp(home: NovelDetailPage(novelId: 'novel:1')),
+      child: const LocalizedTestApp(home: NovelDetailPage(novelId: 'novel:1')),
     ),
   );
   await tester.pumpAndSettle();

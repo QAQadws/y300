@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
@@ -123,7 +124,7 @@ Future<_Harness> _pumpHarness(
   });
 
   await tester.pumpWidget(
-    MaterialApp(
+    LocalizedTestApp(
       home: Scaffold(
         body: SizedBox(
           key: viewportKey,

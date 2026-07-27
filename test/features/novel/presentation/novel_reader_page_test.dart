@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -1097,7 +1098,7 @@ void main() {
       firstParagraphs: List<String>.generate(30, (index) => '第一章段落 $index'),
     );
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: ProviderScope(
           overrides: [
             novelRepositoryProvider.overrideWithValue(repository),
@@ -1140,7 +1141,7 @@ void main() {
       firstParagraphs: List<String>.generate(30, (index) => '第一章段落 $index'),
     );
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: ProviderScope(
           overrides: [
             novelRepositoryProvider.overrideWithValue(repository),
@@ -1587,7 +1588,7 @@ Widget _buildReaderApp({
       if (threadRepository != null)
         threadRepositoryProvider.overrideWithValue(threadRepository),
     ],
-    child: MaterialApp(
+    child: LocalizedTestApp(
       theme: theme,
       home:
           home ??

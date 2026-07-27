@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/shared/widgets/shelf/shelf_app_bar.dart';
 
@@ -7,7 +8,7 @@ void main() {
     String? selected;
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           appBar: ShelfAppBar(
             title: '小说书架',

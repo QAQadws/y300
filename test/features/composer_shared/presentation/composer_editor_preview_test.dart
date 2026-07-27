@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -143,7 +144,7 @@ Widget _buildEditor({
   required TextEditingController controller,
   ValueChanged<String>? onChanged,
 }) {
-  return MaterialApp(
+  return LocalizedTestApp(
     theme: AppTheme.light(),
     home: Scaffold(
       body: ComposerEditorPreview(

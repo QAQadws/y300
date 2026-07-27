@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
@@ -19,7 +20,7 @@ void main() {
   ) async {
     late BuildContext hostContext;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Builder(
           builder: (context) {
             hostContext = context;
@@ -104,7 +105,7 @@ void main() {
     for (final testCase in cases) {
       late BuildContext hostContext;
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           theme: ThemeData(
             brightness: testCase.theme.brightness == ForumHtmlBrightness.dark
                 ? Brightness.dark
@@ -181,7 +182,7 @@ void main() {
 
       final rendererKey = GlobalKey();
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           theme: ThemeData(
             brightness: testCase.theme.brightness == ForumHtmlBrightness.dark
                 ? Brightness.dark

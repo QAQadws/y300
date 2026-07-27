@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
@@ -10,7 +11,7 @@ import 'package:y300/features/cache/presentation/widgets/library_cached_image.da
 void main() {
   testWidgets('network image uses headers from header builder', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: LibraryCachedImage(
           imageUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
           fit: BoxFit.cover,
@@ -39,7 +40,7 @@ void main() {
     (tester) async {
       final headerBuilder = _DeferredImageHeaderBuilder();
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: LibraryCachedImage(
             imageUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
             fit: BoxFit.cover,
@@ -66,7 +67,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: LibraryCachedImage(
           imageUrl: 'data/attachment/forum/page-1.jpg',
           fit: BoxFit.cover,
@@ -90,7 +91,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: LibraryCachedImage(
           imageUrl: 'https://bbs.yamibo.com/uc_server/data/avatar/noavatar.svg',
           fit: BoxFit.cover,
@@ -114,7 +115,7 @@ void main() {
 
     Size? resolvedSize;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: LibraryCachedImage(
           imageProviderOverride: provider,
           fit: BoxFit.cover,
@@ -141,7 +142,7 @@ void main() {
     final provider = _DeferredImageProvider();
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: LibraryCachedImage(
           imageProviderOverride: provider,
           fit: BoxFit.cover,
@@ -171,7 +172,7 @@ void main() {
     final provider = _FailThenSucceedImageProvider(testImage);
 
     Widget build(int retryToken) {
-      return MaterialApp(
+      return LocalizedTestApp(
         home: Center(
           child: SizedBox(
             width: 120,
@@ -219,7 +220,7 @@ void main() {
     // 横向无界 → 解码目标为 none → provider 不被 ResizeImage 包装。这条路径下
     // 失败的 completer 会滞留在图片缓存 pending 表中，只有显式驱逐才能重试。
     Widget build(int retryToken) {
-      return MaterialApp(
+      return LocalizedTestApp(
         home: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: LibraryCachedImage(
@@ -266,7 +267,7 @@ void main() {
     final provider = _CountingImageProvider(testImage);
 
     Widget build() {
-      return MaterialApp(
+      return LocalizedTestApp(
         home: Center(
           child: SizedBox(
             width: 120,

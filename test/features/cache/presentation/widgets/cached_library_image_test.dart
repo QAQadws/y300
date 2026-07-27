@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/media/cover_aware_resize_image.dart';
@@ -29,7 +30,7 @@ void main() {
           overrides: [
             imageCacheServiceProvider.overrideWithValue(cacheService),
           ],
-          child: MaterialApp(
+          child: LocalizedTestApp(
             home: CachedLibraryImage(
               request: _request('thread-image'),
               fit: BoxFit.cover,
@@ -200,7 +201,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: CachedLibraryImage(
             request: _request('thread-image'),
             fit: BoxFit.cover,
@@ -234,7 +235,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: CachedLibraryImage(
             request: _request('thread-image'),
             fit: BoxFit.cover,
@@ -277,7 +278,7 @@ void main() {
           overrides: [
             imageCacheServiceProvider.overrideWithValue(cacheService),
           ],
-          child: MaterialApp(
+          child: LocalizedTestApp(
             home: CachedLibraryImage(
               request: _request('thread-image'),
               fit: BoxFit.cover,
@@ -328,7 +329,7 @@ void main() {
     Widget build(String cacheKey) {
       return ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: CachedLibraryImage(
             request: _request(cacheKey),
             fit: BoxFit.cover,
@@ -400,7 +401,7 @@ Widget _loadingHarness(
 }) {
   return ProviderScope(
     overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-    child: MaterialApp(
+    child: LocalizedTestApp(
       home: Center(
         child: SizedBox(
           width: 240,

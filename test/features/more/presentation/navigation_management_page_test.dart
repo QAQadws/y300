@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
@@ -21,7 +22,7 @@ void main() {
             repository,
           ),
         ],
-        child: const MaterialApp(home: NavigationManagementPage()),
+        child: const LocalizedTestApp(home: NavigationManagementPage()),
       ),
     );
     await tester.pump();
@@ -225,7 +226,7 @@ Future<void> _pumpPage(
       overrides: [
         mainNavigationSettingsRepositoryProvider.overrideWithValue(repository),
       ],
-      child: const MaterialApp(home: NavigationManagementPage()),
+      child: const LocalizedTestApp(home: NavigationManagementPage()),
     ),
   );
   await tester.pumpAndSettle();

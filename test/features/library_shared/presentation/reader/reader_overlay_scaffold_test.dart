@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
@@ -185,7 +186,7 @@ Widget _buildScaffold({
   ReaderOverlayController? controller,
   ThemeData? theme,
 }) {
-  return MaterialApp(
+  return LocalizedTestApp(
     theme: theme,
     home: Scaffold(
       body: ReaderOverlayScaffold(

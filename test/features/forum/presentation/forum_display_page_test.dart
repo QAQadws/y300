@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1051,7 +1052,7 @@ void main() {
           overrides: [
             forumDisplayRepositoryProvider.overrideWithValue(repository),
           ],
-          child: MaterialApp(
+          child: LocalizedTestApp(
             theme: AppTheme.dark(),
             home: const ForumDisplayPage(fid: '2', title: '公告区'),
           ),
@@ -1147,7 +1148,7 @@ void main() {
           overrides: [
             forumDisplayRepositoryProvider.overrideWithValue(repository),
           ],
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ForumDisplayPage(fid: '30', title: '漫画区'),
           ),
         ),
@@ -1194,7 +1195,7 @@ void main() {
           overrides: [
             forumDisplayRepositoryProvider.overrideWithValue(repository),
           ],
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ForumDisplayPage(fid: '33', title: '海域区'),
           ),
         ),
@@ -1230,7 +1231,7 @@ void main() {
           overrides: [
             forumDisplayRepositoryProvider.overrideWithValue(repository),
           ],
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ForumDisplayPage(fid: '', title: ''),
           ),
         ),
@@ -1257,7 +1258,7 @@ Widget _buildTestApp(
   ];
   return ProviderScope(
     overrides: overrides,
-    child: const MaterialApp(
+    child: const LocalizedTestApp(
       home: ForumDisplayPage(fid: '2', title: '公告区'),
     ),
   );

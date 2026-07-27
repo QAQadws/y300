@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -25,7 +26,7 @@ import 'forum_html_test_theme.dart';
 void main() {
   testWidgets('renders simple HTML text and inline formatting', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
@@ -45,7 +46,7 @@ void main() {
   testWidgets('forwards link taps to callbacks', (tester) async {
     final tappedUrls = <String>[];
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
@@ -81,7 +82,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: ThemeData(
           textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 10)),
         ),
@@ -109,7 +110,7 @@ void main() {
 
   testWidgets('uses explicit render theme quote colors', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
@@ -152,7 +153,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
@@ -176,7 +177,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: ThemeData(
           textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 20)),
         ),
@@ -202,7 +203,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: ThemeData(
           textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 20)),
         ),
@@ -232,7 +233,7 @@ void main() {
   testWidgets('renders Discuz edit status smaller and quieter', (tester) async {
     const bodyColor = Color(0xFF203040);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: ThemeData(
           textTheme: const TextTheme(
             bodyMedium: TextStyle(fontSize: 20, color: bodyColor),
@@ -269,7 +270,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
@@ -305,7 +306,7 @@ void main() {
   ) async {
     final tappedUrls = <String>[];
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
@@ -363,7 +364,7 @@ void main() {
 
   testWidgets('starts active forum collapse blocks expanded', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
@@ -390,7 +391,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
@@ -410,7 +411,7 @@ void main() {
   testWidgets('maps tapped images to forum image requests', (tester) async {
     ForumHtmlImageRequest? tappedImage;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
@@ -480,7 +481,7 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -528,7 +529,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             html: prepared.preparedHtml,
@@ -552,7 +553,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -603,7 +604,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -641,7 +642,7 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -679,7 +680,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -720,7 +721,7 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -762,7 +763,7 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -808,7 +809,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -845,7 +846,7 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -883,7 +884,7 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -940,7 +941,7 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -993,7 +994,7 @@ void main() {
               _RecordingImageCacheService(),
             ),
           ],
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: Scaffold(
               body: SingleChildScrollView(
                 child: Align(
@@ -1070,7 +1071,7 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -1122,7 +1123,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -1185,7 +1186,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -1232,7 +1233,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
@@ -1255,7 +1256,7 @@ void main() {
     'deduplicates repeated forum attachment images before rendering',
     (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
@@ -1292,7 +1293,7 @@ void main() {
   testWidgets('marks forum smiley images as stickers', (tester) async {
     ForumHtmlImageRequest? tappedImage;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,

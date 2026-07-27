@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -84,7 +85,7 @@ Widget _host({
         repository,
       ),
     ],
-    child: MaterialApp(
+    child: LocalizedTestApp(
       theme: theme,
       themeAnimationDuration: Duration.zero,
       home: Scaffold(

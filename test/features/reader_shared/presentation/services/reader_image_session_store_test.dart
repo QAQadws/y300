@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/media/image_display_provider.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -142,7 +143,7 @@ void main() {
     binding.promoteLocalPath(localFile.path);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: ReaderSessionImage(
           sessionBinding: binding,
           cacheRequest: ImageCacheRequest(

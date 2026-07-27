@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -2012,7 +2013,7 @@ Widget _buildTestApp({
         historyRecorder ?? _NoopHistoryVisitRecorder(),
       ),
     ],
-    child: const MaterialApp(home: ForumWebViewPage()),
+    child: const LocalizedTestApp(home: ForumWebViewPage()),
   );
 }
 
@@ -2074,7 +2075,7 @@ Widget _buildRoutedTestApp({
         historyRecorder ?? _NoopHistoryVisitRecorder(),
       ),
     ],
-    child: MaterialApp(
+    child: LocalizedTestApp(
       home: Builder(
         builder: (context) {
           return Scaffold(

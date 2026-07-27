@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
 
@@ -8,7 +9,7 @@ void main() {
   ) async {
     int? selectedPage;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: Center(
             child: NativePageDropdownButton(
@@ -53,7 +54,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: Center(
             child: NativePageDropdownButton(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -21,7 +22,7 @@ void main() {
             ),
             authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
           ],
-          child: const MaterialApp(home: ForumHomePage()),
+          child: const LocalizedTestApp(home: ForumHomePage()),
         ),
       );
       await tester.pumpAndSettle();

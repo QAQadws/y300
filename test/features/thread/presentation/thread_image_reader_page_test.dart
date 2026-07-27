@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,7 +29,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: MaterialApp(home: ThreadImageReaderPage(request: _request())),
+        child: LocalizedTestApp(home: ThreadImageReaderPage(request: _request())),
       ),
     );
     await tester.pump();
@@ -52,7 +53,7 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: MaterialApp(home: ThreadImageReaderPage(request: _request())),
+        child: LocalizedTestApp(home: ThreadImageReaderPage(request: _request())),
       ),
     );
     await tester.pump();
@@ -81,7 +82,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: MaterialApp(home: ThreadImageReaderPage(request: _request())),
+        child: LocalizedTestApp(home: ThreadImageReaderPage(request: _request())),
       ),
     );
     await tester.pump();
@@ -157,7 +158,7 @@ void main() {
           imageCacheServiceProvider.overrideWithValue(cacheService),
           forumImagePrecacheServiceProvider.overrideWithValue(precacheService),
         ],
-        child: MaterialApp(home: ThreadImageReaderPage(request: _request())),
+        child: LocalizedTestApp(home: ThreadImageReaderPage(request: _request())),
       ),
     );
     await tester.pump();
@@ -194,7 +195,7 @@ void main() {
               _RecordingImageCacheService(),
             ),
           ],
-          child: MaterialApp(
+          child: LocalizedTestApp(
             home: ThreadImageReaderPage(
               request: _request(),
               diagnosticRecorder: recorder,
@@ -624,7 +625,7 @@ Future<void> _pumpHorizontalReader(
         if (precacheService != null)
           forumImagePrecacheServiceProvider.overrideWithValue(precacheService),
       ],
-      child: MaterialApp(
+      child: LocalizedTestApp(
         home: ThreadImageReaderPage(
           request: _request(initialIndex: 2),
           diagnosticRecorder: diagnosticRecorder,

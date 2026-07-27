@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
@@ -222,7 +223,7 @@ Widget _buildToolbar({
   required ValueChanged<ComposerBbCodeCommand> onCommandSelected,
   EdgeInsets viewInsets = EdgeInsets.zero,
 }) {
-  return MaterialApp(
+  return LocalizedTestApp(
     builder: (context, child) {
       return MediaQuery(
         data: MediaQuery.of(context).copyWith(viewInsets: viewInsets),

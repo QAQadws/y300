@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -22,7 +23,7 @@ void main() {
             const _StaticImageHeaderBuilder(),
           ),
         ],
-        child: const MaterialApp(home: MyMessageCenterPage()),
+        child: const LocalizedTestApp(home: MyMessageCenterPage()),
       ),
     );
 

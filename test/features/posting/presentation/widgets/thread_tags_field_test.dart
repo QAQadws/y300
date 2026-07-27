@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_tags_field.dart';
 
 void main() {
   Widget wrap(Widget child) {
-    return MaterialApp(
+    return LocalizedTestApp(
       home: Scaffold(body: Padding(padding: const EdgeInsets.all(8), child: child)),
     );
   }

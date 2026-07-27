@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 
@@ -10,7 +11,7 @@ Widget _hostZoomableImage({
   ValueChanged<bool>? onZoomStateChanged,
   Widget? child,
 }) {
-  return MaterialApp(
+  return LocalizedTestApp(
     home: Scaffold(
       body: Center(
         child: SizedBox(
@@ -32,7 +33,7 @@ Widget _hostScrollableZoomableImage(
   ScrollController controller, {
   ReaderZoomBehavior behavior = ReaderZoomBehavior.bounded,
 }) {
-  return MaterialApp(
+  return LocalizedTestApp(
     home: Scaffold(
       body: ListView(
         controller: controller,
@@ -288,7 +289,7 @@ void main() {
     addTearDown(blocked.dispose);
     final provider = MemoryImage(Uint8List.fromList(_transparentImageBytes));
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: ReaderPagedSwipeGate(
           blockedListenable: blocked,
           child: Image(image: provider),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
@@ -36,7 +37,7 @@ void main() {
             () => _FakeAppAppearanceController(),
           ),
         ],
-        child: MaterialApp(theme: AppTheme.dark(), home: const MorePage()),
+        child: LocalizedTestApp(theme: AppTheme.dark(), home: const MorePage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -60,7 +61,7 @@ void main() {
             () => _FakeAppAppearanceController(),
           ),
         ],
-        child: const MaterialApp(home: MorePage()),
+        child: const LocalizedTestApp(home: MorePage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -142,7 +143,7 @@ void main() {
             () => _FakeAppAppearanceController(),
           ),
         ],
-        child: const MaterialApp(home: MorePage()),
+        child: const LocalizedTestApp(home: MorePage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -184,7 +185,11 @@ void main() {
             const _FakeForumFavoriteRepository(),
           ),
         ],
-        child: const MaterialApp(home: MorePage()),
+        child: const LocalizedTestApp(
+          locale: Locale('en'),
+          supportedLocales: [Locale('en')],
+          home: MorePage(),
+        ),
       ),
     );
     await tester.pump();
@@ -239,7 +244,7 @@ void main() {
             () => _FakeAppAppearanceController(),
           ),
         ],
-        child: const MaterialApp(home: MorePage()),
+        child: const LocalizedTestApp(home: MorePage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -282,7 +287,7 @@ void main() {
             () => _FakeAppAppearanceController(),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: const MorePage(),
           navigatorObservers: [routeObserver],
         ),
@@ -315,7 +320,7 @@ void main() {
             () => _FakeAppAppearanceController(),
           ),
         ],
-        child: const MaterialApp(home: MorePage()),
+        child: const LocalizedTestApp(home: MorePage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -350,7 +355,7 @@ void main() {
             () => appearanceController,
           ),
         ],
-        child: const MaterialApp(home: MorePage()),
+        child: const LocalizedTestApp(home: MorePage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -419,7 +424,7 @@ void main() {
             () => appearanceController,
           ),
         ],
-        child: const MaterialApp(home: MorePage()),
+        child: const LocalizedTestApp(home: MorePage()),
       ),
     );
     await tester.pumpAndSettle();

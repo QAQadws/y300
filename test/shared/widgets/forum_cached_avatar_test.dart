@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -71,7 +72,7 @@ Widget _wrap(Widget child) {
         const _StaticImageRequestHeaderBuilder(),
       ),
     ],
-    child: MaterialApp(home: Scaffold(body: child)),
+    child: LocalizedTestApp(home: Scaffold(body: child)),
   );
 }
 

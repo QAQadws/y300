@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph, ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
@@ -123,7 +124,7 @@ void main() {
       final palette = ThreadDetailNativePalette.resolve(theme);
 
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           theme: theme,
           home: Scaffold(
             body: ThreadPostRatingRow(
@@ -1168,7 +1169,7 @@ void main() {
       await tester.pump();
       expect(historyRecorder.drafts, isEmpty);
 
-      await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+      await tester.pumpWidget(const LocalizedTestApp(home: SizedBox.shrink()));
       result.complete(
         ApiSuccess(
           _threadDetailData(
@@ -1797,7 +1798,7 @@ void main() {
             repository,
             imageCacheService: imageCacheService,
           ),
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ThreadDetailPage(tid: '100', subject: '测试主题'),
           ),
         ),
@@ -1845,7 +1846,7 @@ void main() {
               _NoopImageCacheService(),
             ),
           ],
-          child: MaterialApp(
+          child: LocalizedTestApp(
             home: Scaffold(
               body: ThreadDetailContent(
                 state: state,
@@ -1923,7 +1924,7 @@ void main() {
               _NoopImageCacheService(),
             ),
           ],
-          child: MaterialApp(
+          child: LocalizedTestApp(
             home: Scaffold(
               body: ThreadDetailContent(
                 state: state,
@@ -1991,7 +1992,7 @@ void main() {
                 _NoopImageCacheService(),
               ),
             ],
-            child: MaterialApp(
+            child: LocalizedTestApp(
               home: Scaffold(
                 body: ThreadDetailContent(
                   state: state,
@@ -2117,7 +2118,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: _threadDetailOverrides(repository),
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ThreadDetailPage(
               tid: '100',
               subject: '测试主题',
@@ -4610,7 +4611,7 @@ Widget _buildTestApp(
       historyVisitRecorder: historyVisitRecorder,
       historyDiagnosticRecorder: historyDiagnosticRecorder,
     ),
-    child: MaterialApp(
+    child: LocalizedTestApp(
       theme: theme,
       home: home ?? const ThreadDetailPage(tid: '100', subject: '测试主题'),
     ),

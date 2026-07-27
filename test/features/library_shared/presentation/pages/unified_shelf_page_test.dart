@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,7 +22,7 @@ import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 void main() {
   testWidgets('search mode switches app bar layout', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.grid,
@@ -66,7 +67,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: adapter,
           onOpenWork: (context, workId) async {},
@@ -90,7 +91,7 @@ void main() {
 
   testWidgets('filter sheet and display mode switch work', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.grid,
@@ -146,7 +147,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: adapter,
           onOpenWork: (context, workId) async {},
@@ -199,7 +200,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.list,
@@ -254,7 +255,7 @@ void main() {
         initialDisplayMode: LibraryDisplayMode.grid,
       );
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedShelfPage(
             adapter: adapter,
             onOpenWork: (context, workId) async {},
@@ -280,7 +281,7 @@ void main() {
     'grid and list have scrollCacheExtent for large shelf scrolling',
     (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedShelfPage(
             adapter: _FakeShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.grid,
@@ -316,7 +317,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.grid,
@@ -338,7 +339,7 @@ void main() {
     'list mode hides cover placeholder when item has no cover source',
     (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedShelfPage(
             adapter: _FakeShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.list,
@@ -371,7 +372,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: UnifiedShelfPage(
             adapter: _FakeShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.list,
@@ -417,7 +418,7 @@ void main() {
     Future<void> pumpShelf(LibraryDisplayMode displayMode) async {
       await tester.pumpWidget(
         ProviderScope(
-          child: MaterialApp(
+          child: LocalizedTestApp(
             home: UnifiedShelfPage(
               adapter: _FakeShelfAdapter(
                 initialDisplayMode: displayMode,
@@ -452,7 +453,7 @@ void main() {
 
   testWidgets('unread badge renders shelf aggregate count', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.list,
@@ -499,7 +500,7 @@ void main() {
     'category pages keep stable PageStorage keys for scroll restoration',
     (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedShelfPage(
             adapter: _FakeShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.grid,
@@ -536,7 +537,7 @@ void main() {
       ),
     );
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.list,
@@ -578,7 +579,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
+        child: LocalizedTestApp(
           theme: theme,
           home: UnifiedShelfPage(
             adapter: _FakeShelfAdapter(
@@ -661,7 +662,7 @@ void main() {
     );
     addTearDown(progress.dispose);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.list,
@@ -695,7 +696,7 @@ void main() {
     );
     addTearDown(progress.dispose);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.list,
@@ -734,7 +735,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: adapter,
           onOpenWork: (context, workId) async {},
@@ -755,7 +756,7 @@ void main() {
       final host = ShelfSelectionHostController();
       addTearDown(host.dispose);
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedShelfPage(
             adapter: _FakeSelectableShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.grid,
@@ -788,7 +789,7 @@ void main() {
     addTearDown(host.dispose);
     var openCount = 0;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeSelectableShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.grid,
@@ -821,7 +822,7 @@ void main() {
     final host = ShelfSelectionHostController();
     addTearDown(host.dispose);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeSelectableShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.grid,
@@ -882,7 +883,7 @@ void main() {
     final host = ShelfSelectionHostController();
     addTearDown(host.dispose);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeSelectableShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.grid,
@@ -911,7 +912,7 @@ void main() {
     final host = ShelfSelectionHostController();
     addTearDown(host.dispose);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeSelectableShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.list,
@@ -953,7 +954,7 @@ void main() {
     final host = ShelfSelectionHostController();
     addTearDown(host.dispose);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeSelectableShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.list,
@@ -1003,7 +1004,7 @@ void main() {
     final host = ShelfSelectionHostController();
     addTearDown(host.dispose);
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: _FakeSelectableShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.list,
@@ -1068,7 +1069,7 @@ void main() {
       final host = ShelfSelectionHostController();
       addTearDown(host.dispose);
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: UnifiedShelfPage(
             adapter: _FakeSelectableShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.list,

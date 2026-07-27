@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_page_indicator_overlay.dart';
@@ -7,7 +8,7 @@ import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 void main() {
   testWidgets('page indicator renders current page and total pages', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: ReaderPageIndicatorOverlay(
             visible: true,
@@ -29,7 +30,7 @@ void main() {
     final palette = const ReaderChromePaletteResolver().resolve(theme);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: theme,
         home: const Scaffold(
           body: ReaderPageIndicatorOverlay(

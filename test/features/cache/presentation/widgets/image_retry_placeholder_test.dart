@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 
@@ -6,7 +7,7 @@ void main() {
   testWidgets('roomy box shows message and retry button', (tester) async {
     var retries = 0;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: Center(
             child: SizedBox(
@@ -31,7 +32,7 @@ void main() {
 
   testWidgets('short box degrades to a single compact row', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: Center(
             child: SizedBox(
@@ -55,7 +56,7 @@ void main() {
   ) async {
     var retries = 0;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: Center(
             child: SizedBox(
@@ -81,7 +82,7 @@ void main() {
 
   testWidgets('narrow box degrades to a tappable icon only', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: Center(
             child: SizedBox(
@@ -101,7 +102,7 @@ void main() {
 
   testWidgets('unbounded height keeps the full panel', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: SingleChildScrollView(
             child: ImageRetryPlaceholder(onRetry: _noop),

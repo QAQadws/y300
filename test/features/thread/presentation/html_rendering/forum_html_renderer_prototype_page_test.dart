@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -532,7 +533,7 @@ Widget _wrapWithProviders(
         },
       ),
     ],
-    child: MaterialApp(home: child),
+    child: LocalizedTestApp(home: child),
   );
 }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
@@ -63,7 +64,7 @@ void main() {
               _FakeLibraryStateRepository(),
             ),
           ],
-          child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
+          child: const LocalizedTestApp(home: ComicDetailPage(comicId: 'comic:1')),
         ),
       );
 
@@ -124,7 +125,7 @@ void main() {
             _FakeLibraryStateRepository(),
           ),
         ],
-        child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
+        child: const LocalizedTestApp(home: ComicDetailPage(comicId: 'comic:1')),
       ),
     );
 
@@ -170,7 +171,7 @@ void main() {
             _FakeLibraryStateRepository(),
           ),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           navigatorObservers: [observer],
           home: const ComicDetailPage(comicId: 'comic:1'),
         ),
@@ -232,7 +233,7 @@ void main() {
             ),
             libraryStateRepositoryProvider.overrideWithValue(stateRepository),
           ],
-          child: const MaterialApp(home: ComicDetailPage(comicId: 'comic:1')),
+          child: const LocalizedTestApp(home: ComicDetailPage(comicId: 'comic:1')),
         ),
       );
 

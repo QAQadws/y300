@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
@@ -9,7 +10,7 @@ void main() {
     'ShelfCoverCard renders title and badge with fallback background',
     (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: Scaffold(
             body: SizedBox(
               width: 120,
@@ -44,7 +45,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: SizedBox(
             width: 120,
@@ -70,7 +71,7 @@ void main() {
     final palette = const ShelfThemePaletteResolver().resolve(theme);
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: theme,
         home: Scaffold(
           body: SizedBox(
@@ -109,7 +110,7 @@ void main() {
       double? focusY,
     }) {
       return tester.pumpWidget(
-        MaterialApp(
+        LocalizedTestApp(
           home: Scaffold(
             body: SizedBox(
               width: 120,

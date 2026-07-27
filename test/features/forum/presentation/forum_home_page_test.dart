@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter_test/flutter_test.dart';
@@ -144,7 +145,7 @@ void main() {
               precacheService,
             ),
           ],
-          child: MaterialApp(
+          child: LocalizedTestApp(
             home: Scaffold(
               body: ForumHomeCarousel(
                 items: items,
@@ -508,7 +509,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: _overrides(repository),
-          child: MaterialApp(
+          child: LocalizedTestApp(
             theme: AppTheme.dark(),
             home: const ForumHomePage(),
           ),
@@ -597,7 +598,7 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: ForumHomePage()),
+          child: const LocalizedTestApp(home: ForumHomePage()),
         ),
       );
       await tester.pump();
@@ -643,7 +644,7 @@ void main() {
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(home: ForumHomePage()),
+            child: const LocalizedTestApp(home: ForumHomePage()),
           ),
         );
         await tester.pumpAndSettle();
@@ -708,7 +709,7 @@ void main() {
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(home: ForumHomePage()),
+            child: const LocalizedTestApp(home: ForumHomePage()),
           ),
         );
         await tester.pumpAndSettle();
@@ -762,7 +763,7 @@ Widget _buildTestApp(
       imageCacheService: imageCacheService,
       forumImagePrecacheService: forumImagePrecacheService,
     ),
-    child: MaterialApp(
+    child: LocalizedTestApp(
       navigatorObservers: navigatorObservers,
       home: ForumHomePage(isActive: isActive),
     ),

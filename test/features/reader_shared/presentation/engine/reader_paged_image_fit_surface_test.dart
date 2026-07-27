@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_paged_image_fit_surface.dart';
@@ -97,7 +98,7 @@ void main() {
     var pageFit = ReaderPageFitPreference.fitHeight;
     late StateSetter rebuild;
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: StatefulBuilder(
             builder: (context, setState) {
@@ -215,7 +216,7 @@ Widget _hostSurface({
   ValueChanged<bool>? onHorizontalOverflowChanged,
   ValueChanged<ReaderPageTurnIntent>? onEdgeTurnRequested,
 }) {
-  return MaterialApp(
+  return LocalizedTestApp(
     home: Scaffold(
       body: Align(
         alignment: Alignment.topLeft,

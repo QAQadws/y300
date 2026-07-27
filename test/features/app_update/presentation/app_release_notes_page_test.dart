@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:version/version.dart';
@@ -86,7 +87,7 @@ Future<void> _pumpPage(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [appReleaseNotesServiceProvider.overrideWithValue(service)],
-      child: MaterialApp(home: AppReleaseNotesPage(installedVersion: version)),
+      child: LocalizedTestApp(home: AppReleaseNotesPage(installedVersion: version)),
     ),
   );
   await tester.pumpAndSettle();

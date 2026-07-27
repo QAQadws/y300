@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_surface.dart';
 
 void main() {
   testWidgets('feedback states expose stable semantics', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: ComicCommentFeedbackSurface(
             kind: ComicCommentFeedbackKind.unavailable,
@@ -22,7 +23,7 @@ void main() {
     expect(find.text(ComicCommentCopy.retry), findsOneWidget);
 
     await tester.pumpWidget(
-      const MaterialApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: ComicCommentFeedbackSurface(
             kind: ComicCommentFeedbackKind.loading,
@@ -47,7 +48,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),

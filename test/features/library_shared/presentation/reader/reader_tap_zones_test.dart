@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_gesture_coordinator.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_tap_zones.dart';
@@ -155,7 +156,7 @@ Widget _buildTapZones({
   ValueListenable<bool>? blockedListenable,
   ReaderGestureCoordinator? gestureCoordinator,
 }) {
-  return MaterialApp(
+  return LocalizedTestApp(
     home: Scaffold(
       body: SizedBox(
         width: 600,

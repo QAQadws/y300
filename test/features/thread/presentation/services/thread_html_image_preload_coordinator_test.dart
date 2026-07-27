@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
@@ -144,7 +145,7 @@ Future<List<ForumImagePrecacheResult>> _withContext(
 ) async {
   late Future<List<ForumImagePrecacheResult>> future;
   await tester.pumpWidget(
-    MaterialApp(
+    LocalizedTestApp(
       home: Builder(
         builder: (context) {
           future = run(context);

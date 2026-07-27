@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -29,7 +30,7 @@ void main() {
             const _StaticImageHeaderBuilder(),
           ),
         ],
-        child: const MaterialApp(home: UserProfilePage(uid: '509957')),
+        child: const LocalizedTestApp(home: UserProfilePage(uid: '509957')),
       ),
     );
 
@@ -69,7 +70,7 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
-        child: const MaterialApp(home: UserProfilePage(uid: '509957')),
+        child: const LocalizedTestApp(home: UserProfilePage(uid: '509957')),
       ),
     );
 
@@ -109,7 +110,11 @@ void main() {
             const _StaticImageHeaderBuilder(),
           ),
         ],
-        child: const MaterialApp(home: MyProfilePage()),
+        child: const LocalizedTestApp(
+          locale: Locale('en'),
+          supportedLocales: [Locale('en')],
+          home: MyProfilePage(),
+        ),
       ),
     );
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -119,7 +120,7 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: ComicReaderPage(
             comicId: 'yamibo:100',
             episodeId: 'yamibo:100:101',
@@ -227,7 +228,7 @@ void main() {
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           forumImagePrecacheServiceProvider.overrideWithValue(precacheService),
         ],
-        child: MaterialApp(
+        child: LocalizedTestApp(
           home: ComicReaderPage(
             comicId: 'yamibo:100',
             episodeId: 'yamibo:100:101',
@@ -293,7 +294,7 @@ void main() {
               _FakeImageCacheService(),
             ),
           ],
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ComicReaderPage(
               comicId: 'yamibo:100',
               episodeId: 'yamibo:100:101',
@@ -336,7 +337,7 @@ void main() {
               _FakeImageCacheService(),
             ),
           ],
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ComicReaderPage(
               comicId: 'yamibo:100',
               episodeId: 'yamibo:100:101',
@@ -380,7 +381,7 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: ComicReaderPage(
             comicId: 'yamibo:100',
             episodeId: 'yamibo:100:101',
@@ -450,7 +451,7 @@ void main() {
               _FakeImageCacheService(),
             ),
           ],
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ComicReaderPage(
               comicId: 'yamibo:100',
               episodeId: 'yamibo:100:101',
@@ -502,7 +503,7 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: ComicReaderPage(
             comicId: 'yamibo:100',
             episodeId: 'yamibo:100:101',
@@ -573,7 +574,7 @@ void main() {
               _FakeImageCacheService(),
             ),
           ],
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ComicReaderPage(
               comicId: 'yamibo:100',
               episodeId: 'yamibo:100:101',
@@ -636,7 +637,7 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(imageCache),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: ComicReaderPage(
             comicId: 'yamibo:100',
             episodeId: 'yamibo:100:101',
@@ -697,7 +698,7 @@ void main() {
               _FakeImageCacheService(),
             ),
           ],
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ComicReaderPage(
               comicId: 'yamibo:100',
               episodeId: 'yamibo:100:101',
@@ -778,7 +779,7 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: ComicReaderPage(
             comicId: 'yamibo:100',
             episodeId: 'yamibo:100:101',
@@ -856,7 +857,7 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: ComicReaderPage(
             comicId: 'yamibo:100',
             episodeId: 'yamibo:100:101',
@@ -920,7 +921,7 @@ void main() {
               _FakeImageCacheService(),
             ),
           ],
-          child: const MaterialApp(
+          child: const LocalizedTestApp(
             home: ComicReaderPage(
               comicId: 'yamibo:100',
               episodeId: 'yamibo:100:101',
@@ -964,7 +965,7 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
         ],
-        child: const MaterialApp(
+        child: const LocalizedTestApp(
           home: ComicReaderPage(
             comicId: 'yamibo:100',
             episodeId: 'yamibo:100:101',
@@ -1021,7 +1022,7 @@ void main() {
               _FakeImageCacheService(),
             ),
           ],
-          child: MaterialApp(
+          child: LocalizedTestApp(
             theme: theme,
             home: const ComicReaderPage(
               comicId: 'yamibo:100',

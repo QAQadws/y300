@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,7 +42,7 @@ void main() {
             queueSnapshot,
           ),
         ],
-        child: const MaterialApp(home: ComicShelfPage()),
+        child: const LocalizedTestApp(home: ComicShelfPage()),
       ),
     );
 
@@ -79,7 +80,7 @@ void main() {
           ),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
         ],
-        child: const MaterialApp(home: ComicShelfPage()),
+        child: const LocalizedTestApp(home: ComicShelfPage()),
       ),
     );
 

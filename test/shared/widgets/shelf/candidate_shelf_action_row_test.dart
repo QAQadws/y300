@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/shared/widgets/shelf/candidate_shelf_action_row.dart';
 
@@ -7,7 +8,7 @@ void main() {
     var tapped = false;
 
     await tester.pumpWidget(
-      MaterialApp(
+      LocalizedTestApp(
         home: Scaffold(
           body: CandidateShelfActionRow(
             label: '测试候选',

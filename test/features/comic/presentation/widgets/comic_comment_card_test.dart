@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -129,7 +130,7 @@ Widget _host(
       if (imageCacheService != null)
         imageCacheServiceProvider.overrideWithValue(imageCacheService),
     ],
-    child: MaterialApp(
+    child: LocalizedTestApp(
       theme: theme ?? ThemeData.light(useMaterial3: true),
       home: Scaffold(body: SingleChildScrollView(child: child)),
     ),

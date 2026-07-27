@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/cookie_store.dart';
@@ -78,7 +79,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: ForumShellPage()),
+        child: const LocalizedTestApp(home: ForumShellPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -109,7 +110,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: ForumShellPage()),
+        child: const LocalizedTestApp(home: ForumShellPage()),
       ),
     );
     await tester.pump();
@@ -144,7 +145,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: ForumShellPage(isActive: false)),
+        child: const LocalizedTestApp(home: ForumShellPage(isActive: false)),
       ),
     );
     await tester.pumpAndSettle();
@@ -174,7 +175,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: ForumShellPage()),
+        child: const LocalizedTestApp(home: ForumShellPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -204,7 +205,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: ForumShellPage()),
+        child: const LocalizedTestApp(home: ForumShellPage()),
       ),
     );
     await tester.pump();
@@ -240,7 +241,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: ForumShellPage()),
+        child: const LocalizedTestApp(home: ForumShellPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -293,7 +294,7 @@ void main() {
             ),
             cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
           ],
-          child: const MaterialApp(home: ForumShellPage()),
+          child: const LocalizedTestApp(home: ForumShellPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -351,7 +352,7 @@ void main() {
           ),
           cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
         ],
-        child: const MaterialApp(home: ForumShellPage()),
+        child: const LocalizedTestApp(home: ForumShellPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -403,7 +404,7 @@ void main() {
             ),
             cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
           ],
-          child: const MaterialApp(home: ForumShellPage()),
+          child: const LocalizedTestApp(home: ForumShellPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -452,7 +453,7 @@ void main() {
             ),
             cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
           ],
-          child: const MaterialApp(home: ForumShellPage()),
+          child: const LocalizedTestApp(home: ForumShellPage()),
         ),
       );
       await tester.pumpAndSettle();
