@@ -39,6 +39,12 @@ class Y300App extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         FlutterQuillLocalizations.delegate,
       ],
+      // Phase 0: enable Flutter's built-in Chinese framework strings while
+      // leaving locale selection to the platform until app-level l10n lands.
+      supportedLocales: const [
+        Locale('zh', 'CN'),
+        Locale('zh', 'TW'),
+      ],
       home: enableAppUpdatePrompt ? AppUpdateAlertHost(child: home) : home,
     );
   }

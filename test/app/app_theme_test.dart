@@ -188,6 +188,10 @@ void main() {
     final theme = materialApp.theme!;
 
     expect(materialApp.themeMode, ThemeMode.dark);
+    expect(
+      materialApp.supportedLocales,
+      const <Locale>[Locale('zh', 'CN'), Locale('zh', 'TW')],
+    );
     expect(theme.scaffoldBackgroundColor, AppThemeTokens.scaffoldBackground);
     expect(theme.appBarTheme.backgroundColor, AppThemeTokens.appBarBackground);
     expect(
