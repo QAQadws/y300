@@ -11,6 +11,7 @@ import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dar
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
 
 class ForumDisplayContent extends StatefulWidget {
@@ -70,7 +71,7 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
       child: CustomScrollView(
         key: const Key('forum-display-list'),
         controller: widget.scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
+        physics: ForumPullToRefresh.scrollPhysics,
         slivers: [
           if (state.headImageUrl?.trim().isNotEmpty == true)
             SliverToBoxAdapter(

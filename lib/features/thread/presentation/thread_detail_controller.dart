@@ -72,7 +72,15 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     );
   }
 
-  Future<void> refresh() async {
+  /// 重新加载当前页，保留当前的筛选/排序参数。
+  ///
+  /// [forceNetwork] 会先清掉本帖的文档与解析快照缓存。快照有 5 分钟新鲜期，不清
+  /// 缓存的话下拉刷新会直接命中快照、看不到新回复，手势等于空转——这是用户主动
+  /// 要求刷新的场景，必须真的走一次网络。
+  Future<void> refresh({bool forceNetwork = false}) async {
+    if (forceNetwork) {
+      await _invalidateCurrentThreadCache(state.value?.tid ?? _args.tid);
+    }
     final current = state.value;
     final currentPage = current?.currentPage;
     state = const AsyncLoading();
@@ -85,13 +93,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     );
   }
 
-  Future<void> refreshAfterMutation() async {
-    final current = state.value;
-    if (current != null) {
-      await _invalidateCurrentThreadCache(current.tid);
-    }
-    await refresh();
-  }
+  Future<void> refreshAfterMutation() => refresh(forceNetwork: true);
 
   Future<void> loadMore() async {
     final current = state.value;

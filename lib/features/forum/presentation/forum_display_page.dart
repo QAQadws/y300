@@ -18,6 +18,7 @@ import 'package:y300/features/posting/presentation/posting_composer_state.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 
 class ForumDisplayPage extends ConsumerStatefulWidget {
   const ForumDisplayPage({super.key, required this.fid, this.title = ''});
@@ -94,8 +95,7 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
               message: state.errorMessage!,
               onRetry: () => controller.refresh(forceNetwork: true),
             )
-          : RefreshIndicator(
-              color: theme.colorScheme.primary,
+          : ForumPullToRefresh(
               onRefresh: () => controller.refresh(forceNetwork: true),
               child: ForumDisplayContent(
                 state: state,

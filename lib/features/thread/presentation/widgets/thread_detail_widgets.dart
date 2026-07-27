@@ -26,6 +26,7 @@ import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
 
 // File split (Phase 5b): cohesive widget groups live in part files under the
@@ -217,6 +218,8 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       child: ListView.builder(
         key: const Key('thread-detail-list'),
         controller: widget.scrollController,
+        // 只有一楼的短帖也要能下拉刷新，见 ForumPullToRefresh.scrollPhysics。
+        physics: ForumPullToRefresh.scrollPhysics,
         padding: EdgeInsets.fromLTRB(
           ForumContentSpacing.pageHorizontal,
           ForumContentSpacing.listTop,
@@ -247,6 +250,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         child: CustomScrollView(
           key: const Key('thread-detail-list'),
           controller: widget.scrollController,
+          physics: ForumPullToRefresh.scrollPhysics,
           center: _targetCenterKey,
           scrollCacheExtent: const ScrollCacheExtent.pixels(900),
           semanticChildCount: entries.length,
@@ -306,9 +310,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           );
           if (addPageTopPadding && entryIndex == 0) {
             child = Padding(
-              padding: const EdgeInsets.only(
-                top: ForumContentSpacing.listTop,
-              ),
+              padding: const EdgeInsets.only(top: ForumContentSpacing.listTop),
               child: child,
             );
           }

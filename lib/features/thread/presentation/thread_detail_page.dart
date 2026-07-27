@@ -46,6 +46,7 @@ import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_button.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
+import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 
 class ThreadDetailPage extends ConsumerStatefulWidget {
   const ThreadDetailPage({
@@ -239,45 +240,56 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                         message: state.errorMessage!,
                         onRetry: controller.refresh,
                       )
-                    : ThreadDetailContent(
-                        state: state,
-                        scrollController: _scrollController,
-                        highlightPostPid: _highlightPostPid,
-                        targetPid: widget.targetPid,
-                        imageHeaderBuilder: imageHeaderBuilder,
-                        imageReferer: _imageRefererFor(state),
-                        imageDimensionStore: _imageDimensionStore,
-                        onLoadPreviousPage: () {
-                          unawaited(
-                            _runPageActionAndScrollTop(
-                              controller.loadPreviousPage,
-                            ),
-                          );
-                        },
-                        onLoadNextPage: () {
-                          unawaited(
-                            _runPageActionAndScrollTop(controller.loadNextPage),
-                          );
-                        },
-                        onLoadPageNumber: (page) {
-                          unawaited(
-                            _runPageActionAndScrollTop(
-                              () => controller.loadPage(page),
-                            ),
-                          );
-                        },
-                        onOpenAuthorProfile: _openAuthorProfile,
-                        onOpenCommentAuthorProfile: _openCommentAuthorProfile,
-                        onCopyActionUrl: _copyActionUrl,
-                        onOpenPostLink: _openForumLink,
-                        onOpenPostImages: _openPostImages,
-                        onOpenPostActions: (post, plan) {
-                          _openPostActions(args, state, controller, post, plan);
-                        },
-                        htmlImagePrecacheService: htmlFirstPrecacheService,
-                        onTogglePollOption: controller.togglePollOption,
-                        onSubmitPollVote: controller.submitPollVote,
-                        onLoadAllRatings: controller.loadAllRatings,
+                    : ForumPullToRefresh(
+                        onRefresh: () => controller.refresh(forceNetwork: true),
+                        child: ThreadDetailContent(
+                          state: state,
+                          scrollController: _scrollController,
+                          highlightPostPid: _highlightPostPid,
+                          targetPid: widget.targetPid,
+                          imageHeaderBuilder: imageHeaderBuilder,
+                          imageReferer: _imageRefererFor(state),
+                          imageDimensionStore: _imageDimensionStore,
+                          onLoadPreviousPage: () {
+                            unawaited(
+                              _runPageActionAndScrollTop(
+                                controller.loadPreviousPage,
+                              ),
+                            );
+                          },
+                          onLoadNextPage: () {
+                            unawaited(
+                              _runPageActionAndScrollTop(
+                                controller.loadNextPage,
+                              ),
+                            );
+                          },
+                          onLoadPageNumber: (page) {
+                            unawaited(
+                              _runPageActionAndScrollTop(
+                                () => controller.loadPage(page),
+                              ),
+                            );
+                          },
+                          onOpenAuthorProfile: _openAuthorProfile,
+                          onOpenCommentAuthorProfile: _openCommentAuthorProfile,
+                          onCopyActionUrl: _copyActionUrl,
+                          onOpenPostLink: _openForumLink,
+                          onOpenPostImages: _openPostImages,
+                          onOpenPostActions: (post, plan) {
+                            _openPostActions(
+                              args,
+                              state,
+                              controller,
+                              post,
+                              plan,
+                            );
+                          },
+                          htmlImagePrecacheService: htmlFirstPrecacheService,
+                          onTogglePollOption: controller.togglePollOption,
+                          onSubmitPollVote: controller.submitPollVote,
+                          onLoadAllRatings: controller.loadAllRatings,
+                        ),
                       ),
               ),
             ],

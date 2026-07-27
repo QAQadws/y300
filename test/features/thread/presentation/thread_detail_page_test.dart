@@ -80,6 +80,7 @@ import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dar
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 
 void main() {
   setUp(() {
@@ -364,6 +365,117 @@ void main() {
         isEmpty,
       );
       expect(ratingsRepository.loadCount, 1);
+    });
+
+    testWidgets('pull to refresh reloads a short thread from network', (
+      tester,
+    ) async {
+      // 只有一楼的帖子撑不满一屏。默认滚动物理会直接拒绝这种列表的拖拽，
+      // 手势永远到不了 RefreshIndicator，所以这条用真实拖拽而不是直接调
+      // onRefresh——它同时守住 ForumPullToRefresh.scrollPhysics 的接线。
+      var callCount = 0;
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        callCount++;
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: <ThreadPost>[
+              _post(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                number: 1,
+                isFirst: true,
+                message: '<p>第 $callCount 次加载</p>',
+              ),
+            ],
+          ),
+        );
+      });
+      final invalidationService = _FakeNativePageCacheInvalidationService();
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          pageCacheInvalidationService: invalidationService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(callCount, 1);
+      expect(_richTextContaining('第 1 次加载'), findsOneWidget);
+      expect(
+        tester
+            .widget<ListView>(find.byKey(const Key('thread-detail-list')))
+            .physics,
+        ForumPullToRefresh.scrollPhysics,
+      );
+
+      await tester.fling(
+        find.byKey(const Key('thread-detail-list')),
+        const Offset(0, 320),
+        1000,
+      );
+      await tester.pumpAndSettle();
+
+      // 解析快照有 5 分钟新鲜期，不清缓存的话这次刷新会命中快照、看不到新回复。
+      expect(invalidationService.invalidatedThreadIds, <String>['100']);
+      expect(callCount, 2);
+      expect(_richTextContaining('第 2 次加载'), findsOneWidget);
+    });
+
+    testWidgets('pull to refresh keeps the current page and filters', (
+      tester,
+    ) async {
+      final requests = <({int page, Map<String, String> query})>[];
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        requests.add((page: page, query: Map<String, String>.from(query)));
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: <ThreadPost>[
+              _post(
+                pid: 'p$page',
+                author: 'alice',
+                authorId: '1',
+                number: page,
+                isFirst: page == 1,
+                message: '<p>第 $page 页</p>',
+              ),
+            ],
+            currentPage: page,
+            lastPage: 3,
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ThreadDetailPage)),
+      );
+      const args = ThreadDetailArgs(tid: '100', subject: '测试主题');
+      final controller = container.read(
+        threadDetailControllerProvider(args).notifier,
+      );
+      await controller.openOnlyAuthor();
+      await tester.pumpAndSettle();
+      await controller.loadPage(2);
+      await tester.pumpAndSettle();
+
+      final beforeRefresh = requests.last;
+      expect(beforeRefresh.page, 2);
+      expect(beforeRefresh.query, isNotEmpty);
+
+      final indicator = tester.widget<RefreshIndicator>(
+        find.byType(RefreshIndicator),
+      );
+      await indicator.onRefresh();
+      await tester.pumpAndSettle();
+
+      expect(requests.last.page, 2);
+      expect(requests.last.query, beforeRefresh.query);
     });
 
     testWidgets('shows posts and switches thread pages', (tester) async {
@@ -2681,6 +2793,15 @@ void main() {
         expect(_richTextContaining('第一话 姐姐的日记'), findsOneWidget);
         expect(historyRecorder.drafts, hasLength(1));
         expect(historyRecorder.drafts.single.target.id, '556943');
+        // 锚定分支走的是另一个滚动视图，下拉刷新的物理必须一起挂上。
+        expect(
+          tester
+              .widget<CustomScrollView>(
+                find.byKey(const Key('thread-detail-list')),
+              )
+              .physics,
+          ForumPullToRefresh.scrollPhysics,
+        );
       },
     );
 
@@ -4649,6 +4770,8 @@ class _RecordingHistoryDiagnostics implements HistoryDiagnosticRecorder {
 ThreadDetailData _threadDetailData({
   required String tid,
   required List<ThreadPost> posts,
+  int currentPage = 1,
+  int lastPage = 1,
 }) {
   return ThreadDetailData(
     tid: tid,
@@ -4657,8 +4780,8 @@ ThreadDetailData _threadDetailData({
     author: 'alice',
     replies: posts.length,
     views: 12,
-    currentPage: 1,
-    lastPage: 1,
+    currentPage: currentPage,
+    lastPage: lastPage,
     perPage: posts.length,
     posts: posts,
   );
