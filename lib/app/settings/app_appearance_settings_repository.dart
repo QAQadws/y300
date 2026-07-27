@@ -22,6 +22,9 @@ class SharedPrefsAppAppearanceSettingsRepository
       themePreference: _parseThemePreference(
         await _preferencesStore.read(PreferenceKeys.appThemePreference),
       ),
+      languagePreference: _parseLanguage(
+        await _preferencesStore.read(PreferenceKeys.appLanguagePreference),
+      ),
     );
   }
 
@@ -30,6 +33,10 @@ class SharedPrefsAppAppearanceSettingsRepository
     await _preferencesStore.write(
       PreferenceKeys.appThemePreference,
       settings.themePreference.name,
+    );
+    await _preferencesStore.write(
+      PreferenceKeys.appLanguagePreference,
+      settings.languagePreference.name,
     );
   }
 
@@ -40,5 +47,14 @@ class SharedPrefsAppAppearanceSettingsRepository
       }
     }
     return AppThemePreference.light;
+  }
+
+  AppLanguage _parseLanguage(String? raw) {
+    for (final language in AppLanguage.values) {
+      if (language.name == raw) {
+        return language;
+      }
+    }
+    return AppLanguage.system;
   }
 }

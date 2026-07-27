@@ -1,0 +1,29 @@
+{
+  "@@locale": "zh",
+
+  "appLanguageSectionTitle": "界面语言",
+  "@appLanguageSectionTitle": {
+    "description": "应用设置中的界面语言分区标题"
+  },
+  "appLanguageSystem": "跟随系统",
+  "@appLanguageSystem": {
+    "description": "跟随设备系统语言"
+  },
+  "appLanguageSimplifiedChinese": "简体中文",
+  "@appLanguageSimplifiedChinese": {
+    "description": "将应用界面设置为简体中文"
+  },
+  "appLanguageTraditionalChinese": "繁体中文",
+  "@appLanguageTraditionalChinese": {
+    "description": "将应用界面设置为繁体中文"
+  },
+  "appLanguageSaveFailed": "语言设置保存失败：{error}",
+  "@appLanguageSaveFailed": {
+    "description": "保存界面语言失败时显示的错误提示",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
+}

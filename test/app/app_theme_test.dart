@@ -2,17 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../test_support/localized_test_app.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/settings/app_appearance_settings_repository.dart';
+import 'package:y300/app/localization/app_locale_resolution.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_palette.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/app/y300_app.dart';
 import 'package:y300/features/forum/presentation/webview/theme/forum_webview_theme_palette_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
   test(
@@ -173,6 +176,7 @@ void main() {
             _FakeAppAppearanceSettingsRepository(
               settings: const AppAppearanceSettings(
                 themePreference: AppThemePreference.dark,
+                languagePreference: AppLanguage.system,
               ),
             ),
           ),
@@ -189,9 +193,18 @@ void main() {
     final theme = materialApp.theme!;
 
     expect(materialApp.themeMode, ThemeMode.dark);
+    expect(materialApp.supportedLocales, const <Locale>[
+      Locale('zh'),
+      Locale('zh', 'TW'),
+    ]);
+    expect(materialApp.locale, isNull);
     expect(
-      materialApp.supportedLocales,
-      const <Locale>[Locale('zh', 'CN'), Locale('zh', 'TW')],
+      materialApp.localizationsDelegates,
+      contains(AppLocalizations.delegate),
+    );
+    expect(
+      materialApp.localizationsDelegates,
+      contains(FlutterQuillLocalizations.delegate),
     );
     expect(theme.scaffoldBackgroundColor, AppThemeTokens.scaffoldBackground);
     expect(theme.appBarTheme.backgroundColor, AppThemeTokens.appBarBackground);
@@ -201,6 +214,33 @@ void main() {
     );
     expect(materialApp.darkTheme!.colorScheme.brightness, Brightness.dark);
     expect(materialApp.darkTheme!.extension<Y300ThemeExtension>(), isNotNull);
+  });
+
+  testWidgets('Y300App applies an explicit traditional language preference', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appAppearanceSettingsRepositoryProvider.overrideWithValue(
+            _FakeAppAppearanceSettingsRepository(
+              settings: const AppAppearanceSettings(
+                themePreference: AppThemePreference.light,
+                languagePreference: AppLanguage.traditionalChinese,
+              ),
+            ),
+          ),
+        ],
+        child: const Y300App(
+          home: SizedBox.shrink(),
+          enableAppUpdatePrompt: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(materialApp.locale, appTraditionalLocale);
   });
 
   testWidgets('AppTheme.dark builds common Material controls', (tester) async {

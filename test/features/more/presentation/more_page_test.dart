@@ -188,6 +188,8 @@ void main() {
         child: const LocalizedTestApp(
           locale: Locale('en'),
           supportedLocales: [Locale('en')],
+          localizationsDelegates:
+              LocalizedTestApp.frameworkAndQuillLocalizationsDelegates,
           home: MorePage(),
         ),
       ),
@@ -407,6 +409,67 @@ void main() {
     expect(find.text('当前：深色'), findsOneWidget);
   });
 
+  testWidgets('Appearance settings drawer changes app language', (
+    tester,
+  ) async {
+    final appearanceController = _FakeAppAppearanceController();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            _FakeAuthRepository(isLoggedIn: false),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => appearanceController,
+          ),
+        ],
+        child: const LocalizedTestApp(home: MorePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('more-appearance-entry')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('appearance-language-option-system')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('appearance-language-option-simplifiedChinese')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('appearance-language-option-traditionalChinese')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('appearance-language-selected-system')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('appearance-language-option-traditionalChinese')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      appearanceController.languagePreference,
+      AppLanguage.traditionalChinese,
+    );
+    expect(
+      find.byKey(const Key('appearance-language-selected-traditionalChinese')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('appearance-language-selected-system')),
+      findsNothing,
+    );
+  });
+
   testWidgets('Appearance settings drawer shows snackbar when save fails', (
     tester,
   ) async {
@@ -543,6 +606,7 @@ class _FakeAppAppearanceController extends AppAppearanceController {
   var _settings = AppAppearanceSettings.defaults();
 
   AppThemePreference get themePreference => _settings.themePreference;
+  AppLanguage get languagePreference => _settings.languagePreference;
 
   @override
   Future<AppAppearanceSettings> build() async {
@@ -556,6 +620,22 @@ class _FakeAppAppearanceController extends AppAppearanceController {
       return;
     }
     _settings = previous.copyWith(themePreference: preference);
+    state = AsyncData(_settings);
+    if (!failOnSave) {
+      return;
+    }
+    _settings = previous;
+    state = AsyncData(previous);
+    throw StateError('save failed');
+  }
+
+  @override
+  Future<void> setLanguagePreference(AppLanguage language) async {
+    final previous = _settings;
+    if (previous.languagePreference == language) {
+      return;
+    }
+    _settings = previous.copyWith(languagePreference: language);
     state = AsyncData(_settings);
     if (!failOnSave) {
       return;

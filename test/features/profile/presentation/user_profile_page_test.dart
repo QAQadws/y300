@@ -113,6 +113,8 @@ void main() {
         child: const LocalizedTestApp(
           locale: Locale('en'),
           supportedLocales: [Locale('en')],
+          localizationsDelegates:
+              LocalizedTestApp.frameworkAndQuillLocalizationsDelegates,
           home: MyProfilePage(),
         ),
       ),

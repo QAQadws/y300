@@ -1,0 +1,9 @@
+{
+  "@@locale": "zh_TW",
+
+  "appLanguageSectionTitle": "介面語言",
+  "appLanguageSystem": "跟隨系統",
+  "appLanguageSimplifiedChinese": "簡體中文",
+  "appLanguageTraditionalChinese": "繁體中文",
+  "appLanguageSaveFailed": "語言設定儲存失敗：{error}"
+}

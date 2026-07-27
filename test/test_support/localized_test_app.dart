@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// The common application shell for widget tests.
 ///
-/// Keeping framework delegates here makes every test ready for app-level l10n
-/// without duplicating localization configuration in individual test files.
-/// The app localization delegate can be added here when the ARB phase lands.
+/// Keeping app and framework delegates here prevents individual widget tests
+/// from silently drifting away from the production localization contract.
 class LocalizedTestApp extends MaterialApp {
   const LocalizedTestApp({
     super.key,
@@ -31,7 +31,7 @@ class LocalizedTestApp extends MaterialApp {
     super.themeMode,
     super.themeAnimationDuration,
     super.themeAnimationCurve,
-    super.locale = const Locale('zh', 'CN'),
+    super.locale = const Locale('zh'),
     Iterable<LocalizationsDelegate<dynamic>>? localizationsDelegates,
     super.localeListResolutionCallback,
     super.localeResolutionCallback,
@@ -52,16 +52,20 @@ class LocalizedTestApp extends MaterialApp {
              localizationsDelegates ?? _defaultLocalizationsDelegates,
        );
 
-  static const List<Locale> _defaultSupportedLocales = <Locale>[
-    Locale('zh', 'CN'),
-    Locale('zh', 'TW'),
+  static const List<Locale> _defaultSupportedLocales =
+      AppLocalizations.supportedLocales;
+
+  static const List<LocalizationsDelegate<dynamic>>
+  frameworkAndQuillLocalizationsDelegates = <LocalizationsDelegate<dynamic>>[
+    GlobalMaterialLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    FlutterQuillLocalizations.delegate,
   ];
 
   static const List<LocalizationsDelegate<dynamic>>
   _defaultLocalizationsDelegates = <LocalizationsDelegate<dynamic>>[
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
+    ...AppLocalizations.localizationsDelegates,
     FlutterQuillLocalizations.delegate,
   ];
 }
@@ -69,7 +73,7 @@ class LocalizedTestApp extends MaterialApp {
 /// Lightweight form for tests that only need a localized home widget.
 Widget localizedTestApp({
   required Widget home,
-  Locale locale = const Locale('zh', 'CN'),
+  Locale locale = const Locale('zh'),
 }) {
   return LocalizedTestApp(locale: locale, home: home);
 }

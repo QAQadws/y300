@@ -164,6 +164,8 @@ Future<void> _pumpHost(
       child: LocalizedTestApp(
         locale: Locale('en'),
         supportedLocales: const [Locale('en')],
+        localizationsDelegates:
+            LocalizedTestApp.frameworkAndQuillLocalizationsDelegates,
         home: AppUpdateAlertHost(child: child),
       ),
     ),

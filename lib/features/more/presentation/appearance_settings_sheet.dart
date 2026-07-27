@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 
 class AppearanceSettingsSheet extends ConsumerWidget {
@@ -13,6 +14,7 @@ class AppearanceSettingsSheet extends ConsumerWidget {
     final settings =
         settingsState.asData?.value ?? AppAppearanceSettings.defaults();
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
 
     return SafeArea(
       child: ListView(
@@ -60,9 +62,40 @@ class AppearanceSettingsSheet extends ConsumerWidget {
                 ),
             ],
           ),
+          const SizedBox(height: 20),
+          Text(
+            l10n.appLanguageSectionTitle,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final language in AppLanguage.values)
+                _AppearanceLanguageChoice(
+                  language: language,
+                  label: _languageLabel(l10n, language),
+                  selected: settings.languagePreference == language,
+                  onPressed: () =>
+                      _setLanguagePreference(context, ref, language),
+                ),
+            ],
+          ),
         ],
       ),
     );
+  }
+
+  String _languageLabel(AppLocalizations l10n, AppLanguage language) {
+    return switch (language) {
+      AppLanguage.system => l10n.appLanguageSystem,
+      AppLanguage.simplifiedChinese => l10n.appLanguageSimplifiedChinese,
+      AppLanguage.traditionalChinese => l10n.appLanguageTraditionalChinese,
+    };
   }
 
   Future<void> _setThemePreference(
@@ -79,6 +112,24 @@ class AppearanceSettingsSheet extends ConsumerWidget {
         return;
       }
       showTransientSnackBar(context, '主题设置保存失败：$error');
+    }
+  }
+
+  Future<void> _setLanguagePreference(
+    BuildContext context,
+    WidgetRef ref,
+    AppLanguage language,
+  ) async {
+    try {
+      await ref
+          .read(appAppearanceControllerProvider.notifier)
+          .setLanguagePreference(language);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      final l10n = AppLocalizations.of(context);
+      showTransientSnackBar(context, l10n.appLanguageSaveFailed('$error'));
     }
   }
 }
@@ -157,5 +208,62 @@ class _AppearanceThemeChoice extends StatelessWidget {
       AppThemePreference.dark => '使用深色外观',
       AppThemePreference.system => '跟随系统浅色或深色设置',
     };
+  }
+}
+
+class _AppearanceLanguageChoice extends StatelessWidget {
+  const _AppearanceLanguageChoice({
+    required this.language,
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final AppLanguage language;
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final foreground = selected ? scheme.onPrimaryContainer : scheme.onSurface;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: OutlinedButton.icon(
+        key: Key('appearance-language-option-${language.name}'),
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: foreground,
+          backgroundColor: selected ? scheme.primaryContainer : null,
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          side: BorderSide(
+            color: selected ? Colors.transparent : scheme.outlineVariant,
+            width: selected ? 0 : 1,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: TextStyle(
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+        icon: Icon(
+          selected ? Icons.check : Icons.language_outlined,
+          key: Key(
+            selected
+                ? 'appearance-language-selected-${language.name}'
+                : 'appearance-language-unselected-${language.name}',
+          ),
+          size: 18,
+        ),
+        label: Text(label),
+      ),
+    );
   }
 }

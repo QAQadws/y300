@@ -41,4 +41,22 @@ class AppAppearanceController extends AsyncNotifier<AppAppearanceSettings> {
       Error.throwWithStackTrace(error, stackTrace);
     }
   }
+
+  Future<void> setLanguagePreference(AppLanguage preference) async {
+    final previous = state.value ?? AppAppearanceSettings.defaults();
+    if (previous.languagePreference == preference) {
+      return;
+    }
+
+    final next = previous.copyWith(languagePreference: preference);
+    state = AsyncData(next);
+    try {
+      await _repository.save(next);
+    } catch (error, stackTrace) {
+      if (ref.mounted) {
+        state = AsyncData(previous);
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
 }

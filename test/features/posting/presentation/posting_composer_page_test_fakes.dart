@@ -128,6 +128,8 @@ Widget _buildLauncher({
     child: LocalizedTestApp(
       locale: const Locale('en'),
       supportedLocales: const [Locale('en')],
+      localizationsDelegates:
+          LocalizedTestApp.frameworkAndQuillLocalizationsDelegates,
       theme: theme,
       home: _PostingComposerLauncher(
         args: args ?? _args(),
