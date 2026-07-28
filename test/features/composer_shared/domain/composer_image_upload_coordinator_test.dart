@@ -4,16 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_attachment_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 
 void main() {
   group('SerialComposerImageUploadCoordinator', () {
     test('uploads images sequentially by order', () async {
       final repository = _FakeComposerAttachmentRepository(
-        aidsByLocalId: const <String, String>{
-          'b': '200',
-          'a': '100',
-        },
+        aidsByLocalId: const <String, String>{'b': '200', 'a': '100'},
       );
       final coordinator = SerialComposerImageUploadCoordinator(
         repository: repository,
@@ -32,8 +30,9 @@ void main() {
       expect(repository.uploadedLocalIds, ['a', 'b']);
       expect(
         events
-            .where((event) =>
-                event.type == ComposerImageUploadEventType.uploaded)
+            .where(
+              (event) => event.type == ComposerImageUploadEventType.uploaded,
+            )
             .map((event) => event.uploadedImage?.aid),
         ['100', '200'],
       );
@@ -88,8 +87,9 @@ void main() {
 
       expect(
         events
-            .where((event) =>
-                event.type == ComposerImageUploadEventType.progress)
+            .where(
+              (event) => event.type == ComposerImageUploadEventType.progress,
+            )
             .map((event) => event.progress),
         [0.25, 0.75],
       );
@@ -118,10 +118,24 @@ void main() {
       expect(repository.uploadedLocalIds, isEmpty);
       expect(
         events
-            .where((event) =>
-                event.type == ComposerImageUploadEventType.failed)
+            .where((event) => event.type == ComposerImageUploadEventType.failed)
             .map((event) => event.localId),
         ['first', 'second'],
+      );
+      expect(
+        events
+            .where((event) => event.type == ComposerImageUploadEventType.failed)
+            .map((event) => event.failure?.code),
+        [
+          ComposerImageUploadFailureCode.unknown,
+          ComposerImageUploadFailureCode.unknown,
+        ],
+      );
+      expect(
+        events
+            .where((event) => event.type == ComposerImageUploadEventType.failed)
+            .map((event) => event.failure?.detail),
+        ['没有上传权限', '没有上传权限'],
       );
     });
 
@@ -160,10 +174,7 @@ void main() {
       await subscription.asFuture<void>();
 
       expect(repository.uploadedLocalIds, ['first']);
-      expect(
-        events.any((event) => event.localId == 'second'),
-        isFalse,
-      );
+      expect(events.any((event) => event.localId == 'second'), isFalse);
     });
   });
 }
@@ -182,7 +193,8 @@ ComposerImageAttachment _attachment({
   );
 }
 
-class _FakeComposerAttachmentRepository implements ComposerAttachmentRepository {
+class _FakeComposerAttachmentRepository
+    implements ComposerAttachmentRepository {
   _FakeComposerAttachmentRepository({
     this.prepareResult = const ApiSuccess<ComposerImageUploadPermission>(
       ComposerImageUploadPermission(

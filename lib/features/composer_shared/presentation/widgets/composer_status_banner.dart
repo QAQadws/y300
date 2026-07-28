@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 编辑器顶部的"状态条"——给 reply / posting 共用。
 ///
@@ -16,7 +17,7 @@ class ComposerStatusBanner extends StatelessWidget {
     this.textKey,
     this.onRetry,
     this.retryButtonKey,
-    this.retryLabel = '重试',
+    this.retryLabel,
     this.maxLines,
   }) : _variant = variant;
 
@@ -26,11 +27,11 @@ class ComposerStatusBanner extends StatelessWidget {
     required String text,
     Key? textKey,
   }) : this._(
-          key: key,
-          text: text,
-          variant: _ComposerStatusBannerVariant.loading,
-          textKey: textKey,
-        );
+         key: key,
+         text: text,
+         variant: _ComposerStatusBannerVariant.loading,
+         textKey: textKey,
+       );
 
   /// 错误态：错误色描边 + 文案 + 重试按钮。
   const ComposerStatusBanner.error({
@@ -39,16 +40,16 @@ class ComposerStatusBanner extends StatelessWidget {
     required VoidCallback onRetry,
     Key? textKey,
     Key? retryButtonKey,
-    String retryLabel = '重试',
+    String? retryLabel,
   }) : this._(
-          key: key,
-          text: text,
-          variant: _ComposerStatusBannerVariant.error,
-          textKey: textKey,
-          onRetry: onRetry,
-          retryButtonKey: retryButtonKey,
-          retryLabel: retryLabel,
-        );
+         key: key,
+         text: text,
+         variant: _ComposerStatusBannerVariant.error,
+         textKey: textKey,
+         onRetry: onRetry,
+         retryButtonKey: retryButtonKey,
+         retryLabel: retryLabel,
+       );
 
   /// 信息态：默认描边 + 文案。
   const ComposerStatusBanner.info({
@@ -57,19 +58,19 @@ class ComposerStatusBanner extends StatelessWidget {
     Key? textKey,
     int? maxLines,
   }) : this._(
-          key: key,
-          text: text,
-          variant: _ComposerStatusBannerVariant.info,
-          textKey: textKey,
-          maxLines: maxLines,
-        );
+         key: key,
+         text: text,
+         variant: _ComposerStatusBannerVariant.info,
+         textKey: textKey,
+         maxLines: maxLines,
+       );
 
   final String text;
   final _ComposerStatusBannerVariant _variant;
   final Key? textKey;
   final VoidCallback? onRetry;
   final Key? retryButtonKey;
-  final String retryLabel;
+  final String? retryLabel;
   final int? maxLines;
 
   @override
@@ -86,12 +87,15 @@ class ComposerStatusBanner extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: _buildBody(colorScheme),
+        child: _buildBody(
+          colorScheme,
+          retryLabel ?? AppLocalizations.of(context).commonRetry,
+        ),
       ),
     );
   }
 
-  Widget _buildBody(ColorScheme colorScheme) {
+  Widget _buildBody(ColorScheme colorScheme, String resolvedRetryLabel) {
     switch (_variant) {
       case _ComposerStatusBannerVariant.loading:
         return Row(
@@ -119,7 +123,7 @@ class ComposerStatusBanner extends StatelessWidget {
               key: retryButtonKey,
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: Text(retryLabel),
+              label: Text(resolvedRetryLabel),
             ),
           ],
         );
@@ -134,8 +138,4 @@ class ComposerStatusBanner extends StatelessWidget {
   }
 }
 
-enum _ComposerStatusBannerVariant {
-  loading,
-  error,
-  info,
-}
+enum _ComposerStatusBannerVariant { loading, error, info }

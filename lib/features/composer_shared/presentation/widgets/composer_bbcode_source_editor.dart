@@ -8,6 +8,7 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_bbco
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_toolbar.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ComposerBbCodeSourceEditor extends StatelessWidget {
   const ComposerBbCodeSourceEditor({
@@ -20,7 +21,7 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
     this.keyPrefix = 'composer-source',
     this.viewKey,
     this.inputKey,
-    this.hintText = '源码',
+    this.hintText,
     this.minLines = 12,
     this.contentPadding = const EdgeInsets.symmetric(
       horizontal: ForumContentSpacing.composerSourceEditorHorizontal,
@@ -50,7 +51,7 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
   final String keyPrefix;
   final Key? viewKey;
   final Key? inputKey;
-  final String hintText;
+  final String? hintText;
   final int minLines;
   final EdgeInsetsGeometry contentPadding;
 
@@ -86,7 +87,9 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
             textInputAction: TextInputAction.newline,
             contextMenuBuilder: ComposerBbCodeContextMenu.build,
             onChanged: onChanged,
-            decoration: noBorderDecoration(hintText),
+            decoration: noBorderDecoration(
+              hintText ?? AppLocalizations.of(context).composerSourceMode,
+            ),
           ),
         ],
       ),

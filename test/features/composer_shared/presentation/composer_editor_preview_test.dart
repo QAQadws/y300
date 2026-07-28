@@ -29,8 +29,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('加粗'), findsOneWidget);
-    expect(find.text('颜色'), findsOneWidget);
-    expect(find.text('背景'), findsOneWidget);
+    expect(find.text('字体色'), findsOneWidget);
+    expect(find.text('背景色'), findsOneWidget);
     expect(find.text('引用'), findsOneWidget);
     expect(find.text('字号'), findsOneWidget);
     expect(find.text('居中'), findsNothing);
@@ -64,7 +64,7 @@ void main() {
     final editable = tester.state<EditableTextState>(find.byType(EditableText));
     editable.showToolbar();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('颜色'));
+    await tester.tap(find.text('字体色'));
     await tester.pumpAndSettle();
 
     expect(
@@ -99,7 +99,7 @@ void main() {
     final editable = tester.state<EditableTextState>(find.byType(EditableText));
     editable.showToolbar();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('背景'));
+    await tester.tap(find.text('背景色'));
     await tester.pumpAndSettle();
 
     expect(

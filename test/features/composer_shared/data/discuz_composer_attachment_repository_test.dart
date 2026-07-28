@@ -6,6 +6,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/services/composer_attachment_remote_data_source.dart';
 import 'package:y300/features/composer_shared/data/repositories/discuz_composer_attachment_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 
 void main() {
   group('DiscuzComposerAttachmentRepository', () {
@@ -34,7 +35,10 @@ void main() {
 
       expect(result.isFailure, isTrue);
       expect(result.errorOrNull?.type, ApiErrorType.business);
-      expect(result.errorOrNull?.message, contains('上传权限无效'));
+      expect(
+        result.errorOrNull?.code,
+        ComposerImageUploadFailureCode.permissionExpired.name,
+      );
     });
 
     test('prepareUpload fails when upload hash is empty', () async {
@@ -47,7 +51,10 @@ void main() {
       final result = await repository.prepareUpload(fid: '33');
 
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, contains('上传权限无效'));
+      expect(
+        result.errorOrNull?.code,
+        ComposerImageUploadFailureCode.permissionExpired.name,
+      );
     });
 
     test('prepareUpload fails when no image extension is allowed', () async {
@@ -60,7 +67,10 @@ void main() {
       final result = await repository.prepareUpload(fid: '33');
 
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, contains('不允许上传图片'));
+      expect(
+        result.errorOrNull?.code,
+        ComposerImageUploadFailureCode.extensionNotAllowed.name,
+      );
     });
 
     test('prepareUpload fails when attach remain is exhausted', () async {
@@ -75,7 +85,10 @@ void main() {
       final result = await repository.prepareUpload(fid: '33');
 
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, contains('附件额度不足'));
+      expect(
+        result.errorOrNull?.code,
+        ComposerImageUploadFailureCode.quotaExceeded.name,
+      );
     });
 
     test('uploadImage fails when local file does not exist', () async {
@@ -92,7 +105,10 @@ void main() {
       );
 
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, contains('图片文件不存在'));
+      expect(
+        result.errorOrNull?.code,
+        ComposerImageUploadFailureCode.fileMissing.name,
+      );
     });
 
     test('uploadImage fails when mime is not image', () async {
@@ -113,7 +129,10 @@ void main() {
       );
 
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, contains('只能上传图片'));
+      expect(
+        result.errorOrNull?.code,
+        ComposerImageUploadFailureCode.invalidFileType.name,
+      );
     });
 
     test('uploadImage fails when extension is not allowed', () async {
@@ -134,68 +153,76 @@ void main() {
       );
 
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, contains('不允许上传'));
+      expect(
+        result.errorOrNull?.code,
+        ComposerImageUploadFailureCode.extensionNotAllowed.name,
+      );
+      expect(result.errorOrNull?.message, 'webp');
     });
 
-    test('uploadImage returns uploaded image when remote returns positive aid',
-        () async {
-      final fileSystem = _fileSystemWithFile('/gallery/photo.jpg');
-      final remoteDataSource = _FakeUploadRemoteDataSource(
-        uploadResponse: const ComposerImageUploadResponse(
-          aid: '123456',
-          rawBody: '123456',
-          statusCode: 200,
-        ),
-      );
-      final now = DateTime(2026, 6, 8, 12);
-      final repository = _buildRepository(
-        remoteDataSource: remoteDataSource,
-        fileSystem: fileSystem,
-        now: () => now,
-      );
-      double? progress;
-
-      final result = await repository.uploadImage(
-        fid: '33',
-        permission: _permission(),
-        attachment: _attachment(localPath: '/gallery/photo.jpg'),
-        onProgress: (value) => progress = value,
-      );
-
-      expect(result.isSuccess, isTrue);
-      expect(result.dataOrNull?.localId, 'local-1');
-      expect(result.dataOrNull?.aid, '123456');
-      expect(result.dataOrNull?.uploadedAt, now);
-      expect(remoteDataSource.uploadedFiles.single.fileName, 'photo.jpg');
-      expect(remoteDataSource.uploadedFiles.single.mimeType, 'image/jpeg');
-      expect(progress, 0.5);
-    });
-
-    test('uploadImage fails when remote aid is negative non-number or empty',
-        () async {
-      for (final rawAid in <String>['-1', 'not-aid', '']) {
+    test(
+      'uploadImage returns uploaded image when remote returns positive aid',
+      () async {
         final fileSystem = _fileSystemWithFile('/gallery/photo.jpg');
-        final repository = _buildRepository(
-          remoteDataSource: _FakeUploadRemoteDataSource(
-            uploadResponse: ComposerImageUploadResponse(
-              aid: rawAid,
-              rawBody: rawAid,
-              statusCode: 200,
-            ),
+        final remoteDataSource = _FakeUploadRemoteDataSource(
+          uploadResponse: const ComposerImageUploadResponse(
+            aid: '123456',
+            rawBody: '123456',
+            statusCode: 200,
           ),
-          fileSystem: fileSystem,
         );
+        final now = DateTime(2026, 6, 8, 12);
+        final repository = _buildRepository(
+          remoteDataSource: remoteDataSource,
+          fileSystem: fileSystem,
+          now: () => now,
+        );
+        double? progress;
 
         final result = await repository.uploadImage(
           fid: '33',
           permission: _permission(),
           attachment: _attachment(localPath: '/gallery/photo.jpg'),
+          onProgress: (value) => progress = value,
         );
 
-        expect(result.isFailure, isTrue);
-        expect(result.errorOrNull?.type, ApiErrorType.business);
-      }
-    });
+        expect(result.isSuccess, isTrue);
+        expect(result.dataOrNull?.localId, 'local-1');
+        expect(result.dataOrNull?.aid, '123456');
+        expect(result.dataOrNull?.uploadedAt, now);
+        expect(remoteDataSource.uploadedFiles.single.fileName, 'photo.jpg');
+        expect(remoteDataSource.uploadedFiles.single.mimeType, 'image/jpeg');
+        expect(progress, 0.5);
+      },
+    );
+
+    test(
+      'uploadImage fails when remote aid is negative non-number or empty',
+      () async {
+        for (final rawAid in <String>['-1', 'not-aid', '']) {
+          final fileSystem = _fileSystemWithFile('/gallery/photo.jpg');
+          final repository = _buildRepository(
+            remoteDataSource: _FakeUploadRemoteDataSource(
+              uploadResponse: ComposerImageUploadResponse(
+                aid: rawAid,
+                rawBody: rawAid,
+                statusCode: 200,
+              ),
+            ),
+            fileSystem: fileSystem,
+          );
+
+          final result = await repository.uploadImage(
+            fid: '33',
+            permission: _permission(),
+            attachment: _attachment(localPath: '/gallery/photo.jpg'),
+          );
+
+          expect(result.isFailure, isTrue);
+          expect(result.errorOrNull?.type, ApiErrorType.business);
+        }
+      },
+    );
 
     test('maps dio timeout to timeout failure', () async {
       final fileSystem = _fileSystemWithFile('/gallery/photo.jpg');
@@ -278,8 +305,10 @@ ComposerImageUploadPermission _permission({
   String uid = '597454',
   String uploadHash = 'upload-hash',
   Set<String> allowedExtensions = const {'jpg', 'jpeg', 'png', 'gif'},
-  ComposerAttachRemain attachRemain =
-      const ComposerAttachRemain(size: -1, count: -1),
+  ComposerAttachRemain attachRemain = const ComposerAttachRemain(
+    size: -1,
+    count: -1,
+  ),
 }) {
   return ComposerImageUploadPermission(
     uid: uid,

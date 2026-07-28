@@ -11,6 +11,8 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
@@ -674,7 +676,11 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       ThreadActionNotice(
         code: ThreadActionNoticeCode.success,
         action: ThreadActionKind.reply,
-        detail: result.message,
+        detail: ComposerTextResolver.submitSuccess(
+          AppLocalizations.of(context),
+          ComposerKind.reply,
+          result.rawSuccessDetail,
+        ),
       ),
     );
     await ref

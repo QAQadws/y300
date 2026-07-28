@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/presentation/widgets/composer_anchored_dropdown.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 主题分类选择器。
 ///
@@ -56,8 +57,11 @@ class ThreadTypeSelector extends StatelessWidget {
     if (types.isEmpty) {
       return const SizedBox.shrink();
     }
-    final title = typeRequired ? '主题分类（必选）' : '主题分类';
-    final selectedLabel = _selectedType?.name ?? (typeRequired ? '未选择' : '无分类');
+    final l10n = AppLocalizations.of(context);
+    final title = typeRequired ? l10n.postingTypeRequired : l10n.postingType;
+    final selectedLabel =
+        _selectedType?.name ??
+        (typeRequired ? l10n.postingTypeUnselected : l10n.postingTypeNone);
     if (useDropdown) {
       return SizedBox(
         key: containerKey,
@@ -96,7 +100,7 @@ class ThreadTypeSelector extends StatelessWidget {
             if (!typeRequired)
               ChoiceChip(
                 key: noneChipKey,
-                label: const Text('无分类'),
+                label: Text(l10n.postingTypeNone),
                 selected: selectedTypeId == null,
                 onSelected: enabled ? (_) => onSelected(null) : null,
               ),

@@ -18,8 +18,8 @@ class DiscuzNewThreadRepository implements NewThreadRepository {
   DiscuzNewThreadRepository({
     required NewThreadRemoteDataSource remoteDataSource,
     NewThreadResponseParser parser = const NewThreadResponseParser(),
-  })  : _remoteDataSource = remoteDataSource,
-        _parser = parser;
+  }) : _remoteDataSource = remoteDataSource,
+       _parser = parser;
 
   final NewThreadRemoteDataSource _remoteDataSource;
   final NewThreadResponseParser _parser;
@@ -48,7 +48,7 @@ class DiscuzNewThreadRepository implements NewThreadRepository {
       return ApiFailure<NewThreadSubmissionResult>(
         ApiError(
           type: _mapDioErrorType(error),
-          message: error.message ?? '网络异常',
+          message: error.message ?? '',
           statusCode: error.response?.statusCode,
           raw: error.response?.data,
         ),
@@ -57,7 +57,7 @@ class DiscuzNewThreadRepository implements NewThreadRepository {
       return ApiFailure<NewThreadSubmissionResult>(
         ApiError(
           type: ApiErrorType.unknown,
-          message: '发帖失败：$error',
+          message: error.toString(),
           raw: error,
         ),
       );

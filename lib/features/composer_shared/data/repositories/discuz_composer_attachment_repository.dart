@@ -5,15 +5,17 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/services/composer_attachment_remote_data_source.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_attachment_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 
-class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository {
+class DiscuzComposerAttachmentRepository
+    implements ComposerAttachmentRepository {
   DiscuzComposerAttachmentRepository({
     required ComposerAttachmentRemoteDataSource remoteDataSource,
     FileSystem fileSystem = const LocalFileSystem(),
     DateTime Function()? now,
-  })  : _remoteDataSource = remoteDataSource,
-        _fileSystem = fileSystem,
-        _now = now ?? DateTime.now;
+  }) : _remoteDataSource = remoteDataSource,
+       _fileSystem = fileSystem,
+       _now = now ?? DateTime.now;
 
   final ComposerAttachmentRemoteDataSource _remoteDataSource;
   final FileSystem _fileSystem;
@@ -30,8 +32,9 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
     required String fid,
   }) async {
     try {
-      final permission =
-          await _remoteDataSource.checkUploadPermission(fid: fid);
+      final permission = await _remoteDataSource.checkUploadPermission(
+        fid: fid,
+      );
       final validation = _validatePermission(permission);
       if (validation != null) {
         return ApiFailure<ComposerImageUploadPermission>(validation);
@@ -43,7 +46,8 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
       return ApiFailure<ComposerImageUploadPermission>(
         ApiError(
           type: ApiErrorType.unknown,
-          message: '获取上传权限失败：$error',
+          code: ComposerImageUploadFailureCode.unknown.name,
+          message: error.toString(),
           raw: error,
         ),
       );
@@ -65,13 +69,17 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
     final file = _fileSystem.file(attachment.localPath);
     if (!file.existsSync()) {
       return const ApiFailure<ComposerUploadedImage>(
-        ApiError(type: ApiErrorType.business, message: '图片文件不存在，无法上传'),
+        ApiError(type: ApiErrorType.business, code: 'fileMissing', message: ''),
       );
     }
 
     if (!attachment.mimeType.toLowerCase().startsWith('image/')) {
       return const ApiFailure<ComposerUploadedImage>(
-        ApiError(type: ApiErrorType.business, message: '只能上传图片文件'),
+        ApiError(
+          type: ApiErrorType.business,
+          code: 'invalidFileType',
+          message: '',
+        ),
       );
     }
 
@@ -81,7 +89,8 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
       return ApiFailure<ComposerUploadedImage>(
         ApiError(
           type: ApiErrorType.business,
-          message: '当前版块不允许上传 ${extension.isEmpty ? '该类型' : extension} 图片',
+          code: ComposerImageUploadFailureCode.extensionNotAllowed.name,
+          message: extension,
         ),
       );
     }
@@ -107,7 +116,8 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
         return ApiFailure<ComposerUploadedImage>(
           ApiError(
             type: ApiErrorType.business,
-            message: '图片上传失败',
+            code: ComposerImageUploadFailureCode.server.name,
+            message: '',
             raw: response.rawBody,
             statusCode: response.statusCode,
           ),
@@ -126,7 +136,8 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
       return ApiFailure<ComposerUploadedImage>(
         ApiError(
           type: ApiErrorType.unknown,
-          message: '上传图片失败：$error',
+          code: ComposerImageUploadFailureCode.unknown.name,
+          message: error.toString(),
           raw: error,
         ),
       );
@@ -135,9 +146,10 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
 
   ApiError? _validatePermission(ComposerImageUploadPermission permission) {
     if (permission.uid.trim().isEmpty || permission.uploadHash.trim().isEmpty) {
-      return const ApiError(
+      return ApiError(
         type: ApiErrorType.business,
-        message: '上传权限无效，请重新登录后再试',
+        code: ComposerImageUploadFailureCode.permissionExpired.name,
+        message: '',
       );
     }
     if (!permission.allowedExtensions.any(
@@ -145,16 +157,18 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
         extension.trim().toLowerCase().replaceFirst('.', ''),
       ),
     )) {
-      return const ApiError(
+      return ApiError(
         type: ApiErrorType.business,
-        message: '当前版块不允许上传图片',
+        code: ComposerImageUploadFailureCode.extensionNotAllowed.name,
+        message: '',
       );
     }
     if (!permission.attachRemain.hasSizeRemain ||
         !permission.attachRemain.hasCountRemain) {
-      return const ApiError(
+      return ApiError(
         type: ApiErrorType.business,
-        message: '附件额度不足，无法上传图片',
+        code: ComposerImageUploadFailureCode.quotaExceeded.name,
+        message: '',
       );
     }
     return null;
@@ -202,7 +216,8 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
         error.type == DioExceptionType.sendTimeout) {
       return ApiError(
         type: ApiErrorType.timeout,
-        message: error.message ?? '上传图片超时',
+        code: ComposerImageUploadFailureCode.timeout.name,
+        message: error.message ?? '',
         statusCode: statusCode,
         raw: error.response?.data,
       );
@@ -210,7 +225,8 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
     if (statusCode == 401 || statusCode == 403) {
       return ApiError(
         type: ApiErrorType.unauthorized,
-        message: error.message ?? '上传权限已失效，请重新登录',
+        code: ComposerImageUploadFailureCode.permissionExpired.name,
+        message: error.message ?? '',
         statusCode: statusCode,
         raw: error.response?.data,
       );
@@ -218,14 +234,16 @@ class DiscuzComposerAttachmentRepository implements ComposerAttachmentRepository
     if (statusCode != null && statusCode >= 500) {
       return ApiError(
         type: ApiErrorType.server,
-        message: error.message ?? '上传服务异常',
+        code: ComposerImageUploadFailureCode.server.name,
+        message: error.message ?? '',
         statusCode: statusCode,
         raw: error.response?.data,
       );
     }
     return ApiError(
       type: ApiErrorType.network,
-      message: error.message ?? '网络异常，图片上传失败',
+      code: ComposerImageUploadFailureCode.network.name,
+      message: error.message ?? '',
       statusCode: statusCode,
       raw: error.response?.data,
     );

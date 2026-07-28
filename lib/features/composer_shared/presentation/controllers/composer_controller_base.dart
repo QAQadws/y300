@@ -7,6 +7,8 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_sanitizer.dart';
@@ -53,11 +55,13 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
   /// 子类在提交前做业务校验。
   ///
-  /// 返回 null 表示通过；返回非空字符串表示失败，基类会把它写入
-  /// `errorMessage` 并直接返回 not-sent，**不会**调用 [performSubmit]。
-  String? preflightValidate(TState state) {
+  /// Returns a locale-neutral failure and never invokes [performSubmit] when
+  /// validation fails.
+  ComposerValidationFailure? preflightValidate(TState state) {
     if (state.message.trim().isEmpty) {
-      return '请输入内容';
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.contentRequired,
+      );
     }
     return null;
   }
@@ -165,7 +169,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           message: value,
           messageRevision: _messageRevisionTracker.revision,
           clearLastMessageMutation: true,
-          clearErrorMessage: true,
+          clearFailure: true,
         ),
       ),
     );
@@ -180,7 +184,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     _setDataState(
       applyPatch(
         current,
-        ComposerStatePatch(useSignature: value, clearErrorMessage: true),
+        ComposerStatePatch(useSignature: value, clearFailure: true),
       ),
     );
     _scheduleDraftSave();
@@ -242,14 +246,14 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           messageRevision: current.messageRevision + 1,
           clearLastMessageMutation: true,
           pendingAttachmentAids: <String>[],
-          clearPendingAttachmentMessage: true,
+          clearPendingAttachmentNotice: true,
           restoredDraft: false,
           imageAttachments: <ComposerImageAttachment>[],
           isUploadingImages: false,
           imageUploadCurrent: 0,
           imageUploadTotal: 0,
-          clearErrorMessage: true,
-          clearImageUploadError: true,
+          clearFailure: true,
+          clearImageUploadFailure: true,
         ),
       ),
     );
@@ -363,7 +367,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             isUploadingImages: true,
             imageUploadCurrent: 0,
             imageUploadTotal: sortedPickedImages.length,
-            clearImageUploadError: true,
+            clearImageUploadFailure: true,
           ),
         ),
       );
@@ -382,7 +386,11 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       _setDataState(
         applyPatch(
           latest,
-          const ComposerStatePatch(imageUploadError: '选择图片失败，请重试'),
+          const ComposerStatePatch(
+            imageUploadFailure: ComposerImageUploadFailure(
+              code: ComposerImageUploadFailureCode.pickerFailed,
+            ),
+          ),
         ),
       );
     }
@@ -413,7 +421,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             current,
             const ComposerStatePatch(
               isUploadingImages: false,
-              imageUploadError: '图片上传失败，请重试',
+              imageUploadFailure: ComposerImageUploadFailure(
+                code: ComposerImageUploadFailureCode.unknown,
+              ),
             ),
           ),
         );
@@ -475,7 +485,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
                 status: ComposerImageAttachmentStatus.uploaded,
                 aid: uploadedImage.aid,
                 uploadedAt: uploadedImage.uploadedAt,
-                clearErrorMessage: true,
+                clearFailureCode: true,
               ),
               isUploadingImages: true,
               imageUploadCurrent: event.current,
@@ -494,12 +504,18 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
                 current.imageAttachments,
                 localId: event.localId,
                 status: ComposerImageAttachmentStatus.failed,
-                errorMessage: event.errorMessage ?? '图片上传失败',
+                failureCode:
+                    event.failure?.code ??
+                    ComposerImageUploadFailureCode.unknown,
               ),
               isUploadingImages: true,
               imageUploadCurrent: event.current,
               imageUploadTotal: event.total,
-              imageUploadError: event.errorMessage ?? '图片上传失败，请重试',
+              imageUploadFailure:
+                  event.failure ??
+                  const ComposerImageUploadFailure(
+                    code: ComposerImageUploadFailureCode.unknown,
+                  ),
             ),
           ),
         );
@@ -593,7 +609,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
         current,
         ComposerStatePatch(
           pendingAttachmentAids: merged,
-          pendingAttachmentMessage: '图片已上传，请选择位置后点击图片按钮重新插入',
+          pendingAttachmentNotice: ComposerPendingAttachmentNotice(
+            code: ComposerPendingAttachmentNoticeCode.readyToReinsert,
+            count: merged.length,
+          ),
           clearLastMessageMutation: true,
         ),
       ),
@@ -611,8 +630,11 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       _setDataState(
         applyPatch(
           current,
-          const ComposerStatePatch(
-            pendingAttachmentMessage: '当前选区无法安全恢复，请重新选择位置',
+          ComposerStatePatch(
+            pendingAttachmentNotice: ComposerPendingAttachmentNotice(
+              code: ComposerPendingAttachmentNoticeCode.selectionExpired,
+              count: current.pendingAttachmentAids.length,
+            ),
           ),
         ),
       );
@@ -652,8 +674,8 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             revision: _messageRevisionTracker.revision,
           ),
           pendingAttachmentAids: const <String>[],
-          clearPendingAttachmentMessage: true,
-          clearErrorMessage: true,
+          clearPendingAttachmentNotice: true,
+          clearFailure: true,
         ),
       ),
     );
@@ -666,8 +688,8 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     required ComposerImageAttachmentStatus status,
     String? aid,
     DateTime? uploadedAt,
-    String? errorMessage,
-    bool clearErrorMessage = false,
+    ComposerImageUploadFailureCode? failureCode,
+    bool clearFailureCode = false,
   }) {
     return [
       for (final attachment in attachments)
@@ -681,9 +703,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             status: status,
             aid: aid ?? attachment.aid,
             uploadedAt: uploadedAt ?? attachment.uploadedAt,
-            errorMessage: clearErrorMessage
+            failureCode: clearFailureCode
                 ? null
-                : errorMessage ?? attachment.errorMessage,
+                : failureCode ?? attachment.failureCode,
             cachePath: attachment.cachePath,
           )
         else
@@ -702,7 +724,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
     final marked = applyPatch(
       stateValue,
-      const ComposerStatePatch(isSubmitting: true, clearErrorMessage: true),
+      const ComposerStatePatch(isSubmitting: true, clearFailure: true),
     );
     _setDataState(marked);
 
@@ -713,10 +735,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       _setDataState(
         applyPatch(
           sanitized,
-          ComposerStatePatch(isSubmitting: false, errorMessage: preflight),
+          ComposerStatePatch(isSubmitting: false, failure: preflight),
         ),
       );
-      return ComposerSubmitInvocationResult.notSent(message: preflight);
+      return ComposerSubmitInvocationResult.notSent(failure: preflight);
     }
 
     final uploadedAids = _resolveUploadedAttachmentAids(sanitized);
@@ -738,8 +760,8 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           messageRevision: afterSubmit.messageRevision + 1,
           pendingAttachmentAids: const <String>[],
           clearLastMessageMutation: true,
-          clearPendingAttachmentMessage: true,
-          clearErrorMessage: true,
+          clearPendingAttachmentNotice: true,
+          clearFailure: true,
         ),
       );
       _setDataState(resetAfterSuccess(reset));
@@ -747,17 +769,24 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
         source: '',
         revision: afterSubmit.messageRevision + 1,
       );
-      return ComposerSubmitInvocationResult.sent(outcome.successMessage ?? '');
+      return ComposerSubmitInvocationResult.sent(
+        rawDetail: outcome.rawSuccessDetail,
+      );
     }
 
-    final errorMessage = outcome.errorMessage ?? '';
+    final failure =
+        outcome.failure ??
+        const ComposerSubmissionFailure(
+          code: ComposerSubmissionFailureCode.unknown,
+          kind: ComposerKind.reply,
+        );
     final failed = applyPatch(
       afterSubmit,
-      ComposerStatePatch(isSubmitting: false, errorMessage: errorMessage),
+      ComposerStatePatch(isSubmitting: false, failure: failure),
     );
     _setDataState(failed);
     await _saveSnapshot(failed);
-    return ComposerSubmitInvocationResult.notSent(message: errorMessage);
+    return ComposerSubmitInvocationResult.notSent(failure: failure);
   }
 
   Future<TState> _sanitizeBeforeSubmit(TState current) async {
@@ -778,7 +807,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             ? current.messageRevision
             : _recordMessageChange(current.message, result.message),
         clearLastMessageMutation: true,
-        clearImageUploadError: true,
+        clearImageUploadFailure: true,
       ),
     );
     _setDataState(sanitized);

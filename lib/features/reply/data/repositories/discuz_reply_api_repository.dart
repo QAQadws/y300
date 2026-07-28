@@ -64,7 +64,8 @@ class DiscuzReplyApiRepository implements ReplyRepository {
       return ApiFailure<ReplySubmissionResult>(
         ApiError(
           type: ApiErrorType.business,
-          message: validation.message ?? '回复内容不能为空',
+          code: validation.code?.name,
+          message: '',
         ),
       );
     }
@@ -100,7 +101,7 @@ class DiscuzReplyApiRepository implements ReplyRepository {
       return ApiFailure<ReplySubmissionResult>(
         ApiError(
           type: _mapDioErrorType(error),
-          message: error.message ?? '网络异常',
+          message: error.message ?? '',
           statusCode: error.response?.statusCode,
           raw: error.response?.data,
         ),
@@ -109,7 +110,7 @@ class DiscuzReplyApiRepository implements ReplyRepository {
       return ApiFailure<ReplySubmissionResult>(
         ApiError(
           type: ApiErrorType.unknown,
-          message: '发送回复失败：$error',
+          message: error.toString(),
           raw: error,
         ),
       );
@@ -129,7 +130,7 @@ class DiscuzReplyApiRepository implements ReplyRepository {
       return ApiFailure<ReplyPreparation>(
         ApiError(
           type: _mapDioErrorType(error),
-          message: error.message ?? '获取楼层回复表单失败',
+          message: error.message ?? '',
           statusCode: error.response?.statusCode,
           raw: error.response?.data,
         ),
@@ -142,7 +143,7 @@ class DiscuzReplyApiRepository implements ReplyRepository {
       return ApiFailure<ReplyPreparation>(
         ApiError(
           type: ApiErrorType.unknown,
-          message: '准备楼层回复失败：$error',
+          message: error.toString(),
           raw: error,
         ),
       );
@@ -166,7 +167,8 @@ class DiscuzReplyApiRepository implements ReplyRepository {
           return const ApiFailure<String>(
             ApiError(
               type: ApiErrorType.business,
-              message: 'formhash 为空，无法发送回复',
+              code: 'formhash_invalid',
+              message: '',
             ),
           );
         }
@@ -175,7 +177,7 @@ class DiscuzReplyApiRepository implements ReplyRepository {
       failure: (error) => ApiFailure<String>(
         ApiError(
           type: error.type,
-          message: '获取 formhash 失败：${error.message}',
+          message: error.message,
           code: error.code,
           statusCode: error.statusCode,
           raw: error.raw,
@@ -189,10 +191,7 @@ class DiscuzReplyApiRepository implements ReplyRepository {
     final messageNode = ParseUtils.asMap(root['Message']);
     final message = ParseUtils.asString(
       messageNode['messagestr'],
-      fallback: ParseUtils.asString(
-        messageNode['messageval'],
-        fallback: '回复结果未知',
-      ),
+      fallback: ParseUtils.asString(messageNode['messageval'], fallback: ''),
     );
     final code = ParseUtils.asString(messageNode['messageval'], fallback: '');
     final loweredCode = code.toLowerCase();

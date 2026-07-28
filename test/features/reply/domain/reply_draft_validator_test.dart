@@ -14,21 +14,21 @@ void main() {
       final result = validator.validate(draftWithMessage(''));
 
       expect(result.isValid, isFalse);
-      expect(result.message, contains('不能为空'));
+      expect(result.code, ReplyValidationCode.emptyMessage);
     });
 
     test('rejects whitespace only message', () {
       final result = validator.validate(draftWithMessage('   \n\t  '));
 
       expect(result.isValid, isFalse);
-      expect(result.message, contains('不能为空'));
+      expect(result.code, ReplyValidationCode.emptyMessage);
     });
 
     test('accepts plain text message', () {
       final result = validator.validate(draftWithMessage('这是测试回复'));
 
       expect(result.isValid, isTrue);
-      expect(result.message, isNull);
+      expect(result.code, isNull);
     });
 
     test('accepts bbcode message', () {
@@ -37,7 +37,7 @@ void main() {
       );
 
       expect(result.isValid, isTrue);
-      expect(result.message, isNull);
+      expect(result.code, isNull);
     });
   });
 }

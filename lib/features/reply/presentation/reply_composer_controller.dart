@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_submission_error_presenter.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_submission_failure_classifier.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_controller_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
@@ -28,7 +30,7 @@ class ReplyComposerController
 
   final ReplyComposerArgs _args;
   ReplyRepository? _replyRepository;
-  ComposerSubmissionErrorPresenter? _errorPresenter;
+  ComposerSubmissionFailureClassifier? _failureClassifier;
 
   @override
   ComposerDraftIdentity get draftIdentity => _args.identity;
@@ -39,7 +41,7 @@ class ReplyComposerController
   @override
   FutureOr<ReplyComposerState> build() async {
     _replyRepository = ref.read(replyRepositoryProvider);
-    _errorPresenter = ref.read(composerSubmissionErrorPresenterProvider);
+    _failureClassifier = ref.read(composerSubmissionFailureClassifierProvider);
     return super.build();
   }
 
@@ -88,13 +90,13 @@ class ReplyComposerController
       messageRevision: patch.messageRevision,
       lastMessageMutation: patch.lastMessageMutation,
       pendingAttachmentAids: patch.pendingAttachmentAids,
-      pendingAttachmentMessage: patch.pendingAttachmentMessage,
-      errorMessage: patch.errorMessage,
-      imageUploadError: patch.imageUploadError,
-      clearErrorMessage: patch.clearErrorMessage,
-      clearImageUploadError: patch.clearImageUploadError,
+      pendingAttachmentNotice: patch.pendingAttachmentNotice,
+      failure: patch.failure,
+      imageUploadFailure: patch.imageUploadFailure,
+      clearFailure: patch.clearFailure,
+      clearImageUploadFailure: patch.clearImageUploadFailure,
       clearLastMessageMutation: patch.clearLastMessageMutation,
-      clearPendingAttachmentMessage: patch.clearPendingAttachmentMessage,
+      clearPendingAttachmentNotice: patch.clearPendingAttachmentNotice,
     );
   }
 
@@ -104,15 +106,19 @@ class ReplyComposerController
   }
 
   @override
-  String? preflightValidate(ReplyComposerState state) {
+  ComposerValidationFailure? preflightValidate(ReplyComposerState state) {
     if (state.message.trim().isEmpty) {
-      return '请输入回复内容';
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.contentRequired,
+      );
     }
     final missingPostReference =
         state.target.isPostReply &&
         (state.isPreparing || state.preparation == null);
     if (missingPostReference) {
-      return '楼层回复引用准备失败，请重试';
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.replyReferenceUnavailable,
+      );
     }
     return null;
   }
@@ -140,12 +146,18 @@ class ReplyComposerController
     );
     if (result case ApiSuccess<ReplySubmissionResult>(:final data)) {
       return ComposerSubmissionOutcome.success(
-        message: data.message.isEmpty ? '回复成功' : data.message,
+        rawDetail: data.message.isEmpty ? null : data.message,
       );
     }
     final error = (result as ApiFailure<ReplySubmissionResult>).error;
-    final errorMessage = _errorPresenter?.present(error) ?? error.message;
-    return ComposerSubmissionOutcome.failure(errorMessage: errorMessage);
+    final failure =
+        _failureClassifier?.classify(error, kind: ComposerKind.reply) ??
+        ComposerSubmissionFailure(
+          code: ComposerSubmissionFailureCode.unknown,
+          kind: ComposerKind.reply,
+          detail: error.message,
+        );
+    return ComposerSubmissionOutcome.failure(failure: failure);
   }
 
   /// 楼层引用准备：reply 专属流程，发帖页不会用到。
@@ -168,8 +180,8 @@ class ReplyComposerController
         current.copyWith(
           isPreparing: true,
           clearPreparation: true,
-          clearPreparationError: true,
-          clearErrorMessage: true,
+          clearPreparationFailure: true,
+          clearFailure: true,
         ),
       );
     }
@@ -186,7 +198,7 @@ class ReplyComposerController
         latest.copyWith(
           isPreparing: false,
           preparation: data,
-          clearPreparationError: true,
+          clearPreparationFailure: true,
         ),
       );
       return;
@@ -195,26 +207,24 @@ class ReplyComposerController
     _setReplyState(
       latest.copyWith(
         isPreparing: false,
-        preparationError: error.message,
-        errorMessage: error.message,
+        preparationFailure: ComposerOperationFailure(
+          code: ComposerOperationFailureCode.replyPreparation,
+          detail: error.message.isEmpty ? null : error.message,
+        ),
       ),
     );
   }
 
-  /// reply 专属字段（preparation / preparationError）走自己的 setter，
+  /// reply 专属字段（preparation / preparationFailure）走自己的 setter，
   /// 不经过 [ComposerStatePatch]，避免污染基类抽象。
   void _setReplyState(ReplyComposerState value) {
     setStateValue(value);
   }
 
-  /// 兼容旧调用点：基类 [submit] 返回 [ComposerSubmitInvocationResult]，
-  /// reply 这里把它窄化为 [ReplyComposerResult]，旧页面/测试不需要改签名。
+  /// 将基类的通用调用结果窄化为 reply 路由结果。
   @override
   Future<ReplyComposerResult> submit() async {
     final result = await super.submit();
     return ReplyComposerResult.fromInvocation(result);
   }
-
-  /// 历史方法名，仍然可用，等同于 [submit]。
-  Future<ReplyComposerResult> submitReply() => submit();
 }

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_attachment_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_image_upload_failure_classifier.dart';
 
 enum ComposerImageUploadEventType {
   started,
@@ -20,7 +22,7 @@ class ComposerImageUploadEvent {
     required this.total,
     this.progress,
     this.uploadedImage,
-    this.errorMessage,
+    this.failure,
   });
 
   const ComposerImageUploadEvent.started({
@@ -28,11 +30,11 @@ class ComposerImageUploadEvent {
     required int current,
     required int total,
   }) : this._(
-          type: ComposerImageUploadEventType.started,
-          localId: localId,
-          current: current,
-          total: total,
-        );
+         type: ComposerImageUploadEventType.started,
+         localId: localId,
+         current: current,
+         total: total,
+       );
 
   const ComposerImageUploadEvent.progress({
     required String localId,
@@ -40,12 +42,12 @@ class ComposerImageUploadEvent {
     required int total,
     required double progress,
   }) : this._(
-          type: ComposerImageUploadEventType.progress,
-          localId: localId,
-          current: current,
-          total: total,
-          progress: progress,
-        );
+         type: ComposerImageUploadEventType.progress,
+         localId: localId,
+         current: current,
+         total: total,
+         progress: progress,
+       );
 
   const ComposerImageUploadEvent.uploaded({
     required String localId,
@@ -53,34 +55,33 @@ class ComposerImageUploadEvent {
     required int total,
     required ComposerUploadedImage uploadedImage,
   }) : this._(
-          type: ComposerImageUploadEventType.uploaded,
-          localId: localId,
-          current: current,
-          total: total,
-          uploadedImage: uploadedImage,
-        );
+         type: ComposerImageUploadEventType.uploaded,
+         localId: localId,
+         current: current,
+         total: total,
+         uploadedImage: uploadedImage,
+       );
 
   const ComposerImageUploadEvent.failed({
     required String localId,
     required int current,
     required int total,
-    required String errorMessage,
+    required ComposerImageUploadFailure failure,
   }) : this._(
-          type: ComposerImageUploadEventType.failed,
-          localId: localId,
-          current: current,
-          total: total,
-          errorMessage: errorMessage,
-        );
+         type: ComposerImageUploadEventType.failed,
+         localId: localId,
+         current: current,
+         total: total,
+         failure: failure,
+       );
 
-  const ComposerImageUploadEvent.completed({
-    required int total,
-  }) : this._(
-          type: ComposerImageUploadEventType.completed,
-          localId: '',
-          current: total,
-          total: total,
-        );
+  const ComposerImageUploadEvent.completed({required int total})
+    : this._(
+        type: ComposerImageUploadEventType.completed,
+        localId: '',
+        current: total,
+        total: total,
+      );
 
   final ComposerImageUploadEventType type;
   final String localId;
@@ -88,7 +89,7 @@ class ComposerImageUploadEvent {
   final int total;
   final double? progress;
   final ComposerUploadedImage? uploadedImage;
-  final String? errorMessage;
+  final ComposerImageUploadFailure? failure;
 }
 
 abstract class ComposerImageUploadCoordinator {
@@ -105,9 +106,13 @@ class SerialComposerImageUploadCoordinator
     implements ComposerImageUploadCoordinator {
   SerialComposerImageUploadCoordinator({
     required ComposerAttachmentRepository repository,
-  }) : _repository = repository;
+    ComposerImageUploadFailureClassifier failureClassifier =
+        const ComposerImageUploadFailureClassifier(),
+  }) : _repository = repository,
+       _failureClassifier = failureClassifier;
 
   final ComposerAttachmentRepository _repository;
+  final ComposerImageUploadFailureClassifier _failureClassifier;
   bool _cancelled = false;
   int _runId = 0;
 
@@ -125,12 +130,14 @@ class SerialComposerImageUploadCoordinator
         cancel();
       }
     };
-    unawaited(_runUpload(
-      controller: controller,
-      fid: fid,
-      attachments: attachments,
-      runId: runId,
-    ));
+    unawaited(
+      _runUpload(
+        controller: controller,
+        fid: fid,
+        attachments: attachments,
+        runId: runId,
+      ),
+    );
     return controller.stream;
   }
 
@@ -161,19 +168,22 @@ class SerialComposerImageUploadCoordinator
         await controller.close();
         return;
       }
-      if (permissionResult
-          case ApiFailure<ComposerImageUploadPermission>(:final error)) {
+      if (permissionResult case ApiFailure<ComposerImageUploadPermission>(
+        :final error,
+      )) {
         for (var index = 0; index < sorted.length; index += 1) {
           if (_isCancelled(runId)) {
             await controller.close();
             return;
           }
-          controller.add(ComposerImageUploadEvent.failed(
-            localId: sorted[index].localId,
-            current: index + 1,
-            total: total,
-            errorMessage: error.message,
-          ));
+          controller.add(
+            ComposerImageUploadEvent.failed(
+              localId: sorted[index].localId,
+              current: index + 1,
+              total: total,
+              failure: _failureClassifier.classify(error),
+            ),
+          );
         }
         controller.add(ComposerImageUploadEvent.completed(total: total));
         await controller.close();
@@ -189,11 +199,13 @@ class SerialComposerImageUploadCoordinator
         }
         final attachment = sorted[index];
         final current = index + 1;
-        controller.add(ComposerImageUploadEvent.started(
-          localId: attachment.localId,
-          current: current,
-          total: total,
-        ));
+        controller.add(
+          ComposerImageUploadEvent.started(
+            localId: attachment.localId,
+            current: current,
+            total: total,
+          ),
+        );
         final result = await _repository.uploadImage(
           fid: fid,
           permission: permission,
@@ -217,20 +229,24 @@ class SerialComposerImageUploadCoordinator
           return;
         }
         if (result case ApiSuccess<ComposerUploadedImage>(:final data)) {
-          controller.add(ComposerImageUploadEvent.uploaded(
-            localId: attachment.localId,
-            current: current,
-            total: total,
-            uploadedImage: data,
-          ));
+          controller.add(
+            ComposerImageUploadEvent.uploaded(
+              localId: attachment.localId,
+              current: current,
+              total: total,
+              uploadedImage: data,
+            ),
+          );
         } else {
           final error = (result as ApiFailure<ComposerUploadedImage>).error;
-          controller.add(ComposerImageUploadEvent.failed(
-            localId: attachment.localId,
-            current: current,
-            total: total,
-            errorMessage: error.message,
-          ));
+          controller.add(
+            ComposerImageUploadEvent.failed(
+              localId: attachment.localId,
+              current: current,
+              total: total,
+              failure: _failureClassifier.classify(error),
+            ),
+          );
         }
       }
       if (!_isCancelled(runId)) {

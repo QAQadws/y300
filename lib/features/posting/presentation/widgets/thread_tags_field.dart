@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 主题标签 chip 输入框。
 ///
@@ -27,8 +28,8 @@ class ThreadTagsField extends StatefulWidget {
     this.inputFieldKey,
     this.chipKeyBuilder,
     this.removeButtonKeyBuilder,
-    this.title = '主题标签',
-    this.hintText = '输入标签，回车或英文逗号确认',
+    this.title,
+    this.hintText,
   });
 
   final List<String> tags;
@@ -40,8 +41,8 @@ class ThreadTagsField extends StatefulWidget {
   final Key? inputFieldKey;
   final Key Function(String tag, int index)? chipKeyBuilder;
   final Key Function(String tag, int index)? removeButtonKeyBuilder;
-  final String title;
-  final String hintText;
+  final String? title;
+  final String? hintText;
 
   @override
   State<ThreadTagsField> createState() => _ThreadTagsFieldState();
@@ -119,12 +120,16 @@ class _ThreadTagsFieldState extends State<ThreadTagsField> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
     final canAddMore = widget.tags.length < widget.maxTags;
     return Column(
       key: widget.containerKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(widget.title, style: theme.textTheme.titleSmall),
+        Text(
+          widget.title ?? l10n.postingTags,
+          style: theme.textTheme.titleSmall,
+        ),
         const SizedBox(height: 8),
         InputDecorator(
           decoration: InputDecoration(
@@ -142,7 +147,9 @@ class _ThreadTagsFieldState extends State<ThreadTagsField> {
                   key: widget.chipKeyBuilder?.call(widget.tags[i], i),
                   label: Text(widget.tags[i]),
                   onDeleted: widget.enabled ? () => _removeAt(i) : null,
-                  deleteButtonTooltipMessage: widget.enabled ? '删除标签' : null,
+                  deleteButtonTooltipMessage: widget.enabled
+                      ? l10n.postingTagDelete
+                      : null,
                   // deleteIcon 依赖默认实现；若需要测试单独 key，
                   // 改成 [GestureDetector] 包裹一个自定义 Icon 即可。
                 ),
@@ -151,7 +158,7 @@ class _ThreadTagsFieldState extends State<ThreadTagsField> {
                   controller: _controller,
                   focusNode: _focusNode,
                   enabled: widget.enabled,
-                  hintText: widget.hintText,
+                  hintText: widget.hintText ?? l10n.postingTagsHint,
                   inputFieldKey: widget.inputFieldKey,
                   onChanged: _onTextChanged,
                   onSubmitted: _onSubmitted,
@@ -162,7 +169,7 @@ class _ThreadTagsFieldState extends State<ThreadTagsField> {
         ),
         const SizedBox(height: 4),
         Text(
-          '最多 ${widget.maxTags} 个；单个标签 ≤ ${widget.maxTagLength} 字符',
+          l10n.postingTagsLimit(widget.maxTags, widget.maxTagLength),
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -211,9 +218,7 @@ class _ChipInputField extends StatelessWidget {
         textInputAction: TextInputAction.done,
         maxLines: 1,
         // 截到 maxTagLength + 2，留给逗号/换行触发器，最终 commit 还会再过滤一次。
-        inputFormatters: [
-          LengthLimitingTextInputFormatter(maxTagLength + 2),
-        ],
+        inputFormatters: [LengthLimitingTextInputFormatter(maxTagLength + 2)],
         decoration: InputDecoration(
           isDense: true,
           border: InputBorder.none,

@@ -14,7 +14,11 @@ class ReplyFormParser {
     final form = document.querySelector('#postform');
     if (form == null) {
       return const ApiFailure<ReplyPreparation>(
-        ApiError(type: ApiErrorType.parse, message: '未找到楼层回复表单'),
+        ApiError(
+          type: ApiErrorType.parse,
+          code: 'reply_form_missing',
+          message: '',
+        ),
       );
     }
 
@@ -36,14 +40,8 @@ class ReplyFormParser {
       if (actionUri != null) ...actionUri.queryParameters,
     };
 
-    final fid = _firstNonEmpty(
-      hiddenValues['fid'],
-      queryValues['fid'],
-    );
-    final tid = _firstNonEmpty(
-      hiddenValues['tid'],
-      queryValues['tid'],
-    );
+    final fid = _firstNonEmpty(hiddenValues['fid'], queryValues['fid']);
+    final tid = _firstNonEmpty(hiddenValues['tid'], queryValues['tid']);
     final repquote = _firstNonEmpty(
       queryValues['repquote'],
       hiddenValues['repquote'],
@@ -54,7 +52,11 @@ class ReplyFormParser {
 
     if (fid == null || tid == null || pid == null) {
       return const ApiFailure<ReplyPreparation>(
-        ApiError(type: ApiErrorType.parse, message: '楼层回复参数缺失'),
+        ApiError(
+          type: ApiErrorType.parse,
+          code: 'reply_form_parameters_missing',
+          message: '',
+        ),
       );
     }
 
@@ -79,10 +81,7 @@ class ReplyFormParser {
     );
   }
 
-  Uri? _resolveActionUri({
-    required Uri sourceUri,
-    required String? action,
-  }) {
+  Uri? _resolveActionUri({required Uri sourceUri, required String? action}) {
     final trimmed = action?.trim();
     if (trimmed == null || trimmed.isEmpty) {
       return null;
@@ -91,9 +90,9 @@ class ReplyFormParser {
   }
 
   String? _extractQuotePreview(String rawText) {
-    final normalized = ParseUtils.asString(rawText)
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    final normalized = ParseUtils.asString(
+      rawText,
+    ).replaceAll(RegExp(r'\s+'), ' ').trim();
     if (normalized.isEmpty) {
       return null;
     }

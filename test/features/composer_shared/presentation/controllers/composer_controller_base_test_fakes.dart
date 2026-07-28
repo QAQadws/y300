@@ -31,9 +31,9 @@ class _TestComposerState extends ComposerStateBase {
     super.messageRevision,
     super.lastMessageMutation,
     super.pendingAttachmentAids,
-    super.pendingAttachmentMessage,
-    super.errorMessage,
-    super.imageUploadError,
+    super.pendingAttachmentNotice,
+    super.failure,
+    super.imageUploadFailure,
   });
 
   factory _TestComposerState.initial({
@@ -70,15 +70,13 @@ class _TestComposerState extends ComposerStateBase {
           : patch.lastMessageMutation ?? lastMessageMutation,
       pendingAttachmentAids:
           patch.pendingAttachmentAids ?? pendingAttachmentAids,
-      pendingAttachmentMessage: patch.clearPendingAttachmentMessage
+      pendingAttachmentNotice: patch.clearPendingAttachmentNotice
           ? null
-          : patch.pendingAttachmentMessage ?? pendingAttachmentMessage,
-      errorMessage: patch.clearErrorMessage
+          : patch.pendingAttachmentNotice ?? pendingAttachmentNotice,
+      failure: patch.clearFailure ? null : patch.failure ?? failure,
+      imageUploadFailure: patch.clearImageUploadFailure
           ? null
-          : patch.errorMessage ?? errorMessage,
-      imageUploadError: patch.clearImageUploadError
-          ? null
-          : patch.imageUploadError ?? imageUploadError,
+          : patch.imageUploadFailure ?? imageUploadFailure,
     );
   }
 }
@@ -89,7 +87,7 @@ class _TestComposerController
 
   final _TestArgs _args;
   ComposerSubmissionOutcome outcome = const ComposerSubmissionOutcome.success(
-    message: 'ok',
+    rawDetail: 'ok',
   );
   Future<ComposerSubmissionOutcome>? outcomeFuture;
   int performSubmitCallCount = 0;
@@ -262,7 +260,11 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
           localId: localId,
           current: event.current,
           total: event.total,
-          errorMessage: event.errorMessage ?? '上传失败',
+          failure:
+              event.failure ??
+              const ComposerImageUploadFailure(
+                code: ComposerImageUploadFailureCode.unknown,
+              ),
         ),
         ComposerImageUploadEventType.completed =>
           ComposerImageUploadEvent.completed(total: event.total),

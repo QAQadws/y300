@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 final class ComposerLinkDraft {
   const ComposerLinkDraft({required this.url, required this.label});
@@ -43,6 +44,7 @@ class _ComposerLinkSheetState extends State<_ComposerLinkSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return SafeArea(
       top: false,
@@ -53,7 +55,10 @@ class _ComposerLinkSheetState extends State<_ComposerLinkSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('添加链接', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              l10n.composerLinkTitle,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 12),
             TextField(
               key: Key('${widget.keyPrefix}-link-url-input'),
@@ -62,7 +67,7 @@ class _ComposerLinkSheetState extends State<_ComposerLinkSheet> {
               keyboardType: TextInputType.url,
               textInputAction: TextInputAction.next,
               decoration: InputDecoration(
-                labelText: '链接',
+                labelText: l10n.composerLinkUrl,
                 hintText: 'https://example.com',
                 errorText: _urlErrorText,
                 border: const OutlineInputBorder(),
@@ -75,8 +80,8 @@ class _ComposerLinkSheetState extends State<_ComposerLinkSheet> {
               controller: _labelController,
               textInputAction: TextInputAction.done,
               decoration: InputDecoration(
-                labelText: '链接文字',
-                hintText: '显示给别人看的文字',
+                labelText: l10n.composerLinkText,
+                hintText: l10n.composerLinkTextHint,
                 errorText: _labelErrorText,
                 border: const OutlineInputBorder(),
               ),
@@ -90,13 +95,13 @@ class _ComposerLinkSheetState extends State<_ComposerLinkSheet> {
                 TextButton(
                   key: Key('${widget.keyPrefix}-link-cancel-button'),
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('取消'),
+                  child: Text(l10n.commonCancel),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   key: Key('${widget.keyPrefix}-link-use-button'),
                   onPressed: _submit,
-                  child: const Text('使用'),
+                  child: Text(l10n.commonUse),
                 ),
               ],
             ),
@@ -122,8 +127,9 @@ class _ComposerLinkSheetState extends State<_ComposerLinkSheet> {
     final url = _urlController.text.trim();
     final label = _labelController.text.trim();
     setState(() {
-      _urlErrorText = url.isEmpty ? '请输入链接' : null;
-      _labelErrorText = label.isEmpty ? '请输入链接文字' : null;
+      final l10n = AppLocalizations.of(context);
+      _urlErrorText = url.isEmpty ? l10n.composerLinkUrlRequired : null;
+      _labelErrorText = label.isEmpty ? l10n.composerLinkTextRequired : null;
     });
     if (url.isEmpty || label.isEmpty) {
       return;

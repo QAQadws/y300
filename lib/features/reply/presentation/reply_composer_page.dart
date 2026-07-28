@@ -13,6 +13,9 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_sett
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_transient_feedback.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_error_summary.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -57,6 +60,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final provider = replyComposerControllerProvider(widget.args);
     final asyncState = ref.watch(provider);
     final controller = ref.read(provider.notifier);
@@ -96,13 +100,17 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
         resizeToAvoidBottomInset:
             _editorSurface != ComposerSurfacePreference.quill,
         appBar: AppBar(
-          title: Text(widget.args.target.isPostReply ? '回复楼层' : '回复帖子'),
+          title: Text(
+            widget.args.target.isPostReply
+                ? l10n.replyFloorTitle
+                : l10n.replyThreadTitle,
+          ),
           actions: [
             IconButton(
               key: const Key('reply-composer-source-button'),
               tooltip: _editorSurface == ComposerSurfacePreference.quill
-                  ? '源码'
-                  : '返回编辑',
+                  ? l10n.composerSourceMode
+                  : l10n.composerVisualMode,
               onPressed: state == null
                   ? null
                   : () {
@@ -117,7 +125,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
             ),
             IconButton(
               key: const Key('reply-composer-more-button'),
-              tooltip: '更多',
+              tooltip: l10n.composerMore,
               onPressed: state == null
                   ? null
                   : () {
@@ -128,7 +136,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
             ),
             IconButton(
               key: const Key('reply-composer-send-button'),
-              tooltip: '发送',
+              tooltip: l10n.replySubmit,
               onPressed: state == null || !state.canSubmit
                   ? null
                   : () {
@@ -142,7 +150,10 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
         body: asyncState.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => ComposerLoadErrorView(
-            message: '加载草稿失败：$error',
+            message: l10n.composerLoadDraftFailed(
+              ComposerErrorSummary.sanitize(error) ??
+                  l10n.composerUnknownFailure('other'),
+            ),
             textKey: const Key('reply-composer-load-error'),
           ),
           data: (state) => _ReplyComposerBody(
@@ -244,14 +255,19 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
   }
 
   void _scheduleTransientFeedback(ReplyComposerState state) {
+    final l10n = AppLocalizations.of(context);
     final shouldNotifyRestoredDraft =
         state.restoredDraft && !_didNotifyRestoredDraft;
     if (shouldNotifyRestoredDraft) {
       _didNotifyRestoredDraft = true;
     }
     final messages = <String>[
-      if (shouldNotifyRestoredDraft) '已恢复未发送草稿',
-      ..._uploadFeedbackTracker.update(state),
+      if (shouldNotifyRestoredDraft) l10n.composerRestoredDraft,
+      ..._uploadFeedbackTracker
+          .update(state)
+          .map(
+            (feedback) => ComposerTextResolver.uploadFeedback(l10n, feedback),
+          ),
     ];
     if (messages.isEmpty) {
       return;
@@ -293,23 +309,24 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     final shouldLeave = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext);
         return AlertDialog(
-          title: const Text('保存草稿并离开？'),
-          content: const Text('当前回复还没有发送，离开前会保存为草稿。'),
+          title: Text(l10n.replyLeaveTitle),
+          content: Text(l10n.replyLeaveBody),
           actions: [
             TextButton(
               key: const Key('reply-composer-continue-edit-button'),
               onPressed: () {
                 Navigator.of(dialogContext).pop(false);
               },
-              child: const Text('继续编辑'),
+              child: Text(l10n.composerContinueEditing),
             ),
             FilledButton(
               key: const Key('reply-composer-save-leave-button'),
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
               },
-              child: const Text('保存草稿并离开'),
+              child: Text(l10n.composerSaveDraftAndLeave),
             ),
           ],
         );
@@ -334,6 +351,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
       builder: (sheetContext) {
         return Consumer(
           builder: (context, ref, _) {
+            final l10n = AppLocalizations.of(context);
             final sheetState = ref.watch(provider).value;
             final enabled =
                 sheetState != null &&
@@ -346,11 +364,11 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
             final notifier = ref.read(provider.notifier);
             return ComposerSettingsSheet(
               key: const Key('reply-composer-settings-sheet'),
-              title: '更多设置',
+              title: l10n.composerMoreSettings,
               children: [
                 ComposerSettingsSwitchTile(
                   tileKey: const Key('reply-composer-use-signature-switch'),
-                  title: '使用个人签名',
+                  title: l10n.composerUseSignature,
                   value: sheetState?.useSignature ?? false,
                   onChanged: notifier.toggleUseSignature,
                   enabled: enabled,
@@ -359,7 +377,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
                 ComposerSettingsActionTile(
                   tileKey: const Key('reply-composer-reset-draft-button'),
                   icon: Icons.restart_alt,
-                  title: '重置草稿',
+                  title: l10n.composerResetDraft,
                   destructive: true,
                   onPressed: canReset
                       ? () {
@@ -386,14 +404,15 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
       context: context,
       builder: (dialogContext) {
         final colorScheme = Theme.of(dialogContext).colorScheme;
+        final l10n = AppLocalizations.of(dialogContext);
         return AlertDialog(
-          title: const Text('重置草稿？'),
-          content: const Text('当前编辑内容和已选图片将被清空，且无法恢复。'),
+          title: Text(l10n.composerResetDraftTitle),
+          content: Text(l10n.composerResetDraftBody),
           actions: [
             TextButton(
               key: const Key('reply-composer-reset-cancel-button'),
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
+              child: Text(l10n.commonCancel),
             ),
             FilledButton(
               key: const Key('reply-composer-reset-confirm-button'),
@@ -402,7 +421,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
                 foregroundColor: colorScheme.onError,
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('重置'),
+              child: Text(l10n.commonReset),
             ),
           ],
         );
@@ -502,11 +521,13 @@ class _ReplyComposerBody extends StatelessWidget {
 
   List<Widget> _buildLeadingFeedbackWidgets(BuildContext context) {
     return [
-      if (state.pendingAttachmentMessage case final message?
-          when message.trim().isNotEmpty) ...[
+      if (state.pendingAttachmentNotice case final notice?) ...[
         ComposerStatusBanner.info(
           key: const Key('reply-composer-pending-attachment'),
-          text: message,
+          text: ComposerTextResolver.pendingAttachment(
+            AppLocalizations.of(context),
+            notice,
+          ),
           maxLines: 2,
         ),
         const SizedBox(height: 12),
@@ -520,11 +541,10 @@ class _ReplyComposerBody extends StatelessWidget {
 
   List<Widget> _buildTrailingFeedbackWidgets(BuildContext context) {
     return [
-      if (state.errorMessage != null &&
-          state.errorMessage!.trim().isNotEmpty) ...[
+      if (state.failure case final failure?) ...[
         const SizedBox(height: 8),
         Text(
-          state.errorMessage!,
+          ComposerTextResolver.failure(AppLocalizations.of(context), failure),
           key: const Key('reply-composer-error-message'),
           style: TextStyle(color: Theme.of(context).colorScheme.error),
         ),
@@ -578,7 +598,7 @@ class _ReplyMessageEditor extends StatelessWidget {
         attachFileExists: renderer is FlutterBbCodeForumRenderer
             ? renderer.attachFileExists
             : null,
-        hintText: '输入回复内容',
+        hintText: AppLocalizations.of(context).replyMessageHint,
         expand: true,
         onBbCodeChanged: onMessageChanged,
         messageRevision: state.messageRevision,
@@ -593,7 +613,7 @@ class _ReplyMessageEditor extends StatelessWidget {
         enabled: enabled,
         messageRevision: state.messageRevision,
         onImagePressed: onImagePressed,
-        hintText: '输入回复内容',
+        hintText: AppLocalizations.of(context).replyMessageHint,
         onChanged: onMessageChanged,
       ),
     };
@@ -612,14 +632,19 @@ class _ReplyReferenceStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (state.isPreparing) {
-      return const ComposerStatusBanner.loading(text: '正在准备楼层引用');
+      return ComposerStatusBanner.loading(
+        text: AppLocalizations.of(context).replyPreparingQuote,
+      );
     }
 
-    final error = state.preparationError;
-    if (error != null && error.trim().isNotEmpty) {
+    final failure = state.preparationFailure;
+    if (failure != null) {
       return ComposerStatusBanner.error(
         key: const Key('reply-composer-preparation-error'),
-        text: error,
+        text: ComposerTextResolver.operationFailure(
+          AppLocalizations.of(context),
+          failure,
+        ),
         retryButtonKey: const Key('reply-composer-retry-prepare-button'),
         onRetry: onRetryPrepare,
       );

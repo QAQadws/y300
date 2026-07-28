@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ComposerBbCodeColorPickerSheet extends StatefulWidget {
   const ComposerBbCodeColorPickerSheet({
@@ -30,6 +31,7 @@ class _ComposerBbCodeColorPickerSheetState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final width = MediaQuery.sizeOf(context).width;
     return SafeArea(
@@ -66,7 +68,7 @@ class _ComposerBbCodeColorPickerSheetState
                 TextButton(
                   key: Key('${widget.keyPrefix}-cancel-button'),
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('取消'),
+                  child: Text(l10n.commonCancel),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
@@ -76,7 +78,7 @@ class _ComposerBbCodeColorPickerSheetState
                       context,
                     ).pop(composerBbCodeColorToHex(_selectedColor));
                   },
-                  child: const Text('使用'),
+                  child: Text(l10n.commonUse),
                 ),
               ],
             ),

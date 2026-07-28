@@ -1,5 +1,6 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -69,11 +70,11 @@ class ReplyComposerState extends ComposerStateBase {
     super.messageRevision,
     super.lastMessageMutation,
     super.pendingAttachmentAids,
-    super.pendingAttachmentMessage,
+    super.pendingAttachmentNotice,
     this.preparation,
-    this.preparationError,
-    super.errorMessage,
-    super.imageUploadError,
+    this.preparationFailure,
+    super.failure,
+    super.imageUploadFailure,
   });
 
   factory ReplyComposerState.initial({
@@ -89,9 +90,9 @@ class ReplyComposerState extends ComposerStateBase {
     int messageRevision = 0,
     ComposerTextMutation? lastMessageMutation,
     List<String> pendingAttachmentAids = const <String>[],
-    String? pendingAttachmentMessage,
+    ComposerPendingAttachmentNotice? pendingAttachmentNotice,
     ReplyPreparation? preparation,
-    String? preparationError,
+    ComposerOperationFailure? preparationFailure,
   }) {
     return ReplyComposerState(
       target: target,
@@ -107,16 +108,16 @@ class ReplyComposerState extends ComposerStateBase {
       messageRevision: messageRevision,
       lastMessageMutation: lastMessageMutation,
       pendingAttachmentAids: pendingAttachmentAids,
-      pendingAttachmentMessage: pendingAttachmentMessage,
+      pendingAttachmentNotice: pendingAttachmentNotice,
       preparation: preparation,
-      preparationError: preparationError,
+      preparationFailure: preparationFailure,
     );
   }
 
   final ReplyTarget target;
   final bool isPreparing;
   final ReplyPreparation? preparation;
-  final String? preparationError;
+  final ComposerOperationFailure? preparationFailure;
 
   bool get canPickImages => !isSubmitting && !isPreparing && !isUploadingImages;
 
@@ -143,17 +144,17 @@ class ReplyComposerState extends ComposerStateBase {
     int? messageRevision,
     ComposerTextMutation? lastMessageMutation,
     List<String>? pendingAttachmentAids,
-    String? pendingAttachmentMessage,
+    ComposerPendingAttachmentNotice? pendingAttachmentNotice,
     ReplyPreparation? preparation,
-    String? preparationError,
-    String? errorMessage,
-    String? imageUploadError,
+    ComposerOperationFailure? preparationFailure,
+    ComposerFailure? failure,
+    ComposerImageUploadFailure? imageUploadFailure,
     bool clearPreparation = false,
-    bool clearPreparationError = false,
-    bool clearErrorMessage = false,
-    bool clearImageUploadError = false,
+    bool clearPreparationFailure = false,
+    bool clearFailure = false,
+    bool clearImageUploadFailure = false,
     bool clearLastMessageMutation = false,
-    bool clearPendingAttachmentMessage = false,
+    bool clearPendingAttachmentNotice = false,
   }) {
     return ReplyComposerState(
       target: target,
@@ -172,35 +173,38 @@ class ReplyComposerState extends ComposerStateBase {
           : lastMessageMutation ?? this.lastMessageMutation,
       pendingAttachmentAids:
           pendingAttachmentAids ?? this.pendingAttachmentAids,
-      pendingAttachmentMessage: clearPendingAttachmentMessage
+      pendingAttachmentNotice: clearPendingAttachmentNotice
           ? null
-          : pendingAttachmentMessage ?? this.pendingAttachmentMessage,
+          : pendingAttachmentNotice ?? this.pendingAttachmentNotice,
       preparation: clearPreparation ? null : preparation ?? this.preparation,
-      preparationError: clearPreparationError
+      preparationFailure: clearPreparationFailure
           ? null
-          : preparationError ?? this.preparationError,
-      errorMessage: clearErrorMessage
+          : preparationFailure ?? this.preparationFailure,
+      failure: clearFailure ? null : failure ?? this.failure,
+      imageUploadFailure: clearImageUploadFailure
           ? null
-          : errorMessage ?? this.errorMessage,
-      imageUploadError: clearImageUploadError
-          ? null
-          : imageUploadError ?? this.imageUploadError,
+          : imageUploadFailure ?? this.imageUploadFailure,
     );
   }
 }
 
 class ReplyComposerResult extends ComposerSubmitInvocationResult {
-  const ReplyComposerResult({required super.sent, required super.message});
+  const ReplyComposerResult({
+    required super.sent,
+    super.rawSuccessDetail,
+    super.failure,
+  });
 
-  const ReplyComposerResult.sent(String message)
-    : this(sent: true, message: message);
+  const ReplyComposerResult.sent({String? rawDetail})
+    : this(sent: true, rawSuccessDetail: rawDetail);
 
   factory ReplyComposerResult.fromInvocation(
     ComposerSubmitInvocationResult invocation,
   ) {
     return ReplyComposerResult(
       sent: invocation.sent,
-      message: invocation.message,
+      rawSuccessDetail: invocation.rawSuccessDetail,
+      failure: invocation.failure,
     );
   }
 }

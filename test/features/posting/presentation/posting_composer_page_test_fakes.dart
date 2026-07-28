@@ -33,6 +33,7 @@ Widget _buildPage({
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
   ThemeData? theme,
+  Locale locale = const Locale('zh'),
 }) {
   return ProviderScope(
     overrides: [
@@ -63,6 +64,7 @@ Widget _buildPage({
       ),
     ],
     child: LocalizedTestApp(
+      locale: locale,
       theme: theme,
       home: PostingComposerPage(args: args ?? _args()),
     ),
@@ -126,10 +128,6 @@ Widget _buildLauncher({
       ),
     ],
     child: LocalizedTestApp(
-      locale: const Locale('en'),
-      supportedLocales: const [Locale('en')],
-      localizationsDelegates:
-          LocalizedTestApp.frameworkAndQuillLocalizationsDelegates,
       theme: theme,
       home: _PostingComposerLauncher(
         args: args ?? _args(),
@@ -363,7 +361,11 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
           localId: localId,
           current: event.current,
           total: event.total,
-          errorMessage: event.errorMessage ?? '上传失败',
+          failure:
+              event.failure ??
+              const ComposerImageUploadFailure(
+                code: ComposerImageUploadFailureCode.unknown,
+              ),
         ),
         ComposerImageUploadEventType.completed =>
           ComposerImageUploadEvent.completed(total: event.total),

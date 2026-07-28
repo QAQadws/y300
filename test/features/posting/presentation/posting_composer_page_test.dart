@@ -12,6 +12,7 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
@@ -87,6 +88,44 @@ void main() {
       find.byKey(const Key('posting-composer-send-button')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('PostingComposerPage localizes chrome and preserves raw input', (
+    tester,
+  ) async {
+    const rawForumName = '原始 Forum 名稱';
+    const rawSubject = '简体與繁體 Raw Subject';
+    const rawBody = '[quote]使用者原文 不转换[/quote]';
+    await tester.pumpWidget(
+      _buildPage(
+        locale: const Locale('zh', 'TW'),
+        metadataRepository: _FakeMetadataRepository.success(
+          _metadata(forumName: rawForumName),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('發帖 — $rawForumName'), findsOneWidget);
+    expect(find.byTooltip('發佈'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('posting-composer-subject-input')),
+      rawSubject,
+    );
+    await _enterPostingSourceMode(tester);
+    await tester.enterText(
+      find.byKey(const Key('posting-composer-message-input')),
+      rawBody,
+    );
+
+    final subjectField = tester.widget<TextField>(
+      find.byKey(const Key('posting-composer-subject-input')),
+    );
+    final bodyField = tester.widget<TextField>(
+      find.byKey(const Key('posting-composer-message-input')),
+    );
+    expect(subjectField.controller?.text, rawSubject);
+    expect(bodyField.controller?.text, rawBody);
   });
 
   testWidgets('PostingComposerPage uses AppBar foreground for action buttons', (
@@ -1131,8 +1170,8 @@ void main() {
       );
       await tester.pump();
 
-      // 触发系统返回——通过 AppBar 上的 back button。
-      await tester.pageBack();
+      // 通过 AppBar 上的 back button 触发系统返回流程。
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
 
       expect(find.text('保存草稿并离开？'), findsOneWidget);

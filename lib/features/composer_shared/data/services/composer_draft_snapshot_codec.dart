@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 
 /// 序列化 [ComposerDraftSnapshot] 到可持久化的 JSON 形式。
 ///
@@ -142,7 +143,8 @@ class ComposerDraftSnapshotJsonCodec {
       'status': attachment.status.name,
       'aid': attachment.aid,
       'uploadedAt': attachment.uploadedAt?.toIso8601String(),
-      'errorMessage': attachment.errorMessage,
+      // Keep the legacy JSON key stable, but only persist a locale-neutral code.
+      'errorMessage': attachment.failureCode?.name,
       'cachePath': attachment.cachePath,
     };
   }
@@ -191,9 +193,22 @@ class ComposerDraftSnapshotJsonCodec {
       status: status,
       aid: _stringValue(raw['aid']),
       uploadedAt: uploadedAt,
-      errorMessage: _stringValue(raw['errorMessage']),
+      failureCode: _decodeUploadFailureCode(raw['errorMessage']),
       cachePath: _stringValue(raw['cachePath']),
     );
+  }
+
+  ComposerImageUploadFailureCode? _decodeUploadFailureCode(Object? raw) {
+    final value = _stringValue(raw)?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    for (final code in ComposerImageUploadFailureCode.values) {
+      if (code.name == value) {
+        return code;
+      }
+    }
+    return ComposerImageUploadFailureCode.unknown;
   }
 
   ComposerImageAttachmentStatus? _decodeStatus(String? raw) {

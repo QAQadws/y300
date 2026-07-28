@@ -13,6 +13,7 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_bbco
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_toolbar.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ComposerQuillPrototypePage extends ConsumerStatefulWidget {
   const ComposerQuillPrototypePage({super.key});
@@ -61,11 +62,11 @@ class _ComposerQuillPrototypePageState
     final stickers = [for (final group in stickerGroups) ...group.stickers];
     return Scaffold(
       appBar: AppBar(
-        title: Text(_titleForMode()),
+        title: Text(_titleForMode(context)),
         actions: [
           IconButton(
             key: Key(_actionKeyForMode()),
-            tooltip: _actionTooltipForMode(),
+            tooltip: _actionTooltipForMode(context),
             icon: Icon(_actionIconForMode()),
             onPressed: _handlePrimaryAction,
           ),
@@ -99,10 +100,11 @@ class _ComposerQuillPrototypePageState
     };
   }
 
-  String _titleForMode() {
+  String _titleForMode(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return switch (_mode) {
-      _ComposerQuillPrototypeMode.quill => 'Quill Composer 原型',
-      _ComposerQuillPrototypeMode.source => '源码微调',
+      _ComposerQuillPrototypeMode.quill => l10n.composerPrototypeTitle,
+      _ComposerQuillPrototypeMode.source => l10n.composerPrototypeSourceTitle,
     };
   }
 
@@ -115,10 +117,11 @@ class _ComposerQuillPrototypePageState
     };
   }
 
-  String _actionTooltipForMode() {
+  String _actionTooltipForMode(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return switch (_mode) {
-      _ComposerQuillPrototypeMode.quill => '源码',
-      _ComposerQuillPrototypeMode.source => '返回编辑',
+      _ComposerQuillPrototypeMode.quill => l10n.composerSourceMode,
+      _ComposerQuillPrototypeMode.source => l10n.composerVisualMode,
     };
   }
 
@@ -241,7 +244,15 @@ class _ComposerQuillPrototypePageState
     });
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('已插入测试附件 $aid')));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(
+              context,
+            ).composerPrototypeAttachmentInserted(aid),
+          ),
+        ),
+      );
   }
 }
 
@@ -281,7 +292,9 @@ class _SourceFineTuneView extends StatelessWidget {
           textInputAction: TextInputAction.newline,
           contextMenuBuilder: ComposerBbCodeContextMenu.build,
           onChanged: onChanged,
-          decoration: ComposerBbCodeSourceEditor.noBorderDecoration('源码'),
+          decoration: ComposerBbCodeSourceEditor.noBorderDecoration(
+            AppLocalizations.of(context).composerSourceMode,
+          ),
         ),
       ],
     );

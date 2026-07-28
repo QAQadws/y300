@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
 import 'package:path/path.dart' as p;
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 
 typedef PickMultiImage = Future<List<XFile>> Function();
 typedef PickImageFiles = Future<FilePickerResult?> Function();
@@ -13,14 +14,17 @@ abstract class ComposerImagePicker {
 }
 
 class ComposerImagePickerException implements Exception {
-  const ComposerImagePickerException(this.message, [this.cause]);
+  const ComposerImagePickerException({
+    this.code = ComposerImageUploadFailureCode.pickerFailed,
+    this.cause,
+  });
 
-  final String message;
+  final ComposerImageUploadFailureCode code;
   final Object? cause;
 
   @override
   String toString() {
-    return 'ComposerImagePickerException($message)';
+    return 'ComposerImagePickerException(${code.name})';
   }
 }
 
@@ -30,10 +34,10 @@ class ImagePickerComposerImagePicker implements ComposerImagePicker {
     PickMultiImage? pickMultiImage,
     PickImageFiles? pickImageFiles,
     TargetPlatform? platform,
-  })  : _imagePicker = imagePicker ?? ImagePicker(),
-        _pickMultiImage = pickMultiImage,
-        _pickImageFiles = pickImageFiles,
-        _platform = platform;
+  }) : _imagePicker = imagePicker ?? ImagePicker(),
+       _pickMultiImage = pickMultiImage,
+       _pickImageFiles = pickImageFiles,
+       _platform = platform;
 
   final ImagePicker _imagePicker;
   final PickMultiImage? _pickMultiImage;
@@ -68,7 +72,7 @@ class ImagePickerComposerImagePicker implements ComposerImagePicker {
             _pickedFromPlatformFile(files[index], index),
       ];
     } catch (error) {
-      throw ComposerImagePickerException('选择图片失败，请重试', error);
+      throw ComposerImagePickerException(cause: error);
     }
   }
 

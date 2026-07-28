@@ -9,6 +9,8 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
@@ -69,7 +71,16 @@ void main() {
           .read(postingComposerControllerProvider(args))
           .value!;
       expect(failed.isLoadingMetadata, isFalse);
-      expect(failed.metadataError, '网络挂了');
+      expect(
+        failed.metadataFailure,
+        isA<ComposerOperationFailure>()
+            .having(
+              (failure) => failure.code,
+              'code',
+              ComposerOperationFailureCode.postingMetadataLoad,
+            )
+            .having((failure) => failure.detail, 'detail', '网络挂了'),
+      );
       expect(failed.metadata, isNull);
 
       metadataRepository.queueSuccess(_metadataWithTypes(typeRequired: false));
@@ -80,7 +91,7 @@ void main() {
           .read(postingComposerControllerProvider(args))
           .value!;
       expect(retried.isLoadingMetadata, isFalse);
-      expect(retried.metadataError, isNull);
+      expect(retried.metadataFailure, isNull);
       expect(retried.metadata?.formHash, 'fh');
       expect(metadataRepository.callCount, 2);
     });
@@ -189,8 +200,12 @@ void main() {
           container
               .read(postingComposerControllerProvider(args))
               .value
-              ?.errorMessage,
-          contains('请先选择'),
+              ?.failure,
+          isA<ComposerValidationFailure>().having(
+            (failure) => failure.code,
+            'code',
+            ComposerValidationFailureCode.typeRequired,
+          ),
         );
       },
     );
@@ -347,11 +362,14 @@ void main() {
 
       expect(result.sent, isFalse);
       expect(
-        container
-            .read(postingComposerControllerProvider(args))
-            .value
-            ?.errorMessage,
-        '发帖过于频繁，请稍后再试',
+        container.read(postingComposerControllerProvider(args)).value?.failure,
+        isA<ComposerSubmissionFailure>()
+            .having(
+              (failure) => failure.code,
+              'code',
+              ComposerSubmissionFailureCode.rateLimited,
+            )
+            .having((failure) => failure.kind, 'kind', ComposerKind.newThread),
       );
       final saved = await draftRepository.loadDraft(args.identity);
       expect(saved?.subject, '标题');
@@ -550,8 +568,14 @@ void main() {
           container
               .read(postingComposerControllerProvider(args))
               .value
-              ?.errorMessage,
-          contains('标题超出版块上限'),
+              ?.failure,
+          isA<ComposerValidationFailure>()
+              .having(
+                (failure) => failure.code,
+                'code',
+                ComposerValidationFailureCode.subjectTooLong,
+              )
+              .having((failure) => failure.limit, 'limit', 5),
         );
       },
     );
@@ -650,7 +674,14 @@ void main() {
         final result = await controller.submit();
         expect(result.sent, isFalse);
         expect(newThreadRepository.submittedPayloads, isEmpty);
-        expect(result.message, contains('投票至少需要'));
+        expect(
+          result.failure,
+          isA<ComposerValidationFailure>().having(
+            (failure) => failure.code,
+            'code',
+            ComposerValidationFailureCode.pollTooFewOptions,
+          ),
+        );
       },
     );
 
@@ -789,9 +820,19 @@ void main() {
           messageRevision: 7,
           lastMessageMutation: mutation,
           pendingAttachmentAids: const ['888'],
-          pendingAttachmentMessage: '待插入',
-          errorMessage: '错误',
-          imageUploadError: '上传错误',
+          pendingAttachmentNotice: ComposerPendingAttachmentNotice(
+            code: ComposerPendingAttachmentNoticeCode.readyToReinsert,
+            count: 1,
+          ),
+          failure: ComposerSubmissionFailure(
+            code: ComposerSubmissionFailureCode.unknown,
+            kind: ComposerKind.newThread,
+            detail: '错误',
+          ),
+          imageUploadFailure: ComposerImageUploadFailure(
+            code: ComposerImageUploadFailureCode.unknown,
+            detail: '上传错误',
+          ),
         ),
       );
 
@@ -806,24 +847,27 @@ void main() {
       expect(applied.messageRevision, 7);
       expect(applied.lastMessageMutation, same(mutation));
       expect(applied.pendingAttachmentAids, ['888']);
-      expect(applied.pendingAttachmentMessage, '待插入');
-      expect(applied.errorMessage, '错误');
-      expect(applied.imageUploadError, '上传错误');
+      expect(
+        applied.pendingAttachmentNotice?.code,
+        ComposerPendingAttachmentNoticeCode.readyToReinsert,
+      );
+      expect(applied.failure?.detail, '错误');
+      expect(applied.imageUploadFailure?.detail, '上传错误');
 
       final cleared = controller.applyPatch(
         applied,
         const ComposerStatePatch(
-          clearErrorMessage: true,
-          clearImageUploadError: true,
+          clearFailure: true,
+          clearImageUploadFailure: true,
           clearLastMessageMutation: true,
-          clearPendingAttachmentMessage: true,
+          clearPendingAttachmentNotice: true,
         ),
       );
 
-      expect(cleared.errorMessage, isNull);
-      expect(cleared.imageUploadError, isNull);
+      expect(cleared.failure, isNull);
+      expect(cleared.imageUploadFailure, isNull);
       expect(cleared.lastMessageMutation, isNull);
-      expect(cleared.pendingAttachmentMessage, isNull);
+      expect(cleared.pendingAttachmentNotice, isNull);
     });
   });
 }

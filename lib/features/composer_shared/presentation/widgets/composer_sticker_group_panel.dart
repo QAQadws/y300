@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ComposerStickerGroupPanel extends StatefulWidget {
   const ComposerStickerGroupPanel({
@@ -36,7 +38,11 @@ class _ComposerStickerGroupPanelState extends State<ComposerStickerGroupPanel> {
   @override
   Widget build(BuildContext context) {
     if (widget.groups.isEmpty) {
-      return const Center(child: Text('需要联网加载表情包'));
+      return Center(
+        child: Text(
+          AppLocalizations.of(context).composerStickerNetworkRequired,
+        ),
+      );
     }
     return DefaultTabController(
       key: Key('${widget.keyPrefix}-sticker-sheet'),
@@ -57,7 +63,10 @@ class _ComposerStickerGroupPanelState extends State<ComposerStickerGroupPanel> {
                       key: Key(
                         '${widget.keyPrefix}-sticker-group-tab-${group.id}',
                       ),
-                      text: group.title,
+                      text: ComposerTextResolver.stickerGroupTitle(
+                        AppLocalizations.of(context),
+                        group,
+                      ),
                     ),
                 ],
               ),

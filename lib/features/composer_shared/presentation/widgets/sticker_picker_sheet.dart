@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_group_panel.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_error_summary.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 表情选择底部面板。
 ///
@@ -14,6 +16,7 @@ class StickerPickerSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final asyncGroups = ref.watch(stickerGroupsProvider);
     final asyncLastGroupId = ref.watch(
       stickerPickerLastGroupIdControllerProvider,
@@ -33,7 +36,10 @@ class StickerPickerSheet extends ConsumerWidget {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
-                '表情加载失败：$error',
+                l10n.composerStickerLoadFailed(
+                  ComposerErrorSummary.sanitize(error) ??
+                      l10n.composerUnknownFailure('other'),
+                ),
                 key: const Key('reply-sticker-picker-error'),
                 textAlign: TextAlign.center,
               ),
@@ -44,10 +50,10 @@ class StickerPickerSheet extends ConsumerWidget {
                 .where((group) => group.stickers.isNotEmpty)
                 .toList(growable: false);
             if (visibleGroups.isEmpty) {
-              return const Center(
+              return Center(
                 child: Text(
-                  '需要联网加载表情包',
-                  key: Key('reply-sticker-picker-empty'),
+                  l10n.composerStickerNetworkRequired,
+                  key: const Key('reply-sticker-picker-empty'),
                   textAlign: TextAlign.center,
                 ),
               );

@@ -16,6 +16,7 @@ import 'package:y300/features/composer_shared/presentation/quill/composer_quill_
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_color_picker_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_link_sheet.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_group_panel.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
@@ -125,7 +126,7 @@ class ComposerQuillEditorSurface extends StatefulWidget {
     this.minHeight = 220,
     this.expand = false,
     this.enabled = true,
-    this.hintText = '请开始输入',
+    this.hintText,
     this.contentPadding = const EdgeInsets.fromLTRB(
       ForumContentSpacing.composerQuillSurfaceHorizontal,
       ForumContentSpacing.composerBodyTop,
@@ -152,7 +153,7 @@ class ComposerQuillEditorSurface extends StatefulWidget {
   final double minHeight;
   final bool expand;
   final bool enabled;
-  final String hintText;
+  final String? hintText;
   final EdgeInsetsGeometry contentPadding;
 
   @override
@@ -256,7 +257,9 @@ class _ComposerQuillEditorSurfaceState
         focusNode: _focusNode,
         scrollController: _scrollController,
         config: QuillEditorConfig(
-          placeholder: widget.hintText,
+          placeholder:
+              widget.hintText ??
+              AppLocalizations.of(context).composerStartTypingHint,
           padding: const EdgeInsets.all(12),
           onTapDown: _handleEditorTapDown,
           onTapUp: _handleEditorTapUp,
@@ -358,7 +361,7 @@ class _ComposerQuillEditorSurfaceState
     }
     return [
       if (widget.stickers.isNotEmpty)
-        StickerGroup(id: 'all', title: '表情', stickers: widget.stickers),
+        StickerGroup(id: 'all', title: 'all', stickers: widget.stickers),
     ];
   }
 
@@ -667,9 +670,7 @@ class _ComposerQuillEditorSurfaceState
   }
 
   void _promoteAttachTokens() {
-    final promotion = _attachTokenPromoter.buildPromotion(
-      _controller.document,
-    );
+    final promotion = _attachTokenPromoter.buildPromotion(_controller.document);
     if (promotion == null) {
       return;
     }
@@ -677,11 +678,7 @@ class _ComposerQuillEditorSurfaceState
     try {
       // compose 会用 Delta.transformPosition 把光标从被替换掉的字面文本
       // 迁移到 embed 之后，因此传入当前 selection 即可。
-      _controller.compose(
-        promotion,
-        _controller.selection,
-        ChangeSource.local,
-      );
+      _controller.compose(promotion, _controller.selection, ChangeSource.local);
     } finally {
       _isPromotingAttachTokens = false;
     }
@@ -909,37 +906,37 @@ class _PrototypeToolbar extends StatelessWidget {
             children: [
               _ToolbarButton(
                 key: Key('$keyPrefix-format-button'),
-                tooltip: '格式',
+                tooltip: AppLocalizations.of(context).composerFormat,
                 icon: Icons.text_fields,
                 onPressed: enabled ? onFormatPressed : null,
               ),
               _ToolbarButton(
                 key: Key('$keyPrefix-align-button'),
-                tooltip: '对齐',
+                tooltip: AppLocalizations.of(context).composerAlignment,
                 icon: Icons.format_align_center,
                 onPressed: enabled ? onAlignPressed : null,
               ),
               _ToolbarButton(
                 key: Key('$keyPrefix-quote-button'),
-                tooltip: '引用',
+                tooltip: AppLocalizations.of(context).composerQuote,
                 icon: Icons.format_quote,
                 onPressed: enabled ? onQuotePressed : null,
               ),
               _ToolbarButton(
                 key: Key('$keyPrefix-link-button'),
-                tooltip: '链接',
+                tooltip: AppLocalizations.of(context).composerLink,
                 icon: Icons.add_link,
                 onPressed: enabled ? onLinkPressed : null,
               ),
               _ToolbarButton(
                 key: Key('$keyPrefix-sticker-button'),
-                tooltip: '表情',
+                tooltip: AppLocalizations.of(context).composerSticker,
                 icon: Icons.mood,
                 onPressed: enabled ? onStickerPressed : null,
               ),
               _ToolbarButton(
                 key: Key('$keyPrefix-image-button'),
-                tooltip: '图片',
+                tooltip: AppLocalizations.of(context).composerImage,
                 icon: Icons.image_outlined,
                 onPressed: enabled ? onImagePressed : null,
               ),
@@ -981,19 +978,19 @@ class _AlignPanel extends StatelessWidget {
         ListTile(
           key: Key('$keyPrefix-align-left'),
           leading: const Icon(Icons.format_align_left),
-          title: const Text('左对齐'),
+          title: Text(AppLocalizations.of(context).composerAlignLeft),
           onTap: () => onSelected('left'),
         ),
         ListTile(
           key: Key('$keyPrefix-align-center'),
           leading: const Icon(Icons.format_align_center),
-          title: const Text('居中'),
+          title: Text(AppLocalizations.of(context).composerAlignCenter),
           onTap: () => onSelected('center'),
         ),
         ListTile(
           key: Key('$keyPrefix-align-right'),
           leading: const Icon(Icons.format_align_right),
-          title: const Text('右对齐'),
+          title: Text(AppLocalizations.of(context).composerAlignRight),
           onTap: () => onSelected('right'),
         ),
       ],
@@ -1113,7 +1110,7 @@ class _FormatSheetState extends State<_FormatSheet> {
                         _FormatIconToggle(
                           key: Key('${widget.keyPrefix}-format-bold-toggle'),
                           icon: Icons.format_bold,
-                          tooltip: '加粗',
+                          tooltip: AppLocalizations.of(context).composerBold,
                           selected: _isAttributeActive(Attribute.bold),
                           onSelected: (_) => _toggleAttribute(Attribute.bold),
                         ),
@@ -1121,7 +1118,7 @@ class _FormatSheetState extends State<_FormatSheet> {
                         _FormatIconToggle(
                           key: Key('${widget.keyPrefix}-format-italic-toggle'),
                           icon: Icons.format_italic,
-                          tooltip: '斜体',
+                          tooltip: AppLocalizations.of(context).composerItalic,
                           selected: _isAttributeActive(Attribute.italic),
                           onSelected: (_) => _toggleAttribute(Attribute.italic),
                         ),
@@ -1131,7 +1128,9 @@ class _FormatSheetState extends State<_FormatSheet> {
                             '${widget.keyPrefix}-format-underline-toggle',
                           ),
                           icon: Icons.format_underline,
-                          tooltip: '下划线',
+                          tooltip: AppLocalizations.of(
+                            context,
+                          ).composerUnderline,
                           selected: _isAttributeActive(Attribute.underline),
                           onSelected: (_) =>
                               _toggleAttribute(Attribute.underline),
@@ -1140,7 +1139,9 @@ class _FormatSheetState extends State<_FormatSheet> {
                         _FormatIconToggle(
                           key: Key('${widget.keyPrefix}-format-strike-toggle'),
                           icon: Icons.format_strikethrough,
-                          tooltip: '删除线',
+                          tooltip: AppLocalizations.of(
+                            context,
+                          ).composerStrikethrough,
                           selected: _isAttributeActive(Attribute.strikeThrough),
                           onSelected: (_) =>
                               _toggleAttribute(Attribute.strikeThrough),
@@ -1153,7 +1154,9 @@ class _FormatSheetState extends State<_FormatSheet> {
                 TextButton(
                   key: Key('${widget.keyPrefix}-format-clear-state-button'),
                   onPressed: _hasClearableStyle ? _clearAllStyles : null,
-                  child: const Text('清除状态'),
+                  child: Text(
+                    AppLocalizations.of(context).composerClearFormatting,
+                  ),
                 ),
               ],
             ),
@@ -1162,7 +1165,7 @@ class _FormatSheetState extends State<_FormatSheet> {
               children: [
                 Expanded(
                   child: Text(
-                    '字号',
+                    AppLocalizations.of(context).composerFontSize,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
@@ -1171,7 +1174,9 @@ class _FormatSheetState extends State<_FormatSheet> {
                   onPressed: currentSize == null
                       ? null
                       : () => _clearAttribute(Attribute.size),
-                  child: const Text('清除字号'),
+                  child: Text(
+                    AppLocalizations.of(context).composerClearFontSize,
+                  ),
                 ),
               ],
             ),
@@ -1197,7 +1202,7 @@ class _FormatSheetState extends State<_FormatSheet> {
               children: [
                 Expanded(
                   child: Text(
-                    '字体色',
+                    AppLocalizations.of(context).composerTextColor,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
@@ -1206,7 +1211,9 @@ class _FormatSheetState extends State<_FormatSheet> {
                   onPressed: _attributeValue(Attribute.color) == null
                       ? null
                       : () => _clearAttribute(Attribute.color),
-                  child: const Text('清除颜色'),
+                  child: Text(
+                    AppLocalizations.of(context).composerClearTextColor,
+                  ),
                 ),
               ],
             ),
@@ -1225,7 +1232,7 @@ class _FormatSheetState extends State<_FormatSheet> {
               children: [
                 Expanded(
                   child: Text(
-                    '背景色',
+                    AppLocalizations.of(context).composerBackgroundColor,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
@@ -1234,7 +1241,9 @@ class _FormatSheetState extends State<_FormatSheet> {
                   onPressed: _attributeValue(Attribute.background) == null
                       ? null
                       : () => _clearAttribute(Attribute.background),
-                  child: const Text('清除背景'),
+                  child: Text(
+                    AppLocalizations.of(context).composerClearBackgroundColor,
+                  ),
                 ),
               ],
             ),
@@ -1256,7 +1265,7 @@ class _FormatSheetState extends State<_FormatSheet> {
                   TextButton(
                     key: Key('${widget.keyPrefix}-format-close-button'),
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('关闭'),
+                    child: Text(AppLocalizations.of(context).commonClose),
                   ),
               ],
             ),
@@ -1601,7 +1610,9 @@ class _AttachEmbedBuilder extends EmbedBuilder {
     final attachment = imageAttachments
         .cast<ComposerImageAttachment?>()
         .firstWhere(
-          (item) => item != null && item.canEnterSubmitPayload &&
+          (item) =>
+              item != null &&
+              item.canEnterSubmitPayload &&
               item.aid!.trim() == aid,
           orElse: () => null,
         );
@@ -1621,7 +1632,9 @@ class _AttachEmbedBuilder extends EmbedBuilder {
         );
       }
     }
-    final label = attachment == null ? '图片 $aid' : attachment.fileName;
+    final label = attachment == null
+        ? AppLocalizations.of(context).composerAttachmentFallback(aid)
+        : attachment.fileName;
     return Container(
       key: Key('composer-quill-attach-$aid'),
       margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),

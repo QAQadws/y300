@@ -9,10 +9,7 @@ void main() {
   group('NewThreadResponseParser success', () {
     test('parses tid+pid with post_newthread_succeed', () {
       final result = parser.parse(<String, dynamic>{
-        'Variables': <String, dynamic>{
-          'tid': '999001',
-          'pid': '888001',
-        },
+        'Variables': <String, dynamic>{'tid': '999001', 'pid': '888001'},
         'Message': <String, dynamic>{
           'messageval': 'post_newthread_succeed',
           'messagestr': '主题已发布',
@@ -27,10 +24,7 @@ void main() {
 
     test('parses tid+pid even when Message node is absent', () {
       final result = parser.parse(<String, dynamic>{
-        'Variables': <String, dynamic>{
-          'tid': '999002',
-          'pid': '888002',
-        },
+        'Variables': <String, dynamic>{'tid': '999002', 'pid': '888002'},
       });
 
       expect(result.success, isTrue);
@@ -40,13 +34,8 @@ void main() {
     test('parses JSON string body', () {
       final result = parser.parse(
         jsonEncode(<String, dynamic>{
-          'Variables': <String, dynamic>{
-            'tid': '999003',
-            'pid': '888003',
-          },
-          'Message': <String, dynamic>{
-            'messageval': 'post_newthread_succeed',
-          },
+          'Variables': <String, dynamic>{'tid': '999003', 'pid': '888003'},
+          'Message': <String, dynamic>{'messageval': 'post_newthread_succeed'},
         }),
       );
 
@@ -92,24 +81,27 @@ void main() {
       expect(result.code, 'postperm_login_nopermission');
     });
 
-    test('missing tid even with succeed-like messageval is treated as failure',
-        () {
-      final result = parser.parse(<String, dynamic>{
-        'Variables': <String, dynamic>{},
-        'Message': <String, dynamic>{
-          'messageval': 'post_newthread_succeed',
-          'messagestr': '主题已发布',
-        },
-      });
+    test(
+      'missing tid even with succeed-like messageval is treated as failure',
+      () {
+        final result = parser.parse(<String, dynamic>{
+          'Variables': <String, dynamic>{},
+          'Message': <String, dynamic>{
+            'messageval': 'post_newthread_succeed',
+            'messagestr': '主题已发布',
+          },
+        });
 
-      expect(result.success, isFalse);
-      expect(result.code, 'post_newthread_succeed');
-    });
+        expect(result.success, isFalse);
+        expect(result.code, 'post_newthread_succeed');
+      },
+    );
 
-    test('empty body falls back to failure with default message', () {
+    test('empty body returns an empty protocol failure', () {
       final result = parser.parse(null);
       expect(result.success, isFalse);
-      expect(result.message, '发帖结果未知');
+      expect(result.code, isEmpty);
+      expect(result.message, isEmpty);
     });
   });
 }

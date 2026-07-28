@@ -11,6 +11,9 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_app_
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_error_summary.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_transient_feedback.dart';
@@ -76,6 +79,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final provider = postingComposerControllerProvider(widget.args);
     final asyncState = ref.watch(provider);
     final controller = ref.read(provider.notifier);
@@ -120,8 +124,8 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
             IconButton(
               key: const Key('posting-composer-source-button'),
               tooltip: _editorSurface == ComposerSurfacePreference.quill
-                  ? '源码'
-                  : '返回编辑',
+                  ? l10n.composerSourceMode
+                  : l10n.composerVisualMode,
               onPressed: state == null
                   ? null
                   : () {
@@ -136,7 +140,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
             ),
             IconButton(
               key: const Key('posting-composer-more-button'),
-              tooltip: '更多',
+              tooltip: l10n.composerMore,
               onPressed: state == null
                   ? null
                   : () {
@@ -147,7 +151,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
             ),
             IconButton(
               key: const Key('posting-composer-send-button'),
-              tooltip: '发送',
+              tooltip: l10n.postingSend,
               onPressed: state == null || !state.canSubmit
                   ? null
                   : () {
@@ -161,7 +165,10 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
         body: asyncState.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => ComposerLoadErrorView(
-            message: '加载草稿失败：$error',
+            message: l10n.composerLoadDraftFailed(
+              ComposerErrorSummary.sanitize(error) ??
+                  l10n.composerUnknownFailure('other'),
+            ),
             textKey: const Key('posting-composer-load-error'),
           ),
           data: (state) => _PostingComposerBody(
@@ -245,9 +252,9 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
   String _appBarTitle(PostingComposerState? state) {
     final forumName = state?.metadata?.forumName.trim();
     if (forumName == null || forumName.isEmpty) {
-      return '发帖';
+      return AppLocalizations.of(context).postingTitle;
     }
-    return '发帖 — $forumName';
+    return AppLocalizations.of(context).postingTitleWithForum(forumName);
   }
 
   List<StickerItem> _flattenStickers(List<StickerGroup> groups) {
@@ -302,6 +309,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
   }
 
   void _scheduleTransientFeedback(PostingComposerState state) {
+    final l10n = AppLocalizations.of(context);
     final shouldNotifyMetadataLoading =
         state.isLoadingMetadata && !_wasLoadingMetadata;
     _wasLoadingMetadata = state.isLoadingMetadata;
@@ -310,11 +318,15 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     if (shouldNotifyRestoredDraft) {
       _didNotifyRestoredDraft = true;
     }
-    final uploadMessages = _uploadFeedbackTracker.update(state);
+    final uploadMessages = _uploadFeedbackTracker
+        .update(state)
+        .map((feedback) => ComposerTextResolver.uploadFeedback(l10n, feedback));
     final messages = <String>[
       if (shouldNotifyRestoredDraft)
-        state.tags.isNotEmpty ? '已恢复未发送的草稿，请注意已恢复的主题标签' : '已恢复未发送草稿',
-      if (shouldNotifyMetadataLoading) '正在加载发帖表单',
+        state.tags.isEmpty
+            ? l10n.composerRestoredDraft
+            : l10n.postingRestoredDraftWithTags,
+      if (shouldNotifyMetadataLoading) l10n.postingFormLoading,
       ...uploadMessages,
     ];
     if (messages.isEmpty) {
@@ -363,23 +375,24 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     final shouldLeave = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext);
         return AlertDialog(
-          title: const Text('保存草稿并离开？'),
-          content: const Text('当前帖子还没有发送，离开前会保存为草稿。'),
+          title: Text(l10n.postingLeaveTitle),
+          content: Text(l10n.postingLeaveBody),
           actions: [
             TextButton(
               key: const Key('posting-composer-continue-edit-button'),
               onPressed: () {
                 Navigator.of(dialogContext).pop(false);
               },
-              child: const Text('继续编辑'),
+              child: Text(l10n.composerContinueEditing),
             ),
             FilledButton(
               key: const Key('posting-composer-save-leave-button'),
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
               },
-              child: const Text('保存草稿并离开'),
+              child: Text(l10n.composerSaveDraftAndLeave),
             ),
           ],
         );
@@ -405,6 +418,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
       builder: (sheetContext) {
         return Consumer(
           builder: (context, ref, _) {
+            final l10n = AppLocalizations.of(context);
             final sheetState = ref.watch(provider).value;
             final enabled = sheetState != null && !sheetState.isSubmitting;
             final notifier = ref.read(provider.notifier);
@@ -414,7 +428,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
                 sheetState.hasDraftContent;
             return ComposerSettingsSheet(
               key: const Key('posting-composer-settings-sheet'),
-              title: '更多设置',
+              title: l10n.composerMoreSettings,
               children: [
                 ThreadTagsField(
                   containerKey: const Key('posting-composer-tags-field'),
@@ -428,7 +442,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
                 const SizedBox(height: 12),
                 ComposerSettingsSwitchTile(
                   tileKey: const Key('posting-composer-use-signature-switch'),
-                  title: '使用个人签名',
+                  title: l10n.composerUseSignature,
                   value: sheetState?.useSignature ?? false,
                   onChanged: notifier.toggleUseSignature,
                   enabled: enabled,
@@ -437,28 +451,28 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
                   tileKey: const Key(
                     'posting-composer-allow-notice-author-switch',
                   ),
-                  title: '允许通知作者',
+                  title: l10n.postingAllowNoticeAuthor,
                   value: sheetState?.allowNoticeAuthor ?? false,
                   onChanged: notifier.updateAllowNoticeAuthor,
                   enabled: enabled,
                 ),
                 ComposerSettingsSwitchTile(
                   tileKey: const Key('posting-composer-bbcode-off-switch'),
-                  title: '关闭 BBCode 解析',
+                  title: l10n.postingDisableBbCode,
                   value: sheetState?.bbCodeOff ?? false,
                   onChanged: notifier.updateBbCodeOff,
                   enabled: enabled,
                 ),
                 ComposerSettingsSwitchTile(
                   tileKey: const Key('posting-composer-smiley-off-switch'),
-                  title: '关闭表情解析',
+                  title: l10n.postingDisableSmiley,
                   value: sheetState?.smileyOff ?? false,
                   onChanged: notifier.updateSmileyOff,
                   enabled: enabled,
                 ),
                 ComposerSettingsSwitchTile(
                   tileKey: const Key('posting-composer-parseurl-off-switch'),
-                  title: '关闭 URL 解析',
+                  title: l10n.postingDisableUrl,
                   value: sheetState?.parseUrlOff ?? false,
                   onChanged: notifier.updateParseUrlOff,
                   enabled: enabled,
@@ -467,7 +481,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
                 ComposerSettingsActionTile(
                   tileKey: const Key('posting-composer-reset-draft-button'),
                   icon: Icons.restart_alt,
-                  title: '重置草稿',
+                  title: l10n.composerResetDraft,
                   destructive: true,
                   onPressed: canReset
                       ? () {
@@ -494,14 +508,15 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
       context: context,
       builder: (dialogContext) {
         final colorScheme = Theme.of(dialogContext).colorScheme;
+        final l10n = AppLocalizations.of(dialogContext);
         return AlertDialog(
-          title: const Text('重置草稿？'),
-          content: const Text('当前编辑内容和已选图片将被清空，且无法恢复。'),
+          title: Text(l10n.composerResetDraftTitle),
+          content: Text(l10n.composerResetDraftBody),
           actions: [
             TextButton(
               key: const Key('posting-composer-reset-cancel-button'),
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
+              child: Text(l10n.commonCancel),
             ),
             FilledButton(
               key: const Key('posting-composer-reset-confirm-button'),
@@ -510,7 +525,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
                 foregroundColor: colorScheme.onError,
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('重置'),
+              child: Text(l10n.commonReset),
             ),
           ],
         );
@@ -665,11 +680,13 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
     final state = widget.state;
     final disabled = state.isSubmitting;
     return [
-      if (state.pendingAttachmentMessage case final message?
-          when message.trim().isNotEmpty) ...[
+      if (state.pendingAttachmentNotice case final notice?) ...[
         ComposerStatusBanner.info(
           key: const Key('posting-composer-pending-attachment'),
-          text: message,
+          text: ComposerTextResolver.pendingAttachment(
+            AppLocalizations.of(context),
+            notice,
+          ),
           maxLines: 2,
         ),
         const SizedBox(height: 12),
@@ -802,11 +819,10 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
   List<Widget> _buildTrailingFeedbackWidgets(BuildContext context) {
     final state = widget.state;
     return [
-      if (state.errorMessage != null &&
-          state.errorMessage!.trim().isNotEmpty) ...[
+      if (state.failure case final failure?) ...[
         const SizedBox(height: 8),
         Text(
-          state.errorMessage!,
+          ComposerTextResolver.failure(AppLocalizations.of(context), failure),
           key: const Key('posting-composer-error-message'),
           style: TextStyle(color: Theme.of(context).colorScheme.error),
         ),
@@ -817,11 +833,14 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
   /// metadata 加载中用 SnackBar 轻提示；只有失败态保留正文重试入口。
   Widget _buildMetadataBanner() {
     final state = widget.state;
-    final error = state.metadataError;
-    if (error != null && error.trim().isNotEmpty) {
+    final failure = state.metadataFailure;
+    if (failure != null) {
       return ComposerStatusBanner.error(
         key: const Key('posting-composer-metadata-error'),
-        text: '加载发帖表单失败：$error',
+        text: ComposerTextResolver.operationFailure(
+          AppLocalizations.of(context),
+          failure,
+        ),
         textKey: const Key('posting-composer-metadata-error-text'),
         retryButtonKey: const Key('posting-composer-metadata-retry-button'),
         onRetry: widget.onRetryLoadMetadata,
@@ -831,8 +850,8 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
   }
 
   Widget _buildMetadataSpacer() {
-    final error = widget.state.metadataError;
-    if (error != null && error.trim().isNotEmpty) {
+    final failure = widget.state.metadataFailure;
+    if (failure != null) {
       return const SizedBox(height: 12);
     }
     return const SizedBox.shrink();
@@ -885,7 +904,7 @@ class _PostingMessageEditor extends StatelessWidget {
         attachFileExists: renderer is FlutterBbCodeForumRenderer
             ? renderer.attachFileExists
             : null,
-        hintText: '请注意上传的图片仅在本地保存24小时',
+        hintText: AppLocalizations.of(context).composerImageRetentionHint,
         expand: true,
         onBbCodeChanged: onMessageChanged,
         messageRevision: state.messageRevision,
@@ -900,7 +919,7 @@ class _PostingMessageEditor extends StatelessWidget {
         enabled: enabled,
         messageRevision: state.messageRevision,
         onImagePressed: onImagePressed,
-        hintText: '请注意上传的图片仅在本地保存24小时',
+        hintText: AppLocalizations.of(context).composerImageRetentionHint,
         onChanged: onMessageChanged,
       ),
     };

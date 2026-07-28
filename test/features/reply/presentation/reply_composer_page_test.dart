@@ -19,6 +19,7 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_sanitizer.dart';
@@ -41,6 +42,22 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('reply-composer-send-button')), findsOneWidget);
+  });
+
+  testWidgets('ReplyComposerPage localizes chrome and preserves raw reply', (
+    tester,
+  ) async {
+    const rawReply = '[quote]引用原文[/quote]\n简体與繁體';
+    await tester.pumpWidget(_buildPage(locale: const Locale('zh', 'TW')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('回覆帖子'), findsOneWidget);
+    expect(find.byTooltip('送出'), findsOneWidget);
+    await _enterReplySourceText(tester, rawReply);
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('reply-composer-message-input')),
+    );
+    expect(field.controller?.text, rawReply);
   });
 
   testWidgets('ReplyComposerPage shows minimal composer UI', (tester) async {
@@ -551,7 +568,7 @@ void main() {
 
     expect(replyRepository.sentDrafts.single.message, '提交内容');
     expect(poppedResult?.sent, isTrue);
-    expect(poppedResult?.message, '回复发布成功');
+    expect(poppedResult?.rawSuccessDetail, '回复发布成功');
   });
 
   testWidgets('ReplyComposerPage submits raw source message from source mode', (
@@ -907,7 +924,10 @@ void main() {
                 localId: '',
                 current: 1,
                 total: 1,
-                errorMessage: '图片上传失败',
+                failure: const ComposerImageUploadFailure(
+                  code: ComposerImageUploadFailureCode.server,
+                  detail: '图片上传失败',
+                ),
               ),
               const ComposerImageUploadEvent.completed(total: 1),
             ],
@@ -1230,6 +1250,7 @@ Widget _buildPage({
   ComposerImageUploadCoordinator? imageUploadCoordinator,
   List<StickerGroup> stickerGroups = const [],
   ThemeData? theme,
+  Locale locale = const Locale('zh'),
 }) {
   return ProviderScope(
     overrides: [
@@ -1256,6 +1277,7 @@ Widget _buildPage({
       imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
     ],
     child: LocalizedTestApp(
+      locale: locale,
       theme: theme,
       home: ReplyComposerPage(args: args ?? _threadArgs()),
     ),
@@ -1697,7 +1719,11 @@ class _FakeReplyImageUploadCoordinator
           localId: localId,
           current: event.current,
           total: event.total,
-          errorMessage: event.errorMessage ?? '图片上传失败',
+          failure:
+              event.failure ??
+              const ComposerImageUploadFailure(
+                code: ComposerImageUploadFailureCode.unknown,
+              ),
         ),
         ComposerImageUploadEventType.completed =>
           ComposerImageUploadEvent.completed(total: event.total),

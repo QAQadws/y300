@@ -12,6 +12,7 @@ import 'package:y300/features/profile/data/models/profile_models.dart';
 import 'package:y300/features/profile/data/repositories/profile_repository.dart';
 import 'package:y300/features/reply/data/repositories/discuz_reply_api_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reply/domain/services/reply_draft_validator.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,40 +34,42 @@ void main() {
       final repository = _buildRepository(adapter: adapter);
 
       final result = await repository.sendReply(
-        draft: const ReplyDraft(
-          fid: '33',
-          tid: '570617',
-          message: '测试回复',
-        ),
+        draft: const ReplyDraft(fid: '33', tid: '570617', message: '测试回复'),
       );
 
       expect(result.isSuccess, isTrue);
       expect(result.dataOrNull?.message, contains('成功'));
-      expect(adapter.lastBody, contains('message=%E6%B5%8B%E8%AF%95%E5%9B%9E%E5%A4%8D'));
+      expect(
+        adapter.lastBody,
+        contains('message=%E6%B5%8B%E8%AF%95%E5%9B%9E%E5%A4%8D'),
+      );
     });
 
     test('returns failure when message is empty', () async {
       final remoteDataSource = _FakeReplyRemoteDataSource(
-        response: const ReplyRemoteResponse(data: <String, dynamic>{}, statusCode: 200),
+        response: const ReplyRemoteResponse(
+          data: <String, dynamic>{},
+          statusCode: 200,
+        ),
       );
       final repository = _buildRepositoryWithRemote(
         remoteDataSource: remoteDataSource,
       );
       final result = await repository.sendReply(
-        draft: const ReplyDraft(
-          fid: '33',
-          tid: '570617',
-          message: '   ',
-        ),
+        draft: const ReplyDraft(fid: '33', tid: '570617', message: '   '),
       );
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, contains('不能为空'));
+      expect(result.errorOrNull?.code, ReplyValidationCode.emptyMessage.name);
+      expect(result.errorOrNull?.message, isEmpty);
       expect(remoteDataSource.called, isFalse);
     });
 
     test('returns failure when formhash is empty', () async {
       final remoteDataSource = _FakeReplyRemoteDataSource(
-        response: const ReplyRemoteResponse(data: <String, dynamic>{}, statusCode: 200),
+        response: const ReplyRemoteResponse(
+          data: <String, dynamic>{},
+          statusCode: 200,
+        ),
       );
       final repository = _buildRepositoryWithRemote(
         profileRepository: _FakeProfileRepository.success(formhash: ''),
@@ -74,15 +77,12 @@ void main() {
       );
 
       final result = await repository.sendReply(
-        draft: const ReplyDraft(
-          fid: '33',
-          tid: '570617',
-          message: '测试回复',
-        ),
+        draft: const ReplyDraft(fid: '33', tid: '570617', message: '测试回复'),
       );
 
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, contains('formhash 为空'));
+      expect(result.errorOrNull?.code, 'formhash_invalid');
+      expect(result.errorOrNull?.message, isEmpty);
       expect(remoteDataSource.called, isFalse);
     });
 
@@ -103,11 +103,7 @@ void main() {
       );
 
       final result = await repository.sendReply(
-        draft: const ReplyDraft(
-          fid: '33',
-          tid: '570617',
-          message: '测试回复',
-        ),
+        draft: const ReplyDraft(fid: '33', tid: '570617', message: '测试回复'),
       );
 
       expect(result.isFailure, isTrue);
@@ -128,11 +124,7 @@ void main() {
       );
 
       final result = await repository.sendReply(
-        draft: const ReplyDraft(
-          fid: '33',
-          tid: '570617',
-          message: '测试回复',
-        ),
+        draft: const ReplyDraft(fid: '33', tid: '570617', message: '测试回复'),
       );
 
       expect(result.isFailure, isTrue);
@@ -154,11 +146,7 @@ void main() {
       );
 
       final result = await repository.sendReply(
-        draft: const ReplyDraft(
-          fid: '33',
-          tid: '570617',
-          message: '测试回复',
-        ),
+        draft: const ReplyDraft(fid: '33', tid: '570617', message: '测试回复'),
       );
 
       expect(result.isFailure, isTrue);
@@ -182,11 +170,7 @@ void main() {
       );
 
       final result = await repository.sendReply(
-        draft: const ReplyDraft(
-          fid: '33',
-          tid: '570617',
-          message: '测试回复',
-        ),
+        draft: const ReplyDraft(fid: '33', tid: '570617', message: '测试回复'),
       );
 
       expect(result.isFailure, isTrue);
@@ -213,43 +197,49 @@ void main() {
       expect(result.dataOrNull?.reference.noticeTrimStr, '[quote]引用[/quote]');
     });
 
-    test('uses prepared formhash before profile formhash for post reply', () async {
-      final remoteDataSource = _FakeReplyRemoteDataSource(
-        response: const ReplyRemoteResponse(
-          data: <String, dynamic>{
-            'Message': <String, dynamic>{
-              'messageval': 'post_reply_succeed',
-              'messagestr': '回复发布成功',
+    test(
+      'uses prepared formhash before profile formhash for post reply',
+      () async {
+        final remoteDataSource = _FakeReplyRemoteDataSource(
+          response: const ReplyRemoteResponse(
+            data: <String, dynamic>{
+              'Message': <String, dynamic>{
+                'messageval': 'post_reply_succeed',
+                'messagestr': '回复发布成功',
+              },
             },
-          },
-          statusCode: 200,
-        ),
-      );
-      final repository = _buildRepositoryWithRemote(
-        profileRepository: _FakeProfileRepository.success(
-          formhash: 'profile-formhash',
-        ),
-        remoteDataSource: remoteDataSource,
-      );
+            statusCode: 200,
+          ),
+        );
+        final repository = _buildRepositoryWithRemote(
+          profileRepository: _FakeProfileRepository.success(
+            formhash: 'profile-formhash',
+          ),
+          remoteDataSource: remoteDataSource,
+        );
 
-      final result = await repository.sendReply(
-        draft: const ReplyDraft(
-          fid: '33',
-          tid: '570617',
-          message: '楼层回复',
-          formHash: 'prepared-formhash',
-          repPid: '41554317',
-          repPost: '41554317',
-          noticeAuthor: 'notice-token',
-          noticeTrimStr: '[quote]引用[/quote]',
-          noticeAuthorMsg: '引用正文',
-        ),
-      );
+        final result = await repository.sendReply(
+          draft: const ReplyDraft(
+            fid: '33',
+            tid: '570617',
+            message: '楼层回复',
+            formHash: 'prepared-formhash',
+            repPid: '41554317',
+            repPost: '41554317',
+            noticeAuthor: 'notice-token',
+            noticeTrimStr: '[quote]引用[/quote]',
+            noticeAuthorMsg: '引用正文',
+          ),
+        );
 
-      expect(result.isSuccess, isTrue);
-      expect(remoteDataSource.payloads.single.formHash, 'prepared-formhash');
-      expect(remoteDataSource.payloads.single.noticeTrimStr, '[quote]引用[/quote]');
-    });
+        expect(result.isSuccess, isTrue);
+        expect(remoteDataSource.payloads.single.formHash, 'prepared-formhash');
+        expect(
+          remoteDataSource.payloads.single.noticeTrimStr,
+          '[quote]引用[/quote]',
+        );
+      },
+    );
 
     test('passes uploaded attachment aids into submit payload', () async {
       final remoteDataSource = _FakeReplyRemoteDataSource(
@@ -323,7 +313,8 @@ DiscuzReplyApiRepository _buildRepositoryWithRemote({
 }) {
   return DiscuzReplyApiRepository(
     profileRepository:
-        profileRepository ?? _FakeProfileRepository.success(formhash: 'fe182126'),
+        profileRepository ??
+        _FakeProfileRepository.success(formhash: 'fe182126'),
     cookieStore: CookieStore(),
     remoteDataSource: remoteDataSource,
     preparationDataSource: preparationDataSource,
@@ -352,10 +343,7 @@ class _FakeProfileRepository implements ProfileRepository {
 }
 
 class _FakeReplyRemoteDataSource implements DiscuzReplyRemoteDataSource {
-  _FakeReplyRemoteDataSource({
-    this.response,
-    this.exception,
-  });
+  _FakeReplyRemoteDataSource({this.response, this.exception});
 
   final ReplyRemoteResponse? response;
   final Object? exception;
@@ -377,9 +365,7 @@ class _FakeReplyRemoteDataSource implements DiscuzReplyRemoteDataSource {
 
 class _FakeReplyFormPreparationDataSource
     implements ReplyFormPreparationDataSource {
-  _FakeReplyFormPreparationDataSource({
-    required this.preparation,
-  });
+  _FakeReplyFormPreparationDataSource({required this.preparation});
 
   final ReplyPreparation preparation;
 
@@ -391,11 +377,7 @@ class _FakeReplyFormPreparationDataSource
 
 ReplyPreparation _preparation() {
   return const ReplyPreparation(
-    target: ReplyTarget.post(
-      fid: '33',
-      tid: '570617',
-      pid: '41554317',
-    ),
+    target: ReplyTarget.post(fid: '33', tid: '570617', pid: '41554317'),
     reference: ReplyReference(
       formHash: 'prepared-formhash',
       noticeAuthor: 'notice-token',
@@ -408,9 +390,7 @@ ReplyPreparation _preparation() {
 }
 
 class _ReplyTestAdapter implements HttpClientAdapter {
-  _ReplyTestAdapter({
-    required this.responseJson,
-  });
+  _ReplyTestAdapter({required this.responseJson});
 
   final Map<String, dynamic> responseJson;
   String lastBody = '';

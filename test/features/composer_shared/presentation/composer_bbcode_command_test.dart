@@ -70,12 +70,17 @@ void main() {
     },
   );
 
-  test('selection menu keeps quote and removes center align shortcut', () {
-    final labels = composerSelectionMenuTrailingBbCodeCommands
-        .map((command) => command.label)
+  test('selection menu keeps stable quote and size commands', () {
+    final kinds = composerSelectionMenuTrailingBbCodeCommands
+        .map((command) => command.kind)
         .toList();
 
-    expect(labels, containsAllInOrder(<String>['引用', '字号']));
-    expect(labels, isNot(contains('居中')));
+    expect(
+      kinds,
+      containsAllInOrder(<ComposerBbCodeMenuCommandKind>[
+        ComposerBbCodeMenuCommandKind.quote,
+        ComposerBbCodeMenuCommandKind.fontSize,
+      ]),
+    );
   });
 }

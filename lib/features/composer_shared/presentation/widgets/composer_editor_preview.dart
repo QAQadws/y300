@@ -4,6 +4,7 @@ import 'package:y300/features/composer_shared/domain/models/sticker_models.dart'
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/bbcode_preview_panel.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_context_menu.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 同屏编辑与预览，避免在源码/预览之间来回切换。
 class ComposerEditorPreview extends StatelessWidget {
@@ -60,7 +61,7 @@ class ComposerEditorPreview extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          '预览',
+          AppLocalizations.of(context).composerPreview,
           key: previewLabelKey,
           style: Theme.of(
             context,

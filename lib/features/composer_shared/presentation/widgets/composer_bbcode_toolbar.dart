@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_color_picker_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_link_sheet.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ComposerBbCodeToolbar extends StatelessWidget {
   const ComposerBbCodeToolbar({
@@ -21,20 +22,21 @@ class ComposerBbCodeToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
           _ToolbarIconButton(
             buttonKey: Key('$keyPrefix-sticker-button'),
-            tooltip: '表情',
+            tooltip: l10n.composerSticker,
             enabled: enabled,
             icon: Icons.mood,
             onPressed: onStickerPressed,
           ),
           _ToolbarIconButton(
             buttonKey: Key('$keyPrefix-color-button'),
-            tooltip: '字体色',
+            tooltip: l10n.composerTextColor,
             enabled: enabled,
             icon: Icons.format_color_text,
             onPressed: () {
@@ -43,7 +45,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
           ),
           _ToolbarIconButton(
             buttonKey: Key('$keyPrefix-backcolor-button'),
-            tooltip: '背景色',
+            tooltip: l10n.composerBackgroundColor,
             enabled: enabled,
             icon: Icons.format_color_fill,
             onPressed: () {
@@ -52,7 +54,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
           ),
           _ToolbarIconButton(
             buttonKey: Key('$keyPrefix-link-button'),
-            tooltip: '链接',
+            tooltip: l10n.composerLink,
             enabled: enabled,
             icon: Icons.add_link,
             onPressed: () {
@@ -61,7 +63,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
           ),
           _ToolbarIconButton(
             buttonKey: Key('$keyPrefix-size-button'),
-            tooltip: '字号',
+            tooltip: l10n.composerFontSize,
             enabled: enabled,
             icon: Icons.format_size,
             onPressed: () {
@@ -70,7 +72,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
           ),
           _ToolbarIconButton(
             buttonKey: Key('$keyPrefix-align-button'),
-            tooltip: '对齐',
+            tooltip: l10n.composerAlignment,
             enabled: enabled,
             icon: Icons.format_align_center,
             onPressed: () {
@@ -79,7 +81,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
           ),
           _ToolbarIconButton(
             buttonKey: Key('$keyPrefix-quote-button'),
-            tooltip: '引用',
+            tooltip: l10n.composerQuote,
             enabled: enabled,
             icon: Icons.format_quote,
             onPressed: () {
@@ -89,7 +91,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
           if (onImagePressed != null)
             _ToolbarIconButton(
               buttonKey: Key('$keyPrefix-image-button'),
-              tooltip: '图片',
+              tooltip: l10n.composerImage,
               enabled: enabled,
               icon: Icons.image_outlined,
               onPressed: onImagePressed!,
@@ -103,7 +105,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
     final color = await showComposerBbCodeColorPickerSheet(
       context: context,
       keyPrefix: '$keyPrefix-color',
-      title: '字体色',
+      title: AppLocalizations.of(context).composerTextColor,
       initialColor: const Color(0xffd32f2f),
     );
     if (color == null) {
@@ -121,7 +123,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
     final color = await showComposerBbCodeColorPickerSheet(
       context: context,
       keyPrefix: '$keyPrefix-backcolor',
-      title: '背景色',
+      title: AppLocalizations.of(context).composerBackgroundColor,
       initialColor: const Color(0xfffff3b0),
     );
     if (color == null) {
@@ -217,6 +219,7 @@ class _SizeSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -225,7 +228,10 @@ class _SizeSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('字号', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              l10n.composerFontSize,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -256,6 +262,7 @@ class _AlignSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SafeArea(
       child: Column(
         key: Key('$keyPrefix-align-sheet'),
@@ -264,19 +271,19 @@ class _AlignSheet extends StatelessWidget {
           ListTile(
             key: Key('$keyPrefix-align-left'),
             leading: const Icon(Icons.format_align_left),
-            title: const Text('左对齐'),
+            title: Text(l10n.composerAlignLeft),
             onTap: () => Navigator.of(context).pop('left'),
           ),
           ListTile(
             key: Key('$keyPrefix-align-center'),
             leading: const Icon(Icons.format_align_center),
-            title: const Text('居中'),
+            title: Text(l10n.composerAlignCenter),
             onTap: () => Navigator.of(context).pop('center'),
           ),
           ListTile(
             key: Key('$keyPrefix-align-right'),
             leading: const Icon(Icons.format_align_right),
-            title: const Text('右对齐'),
+            title: Text(l10n.composerAlignRight),
             onTap: () => Navigator.of(context).pop('right'),
           ),
         ],

@@ -4562,7 +4562,7 @@ void main() {
       expect(replyRepo.called, isTrue);
       expect(replyRepo.lastDraft?.message, '这是测试回复');
       expect(invalidationService.invalidatedThreadIds, <String>['100']);
-      expect(find.text('回复发布成功'), findsOneWidget);
+      expect(find.text('回复成功：回复发布成功'), findsOneWidget);
     });
   });
 }

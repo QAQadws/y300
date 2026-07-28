@@ -217,13 +217,32 @@ void main() {
     expect(selected?.openingTag, '[quote]');
     expect(selected?.closingTag, '[/quote]');
   });
+
+  testWidgets('ComposerBbCodeToolbar localizes Traditional Chinese chrome', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildToolbar(
+        locale: const Locale('zh', 'TW'),
+        onCommandSelected: (_) {},
+      ),
+    );
+
+    expect(find.byTooltip('字體色'), findsOneWidget);
+    expect(find.byTooltip('連結'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reply-composer-link-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('新增連結'), findsOneWidget);
+  });
 }
 
 Widget _buildToolbar({
   required ValueChanged<ComposerBbCodeCommand> onCommandSelected,
   EdgeInsets viewInsets = EdgeInsets.zero,
+  Locale locale = const Locale('zh'),
 }) {
   return LocalizedTestApp(
+    locale: locale,
     builder: (context, child) {
       return MediaQuery(
         data: MediaQuery.of(context).copyWith(viewInsets: viewInsets),

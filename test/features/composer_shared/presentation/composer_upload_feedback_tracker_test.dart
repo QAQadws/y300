@@ -1,7 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_transient_feedback.dart';
+import 'package:y300/l10n/app_localizations_zh.dart';
 
 void main() {
   test('does not notify for restored uploaded attachments', () {
@@ -17,88 +20,89 @@ void main() {
     );
   });
 
-  test('reports successful and failed status transitions once', () {
+  test('reports successful and failed transitions as structured data once', () {
     final tracker = ComposerUploadFeedbackTracker();
 
     expect(
       tracker.update(_state(status: ComposerImageAttachmentStatus.local)),
       isEmpty,
     );
+    final uploaded = tracker.update(
+      _state(status: ComposerImageAttachmentStatus.uploaded),
+    );
+    expect(uploaded.single.type, ComposerUploadFeedbackType.uploaded);
+    expect(uploaded.single.fileName, 'image.jpg');
     expect(
-      tracker.update(_state(status: ComposerImageAttachmentStatus.uploaded)),
-      ['image.jpg 已上传'],
+      ComposerTextResolver.uploadFeedback(
+        AppLocalizationsZhTw(),
+        uploaded.single,
+      ),
+      contains('image.jpg'),
     );
     expect(
       tracker.update(_state(status: ComposerImageAttachmentStatus.uploaded)),
       isEmpty,
     );
-    expect(
-      tracker.update(
-        _state(
-          status: ComposerImageAttachmentStatus.failed,
-          errorMessage: '服务器拒绝',
-        ),
+
+    final failed = tracker.update(
+      _state(
+        status: ComposerImageAttachmentStatus.failed,
+        attachmentFailureCode: ComposerImageUploadFailureCode.server,
       ),
-      ['image.jpg 上传失败：服务器拒绝'],
     );
+    expect(failed.single.type, ComposerUploadFeedbackType.failed);
+    expect(failed.single.failure?.code, ComposerImageUploadFailureCode.server);
     expect(
       tracker.update(
         _state(
           status: ComposerImageAttachmentStatus.failed,
-          errorMessage: '服务器拒绝',
+          attachmentFailureCode: ComposerImageUploadFailureCode.server,
         ),
       ),
       isEmpty,
     );
   });
 
-  test('normalizes unknown network errors to stable user feedback', () {
+  test('reports a changed batch failure once', () {
     final tracker = ComposerUploadFeedbackTracker();
 
     expect(tracker.update(_state()), isEmpty);
-    expect(tracker.update(_state(imageUploadError: '网络异常: unknown')), [
-      '图片上传失败，请重试',
-    ]);
-    expect(tracker.update(_state(imageUploadError: '网络异常: unknown')), isEmpty);
-  });
-
-  test('normalizes empty and generic attachment errors', () {
-    final tracker = ComposerUploadFeedbackTracker();
-
+    final feedback = tracker.update(
+      _state(
+        imageUploadFailure: const ComposerImageUploadFailure(
+          code: ComposerImageUploadFailureCode.network,
+        ),
+      ),
+    );
+    expect(feedback.single.type, ComposerUploadFeedbackType.batchFailure);
     expect(
-      tracker.update(_state(status: ComposerImageAttachmentStatus.local)),
-      isEmpty,
+      feedback.single.failure?.code,
+      ComposerImageUploadFailureCode.network,
     );
     expect(
-      tracker.update(
-        _state(status: ComposerImageAttachmentStatus.failed, errorMessage: ''),
+      ComposerTextResolver.uploadFeedback(
+        AppLocalizationsZh(),
+        feedback.single,
       ),
-      ['image.jpg 上传失败，请重试'],
+      contains('网络'),
     );
     expect(
       tracker.update(
         _state(
-          status: ComposerImageAttachmentStatus.failed,
-          errorMessage: '网络异常，图片上传失败',
+          imageUploadFailure: const ComposerImageUploadFailure(
+            code: ComposerImageUploadFailureCode.network,
+          ),
         ),
       ),
       isEmpty,
-    );
-  });
-
-  test('preserves explicit server rejection details', () {
-    expect(normalizeComposerUploadError('服务器拒绝：文件过大'), '服务器拒绝：文件过大');
-    expect(
-      normalizeComposerUploadError('SocketException: connection reset'),
-      ComposerUploadFeedbackTracker.genericUploadFailure,
     );
   });
 }
 
 _TestComposerState _state({
   ComposerImageAttachmentStatus? status,
-  String? errorMessage,
-  String? imageUploadError,
+  ComposerImageUploadFailureCode? attachmentFailureCode,
+  ComposerImageUploadFailure? imageUploadFailure,
 }) {
   return _TestComposerState(
     message: '',
@@ -115,13 +119,13 @@ _TestComposerState _state({
               mimeType: 'image/jpeg',
               order: 0,
               status: status,
-              errorMessage: errorMessage,
+              failureCode: attachmentFailureCode,
             ),
           ],
     isUploadingImages: false,
     imageUploadCurrent: 0,
     imageUploadTotal: 0,
-    imageUploadError: imageUploadError,
+    imageUploadFailure: imageUploadFailure,
   );
 }
 
@@ -135,6 +139,6 @@ class _TestComposerState extends ComposerStateBase {
     required super.isUploadingImages,
     required super.imageUploadCurrent,
     required super.imageUploadTotal,
-    super.imageUploadError,
+    super.imageUploadFailure,
   });
 }

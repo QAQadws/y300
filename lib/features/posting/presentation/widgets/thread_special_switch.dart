@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/presentation/widgets/composer_anchored_dropdown.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 普通帖 / 投票 切换器。
 ///
@@ -29,22 +30,23 @@ class ThreadSpecialSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return ComposerAnchoredDropdown<NewThreadSpecial>(
       anchorKey: widgetKey,
       summaryKey: summaryKey,
-      label: '帖子类型',
+      label: l10n.postingThreadKind,
       value: special,
-      valueLabelBuilder: _labelForSpecial,
+      valueLabelBuilder: (value) => _labelForSpecial(l10n, value),
       items: [
         ComposerDropdownItem<NewThreadSpecial>(
           key: normalItemKey,
           value: NewThreadSpecial.normal,
-          label: '普通帖',
+          label: l10n.postingNormalThread,
         ),
         ComposerDropdownItem<NewThreadSpecial>(
           key: pollItemKey,
           value: NewThreadSpecial.poll,
-          label: '投票',
+          label: l10n.postingPoll,
         ),
       ],
       onSelected: onChanged,
@@ -52,10 +54,10 @@ class ThreadSpecialSwitch extends StatelessWidget {
     );
   }
 
-  String _labelForSpecial(NewThreadSpecial value) {
+  String _labelForSpecial(AppLocalizations l10n, NewThreadSpecial value) {
     return switch (value) {
-      NewThreadSpecial.normal => '普通帖',
-      NewThreadSpecial.poll => '投票',
+      NewThreadSpecial.normal => l10n.postingNormalThread,
+      NewThreadSpecial.poll => l10n.postingPoll,
     };
   }
 }

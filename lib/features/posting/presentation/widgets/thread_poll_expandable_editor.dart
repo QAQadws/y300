@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_poll_editor.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ThreadPollExpandableEditor extends StatelessWidget {
   const ThreadPollExpandableEditor({
@@ -61,7 +62,7 @@ class ThreadPollExpandableEditor extends StatelessWidget {
         _PollConfigHeader(
           toggleKey: toggleKey,
           summaryKey: summaryKey,
-          summary: _summary,
+          summary: _summary(context),
           expanded: expanded,
           enabled: enabled,
           onTap: () => onExpansionChanged(!expanded),
@@ -100,12 +101,15 @@ class ThreadPollExpandableEditor extends StatelessWidget {
     );
   }
 
-  String get _summary {
+  String _summary(BuildContext context) {
     final filledCount = poll.options.where((option) {
       return option.trim().isNotEmpty;
     }).length;
-    final mode = poll.multiple ? '多选' : '单选';
-    return '已填 $filledCount 项 / $mode';
+    final l10n = AppLocalizations.of(context);
+    final mode = poll.multiple
+        ? l10n.postingPollMultipleMode
+        : l10n.postingPollSingle;
+    return l10n.postingPollSummary(filledCount, mode);
   }
 }
 
@@ -155,7 +159,7 @@ class _PollConfigHeader extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '投票配置',
+                          AppLocalizations.of(context).postingPollConfig,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.labelSmall?.copyWith(

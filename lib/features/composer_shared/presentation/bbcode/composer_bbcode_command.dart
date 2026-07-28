@@ -12,10 +12,12 @@ class ComposerBbCodeCommand {
   final String? body;
 }
 
-class ComposerBbCodeMenuCommand {
-  const ComposerBbCodeMenuCommand({required this.label, required this.command});
+enum ComposerBbCodeMenuCommandKind { quote, fontSize }
 
-  final String label;
+class ComposerBbCodeMenuCommand {
+  const ComposerBbCodeMenuCommand({required this.kind, required this.command});
+
+  final ComposerBbCodeMenuCommandKind kind;
   final ComposerBbCodeCommand command;
 }
 
@@ -50,8 +52,14 @@ const composerCenterAlignBbCodeCommand = ComposerBbCodeCommand(
 );
 
 const composerSelectionMenuTrailingBbCodeCommands = <ComposerBbCodeMenuCommand>[
-  ComposerBbCodeMenuCommand(label: '引用', command: composerQuoteBbCodeCommand),
-  ComposerBbCodeMenuCommand(label: '字号', command: composerSizeBbCodeCommand),
+  ComposerBbCodeMenuCommand(
+    kind: ComposerBbCodeMenuCommandKind.quote,
+    command: composerQuoteBbCodeCommand,
+  ),
+  ComposerBbCodeMenuCommand(
+    kind: ComposerBbCodeMenuCommandKind.fontSize,
+    command: composerSizeBbCodeCommand,
+  ),
 ];
 
 class ComposerBbCodeInsertionService {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 发帖标题输入框。
 ///
@@ -14,7 +15,7 @@ class ThreadSubjectField extends StatelessWidget {
     required this.onChanged,
     this.enabled = true,
     this.fieldKey,
-    this.hintText = '输入标题',
+    this.hintText,
     this.maxLength = 0,
     this.counterTextKey,
   });
@@ -23,7 +24,7 @@ class ThreadSubjectField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final bool enabled;
   final Key? fieldKey;
-  final String hintText;
+  final String? hintText;
 
   /// `<=0` 表示版块没声明上限，UI 不显示计数。
   final int maxLength;
@@ -53,7 +54,7 @@ class ThreadSubjectField extends StatelessWidget {
       // 仅用 buildCounter 接管计数显示——不传 maxLength，避免 Flutter 把超限
       // 的字符截断。preflight + state.canSubmit 已经在网络/按钮层兜住超限。
       decoration: InputDecoration(
-        hintText: hintText,
+        hintText: hintText ?? AppLocalizations.of(context).postingSubjectHint,
         filled: false,
         border: underlineBorder,
         enabledBorder: underlineBorder,

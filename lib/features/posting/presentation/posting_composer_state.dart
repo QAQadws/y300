@@ -1,6 +1,7 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
@@ -37,7 +38,7 @@ class PostingComposerArgs {
 /// - 通用字段（message / 附件 / 草稿恢复 / 上传进度 / 错误）走基类；
 /// - 业务字段（target / metadata / subject / typeid / 选项）放在本类；
 /// - metadata 是 `null` 表示"还在加载或加载失败"，由 [isLoadingMetadata] /
-///   [metadataError] 区分。这两个状态分开存而非合并 enum，是为了让"加载失败
+///   [metadataFailure] 区分。这两个状态分开存而非合并 enum，是为了让"加载失败
 ///   后用户继续打字"的情况，metadata 可以保留旧错误标记同时正常编辑草稿。
 /// - tags / special / poll 三个字段是后续扩展轴：tags 普通/投票通用；
 ///   special 决定 payload strategy；poll 仅当 special == poll 时非空。
@@ -56,10 +57,10 @@ class PostingComposerState extends ComposerStateBase {
     super.messageRevision,
     super.lastMessageMutation,
     super.pendingAttachmentAids,
-    super.pendingAttachmentMessage,
+    super.pendingAttachmentNotice,
     required this.isLoadingMetadata,
     this.metadata,
-    this.metadataError,
+    this.metadataFailure,
     this.selectedTypeId,
     this.allowNoticeAuthor = false,
     this.bbCodeOff = false,
@@ -68,8 +69,8 @@ class PostingComposerState extends ComposerStateBase {
     this.tags = const <String>[],
     this.special = NewThreadSpecial.normal,
     this.poll,
-    super.errorMessage,
-    super.imageUploadError,
+    super.failure,
+    super.imageUploadFailure,
   });
 
   factory PostingComposerState.initial({
@@ -82,10 +83,10 @@ class PostingComposerState extends ComposerStateBase {
     int messageRevision = 0,
     ComposerTextMutation? lastMessageMutation,
     List<String> pendingAttachmentAids = const <String>[],
-    String? pendingAttachmentMessage,
+    ComposerPendingAttachmentNotice? pendingAttachmentNotice,
     bool isLoadingMetadata = true,
     NewThreadFormMetadata? metadata,
-    String? metadataError,
+    ComposerOperationFailure? metadataFailure,
     String? selectedTypeId,
     bool allowNoticeAuthor = false,
     bool bbCodeOff = false,
@@ -109,10 +110,10 @@ class PostingComposerState extends ComposerStateBase {
       messageRevision: messageRevision,
       lastMessageMutation: lastMessageMutation,
       pendingAttachmentAids: pendingAttachmentAids,
-      pendingAttachmentMessage: pendingAttachmentMessage,
+      pendingAttachmentNotice: pendingAttachmentNotice,
       isLoadingMetadata: isLoadingMetadata,
       metadata: metadata,
-      metadataError: metadataError,
+      metadataFailure: metadataFailure,
       selectedTypeId: selectedTypeId,
       allowNoticeAuthor: allowNoticeAuthor,
       bbCodeOff: bbCodeOff,
@@ -128,7 +129,7 @@ class PostingComposerState extends ComposerStateBase {
   final String subject;
   final bool isLoadingMetadata;
   final NewThreadFormMetadata? metadata;
-  final String? metadataError;
+  final ComposerOperationFailure? metadataFailure;
 
   /// 用户当前选择的 typeid。`null` 表示"未选择"或"无分类"。
   /// 草稿恢复出的 typeid 如果不在 metadata 列表里，会在 metadata 加载完成后被重置为 `null`。
@@ -221,10 +222,10 @@ class PostingComposerState extends ComposerStateBase {
     int? messageRevision,
     ComposerTextMutation? lastMessageMutation,
     List<String>? pendingAttachmentAids,
-    String? pendingAttachmentMessage,
+    ComposerPendingAttachmentNotice? pendingAttachmentNotice,
     bool? isLoadingMetadata,
     NewThreadFormMetadata? metadata,
-    String? metadataError,
+    ComposerOperationFailure? metadataFailure,
     String? selectedTypeId,
     bool? allowNoticeAuthor,
     bool? bbCodeOff,
@@ -233,16 +234,16 @@ class PostingComposerState extends ComposerStateBase {
     List<String>? tags,
     NewThreadSpecial? special,
     NewThreadPollDraft? poll,
-    String? errorMessage,
-    String? imageUploadError,
+    ComposerFailure? failure,
+    ComposerImageUploadFailure? imageUploadFailure,
     bool clearMetadata = false,
-    bool clearMetadataError = false,
+    bool clearMetadataFailure = false,
     bool clearSelectedTypeId = false,
     bool clearPoll = false,
-    bool clearErrorMessage = false,
-    bool clearImageUploadError = false,
+    bool clearFailure = false,
+    bool clearImageUploadFailure = false,
     bool clearLastMessageMutation = false,
-    bool clearPendingAttachmentMessage = false,
+    bool clearPendingAttachmentNotice = false,
   }) {
     return PostingComposerState(
       target: target,
@@ -261,14 +262,14 @@ class PostingComposerState extends ComposerStateBase {
           : lastMessageMutation ?? this.lastMessageMutation,
       pendingAttachmentAids:
           pendingAttachmentAids ?? this.pendingAttachmentAids,
-      pendingAttachmentMessage: clearPendingAttachmentMessage
+      pendingAttachmentNotice: clearPendingAttachmentNotice
           ? null
-          : pendingAttachmentMessage ?? this.pendingAttachmentMessage,
+          : pendingAttachmentNotice ?? this.pendingAttachmentNotice,
       isLoadingMetadata: isLoadingMetadata ?? this.isLoadingMetadata,
       metadata: clearMetadata ? null : metadata ?? this.metadata,
-      metadataError: clearMetadataError
+      metadataFailure: clearMetadataFailure
           ? null
-          : metadataError ?? this.metadataError,
+          : metadataFailure ?? this.metadataFailure,
       selectedTypeId: clearSelectedTypeId
           ? null
           : selectedTypeId ?? this.selectedTypeId,
@@ -279,12 +280,10 @@ class PostingComposerState extends ComposerStateBase {
       tags: tags ?? this.tags,
       special: special ?? this.special,
       poll: clearPoll ? null : poll ?? this.poll,
-      errorMessage: clearErrorMessage
+      failure: clearFailure ? null : failure ?? this.failure,
+      imageUploadFailure: clearImageUploadFailure
           ? null
-          : errorMessage ?? this.errorMessage,
-      imageUploadError: clearImageUploadError
-          ? null
-          : imageUploadError ?? this.imageUploadError,
+          : imageUploadFailure ?? this.imageUploadFailure,
     );
   }
 }
@@ -296,7 +295,8 @@ class PostingComposerState extends ComposerStateBase {
 class PostingComposerResult extends ComposerSubmitInvocationResult {
   const PostingComposerResult({
     required super.sent,
-    required super.message,
+    super.rawSuccessDetail,
+    super.failure,
     this.tid,
     this.pid,
   });
@@ -308,7 +308,8 @@ class PostingComposerResult extends ComposerSubmitInvocationResult {
   }) {
     return PostingComposerResult(
       sent: invocation.sent,
-      message: invocation.message,
+      rawSuccessDetail: invocation.rawSuccessDetail,
+      failure: invocation.failure,
       tid: tid,
       pid: pid,
     );

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_color_picker_sheet.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ComposerBbCodeContextMenu {
   const ComposerBbCodeContextMenu._();
@@ -11,23 +13,24 @@ class ComposerBbCodeContextMenu {
     BuildContext context,
     EditableTextState editableTextState,
   ) {
+    final l10n = AppLocalizations.of(context);
     final buttonItems = <ContextMenuButtonItem>[
       ..._defaultButtonItemsWithoutShare(editableTextState),
       if (_hasSelectedText(editableTextState)) ...[
         ContextMenuButtonItem(
-          label: '加粗',
+          label: l10n.composerBold,
           onPressed: () {
             _applyCommand(editableTextState, composerBoldBbCodeCommand);
           },
         ),
         ContextMenuButtonItem(
-          label: '颜色',
+          label: l10n.composerTextColor,
           onPressed: () {
             _applyPickedColor(
               context: context,
               editableTextState: editableTextState,
               keyPrefix: 'composer-selection-color',
-              title: '字体色',
+              title: l10n.composerTextColor,
               initialColor: const Color(0xffd32f2f),
               commandBuilder: (color) => ComposerBbCodeCommand(
                 openingTag: '[color=$color]',
@@ -37,13 +40,13 @@ class ComposerBbCodeContextMenu {
           },
         ),
         ContextMenuButtonItem(
-          label: '背景',
+          label: l10n.composerBackgroundColor,
           onPressed: () {
             _applyPickedColor(
               context: context,
               editableTextState: editableTextState,
               keyPrefix: 'composer-selection-backcolor',
-              title: '背景色',
+              title: l10n.composerBackgroundColor,
               initialColor: const Color(0xfffff3b0),
               commandBuilder: (color) => ComposerBbCodeCommand(
                 openingTag: '[backcolor=$color]',
@@ -54,7 +57,10 @@ class ComposerBbCodeContextMenu {
         ),
         for (final menuCommand in composerSelectionMenuTrailingBbCodeCommands)
           ContextMenuButtonItem(
-            label: menuCommand.label,
+            label: ComposerTextResolver.bbCodeMenuCommand(
+              l10n,
+              menuCommand.kind,
+            ),
             onPressed: () {
               _applyCommand(editableTextState, menuCommand.command);
             },

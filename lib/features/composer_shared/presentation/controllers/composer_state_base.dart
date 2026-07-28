@@ -1,5 +1,6 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 
 /// 编辑器通用状态字段。
 ///
@@ -19,9 +20,9 @@ abstract class ComposerStateBase {
     this.messageRevision = 0,
     this.lastMessageMutation,
     this.pendingAttachmentAids = const <String>[],
-    this.pendingAttachmentMessage,
-    this.errorMessage,
-    this.imageUploadError,
+    this.pendingAttachmentNotice,
+    this.failure,
+    this.imageUploadFailure,
   });
 
   final String message;
@@ -35,9 +36,9 @@ abstract class ComposerStateBase {
   final int messageRevision;
   final ComposerTextMutation? lastMessageMutation;
   final List<String> pendingAttachmentAids;
-  final String? pendingAttachmentMessage;
-  final String? errorMessage;
-  final String? imageUploadError;
+  final ComposerPendingAttachmentNotice? pendingAttachmentNotice;
+  final ComposerFailure? failure;
+  final ComposerImageUploadFailure? imageUploadFailure;
 
   bool get hasDraftContent =>
       message.trim().isNotEmpty || imageAttachments.isNotEmpty;

@@ -1,3 +1,5 @@
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+
 /// 附件相关领域模型，在自制回复页与（后续）发帖页之间共享。
 ///
 /// Phase 1 仅做迁移：把原 `ReplyImageAttachment` 等类型从 reply 模块抽到 composer_shared。
@@ -21,7 +23,7 @@ class ComposerImageAttachment {
     required this.status,
     this.aid,
     this.uploadedAt,
-    this.errorMessage,
+    this.failureCode,
     this.cachePath,
   });
 
@@ -33,7 +35,7 @@ class ComposerImageAttachment {
   final ComposerImageAttachmentStatus status;
   final String? aid;
   final DateTime? uploadedAt;
-  final String? errorMessage;
+  final ComposerImageUploadFailureCode? failureCode;
   final String? cachePath;
 
   bool get isUploaded => status == ComposerImageAttachmentStatus.uploaded;
@@ -52,10 +54,7 @@ class ComposerImageAttachment {
 }
 
 class ComposerAttachRemain {
-  const ComposerAttachRemain({
-    required this.size,
-    required this.count,
-  });
+  const ComposerAttachRemain({required this.size, required this.count});
 
   final int size;
   final int count;

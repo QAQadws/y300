@@ -296,7 +296,11 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
           localId: localId,
           current: event.current,
           total: event.total,
-          errorMessage: event.errorMessage ?? '上传失败',
+          failure:
+              event.failure ??
+              const ComposerImageUploadFailure(
+                code: ComposerImageUploadFailureCode.unknown,
+              ),
         ),
         ComposerImageUploadEventType.completed =>
           ComposerImageUploadEvent.completed(total: event.total),

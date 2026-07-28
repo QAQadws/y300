@@ -9,6 +9,8 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
@@ -225,11 +227,12 @@ void main() {
       expect(result.sent, isFalse);
       expect(replyRepository.sentDrafts, isEmpty);
       expect(
-        container
-            .read(replyComposerControllerProvider(args))
-            .value
-            ?.errorMessage,
-        contains('请输入回复内容'),
+        container.read(replyComposerControllerProvider(args)).value?.failure,
+        isA<ComposerValidationFailure>().having(
+          (failure) => failure.code,
+          'code',
+          ComposerValidationFailureCode.contentRequired,
+        ),
       );
     });
 
@@ -509,11 +512,14 @@ void main() {
 
       expect(result.sent, isFalse);
       expect(
-        container
-            .read(replyComposerControllerProvider(args))
-            .value
-            ?.errorMessage,
-        '网络异常，请稍后重试',
+        container.read(replyComposerControllerProvider(args)).value?.failure,
+        isA<ComposerSubmissionFailure>()
+            .having(
+              (failure) => failure.code,
+              'code',
+              ComposerSubmissionFailureCode.network,
+            )
+            .having((failure) => failure.kind, 'kind', ComposerKind.reply),
       );
       expect(
         (await draftRepository.loadDraft(args.identity))?.message,
@@ -743,7 +749,10 @@ void main() {
               localId: '',
               current: 1,
               total: 2,
-              errorMessage: '第一张失败',
+              failure: const ComposerImageUploadFailure(
+                code: ComposerImageUploadFailureCode.server,
+                detail: '第一张失败',
+              ),
             ),
             ComposerImageUploadEvent.uploaded(
               localId: '',
@@ -788,7 +797,10 @@ void main() {
           ReplyImageAttachmentStatus.uploaded,
         ]);
         expect(state.message, '[attach]222[/attach]\n');
-        expect(state.imageUploadError, '第一张失败');
+        expect(
+          state.imageUploadFailure?.code,
+          ComposerImageUploadFailureCode.server,
+        );
       },
     );
 
@@ -833,7 +845,7 @@ void main() {
 
     test('pickImages exposes picker error', () async {
       final imagePicker = _FakeReplyImagePicker(
-        error: const ComposerImagePickerException('failed'),
+        error: const ComposerImagePickerException(cause: 'failed'),
       );
       final args = _threadArgs(tid: '572063');
       final container = _buildContainer(imagePicker: imagePicker);
@@ -850,8 +862,9 @@ void main() {
         container
             .read(replyComposerControllerProvider(args))
             .value
-            ?.imageUploadError,
-        '选择图片失败，请重试',
+            ?.imageUploadFailure
+            ?.code,
+        ComposerImageUploadFailureCode.pickerFailed,
       );
     });
 
@@ -1079,9 +1092,19 @@ void main() {
           messageRevision: 7,
           lastMessageMutation: mutation,
           pendingAttachmentAids: const ['888'],
-          pendingAttachmentMessage: '待插入',
-          errorMessage: '错误',
-          imageUploadError: '上传错误',
+          pendingAttachmentNotice: ComposerPendingAttachmentNotice(
+            code: ComposerPendingAttachmentNoticeCode.readyToReinsert,
+            count: 1,
+          ),
+          failure: ComposerSubmissionFailure(
+            code: ComposerSubmissionFailureCode.unknown,
+            kind: ComposerKind.reply,
+            detail: '错误',
+          ),
+          imageUploadFailure: ComposerImageUploadFailure(
+            code: ComposerImageUploadFailureCode.unknown,
+            detail: '上传错误',
+          ),
         ),
       );
 
@@ -1096,24 +1119,27 @@ void main() {
       expect(applied.messageRevision, 7);
       expect(applied.lastMessageMutation, same(mutation));
       expect(applied.pendingAttachmentAids, ['888']);
-      expect(applied.pendingAttachmentMessage, '待插入');
-      expect(applied.errorMessage, '错误');
-      expect(applied.imageUploadError, '上传错误');
+      expect(
+        applied.pendingAttachmentNotice?.code,
+        ComposerPendingAttachmentNoticeCode.readyToReinsert,
+      );
+      expect(applied.failure?.detail, '错误');
+      expect(applied.imageUploadFailure?.detail, '上传错误');
 
       final cleared = controller.applyPatch(
         applied,
         const ComposerStatePatch(
-          clearErrorMessage: true,
-          clearImageUploadError: true,
+          clearFailure: true,
+          clearImageUploadFailure: true,
           clearLastMessageMutation: true,
-          clearPendingAttachmentMessage: true,
+          clearPendingAttachmentNotice: true,
         ),
       );
 
-      expect(cleared.errorMessage, isNull);
-      expect(cleared.imageUploadError, isNull);
+      expect(cleared.failure, isNull);
+      expect(cleared.imageUploadFailure, isNull);
       expect(cleared.lastMessageMutation, isNull);
-      expect(cleared.pendingAttachmentMessage, isNull);
+      expect(cleared.pendingAttachmentNotice, isNull);
     });
   });
 }
@@ -1379,7 +1405,11 @@ class _FakeReplyImageUploadCoordinator
         localId: localId,
         current: event.current,
         total: event.total,
-        errorMessage: event.errorMessage ?? '上传失败',
+        failure:
+            event.failure ??
+            const ComposerImageUploadFailure(
+              code: ComposerImageUploadFailureCode.unknown,
+            ),
       ),
       ComposerImageUploadEventType.completed =>
         ComposerImageUploadEvent.completed(total: event.total),

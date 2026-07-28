@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 投票编辑器。
 ///
@@ -73,6 +74,7 @@ class ThreadPollEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
     final canAddMore = poll.options.length < NewThreadPollValidation.maxOptions;
     return Container(
       key: containerKey,
@@ -92,12 +94,16 @@ class ThreadPollEditor extends StatelessWidget {
                 color: theme.colorScheme.primary,
               ),
               const SizedBox(width: 8),
-              Text('投票配置', style: theme.textTheme.titleSmall),
+              Text(l10n.postingPollConfig, style: theme.textTheme.titleSmall),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            '至少 ${NewThreadPollValidation.minOptions} 个选项；最多 ${NewThreadPollValidation.maxOptions} 个，单项 ≤ ${NewThreadPollValidation.maxOptionLength} 字符',
+            l10n.postingPollConstraints(
+              NewThreadPollValidation.minOptions,
+              NewThreadPollValidation.maxOptions,
+              NewThreadPollValidation.maxOptionLength,
+            ),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -117,7 +123,7 @@ class ThreadPollEditor extends StatelessWidget {
                       initialValue: poll.options[i],
                       onChanged: (value) => _updateOption(i, value),
                       decoration: InputDecoration(
-                        hintText: '选项 ${i + 1}',
+                        hintText: l10n.postingPollOption(i + 1),
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -132,7 +138,7 @@ class ThreadPollEditor extends StatelessWidget {
                     key: optionRemoveKeyBuilder?.call(i),
                     onPressed: enabled ? () => _removeOption(i) : null,
                     icon: const Icon(Icons.remove_circle_outline),
-                    tooltip: '删除选项',
+                    tooltip: l10n.postingPollRemoveOption,
                   ),
                 ],
               ),
@@ -142,28 +148,29 @@ class ThreadPollEditor extends StatelessWidget {
               key: addOptionButtonKey,
               onPressed: enabled ? _addOption : null,
               icon: const Icon(Icons.add_circle_outline),
-              label: const Text('添加选项'),
+              label: Text(l10n.postingPollAddOption),
             ),
           const SizedBox(height: 12),
           SwitchListTile(
             key: multipleSwitchKey,
             value: poll.multiple,
             onChanged: enabled ? onMultipleChanged : null,
-            title: const Text('允许多选'),
+            title: Text(l10n.postingPollMultiple),
             contentPadding: EdgeInsets.zero,
             dense: true,
           ),
-          if (poll.multiple) _MaxChoicesField(
-            fieldKey: maxChoicesFieldKey,
-            initial: poll.maxChoices,
-            optionsCount: poll.options.length,
-            enabled: enabled,
-            onChanged: onMaxChoicesChanged,
-          ),
+          if (poll.multiple)
+            _MaxChoicesField(
+              fieldKey: maxChoicesFieldKey,
+              initial: poll.maxChoices,
+              optionsCount: poll.options.length,
+              enabled: enabled,
+              onChanged: onMaxChoicesChanged,
+            ),
           const SizedBox(height: 8),
           _NumberField(
             fieldKey: expirationFieldKey,
-            label: '截止天数（0 = 不过期）',
+            label: l10n.postingPollDeadline,
             initial: poll.expirationDays,
             min: 0,
             max: 365,
@@ -174,8 +181,8 @@ class ThreadPollEditor extends StatelessWidget {
             key: overtSwitchKey,
             value: poll.overt,
             onChanged: enabled ? onOvertChanged : null,
-            title: const Text('公开投票人'),
-            subtitle: const Text('开启后所有人可看到谁投了哪一项'),
+            title: Text(l10n.postingPollPublicVoters),
+            subtitle: Text(l10n.postingPollPublicVotersDescription),
             contentPadding: EdgeInsets.zero,
             dense: true,
           ),
@@ -183,7 +190,7 @@ class ThreadPollEditor extends StatelessWidget {
             key: visibilityPollSwitchKey,
             value: poll.visibilityPoll,
             onChanged: enabled ? onVisibilityPollChanged : null,
-            title: const Text('投票后才显示结果'),
+            title: Text(l10n.postingPollShowResultsAfterVote),
             contentPadding: EdgeInsets.zero,
             dense: true,
           ),
@@ -215,7 +222,7 @@ class _MaxChoicesField extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: _NumberField(
         fieldKey: fieldKey,
-        label: '最多可选项数（2 ~ $upperBound）',
+        label: AppLocalizations.of(context).postingPollMaxChoices(upperBound),
         initial: initial < 2 ? 2 : initial,
         min: 2,
         max: upperBound,
@@ -261,8 +268,7 @@ class _NumberField extends StatelessWidget {
       onChanged: (value) {
         final parsed = int.tryParse(value);
         if (parsed == null) return;
-        final clamped =
-            parsed < min ? min : (parsed > max ? max : parsed);
+        final clamped = parsed < min ? min : (parsed > max ? max : parsed);
         onChanged(clamped);
       },
     );

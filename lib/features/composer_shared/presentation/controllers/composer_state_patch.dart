@@ -1,5 +1,6 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 
 /// 基类向子类下发"状态增量"的值对象。
 ///
@@ -23,13 +24,13 @@ class ComposerStatePatch {
     this.messageRevision,
     this.lastMessageMutation,
     this.pendingAttachmentAids,
-    this.pendingAttachmentMessage,
-    this.errorMessage,
-    this.imageUploadError,
-    this.clearErrorMessage = false,
-    this.clearImageUploadError = false,
+    this.pendingAttachmentNotice,
+    this.failure,
+    this.imageUploadFailure,
+    this.clearFailure = false,
+    this.clearImageUploadFailure = false,
     this.clearLastMessageMutation = false,
-    this.clearPendingAttachmentMessage = false,
+    this.clearPendingAttachmentNotice = false,
   });
 
   final String? message;
@@ -43,11 +44,11 @@ class ComposerStatePatch {
   final int? messageRevision;
   final ComposerTextMutation? lastMessageMutation;
   final List<String>? pendingAttachmentAids;
-  final String? pendingAttachmentMessage;
-  final String? errorMessage;
-  final String? imageUploadError;
-  final bool clearErrorMessage;
-  final bool clearImageUploadError;
+  final ComposerPendingAttachmentNotice? pendingAttachmentNotice;
+  final ComposerFailure? failure;
+  final ComposerImageUploadFailure? imageUploadFailure;
+  final bool clearFailure;
+  final bool clearImageUploadFailure;
   final bool clearLastMessageMutation;
-  final bool clearPendingAttachmentMessage;
+  final bool clearPendingAttachmentNotice;
 }

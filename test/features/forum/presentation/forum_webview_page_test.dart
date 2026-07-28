@@ -109,7 +109,7 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-    expect(find.text('论坛首页'), findsOneWidget);
+      expect(find.text('论坛首页'), findsOneWidget);
       expect(find.byKey(const Key('forum-webview-back-button')), findsNothing);
       expect(
         find.byKey(const Key('forum-webview-search-button')),
@@ -1298,7 +1298,7 @@ void main() {
     expect(replyRepository.sentDrafts.single.tid, '123');
     expect(replyRepository.sentDrafts.single.message, '来自 WebView 的回复');
     expect(driver.reloadCallCount, 1);
-    expect(find.text('回复发布成功'), findsOneWidget);
+    expect(find.text('回复成功：回复发布成功'), findsOneWidget);
   });
 
   testWidgets(
@@ -1428,7 +1428,7 @@ void main() {
       expect(newThreadRepository.submittedPayloads.single.formHash, 'fh');
       // 提交成功 → SnackBar + WebView reload。
       expect(driver.reloadCallCount, 1);
-      expect(find.text('发布成功'), findsOneWidget);
+      expect(find.text('发布成功：发布成功'), findsOneWidget);
     },
   );
 

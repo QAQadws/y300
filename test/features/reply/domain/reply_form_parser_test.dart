@@ -77,7 +77,8 @@ void main() {
       );
 
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, contains('参数缺失'));
+      expect(result.errorOrNull?.code, 'reply_form_parameters_missing');
+      expect(result.errorOrNull?.message, isEmpty);
     });
   });
 }

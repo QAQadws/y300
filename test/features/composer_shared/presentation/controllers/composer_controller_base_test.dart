@@ -8,6 +8,8 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
@@ -265,7 +267,7 @@ void main() {
         final inserted = container.read(_testControllerProvider(args)).value!;
         expect(inserted.message, '[attach]790[/attach]\n');
         expect(inserted.pendingAttachmentAids, isEmpty);
-        expect(inserted.pendingAttachmentMessage, isNull);
+        expect(inserted.pendingAttachmentNotice, isNull);
       },
     );
 
@@ -330,8 +332,12 @@ void main() {
         expect(result.sent, isFalse);
         expect(controller.performSubmitCallCount, 0);
         expect(
-          container.read(_testControllerProvider(args)).value?.errorMessage,
-          '请输入内容',
+          container.read(_testControllerProvider(args)).value?.failure,
+          isA<ComposerValidationFailure>().having(
+            (failure) => failure.code,
+            'code',
+            ComposerValidationFailureCode.contentRequired,
+          ),
         );
       },
     );
@@ -355,12 +361,12 @@ void main() {
 
       controller.updateMessage('提交内容');
       controller.outcome = const ComposerSubmissionOutcome.success(
-        message: '完成',
+        rawDetail: '完成',
       );
       final result = await controller.submit();
 
       expect(result.sent, isTrue);
-      expect(result.message, '完成');
+      expect(result.rawSuccessDetail, '完成');
       expect(controller.performSubmitCallCount, 1);
       final state = container.read(_testControllerProvider(args)).value!;
       expect(state.message, isEmpty);
@@ -368,30 +374,46 @@ void main() {
       expect(await draftRepository.loadDraft(args.identity), isNull);
     });
 
-    test('failed submit preserves draft and writes errorMessage', () async {
-      final draftRepository = _MemoryDraftRepository();
-      final args = _TestArgs(fid: '33', tid: '572063');
-      final container = _buildContainer(draftRepository: draftRepository);
-      addTearDown(container.dispose);
-      _keepAlive(container, args);
-      await container.read(_testControllerProvider(args).future);
-      final controller = container.read(_testControllerProvider(args).notifier);
+    test(
+      'failed submit preserves draft and writes structured failure',
+      () async {
+        final draftRepository = _MemoryDraftRepository();
+        final args = _TestArgs(fid: '33', tid: '572063');
+        final container = _buildContainer(draftRepository: draftRepository);
+        addTearDown(container.dispose);
+        _keepAlive(container, args);
+        await container.read(_testControllerProvider(args).future);
+        final controller = container.read(
+          _testControllerProvider(args).notifier,
+        );
 
-      controller.updateMessage('失败也要保留');
-      controller.outcome = const ComposerSubmissionOutcome.failure(
-        errorMessage: '网络异常',
-      );
-      final result = await controller.submit();
+        controller.updateMessage('失败也要保留');
+        controller.outcome = const ComposerSubmissionOutcome.failure(
+          failure: ComposerSubmissionFailure(
+            code: ComposerSubmissionFailureCode.network,
+            kind: ComposerKind.reply,
+            detail: '网络异常',
+          ),
+        );
+        final result = await controller.submit();
 
-      expect(result.sent, isFalse);
-      expect(result.message, '网络异常');
-      expect(
-        container.read(_testControllerProvider(args)).value?.errorMessage,
-        '网络异常',
-      );
-      final saved = await draftRepository.loadDraft(args.identity);
-      expect(saved?.message, '失败也要保留');
-    });
+        expect(result.sent, isFalse);
+        expect(
+          result.failure,
+          isA<ComposerSubmissionFailure>().having(
+            (failure) => failure.code,
+            'code',
+            ComposerSubmissionFailureCode.network,
+          ),
+        );
+        expect(
+          container.read(_testControllerProvider(args)).value?.failure,
+          same(result.failure),
+        );
+        final saved = await draftRepository.loadDraft(args.identity);
+        expect(saved?.message, '失败也要保留');
+      },
+    );
 
     test(
       'duplicate submit while submitting does not call performSubmit twice',
@@ -411,7 +433,7 @@ void main() {
         final first = controller.submit();
         final second = await controller.submit();
         completer.complete(
-          const ComposerSubmissionOutcome.success(message: 'ok'),
+          const ComposerSubmissionOutcome.success(rawDetail: 'ok'),
         );
         await first;
 

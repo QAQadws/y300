@@ -4798,6 +4798,876 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'滚动到底部'**
   String get threadDetailScrollBottom;
+
+  /// No description provided for @commonUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用'**
+  String get commonUse;
+
+  /// No description provided for @commonReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置'**
+  String get commonReset;
+
+  /// No description provided for @composerBold.
+  ///
+  /// In zh, this message translates to:
+  /// **'加粗'**
+  String get composerBold;
+
+  /// No description provided for @composerItalic.
+  ///
+  /// In zh, this message translates to:
+  /// **'斜体'**
+  String get composerItalic;
+
+  /// No description provided for @composerUnderline.
+  ///
+  /// In zh, this message translates to:
+  /// **'下划线'**
+  String get composerUnderline;
+
+  /// No description provided for @composerStrikethrough.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除线'**
+  String get composerStrikethrough;
+
+  /// No description provided for @composerTextColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'字体色'**
+  String get composerTextColor;
+
+  /// No description provided for @composerBackgroundColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'背景色'**
+  String get composerBackgroundColor;
+
+  /// No description provided for @composerLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接'**
+  String get composerLink;
+
+  /// No description provided for @composerFontSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'字号'**
+  String get composerFontSize;
+
+  /// No description provided for @composerAlignment.
+  ///
+  /// In zh, this message translates to:
+  /// **'对齐'**
+  String get composerAlignment;
+
+  /// No description provided for @composerQuote.
+  ///
+  /// In zh, this message translates to:
+  /// **'引用'**
+  String get composerQuote;
+
+  /// No description provided for @composerImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片'**
+  String get composerImage;
+
+  /// No description provided for @composerSticker.
+  ///
+  /// In zh, this message translates to:
+  /// **'表情'**
+  String get composerSticker;
+
+  /// No description provided for @composerFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'格式'**
+  String get composerFormat;
+
+  /// No description provided for @composerPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'预览'**
+  String get composerPreview;
+
+  /// No description provided for @composerSourceMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'源码'**
+  String get composerSourceMode;
+
+  /// No description provided for @composerVisualMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回编辑'**
+  String get composerVisualMode;
+
+  /// No description provided for @composerMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get composerMore;
+
+  /// No description provided for @composerMoreSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多设置'**
+  String get composerMoreSettings;
+
+  /// No description provided for @composerUseSignature.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用个人签名'**
+  String get composerUseSignature;
+
+  /// No description provided for @composerResetDraft.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置草稿'**
+  String get composerResetDraft;
+
+  /// No description provided for @composerResetDraftTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置草稿？'**
+  String get composerResetDraftTitle;
+
+  /// No description provided for @composerResetDraftBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前编辑内容和已选图片将被清空，且无法恢复。'**
+  String get composerResetDraftBody;
+
+  /// No description provided for @composerContinueEditing.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续编辑'**
+  String get composerContinueEditing;
+
+  /// No description provided for @composerSaveDraftAndLeave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存草稿并离开'**
+  String get composerSaveDraftAndLeave;
+
+  /// No description provided for @composerRestoredDraft.
+  ///
+  /// In zh, this message translates to:
+  /// **'已恢复未发送草稿'**
+  String get composerRestoredDraft;
+
+  /// No description provided for @postingRestoredDraftWithTags.
+  ///
+  /// In zh, this message translates to:
+  /// **'已恢复未发送的草稿，请注意已恢复的主题标签'**
+  String get postingRestoredDraftWithTags;
+
+  /// No description provided for @composerPendingAttachment.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {图片已上传，请选择位置后点击图片按钮重新插入} other {{count} 张图片已上传，请选择位置后点击图片按钮重新插入}}'**
+  String composerPendingAttachment(int count);
+
+  /// No description provided for @composerPendingAttachmentSelectionExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前选区无法安全恢复，请重新选择位置'**
+  String get composerPendingAttachmentSelectionExpired;
+
+  /// No description provided for @composerUploadingImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在上传图片 {current}/{total}'**
+  String composerUploadingImages(int current, int total);
+
+  /// No description provided for @composerImageUploaded.
+  ///
+  /// In zh, this message translates to:
+  /// **'{fileName} 已上传'**
+  String composerImageUploaded(String fileName);
+
+  /// No description provided for @composerImageUploadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'{fileName} 上传失败，请重试'**
+  String composerImageUploadFailed(String fileName);
+
+  /// No description provided for @composerImageUploadFailedWithReason.
+  ///
+  /// In zh, this message translates to:
+  /// **'{fileName} 上传失败：{reason}'**
+  String composerImageUploadFailedWithReason(String fileName, String reason);
+
+  /// No description provided for @composerImagePickerFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择图片失败，请重试'**
+  String get composerImagePickerFailed;
+
+  /// No description provided for @composerImageFileMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片文件不存在，无法上传'**
+  String get composerImageFileMissing;
+
+  /// No description provided for @composerImageInvalidFileType.
+  ///
+  /// In zh, this message translates to:
+  /// **'只能上传图片文件'**
+  String get composerImageInvalidFileType;
+
+  /// No description provided for @composerImageExtensionNotAllowed.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版块不允许上传该类型图片'**
+  String get composerImageExtensionNotAllowed;
+
+  /// No description provided for @composerImagePermissionExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'上传权限已失效，请重新登录'**
+  String get composerImagePermissionExpired;
+
+  /// No description provided for @composerImageQuotaExceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'附件额度不足，无法上传图片'**
+  String get composerImageQuotaExceeded;
+
+  /// No description provided for @composerImageUploadTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片上传超时，请重试'**
+  String get composerImageUploadTimeout;
+
+  /// No description provided for @composerImageUploadNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络异常，图片上传失败'**
+  String get composerImageUploadNetwork;
+
+  /// No description provided for @composerImageUploadServer.
+  ///
+  /// In zh, this message translates to:
+  /// **'上传服务异常，请稍后重试'**
+  String get composerImageUploadServer;
+
+  /// No description provided for @composerImageUploadUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片上传失败，请重试'**
+  String get composerImageUploadUnknown;
+
+  /// No description provided for @composerLoadDraftFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载草稿失败：{error}'**
+  String composerLoadDraftFailed(String error);
+
+  /// No description provided for @composerStickerLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'表情加载失败：{error}'**
+  String composerStickerLoadFailed(String error);
+
+  /// No description provided for @composerStickerNetworkRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要联网加载表情包'**
+  String get composerStickerNetworkRequired;
+
+  /// No description provided for @composerStickerAllGroup.
+  ///
+  /// In zh, this message translates to:
+  /// **'表情'**
+  String get composerStickerAllGroup;
+
+  /// No description provided for @composerStickerDefaultGroup.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认表情'**
+  String get composerStickerDefaultGroup;
+
+  /// No description provided for @composerStartTypingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请开始输入'**
+  String get composerStartTypingHint;
+
+  /// No description provided for @composerImageRetentionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请注意上传的图片仅在本地保存 24 小时'**
+  String get composerImageRetentionHint;
+
+  /// No description provided for @composerLinkTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加链接'**
+  String get composerLinkTitle;
+
+  /// No description provided for @composerLinkUrl.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接'**
+  String get composerLinkUrl;
+
+  /// No description provided for @composerLinkText.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接文字'**
+  String get composerLinkText;
+
+  /// No description provided for @composerLinkTextHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示给别人看的文字'**
+  String get composerLinkTextHint;
+
+  /// No description provided for @composerLinkUrlRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入链接'**
+  String get composerLinkUrlRequired;
+
+  /// No description provided for @composerLinkTextRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入链接文字'**
+  String get composerLinkTextRequired;
+
+  /// No description provided for @composerAlignLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左对齐'**
+  String get composerAlignLeft;
+
+  /// No description provided for @composerAlignCenter.
+  ///
+  /// In zh, this message translates to:
+  /// **'居中'**
+  String get composerAlignCenter;
+
+  /// No description provided for @composerAlignRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右对齐'**
+  String get composerAlignRight;
+
+  /// No description provided for @composerClearFormatting.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除状态'**
+  String get composerClearFormatting;
+
+  /// No description provided for @composerClearFontSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除字号'**
+  String get composerClearFontSize;
+
+  /// No description provided for @composerClearTextColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除颜色'**
+  String get composerClearTextColor;
+
+  /// No description provided for @composerClearBackgroundColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除背景'**
+  String get composerClearBackgroundColor;
+
+  /// No description provided for @composerAuthenticationRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录状态已失效，请重新登录后再试'**
+  String get composerAuthenticationRequired;
+
+  /// No description provided for @composerCredentialExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'{kind, select, newThread {发帖凭证已失效，请刷新登录态后重试} reply {回复凭证已失效，请刷新登录态后重试} other {提交凭证已失效，请刷新登录态后重试}}'**
+  String composerCredentialExpired(String kind);
+
+  /// No description provided for @composerRateLimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'{kind, select, newThread {发帖过于频繁，请稍后再试} reply {回复太频繁了，请稍后再试} other {操作过于频繁，请稍后再试}}'**
+  String composerRateLimited(String kind);
+
+  /// No description provided for @composerPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'{kind, select, newThread {当前账号权限不足，无法发帖} reply {当前账号权限不足，无法发送回复} other {当前账号权限不足}}'**
+  String composerPermissionDenied(String kind);
+
+  /// No description provided for @composerSubmissionTypeRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'该版块要求选择主题分类，请先选择'**
+  String get composerSubmissionTypeRequired;
+
+  /// No description provided for @composerSubmissionContentTooShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'{kind, select, newThread {标题或内容过短} reply {回复内容过短} other {提交内容过短}}'**
+  String composerSubmissionContentTooShort(String kind);
+
+  /// No description provided for @composerCaptchaRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要验证码，请暂时改用网页发布'**
+  String get composerCaptchaRequired;
+
+  /// No description provided for @composerPollInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票配置无效，请检查选项与截止时间'**
+  String get composerPollInvalid;
+
+  /// No description provided for @composerPollOptionCountInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票选项数量不合法'**
+  String get composerPollOptionCountInvalid;
+
+  /// No description provided for @composerPollFieldsInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请正确填写投票相关字段'**
+  String get composerPollFieldsInvalid;
+
+  /// No description provided for @composerNetworkTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络超时，请稍后重试'**
+  String get composerNetworkTimeout;
+
+  /// No description provided for @composerNetworkFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络异常，请稍后重试'**
+  String get composerNetworkFailure;
+
+  /// No description provided for @composerServerFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务异常，请稍后重试'**
+  String get composerServerFailure;
+
+  /// No description provided for @composerUnknownFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'{kind, select, newThread {发帖失败，请稍后重试} reply {发送回复失败，请稍后重试} other {提交失败，请稍后重试}}'**
+  String composerUnknownFailure(String kind);
+
+  /// No description provided for @postingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发帖'**
+  String get postingTitle;
+
+  /// No description provided for @postingTitleWithForum.
+  ///
+  /// In zh, this message translates to:
+  /// **'发帖 — {forumName}'**
+  String postingTitleWithForum(String forumName);
+
+  /// No description provided for @postingSend.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布'**
+  String get postingSend;
+
+  /// No description provided for @postingSubjectHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入标题'**
+  String get postingSubjectHint;
+
+  /// No description provided for @postingBodyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入正文'**
+  String get postingBodyHint;
+
+  /// No description provided for @postingFormLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在加载发帖表单'**
+  String get postingFormLoading;
+
+  /// No description provided for @postingFormLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载发帖表单失败：{error}'**
+  String postingFormLoadFailed(String error);
+
+  /// No description provided for @postingType.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题分类'**
+  String get postingType;
+
+  /// No description provided for @postingTypeRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题分类（必选）'**
+  String get postingTypeRequired;
+
+  /// No description provided for @postingTypeNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'无分类'**
+  String get postingTypeNone;
+
+  /// No description provided for @postingTypeUnselected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未选择'**
+  String get postingTypeUnselected;
+
+  /// No description provided for @postingTags.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题标签'**
+  String get postingTags;
+
+  /// No description provided for @postingTagsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入标签，回车或英文逗号确认'**
+  String get postingTagsHint;
+
+  /// No description provided for @postingTagDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除标签'**
+  String get postingTagDelete;
+
+  /// No description provided for @postingTagsLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'最多 {maxTags} 个；单个标签 ≤ {maxLength} 字符'**
+  String postingTagsLimit(int maxTags, int maxLength);
+
+  /// No description provided for @postingNormalThread.
+  ///
+  /// In zh, this message translates to:
+  /// **'普通帖'**
+  String get postingNormalThread;
+
+  /// No description provided for @postingPoll.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票'**
+  String get postingPoll;
+
+  /// No description provided for @postingPollConfig.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票配置'**
+  String get postingPollConfig;
+
+  /// No description provided for @postingThreadKind.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子类型'**
+  String get postingThreadKind;
+
+  /// No description provided for @postingPollConstraints.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少 {min} 个选项；最多 {max} 个，单项 ≤ {maxLength} 字符'**
+  String postingPollConstraints(int min, int max, int maxLength);
+
+  /// No description provided for @postingPollSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {尚未填写选项 / {mode}} other {已填 {count} 项 / {mode}}}'**
+  String postingPollSummary(int count, String mode);
+
+  /// No description provided for @postingPollSingle.
+  ///
+  /// In zh, this message translates to:
+  /// **'单选'**
+  String get postingPollSingle;
+
+  /// No description provided for @postingPollMultipleMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'多选'**
+  String get postingPollMultipleMode;
+
+  /// No description provided for @postingPollOption.
+  ///
+  /// In zh, this message translates to:
+  /// **'选项 {index}'**
+  String postingPollOption(int index);
+
+  /// No description provided for @postingPollAddOption.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加选项'**
+  String get postingPollAddOption;
+
+  /// No description provided for @postingPollRemoveOption.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除选项'**
+  String get postingPollRemoveOption;
+
+  /// No description provided for @postingPollMultiple.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许多选'**
+  String get postingPollMultiple;
+
+  /// No description provided for @postingPollMaxChoices.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {不可选择选项} other {最多可选 {count} 项}}'**
+  String postingPollMaxChoices(int count);
+
+  /// No description provided for @postingPollDeadline.
+  ///
+  /// In zh, this message translates to:
+  /// **'截止天数'**
+  String get postingPollDeadline;
+
+  /// No description provided for @postingPollNeverExpires.
+  ///
+  /// In zh, this message translates to:
+  /// **'不限期'**
+  String get postingPollNeverExpires;
+
+  /// No description provided for @postingPollDays.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {不限期} other {{count} 天}}'**
+  String postingPollDays(int count);
+
+  /// No description provided for @postingPollPublicVoters.
+  ///
+  /// In zh, this message translates to:
+  /// **'公开投票人'**
+  String get postingPollPublicVoters;
+
+  /// No description provided for @postingPollPublicVotersDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后所有人可看到谁投了哪一项'**
+  String get postingPollPublicVotersDescription;
+
+  /// No description provided for @postingPollShowResultsAfterVote.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票后才显示结果'**
+  String get postingPollShowResultsAfterVote;
+
+  /// No description provided for @postingAllowNoticeAuthor.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许通知作者'**
+  String get postingAllowNoticeAuthor;
+
+  /// No description provided for @postingDisableBbCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭 BBCode 解析'**
+  String get postingDisableBbCode;
+
+  /// No description provided for @postingDisableSmiley.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭表情解析'**
+  String get postingDisableSmiley;
+
+  /// No description provided for @postingDisableUrl.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭 URL 解析'**
+  String get postingDisableUrl;
+
+  /// No description provided for @postingLeaveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存草稿并离开？'**
+  String get postingLeaveTitle;
+
+  /// No description provided for @postingLeaveBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前帖子还没有发送，离开前会保存为草稿。'**
+  String get postingLeaveBody;
+
+  /// No description provided for @postingSubjectRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入标题'**
+  String get postingSubjectRequired;
+
+  /// No description provided for @postingBodyRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入正文'**
+  String get postingBodyRequired;
+
+  /// No description provided for @postingFormStillLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'发帖表单还在加载，请稍候再试'**
+  String get postingFormStillLoading;
+
+  /// No description provided for @postingSubjectTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'标题超出版块上限（最多 {limit} 字符）'**
+  String postingSubjectTooLong(int limit);
+
+  /// No description provided for @postingBodyTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文超出版块上限（最多 {limit} 字符）'**
+  String postingBodyTooLong(int limit);
+
+  /// No description provided for @postingPollMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票配置缺失，请添加选项'**
+  String get postingPollMissing;
+
+  /// No description provided for @postingPollTooFewOptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票至少需要 {limit} 个非空选项'**
+  String postingPollTooFewOptions(int limit);
+
+  /// No description provided for @postingPollOptionTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'单个投票选项不能超过 {limit} 字符'**
+  String postingPollOptionTooLong(int limit);
+
+  /// No description provided for @postingPollMultipleInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'多选投票的最大选择数至少为 {limit}'**
+  String postingPollMultipleInvalid(int limit);
+
+  /// No description provided for @postingSubmitSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布成功'**
+  String get postingSubmitSuccess;
+
+  /// No description provided for @postingSubmitSuccessWithDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布成功：{detail}'**
+  String postingSubmitSuccessWithDetail(String detail);
+
+  /// No description provided for @replyThreadTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复帖子'**
+  String get replyThreadTitle;
+
+  /// No description provided for @replyFloorTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复楼层'**
+  String get replyFloorTitle;
+
+  /// No description provided for @replySubmit.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送'**
+  String get replySubmit;
+
+  /// No description provided for @replyMessageHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入回复内容'**
+  String get replyMessageHint;
+
+  /// No description provided for @replyPreparingQuote.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备楼层引用'**
+  String get replyPreparingQuote;
+
+  /// No description provided for @replyPreparationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'楼层回复引用准备失败：{error}'**
+  String replyPreparationFailed(String error);
+
+  /// No description provided for @replyLeaveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存草稿并离开？'**
+  String get replyLeaveTitle;
+
+  /// No description provided for @replyLeaveBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前回复还没有发送，离开前会保存为草稿。'**
+  String get replyLeaveBody;
+
+  /// No description provided for @replyContentRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入回复内容'**
+  String get replyContentRequired;
+
+  /// No description provided for @replyReferenceUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'楼层回复引用准备失败，请重试'**
+  String get replyReferenceUnavailable;
+
+  /// No description provided for @replySubmitSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复成功'**
+  String get replySubmitSuccess;
+
+  /// No description provided for @replySubmitSuccessWithDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复成功：{detail}'**
+  String replySubmitSuccessWithDetail(String detail);
+
+  /// No description provided for @composerPrototypeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'Quill Composer 原型'**
+  String get composerPrototypeTitle;
+
+  /// No description provided for @composerPrototypeSourceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'源码微调'**
+  String get composerPrototypeSourceTitle;
+
+  /// No description provided for @composerPrototypeAttachmentInserted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已插入测试附件 {aid}'**
+  String composerPrototypeAttachmentInserted(String aid);
+
+  /// No description provided for @composerAttachmentFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片 {aid}'**
+  String composerAttachmentFallback(String aid);
 }
 
 class _AppLocalizationsDelegate

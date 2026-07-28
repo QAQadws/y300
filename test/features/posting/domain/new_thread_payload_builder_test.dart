@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/domain/services/new_thread_payload_builder.dart';
 
@@ -79,7 +80,8 @@ void main() {
       final payload = builder.build(
         input: NewThreadDraftInput(
           subject: '标题',
-          message: '[attach]222[/attach]\n正文\n[attach]111[/attach]\n[attach]222[/attach]',
+          message:
+              '[attach]222[/attach]\n正文\n[attach]111[/attach]\n[attach]222[/attach]',
           selectedTypeId: '101',
           useSignature: true,
           allowNoticeAuthor: false,
@@ -101,7 +103,8 @@ void main() {
       final payload = builder.build(
         input: NewThreadDraftInput(
           subject: '标题',
-          message: '[attach]111[/attach][attach]222[/attach][attach]333[/attach]',
+          message:
+              '[attach]111[/attach][attach]222[/attach][attach]333[/attach]',
           selectedTypeId: null,
           useSignature: true,
           allowNoticeAuthor: false,
@@ -127,7 +130,7 @@ void main() {
               order: 2,
               status: ComposerImageAttachmentStatus.failed,
               aid: '333',
-              errorMessage: 'oops',
+              failureCode: ComposerImageUploadFailureCode.server,
             ),
           ],
         ),
@@ -137,26 +140,26 @@ void main() {
       expect(payload.uploadedAttachmentAids, ['222']);
     });
 
-    test('skips uploaded attachment when its attach code was removed from message',
-        () {
-      final payload = builder.build(
-        input: NewThreadDraftInput(
-          subject: '标题',
-          message: '正文',
-          selectedTypeId: null,
-          useSignature: true,
-          allowNoticeAuthor: false,
-          bbCodeOff: false,
-          smileyOff: false,
-          parseUrlOff: false,
-          imageAttachments: [
-            _uploaded(localId: 'a', aid: '111'),
-          ],
-        ),
-        metadata: _metadata(),
-      );
-      expect(payload.uploadedAttachmentAids, isEmpty);
-    });
+    test(
+      'skips uploaded attachment when its attach code was removed from message',
+      () {
+        final payload = builder.build(
+          input: NewThreadDraftInput(
+            subject: '标题',
+            message: '正文',
+            selectedTypeId: null,
+            useSignature: true,
+            allowNoticeAuthor: false,
+            bbCodeOff: false,
+            smileyOff: false,
+            parseUrlOff: false,
+            imageAttachments: [_uploaded(localId: 'a', aid: '111')],
+          ),
+          metadata: _metadata(),
+        );
+        expect(payload.uploadedAttachmentAids, isEmpty);
+      },
+    );
 
     // ── tags 扩展轴 ─────────────────────────────────
     test('passes tags through normalizer (trim, dedupe, cap)', () {

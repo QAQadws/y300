@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 
@@ -8,14 +9,12 @@ void showComposerSnackBar(BuildContext context, String message) {
 }
 
 class ComposerUploadFeedbackTracker {
-  static const genericUploadFailure = '图片上传失败，请重试';
-
   bool _initialized = false;
   Set<String> _uploadedIds = const <String>{};
   Set<String> _failedIds = const <String>{};
-  String? _lastError;
+  String? _lastFailureSignature;
 
-  List<String> update(ComposerStateBase state) {
+  List<ComposerUploadFeedback> update(ComposerStateBase state) {
     final uploadedIds = {
       for (final attachment in state.imageAttachments)
         if (attachment.isUploaded) attachment.localId,
@@ -25,67 +24,77 @@ class ComposerUploadFeedbackTracker {
         if (attachment.status == ComposerImageAttachmentStatus.failed)
           attachment.localId,
     };
-    final normalizedError = normalizeComposerUploadError(
-      state.imageUploadError,
-    );
+    final batchFailure = state.imageUploadFailure;
+    final failureSignature = batchFailure == null
+        ? null
+        : '${batchFailure.code.name}:${batchFailure.detail ?? ''}';
 
     if (!_initialized) {
       _initialized = true;
       _uploadedIds = uploadedIds;
       _failedIds = failedIds;
-      _lastError = normalizedError;
-      return const <String>[];
+      _lastFailureSignature = failureSignature;
+      return const <ComposerUploadFeedback>[];
     }
 
-    final messages = <String>[];
+    final feedback = <ComposerUploadFeedback>[];
     for (final attachment in state.imageAttachments) {
       if (attachment.isUploaded && !_uploadedIds.contains(attachment.localId)) {
-        messages.add('${attachment.fileName} 已上传');
+        feedback.add(ComposerUploadFeedback.uploaded(attachment.fileName));
       }
       if (attachment.status == ComposerImageAttachmentStatus.failed &&
           !_failedIds.contains(attachment.localId)) {
-        final reason = normalizeComposerUploadError(attachment.errorMessage);
-        if (reason == null || reason == genericUploadFailure) {
-          messages.add('${attachment.fileName} 上传失败，请重试');
-        } else {
-          messages.add('${attachment.fileName} 上传失败：$reason');
-        }
+        feedback.add(
+          ComposerUploadFeedback.failed(
+            fileName: attachment.fileName,
+            failure: ComposerImageUploadFailure(
+              code:
+                  attachment.failureCode ??
+                  ComposerImageUploadFailureCode.unknown,
+            ),
+          ),
+        );
       }
     }
 
-    if (messages.isEmpty &&
-        normalizedError != null &&
-        normalizedError != _lastError) {
-      messages.add(normalizedError);
+    if (feedback.isEmpty &&
+        batchFailure != null &&
+        failureSignature != _lastFailureSignature) {
+      feedback.add(ComposerUploadFeedback.batchFailure(batchFailure));
     }
 
     _uploadedIds = uploadedIds;
     _failedIds = failedIds;
-    _lastError = normalizedError;
-    return messages;
+    _lastFailureSignature = failureSignature;
+    return feedback;
   }
 }
 
-String? normalizeComposerUploadError(String? raw) {
-  if (raw == null) {
-    return null;
-  }
-  final message = raw.trim();
-  if (message.isEmpty) {
-    return ComposerUploadFeedbackTracker.genericUploadFailure;
-  }
-  final lower = message.toLowerCase();
-  if (lower == 'unknown' ||
-      lower.contains('network error: unknown') ||
-      lower.contains('网络异常: unknown') ||
-      lower.contains('网络异常') ||
-      lower.contains('socketexception') ||
-      lower.contains('failed host lookup') ||
-      lower.contains('clientexception') ||
-      lower.contains('timed out') ||
-      lower.contains('timeout') ||
-      lower == '图片上传失败') {
-    return ComposerUploadFeedbackTracker.genericUploadFailure;
-  }
-  return message;
+enum ComposerUploadFeedbackType { uploaded, failed, batchFailure }
+
+class ComposerUploadFeedback {
+  const ComposerUploadFeedback._({
+    required this.type,
+    this.fileName,
+    this.failure,
+  });
+
+  const ComposerUploadFeedback.uploaded(String fileName)
+    : this._(type: ComposerUploadFeedbackType.uploaded, fileName: fileName);
+
+  const ComposerUploadFeedback.failed({
+    required String fileName,
+    required ComposerImageUploadFailure failure,
+  }) : this._(
+         type: ComposerUploadFeedbackType.failed,
+         fileName: fileName,
+         failure: failure,
+       );
+
+  const ComposerUploadFeedback.batchFailure(ComposerImageUploadFailure failure)
+    : this._(type: ComposerUploadFeedbackType.batchFailure, failure: failure);
+
+  final ComposerUploadFeedbackType type;
+  final String? fileName;
+  final ComposerImageUploadFailure? failure;
 }

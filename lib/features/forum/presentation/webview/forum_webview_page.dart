@@ -38,6 +38,8 @@ import 'package:y300/features/posting/presentation/posting_composer_state.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -838,9 +840,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (messenger != null) {
       _showSnackBar(
         messenger,
-        result.message.trim().isEmpty
-            ? l10n.forumWebViewReplySuccess
-            : result.message,
+        ComposerTextResolver.submitSuccess(
+          l10n,
+          ComposerKind.reply,
+          result.rawSuccessDetail,
+        ),
       );
     }
     await driver.reload();
@@ -878,9 +882,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (messenger != null) {
       _showSnackBar(
         messenger,
-        result.message.trim().isEmpty
-            ? l10n.forumWebViewReplySuccess
-            : result.message,
+        ComposerTextResolver.submitSuccess(
+          l10n,
+          ComposerKind.reply,
+          result.rawSuccessDetail,
+        ),
       );
     }
     await driver.reload();
@@ -915,9 +921,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (messenger != null) {
       _showSnackBar(
         messenger,
-        result.message.trim().isEmpty
-            ? l10n.forumWebViewPostSuccess
-            : result.message,
+        ComposerTextResolver.submitSuccess(
+          l10n,
+          ComposerKind.newThread,
+          result.rawSuccessDetail,
+        ),
       );
     }
     // 方案 §4.2 本期保持简单：仅刷新当前 WebView。新帖 tid 已经在

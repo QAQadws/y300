@@ -10,7 +10,7 @@ import 'package:y300/features/composer_shared/domain/services/composer_attach_bb
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_tokenizer.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_sticker_image_cache_loader.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_submission_error_presenter.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_submission_failure_classifier.dart';
 import 'package:y300/features/composer_shared/domain/services/sticker_bbcode_tokenizer.dart';
 import 'package:y300/features/composer_shared/domain/services/sticker_code_normalizer.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
@@ -61,9 +61,9 @@ final composerAttachBbCodeTokenizerProvider =
       return const ComposerAttachBbCodeTokenizer();
     });
 
-final composerSubmissionErrorPresenterProvider =
-    Provider<ComposerSubmissionErrorPresenter>((_) {
-      return const ComposerSubmissionErrorPresenter();
+final composerSubmissionFailureClassifierProvider =
+    Provider<ComposerSubmissionFailureClassifier>((_) {
+      return const ComposerSubmissionFailureClassifier();
     });
 
 final composerImagePickerProvider = Provider<ComposerImagePicker>((_) {

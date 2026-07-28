@@ -2933,6 +2933,550 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get threadDetailScrollBottom => '滚动到底部';
+
+  @override
+  String get commonUse => '使用';
+
+  @override
+  String get commonReset => '重置';
+
+  @override
+  String get composerBold => '加粗';
+
+  @override
+  String get composerItalic => '斜体';
+
+  @override
+  String get composerUnderline => '下划线';
+
+  @override
+  String get composerStrikethrough => '删除线';
+
+  @override
+  String get composerTextColor => '字体色';
+
+  @override
+  String get composerBackgroundColor => '背景色';
+
+  @override
+  String get composerLink => '链接';
+
+  @override
+  String get composerFontSize => '字号';
+
+  @override
+  String get composerAlignment => '对齐';
+
+  @override
+  String get composerQuote => '引用';
+
+  @override
+  String get composerImage => '图片';
+
+  @override
+  String get composerSticker => '表情';
+
+  @override
+  String get composerFormat => '格式';
+
+  @override
+  String get composerPreview => '预览';
+
+  @override
+  String get composerSourceMode => '源码';
+
+  @override
+  String get composerVisualMode => '返回编辑';
+
+  @override
+  String get composerMore => '更多';
+
+  @override
+  String get composerMoreSettings => '更多设置';
+
+  @override
+  String get composerUseSignature => '使用个人签名';
+
+  @override
+  String get composerResetDraft => '重置草稿';
+
+  @override
+  String get composerResetDraftTitle => '重置草稿？';
+
+  @override
+  String get composerResetDraftBody => '当前编辑内容和已选图片将被清空，且无法恢复。';
+
+  @override
+  String get composerContinueEditing => '继续编辑';
+
+  @override
+  String get composerSaveDraftAndLeave => '保存草稿并离开';
+
+  @override
+  String get composerRestoredDraft => '已恢复未发送草稿';
+
+  @override
+  String get postingRestoredDraftWithTags => '已恢复未发送的草稿，请注意已恢复的主题标签';
+
+  @override
+  String composerPendingAttachment(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 张图片已上传，请选择位置后点击图片按钮重新插入',
+      zero: '图片已上传，请选择位置后点击图片按钮重新插入',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get composerPendingAttachmentSelectionExpired => '当前选区无法安全恢复，请重新选择位置';
+
+  @override
+  String composerUploadingImages(int current, int total) {
+    return '正在上传图片 $current/$total';
+  }
+
+  @override
+  String composerImageUploaded(String fileName) {
+    return '$fileName 已上传';
+  }
+
+  @override
+  String composerImageUploadFailed(String fileName) {
+    return '$fileName 上传失败，请重试';
+  }
+
+  @override
+  String composerImageUploadFailedWithReason(String fileName, String reason) {
+    return '$fileName 上传失败：$reason';
+  }
+
+  @override
+  String get composerImagePickerFailed => '选择图片失败，请重试';
+
+  @override
+  String get composerImageFileMissing => '图片文件不存在，无法上传';
+
+  @override
+  String get composerImageInvalidFileType => '只能上传图片文件';
+
+  @override
+  String get composerImageExtensionNotAllowed => '当前版块不允许上传该类型图片';
+
+  @override
+  String get composerImagePermissionExpired => '上传权限已失效，请重新登录';
+
+  @override
+  String get composerImageQuotaExceeded => '附件额度不足，无法上传图片';
+
+  @override
+  String get composerImageUploadTimeout => '图片上传超时，请重试';
+
+  @override
+  String get composerImageUploadNetwork => '网络异常，图片上传失败';
+
+  @override
+  String get composerImageUploadServer => '上传服务异常，请稍后重试';
+
+  @override
+  String get composerImageUploadUnknown => '图片上传失败，请重试';
+
+  @override
+  String composerLoadDraftFailed(String error) {
+    return '加载草稿失败：$error';
+  }
+
+  @override
+  String composerStickerLoadFailed(String error) {
+    return '表情加载失败：$error';
+  }
+
+  @override
+  String get composerStickerNetworkRequired => '需要联网加载表情包';
+
+  @override
+  String get composerStickerAllGroup => '表情';
+
+  @override
+  String get composerStickerDefaultGroup => '默认表情';
+
+  @override
+  String get composerStartTypingHint => '请开始输入';
+
+  @override
+  String get composerImageRetentionHint => '请注意上传的图片仅在本地保存 24 小时';
+
+  @override
+  String get composerLinkTitle => '添加链接';
+
+  @override
+  String get composerLinkUrl => '链接';
+
+  @override
+  String get composerLinkText => '链接文字';
+
+  @override
+  String get composerLinkTextHint => '显示给别人看的文字';
+
+  @override
+  String get composerLinkUrlRequired => '请输入链接';
+
+  @override
+  String get composerLinkTextRequired => '请输入链接文字';
+
+  @override
+  String get composerAlignLeft => '左对齐';
+
+  @override
+  String get composerAlignCenter => '居中';
+
+  @override
+  String get composerAlignRight => '右对齐';
+
+  @override
+  String get composerClearFormatting => '清除状态';
+
+  @override
+  String get composerClearFontSize => '清除字号';
+
+  @override
+  String get composerClearTextColor => '清除颜色';
+
+  @override
+  String get composerClearBackgroundColor => '清除背景';
+
+  @override
+  String get composerAuthenticationRequired => '登录状态已失效，请重新登录后再试';
+
+  @override
+  String composerCredentialExpired(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '发帖凭证已失效，请刷新登录态后重试',
+      'reply': '回复凭证已失效，请刷新登录态后重试',
+      'other': '提交凭证已失效，请刷新登录态后重试',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String composerRateLimited(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '发帖过于频繁，请稍后再试',
+      'reply': '回复太频繁了，请稍后再试',
+      'other': '操作过于频繁，请稍后再试',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String composerPermissionDenied(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '当前账号权限不足，无法发帖',
+      'reply': '当前账号权限不足，无法发送回复',
+      'other': '当前账号权限不足',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get composerSubmissionTypeRequired => '该版块要求选择主题分类，请先选择';
+
+  @override
+  String composerSubmissionContentTooShort(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '标题或内容过短',
+      'reply': '回复内容过短',
+      'other': '提交内容过短',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get composerCaptchaRequired => '需要验证码，请暂时改用网页发布';
+
+  @override
+  String get composerPollInvalid => '投票配置无效，请检查选项与截止时间';
+
+  @override
+  String get composerPollOptionCountInvalid => '投票选项数量不合法';
+
+  @override
+  String get composerPollFieldsInvalid => '请正确填写投票相关字段';
+
+  @override
+  String get composerNetworkTimeout => '网络超时，请稍后重试';
+
+  @override
+  String get composerNetworkFailure => '网络异常，请稍后重试';
+
+  @override
+  String get composerServerFailure => '服务异常，请稍后重试';
+
+  @override
+  String composerUnknownFailure(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '发帖失败，请稍后重试',
+      'reply': '发送回复失败，请稍后重试',
+      'other': '提交失败，请稍后重试',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get postingTitle => '发帖';
+
+  @override
+  String postingTitleWithForum(String forumName) {
+    return '发帖 — $forumName';
+  }
+
+  @override
+  String get postingSend => '发布';
+
+  @override
+  String get postingSubjectHint => '输入标题';
+
+  @override
+  String get postingBodyHint => '请输入正文';
+
+  @override
+  String get postingFormLoading => '正在加载发帖表单';
+
+  @override
+  String postingFormLoadFailed(String error) {
+    return '加载发帖表单失败：$error';
+  }
+
+  @override
+  String get postingType => '主题分类';
+
+  @override
+  String get postingTypeRequired => '主题分类（必选）';
+
+  @override
+  String get postingTypeNone => '无分类';
+
+  @override
+  String get postingTypeUnselected => '未选择';
+
+  @override
+  String get postingTags => '主题标签';
+
+  @override
+  String get postingTagsHint => '输入标签，回车或英文逗号确认';
+
+  @override
+  String get postingTagDelete => '删除标签';
+
+  @override
+  String postingTagsLimit(int maxTags, int maxLength) {
+    return '最多 $maxTags 个；单个标签 ≤ $maxLength 字符';
+  }
+
+  @override
+  String get postingNormalThread => '普通帖';
+
+  @override
+  String get postingPoll => '投票';
+
+  @override
+  String get postingPollConfig => '投票配置';
+
+  @override
+  String get postingThreadKind => '帖子类型';
+
+  @override
+  String postingPollConstraints(int min, int max, int maxLength) {
+    return '至少 $min 个选项；最多 $max 个，单项 ≤ $maxLength 字符';
+  }
+
+  @override
+  String postingPollSummary(int count, String mode) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已填 $count 项 / $mode',
+      zero: '尚未填写选项 / $mode',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get postingPollSingle => '单选';
+
+  @override
+  String get postingPollMultipleMode => '多选';
+
+  @override
+  String postingPollOption(int index) {
+    return '选项 $index';
+  }
+
+  @override
+  String get postingPollAddOption => '添加选项';
+
+  @override
+  String get postingPollRemoveOption => '删除选项';
+
+  @override
+  String get postingPollMultiple => '允许多选';
+
+  @override
+  String postingPollMaxChoices(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '最多可选 $count 项',
+      zero: '不可选择选项',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get postingPollDeadline => '截止天数';
+
+  @override
+  String get postingPollNeverExpires => '不限期';
+
+  @override
+  String postingPollDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 天',
+      zero: '不限期',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get postingPollPublicVoters => '公开投票人';
+
+  @override
+  String get postingPollPublicVotersDescription => '开启后所有人可看到谁投了哪一项';
+
+  @override
+  String get postingPollShowResultsAfterVote => '投票后才显示结果';
+
+  @override
+  String get postingAllowNoticeAuthor => '允许通知作者';
+
+  @override
+  String get postingDisableBbCode => '关闭 BBCode 解析';
+
+  @override
+  String get postingDisableSmiley => '关闭表情解析';
+
+  @override
+  String get postingDisableUrl => '关闭 URL 解析';
+
+  @override
+  String get postingLeaveTitle => '保存草稿并离开？';
+
+  @override
+  String get postingLeaveBody => '当前帖子还没有发送，离开前会保存为草稿。';
+
+  @override
+  String get postingSubjectRequired => '请输入标题';
+
+  @override
+  String get postingBodyRequired => '请输入正文';
+
+  @override
+  String get postingFormStillLoading => '发帖表单还在加载，请稍候再试';
+
+  @override
+  String postingSubjectTooLong(int limit) {
+    return '标题超出版块上限（最多 $limit 字符）';
+  }
+
+  @override
+  String postingBodyTooLong(int limit) {
+    return '正文超出版块上限（最多 $limit 字符）';
+  }
+
+  @override
+  String get postingPollMissing => '投票配置缺失，请添加选项';
+
+  @override
+  String postingPollTooFewOptions(int limit) {
+    return '投票至少需要 $limit 个非空选项';
+  }
+
+  @override
+  String postingPollOptionTooLong(int limit) {
+    return '单个投票选项不能超过 $limit 字符';
+  }
+
+  @override
+  String postingPollMultipleInvalid(int limit) {
+    return '多选投票的最大选择数至少为 $limit';
+  }
+
+  @override
+  String get postingSubmitSuccess => '发布成功';
+
+  @override
+  String postingSubmitSuccessWithDetail(String detail) {
+    return '发布成功：$detail';
+  }
+
+  @override
+  String get replyThreadTitle => '回复帖子';
+
+  @override
+  String get replyFloorTitle => '回复楼层';
+
+  @override
+  String get replySubmit => '发送';
+
+  @override
+  String get replyMessageHint => '输入回复内容';
+
+  @override
+  String get replyPreparingQuote => '正在准备楼层引用';
+
+  @override
+  String replyPreparationFailed(String error) {
+    return '楼层回复引用准备失败：$error';
+  }
+
+  @override
+  String get replyLeaveTitle => '保存草稿并离开？';
+
+  @override
+  String get replyLeaveBody => '当前回复还没有发送，离开前会保存为草稿。';
+
+  @override
+  String get replyContentRequired => '请输入回复内容';
+
+  @override
+  String get replyReferenceUnavailable => '楼层回复引用准备失败，请重试';
+
+  @override
+  String get replySubmitSuccess => '回复成功';
+
+  @override
+  String replySubmitSuccessWithDetail(String detail) {
+    return '回复成功：$detail';
+  }
+
+  @override
+  String get composerPrototypeTitle => 'Quill Composer 原型';
+
+  @override
+  String get composerPrototypeSourceTitle => '源码微调';
+
+  @override
+  String composerPrototypeAttachmentInserted(String aid) {
+    return '已插入测试附件 $aid';
+  }
+
+  @override
+  String composerAttachmentFallback(String aid) {
+    return '图片 $aid';
+  }
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -5864,4 +6408,549 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadDetailScrollBottom => '滾動到底部';
+
+  @override
+  String get commonUse => '使用';
+
+  @override
+  String get commonReset => '重置';
+
+  @override
+  String get composerBold => '粗體';
+
+  @override
+  String get composerItalic => '斜體';
+
+  @override
+  String get composerUnderline => '底線';
+
+  @override
+  String get composerStrikethrough => '刪除線';
+
+  @override
+  String get composerTextColor => '字體色';
+
+  @override
+  String get composerBackgroundColor => '背景色';
+
+  @override
+  String get composerLink => '連結';
+
+  @override
+  String get composerFontSize => '字號';
+
+  @override
+  String get composerAlignment => '對齊';
+
+  @override
+  String get composerQuote => '引用';
+
+  @override
+  String get composerImage => '圖片';
+
+  @override
+  String get composerSticker => '表情';
+
+  @override
+  String get composerFormat => '格式';
+
+  @override
+  String get composerPreview => '預覽';
+
+  @override
+  String get composerSourceMode => '原始碼';
+
+  @override
+  String get composerVisualMode => '返回編輯';
+
+  @override
+  String get composerMore => '更多';
+
+  @override
+  String get composerMoreSettings => '更多設定';
+
+  @override
+  String get composerUseSignature => '使用個人簽名';
+
+  @override
+  String get composerResetDraft => '重置草稿';
+
+  @override
+  String get composerResetDraftTitle => '重置草稿？';
+
+  @override
+  String get composerResetDraftBody => '目前編輯內容和已選圖片將被清空，且無法復原。';
+
+  @override
+  String get composerContinueEditing => '繼續編輯';
+
+  @override
+  String get composerSaveDraftAndLeave => '儲存草稿並離開';
+
+  @override
+  String get composerRestoredDraft => '已復原未送出草稿';
+
+  @override
+  String get postingRestoredDraftWithTags => '已復原未送出的草稿，請注意已復原的主題標籤';
+
+  @override
+  String composerPendingAttachment(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 張圖片已上傳，請選擇位置後點選圖片按鈕重新插入',
+      zero: '圖片已上傳，請選擇位置後點選圖片按鈕重新插入',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get composerPendingAttachmentSelectionExpired =>
+      '目前選取範圍無法安全復原，請重新選擇位置';
+
+  @override
+  String composerUploadingImages(int current, int total) {
+    return '正在上傳圖片 $current/$total';
+  }
+
+  @override
+  String composerImageUploaded(String fileName) {
+    return '$fileName 已上傳';
+  }
+
+  @override
+  String composerImageUploadFailed(String fileName) {
+    return '$fileName 上傳失敗，請重試';
+  }
+
+  @override
+  String composerImageUploadFailedWithReason(String fileName, String reason) {
+    return '$fileName 上傳失敗：$reason';
+  }
+
+  @override
+  String get composerImagePickerFailed => '選擇圖片失敗，請重試';
+
+  @override
+  String get composerImageFileMissing => '圖片檔案不存在，無法上傳';
+
+  @override
+  String get composerImageInvalidFileType => '只能上傳圖片檔案';
+
+  @override
+  String get composerImageExtensionNotAllowed => '目前看板不允許上傳該類型圖片';
+
+  @override
+  String get composerImagePermissionExpired => '上傳權限已失效，請重新登入';
+
+  @override
+  String get composerImageQuotaExceeded => '附件額度不足，無法上傳圖片';
+
+  @override
+  String get composerImageUploadTimeout => '圖片上傳逾時，請重試';
+
+  @override
+  String get composerImageUploadNetwork => '網路異常，圖片上傳失敗';
+
+  @override
+  String get composerImageUploadServer => '上傳服務異常，請稍後重試';
+
+  @override
+  String get composerImageUploadUnknown => '圖片上傳失敗，請重試';
+
+  @override
+  String composerLoadDraftFailed(String error) {
+    return '載入草稿失敗：$error';
+  }
+
+  @override
+  String composerStickerLoadFailed(String error) {
+    return '表情載入失敗：$error';
+  }
+
+  @override
+  String get composerStickerNetworkRequired => '需要連線載入表情包';
+
+  @override
+  String get composerStickerAllGroup => '表情';
+
+  @override
+  String get composerStickerDefaultGroup => '預設表情';
+
+  @override
+  String get composerStartTypingHint => '請開始輸入';
+
+  @override
+  String get composerImageRetentionHint => '請注意上傳的圖片僅在本機保留 24 小時';
+
+  @override
+  String get composerLinkTitle => '新增連結';
+
+  @override
+  String get composerLinkUrl => '連結';
+
+  @override
+  String get composerLinkText => '連結文字';
+
+  @override
+  String get composerLinkTextHint => '顯示給別人看的文字';
+
+  @override
+  String get composerLinkUrlRequired => '請輸入連結';
+
+  @override
+  String get composerLinkTextRequired => '請輸入連結文字';
+
+  @override
+  String get composerAlignLeft => '靠左對齊';
+
+  @override
+  String get composerAlignCenter => '置中';
+
+  @override
+  String get composerAlignRight => '靠右對齊';
+
+  @override
+  String get composerClearFormatting => '清除狀態';
+
+  @override
+  String get composerClearFontSize => '清除字號';
+
+  @override
+  String get composerClearTextColor => '清除顏色';
+
+  @override
+  String get composerClearBackgroundColor => '清除背景';
+
+  @override
+  String get composerAuthenticationRequired => '登入狀態已失效，請重新登入後再試';
+
+  @override
+  String composerCredentialExpired(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '發帖憑證已失效，請重新整理登入狀態後重試',
+      'reply': '回覆憑證已失效，請重新整理登入狀態後重試',
+      'other': '送出憑證已失效，請重新整理登入狀態後重試',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String composerRateLimited(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '發帖過於頻繁，請稍後再試',
+      'reply': '回覆太頻繁，請稍後再試',
+      'other': '操作過於頻繁，請稍後再試',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String composerPermissionDenied(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '目前帳號權限不足，無法發帖',
+      'reply': '目前帳號權限不足，無法送出回覆',
+      'other': '目前帳號權限不足',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get composerSubmissionTypeRequired => '該看板要求選擇主題分類，請先選擇';
+
+  @override
+  String composerSubmissionContentTooShort(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '標題或內容過短',
+      'reply': '回覆內容過短',
+      'other': '送出內容過短',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get composerCaptchaRequired => '需要驗證碼，請暫時改用網頁發佈';
+
+  @override
+  String get composerPollInvalid => '投票設定無效，請檢查選項與截止時間';
+
+  @override
+  String get composerPollOptionCountInvalid => '投票選項數量不合法';
+
+  @override
+  String get composerPollFieldsInvalid => '請正確填寫投票相關欄位';
+
+  @override
+  String get composerNetworkTimeout => '網路逾時，請稍後重試';
+
+  @override
+  String get composerNetworkFailure => '網路異常，請稍後重試';
+
+  @override
+  String get composerServerFailure => '服務異常，請稍後重試';
+
+  @override
+  String composerUnknownFailure(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '發帖失敗，請稍後重試',
+      'reply': '送出回覆失敗，請稍後重試',
+      'other': '送出失敗，請稍後重試',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get postingTitle => '發帖';
+
+  @override
+  String postingTitleWithForum(String forumName) {
+    return '發帖 — $forumName';
+  }
+
+  @override
+  String get postingSend => '發佈';
+
+  @override
+  String get postingSubjectHint => '輸入標題';
+
+  @override
+  String get postingBodyHint => '請輸入正文';
+
+  @override
+  String get postingFormLoading => '正在載入發帖表單';
+
+  @override
+  String postingFormLoadFailed(String error) {
+    return '載入發帖表單失敗：$error';
+  }
+
+  @override
+  String get postingType => '主題分類';
+
+  @override
+  String get postingTypeRequired => '主題分類（必選）';
+
+  @override
+  String get postingTypeNone => '無分類';
+
+  @override
+  String get postingTypeUnselected => '未選擇';
+
+  @override
+  String get postingTags => '主題標籤';
+
+  @override
+  String get postingTagsHint => '輸入標籤，按 Enter 或英文逗號確認';
+
+  @override
+  String get postingTagDelete => '刪除標籤';
+
+  @override
+  String postingTagsLimit(int maxTags, int maxLength) {
+    return '最多 $maxTags 個；單個標籤 ≤ $maxLength 個字';
+  }
+
+  @override
+  String get postingNormalThread => '一般帖';
+
+  @override
+  String get postingPoll => '投票';
+
+  @override
+  String get postingPollConfig => '投票設定';
+
+  @override
+  String get postingThreadKind => '帖子類型';
+
+  @override
+  String postingPollConstraints(int min, int max, int maxLength) {
+    return '至少 $min 個選項；最多 $max 個，單項 ≤ $maxLength 個字';
+  }
+
+  @override
+  String postingPollSummary(int count, String mode) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已填 $count 項 / $mode',
+      zero: '尚未填寫選項 / $mode',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get postingPollSingle => '單選';
+
+  @override
+  String get postingPollMultipleMode => '複選';
+
+  @override
+  String postingPollOption(int index) {
+    return '選項 $index';
+  }
+
+  @override
+  String get postingPollAddOption => '新增選項';
+
+  @override
+  String get postingPollRemoveOption => '刪除選項';
+
+  @override
+  String get postingPollMultiple => '允許複選';
+
+  @override
+  String postingPollMaxChoices(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '最多可選 $count 項',
+      zero: '不可選擇選項',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get postingPollDeadline => '截止天數';
+
+  @override
+  String get postingPollNeverExpires => '不限期';
+
+  @override
+  String postingPollDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 天',
+      zero: '不限期',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get postingPollPublicVoters => '公開投票人';
+
+  @override
+  String get postingPollPublicVotersDescription => '開啟後所有人可看到誰投了哪一項';
+
+  @override
+  String get postingPollShowResultsAfterVote => '投票後才顯示結果';
+
+  @override
+  String get postingAllowNoticeAuthor => '允許通知作者';
+
+  @override
+  String get postingDisableBbCode => '關閉 BBCode 解析';
+
+  @override
+  String get postingDisableSmiley => '關閉表情解析';
+
+  @override
+  String get postingDisableUrl => '關閉 URL 解析';
+
+  @override
+  String get postingLeaveTitle => '儲存草稿並離開？';
+
+  @override
+  String get postingLeaveBody => '目前帖子還沒有送出，離開前會儲存為草稿。';
+
+  @override
+  String get postingSubjectRequired => '請輸入標題';
+
+  @override
+  String get postingBodyRequired => '請輸入正文';
+
+  @override
+  String get postingFormStillLoading => '發帖表單還在載入，請稍候再試';
+
+  @override
+  String postingSubjectTooLong(int limit) {
+    return '標題超出看板上限（最多 $limit 個字）';
+  }
+
+  @override
+  String postingBodyTooLong(int limit) {
+    return '正文超出看板上限（最多 $limit 個字）';
+  }
+
+  @override
+  String get postingPollMissing => '缺少投票設定，請新增選項';
+
+  @override
+  String postingPollTooFewOptions(int limit) {
+    return '投票至少需要 $limit 個非空選項';
+  }
+
+  @override
+  String postingPollOptionTooLong(int limit) {
+    return '單個投票選項不能超過 $limit 個字';
+  }
+
+  @override
+  String postingPollMultipleInvalid(int limit) {
+    return '複選投票的最大選擇數至少為 $limit';
+  }
+
+  @override
+  String get postingSubmitSuccess => '發佈成功';
+
+  @override
+  String postingSubmitSuccessWithDetail(String detail) {
+    return '發佈成功：$detail';
+  }
+
+  @override
+  String get replyThreadTitle => '回覆帖子';
+
+  @override
+  String get replyFloorTitle => '回覆樓層';
+
+  @override
+  String get replySubmit => '送出';
+
+  @override
+  String get replyMessageHint => '輸入回覆內容';
+
+  @override
+  String get replyPreparingQuote => '正在準備樓層引用';
+
+  @override
+  String replyPreparationFailed(String error) {
+    return '樓層回覆引用準備失敗：$error';
+  }
+
+  @override
+  String get replyLeaveTitle => '儲存草稿並離開？';
+
+  @override
+  String get replyLeaveBody => '目前回覆還沒有送出，離開前會儲存為草稿。';
+
+  @override
+  String get replyContentRequired => '請輸入回覆內容';
+
+  @override
+  String get replyReferenceUnavailable => '樓層回覆引用準備失敗，請重試';
+
+  @override
+  String get replySubmitSuccess => '回覆成功';
+
+  @override
+  String replySubmitSuccessWithDetail(String detail) {
+    return '回覆成功：$detail';
+  }
+
+  @override
+  String get composerPrototypeTitle => 'Quill Composer 原型';
+
+  @override
+  String get composerPrototypeSourceTitle => '原始碼微調';
+
+  @override
+  String composerPrototypeAttachmentInserted(String aid) {
+    return '已插入測試附件 $aid';
+  }
+
+  @override
+  String composerAttachmentFallback(String aid) {
+    return '圖片 $aid';
+  }
 }

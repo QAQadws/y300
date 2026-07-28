@@ -5,9 +5,10 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_submission_error_presenter.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_submission_failure_classifier.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_controller_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
@@ -46,7 +47,7 @@ class PostingComposerController
   PostingFormMetadataRepository? _metadataRepository;
   NewThreadRepository? _newThreadRepository;
   NewThreadPayloadBuilder? _payloadBuilder;
-  ComposerSubmissionErrorPresenter? _errorPresenter;
+  ComposerSubmissionFailureClassifier? _failureClassifier;
   PostingDraftExtrasCodec? _draftExtrasCodec;
   NewThreadTagsNormalizer? _tagsNormalizer;
 
@@ -61,7 +62,7 @@ class PostingComposerController
     _metadataRepository = ref.read(postingFormMetadataRepositoryProvider);
     _newThreadRepository = ref.read(newThreadRepositoryProvider);
     _payloadBuilder = ref.read(newThreadPayloadBuilderProvider);
-    _errorPresenter = ref.read(composerSubmissionErrorPresenterProvider);
+    _failureClassifier = ref.read(composerSubmissionFailureClassifierProvider);
     _draftExtrasCodec = ref.read(postingDraftExtrasCodecProvider);
     _tagsNormalizer = ref.read(newThreadTagsNormalizerProvider);
     return super.build();
@@ -122,13 +123,13 @@ class PostingComposerController
       messageRevision: patch.messageRevision,
       lastMessageMutation: patch.lastMessageMutation,
       pendingAttachmentAids: patch.pendingAttachmentAids,
-      pendingAttachmentMessage: patch.pendingAttachmentMessage,
-      errorMessage: patch.errorMessage,
-      imageUploadError: patch.imageUploadError,
-      clearErrorMessage: patch.clearErrorMessage,
-      clearImageUploadError: patch.clearImageUploadError,
+      pendingAttachmentNotice: patch.pendingAttachmentNotice,
+      failure: patch.failure,
+      imageUploadFailure: patch.imageUploadFailure,
+      clearFailure: patch.clearFailure,
+      clearImageUploadFailure: patch.clearImageUploadFailure,
       clearLastMessageMutation: patch.clearLastMessageMutation,
-      clearPendingAttachmentMessage: patch.clearPendingAttachmentMessage,
+      clearPendingAttachmentNotice: patch.clearPendingAttachmentNotice,
     );
   }
 
@@ -185,7 +186,7 @@ class PostingComposerController
     if (current == null) {
       return;
     }
-    setStateValue(current.copyWith(subject: value, clearErrorMessage: true));
+    setStateValue(current.copyWith(subject: value, clearFailure: true));
     unawaited(scheduleDraftSave());
   }
 
@@ -197,11 +198,11 @@ class PostingComposerController
     final trimmed = typeId?.trim();
     if (trimmed == null || trimmed.isEmpty || trimmed == '0') {
       setStateValue(
-        current.copyWith(clearSelectedTypeId: true, clearErrorMessage: true),
+        current.copyWith(clearSelectedTypeId: true, clearFailure: true),
       );
     } else {
       setStateValue(
-        current.copyWith(selectedTypeId: trimmed, clearErrorMessage: true),
+        current.copyWith(selectedTypeId: trimmed, clearFailure: true),
       );
     }
     unawaited(scheduleDraftSave());
@@ -253,7 +254,7 @@ class PostingComposerController
       poll = current.poll;
     }
     setStateValue(
-      current.copyWith(special: next, poll: poll, clearErrorMessage: true),
+      current.copyWith(special: next, poll: poll, clearFailure: true),
     );
     unawaited(scheduleDraftSave());
   }
@@ -300,7 +301,7 @@ class PostingComposerController
     if (current == null) return;
     if (current.special != NewThreadSpecial.poll) return;
     final next = reducer(current.poll ?? NewThreadPollDraft.empty);
-    setStateValue(current.copyWith(poll: next, clearErrorMessage: true));
+    setStateValue(current.copyWith(poll: next, clearFailure: true));
     unawaited(scheduleDraftSave());
   }
 
@@ -311,7 +312,7 @@ class PostingComposerController
     if (current == null) {
       return;
     }
-    setStateValue(reducer(current).copyWith(clearErrorMessage: true));
+    setStateValue(reducer(current).copyWith(clearFailure: true));
     unawaited(scheduleDraftSave());
   }
 
@@ -326,7 +327,7 @@ class PostingComposerController
     }
     if (!current.isLoadingMetadata) {
       setStateValue(
-        current.copyWith(isLoadingMetadata: true, clearMetadataError: true),
+        current.copyWith(isLoadingMetadata: true, clearMetadataFailure: true),
       );
     }
 
@@ -342,7 +343,7 @@ class PostingComposerController
         latest.copyWith(
           metadata: data,
           isLoadingMetadata: false,
-          clearMetadataError: true,
+          clearMetadataFailure: true,
           // 草稿恢复出来的 typeid 如果不在最新 metadata 列表里（可能版块改了
           // 主题分类配置），就把它丢掉。typeid='0' 用户语义是"无分类"，永远合法。
           selectedTypeId: _normalizeRestoredTypeId(
@@ -361,7 +362,10 @@ class PostingComposerController
     setStateValue(
       latest.copyWith(
         isLoadingMetadata: false,
-        metadataError: error.message.isEmpty ? '加载发帖表单失败' : error.message,
+        metadataFailure: ComposerOperationFailure(
+          code: ComposerOperationFailureCode.postingMetadataLoad,
+          detail: error.message.isEmpty ? null : error.message,
+        ),
       ),
     );
   }
@@ -392,35 +396,50 @@ class PostingComposerController
 
   // PLACEHOLDER_PHASE_4_SUBMIT
   @override
-  String? preflightValidate(PostingComposerState state) {
+  ComposerValidationFailure? preflightValidate(PostingComposerState state) {
     final subject = state.subject.trim();
     if (subject.isEmpty) {
-      return '请输入标题';
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.subjectRequired,
+      );
     }
     final message = state.message.trim();
     if (message.isEmpty) {
-      return '请输入正文';
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.bodyRequired,
+      );
     }
     final metadata = state.metadata;
     if (metadata == null) {
-      return state.metadataError == null
-          ? '发帖表单还在加载，请稍候再试'
-          : '发帖表单加载失败：${state.metadataError}';
+      return ComposerValidationFailure(
+        code: state.metadataFailure == null
+            ? ComposerValidationFailureCode.metadataLoading
+            : ComposerValidationFailureCode.metadataUnavailable,
+        detail: state.metadataFailure?.detail,
+      );
     }
     if (metadata.typeRequired) {
       final typeid = state.selectedTypeId?.trim() ?? '';
       if (typeid.isEmpty || typeid == '0') {
-        return '该版块要求选择主题分类，请先选择';
+        return const ComposerValidationFailure(
+          code: ComposerValidationFailureCode.typeRequired,
+        );
       }
     }
     // metadata 可能没有声明上限——`hasSubjectLimit` 已经把 `<=0` 当作"不限制"。
     if (metadata.hasSubjectLimit &&
         subject.length > metadata.maxSubjectLength) {
-      return '标题超出版块上限（最多 ${metadata.maxSubjectLength} 字符）';
+      return ComposerValidationFailure(
+        code: ComposerValidationFailureCode.subjectTooLong,
+        limit: metadata.maxSubjectLength,
+      );
     }
     if (metadata.hasMessageLimit &&
         message.length > metadata.maxMessageLength) {
-      return '正文超出版块上限（最多 ${metadata.maxMessageLength} 字符）';
+      return ComposerValidationFailure(
+        code: ComposerValidationFailureCode.bodyTooLong,
+        limit: metadata.maxMessageLength,
+      );
     }
     if (state.special == NewThreadSpecial.poll) {
       final pollError = _validatePoll(state.poll);
@@ -429,24 +448,36 @@ class PostingComposerController
     return null;
   }
 
-  String? _validatePoll(NewThreadPollDraft? poll) {
+  ComposerValidationFailure? _validatePoll(NewThreadPollDraft? poll) {
     if (poll == null) {
-      return '投票配置缺失，请添加选项';
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.pollMissing,
+      );
     }
     final validOptions = poll.options
         .where((s) => s.trim().isNotEmpty)
         .toList(growable: false);
     if (validOptions.length < NewThreadPollValidation.minOptions) {
-      return '投票至少需要 ${NewThreadPollValidation.minOptions} 个非空选项';
+      return ComposerValidationFailure(
+        code: ComposerValidationFailureCode.pollTooFewOptions,
+        count: validOptions.length,
+        limit: NewThreadPollValidation.minOptions,
+      );
     }
     if (poll.options.any(
       (option) =>
           option.trim().length > NewThreadPollValidation.maxOptionLength,
     )) {
-      return '单个投票选项不能超过 ${NewThreadPollValidation.maxOptionLength} 字符';
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.pollOptionTooLong,
+        limit: NewThreadPollValidation.maxOptionLength,
+      );
     }
     if (poll.multiple && poll.maxChoices < 2) {
-      return '多选投票的最大选择数需 ≥ 2';
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.pollMultipleChoiceInvalid,
+        limit: 2,
+      );
     }
     return null;
   }
@@ -460,7 +491,10 @@ class PostingComposerController
     if (metadata == null) {
       // preflight 已经守过这一关；这里只是为类型收口兜底。
       return const ComposerSubmissionOutcome.failure(
-        errorMessage: '发帖表单未就绪，请重试',
+        failure: ComposerSubmissionFailure(
+          code: ComposerSubmissionFailureCode.unknown,
+          kind: ComposerKind.newThread,
+        ),
       );
     }
     final input = NewThreadDraftInput(
@@ -482,14 +516,18 @@ class PostingComposerController
     if (result case ApiSuccess<NewThreadSubmissionResult>(:final data)) {
       _lastSuccess = data;
       return ComposerSubmissionOutcome.success(
-        message: data.message.isEmpty ? '发布成功' : data.message,
+        rawDetail: data.message.isEmpty ? null : data.message,
       );
     }
     final error = (result as ApiFailure<NewThreadSubmissionResult>).error;
-    final errorMessage =
-        _errorPresenter?.present(error, kind: ComposerKind.newThread) ??
-        error.message;
-    return ComposerSubmissionOutcome.failure(errorMessage: errorMessage);
+    final failure =
+        _failureClassifier?.classify(error, kind: ComposerKind.newThread) ??
+        ComposerSubmissionFailure(
+          code: ComposerSubmissionFailureCode.unknown,
+          kind: ComposerKind.newThread,
+          detail: error.message,
+        );
+    return ComposerSubmissionOutcome.failure(failure: failure);
   }
 
   /// 兼容外层"窄化结果"的需求：基类返回 [ComposerSubmitInvocationResult]，

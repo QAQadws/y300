@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/composer_shared/data/services/composer_draft_snapshot_codec.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 
 void main() {
   const codec = ComposerDraftSnapshotJsonCodec();
@@ -193,6 +194,64 @@ void main() {
       expect(
         decoded?.imageAttachments.single.status,
         ComposerImageAttachmentStatus.uploaded,
+      );
+    });
+
+    test('writes a stable failure code through the legacy JSON key', () {
+      final snapshot = ComposerDraftSnapshot(
+        identity: const ComposerDraftIdentity.thread(fid: '33', tid: '572063'),
+        message: '正文',
+        useSignature: true,
+        updatedAt: DateTime.utc(2026, 7, 28),
+        imageAttachments: const [
+          ComposerImageAttachment(
+            localId: 'failed-1',
+            localPath: '/path/failed.jpg',
+            fileName: 'failed.jpg',
+            mimeType: 'image/jpeg',
+            order: 0,
+            status: ComposerImageAttachmentStatus.failed,
+            failureCode: ComposerImageUploadFailureCode.network,
+          ),
+        ],
+      );
+
+      final encoded = codec.encode(snapshot);
+      final attachment =
+          (encoded['imageAttachments']! as List).single as Map<String, Object?>;
+      expect(attachment['errorMessage'], 'network');
+      final decoded = codec.decode(jsonEncode(encoded));
+      expect(
+        decoded?.imageAttachments.single.failureCode,
+        ComposerImageUploadFailureCode.network,
+      );
+    });
+
+    test('maps a legacy free-text attachment error to unknown', () {
+      final raw = jsonEncode({
+        'kind': 'threadReply',
+        'fid': '33',
+        'tid': '572063',
+        'message': '正文',
+        'useSignature': true,
+        'updatedAt': '2026-07-28T00:00:00.000Z',
+        'imageAttachments': [
+          {
+            'localId': 'legacy-1',
+            'localPath': '/path/legacy.jpg',
+            'fileName': 'legacy.jpg',
+            'mimeType': 'image/jpeg',
+            'order': 0,
+            'status': 'failed',
+            'errorMessage': '服务器返回的旧错误 Cookie=secret',
+          },
+        ],
+      });
+
+      final decoded = codec.decode(raw);
+      expect(
+        decoded?.imageAttachments.single.failureCode,
+        ComposerImageUploadFailureCode.unknown,
       );
     });
   });
