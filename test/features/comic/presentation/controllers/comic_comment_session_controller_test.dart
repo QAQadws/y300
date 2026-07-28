@@ -158,6 +158,6 @@ ComicCommentLoadResult _failureResult({
     loadedPages: <int>{},
     expectedPages: 0,
     errorCode: errorCode,
-    errorMessage: '请求失败',
+    diagnosticDetail: 'request_failed',
   );
 }

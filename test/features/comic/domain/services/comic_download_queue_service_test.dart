@@ -55,7 +55,10 @@ void main() {
       expect(visible, hasLength(1));
       expect(visible.single.episodeId, 'episode:2');
       expect(visible.single.status, ComicDownloadQueueStatus.failed);
-      expect(visible.single.lastError, 'download failed for episode:2');
+      expect(
+        visible.single.lastError,
+        ComicDownloadFailureCode.unknown.storageValue,
+      );
       expect(service.snapshot.value.failedCount, 1);
     },
   );

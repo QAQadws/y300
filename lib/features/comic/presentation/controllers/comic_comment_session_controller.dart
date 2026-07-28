@@ -119,7 +119,7 @@ class ComicCommentSessionController extends ChangeNotifier {
           loadedPages: const <int>{},
           expectedPages: 0,
           errorCode: ComicCommentLoadErrorCode.firstPageUnavailable,
-          errorMessage: '回帖加载失败',
+          diagnosticDetail: 'unexpected_failure',
         );
       }
 

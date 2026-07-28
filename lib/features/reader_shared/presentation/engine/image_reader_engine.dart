@@ -21,8 +21,10 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surf
 import 'package:y300/features/reader_shared/presentation/engine/reader_vertical_position_driver.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
+import 'package:y300/features/reader_shared/presentation/reader_text_resolver.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_preload_coordinator.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 通用图片阅读壳：垂直/横向模式、缩放、overlay 工具栏、进度滑块、页码浮层、
 /// 显示设置、滚动锚定补偿、解码预热。
@@ -186,7 +188,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _diagnosticMode = preferences.readerMode;
 
     if (content.isEmpty) {
-      return const Scaffold(body: Center(child: Text('没有可阅读图片')));
+      return Scaffold(
+        body: Center(child: Text(AppLocalizations.of(context).readerNoImages)),
+      );
     }
 
     final positionState = _resetIfOwnerChanged(content, preferences.readerMode);
@@ -720,7 +724,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       return null;
     }
     if (position.isAdvance) return null;
-    return tail.indicatorLabel;
+    return tail.indicatorLabel(context);
   }
 
   double? _estimateVerticalOffset(int targetIndex) {
@@ -2063,7 +2067,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final item = content.items[index];
     final metadata = _capability.exportMetadataFor(item);
     if (metadata == null) {
-      _showExportMessage('当前图片不支持下载');
+      _showExportMessage(
+        AppLocalizations.of(context).readerDownloadUnsupported,
+      );
       return;
     }
     final identity = '${content.ownerId}:${item.id}';
@@ -2072,7 +2078,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
     _exportingIdentity = identity;
     _overlayController.hideMenu();
-    _showExportMessage('正在保存当前图片');
+    _showExportMessage(AppLocalizations.of(context).readerExportSaving);
     try {
       final result = await ref
           .read(readerImageExportServiceProvider)
@@ -2085,10 +2091,14 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       if (!mounted || _exportingIdentity != identity) {
         return;
       }
+      final l10n = AppLocalizations.of(context);
       _showExportMessage(
         result.success
-            ? '已保存到${result.destination?.displayLocation ?? '系统照片'}'
-            : _exportFailureMessage(result.failureReason),
+            ? l10n.readerExportSaved(
+                result.destination?.displayLocation ??
+                    l10n.readerExportDefaultDestination,
+              )
+            : ReaderTextResolver.exportFailure(l10n, result.failureReason),
       );
     } finally {
       if (_exportingIdentity == identity) {
@@ -2105,17 +2115,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     messenger
       ?..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  String _exportFailureMessage(ReaderImageExportFailureReason? reason) {
-    return switch (reason) {
-      ReaderImageExportFailureReason.cacheUnavailable => '图片暂不可用，请重试',
-      ReaderImageExportFailureReason.permissionDenied => '没有照片库写入权限，请在系统设置中允许',
-      ReaderImageExportFailureReason.permissionRestricted => '照片库权限受系统限制',
-      ReaderImageExportFailureReason.unsupportedPlatform => '当前平台不支持保存图片',
-      ReaderImageExportFailureReason.unsupportedFormat => '当前图片格式不支持保存',
-      ReaderImageExportFailureReason.mediaWriteFailed || null => '保存图片失败，请重试',
-    };
   }
 
   Future<void> _showDisplaySettingsSheet() async {

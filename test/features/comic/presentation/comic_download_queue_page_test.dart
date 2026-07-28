@@ -53,7 +53,7 @@ void main() {
     expect(find.text('第 1 话 · 2/30'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.text('第 2 话 · 第 1 位'), findsOneWidget);
-    expect(find.text('第 3 话 · 网络失败'), findsOneWidget);
+    expect(find.text('第 3 话 · 下载失败，请重试'), findsOneWidget);
 
     await tester.tap(
       find.byKey(const ValueKey<String>('comic-download-cancel-1')),

@@ -114,6 +114,26 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.widgetWithText(OutlinedButton, '重试'), findsOneWidget);
   });
+
+  testWidgets('default text follows the Traditional Chinese locale', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const LocalizedTestApp(
+        locale: Locale('zh', 'TW'),
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            height: 400,
+            child: ImageRetryPlaceholder(onRetry: _noop),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('圖片載入失敗'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '重試'), findsOneWidget);
+  });
 }
 
 void _noop() {}

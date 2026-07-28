@@ -11,73 +11,89 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_detail_controller.dart';
+import 'package:y300/features/comic/presentation/comic_presentation_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 void main() {
   group('ComicDetailController', () {
-    test('refreshEpisodes uses catalog-then-fallback and applier on success', () async {
-      final repository = _FakeComicRepository();
-      final refreshService = _FakeRefreshService(
-        outcome: const ComicEpisodeRefreshOutcome(
-          source: ComicEpisodeRefreshSource.search,
-          usedSearch: true,
-          links: <ComicEpisodeLink>[
-            ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
-            ComicEpisodeLink(url: 'thread-102-1-1.html', rawText: '第2话'),
-          ],
-        ),
-      );
-      final applier = _RecordingRefreshOutcomeApplier(
-        result: const ComicRefreshApplyResult(
-          status: ComicRefreshApplyStatus.applied,
-          insertedCount: 2,
-          updatedCount: 1,
-          totalCount: 3,
-          coverPromoted: true,
-        ),
-      );
-      final container = ProviderContainer(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(repository),
-          comicEpisodeRefreshServiceProvider.overrideWithValue(refreshService),
-          comicRefreshOutcomeApplierProvider.overrideWithValue(applier),
-          comicReaderFeatureFlagsProvider.overrideWithValue(
-            ComicReaderFeatureFlags.defaults,
+    test(
+      'refreshEpisodes uses catalog-then-fallback and applier on success',
+      () async {
+        final repository = _FakeComicRepository();
+        final refreshService = _FakeRefreshService(
+          outcome: const ComicEpisodeRefreshOutcome(
+            source: ComicEpisodeRefreshSource.search,
+            usedSearch: true,
+            links: <ComicEpisodeLink>[
+              ComicEpisodeLink(url: 'thread-101-1-1.html', rawText: '第1话'),
+              ComicEpisodeLink(url: 'thread-102-1-1.html', rawText: '第2话'),
+            ],
           ),
-        ],
-      );
-      addTearDown(container.dispose);
-      const args = ComicDetailArgs(comicId: 'comic:1');
-      final subscription = container.listen(
-        comicDetailControllerProvider(args),
-        (_, _) {},
-      );
-      addTearDown(subscription.close);
+        );
+        final applier = _RecordingRefreshOutcomeApplier(
+          result: const ComicRefreshApplyResult(
+            status: ComicRefreshApplyStatus.applied,
+            insertedCount: 2,
+            updatedCount: 1,
+            totalCount: 3,
+            coverPromoted: true,
+          ),
+        );
+        final container = ProviderContainer(
+          overrides: [
+            comicRepositoryProvider.overrideWithValue(repository),
+            comicEpisodeRefreshServiceProvider.overrideWithValue(
+              refreshService,
+            ),
+            comicRefreshOutcomeApplierProvider.overrideWithValue(applier),
+            comicReaderFeatureFlagsProvider.overrideWithValue(
+              ComicReaderFeatureFlags.defaults,
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        const args = ComicDetailArgs(comicId: 'comic:1');
+        final subscription = container.listen(
+          comicDetailControllerProvider(args),
+          (_, _) {},
+        );
+        addTearDown(subscription.close);
 
-      await container.read(comicDetailControllerProvider(args).future);
-      await container
-          .read(comicDetailControllerProvider(args).notifier)
-          .refreshEpisodes();
+        await container.read(comicDetailControllerProvider(args).future);
+        await container
+            .read(comicDetailControllerProvider(args).notifier)
+            .refreshEpisodes();
 
-      final state = container.read(comicDetailControllerProvider(args)).value!;
-      expect(refreshService.catalogThenFallbackCalls, 1);
-      expect(refreshService.fetchEpisodeLinksCalls, 0);
-      expect(applier.requests, hasLength(1));
-      expect(applier.requests.single.comicId, 'comic:1');
-      expect(applier.requests.single.sourceTid, '100');
-      expect(
-        applier.requests.single.mutationSource,
-        LibraryMutationSource.comicRefresh,
-      );
-      expect(
-        applier.requests.single.reason,
-        'comic_detail_controller_refresh_completed',
-      );
-      expect(applier.requests.single.source, ComicEpisodeRefreshSource.search);
-      expect(state.isRefreshing, isFalse);
-      expect(state.refreshHint, '章节刷新完成：新增2，更新1');
-    });
+        final state = container
+            .read(comicDetailControllerProvider(args))
+            .value!;
+        expect(refreshService.catalogThenFallbackCalls, 1);
+        expect(refreshService.fetchEpisodeLinksCalls, 0);
+        expect(applier.requests, hasLength(1));
+        expect(applier.requests.single.comicId, 'comic:1');
+        expect(applier.requests.single.sourceTid, '100');
+        expect(
+          applier.requests.single.mutationSource,
+          LibraryMutationSource.comicRefresh,
+        );
+        expect(
+          applier.requests.single.reason,
+          'comic_detail_controller_refresh_completed',
+        );
+        expect(
+          applier.requests.single.source,
+          ComicEpisodeRefreshSource.search,
+        );
+        expect(state.isRefreshing, isFalse);
+        expect(
+          state.refreshNotice?.code,
+          ComicDetailRefreshNoticeCode.completed,
+        );
+        expect(state.refreshNotice?.insertedCount, 2);
+        expect(state.refreshNotice?.updatedCount, 1);
+      },
+    );
 
     test('refreshEpisodes keeps empty-link hint unchanged', () async {
       final container = ProviderContainer(
@@ -111,7 +127,7 @@ void main() {
 
       final state = container.read(comicDetailControllerProvider(args)).value!;
       expect(state.isRefreshing, isFalse);
-      expect(state.refreshHint, '未提取到新的章节链接');
+      expect(state.refreshNotice?.code, ComicDetailRefreshNoticeCode.noLinks);
     });
 
     test('refreshEpisodes keeps exception hint unchanged', () async {
@@ -141,8 +157,8 @@ void main() {
 
       final state = container.read(comicDetailControllerProvider(args)).value!;
       expect(state.isRefreshing, isFalse);
-      expect(state.refreshHint, contains('刷新章节失败：'));
-      expect(state.refreshHint, contains('refresh failed'));
+      expect(state.refreshNotice?.code, ComicDetailRefreshNoticeCode.failed);
+      expect(state.refreshNotice?.detail, isA<StateError>());
     });
   });
 }
@@ -160,8 +176,7 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     return outcome;
   }
 
@@ -192,8 +207,7 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     return outcome;
   }
 
@@ -201,8 +215,7 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
     String catalogUrl, {
     FavoriteSyncExecutionContext? executionContext,
-  }
-  ) async {
+  }) async {
     return outcome;
   }
 }
@@ -216,8 +229,7 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     throw StateError('refresh failed');
   }
 
@@ -246,8 +258,7 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  ) async {
+  }) async {
     throw StateError('refresh failed');
   }
 
@@ -255,8 +266,7 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
     String catalogUrl, {
     FavoriteSyncExecutionContext? executionContext,
-  }
-  ) async {
+  }) async {
     throw StateError('refresh failed');
   }
 }

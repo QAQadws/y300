@@ -2,6 +2,7 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
 import 'package:y300/features/library_shared/presentation/services/library_task_text_resolver.dart';
+import 'package:y300/features/library_shared/presentation/services/library_title_fallback_policy.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 abstract final class LibraryDetailTextResolver {
@@ -71,8 +72,7 @@ abstract final class LibraryDetailTextResolver {
     String title,
     String? sourceTid,
   ) {
-    final normalized = title.trim();
-    if (normalized.isNotEmpty) {
+    if (!LibraryTitleFallbackPolicy.needsChapterFallback(title, sourceTid)) {
       return title;
     }
     return l10n.libraryChapterFallbackTitle(sourceTid?.trim() ?? '-');

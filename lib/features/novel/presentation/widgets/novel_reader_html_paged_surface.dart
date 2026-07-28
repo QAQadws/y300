@@ -31,7 +31,9 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
+import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
+import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -39,6 +41,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 typedef NovelReaderPaginationCoordinatorBuilder =
     NovelReaderPaginationCoordinator Function({
@@ -122,6 +125,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final ValueChanged<NovelReaderAnchorNavigationRequest>?
   onNavigationUnavailable;
+
   /// Must report whether the turn was actually accepted. The surface locks the
   /// gesture off while a turn is in flight and relies on the armed entry request
   /// to unlock it, so a rejected turn has to say so — otherwise the lock waits
@@ -238,10 +242,10 @@ class _NovelReaderHtmlPagedSurfaceState
               !constraints.hasBoundedHeight ||
               pageWidth <= 0 ||
               paginationHeight <= 0) {
-            return const _NovelReaderPaginationStateView(
-              key: Key('novel-reader-paged-invalid-viewport'),
+            return _NovelReaderPaginationStateView(
+              key: const Key('novel-reader-paged-invalid-viewport'),
               icon: Icons.crop_free,
-              message: '当前窗口无法生成分页布局',
+              message: AppLocalizations.of(context).novelPagedWindowUnavailable,
             );
           }
 
@@ -258,10 +262,10 @@ class _NovelReaderHtmlPagedSurfaceState
                     onFallbackToVertical: widget.onFallbackToVertical,
                   );
                 }
-                return const _NovelReaderPaginationStateView(
-                  key: Key('novel-reader-paged-preparing'),
+                return _NovelReaderPaginationStateView(
+                  key: const Key('novel-reader-paged-preparing'),
                   icon: Icons.menu_book_outlined,
-                  message: '正在准备分页正文',
+                  message: AppLocalizations.of(context).novelPagedPreparing,
                   showProgress: true,
                 );
               }
@@ -311,26 +315,30 @@ class _NovelReaderHtmlPagedSurfaceState
                         onFallbackToVertical: widget.onFallbackToVertical,
                       );
                     }
-                    return const _NovelReaderPaginationStateView(
-                      key: Key('novel-reader-paged-layout-loading'),
+                    return _NovelReaderPaginationStateView(
+                      key: const Key('novel-reader-paged-layout-loading'),
                       icon: Icons.view_agenda_outlined,
-                      message: '正在计算分页布局',
+                      message: AppLocalizations.of(
+                        context,
+                      ).novelPagedCalculating,
                       showProgress: true,
                     );
                   }
                   if (plan.pages.isEmpty) {
                     if (progress?.isComplete != true) {
-                      return const _NovelReaderPaginationStateView(
-                        key: Key('novel-reader-paged-layout-loading'),
+                      return _NovelReaderPaginationStateView(
+                        key: const Key('novel-reader-paged-layout-loading'),
                         icon: Icons.view_agenda_outlined,
-                        message: '正在计算分页布局',
+                        message: AppLocalizations.of(
+                          context,
+                        ).novelPagedCalculating,
                         showProgress: true,
                       );
                     }
-                    return const _NovelReaderPaginationStateView(
-                      key: Key('novel-reader-paged-empty'),
+                    return _NovelReaderPaginationStateView(
+                      key: const Key('novel-reader-paged-empty'),
                       icon: Icons.article_outlined,
-                      message: '本章没有可显示的正文',
+                      message: AppLocalizations.of(context).novelPagedNoContent,
                     );
                   }
                   final isPlanComplete = progress?.isComplete == true;
@@ -363,10 +371,12 @@ class _NovelReaderHtmlPagedSurfaceState
                   if (navigationIsPending ||
                       entryIsPending ||
                       initialPage == null) {
-                    return const _NovelReaderPaginationStateView(
-                      key: Key('novel-reader-paged-restoring-position'),
+                    return _NovelReaderPaginationStateView(
+                      key: const Key('novel-reader-paged-restoring-position'),
                       icon: Icons.bookmark_outline,
-                      message: '正在恢复阅读位置',
+                      message: AppLocalizations.of(
+                        context,
+                      ).novelPagedRestoringPosition,
                       showProgress: true,
                     );
                   }
@@ -1119,20 +1129,33 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final pageCount = widget.plan.pageCount;
-    final totalPageLabel = widget.isPageCountFinal ? '$pageCount 页' : '计算中';
+    final totalPageLabel = widget.isPageCountFinal
+        ? l10n.novelPages(pageCount)
+        : l10n.novelPageCountPending;
+    final chapterTitle = NovelTextResolver.chapterTitle(
+      l10n,
+      widget.episode.episodeTitle,
+      widget.episode.sourceTid,
+    );
     return Semantics(
       key: const Key('novel-reader-paged-semantics'),
       container: true,
       explicitChildNodes: true,
       liveRegion: true,
-      label:
-          '${widget.episode.episodeTitle}，第 ${_currentPage + 1} 页，共 $totalPageLabel',
-      value: '第 ${_currentPage + 1} 页，共 $totalPageLabel',
+      label: l10n.novelPageSemantics(
+        chapterTitle,
+        _currentPage + 1,
+        totalPageLabel,
+      ),
+      value: l10n.novelPageValue(_currentPage + 1, totalPageLabel),
       increasedValue: _currentPage + 1 < pageCount
-          ? '下一页，第 ${_currentPage + 2} 页'
+          ? l10n.novelNextPageSemantics(_currentPage + 2)
           : null,
-      decreasedValue: _currentPage > 0 ? '上一页，第 $_currentPage 页' : null,
+      decreasedValue: _currentPage > 0
+          ? l10n.novelPreviousPageSemantics(_currentPage)
+          : null,
       onIncrease: _currentPage + 1 < pageCount
           ? () => _jumpToPage(_currentPage + 1)
           : null,
@@ -1144,46 +1167,46 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
           NotificationListener<ScrollNotification>(
             onNotification: _onScrollNotification,
             child: PageView.builder(
-            key: const Key('novel-reader-paged-page-view'),
-            controller: _pageController,
-            reverse: widget.reverse,
-            allowImplicitScrolling: false,
-            // A chapter that fits on a single page has no scrollable extent, so
-            // the default physics would refuse the drag outright and the
-            // turn-past-the-edge gesture would be dead there. This only
-            // overrides `shouldAcceptUserOffset`; `Scrollable` still appends the
-            // platform physics underneath, so clamping/bouncing behaviour and
-            // page snapping are untouched.
-            physics: const AlwaysScrollableScrollPhysics(),
-            itemCount: pageCount,
-            onPageChanged: _onPageChanged,
-            itemBuilder: (context, index) {
-              final page = widget.plan.pages[index];
-              return Padding(
-                key: ValueKey<String>(
-                  'novel-reader-paged-content-inset-${page.index}',
-                ),
-                padding: EdgeInsets.only(bottom: widget.contentBottomInset),
-                child: _NovelReaderPagedPage(
+              key: const Key('novel-reader-paged-page-view'),
+              controller: _pageController,
+              reverse: widget.reverse,
+              allowImplicitScrolling: false,
+              // A chapter that fits on a single page has no scrollable extent, so
+              // the default physics would refuse the drag outright and the
+              // turn-past-the-edge gesture would be dead there. This only
+              // overrides `shouldAcceptUserOffset`; `Scrollable` still appends the
+              // platform physics underneath, so clamping/bouncing behaviour and
+              // page snapping are untouched.
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: pageCount,
+              onPageChanged: _onPageChanged,
+              itemBuilder: (context, index) {
+                final page = widget.plan.pages[index];
+                return Padding(
                   key: ValueKey<String>(
-                    'novel-reader-paged-page-${page.index}',
+                    'novel-reader-paged-content-inset-${page.index}',
                   ),
-                  page: page,
-                  plan: widget.plan,
-                  theme: widget.theme,
-                  htmlPreferences: widget.htmlPreferences,
-                  typography: widget.typography,
-                  renderDocument: widget.renderDocument,
-                  episode: widget.episode,
-                  imageReferer: widget.imageReferer,
-                  imageHeaderBuilder: widget.imageHeaderBuilder,
-                  onLinkTap: widget.onLinkTap,
-                  onOpenImage: widget.onOpenImage,
-                  onImageFallback: widget.onImageFallback,
-                  imageReaderBridge: widget.imageReaderBridge,
-                ),
-              );
-            },
+                  padding: EdgeInsets.only(bottom: widget.contentBottomInset),
+                  child: _NovelReaderPagedPage(
+                    key: ValueKey<String>(
+                      'novel-reader-paged-page-${page.index}',
+                    ),
+                    page: page,
+                    plan: widget.plan,
+                    theme: widget.theme,
+                    htmlPreferences: widget.htmlPreferences,
+                    typography: widget.typography,
+                    renderDocument: widget.renderDocument,
+                    episode: widget.episode,
+                    imageReferer: widget.imageReferer,
+                    imageHeaderBuilder: widget.imageHeaderBuilder,
+                    onLinkTap: widget.onLinkTap,
+                    onOpenImage: widget.onOpenImage,
+                    onImageFallback: widget.onImageFallback,
+                    imageReaderBridge: widget.imageReaderBridge,
+                  ),
+                );
+              },
             ),
           ),
           _NovelReaderChapterTurnHintOverlay(
@@ -1196,7 +1219,12 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
               right: NovelReaderPagedIndicatorLayout.rightInset,
               bottom: NovelReaderPagedIndicatorLayout.bottomInset,
               child: Text(
-                '${_currentPage + 1} / ${widget.isPageCountFinal ? pageCount : '计算中'}',
+                l10n.novelPageIndicator(
+                  _currentPage + 1,
+                  widget.isPageCountFinal
+                      ? '$pageCount'
+                      : l10n.novelPageCountPending,
+                ),
                 key: const Key('novel-reader-page-indicator-text'),
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   fontSize: NovelReaderPagedIndicatorLayout.fontSize,
@@ -1465,7 +1493,10 @@ class _NovelReaderChapterTurnHintOverlay extends StatelessWidget {
                   vertical: NovelReaderChapterTurnHintLayout.verticalPadding,
                 ),
                 child: Text(
-                  _labelFor(value),
+                  NovelTextResolver.chapterTurnHint(
+                    AppLocalizations.of(context),
+                    value,
+                  ),
                   key: const Key('novel-reader-chapter-turn-hint-text'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1479,14 +1510,6 @@ class _NovelReaderChapterTurnHintOverlay extends StatelessWidget {
         },
       ),
     );
-  }
-
-  String _labelFor(NovelReaderChapterTurnHint hint) {
-    final direction = hint.edge == NovelReaderChapterEdge.end ? '下一章' : '上一章';
-    if (!hint.isReadyToCommit) {
-      return '继续滑动进入$direction';
-    }
-    return '松手进入$direction · ${hint.chapterTitle}';
   }
 }
 
@@ -1555,7 +1578,9 @@ class _NovelReaderPagedPage extends StatelessWidget {
     }
     return Semantics(
       container: true,
-      label: '第 ${page.index + 1} 页，共 ${plan.pageCount} 页',
+      label: AppLocalizations.of(
+        context,
+      ).novelPageOfTotalSemantics(page.index + 1, plan.pageCount),
       child: child,
     );
   }
@@ -1627,6 +1652,7 @@ class _NovelReaderPaginationFailureView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Center(
       child: Column(
         key: const Key('novel-reader-pagination-failure'),
@@ -1634,10 +1660,10 @@ class _NovelReaderPaginationFailureView extends StatelessWidget {
         children: [
           const Icon(Icons.warning_amber_outlined, size: 34),
           const SizedBox(height: 12),
-          const Text('分页布局失败'),
+          Text(l10n.novelPagedLayoutFailed),
           const SizedBox(height: 6),
           Text(
-            error.toString(),
+            LibraryErrorSummary.resolve(l10n, error),
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -1649,14 +1675,14 @@ class _NovelReaderPaginationFailureView extends StatelessWidget {
                 key: const Key('novel-reader-pagination-retry'),
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('重试'),
+                label: Text(l10n.commonRetry),
               ),
               if (onFallbackToVertical != null)
                 FilledButton.icon(
                   key: const Key('novel-reader-pagination-fallback'),
                   onPressed: onFallbackToVertical,
                   icon: const Icon(Icons.view_agenda_outlined),
-                  label: const Text('回到滚动'),
+                  label: Text(l10n.novelReturnToScroll),
                 ),
             ],
           ),

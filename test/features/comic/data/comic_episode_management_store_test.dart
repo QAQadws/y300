@@ -261,8 +261,8 @@ void main() {
     episode = (await repository.getManagedComicEpisodes(
       comicId: 'comic-management',
     )).single;
-    // 手动章节的“来源名”是添加时的默认名，清空后退回它而不是空标题。
-    expect(episode.episodeTitle, '章节 602');
+    // 存储层只保留稳定来源 TID，展示层按当前 locale 生成章节 fallback。
+    expect(episode.episodeTitle, '602');
   });
 
   test('renaming a missing episode reports failure', () async {

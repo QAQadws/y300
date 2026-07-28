@@ -25,6 +25,7 @@ import 'package:y300/features/library_shared/data/repositories/library_state_rep
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_operation_failure.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_source_id_comparator.dart';
@@ -131,7 +132,9 @@ class ComicDetailAdapter
   Future<LibraryDetailHeader> loadHeader({required String workId}) async {
     final detail = await _repository.getComicDetail(comicId: workId);
     if (detail == null) {
-      throw StateError('漫画不存在或已删除');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.workNotFound,
+      );
     }
     final workState = await _stateRepository.getWorkState(
       moduleKey: LibraryModuleKey.comic,
@@ -381,7 +384,9 @@ class ComicDetailAdapter
         ? _repository as ComicWorkReadingStateResetter
         : null;
     if (resetter == null) {
-      throw UnsupportedError('当前漫画仓储不支持整部阅读重置');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
     }
     await resetter.resetComicReadingState(comicId: workId);
   }
@@ -414,7 +419,9 @@ class ComicDetailAdapter
     }
     final queue = _downloadQueue;
     if (queue == null) {
-      throw UnsupportedError('漫画下载队列不可用');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
     }
     final detail = await _repository.getComicDetail(comicId: workId);
     final episodes = await _repository.getComicEpisodes(
@@ -436,7 +443,9 @@ class ComicDetailAdapter
   Future<void> downloadUnread({required String workId}) async {
     final queue = _downloadQueue;
     if (queue == null) {
-      throw UnsupportedError('漫画下载队列不可用');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
     }
     final detail = await _repository.getComicDetail(comicId: workId);
     final episodes = await _repository.getComicEpisodes(
@@ -588,7 +597,9 @@ class ComicDetailAdapter
     if (isDownloaded) {
       final queue = _downloadQueue;
       if (queue == null) {
-        throw UnsupportedError('漫画下载队列不可用');
+        throw const LibraryOperationException(
+          LibraryOperationFailureCode.unsupported,
+        );
       }
       final detail = await _repository.getComicDetail(comicId: workId);
       final episodes = await _repository.getComicEpisodes(
@@ -599,7 +610,9 @@ class ComicDetailAdapter
           .where((item) => item.episodeId == episodeId)
           .firstOrNull;
       if (episode == null) {
-        throw StateError('漫画章节不存在');
+        throw const LibraryOperationException(
+          LibraryOperationFailureCode.chapterNotFound,
+        );
       }
       await queue.enqueueTargets(<ComicDownloadTarget>[
         _downloadTarget(
@@ -914,7 +927,9 @@ class ComicDetailAdapter
   }) async {
     final detail = await _repository.getComicDetail(comicId: workId);
     if (detail == null) {
-      throw StateError('漫画不存在或已删除');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.workNotFound,
+      );
     }
     return DetailCatalogConfiguration(
       sourceCatalogUrl: detail.catalogUrl,
@@ -929,7 +944,9 @@ class ComicDetailAdapter
   }) async {
     final detail = await _repository.getComicDetail(comicId: workId);
     if (detail == null) {
-      throw StateError('漫画不存在或已删除');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.workNotFound,
+      );
     }
     late final String? normalized;
     try {
@@ -949,7 +966,9 @@ class ComicDetailAdapter
     }
     final repository = _repository;
     if (repository is! ComicCatalogOverrideRepository) {
-      throw StateError('当前漫画仓储不支持配置目录');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
     }
     final catalogRepository = repository as ComicCatalogOverrideRepository;
     await catalogRepository.updateCustomCatalogUrl(
@@ -1098,7 +1117,9 @@ class ComicDetailAdapter
   ComicEpisodeManagementRepository get _episodeManagementRepository {
     final repository = _repository;
     if (repository is! ComicEpisodeManagementRepository) {
-      throw StateError('当前漫画仓储不支持章节管理');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
     }
     return repository as ComicEpisodeManagementRepository;
   }
@@ -1130,7 +1151,9 @@ class ComicDetailAdapter
     );
     final protectedPath = cached?.localPath?.trim();
     if (protectedPath == null || protectedPath.isEmpty) {
-      throw StateError('封面图片缓存失败');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.cacheWriteFailed,
+      );
     }
     await _repository.updateCustomCoverFromLocalFile(
       comicId: workId,

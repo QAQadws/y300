@@ -48,7 +48,7 @@ class ComicCommentLoadResult {
     required this.loadedPages,
     required this.expectedPages,
     this.errorCode,
-    this.errorMessage,
+    this.diagnosticDetail,
   });
 
   factory ComicCommentLoadResult.cancelled({
@@ -70,7 +70,9 @@ class ComicCommentLoadResult {
   final Set<int> loadedPages;
   final int expectedPages;
   final ComicCommentLoadErrorCode? errorCode;
-  final String? errorMessage;
+
+  /// Optional diagnostic detail. Presentation must never display it directly.
+  final Object? diagnosticDetail;
 
   bool get isComplete =>
       status == ComicCommentLoadStatus.success ||
@@ -108,7 +110,7 @@ class ComicCommentLoadResult {
     )
     mapPost,
     ComicCommentLoadErrorCode? errorCode,
-    String? errorMessage,
+    Object? diagnosticDetail,
   }) {
     final firstPid = _findFirstPostPid(pages);
     final byPid = <String, ComicCommentItem>{};
@@ -146,7 +148,7 @@ class ComicCommentLoadResult {
       loadedPages: Set<int>.unmodifiable(loadedPages),
       expectedPages: expectedPages,
       errorCode: errorCode,
-      errorMessage: errorMessage,
+      diagnosticDetail: diagnosticDetail,
     );
   }
 

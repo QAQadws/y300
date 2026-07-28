@@ -11,17 +11,6 @@ class ComicEpisodeImagesUnavailable implements Exception {
   final ComicEpisodeImagesFetchFailureReason reason;
   final String? message;
 
-  /// 给用户看的简短中文提示——尽量描述根因而不是泛泛"加载失败"。
-  String get displayHint {
-    return switch (reason) {
-      ComicEpisodeImagesFetchFailureReason.network => '网络异常，请检查后重试',
-      ComicEpisodeImagesFetchFailureReason.auth => '登录态已失效，请重新登录后重试',
-      ComicEpisodeImagesFetchFailureReason.server => '服务暂时不可用，请稍后重试',
-      ComicEpisodeImagesFetchFailureReason.parse => '页面结构异常，无法解析章节内容',
-      ComicEpisodeImagesFetchFailureReason.unknown => '加载章节失败',
-    };
-  }
-
   /// 解析失败重试也是同样结果；其它 reason 都是瞬时的，重试有用。
   bool get isRetryable => reason != ComicEpisodeImagesFetchFailureReason.parse;
 

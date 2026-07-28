@@ -32,11 +32,21 @@ class NovelChapterSourceRoute {
   final String url;
 }
 
-class NovelChapterSourceRouteException implements Exception {
-  const NovelChapterSourceRouteException(this.message);
+enum NovelChapterSourceRouteFailureCode {
+  invalidTid,
+  invalidPid,
+  locatorFailed,
+  emptyResult,
+  mismatchedResult,
+  invalidPage,
+}
 
-  final String message;
+class NovelChapterSourceRouteException implements Exception {
+  const NovelChapterSourceRouteException(this.code, {this.detail});
+
+  final NovelChapterSourceRouteFailureCode code;
+  final Object? detail;
 
   @override
-  String toString() => message;
+  String toString() => 'NovelChapterSourceRouteException(${code.name})';
 }

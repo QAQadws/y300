@@ -89,7 +89,7 @@ class DefaultComicCommentLoader
         _failure(
           sourceTid: normalizedTid,
           errorCode: ComicCommentLoadErrorCode.invalidSourceTid,
-          message: '漫画来源帖子无效',
+          diagnosticDetail: 'invalid_source_tid',
           startedAt: _now(),
           page: 0,
         ),
@@ -149,7 +149,7 @@ class DefaultComicCommentLoader
         return _failure(
           sourceTid: sourceTid,
           errorCode: _errorCode(error, firstPage: true),
-          message: _stableErrorMessage(error),
+          diagnosticDetail: error?.type.name,
           startedAt: startedAt,
           page: 1,
         );
@@ -158,7 +158,7 @@ class DefaultComicCommentLoader
         return _failure(
           sourceTid: sourceTid,
           errorCode: ComicCommentLoadErrorCode.invalidPageResponse,
-          message: '回帖数据格式无效',
+          diagnosticDetail: 'invalid_page_response',
           startedAt: startedAt,
           page: 1,
         );
@@ -194,11 +194,7 @@ class DefaultComicCommentLoader
         expectedPages: expectedPages,
         mapPost: _mapPost,
         errorCode: failures.isEmpty ? null : failures.first,
-        errorMessage: failures.isEmpty
-            ? null
-            : failures.first == ComicCommentLoadErrorCode.maxPageRequestsReached
-            ? '回帖页数超过安全上限'
-            : '部分回帖页面加载失败',
+        diagnosticDetail: failures.isEmpty ? null : failures.first.name,
       );
       _recordDiagnostic(
         sourceTid: sourceTid,
@@ -223,7 +219,7 @@ class DefaultComicCommentLoader
       return _failure(
         sourceTid: sourceTid,
         errorCode: ComicCommentLoadErrorCode.pageTimeout,
-        message: '回帖请求超时',
+        diagnosticDetail: 'timeout',
         startedAt: startedAt,
         page: 1,
       );
@@ -231,7 +227,7 @@ class DefaultComicCommentLoader
       return _failure(
         sourceTid: sourceTid,
         errorCode: ComicCommentLoadErrorCode.firstPageUnavailable,
-        message: '回帖加载失败',
+        diagnosticDetail: 'unexpected_failure',
         startedAt: startedAt,
         page: 1,
       );
@@ -335,7 +331,7 @@ class DefaultComicCommentLoader
   ComicCommentLoadResult _failure({
     required String sourceTid,
     required ComicCommentLoadErrorCode errorCode,
-    required String message,
+    Object? diagnosticDetail,
     required DateTime startedAt,
     required int page,
   }) {
@@ -357,7 +353,7 @@ class DefaultComicCommentLoader
       loadedPages: const <int>{},
       expectedPages: 0,
       errorCode: errorCode,
-      errorMessage: message,
+      diagnosticDetail: diagnosticDetail,
     );
   }
 
@@ -375,22 +371,6 @@ class DefaultComicCommentLoader
         firstPage
             ? ComicCommentLoadErrorCode.firstPageUnavailable
             : ComicCommentLoadErrorCode.pageUnavailable,
-    };
-  }
-
-  String _stableErrorMessage(ApiError? error) {
-    if (error == null) {
-      return '回帖加载失败';
-    }
-    if (error.statusCode == 429) {
-      return '请求过于频繁，请稍后重试';
-    }
-    return switch (error.type) {
-      ApiErrorType.timeout => '回帖请求超时',
-      ApiErrorType.network => '网络不可用',
-      ApiErrorType.unauthorized => '论坛登录状态已失效',
-      ApiErrorType.server => '论坛服务暂不可用',
-      _ => '回帖加载失败',
     };
   }
 

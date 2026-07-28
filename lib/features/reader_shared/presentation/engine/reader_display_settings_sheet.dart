@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_sheet_widgets.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
+import 'package:y300/features/reader_shared/presentation/reader_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 阅读器显示设置抽屉（阅读模式 / 页面适配 / 背景 / 页间距 / 页码浮层）。
 ///
@@ -47,6 +49,7 @@ class ReaderModeSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SafeArea(
       child: RadioGroup<ReaderModePreference>(
         groupValue: currentMode,
@@ -55,24 +58,33 @@ class ReaderModeSheet extends StatelessWidget {
             Navigator.of(context).pop(value);
           }
         },
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ReaderSheetTitle(title: '阅读模式'),
+            ReaderSheetTitle(title: l10n.readerReadingMode),
             _ReaderModeTile(
               mode: ReaderModePreference.vertical,
               icon: Icons.view_stream_outlined,
-              label: '垂直连续',
+              label: ReaderTextResolver.modeChoice(
+                l10n,
+                ReaderModePreference.vertical,
+              ),
             ),
             _ReaderModeTile(
               mode: ReaderModePreference.ltr,
               icon: Icons.swipe_left_outlined,
-              label: '单页 左到右',
+              label: ReaderTextResolver.modeChoice(
+                l10n,
+                ReaderModePreference.ltr,
+              ),
             ),
             _ReaderModeTile(
               mode: ReaderModePreference.rtl,
               icon: Icons.swipe_right_outlined,
-              label: '单页 右到左',
+              label: ReaderTextResolver.modeChoice(
+                l10n,
+                ReaderModePreference.rtl,
+              ),
             ),
           ],
         ),
@@ -138,37 +150,38 @@ class _ReaderDisplaySettingsContentState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return ListView(
       key: const Key('comic-reader-display-settings-sheet'),
       shrinkWrap: true,
       padding: const EdgeInsets.only(bottom: 16),
       children: [
-        const ReaderSheetTitle(title: '显示设置'),
+        ReaderSheetTitle(title: l10n.readerDisplaySettings),
         ReaderSegmentControl<ReaderModePreference>(
-          label: '阅读模式',
+          label: l10n.readerReadingMode,
           value: _current.readerMode,
           values: ReaderModePreference.values,
-          labelBuilder: _readerModeLabel,
+          labelBuilder: (value) => ReaderTextResolver.mode(l10n, value),
           onChanged: (value) {
             setState(() => _current = _current.copyWith(readerMode: value));
             widget.onModeChanged(value);
           },
         ),
         ReaderSegmentControl<ReaderPageFitPreference>(
-          label: '页面适配',
+          label: l10n.readerPageFit,
           value: _current.pageFit,
           values: ReaderPageFitPreference.values,
-          labelBuilder: _pageFitLabel,
+          labelBuilder: (value) => ReaderTextResolver.pageFit(l10n, value),
           onChanged: (value) {
             setState(() => _current = _current.copyWith(pageFit: value));
             widget.onPageFitChanged(value);
           },
         ),
         ReaderSegmentControl<ReaderBackgroundPreference>(
-          label: '背景色',
+          label: l10n.readerBackground,
           value: _current.background,
           values: ReaderBackgroundPreference.values,
-          labelBuilder: _backgroundLabel,
+          labelBuilder: (value) => ReaderTextResolver.background(l10n, value),
           onChanged: (value) {
             setState(() => _current = _current.copyWith(background: value));
             widget.onBackgroundChanged(value);
@@ -178,7 +191,7 @@ class _ReaderDisplaySettingsContentState
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           child: Row(
             children: [
-              const SizedBox(width: 88, child: Text('页间距')),
+              SizedBox(width: 88, child: Text(l10n.readerPageSpacing)),
               Expanded(
                 child: Slider(
                   key: const Key('comic-reader-page-spacing-slider'),
@@ -200,7 +213,7 @@ class _ReaderDisplaySettingsContentState
         ),
         SwitchListTile(
           key: const Key('comic-reader-page-indicator-switch'),
-          title: const Text('页码浮层'),
+          title: Text(l10n.readerPageIndicator),
           value: _current.showPageIndicator,
           onChanged: (value) {
             setState(
@@ -211,40 +224,5 @@ class _ReaderDisplaySettingsContentState
         ),
       ],
     );
-  }
-
-  String _readerModeLabel(ReaderModePreference value) {
-    switch (value) {
-      case ReaderModePreference.vertical:
-        return '垂直';
-      case ReaderModePreference.ltr:
-        return 'LTR';
-      case ReaderModePreference.rtl:
-        return 'RTL';
-    }
-  }
-
-  String _pageFitLabel(ReaderPageFitPreference value) {
-    switch (value) {
-      case ReaderPageFitPreference.fitWidth:
-        return '宽度';
-      case ReaderPageFitPreference.fitHeight:
-        return '高度';
-      case ReaderPageFitPreference.contain:
-        return '屏幕';
-    }
-  }
-
-  String _backgroundLabel(ReaderBackgroundPreference value) {
-    switch (value) {
-      case ReaderBackgroundPreference.followTheme:
-        return '主题';
-      case ReaderBackgroundPreference.black:
-        return '黑';
-      case ReaderBackgroundPreference.white:
-        return '白';
-      case ReaderBackgroundPreference.gray:
-        return '灰';
-    }
   }
 }

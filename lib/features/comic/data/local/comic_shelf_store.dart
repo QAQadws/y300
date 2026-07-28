@@ -4,12 +4,10 @@ import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_operation_failure.dart';
 
 class ComicShelfStore {
-  ComicShelfStore(
-    this._dbFuture, {
-    this.defaultCategoryId = 'default',
-  });
+  ComicShelfStore(this._dbFuture, {this.defaultCategoryId = 'default'});
 
   final Future<Database> _dbFuture;
   final String defaultCategoryId;
@@ -51,15 +49,12 @@ class ComicShelfStore {
       );
       final sortOrder = (countResult.first['count'] as int?) ?? 0;
 
-      await txn.insert(
-        ComicLocalDb.categoriesTable,
-        <String, Object?>{
-          'category_id': categoryId,
-          'name': sanitized,
-          'sort_order': sortOrder,
-          'created_at': now,
-        },
-      );
+      await txn.insert(ComicLocalDb.categoriesTable, <String, Object?>{
+        'category_id': categoryId,
+        'name': sanitized,
+        'sort_order': sortOrder,
+        'created_at': now,
+      });
     });
 
     return categoryId;
@@ -74,7 +69,9 @@ class ComicShelfStore {
       throw ArgumentError('分类名称不能为空');
     }
     if (categoryId == defaultCategoryId) {
-      throw StateError('默认分类不允许重命名');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.defaultCategoryImmutable,
+      );
     }
 
     final db = await _dbFuture;
@@ -88,7 +85,9 @@ class ComicShelfStore {
 
   Future<void> deleteCategory({required String categoryId}) async {
     if (categoryId == defaultCategoryId) {
-      throw StateError('默认分类不允许删除');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.defaultCategoryImmutable,
+      );
     }
 
     final db = await _dbFuture;
@@ -210,14 +209,10 @@ class ComicShelfStore {
     final db = await _dbFuture;
     final normalized = normalizeColumnCount(columnCount);
 
-    await db.insert(
-      ComicLocalDb.settingsTable,
-      <String, Object?>{
-        'key': 'grid_column_count',
-        'value': normalized.toString(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert(ComicLocalDb.settingsTable, <String, Object?>{
+      'key': 'grid_column_count',
+      'value': normalized.toString(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<bool> isInShelf({required String comicId}) async {
@@ -282,21 +277,17 @@ class ComicShelfStore {
             sourceAuthor: row['source_author'] as String?,
             customAuthor: row['custom_author'] as String?,
             translationGroup: row['translation_group'] as String?,
-            sourceTranslationGroup:
-                row['source_translation_group'] as String?,
-            customTranslationGroup:
-                row['custom_translation_group'] as String?,
+            sourceTranslationGroup: row['source_translation_group'] as String?,
+            customTranslationGroup: row['custom_translation_group'] as String?,
             customSearchTitle: row['custom_search_title'] as String?,
             coverImageUrl: row['cover_image_url'] as String?,
-            customCoverImageUrl:
-                row['custom_cover_image_url'] as String?,
+            customCoverImageUrl: row['custom_cover_image_url'] as String?,
             coverLocalPath: row['cover_local_path'] as String?,
-            customCoverLocalPath:
-                row['custom_cover_local_path'] as String?,
-            customCoverFocusX:
-                (row['custom_cover_focus_x'] as num?)?.toDouble(),
-            customCoverFocusY:
-                (row['custom_cover_focus_y'] as num?)?.toDouble(),
+            customCoverLocalPath: row['custom_cover_local_path'] as String?,
+            customCoverFocusX: (row['custom_cover_focus_x'] as num?)
+                ?.toDouble(),
+            customCoverFocusY: (row['custom_cover_focus_y'] as num?)
+                ?.toDouble(),
             categoryId: row['category_id'] as String,
             addedAt: DateTime.fromMillisecondsSinceEpoch(
               row['added_at'] as int,

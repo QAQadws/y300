@@ -1,23 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
-
-/// User-visible copy shared by the standalone list and reader tail.
-abstract final class ComicCommentCopy {
-  static const String indicator = '评论';
-  static const String loading = '评论加载中';
-  static const String empty = '暂无评论';
-  static const String unavailable = '评论暂不可用';
-  static const String retry = '重试';
-  static const String open = '查看评论';
-  static const String lastChapter = '已是最后一章';
-  static const String snackbarUnavailable = '无法查看评论';
-
-  static String advanceTo(String? nextEpisodeTitle) {
-    final title = nextEpisodeTitle?.trim();
-    return title == null || title.isEmpty ? '继续滑动进入下一章' : '继续滑动进入：$title';
-  }
-}
+import 'package:y300/l10n/app_localizations.dart';
 
 enum ComicCommentFeedbackKind {
   loading,
@@ -52,7 +36,8 @@ class ComicCommentFeedbackSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
-    final message = _message();
+    final l10n = AppLocalizations.of(context);
+    final message = _message(l10n);
     final isLoading = kind == ComicCommentFeedbackKind.loading;
     final isAction =
         kind == ComicCommentFeedbackKind.unavailable ||
@@ -80,7 +65,7 @@ class ComicCommentFeedbackSurface extends StatelessWidget {
       ComicCommentFeedbackKind.unavailable => _ActionContent(
         icon: Icons.cloud_off_outlined,
         message: message,
-        actionLabel: ComicCommentCopy.retry,
+        actionLabel: l10n.commonRetry,
         foreground: palette.muted,
         onAction: onAction,
         actionKey: actionKey,
@@ -88,7 +73,7 @@ class ComicCommentFeedbackSurface extends StatelessWidget {
       ComicCommentFeedbackKind.open => _ActionContent(
         icon: Icons.forum_outlined,
         message: message,
-        actionLabel: ComicCommentCopy.open,
+        actionLabel: l10n.comicCommentOpen,
         foreground: palette.muted,
         onAction: onAction,
         actionKey: actionKey,
@@ -117,17 +102,22 @@ class ComicCommentFeedbackSurface extends StatelessWidget {
     );
   }
 
-  String _message() {
+  String _message(AppLocalizations l10n) {
     return switch (kind) {
-      ComicCommentFeedbackKind.loading => ComicCommentCopy.loading,
-      ComicCommentFeedbackKind.empty => ComicCommentCopy.empty,
-      ComicCommentFeedbackKind.unavailable => ComicCommentCopy.unavailable,
-      ComicCommentFeedbackKind.open => ComicCommentCopy.open,
-      ComicCommentFeedbackKind.advance => ComicCommentCopy.advanceTo(
-        nextEpisodeTitle,
-      ),
-      ComicCommentFeedbackKind.lastChapter => ComicCommentCopy.lastChapter,
+      ComicCommentFeedbackKind.loading => l10n.comicCommentLoading,
+      ComicCommentFeedbackKind.empty => l10n.comicCommentEmpty,
+      ComicCommentFeedbackKind.unavailable => l10n.comicCommentUnavailable,
+      ComicCommentFeedbackKind.open => l10n.comicCommentOpen,
+      ComicCommentFeedbackKind.advance => _advanceMessage(l10n),
+      ComicCommentFeedbackKind.lastChapter => l10n.comicLastEpisode,
     };
+  }
+
+  String _advanceMessage(AppLocalizations l10n) {
+    final title = nextEpisodeTitle?.trim();
+    return title == null || title.isEmpty
+        ? l10n.comicCommentContinue
+        : l10n.comicCommentContinueTo(title);
   }
 }
 

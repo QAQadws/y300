@@ -2,23 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
+import 'package:y300/features/comic/presentation/comic_text_resolver.dart';
+import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ComicDownloadQueuePage extends ConsumerWidget {
   const ComicDownloadQueuePage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final queue = ref.watch(comicDownloadQueueProvider);
     final snapshot = ref.watch(comicDownloadQueueSnapshotProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('下载队列')),
+      appBar: AppBar(title: Text(l10n.comicDownloadQueue)),
       body: ValueListenableBuilder<ComicDownloadQueueSnapshot>(
         valueListenable: snapshot,
         builder: (context, value, _) {
           if (value.isEmpty) {
-            return const Center(
-              key: Key('comic-download-queue-empty'),
-              child: Text('暂无下载任务'),
+            return Center(
+              key: const Key('comic-download-queue-empty'),
+              child: Text(l10n.comicDownloadQueueEmpty),
             );
           }
           final active = value.activeEntry;
@@ -34,18 +38,20 @@ class ComicDownloadQueuePage extends ConsumerWidget {
             key: const Key('comic-download-queue-list'),
             children: [
               if (active != null) ...[
-                const _QueueSectionTitle('正在下载'),
+                _QueueSectionTitle(l10n.comicDownloadActive),
                 _ActiveDownloadTile(
                   entry: active,
                   onCancel: () => _runAction(
                     context,
                     action: () => queue.cancel(active.id),
-                    failurePrefix: '取消下载失败',
+                    failureMessage: (error) => l10n.comicDownloadCancelFailed(
+                      LibraryErrorSummary.resolve(l10n, error),
+                    ),
                   ),
                 ),
               ],
               if (pending.isNotEmpty) ...[
-                const _QueueSectionTitle('等待中'),
+                _QueueSectionTitle(l10n.comicDownloadPending),
                 for (var index = 0; index < pending.length; index++)
                   _PendingDownloadTile(
                     entry: pending[index],
@@ -53,24 +59,30 @@ class ComicDownloadQueuePage extends ConsumerWidget {
                     onRemove: () => _runAction(
                       context,
                       action: () => queue.remove(pending[index].id),
-                      failurePrefix: '移除任务失败',
+                      failureMessage: (error) => l10n.comicDownloadRemoveFailed(
+                        LibraryErrorSummary.resolve(l10n, error),
+                      ),
                     ),
                   ),
               ],
               if (failed.isNotEmpty) ...[
-                const _QueueSectionTitle('下载失败'),
+                _QueueSectionTitle(l10n.comicDownloadFailedSection),
                 for (final entry in failed)
                   _FailedDownloadTile(
                     entry: entry,
                     onRetry: () => _runAction(
                       context,
                       action: () => queue.retry(entry.id),
-                      failurePrefix: '重试失败',
+                      failureMessage: (error) => l10n.comicDownloadRetryFailed(
+                        LibraryErrorSummary.resolve(l10n, error),
+                      ),
                     ),
                     onRemove: () => _runAction(
                       context,
                       action: () => queue.remove(entry.id),
-                      failurePrefix: '移除任务失败',
+                      failureMessage: (error) => l10n.comicDownloadRemoveFailed(
+                        LibraryErrorSummary.resolve(l10n, error),
+                      ),
                     ),
                   ),
               ],
@@ -85,7 +97,7 @@ class ComicDownloadQueuePage extends ConsumerWidget {
   Future<void> _runAction(
     BuildContext context, {
     required Future<void> Function() action,
-    required String failurePrefix,
+    required String Function(Object error) failureMessage,
   }) async {
     try {
       await action();
@@ -95,7 +107,7 @@ class ComicDownloadQueuePage extends ConsumerWidget {
       }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('$failurePrefix：$error')));
+        ..showSnackBar(SnackBar(content: Text(failureMessage(error))));
     }
   }
 }
@@ -122,6 +134,7 @@ class _ActiveDownloadTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final canceling = entry.status == ComicDownloadQueueStatus.cancelRequested;
     return Padding(
       key: ValueKey<String>('comic-download-active-${entry.id}'),
@@ -136,14 +149,18 @@ class _ActiveDownloadTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      entry.comicTitle,
+                      ComicTextResolver.workTitle(
+                        l10n,
+                        entry.comicTitle,
+                        entry.comicId,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '${entry.episodeTitle} · '
-                      '${canceling ? '正在取消' : _progressLabel(entry)}',
+                      '${ComicTextResolver.chapterTitle(l10n, entry.episodeTitle, entry.sourceTid)} · '
+                      '${canceling ? l10n.comicDownloadCanceling : _progressLabel(l10n, entry)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -151,7 +168,9 @@ class _ActiveDownloadTile extends StatelessWidget {
               ),
               IconButton(
                 key: ValueKey<String>('comic-download-cancel-${entry.id}'),
-                tooltip: canceling ? '正在取消' : '取消下载',
+                tooltip: canceling
+                    ? l10n.comicDownloadCanceling
+                    : l10n.comicDownloadCancel,
                 onPressed: canceling ? null : onCancel,
                 icon: const Icon(Icons.close),
               ),
@@ -181,17 +200,27 @@ class _PendingDownloadTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
       key: ValueKey<String>('comic-download-pending-${entry.id}'),
       title: Text(
-        entry.comicTitle,
+        ComicTextResolver.workTitle(l10n, entry.comicTitle, entry.comicId),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: Text('${entry.episodeTitle} · 第 $position 位'),
+      subtitle: Text(
+        l10n.comicDownloadQueuePosition(
+          ComicTextResolver.chapterTitle(
+            l10n,
+            entry.episodeTitle,
+            entry.sourceTid,
+          ),
+          position,
+        ),
+      ),
       trailing: IconButton(
         key: ValueKey<String>('comic-download-remove-${entry.id}'),
-        tooltip: '移除任务',
+        tooltip: l10n.comicDownloadRemove,
         onPressed: onRemove,
         icon: const Icon(Icons.delete_outline),
       ),
@@ -212,15 +241,23 @@ class _FailedDownloadTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
       key: ValueKey<String>('comic-download-failed-${entry.id}'),
       title: Text(
-        entry.comicTitle,
+        ComicTextResolver.workTitle(l10n, entry.comicTitle, entry.comicId),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
-        '${entry.episodeTitle} · ${entry.lastError ?? '下载失败'}',
+        l10n.comicDownloadFailureDetail(
+          ComicTextResolver.chapterTitle(
+            l10n,
+            entry.episodeTitle,
+            entry.sourceTid,
+          ),
+          ComicTextResolver.downloadFailure(l10n, entry.failureCode),
+        ),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
@@ -229,13 +266,13 @@ class _FailedDownloadTile extends StatelessWidget {
         children: [
           IconButton(
             key: ValueKey<String>('comic-download-retry-${entry.id}'),
-            tooltip: '重试',
+            tooltip: l10n.comicDownloadRetry,
             onPressed: onRetry,
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
             key: ValueKey<String>('comic-download-remove-${entry.id}'),
-            tooltip: '移除任务',
+            tooltip: l10n.comicDownloadRemove,
             onPressed: onRemove,
             icon: const Icon(Icons.delete_outline),
           ),
@@ -245,11 +282,11 @@ class _FailedDownloadTile extends StatelessWidget {
   }
 }
 
-String _progressLabel(ComicDownloadQueueEntry entry) {
+String _progressLabel(AppLocalizations l10n, ComicDownloadQueueEntry entry) {
   final total = entry.totalImages;
   return total == null || total <= 0
-      ? '正在解析图片'
-      : '${entry.completedImages}/$total';
+      ? l10n.comicDownloadResolvingImages
+      : l10n.comicDownloadProgress(entry.completedImages, total);
 }
 
 double? _progressValue(ComicDownloadQueueEntry entry) {

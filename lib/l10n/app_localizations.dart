@@ -2206,6 +2206,1214 @@ abstract class AppLocalizations {
   /// **'阅读进度：{current} / {total}'**
   String readerProgressSemantics(String current, String total);
 
+  /// No description provided for @readerModeVertical.
+  ///
+  /// In zh, this message translates to:
+  /// **'垂直'**
+  String get readerModeVertical;
+
+  /// No description provided for @readerModeLtr.
+  ///
+  /// In zh, this message translates to:
+  /// **'左到右'**
+  String get readerModeLtr;
+
+  /// No description provided for @readerModeRtl.
+  ///
+  /// In zh, this message translates to:
+  /// **'右到左'**
+  String get readerModeRtl;
+
+  /// No description provided for @readerModeVerticalContinuous.
+  ///
+  /// In zh, this message translates to:
+  /// **'垂直连续'**
+  String get readerModeVerticalContinuous;
+
+  /// No description provided for @readerModeSingleLtr.
+  ///
+  /// In zh, this message translates to:
+  /// **'单页 左到右'**
+  String get readerModeSingleLtr;
+
+  /// No description provided for @readerModeSingleRtl.
+  ///
+  /// In zh, this message translates to:
+  /// **'单页 右到左'**
+  String get readerModeSingleRtl;
+
+  /// No description provided for @readerDisplaySettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示设置'**
+  String get readerDisplaySettings;
+
+  /// No description provided for @readerReadingMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读模式'**
+  String get readerReadingMode;
+
+  /// No description provided for @readerPageFit.
+  ///
+  /// In zh, this message translates to:
+  /// **'页面适配'**
+  String get readerPageFit;
+
+  /// No description provided for @readerPageFitWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'宽度'**
+  String get readerPageFitWidth;
+
+  /// No description provided for @readerPageFitHeight.
+  ///
+  /// In zh, this message translates to:
+  /// **'高度'**
+  String get readerPageFitHeight;
+
+  /// No description provided for @readerPageFitContain.
+  ///
+  /// In zh, this message translates to:
+  /// **'屏幕'**
+  String get readerPageFitContain;
+
+  /// No description provided for @readerBackground.
+  ///
+  /// In zh, this message translates to:
+  /// **'背景色'**
+  String get readerBackground;
+
+  /// No description provided for @readerBackgroundTheme.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题'**
+  String get readerBackgroundTheme;
+
+  /// No description provided for @readerBackgroundBlack.
+  ///
+  /// In zh, this message translates to:
+  /// **'黑'**
+  String get readerBackgroundBlack;
+
+  /// No description provided for @readerBackgroundWhite.
+  ///
+  /// In zh, this message translates to:
+  /// **'白'**
+  String get readerBackgroundWhite;
+
+  /// No description provided for @readerBackgroundGray.
+  ///
+  /// In zh, this message translates to:
+  /// **'灰'**
+  String get readerBackgroundGray;
+
+  /// No description provided for @readerPageSpacing.
+  ///
+  /// In zh, this message translates to:
+  /// **'页间距'**
+  String get readerPageSpacing;
+
+  /// No description provided for @readerPageIndicator.
+  ///
+  /// In zh, this message translates to:
+  /// **'页码浮层'**
+  String get readerPageIndicator;
+
+  /// No description provided for @readerNoImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可阅读图片'**
+  String get readerNoImages;
+
+  /// No description provided for @readerImageLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片加载失败'**
+  String get readerImageLoadFailed;
+
+  /// No description provided for @readerTailContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'末尾内容'**
+  String get readerTailContent;
+
+  /// No description provided for @readerContinue.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续'**
+  String get readerContinue;
+
+  /// No description provided for @readerDownloadUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前图片不支持下载'**
+  String get readerDownloadUnsupported;
+
+  /// No description provided for @readerExportSaving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存当前图片'**
+  String get readerExportSaving;
+
+  /// No description provided for @readerExportSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存到{destination}'**
+  String readerExportSaved(String destination);
+
+  /// No description provided for @readerExportDefaultDestination.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统照片'**
+  String get readerExportDefaultDestination;
+
+  /// No description provided for @readerExportCacheUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片暂不可用，请重试'**
+  String get readerExportCacheUnavailable;
+
+  /// No description provided for @readerExportPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有照片库写入权限，请在系统设置中允许'**
+  String get readerExportPermissionDenied;
+
+  /// No description provided for @readerExportPermissionRestricted.
+  ///
+  /// In zh, this message translates to:
+  /// **'照片库权限受系统限制'**
+  String get readerExportPermissionRestricted;
+
+  /// No description provided for @readerExportUnsupportedPlatform.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前平台不支持保存图片'**
+  String get readerExportUnsupportedPlatform;
+
+  /// No description provided for @readerExportUnsupportedFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前图片格式不支持保存'**
+  String get readerExportUnsupportedFormat;
+
+  /// No description provided for @readerExportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存图片失败，请重试'**
+  String get readerExportFailed;
+
+  /// No description provided for @comicUntitledWork.
+  ///
+  /// In zh, this message translates to:
+  /// **'未命名漫画（{workId}）'**
+  String comicUntitledWork(String workId);
+
+  /// No description provided for @comicChapterFallbackTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节 {sourceTid}'**
+  String comicChapterFallbackTitle(String sourceTid);
+
+  /// No description provided for @comicAddToShelf.
+  ///
+  /// In zh, this message translates to:
+  /// **'加入书架'**
+  String get comicAddToShelf;
+
+  /// No description provided for @comicAlreadyInShelf.
+  ///
+  /// In zh, this message translates to:
+  /// **'已在书架'**
+  String get comicAlreadyInShelf;
+
+  /// No description provided for @comicNoImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前章节没有可阅读图片'**
+  String get comicNoImages;
+
+  /// No description provided for @comicReaderLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载阅读器失败：{error}'**
+  String comicReaderLoadFailed(String error);
+
+  /// No description provided for @comicReaderNetworkFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络异常，请检查后重试'**
+  String get comicReaderNetworkFailure;
+
+  /// No description provided for @comicReaderAuthFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录态已失效，请重新登录后重试'**
+  String get comicReaderAuthFailure;
+
+  /// No description provided for @comicReaderServerFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务暂时不可用，请稍后重试'**
+  String get comicReaderServerFailure;
+
+  /// No description provided for @comicReaderParseFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'页面结构异常，无法解析章节内容'**
+  String get comicReaderParseFailure;
+
+  /// No description provided for @comicReaderUnknownFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载章节失败'**
+  String get comicReaderUnknownFailure;
+
+  /// No description provided for @comicReaderEpisodeUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节不存在或已被移除'**
+  String get comicReaderEpisodeUnavailable;
+
+  /// No description provided for @comicBookmarkAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加书签'**
+  String get comicBookmarkAdd;
+
+  /// No description provided for @comicBookmarkRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消书签'**
+  String get comicBookmarkRemove;
+
+  /// No description provided for @comicBookmarkAdded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已添加书签'**
+  String get comicBookmarkAdded;
+
+  /// No description provided for @comicBookmarkRemoved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已移除书签'**
+  String get comicBookmarkRemoved;
+
+  /// No description provided for @comicOpenSourceThread.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开原帖'**
+  String get comicOpenSourceThread;
+
+  /// No description provided for @comicMoreActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多操作'**
+  String get comicMoreActions;
+
+  /// No description provided for @comicMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get comicMore;
+
+  /// No description provided for @comicChapterList.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节列表'**
+  String get comicChapterList;
+
+  /// No description provided for @comicChapterAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节'**
+  String get comicChapterAction;
+
+  /// No description provided for @comicCurrentChapter.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前'**
+  String get comicCurrentChapter;
+
+  /// No description provided for @comicDisplay.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示'**
+  String get comicDisplay;
+
+  /// No description provided for @comicDownloadCurrentImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载当前图片'**
+  String get comicDownloadCurrentImage;
+
+  /// No description provided for @comicPreviousEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一话'**
+  String get comicPreviousEpisode;
+
+  /// No description provided for @comicNextEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一话'**
+  String get comicNextEpisode;
+
+  /// No description provided for @comicFirstEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'已是第一话'**
+  String get comicFirstEpisode;
+
+  /// No description provided for @comicLastEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'已是最后一话'**
+  String get comicLastEpisode;
+
+  /// No description provided for @comicMarkEpisodeRead.
+  ///
+  /// In zh, this message translates to:
+  /// **'标记本章已读'**
+  String get comicMarkEpisodeRead;
+
+  /// No description provided for @comicMarkEpisodeUnread.
+  ///
+  /// In zh, this message translates to:
+  /// **'标记本章未读'**
+  String get comicMarkEpisodeUnread;
+
+  /// No description provided for @comicEpisodeMarkedRead.
+  ///
+  /// In zh, this message translates to:
+  /// **'已标记本章已读'**
+  String get comicEpisodeMarkedRead;
+
+  /// No description provided for @comicEpisodeMarkedUnread.
+  ///
+  /// In zh, this message translates to:
+  /// **'已标记本章未读'**
+  String get comicEpisodeMarkedUnread;
+
+  /// No description provided for @comicSetCurrentPageCover.
+  ///
+  /// In zh, this message translates to:
+  /// **'将当前页设为封面'**
+  String get comicSetCurrentPageCover;
+
+  /// No description provided for @comicCoverImageUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前页图片暂不可用，无法设为封面'**
+  String get comicCoverImageUnavailable;
+
+  /// No description provided for @comicCoverUpdateFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'封面更新失败'**
+  String get comicCoverUpdateFailed;
+
+  /// No description provided for @comicCoverUpdated.
+  ///
+  /// In zh, this message translates to:
+  /// **'封面已更新'**
+  String get comicCoverUpdated;
+
+  /// No description provided for @comicEpisodeSwitchFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节切换失败，已保留当前章节'**
+  String get comicEpisodeSwitchFailed;
+
+  /// No description provided for @comicSetCoverFocus.
+  ///
+  /// In zh, this message translates to:
+  /// **'调整封面焦点'**
+  String get comicSetCoverFocus;
+
+  /// No description provided for @comicNextChapterTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一章：{title}'**
+  String comicNextChapterTitle(String title);
+
+  /// No description provided for @comicSwitchingEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在切换章节'**
+  String get comicSwitchingEpisode;
+
+  /// No description provided for @comicOpenNextEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击进入下一章'**
+  String get comicOpenNextEpisode;
+
+  /// No description provided for @comicOpeningEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在打开章节'**
+  String get comicOpeningEpisode;
+
+  /// No description provided for @comicRefreshNoNewLinks.
+  ///
+  /// In zh, this message translates to:
+  /// **'未提取到新的章节链接'**
+  String get comicRefreshNoNewLinks;
+
+  /// No description provided for @comicRefreshCompleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节刷新完成：新增 {insertedCount, plural, =0 {0} other {{insertedCount}}}，更新 {updatedCount, plural, =0 {0} other {{updatedCount}}}'**
+  String comicRefreshCompleted(int insertedCount, int updatedCount);
+
+  /// No description provided for @comicRefreshFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新章节失败：{error}'**
+  String comicRefreshFailed(String error);
+
+  /// No description provided for @comicComment.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论'**
+  String get comicComment;
+
+  /// No description provided for @comicCommentLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论加载中'**
+  String get comicCommentLoading;
+
+  /// No description provided for @comicCommentEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无评论'**
+  String get comicCommentEmpty;
+
+  /// No description provided for @comicCommentUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论暂不可用'**
+  String get comicCommentUnavailable;
+
+  /// No description provided for @comicCommentOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看评论'**
+  String get comicCommentOpen;
+
+  /// No description provided for @comicCommentUnavailableFeedback.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法查看评论'**
+  String get comicCommentUnavailableFeedback;
+
+  /// No description provided for @comicCommentContinue.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续滑动进入下一章'**
+  String get comicCommentContinue;
+
+  /// No description provided for @comicCommentContinueTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续滑动进入：{title}'**
+  String comicCommentContinueTo(String title);
+
+  /// No description provided for @comicDownloadQueue.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载队列'**
+  String get comicDownloadQueue;
+
+  /// No description provided for @comicDownloadQueueEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无下载任务'**
+  String get comicDownloadQueueEmpty;
+
+  /// No description provided for @comicDownloadActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在下载'**
+  String get comicDownloadActive;
+
+  /// No description provided for @comicDownloadPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待中'**
+  String get comicDownloadPending;
+
+  /// No description provided for @comicDownloadFailedSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载失败'**
+  String get comicDownloadFailedSection;
+
+  /// No description provided for @comicDownloadCanceling.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在取消'**
+  String get comicDownloadCanceling;
+
+  /// No description provided for @comicDownloadCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消下载'**
+  String get comicDownloadCancel;
+
+  /// No description provided for @comicDownloadRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除任务'**
+  String get comicDownloadRemove;
+
+  /// No description provided for @comicDownloadRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试'**
+  String get comicDownloadRetry;
+
+  /// No description provided for @comicDownloadQueuePosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'{episodeTitle} · 第 {position} 位'**
+  String comicDownloadQueuePosition(String episodeTitle, int position);
+
+  /// No description provided for @comicDownloadFailureDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'{episodeTitle} · {error}'**
+  String comicDownloadFailureDetail(String episodeTitle, String error);
+
+  /// No description provided for @comicDownloadResolvingImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在解析图片'**
+  String get comicDownloadResolvingImages;
+
+  /// No description provided for @comicDownloadProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'{completed}/{total}'**
+  String comicDownloadProgress(int completed, int total);
+
+  /// No description provided for @comicDownloadCancelFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消下载失败：{error}'**
+  String comicDownloadCancelFailed(String error);
+
+  /// No description provided for @comicDownloadRemoveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除任务失败：{error}'**
+  String comicDownloadRemoveFailed(String error);
+
+  /// No description provided for @comicDownloadRetryFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试失败：{error}'**
+  String comicDownloadRetryFailed(String error);
+
+  /// No description provided for @comicDownloadWorkUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'漫画作品不存在或已被移除'**
+  String get comicDownloadWorkUnavailable;
+
+  /// No description provided for @comicDownloadEpisodeUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'漫画章节不存在或已被移除'**
+  String get comicDownloadEpisodeUnavailable;
+
+  /// No description provided for @comicDownloadNoImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节没有可下载图片'**
+  String get comicDownloadNoImages;
+
+  /// No description provided for @comicDownloadImageFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分图片下载失败'**
+  String get comicDownloadImageFailed;
+
+  /// No description provided for @comicDownloadStorageFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载文件保存失败'**
+  String get comicDownloadStorageFailed;
+
+  /// No description provided for @comicDownloadUnknownFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载失败，请重试'**
+  String get comicDownloadUnknownFailure;
+
+  /// No description provided for @novelUntitledWork.
+  ///
+  /// In zh, this message translates to:
+  /// **'未命名小说（{novelId}）'**
+  String novelUntitledWork(String novelId);
+
+  /// No description provided for @novelChapterFallbackTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节 {sourceTid}'**
+  String novelChapterFallbackTitle(String sourceTid);
+
+  /// No description provided for @novelOriginalBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'原创'**
+  String get novelOriginalBadge;
+
+  /// No description provided for @novelOpenInReader.
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读器'**
+  String get novelOpenInReader;
+
+  /// No description provided for @novelOpenSourcePost.
+  ///
+  /// In zh, this message translates to:
+  /// **'原帖'**
+  String get novelOpenSourcePost;
+
+  /// No description provided for @novelSaveOpenModeFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存章节打开方式失败：{error}'**
+  String novelSaveOpenModeFailed(String error);
+
+  /// No description provided for @novelSourceRouteDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法定位原帖楼层'**
+  String get novelSourceRouteDialogTitle;
+
+  /// No description provided for @novelOpenThreadHome.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开帖子首页'**
+  String get novelOpenThreadHome;
+
+  /// No description provided for @novelSourceRouteInvalidTid.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节缺少有效的来源 TID'**
+  String get novelSourceRouteInvalidTid;
+
+  /// No description provided for @novelSourceRouteInvalidPid.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节缺少有效的来源 PID'**
+  String get novelSourceRouteInvalidPid;
+
+  /// No description provided for @novelSourceRouteLocatorFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'原帖楼层定位失败：{error}'**
+  String novelSourceRouteLocatorFailed(String error);
+
+  /// No description provided for @novelSourceRouteEmptyResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'原帖楼层定位结果为空'**
+  String get novelSourceRouteEmptyResult;
+
+  /// No description provided for @novelSourceRouteMismatchedResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'原帖楼层定位结果与章节来源不一致'**
+  String get novelSourceRouteMismatchedResult;
+
+  /// No description provided for @novelSourceRouteInvalidPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'原帖楼层页码无效'**
+  String get novelSourceRouteInvalidPage;
+
+  /// No description provided for @novelHydrationRecoveringMetadata.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在恢复小说来源信息'**
+  String get novelHydrationRecoveringMetadata;
+
+  /// No description provided for @novelHydrationPreparing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备章节'**
+  String get novelHydrationPreparing;
+
+  /// No description provided for @novelHydrationCommitting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存 {count, plural, =0 {0 个章节} other {{count} 个章节}}'**
+  String novelHydrationCommitting(int count);
+
+  /// No description provided for @novelHydrationLoadingPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在加载第 {currentPage} 页 · 已发现 {acceptedCount, plural, =0 {0 章} other {{acceptedCount} 章}}'**
+  String novelHydrationLoadingPage(int currentPage, int acceptedCount);
+
+  /// No description provided for @novelHydrationLoadingPageOfTotal.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在加载第 {currentPage}/{totalPages} 页 · 已发现 {acceptedCount, plural, =0 {0 章} other {{acceptedCount} 章}}'**
+  String novelHydrationLoadingPageOfTotal(
+    int currentPage,
+    int totalPages,
+    int acceptedCount,
+  );
+
+  /// No description provided for @novelHydrationMissingSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少小说来源信息，无法加载章节'**
+  String get novelHydrationMissingSource;
+
+  /// No description provided for @novelHydrationMissingPublisher.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源帖子缺少有效的发布者 ID'**
+  String get novelHydrationMissingPublisher;
+
+  /// No description provided for @novelHydrationMissingTid.
+  ///
+  /// In zh, this message translates to:
+  /// **'小说缺少来源帖子 ID'**
+  String get novelHydrationMissingTid;
+
+  /// No description provided for @novelHydrationMissingCheckpoint.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节同步检查点缺失，无法安全更新'**
+  String get novelHydrationMissingCheckpoint;
+
+  /// No description provided for @novelHydrationInterrupted.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节同步已中断，请重试'**
+  String get novelHydrationInterrupted;
+
+  /// No description provided for @novelChapterLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节加载失败：{error}'**
+  String novelChapterLoadFailed(String error);
+
+  /// No description provided for @novelChapterLoadUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节加载失败，请重试'**
+  String get novelChapterLoadUnknown;
+
+  /// No description provided for @novelReaderNoChapters.
+  ///
+  /// In zh, this message translates to:
+  /// **'小说没有可阅读章节'**
+  String get novelReaderNoChapters;
+
+  /// No description provided for @novelReaderContentMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节正文暂不可用'**
+  String get novelReaderContentMissing;
+
+  /// No description provided for @novelReaderLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载阅读器失败：{error}'**
+  String novelReaderLoadFailed(String error);
+
+  /// No description provided for @novelDisplaySettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示设置'**
+  String get novelDisplaySettings;
+
+  /// No description provided for @novelTypography.
+  ///
+  /// In zh, this message translates to:
+  /// **'排版'**
+  String get novelTypography;
+
+  /// No description provided for @novelFontSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'字号'**
+  String get novelFontSize;
+
+  /// No description provided for @novelLineSpacing.
+  ///
+  /// In zh, this message translates to:
+  /// **'间隔'**
+  String get novelLineSpacing;
+
+  /// No description provided for @novelTheme.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题'**
+  String get novelTheme;
+
+  /// No description provided for @novelThemeLight.
+  ///
+  /// In zh, this message translates to:
+  /// **'浅色'**
+  String get novelThemeLight;
+
+  /// No description provided for @novelThemeSepia.
+  ///
+  /// In zh, this message translates to:
+  /// **'护眼'**
+  String get novelThemeSepia;
+
+  /// No description provided for @novelThemeDark.
+  ///
+  /// In zh, this message translates to:
+  /// **'深色'**
+  String get novelThemeDark;
+
+  /// No description provided for @novelThemeSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'跟随系统'**
+  String get novelThemeSystem;
+
+  /// No description provided for @novelReading.
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读'**
+  String get novelReading;
+
+  /// No description provided for @novelReadingMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读模式'**
+  String get novelReadingMode;
+
+  /// No description provided for @novelConversionMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'简繁'**
+  String get novelConversionMode;
+
+  /// No description provided for @novelSafeContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全显示正文'**
+  String get novelSafeContent;
+
+  /// No description provided for @novelConversionOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'原文'**
+  String get novelConversionOriginal;
+
+  /// No description provided for @novelConversionSimplified.
+  ///
+  /// In zh, this message translates to:
+  /// **'简体'**
+  String get novelConversionSimplified;
+
+  /// No description provided for @novelConversionTraditional.
+  ///
+  /// In zh, this message translates to:
+  /// **'繁体'**
+  String get novelConversionTraditional;
+
+  /// No description provided for @novelFlowScroll.
+  ///
+  /// In zh, this message translates to:
+  /// **'滚动'**
+  String get novelFlowScroll;
+
+  /// No description provided for @novelFlowPagedLtr.
+  ///
+  /// In zh, this message translates to:
+  /// **'分页 LTR'**
+  String get novelFlowPagedLtr;
+
+  /// No description provided for @novelFlowPagedRtl.
+  ///
+  /// In zh, this message translates to:
+  /// **'分页 RTL'**
+  String get novelFlowPagedRtl;
+
+  /// No description provided for @novelBookmarkAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加章节书签'**
+  String get novelBookmarkAdd;
+
+  /// No description provided for @novelBookmarkRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除章节书签'**
+  String get novelBookmarkRemove;
+
+  /// No description provided for @novelBookmarkAdded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已添加书签'**
+  String get novelBookmarkAdded;
+
+  /// No description provided for @novelBookmarkRemoved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已移除书签'**
+  String get novelBookmarkRemoved;
+
+  /// No description provided for @novelOpenSourceThread.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开原帖'**
+  String get novelOpenSourceThread;
+
+  /// No description provided for @novelCatalog.
+  ///
+  /// In zh, this message translates to:
+  /// **'目录'**
+  String get novelCatalog;
+
+  /// No description provided for @novelDisplay.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示'**
+  String get novelDisplay;
+
+  /// No description provided for @novelPageCountPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'计算中'**
+  String get novelPageCountPending;
+
+  /// No description provided for @novelPositionChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'位置已变化，已保留当前页'**
+  String get novelPositionChanged;
+
+  /// No description provided for @novelChapterSwitchFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节切换失败，已保留当前章节'**
+  String get novelChapterSwitchFailed;
+
+  /// No description provided for @novelReturnToScrollFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'切回滚动模式失败'**
+  String get novelReturnToScrollFailed;
+
+  /// No description provided for @novelSaveDisplaySettingsFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示设置保存失败'**
+  String get novelSaveDisplaySettingsFailed;
+
+  /// No description provided for @novelLinkOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接打开失败'**
+  String get novelLinkOpenFailed;
+
+  /// No description provided for @novelImageLinkCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片链接已复制'**
+  String get novelImageLinkCopied;
+
+  /// No description provided for @novelWorkUpdateFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'作品更新失败，已保留当前章节'**
+  String get novelWorkUpdateFailed;
+
+  /// No description provided for @novelSearchChapters.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索章节'**
+  String get novelSearchChapters;
+
+  /// No description provided for @novelNoMatchingChapters.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的章节'**
+  String get novelNoMatchingChapters;
+
+  /// No description provided for @novelBookmark.
+  ///
+  /// In zh, this message translates to:
+  /// **'书签'**
+  String get novelBookmark;
+
+  /// No description provided for @novelCurrent.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前'**
+  String get novelCurrent;
+
+  /// No description provided for @novelLastRead.
+  ///
+  /// In zh, this message translates to:
+  /// **'上次阅读'**
+  String get novelLastRead;
+
+  /// No description provided for @novelNextChapter.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一章：{title}'**
+  String novelNextChapter(String title);
+
+  /// No description provided for @novelChapterUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节暂时无法显示'**
+  String get novelChapterUnavailable;
+
+  /// No description provided for @novelUpdateWork.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新作品'**
+  String get novelUpdateWork;
+
+  /// No description provided for @novelPagedWindowUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前窗口无法生成分页布局'**
+  String get novelPagedWindowUnavailable;
+
+  /// No description provided for @novelPagedPreparing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备分页正文'**
+  String get novelPagedPreparing;
+
+  /// No description provided for @novelPagedCalculating.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在计算分页布局'**
+  String get novelPagedCalculating;
+
+  /// No description provided for @novelPagedNoContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'本章没有可显示的正文'**
+  String get novelPagedNoContent;
+
+  /// No description provided for @novelPagedRestoringPosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在恢复阅读位置'**
+  String get novelPagedRestoringPosition;
+
+  /// No description provided for @novelPagedLayoutFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'分页布局失败'**
+  String get novelPagedLayoutFailed;
+
+  /// No description provided for @novelReturnToScroll.
+  ///
+  /// In zh, this message translates to:
+  /// **'回到滚动'**
+  String get novelReturnToScroll;
+
+  /// No description provided for @novelPages.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {0 页} other {{count} 页}}'**
+  String novelPages(int count);
+
+  /// No description provided for @novelPageSemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'{chapterTitle}，第 {currentPage} 页，共 {totalPages}'**
+  String novelPageSemantics(
+    String chapterTitle,
+    int currentPage,
+    String totalPages,
+  );
+
+  /// No description provided for @novelPageValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {currentPage} 页，共 {totalPages}'**
+  String novelPageValue(int currentPage, String totalPages);
+
+  /// No description provided for @novelNextPageSemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一页，第 {page} 页'**
+  String novelNextPageSemantics(int page);
+
+  /// No description provided for @novelPreviousPageSemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一页，第 {page} 页'**
+  String novelPreviousPageSemantics(int page);
+
+  /// No description provided for @novelPageIndicator.
+  ///
+  /// In zh, this message translates to:
+  /// **'{currentPage} / {totalPages}'**
+  String novelPageIndicator(int currentPage, String totalPages);
+
+  /// No description provided for @novelChapterTurnContinue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{direction, select, next {继续滑动进入下一章} previous {继续滑动进入上一章} other {继续滑动切换章节}}'**
+  String novelChapterTurnContinue(String direction);
+
+  /// No description provided for @novelChapterTurnRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'{direction, select, next {松手进入下一章 · {title}} previous {松手进入上一章 · {title}} other {松手切换章节 · {title}}}'**
+  String novelChapterTurnRelease(String direction, String title);
+
+  /// No description provided for @novelPageOfTotalSemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {page} 页，共 {total} 页'**
+  String novelPageOfTotalSemantics(int page, int total);
+
+  /// No description provided for @libraryOperationWorkNotFound.
+  ///
+  /// In zh, this message translates to:
+  /// **'作品不存在或已被移除'**
+  String get libraryOperationWorkNotFound;
+
+  /// No description provided for @libraryOperationChapterNotFound.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节不存在或已被移除'**
+  String get libraryOperationChapterNotFound;
+
+  /// No description provided for @libraryOperationUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前模块不支持此操作'**
+  String get libraryOperationUnsupported;
+
+  /// No description provided for @libraryOperationCacheWriteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'缓存写入失败，请重试'**
+  String get libraryOperationCacheWriteFailed;
+
+  /// No description provided for @libraryOperationDefaultCategoryImmutable.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认分类不能修改或删除'**
+  String get libraryOperationDefaultCategoryImmutable;
+
   /// No description provided for @moreTitle.
   ///
   /// In zh, this message translates to:

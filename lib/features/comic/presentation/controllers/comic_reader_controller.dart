@@ -16,6 +16,7 @@ import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.d
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
+import 'package:y300/features/comic/presentation/comic_presentation_models.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 
 class ComicReaderArgs {
@@ -170,7 +171,7 @@ class ComicReaderViewState {
       failedCount: 0,
     ),
     this.isSwitchingEpisode = false,
-    this.hint,
+    this.noticeCode,
   });
 
   final String comicId;
@@ -189,7 +190,7 @@ class ComicReaderViewState {
   final int failedImageCount;
   final ComicReaderCacheSummary cacheSummary;
   final bool isSwitchingEpisode;
-  final String? hint;
+  final ComicReaderNoticeCode? noticeCode;
 
   ComicReaderChapterEntry? get nextChapter {
     final currentIndex = chapters.indexWhere((chapter) => chapter.isCurrent);
@@ -218,8 +219,8 @@ class ComicReaderViewState {
     int? failedImageCount,
     ComicReaderCacheSummary? cacheSummary,
     bool? isSwitchingEpisode,
-    String? hint,
-    bool clearHint = false,
+    ComicReaderNoticeCode? noticeCode,
+    bool clearNotice = false,
   }) {
     return ComicReaderViewState(
       comicId: comicId,
@@ -238,7 +239,7 @@ class ComicReaderViewState {
       failedImageCount: failedImageCount ?? this.failedImageCount,
       cacheSummary: cacheSummary ?? this.cacheSummary,
       isSwitchingEpisode: isSwitchingEpisode ?? this.isSwitchingEpisode,
-      hint: clearHint ? null : (hint ?? this.hint),
+      noticeCode: clearNotice ? null : (noticeCode ?? this.noticeCode),
     );
   }
 }
@@ -310,7 +311,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     return _loadState(episodeId: _currentEpisodeId);
   }
 
-  Future<String?> toggleBookmark() async {
+  Future<ComicReaderNoticeCode?> toggleBookmark() async {
     final current = state.value;
     if (current == null) {
       return null;
@@ -324,11 +325,13 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (!ref.mounted) {
       return null;
     }
-    state = AsyncData(current.copyWith(isBookmarked: next, clearHint: true));
-    return next ? '已添加书签' : '已取消书签';
+    state = AsyncData(current.copyWith(isBookmarked: next, clearNotice: true));
+    return next
+        ? ComicReaderNoticeCode.bookmarkAdded
+        : ComicReaderNoticeCode.bookmarkRemoved;
   }
 
-  Future<String?> setCurrentEpisodeRead(bool isRead) async {
+  Future<ComicReaderNoticeCode?> setCurrentEpisodeRead(bool isRead) async {
     final current = state.value;
     if (current == null) {
       return null;
@@ -354,10 +357,12 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
           episodeId: current.episodeId,
           isRead: isRead,
         ),
-        clearHint: true,
+        clearNotice: true,
       ),
     );
-    return isRead ? '本章已标记为已读' : '本章已标记为未读';
+    return isRead
+        ? ComicReaderNoticeCode.episodeMarkedRead
+        : ComicReaderNoticeCode.episodeMarkedUnread;
   }
 
   /// 为“设为封面”准备当前页的本地文件，供 UI 在焦点选区器里预览。
@@ -376,13 +381,13 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         return null;
       }
       final latest = state.value ?? current;
-      state = AsyncData(latest.copyWith(clearHint: true));
+      state = AsyncData(latest.copyWith(clearNotice: true));
       return null;
     }
     return localPath;
   }
 
-  Future<String?> setCurrentImageAsCover({
+  Future<ComicReaderNoticeCode?> setCurrentImageAsCover({
     double? focusX,
     double? focusY,
   }) async {
@@ -392,15 +397,15 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return null;
     }
 
-    state = AsyncData(current.copyWith(clearHint: true));
+    state = AsyncData(current.copyWith(clearNotice: true));
     final localPath = await _ensureCurrentImageLocalFile(image);
     if (localPath == null || localPath.trim().isEmpty) {
       if (!ref.mounted) {
         return null;
       }
       final latest = state.value ?? current;
-      state = AsyncData(latest.copyWith(clearHint: true));
-      return '当前页图片缓存失败，无法设为封面';
+      state = AsyncData(latest.copyWith(clearNotice: true));
+      return ComicReaderNoticeCode.coverImageUnavailable;
     }
 
     final result = await _imageCacheService.copyProtectedLocalFile(
@@ -423,8 +428,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         return null;
       }
       final latest = state.value ?? current;
-      state = AsyncData(latest.copyWith(clearHint: true));
-      return '封面更新失败，请稍后重试';
+      state = AsyncData(latest.copyWith(clearNotice: true));
+      return ComicReaderNoticeCode.coverUpdateFailed;
     }
     try {
       await _repository.updateCustomCoverFromLocalFile(
@@ -441,15 +446,15 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         return null;
       }
       final latest = state.value ?? current;
-      state = AsyncData(latest.copyWith(clearHint: true));
-      return '封面更新失败，请稍后重试';
+      state = AsyncData(latest.copyWith(clearNotice: true));
+      return ComicReaderNoticeCode.coverUpdateFailed;
     }
     if (!ref.mounted) {
       return null;
     }
     final latest = state.value ?? current;
-    state = AsyncData(latest.copyWith(clearHint: true));
-    return '封面已更新';
+    state = AsyncData(latest.copyWith(clearNotice: true));
+    return ComicReaderNoticeCode.coverUpdated;
   }
 
   Future<void> onScrollProgress({
@@ -565,7 +570,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     }
 
     state = AsyncData(
-      current.copyWith(isSwitchingEpisode: true, clearHint: true),
+      current.copyWith(isSwitchingEpisode: true, clearNotice: true),
     );
     _cancelScheduledProgressPersistence();
 
@@ -592,7 +597,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         if (ref.mounted) {
           final latest = state.value ?? current;
           state = AsyncData(
-            latest.copyWith(isSwitchingEpisode: false, clearHint: true),
+            latest.copyWith(isSwitchingEpisode: false, clearNotice: true),
           );
         }
         return false;
@@ -610,7 +615,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       _resolvedImageIndexes.clear();
       _firstImageVisibleLogged = false;
       state = AsyncData(
-        nextState.copyWith(isSwitchingEpisode: false, clearHint: true),
+        nextState.copyWith(isSwitchingEpisode: false, clearNotice: true),
       );
       _logReaderEvent(
         'episode_switched',
@@ -628,7 +633,10 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       }
       final latest = state.value ?? current;
       state = AsyncData(
-        latest.copyWith(isSwitchingEpisode: false, hint: '章节切换失败，请稍后重试'),
+        latest.copyWith(
+          isSwitchingEpisode: false,
+          noticeCode: ComicReaderNoticeCode.episodeSwitchFailed,
+        ),
       );
       _logReaderEvent(
         'episode_switch_failed',
@@ -1125,7 +1133,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     final episodes = await _loadEpisodesInReaderOrder();
     final episodeIndex = episodes.indexWhere((e) => e.episodeId == episodeId);
     if (episodeIndex < 0) {
-      throw StateError('章节不存在');
+      throw const ComicReaderLoadException(
+        ComicReaderLoadFailureCode.episodeNotFound,
+      );
     }
     final episode = episodes[episodeIndex];
     final isRead = await _readingStateWriter.isEpisodeRead(
@@ -1138,7 +1148,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     );
     final images = await _ensureEpisodeImages(episode);
     if (!ref.mounted) {
-      throw StateError('阅读器已销毁');
+      throw StateError('reader_disposed');
     }
     final shouldRestoreProgress =
         policy == ComicEpisodeOpenPolicy.resumeIfUnread && !isRead;
@@ -1183,7 +1193,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       chapters.add(
         ComicReaderChapterEntry(
           episodeId: item.episodeId,
-          title: item.episodeTitle ?? '章节 ${item.sourceTid}',
+          title: item.episodeTitle ?? '',
           orderIndex: item.orderIndex,
           sourceTid: item.sourceTid,
           isCurrent: item.episodeId == episodeId,
@@ -1195,8 +1205,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     final viewState = ComicReaderViewState(
       comicId: _args.comicId,
       episodeId: episodeId,
-      comicTitle: detail?.title ?? '漫画',
-      episodeTitle: episode.episodeTitle ?? '章节 ${episode.sourceTid}',
+      comicTitle: detail?.title ?? '',
+      episodeTitle: episode.episodeTitle ?? '',
       sourceTid: episode.sourceTid,
       images: imageStates,
       chapters: List<ComicReaderChapterEntry>.unmodifiable(chapters),

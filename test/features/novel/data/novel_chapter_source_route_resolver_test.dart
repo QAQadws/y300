@@ -51,9 +51,9 @@ void main() {
       ),
       throwsA(
         isA<NovelChapterSourceRouteException>().having(
-          (error) => error.message,
-          'message',
-          contains('目标楼层不存在'),
+          (error) => error.code,
+          'code',
+          NovelChapterSourceRouteFailureCode.emptyResult,
         ),
       ),
     );

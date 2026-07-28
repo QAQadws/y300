@@ -1399,6 +1399,726 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get readerModeVertical => '垂直';
+
+  @override
+  String get readerModeLtr => '左到右';
+
+  @override
+  String get readerModeRtl => '右到左';
+
+  @override
+  String get readerModeVerticalContinuous => '垂直连续';
+
+  @override
+  String get readerModeSingleLtr => '单页 左到右';
+
+  @override
+  String get readerModeSingleRtl => '单页 右到左';
+
+  @override
+  String get readerDisplaySettings => '显示设置';
+
+  @override
+  String get readerReadingMode => '阅读模式';
+
+  @override
+  String get readerPageFit => '页面适配';
+
+  @override
+  String get readerPageFitWidth => '宽度';
+
+  @override
+  String get readerPageFitHeight => '高度';
+
+  @override
+  String get readerPageFitContain => '屏幕';
+
+  @override
+  String get readerBackground => '背景色';
+
+  @override
+  String get readerBackgroundTheme => '主题';
+
+  @override
+  String get readerBackgroundBlack => '黑';
+
+  @override
+  String get readerBackgroundWhite => '白';
+
+  @override
+  String get readerBackgroundGray => '灰';
+
+  @override
+  String get readerPageSpacing => '页间距';
+
+  @override
+  String get readerPageIndicator => '页码浮层';
+
+  @override
+  String get readerNoImages => '没有可阅读图片';
+
+  @override
+  String get readerImageLoadFailed => '图片加载失败';
+
+  @override
+  String get readerTailContent => '末尾内容';
+
+  @override
+  String get readerContinue => '继续';
+
+  @override
+  String get readerDownloadUnsupported => '当前图片不支持下载';
+
+  @override
+  String get readerExportSaving => '正在保存当前图片';
+
+  @override
+  String readerExportSaved(String destination) {
+    return '已保存到$destination';
+  }
+
+  @override
+  String get readerExportDefaultDestination => '系统照片';
+
+  @override
+  String get readerExportCacheUnavailable => '图片暂不可用，请重试';
+
+  @override
+  String get readerExportPermissionDenied => '没有照片库写入权限，请在系统设置中允许';
+
+  @override
+  String get readerExportPermissionRestricted => '照片库权限受系统限制';
+
+  @override
+  String get readerExportUnsupportedPlatform => '当前平台不支持保存图片';
+
+  @override
+  String get readerExportUnsupportedFormat => '当前图片格式不支持保存';
+
+  @override
+  String get readerExportFailed => '保存图片失败，请重试';
+
+  @override
+  String comicUntitledWork(String workId) {
+    return '未命名漫画（$workId）';
+  }
+
+  @override
+  String comicChapterFallbackTitle(String sourceTid) {
+    return '章节 $sourceTid';
+  }
+
+  @override
+  String get comicAddToShelf => '加入书架';
+
+  @override
+  String get comicAlreadyInShelf => '已在书架';
+
+  @override
+  String get comicNoImages => '当前章节没有可阅读图片';
+
+  @override
+  String comicReaderLoadFailed(String error) {
+    return '加载阅读器失败：$error';
+  }
+
+  @override
+  String get comicReaderNetworkFailure => '网络异常，请检查后重试';
+
+  @override
+  String get comicReaderAuthFailure => '登录态已失效，请重新登录后重试';
+
+  @override
+  String get comicReaderServerFailure => '服务暂时不可用，请稍后重试';
+
+  @override
+  String get comicReaderParseFailure => '页面结构异常，无法解析章节内容';
+
+  @override
+  String get comicReaderUnknownFailure => '加载章节失败';
+
+  @override
+  String get comicReaderEpisodeUnavailable => '章节不存在或已被移除';
+
+  @override
+  String get comicBookmarkAdd => '添加书签';
+
+  @override
+  String get comicBookmarkRemove => '取消书签';
+
+  @override
+  String get comicBookmarkAdded => '已添加书签';
+
+  @override
+  String get comicBookmarkRemoved => '已移除书签';
+
+  @override
+  String get comicOpenSourceThread => '打开原帖';
+
+  @override
+  String get comicMoreActions => '更多操作';
+
+  @override
+  String get comicMore => '更多';
+
+  @override
+  String get comicChapterList => '章节列表';
+
+  @override
+  String get comicChapterAction => '章节';
+
+  @override
+  String get comicCurrentChapter => '当前';
+
+  @override
+  String get comicDisplay => '显示';
+
+  @override
+  String get comicDownloadCurrentImage => '下载当前图片';
+
+  @override
+  String get comicPreviousEpisode => '上一话';
+
+  @override
+  String get comicNextEpisode => '下一话';
+
+  @override
+  String get comicFirstEpisode => '已是第一话';
+
+  @override
+  String get comicLastEpisode => '已是最后一话';
+
+  @override
+  String get comicMarkEpisodeRead => '标记本章已读';
+
+  @override
+  String get comicMarkEpisodeUnread => '标记本章未读';
+
+  @override
+  String get comicEpisodeMarkedRead => '已标记本章已读';
+
+  @override
+  String get comicEpisodeMarkedUnread => '已标记本章未读';
+
+  @override
+  String get comicSetCurrentPageCover => '将当前页设为封面';
+
+  @override
+  String get comicCoverImageUnavailable => '当前页图片暂不可用，无法设为封面';
+
+  @override
+  String get comicCoverUpdateFailed => '封面更新失败';
+
+  @override
+  String get comicCoverUpdated => '封面已更新';
+
+  @override
+  String get comicEpisodeSwitchFailed => '章节切换失败，已保留当前章节';
+
+  @override
+  String get comicSetCoverFocus => '调整封面焦点';
+
+  @override
+  String comicNextChapterTitle(String title) {
+    return '下一章：$title';
+  }
+
+  @override
+  String get comicSwitchingEpisode => '正在切换章节';
+
+  @override
+  String get comicOpenNextEpisode => '点击进入下一章';
+
+  @override
+  String get comicOpeningEpisode => '正在打开章节';
+
+  @override
+  String get comicRefreshNoNewLinks => '未提取到新的章节链接';
+
+  @override
+  String comicRefreshCompleted(int insertedCount, int updatedCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      insertedCount,
+      locale: localeName,
+      other: '$insertedCount',
+      zero: '0',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      updatedCount,
+      locale: localeName,
+      other: '$updatedCount',
+      zero: '0',
+    );
+    return '章节刷新完成：新增 $_temp0，更新 $_temp1';
+  }
+
+  @override
+  String comicRefreshFailed(String error) {
+    return '刷新章节失败：$error';
+  }
+
+  @override
+  String get comicComment => '评论';
+
+  @override
+  String get comicCommentLoading => '评论加载中';
+
+  @override
+  String get comicCommentEmpty => '暂无评论';
+
+  @override
+  String get comicCommentUnavailable => '评论暂不可用';
+
+  @override
+  String get comicCommentOpen => '查看评论';
+
+  @override
+  String get comicCommentUnavailableFeedback => '无法查看评论';
+
+  @override
+  String get comicCommentContinue => '继续滑动进入下一章';
+
+  @override
+  String comicCommentContinueTo(String title) {
+    return '继续滑动进入：$title';
+  }
+
+  @override
+  String get comicDownloadQueue => '下载队列';
+
+  @override
+  String get comicDownloadQueueEmpty => '暂无下载任务';
+
+  @override
+  String get comicDownloadActive => '正在下载';
+
+  @override
+  String get comicDownloadPending => '等待中';
+
+  @override
+  String get comicDownloadFailedSection => '下载失败';
+
+  @override
+  String get comicDownloadCanceling => '正在取消';
+
+  @override
+  String get comicDownloadCancel => '取消下载';
+
+  @override
+  String get comicDownloadRemove => '移除任务';
+
+  @override
+  String get comicDownloadRetry => '重试';
+
+  @override
+  String comicDownloadQueuePosition(String episodeTitle, int position) {
+    return '$episodeTitle · 第 $position 位';
+  }
+
+  @override
+  String comicDownloadFailureDetail(String episodeTitle, String error) {
+    return '$episodeTitle · $error';
+  }
+
+  @override
+  String get comicDownloadResolvingImages => '正在解析图片';
+
+  @override
+  String comicDownloadProgress(int completed, int total) {
+    return '$completed/$total';
+  }
+
+  @override
+  String comicDownloadCancelFailed(String error) {
+    return '取消下载失败：$error';
+  }
+
+  @override
+  String comicDownloadRemoveFailed(String error) {
+    return '移除任务失败：$error';
+  }
+
+  @override
+  String comicDownloadRetryFailed(String error) {
+    return '重试失败：$error';
+  }
+
+  @override
+  String get comicDownloadWorkUnavailable => '漫画作品不存在或已被移除';
+
+  @override
+  String get comicDownloadEpisodeUnavailable => '漫画章节不存在或已被移除';
+
+  @override
+  String get comicDownloadNoImages => '章节没有可下载图片';
+
+  @override
+  String get comicDownloadImageFailed => '部分图片下载失败';
+
+  @override
+  String get comicDownloadStorageFailed => '下载文件保存失败';
+
+  @override
+  String get comicDownloadUnknownFailure => '下载失败，请重试';
+
+  @override
+  String novelUntitledWork(String novelId) {
+    return '未命名小说（$novelId）';
+  }
+
+  @override
+  String novelChapterFallbackTitle(String sourceTid) {
+    return '章节 $sourceTid';
+  }
+
+  @override
+  String get novelOriginalBadge => '原创';
+
+  @override
+  String get novelOpenInReader => '阅读器';
+
+  @override
+  String get novelOpenSourcePost => '原帖';
+
+  @override
+  String novelSaveOpenModeFailed(String error) {
+    return '保存章节打开方式失败：$error';
+  }
+
+  @override
+  String get novelSourceRouteDialogTitle => '无法定位原帖楼层';
+
+  @override
+  String get novelOpenThreadHome => '打开帖子首页';
+
+  @override
+  String get novelSourceRouteInvalidTid => '章节缺少有效的来源 TID';
+
+  @override
+  String get novelSourceRouteInvalidPid => '章节缺少有效的来源 PID';
+
+  @override
+  String novelSourceRouteLocatorFailed(String error) {
+    return '原帖楼层定位失败：$error';
+  }
+
+  @override
+  String get novelSourceRouteEmptyResult => '原帖楼层定位结果为空';
+
+  @override
+  String get novelSourceRouteMismatchedResult => '原帖楼层定位结果与章节来源不一致';
+
+  @override
+  String get novelSourceRouteInvalidPage => '原帖楼层页码无效';
+
+  @override
+  String get novelHydrationRecoveringMetadata => '正在恢复小说来源信息';
+
+  @override
+  String get novelHydrationPreparing => '正在准备章节';
+
+  @override
+  String novelHydrationCommitting(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个章节',
+      zero: '0 个章节',
+    );
+    return '正在保存 $_temp0';
+  }
+
+  @override
+  String novelHydrationLoadingPage(int currentPage, int acceptedCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      acceptedCount,
+      locale: localeName,
+      other: '$acceptedCount 章',
+      zero: '0 章',
+    );
+    return '正在加载第 $currentPage 页 · 已发现 $_temp0';
+  }
+
+  @override
+  String novelHydrationLoadingPageOfTotal(
+    int currentPage,
+    int totalPages,
+    int acceptedCount,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      acceptedCount,
+      locale: localeName,
+      other: '$acceptedCount 章',
+      zero: '0 章',
+    );
+    return '正在加载第 $currentPage/$totalPages 页 · 已发现 $_temp0';
+  }
+
+  @override
+  String get novelHydrationMissingSource => '缺少小说来源信息，无法加载章节';
+
+  @override
+  String get novelHydrationMissingPublisher => '来源帖子缺少有效的发布者 ID';
+
+  @override
+  String get novelHydrationMissingTid => '小说缺少来源帖子 ID';
+
+  @override
+  String get novelHydrationMissingCheckpoint => '章节同步检查点缺失，无法安全更新';
+
+  @override
+  String get novelHydrationInterrupted => '章节同步已中断，请重试';
+
+  @override
+  String novelChapterLoadFailed(String error) {
+    return '章节加载失败：$error';
+  }
+
+  @override
+  String get novelChapterLoadUnknown => '章节加载失败，请重试';
+
+  @override
+  String get novelReaderNoChapters => '小说没有可阅读章节';
+
+  @override
+  String get novelReaderContentMissing => '章节正文暂不可用';
+
+  @override
+  String novelReaderLoadFailed(String error) {
+    return '加载阅读器失败：$error';
+  }
+
+  @override
+  String get novelDisplaySettings => '显示设置';
+
+  @override
+  String get novelTypography => '排版';
+
+  @override
+  String get novelFontSize => '字号';
+
+  @override
+  String get novelLineSpacing => '间隔';
+
+  @override
+  String get novelTheme => '主题';
+
+  @override
+  String get novelThemeLight => '浅色';
+
+  @override
+  String get novelThemeSepia => '护眼';
+
+  @override
+  String get novelThemeDark => '深色';
+
+  @override
+  String get novelThemeSystem => '跟随系统';
+
+  @override
+  String get novelReading => '阅读';
+
+  @override
+  String get novelReadingMode => '阅读模式';
+
+  @override
+  String get novelConversionMode => '简繁';
+
+  @override
+  String get novelSafeContent => '安全显示正文';
+
+  @override
+  String get novelConversionOriginal => '原文';
+
+  @override
+  String get novelConversionSimplified => '简体';
+
+  @override
+  String get novelConversionTraditional => '繁体';
+
+  @override
+  String get novelFlowScroll => '滚动';
+
+  @override
+  String get novelFlowPagedLtr => '分页 LTR';
+
+  @override
+  String get novelFlowPagedRtl => '分页 RTL';
+
+  @override
+  String get novelBookmarkAdd => '添加章节书签';
+
+  @override
+  String get novelBookmarkRemove => '移除章节书签';
+
+  @override
+  String get novelBookmarkAdded => '已添加书签';
+
+  @override
+  String get novelBookmarkRemoved => '已移除书签';
+
+  @override
+  String get novelOpenSourceThread => '打开原帖';
+
+  @override
+  String get novelCatalog => '目录';
+
+  @override
+  String get novelDisplay => '显示';
+
+  @override
+  String get novelPageCountPending => '计算中';
+
+  @override
+  String get novelPositionChanged => '位置已变化，已保留当前页';
+
+  @override
+  String get novelChapterSwitchFailed => '章节切换失败，已保留当前章节';
+
+  @override
+  String get novelReturnToScrollFailed => '切回滚动模式失败';
+
+  @override
+  String get novelSaveDisplaySettingsFailed => '显示设置保存失败';
+
+  @override
+  String get novelLinkOpenFailed => '链接打开失败';
+
+  @override
+  String get novelImageLinkCopied => '图片链接已复制';
+
+  @override
+  String get novelWorkUpdateFailed => '作品更新失败，已保留当前章节';
+
+  @override
+  String get novelSearchChapters => '搜索章节';
+
+  @override
+  String get novelNoMatchingChapters => '没有匹配的章节';
+
+  @override
+  String get novelBookmark => '书签';
+
+  @override
+  String get novelCurrent => '当前';
+
+  @override
+  String get novelLastRead => '上次阅读';
+
+  @override
+  String novelNextChapter(String title) {
+    return '下一章：$title';
+  }
+
+  @override
+  String get novelChapterUnavailable => '章节暂时无法显示';
+
+  @override
+  String get novelUpdateWork => '更新作品';
+
+  @override
+  String get novelPagedWindowUnavailable => '当前窗口无法生成分页布局';
+
+  @override
+  String get novelPagedPreparing => '正在准备分页正文';
+
+  @override
+  String get novelPagedCalculating => '正在计算分页布局';
+
+  @override
+  String get novelPagedNoContent => '本章没有可显示的正文';
+
+  @override
+  String get novelPagedRestoringPosition => '正在恢复阅读位置';
+
+  @override
+  String get novelPagedLayoutFailed => '分页布局失败';
+
+  @override
+  String get novelReturnToScroll => '回到滚动';
+
+  @override
+  String novelPages(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 页',
+      zero: '0 页',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String novelPageSemantics(
+    String chapterTitle,
+    int currentPage,
+    String totalPages,
+  ) {
+    return '$chapterTitle，第 $currentPage 页，共 $totalPages';
+  }
+
+  @override
+  String novelPageValue(int currentPage, String totalPages) {
+    return '第 $currentPage 页，共 $totalPages';
+  }
+
+  @override
+  String novelNextPageSemantics(int page) {
+    return '下一页，第 $page 页';
+  }
+
+  @override
+  String novelPreviousPageSemantics(int page) {
+    return '上一页，第 $page 页';
+  }
+
+  @override
+  String novelPageIndicator(int currentPage, String totalPages) {
+    return '$currentPage / $totalPages';
+  }
+
+  @override
+  String novelChapterTurnContinue(String direction) {
+    String _temp0 = intl.Intl.selectLogic(direction, {
+      'next': '继续滑动进入下一章',
+      'previous': '继续滑动进入上一章',
+      'other': '继续滑动切换章节',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String novelChapterTurnRelease(String direction, String title) {
+    String _temp0 = intl.Intl.selectLogic(direction, {
+      'next': '松手进入下一章 · $title',
+      'previous': '松手进入上一章 · $title',
+      'other': '松手切换章节 · $title',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String novelPageOfTotalSemantics(int page, int total) {
+    return '第 $page 页，共 $total 页';
+  }
+
+  @override
+  String get libraryOperationWorkNotFound => '作品不存在或已被移除';
+
+  @override
+  String get libraryOperationChapterNotFound => '章节不存在或已被移除';
+
+  @override
+  String get libraryOperationUnsupported => '当前模块不支持此操作';
+
+  @override
+  String get libraryOperationCacheWriteFailed => '缓存写入失败，请重试';
+
+  @override
+  String get libraryOperationDefaultCategoryImmutable => '默认分类不能修改或删除';
+
+  @override
   String get moreTitle => '更多';
 
   @override
@@ -3608,6 +4328,726 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String readerProgressSemantics(String current, String total) {
     return '閱讀進度：$current / $total';
   }
+
+  @override
+  String get readerModeVertical => '垂直';
+
+  @override
+  String get readerModeLtr => '由左至右';
+
+  @override
+  String get readerModeRtl => '由右至左';
+
+  @override
+  String get readerModeVerticalContinuous => '垂直連續';
+
+  @override
+  String get readerModeSingleLtr => '單頁 由左至右';
+
+  @override
+  String get readerModeSingleRtl => '單頁 由右至左';
+
+  @override
+  String get readerDisplaySettings => '顯示設定';
+
+  @override
+  String get readerReadingMode => '閱讀模式';
+
+  @override
+  String get readerPageFit => '頁面適配';
+
+  @override
+  String get readerPageFitWidth => '寬度';
+
+  @override
+  String get readerPageFitHeight => '高度';
+
+  @override
+  String get readerPageFitContain => '螢幕';
+
+  @override
+  String get readerBackground => '背景色';
+
+  @override
+  String get readerBackgroundTheme => '主題';
+
+  @override
+  String get readerBackgroundBlack => '黑';
+
+  @override
+  String get readerBackgroundWhite => '白';
+
+  @override
+  String get readerBackgroundGray => '灰';
+
+  @override
+  String get readerPageSpacing => '頁間距';
+
+  @override
+  String get readerPageIndicator => '頁碼浮層';
+
+  @override
+  String get readerNoImages => '沒有可閱讀圖片';
+
+  @override
+  String get readerImageLoadFailed => '圖片載入失敗';
+
+  @override
+  String get readerTailContent => '末尾內容';
+
+  @override
+  String get readerContinue => '繼續';
+
+  @override
+  String get readerDownloadUnsupported => '目前圖片不支援下載';
+
+  @override
+  String get readerExportSaving => '正在儲存目前圖片';
+
+  @override
+  String readerExportSaved(String destination) {
+    return '已儲存到$destination';
+  }
+
+  @override
+  String get readerExportDefaultDestination => '系統照片';
+
+  @override
+  String get readerExportCacheUnavailable => '圖片暫不可用，請重試';
+
+  @override
+  String get readerExportPermissionDenied => '沒有照片圖庫寫入權限，請在系統設定中允許';
+
+  @override
+  String get readerExportPermissionRestricted => '照片圖庫權限受系統限制';
+
+  @override
+  String get readerExportUnsupportedPlatform => '目前平台不支援儲存圖片';
+
+  @override
+  String get readerExportUnsupportedFormat => '目前圖片格式不支援儲存';
+
+  @override
+  String get readerExportFailed => '儲存圖片失敗，請重試';
+
+  @override
+  String comicUntitledWork(String workId) {
+    return '未命名漫畫（$workId）';
+  }
+
+  @override
+  String comicChapterFallbackTitle(String sourceTid) {
+    return '章節 $sourceTid';
+  }
+
+  @override
+  String get comicAddToShelf => '加入書架';
+
+  @override
+  String get comicAlreadyInShelf => '已在書架';
+
+  @override
+  String get comicNoImages => '目前章節沒有可閱讀圖片';
+
+  @override
+  String comicReaderLoadFailed(String error) {
+    return '載入閱讀器失敗：$error';
+  }
+
+  @override
+  String get comicReaderNetworkFailure => '網路異常，請檢查後重試';
+
+  @override
+  String get comicReaderAuthFailure => '登入狀態已失效，請重新登入後重試';
+
+  @override
+  String get comicReaderServerFailure => '服務暫時不可用，請稍後重試';
+
+  @override
+  String get comicReaderParseFailure => '頁面結構異常，無法解析章節內容';
+
+  @override
+  String get comicReaderUnknownFailure => '載入章節失敗';
+
+  @override
+  String get comicReaderEpisodeUnavailable => '章節不存在或已被移除';
+
+  @override
+  String get comicBookmarkAdd => '新增書籤';
+
+  @override
+  String get comicBookmarkRemove => '取消書籤';
+
+  @override
+  String get comicBookmarkAdded => '已新增書籤';
+
+  @override
+  String get comicBookmarkRemoved => '已移除書籤';
+
+  @override
+  String get comicOpenSourceThread => '開啟原帖';
+
+  @override
+  String get comicMoreActions => '更多操作';
+
+  @override
+  String get comicMore => '更多';
+
+  @override
+  String get comicChapterList => '章節列表';
+
+  @override
+  String get comicChapterAction => '章節';
+
+  @override
+  String get comicCurrentChapter => '目前';
+
+  @override
+  String get comicDisplay => '顯示';
+
+  @override
+  String get comicDownloadCurrentImage => '下載目前圖片';
+
+  @override
+  String get comicPreviousEpisode => '上一話';
+
+  @override
+  String get comicNextEpisode => '下一話';
+
+  @override
+  String get comicFirstEpisode => '已是第一話';
+
+  @override
+  String get comicLastEpisode => '已是最後一話';
+
+  @override
+  String get comicMarkEpisodeRead => '標記本章已讀';
+
+  @override
+  String get comicMarkEpisodeUnread => '標記本章未讀';
+
+  @override
+  String get comicEpisodeMarkedRead => '已標記本章已讀';
+
+  @override
+  String get comicEpisodeMarkedUnread => '已標記本章未讀';
+
+  @override
+  String get comicSetCurrentPageCover => '將目前頁設為封面';
+
+  @override
+  String get comicCoverImageUnavailable => '目前頁圖片暫不可用，無法設為封面';
+
+  @override
+  String get comicCoverUpdateFailed => '封面更新失敗';
+
+  @override
+  String get comicCoverUpdated => '封面已更新';
+
+  @override
+  String get comicEpisodeSwitchFailed => '章節切換失敗，已保留目前章節';
+
+  @override
+  String get comicSetCoverFocus => '調整封面焦點';
+
+  @override
+  String comicNextChapterTitle(String title) {
+    return '下一章：$title';
+  }
+
+  @override
+  String get comicSwitchingEpisode => '正在切換章節';
+
+  @override
+  String get comicOpenNextEpisode => '點擊進入下一章';
+
+  @override
+  String get comicOpeningEpisode => '正在開啟章節';
+
+  @override
+  String get comicRefreshNoNewLinks => '未提取到新的章節連結';
+
+  @override
+  String comicRefreshCompleted(int insertedCount, int updatedCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      insertedCount,
+      locale: localeName,
+      other: '$insertedCount',
+      zero: '0',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      updatedCount,
+      locale: localeName,
+      other: '$updatedCount',
+      zero: '0',
+    );
+    return '章節重新整理完成：新增 $_temp0，更新 $_temp1';
+  }
+
+  @override
+  String comicRefreshFailed(String error) {
+    return '重新整理章節失敗：$error';
+  }
+
+  @override
+  String get comicComment => '評論';
+
+  @override
+  String get comicCommentLoading => '評論載入中';
+
+  @override
+  String get comicCommentEmpty => '暫無評論';
+
+  @override
+  String get comicCommentUnavailable => '評論暫不可用';
+
+  @override
+  String get comicCommentOpen => '查看評論';
+
+  @override
+  String get comicCommentUnavailableFeedback => '無法查看評論';
+
+  @override
+  String get comicCommentContinue => '繼續滑動進入下一章';
+
+  @override
+  String comicCommentContinueTo(String title) {
+    return '繼續滑動進入：$title';
+  }
+
+  @override
+  String get comicDownloadQueue => '下載佇列';
+
+  @override
+  String get comicDownloadQueueEmpty => '暫無下載任務';
+
+  @override
+  String get comicDownloadActive => '正在下載';
+
+  @override
+  String get comicDownloadPending => '等待中';
+
+  @override
+  String get comicDownloadFailedSection => '下載失敗';
+
+  @override
+  String get comicDownloadCanceling => '正在取消';
+
+  @override
+  String get comicDownloadCancel => '取消下載';
+
+  @override
+  String get comicDownloadRemove => '移除任務';
+
+  @override
+  String get comicDownloadRetry => '重試';
+
+  @override
+  String comicDownloadQueuePosition(String episodeTitle, int position) {
+    return '$episodeTitle · 第 $position 位';
+  }
+
+  @override
+  String comicDownloadFailureDetail(String episodeTitle, String error) {
+    return '$episodeTitle · $error';
+  }
+
+  @override
+  String get comicDownloadResolvingImages => '正在解析圖片';
+
+  @override
+  String comicDownloadProgress(int completed, int total) {
+    return '$completed/$total';
+  }
+
+  @override
+  String comicDownloadCancelFailed(String error) {
+    return '取消下載失敗：$error';
+  }
+
+  @override
+  String comicDownloadRemoveFailed(String error) {
+    return '移除任務失敗：$error';
+  }
+
+  @override
+  String comicDownloadRetryFailed(String error) {
+    return '重試失敗：$error';
+  }
+
+  @override
+  String get comicDownloadWorkUnavailable => '漫畫作品不存在或已被移除';
+
+  @override
+  String get comicDownloadEpisodeUnavailable => '漫畫章節不存在或已被移除';
+
+  @override
+  String get comicDownloadNoImages => '章節沒有可下載圖片';
+
+  @override
+  String get comicDownloadImageFailed => '部分圖片下載失敗';
+
+  @override
+  String get comicDownloadStorageFailed => '下載檔案儲存失敗';
+
+  @override
+  String get comicDownloadUnknownFailure => '下載失敗，請重試';
+
+  @override
+  String novelUntitledWork(String novelId) {
+    return '未命名小說（$novelId）';
+  }
+
+  @override
+  String novelChapterFallbackTitle(String sourceTid) {
+    return '章節 $sourceTid';
+  }
+
+  @override
+  String get novelOriginalBadge => '原創';
+
+  @override
+  String get novelOpenInReader => '閱讀器';
+
+  @override
+  String get novelOpenSourcePost => '原帖';
+
+  @override
+  String novelSaveOpenModeFailed(String error) {
+    return '儲存章節開啟方式失敗：$error';
+  }
+
+  @override
+  String get novelSourceRouteDialogTitle => '無法定位原帖樓層';
+
+  @override
+  String get novelOpenThreadHome => '開啟帖子首頁';
+
+  @override
+  String get novelSourceRouteInvalidTid => '章節缺少有效的來源 TID';
+
+  @override
+  String get novelSourceRouteInvalidPid => '章節缺少有效的來源 PID';
+
+  @override
+  String novelSourceRouteLocatorFailed(String error) {
+    return '原帖樓層定位失敗：$error';
+  }
+
+  @override
+  String get novelSourceRouteEmptyResult => '原帖樓層定位結果為空';
+
+  @override
+  String get novelSourceRouteMismatchedResult => '原帖樓層定位結果與章節來源不一致';
+
+  @override
+  String get novelSourceRouteInvalidPage => '原帖樓層頁碼無效';
+
+  @override
+  String get novelHydrationRecoveringMetadata => '正在恢復小說來源資訊';
+
+  @override
+  String get novelHydrationPreparing => '正在準備章節';
+
+  @override
+  String novelHydrationCommitting(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個章節',
+      zero: '0 個章節',
+    );
+    return '正在儲存 $_temp0';
+  }
+
+  @override
+  String novelHydrationLoadingPage(int currentPage, int acceptedCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      acceptedCount,
+      locale: localeName,
+      other: '$acceptedCount 章',
+      zero: '0 章',
+    );
+    return '正在載入第 $currentPage 頁 · 已發現 $_temp0';
+  }
+
+  @override
+  String novelHydrationLoadingPageOfTotal(
+    int currentPage,
+    int totalPages,
+    int acceptedCount,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      acceptedCount,
+      locale: localeName,
+      other: '$acceptedCount 章',
+      zero: '0 章',
+    );
+    return '正在載入第 $currentPage/$totalPages 頁 · 已發現 $_temp0';
+  }
+
+  @override
+  String get novelHydrationMissingSource => '缺少小說來源資訊，無法載入章節';
+
+  @override
+  String get novelHydrationMissingPublisher => '來源帖子缺少有效的發佈者 ID';
+
+  @override
+  String get novelHydrationMissingTid => '小說缺少來源帖子 ID';
+
+  @override
+  String get novelHydrationMissingCheckpoint => '章節同步檢查點缺失，無法安全更新';
+
+  @override
+  String get novelHydrationInterrupted => '章節同步已中斷，請重試';
+
+  @override
+  String novelChapterLoadFailed(String error) {
+    return '章節載入失敗：$error';
+  }
+
+  @override
+  String get novelChapterLoadUnknown => '章節載入失敗，請重試';
+
+  @override
+  String get novelReaderNoChapters => '小說沒有可閱讀章節';
+
+  @override
+  String get novelReaderContentMissing => '章節正文暫不可用';
+
+  @override
+  String novelReaderLoadFailed(String error) {
+    return '載入閱讀器失敗：$error';
+  }
+
+  @override
+  String get novelDisplaySettings => '顯示設定';
+
+  @override
+  String get novelTypography => '排版';
+
+  @override
+  String get novelFontSize => '字號';
+
+  @override
+  String get novelLineSpacing => '間隔';
+
+  @override
+  String get novelTheme => '主題';
+
+  @override
+  String get novelThemeLight => '淺色';
+
+  @override
+  String get novelThemeSepia => '護眼';
+
+  @override
+  String get novelThemeDark => '深色';
+
+  @override
+  String get novelThemeSystem => '跟隨系統';
+
+  @override
+  String get novelReading => '閱讀';
+
+  @override
+  String get novelReadingMode => '閱讀模式';
+
+  @override
+  String get novelConversionMode => '簡繁';
+
+  @override
+  String get novelSafeContent => '安全顯示正文';
+
+  @override
+  String get novelConversionOriginal => '原文';
+
+  @override
+  String get novelConversionSimplified => '簡體';
+
+  @override
+  String get novelConversionTraditional => '繁體';
+
+  @override
+  String get novelFlowScroll => '滾動';
+
+  @override
+  String get novelFlowPagedLtr => '分頁 LTR';
+
+  @override
+  String get novelFlowPagedRtl => '分頁 RTL';
+
+  @override
+  String get novelBookmarkAdd => '新增章節書籤';
+
+  @override
+  String get novelBookmarkRemove => '移除章節書籤';
+
+  @override
+  String get novelBookmarkAdded => '已新增書籤';
+
+  @override
+  String get novelBookmarkRemoved => '已移除書籤';
+
+  @override
+  String get novelOpenSourceThread => '開啟原帖';
+
+  @override
+  String get novelCatalog => '目錄';
+
+  @override
+  String get novelDisplay => '顯示';
+
+  @override
+  String get novelPageCountPending => '計算中';
+
+  @override
+  String get novelPositionChanged => '位置已變更，已保留目前頁';
+
+  @override
+  String get novelChapterSwitchFailed => '章節切換失敗，已保留目前章節';
+
+  @override
+  String get novelReturnToScrollFailed => '切回滾動模式失敗';
+
+  @override
+  String get novelSaveDisplaySettingsFailed => '顯示設定儲存失敗';
+
+  @override
+  String get novelLinkOpenFailed => '連結開啟失敗';
+
+  @override
+  String get novelImageLinkCopied => '圖片連結已複製';
+
+  @override
+  String get novelWorkUpdateFailed => '作品更新失敗，已保留目前章節';
+
+  @override
+  String get novelSearchChapters => '搜尋章節';
+
+  @override
+  String get novelNoMatchingChapters => '沒有符合的章節';
+
+  @override
+  String get novelBookmark => '書籤';
+
+  @override
+  String get novelCurrent => '目前';
+
+  @override
+  String get novelLastRead => '上次閱讀';
+
+  @override
+  String novelNextChapter(String title) {
+    return '下一章：$title';
+  }
+
+  @override
+  String get novelChapterUnavailable => '章節暫時無法顯示';
+
+  @override
+  String get novelUpdateWork => '更新作品';
+
+  @override
+  String get novelPagedWindowUnavailable => '目前視窗無法產生分頁版面';
+
+  @override
+  String get novelPagedPreparing => '正在準備分頁正文';
+
+  @override
+  String get novelPagedCalculating => '正在計算分頁版面';
+
+  @override
+  String get novelPagedNoContent => '本章沒有可顯示的正文';
+
+  @override
+  String get novelPagedRestoringPosition => '正在恢復閱讀位置';
+
+  @override
+  String get novelPagedLayoutFailed => '分頁版面失敗';
+
+  @override
+  String get novelReturnToScroll => '回到滾動';
+
+  @override
+  String novelPages(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 頁',
+      zero: '0 頁',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String novelPageSemantics(
+    String chapterTitle,
+    int currentPage,
+    String totalPages,
+  ) {
+    return '$chapterTitle，第 $currentPage 頁，共 $totalPages';
+  }
+
+  @override
+  String novelPageValue(int currentPage, String totalPages) {
+    return '第 $currentPage 頁，共 $totalPages';
+  }
+
+  @override
+  String novelNextPageSemantics(int page) {
+    return '下一頁，第 $page 頁';
+  }
+
+  @override
+  String novelPreviousPageSemantics(int page) {
+    return '上一頁，第 $page 頁';
+  }
+
+  @override
+  String novelPageIndicator(int currentPage, String totalPages) {
+    return '$currentPage / $totalPages';
+  }
+
+  @override
+  String novelChapterTurnContinue(String direction) {
+    String _temp0 = intl.Intl.selectLogic(direction, {
+      'next': '繼續滑動進入下一章',
+      'previous': '繼續滑動進入上一章',
+      'other': '繼續滑動切換章節',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String novelChapterTurnRelease(String direction, String title) {
+    String _temp0 = intl.Intl.selectLogic(direction, {
+      'next': '鬆手進入下一章 · $title',
+      'previous': '鬆手進入上一章 · $title',
+      'other': '鬆手切換章節 · $title',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String novelPageOfTotalSemantics(int page, int total) {
+    return '第 $page 頁，共 $total 頁';
+  }
+
+  @override
+  String get libraryOperationWorkNotFound => '作品不存在或已被移除';
+
+  @override
+  String get libraryOperationChapterNotFound => '章節不存在或已被移除';
+
+  @override
+  String get libraryOperationUnsupported => '目前模組不支援此操作';
+
+  @override
+  String get libraryOperationCacheWriteFailed => '快取寫入失敗，請重試';
+
+  @override
+  String get libraryOperationDefaultCategoryImmutable => '預設分類不能修改或刪除';
 
   @override
   String get moreTitle => '更多';

@@ -303,7 +303,7 @@ class _RecordingTailSurface implements ReaderTailSurface {
   String get id => 'tail';
 
   @override
-  String get indicatorLabel => '评论';
+  String indicatorLabel(BuildContext context) => '评论';
 
   @override
   int get verticalItemCount => 1;

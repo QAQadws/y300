@@ -12,14 +12,18 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
+import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_interaction_models.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_hydration_controller.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_open_mode_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
+import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_chapter_hydration_panel.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
 
@@ -54,6 +58,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final hydrationProvider = novelChapterHydrationControllerProvider(
       widget.novelId,
     );
@@ -87,7 +92,8 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       error: (error, _) => NovelChapterHydrationPanel(
         state: NovelChapterHydrationViewState(
           status: NovelChapterHydrationViewStatus.failed,
-          errorMessage: error.toString(),
+          failureCode: NovelChapterSyncFailureCode.synchronizationFailed,
+          diagnosticDetail: error,
         ),
         onRetry: () {
           ref.invalidate(hydrationProvider);
@@ -120,16 +126,16 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       },
       chapterModeControl: SegmentedButton<NovelChapterOpenMode>(
         key: const Key('novel-chapter-open-mode-control'),
-        segments: const <ButtonSegment<NovelChapterOpenMode>>[
+        segments: <ButtonSegment<NovelChapterOpenMode>>[
           ButtonSegment<NovelChapterOpenMode>(
             value: NovelChapterOpenMode.reader,
             icon: Icon(Icons.book_outlined, size: 18),
-            label: Text('阅读器'),
+            label: Text(l10n.novelOpenInReader),
           ),
           ButtonSegment<NovelChapterOpenMode>(
             value: NovelChapterOpenMode.sourcePost,
             icon: Icon(Icons.chat_bubble_outline, size: 18),
-            label: Text('原帖'),
+            label: Text(l10n.novelOpenSourcePost),
           ),
         ],
         selected: <NovelChapterOpenMode>{openMode},
@@ -198,7 +204,10 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       if (!mounted) {
         return;
       }
-      _showMessage('保存章节打开方式失败：$error');
+      final l10n = AppLocalizations.of(context);
+      _showMessage(
+        l10n.novelSaveOpenModeFailed(LibraryErrorSummary.resolve(l10n, error)),
+      );
     }
   }
 
@@ -290,7 +299,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       }
       await _showSourceRouteFailure(
         context: context,
-        message: error.message,
+        error: error,
         fallbackTid: tid,
         subject: subject,
       );
@@ -299,7 +308,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
 
   Future<void> _showSourceRouteFailure({
     required BuildContext context,
-    required String message,
+    required NovelChapterSourceRouteException error,
     required String fallbackTid,
     required String subject,
   }) async {
@@ -309,18 +318,27 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       builder: (dialogContext) {
         return AlertDialog(
           key: const Key('novel-source-route-failure-dialog'),
-          title: const Text('无法定位原帖楼层'),
-          content: Text(message),
+          title: Text(
+            AppLocalizations.of(dialogContext).novelSourceRouteDialogTitle,
+          ),
+          content: Text(
+            NovelTextResolver.sourceRouteFailure(
+              AppLocalizations.of(dialogContext),
+              error,
+            ),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(dialogContext).commonCancel),
             ),
             if (canOpenThreadHome)
               FilledButton(
                 key: const Key('novel-source-route-open-thread-home'),
                 onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: const Text('打开帖子首页'),
+                child: Text(
+                  AppLocalizations.of(dialogContext).novelOpenThreadHome,
+                ),
               ),
           ],
         );

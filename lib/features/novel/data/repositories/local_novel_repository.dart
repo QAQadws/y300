@@ -11,6 +11,7 @@ import 'package:y300/features/library_shared/data/repositories/library_state_rep
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_operation_failure.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
@@ -119,7 +120,9 @@ class LocalNovelRepository
       throw ArgumentError('分类名称不能为空');
     }
     if (categoryId == _defaultCategoryId) {
-      throw StateError('默认分类不允许重命名');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.defaultCategoryImmutable,
+      );
     }
 
     final db = await _dbFuture;
@@ -134,7 +137,9 @@ class LocalNovelRepository
   @override
   Future<void> deleteCategory({required String categoryId}) async {
     if (categoryId == _defaultCategoryId) {
-      throw StateError('默认分类不允许删除');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.defaultCategoryImmutable,
+      );
     }
 
     final db = await _dbFuture;
@@ -552,7 +557,7 @@ class LocalNovelRepository
             sourceTid: row['source_tid'] as String,
             sourcePid: row['source_pid'] as String?,
             sourcePage: row['source_page'] as int?,
-            episodeTitle: (row['episode_title'] as String?) ?? '未命名章节',
+            episodeTitle: (row['episode_title'] as String?) ?? '',
             orderIndex: row['order_index'] as int,
             datelineText: row['dateline_text'] as String?,
           ),
@@ -1370,8 +1375,8 @@ class LocalNovelRepository
       novelId: novelId,
       episodeId: episodeId,
       anchor: NovelReaderTextAnchor(episodeId: episodeId),
-      title: (row['episode_title'] as String?) ?? '章节书签',
-      snippet: '章节书签',
+      title: (row['episode_title'] as String?) ?? '',
+      snippet: '',
       createdAt: updatedAt,
       updatedAt: updatedAt,
     );
@@ -1439,10 +1444,10 @@ class LocalNovelRepository
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
-  /// 应用标题清洗，并在为空时回退到固定文案或上一次的标题。
+  /// 应用标题清洗，并在为空时回退到上一次的原始标题。
   ///
   /// `fallback` 用于 `refreshEpisodes` 路径 —— 解析后的 plan.subject
-  /// 偶尔为空，此时不能把已存的 title 抹成"未命名小说"。
+  /// 偶尔为空，此时不能把已存的 title 抹成空值。
   String _sanitizeTitleForStorage(String rawTitle, {String? fallback}) {
     final sanitized = (_titleSanitizer ?? const DefaultNovelTitleSanitizer())
         .sanitize(rawTitle);
@@ -1453,7 +1458,7 @@ class LocalNovelRepository
     if (fallbackTrimmed != null && fallbackTrimmed.isNotEmpty) {
       return fallbackTrimmed;
     }
-    return '未命名小说';
+    return '';
   }
 
   /// 取首页第一个 OP 帖（楼层 1）的 message —— 简介解析的输入源。

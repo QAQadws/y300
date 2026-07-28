@@ -320,7 +320,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
               title: Opacity(
                 opacity: progress,
                 child: Text(
-                  header?.title ?? '',
+                  header == null
+                      ? ''
+                      : LibraryShelfTextResolver.workTitle(
+                          l10n,
+                          widget.adapter.moduleKey,
+                          header.title,
+                          header.workId,
+                        ),
                   key: const Key('unified-detail-collapsed-title'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

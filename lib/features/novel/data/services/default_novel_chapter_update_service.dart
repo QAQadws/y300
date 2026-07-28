@@ -33,7 +33,9 @@ class DefaultNovelChapterUpdateService implements NovelChapterUpdateService {
       novelId: normalizedNovelId,
     );
     if (sourceState == null) {
-      throw StateError('缺少小说来源信息，无法更新章节。');
+      throw const NovelChapterSyncException(
+        NovelChapterSyncFailureCode.missingSourceState,
+      );
     }
     var publisherId = sourceState.publisherId?.trim() ?? '';
     if (publisherId.isEmpty) {
@@ -44,20 +46,26 @@ class DefaultNovelChapterUpdateService implements NovelChapterUpdateService {
       publisherId = sourceState?.publisherId?.trim() ?? '';
     }
     if (sourceState == null || publisherId.isEmpty) {
-      throw StateError('来源帖子缺少有效的发布者 ID。');
+      throw const NovelChapterSyncException(
+        NovelChapterSyncFailureCode.missingPublisherId,
+      );
     }
 
     final detail = await _repository.getDetail(novelId: normalizedNovelId);
     final tid = detail?.sourceTid.trim() ?? '';
     if (tid.isEmpty) {
-      throw StateError('小说缺少来源帖子 ID。');
+      throw const NovelChapterSyncException(
+        NovelChapterSyncFailureCode.missingSourceTid,
+      );
     }
 
     final isIncremental =
         sourceState.hydrationState == NovelChapterHydrationState.ready;
     final checkpoint = isIncremental ? sourceState.checkpoint : null;
     if (isIncremental && checkpoint == null) {
-      throw StateError('小说章节同步检查点缺失，无法安全执行增量更新。');
+      throw const NovelChapterSyncException(
+        NovelChapterSyncFailureCode.missingCheckpoint,
+      );
     }
     return _syncService.synchronize(
       NovelChapterSyncRequest(

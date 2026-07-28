@@ -979,7 +979,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     }
     final plainText = document.plainText.trim();
     if (plainText.isEmpty) {
-      return '当前位置';
+      return '';
     }
     return plainText.length <= 36 ? plainText : plainText.substring(0, 36);
   }

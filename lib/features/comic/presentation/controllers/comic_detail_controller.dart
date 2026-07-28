@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/data/providers/comic_refresh_outcome_providers.dart';
@@ -7,6 +7,8 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/models/library_operation_failure.dart';
+import 'package:y300/features/comic/presentation/comic_presentation_models.dart';
 
 class ComicDetailArgs {
   const ComicDetailArgs({required this.comicId});
@@ -31,29 +33,29 @@ class ComicDetailViewState {
     required this.episodes,
     required this.isRefreshing,
     required this.sortDescending,
-    this.refreshHint,
+    this.refreshNotice,
   });
 
   final ComicDetail detail;
   final List<ComicEpisodeItem> episodes;
   final bool isRefreshing;
   final bool sortDescending;
-  final String? refreshHint;
+  final ComicDetailRefreshNotice? refreshNotice;
 
   ComicDetailViewState copyWith({
     ComicDetail? detail,
     List<ComicEpisodeItem>? episodes,
     bool? isRefreshing,
     bool? sortDescending,
-    String? refreshHint,
-    bool clearHint = false,
+    ComicDetailRefreshNotice? refreshNotice,
+    bool clearNotice = false,
   }) {
     return ComicDetailViewState(
       detail: detail ?? this.detail,
       episodes: episodes ?? this.episodes,
       isRefreshing: isRefreshing ?? this.isRefreshing,
       sortDescending: sortDescending ?? this.sortDescending,
-      refreshHint: clearHint ? null : (refreshHint ?? this.refreshHint),
+      refreshNotice: clearNotice ? null : (refreshNotice ?? this.refreshNotice),
     );
   }
 }
@@ -85,7 +87,10 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
       comicId: current.detail.comicId,
       descending: false,
     );
-    final sorted = _sortEpisodesByTid(episodes: episodes, descending: nextDescending);
+    final sorted = _sortEpisodesByTid(
+      episodes: episodes,
+      descending: nextDescending,
+    );
     state = AsyncData(
       (state.value ?? current).copyWith(
         episodes: sorted,
@@ -100,11 +105,13 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
       return;
     }
 
-    state = AsyncData(current.copyWith(isRefreshing: true, clearHint: true));
+    state = AsyncData(current.copyWith(isRefreshing: true, clearNotice: true));
 
     try {
       final refreshService = ref.read(comicEpisodeRefreshServiceProvider);
-      final refreshOutcomeApplier = ref.read(comicRefreshOutcomeApplierProvider);
+      final refreshOutcomeApplier = ref.read(
+        comicRefreshOutcomeApplierProvider,
+      );
       final featureFlags = ref.read(comicReaderFeatureFlagsProvider);
       final outcome = await refreshService.fetchCatalogThenFallback(
         ComicEpisodeRefreshRequest(
@@ -112,8 +119,9 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
           sourceTid: current.detail.sourceTid,
           displayTitle: current.detail.displayTitle,
           sourceTitle: current.detail.sourceTitle,
-          customTitle:
-              featureFlags.readerCustomMetadataEnabled ? current.detail.customTitle : null,
+          customTitle: featureFlags.readerCustomMetadataEnabled
+              ? current.detail.customTitle
+              : null,
           customSearchTitle: featureFlags.readerCustomMetadataEnabled
               ? current.detail.customSearchTitle
               : null,
@@ -124,7 +132,9 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
         state = AsyncData(
           current.copyWith(
             isRefreshing: false,
-            refreshHint: '未提取到新的章节链接',
+            refreshNotice: const ComicDetailRefreshNotice(
+              code: ComicDetailRefreshNoticeCode.noLinks,
+            ),
           ),
         );
         return;
@@ -148,15 +158,21 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
       state = AsyncData(
         refreshed.copyWith(
           isRefreshing: false,
-          refreshHint:
-              '章节刷新完成：新增${applyResult.insertedCount}，更新${applyResult.updatedCount}',
+          refreshNotice: ComicDetailRefreshNotice(
+            code: ComicDetailRefreshNoticeCode.completed,
+            insertedCount: applyResult.insertedCount,
+            updatedCount: applyResult.updatedCount,
+          ),
         ),
       );
     } catch (error) {
       state = AsyncData(
         current.copyWith(
           isRefreshing: false,
-          refreshHint: '刷新章节失败：$error',
+          refreshNotice: ComicDetailRefreshNotice(
+            code: ComicDetailRefreshNoticeCode.failed,
+            detail: error,
+          ),
         ),
       );
     }
@@ -169,21 +185,26 @@ class ComicDetailController extends AsyncNotifier<ComicDetailViewState> {
     final repository = ref.read(comicRepositoryProvider);
     final detail = await repository.getComicDetail(comicId: comicId);
     if (detail == null) {
-      throw StateError('漫画不存在或已被删除');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.workNotFound,
+      );
     }
 
     final episodes = await repository.getComicEpisodes(
       comicId: comicId,
       descending: false,
     );
-    final sorted = _sortEpisodesByTid(episodes: episodes, descending: sortDescending);
+    final sorted = _sortEpisodesByTid(
+      episodes: episodes,
+      descending: sortDescending,
+    );
 
     return ComicDetailViewState(
       detail: detail,
       episodes: sorted,
       isRefreshing: false,
       sortDescending: sortDescending,
-      refreshHint: null,
+      refreshNotice: null,
     );
   }
 

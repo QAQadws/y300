@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 图片加载失败后的统一重试占位。
 ///
@@ -10,15 +11,15 @@ class ImageRetryPlaceholder extends StatelessWidget {
   const ImageRetryPlaceholder({
     super.key,
     required this.onRetry,
-    this.message = '图片加载失败',
-    this.retryLabel = '重试',
+    this.message,
+    this.retryLabel,
     this.icon = Icons.broken_image_outlined,
     this.retryButtonKey,
   });
 
   final VoidCallback onRetry;
-  final String message;
-  final String retryLabel;
+  final String? message;
+  final String? retryLabel;
   final IconData icon;
 
   /// 重试入口的 key。阅读器按图片 URL 区分同屏多张失败图，便于测试与定位。
@@ -72,7 +73,7 @@ class ImageRetryPlaceholder extends StatelessWidget {
     final size = (available - 8).clamp(12.0, 20.0).toDouble();
     return Center(
       child: Tooltip(
-        message: retryLabel,
+        message: _retryLabel(context),
         child: InkResponse(
           key: retryButtonKey,
           onTap: onRetry,
@@ -90,7 +91,9 @@ class ImageRetryPlaceholder extends StatelessWidget {
         children: <Widget>[
           Icon(icon, size: 18, color: _iconColor(context)),
           const SizedBox(width: 6),
-          Flexible(child: Text(message, overflow: TextOverflow.ellipsis)),
+          Flexible(
+            child: Text(_message(context), overflow: TextOverflow.ellipsis),
+          ),
           const SizedBox(width: 4),
           TextButton(
             key: retryButtonKey,
@@ -101,7 +104,7 @@ class ImageRetryPlaceholder extends StatelessWidget {
               minimumSize: const Size(0, 32),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: Text(retryLabel),
+            child: Text(_retryLabel(context)),
           ),
         ],
       ),
@@ -115,12 +118,12 @@ class ImageRetryPlaceholder extends StatelessWidget {
         children: <Widget>[
           Icon(icon, size: 28, color: _iconColor(context)),
           const SizedBox(height: 8),
-          Text(message),
+          Text(_message(context)),
           const SizedBox(height: 8),
           OutlinedButton(
             key: retryButtonKey,
             onPressed: onRetry,
-            child: Text(retryLabel),
+            child: Text(_retryLabel(context)),
           ),
         ],
       ),
@@ -129,6 +132,12 @@ class ImageRetryPlaceholder extends StatelessWidget {
 
   Color _iconColor(BuildContext context) =>
       Theme.of(context).colorScheme.onSurfaceVariant;
+
+  String _message(BuildContext context) =>
+      message ?? AppLocalizations.of(context).readerImageLoadFailed;
+
+  String _retryLabel(BuildContext context) =>
+      retryLabel ?? AppLocalizations.of(context).commonRetry;
 }
 
 enum _ImageRetryDensity { iconOnly, compact, comfortable }

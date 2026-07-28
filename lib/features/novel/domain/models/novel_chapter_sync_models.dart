@@ -41,6 +41,37 @@ enum NovelChapterSyncPhase {
   failed,
 }
 
+enum NovelChapterSyncFailureCode {
+  missingSourceState,
+  missingPublisherId,
+  missingSourceTid,
+  missingCheckpoint,
+  interrupted,
+  synchronizationFailed,
+  unknown,
+}
+
+extension NovelChapterSyncFailureCodeCodec on NovelChapterSyncFailureCode {
+  String get storageValue => 'novel_sync_$name';
+
+  static NovelChapterSyncFailureCode fromStorage(String? value) {
+    return NovelChapterSyncFailureCode.values.firstWhere(
+      (code) => code.storageValue == value,
+      orElse: () => NovelChapterSyncFailureCode.unknown,
+    );
+  }
+}
+
+final class NovelChapterSyncException implements Exception {
+  const NovelChapterSyncException(this.code, {this.detail});
+
+  final NovelChapterSyncFailureCode code;
+  final Object? detail;
+
+  @override
+  String toString() => 'NovelChapterSyncException(${code.name})';
+}
+
 class NovelChapterSyncProgress {
   const NovelChapterSyncProgress({
     required this.runId,
@@ -50,7 +81,8 @@ class NovelChapterSyncProgress {
     this.currentPage,
     this.totalPages,
     this.acceptedCount = 0,
-    this.message,
+    this.failureCode,
+    this.diagnosticDetail,
   });
 
   final String runId;
@@ -60,7 +92,8 @@ class NovelChapterSyncProgress {
   final int? currentPage;
   final int? totalPages;
   final int acceptedCount;
-  final String? message;
+  final NovelChapterSyncFailureCode? failureCode;
+  final Object? diagnosticDetail;
 }
 
 class NovelChapterSyncResult {

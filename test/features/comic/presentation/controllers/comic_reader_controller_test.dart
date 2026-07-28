@@ -18,6 +18,7 @@ import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.d
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
+import 'package:y300/features/comic/presentation/comic_presentation_models.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
@@ -687,14 +688,14 @@ void main() {
     );
     await container.read(comicReaderControllerProvider(args).future);
 
-    final message = await container
+    final notice = await container
         .read(comicReaderControllerProvider(args).notifier)
         .toggleBookmark();
 
     final state = container.read(comicReaderControllerProvider(args)).value!;
     expect(state.isBookmarked, isTrue);
     expect(writer.bookmarkedEpisodeIds, contains('yamibo:100:101'));
-    expect(message, '已添加书签');
+    expect(notice, ComicReaderNoticeCode.bookmarkAdded);
   });
 
   test('setCurrentEpisodeRead updates current chapter state', () async {
@@ -720,14 +721,14 @@ void main() {
     );
     await container.read(comicReaderControllerProvider(args).future);
 
-    final message = await container
+    final notice = await container
         .read(comicReaderControllerProvider(args).notifier)
         .setCurrentEpisodeRead(true);
 
     final state = container.read(comicReaderControllerProvider(args)).value!;
     expect(state.isCurrentEpisodeRead, isTrue);
     expect(state.chapters.first.isRead, isTrue);
-    expect(message, '本章已标记为已读');
+    expect(notice, ComicReaderNoticeCode.episodeMarkedRead);
   });
 
   test(
@@ -756,13 +757,13 @@ void main() {
       );
       await container.read(comicReaderControllerProvider(args).future);
 
-      final message = await container
+      final notice = await container
           .read(comicReaderControllerProvider(args).notifier)
           .setCurrentImageAsCover();
 
       expect(imageCache.lastLocalCopyRequest?.role, ImageCacheRole.customCover);
       expect(repository.lastCustomCoverLocalPath, '/protected/cover.jpg');
-      expect(message, '封面已更新');
+      expect(notice, ComicReaderNoticeCode.coverUpdated);
     },
   );
 
@@ -812,7 +813,7 @@ void main() {
             .isCurrent,
         isTrue,
       );
-      expect(state.hint, isNull);
+      expect(state.noticeCode, isNull);
     },
   );
 
@@ -902,7 +903,7 @@ void main() {
 
     expect(await controller.openEpisode(episodeId: 'yamibo:100:120'), isTrue);
     expect(
-      container.read(comicReaderControllerProvider(args)).value?.hint,
+      container.read(comicReaderControllerProvider(args)).value?.noticeCode,
       isNull,
     );
   });

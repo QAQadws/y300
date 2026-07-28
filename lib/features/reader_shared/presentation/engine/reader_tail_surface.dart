@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// Actions exposed to a tail surface without leaking reader implementation
 /// details into the business module that renders it.
@@ -18,7 +19,8 @@ class ReaderTailActions {
 abstract interface class ReaderTailSurface {
   String get id;
 
-  String get indicatorLabel => '末尾内容';
+  String indicatorLabel(BuildContext context) =>
+      AppLocalizations.of(context).readerTailContent;
 
   bool get hasAdvance => false;
 
@@ -48,7 +50,7 @@ abstract interface class ReaderTailSurface {
   }
 
   Widget buildAdvance(BuildContext context, ReaderTailActions actions) {
-    return const Center(child: Text('继续'));
+    return Center(child: Text(AppLocalizations.of(context).readerContinue));
   }
 
   FutureOr<void> onVisible();

@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+
+import 'package:y300/l10n/app_localizations.dart';
 
 class AddToShelfButton extends StatelessWidget {
   const AddToShelfButton({
@@ -12,12 +14,13 @@ class AddToShelfButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     if (inShelf) {
       return FilledButton.icon(
         key: const Key('comic-in-shelf-button'),
         onPressed: onPressed,
         icon: const Icon(Icons.bookmark_added_outlined),
-        label: const Text('已在书架'),
+        label: Text(l10n.comicAlreadyInShelf),
       );
     }
 
@@ -25,7 +28,7 @@ class AddToShelfButton extends StatelessWidget {
       key: const Key('comic-add-to-shelf-button'),
       onPressed: onPressed,
       icon: const Icon(Icons.bookmark_add_outlined),
-      label: const Text('加入书架'),
+      label: Text(l10n.comicAddToShelf),
     );
   }
 }

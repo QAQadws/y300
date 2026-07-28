@@ -29,13 +29,13 @@ void main() {
 
     expect(find.byType(OutlinedButton), findsNWidgets(10));
     expect(find.text('垂直'), findsOneWidget);
-    expect(find.text('LTR'), findsOneWidget);
+    expect(find.text('左到右'), findsOneWidget);
     expect(find.text('宽度'), findsOneWidget);
     expect(find.text('主题'), findsOneWidget);
     expect(find.text('原始'), findsNothing);
 
     final selectedButtonFinder = find.ancestor(
-      of: find.text('LTR'),
+      of: find.text('左到右'),
       matching: find.byType(OutlinedButton),
     );
     final unselectedButtonFinder = find.ancestor(
@@ -56,7 +56,7 @@ void main() {
       isNot(Colors.transparent),
     );
 
-    await tester.tap(find.text('LTR'));
+    await tester.tap(find.text('左到右'));
     await tester.tap(find.text('高度'));
     await tester.tap(find.text('黑'));
     await tester.pump();
@@ -64,5 +64,28 @@ void main() {
     expect(selectedMode, ReaderModePreference.ltr);
     expect(selectedFit, ReaderPageFitPreference.fitHeight);
     expect(selectedBackground, ReaderBackgroundPreference.black);
+  });
+
+  testWidgets('renders Traditional Chinese display choices', (tester) async {
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        locale: const Locale('zh', 'TW'),
+        home: Scaffold(
+          body: ReaderDisplaySettingsSheet(
+            preferences: ReaderPreferences.defaults(),
+            onModeChanged: (_) {},
+            onPageFitChanged: (_) {},
+            onBackgroundChanged: (_) {},
+            onPageSpacingChanged: (_) {},
+            onShowPageIndicatorChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('顯示設定'), findsOneWidget);
+    expect(find.text('閱讀模式'), findsOneWidget);
+    expect(find.text('由左至右'), findsOneWidget);
+    expect(find.text('寬度'), findsOneWidget);
   });
 }

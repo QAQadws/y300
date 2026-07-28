@@ -92,7 +92,13 @@ void main() {
 
     await expectLater(
       service.update('novel:55:521519'),
-      throwsA(isA<StateError>()),
+      throwsA(
+        isA<NovelChapterSyncException>().having(
+          (error) => error.code,
+          'code',
+          NovelChapterSyncFailureCode.missingCheckpoint,
+        ),
+      ),
     );
 
     expect(syncService.request, isNull);

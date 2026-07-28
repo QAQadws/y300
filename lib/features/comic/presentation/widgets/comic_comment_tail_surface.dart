@@ -11,6 +11,7 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surf
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// Maps one comment session into the neutral reader tail contract.
 ///
@@ -55,7 +56,8 @@ class ComicCommentTailSurface extends ChangeNotifier
   String get id => 'comic-comments-${_session.key.id}';
 
   @override
-  String get indicatorLabel => ComicCommentCopy.indicator;
+  String indicatorLabel(BuildContext context) =>
+      AppLocalizations.of(context).comicComment;
 
   @override
   bool get hasAdvance =>
@@ -255,7 +257,10 @@ class ComicCommentTailSurface extends ChangeNotifier
     }
     if (next.status == ComicCommentLoadStatus.failure ||
         next.status == ComicCommentLoadStatus.cancelled) {
-      showTransientSnackBar(context, ComicCommentCopy.snackbarUnavailable);
+      showTransientSnackBar(
+        context,
+        AppLocalizations.of(context).comicCommentUnavailableFeedback,
+      );
     }
   }
 

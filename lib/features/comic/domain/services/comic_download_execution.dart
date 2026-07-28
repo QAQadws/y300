@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
+
 abstract interface class ComicDownloadProgressObserver {
   Future<void> onImagesResolved(int totalImages);
 
@@ -29,7 +31,17 @@ final class ComicDownloadCanceledException implements Exception {
   const ComicDownloadCanceledException();
 
   @override
-  String toString() => '漫画下载已取消';
+  String toString() => 'ComicDownloadCanceledException';
+}
+
+final class ComicDownloadFailedException implements Exception {
+  const ComicDownloadFailedException(this.code, {this.detail});
+
+  final ComicDownloadFailureCode code;
+  final Object? detail;
+
+  @override
+  String toString() => 'ComicDownloadFailedException(${code.name})';
 }
 
 abstract interface class ComicDownloadImageRequestGovernor {

@@ -55,7 +55,7 @@ class ComicEpisodeManagementStore {
           comicId: comicId,
           // 手动章节的“来源名”就是添加时的默认名。重命名同样写进 custom 列，
           // 于是清空重命名会退回这个默认名，而不是退成空标题。
-          sourceEpisodeTitle: _normalizeTitle(episodeTitle) ?? '章节 $sourceTid',
+          sourceEpisodeTitle: _normalizeTitle(episodeTitle) ?? sourceTid,
           sourceTid: sourceTid,
           sourceUrl: sourceUrl,
           orderIndex: (maxOrder ?? -1) + 1,

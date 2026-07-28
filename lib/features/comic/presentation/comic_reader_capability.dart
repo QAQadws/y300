@@ -8,6 +8,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
+import 'package:y300/features/comic/presentation/comic_text_resolver.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/services/comic_reader_continuous_image_adapter.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
@@ -16,6 +17,7 @@ import 'package:y300/features/reader_shared/domain/export/reader_image_export.da
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 漫画阅读器的"专属能力"实现。
 ///
@@ -31,6 +33,7 @@ class ComicReaderCapability extends ReaderCapability {
     required this.preferences,
     required this.imageHeaderBuilder,
     required this.controller,
+    required this.l10n,
     required this.onShowMoreActions,
     required this.onShowChapterList,
     required this.onOpenSourceThread,
@@ -48,6 +51,7 @@ class ComicReaderCapability extends ReaderCapability {
   @override
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ComicReaderController controller;
+  final AppLocalizations l10n;
   @override
   final ContinuousImageDiagnosticRecorder diagnosticRecorder;
 
@@ -97,13 +101,23 @@ class ComicReaderCapability extends ReaderCapability {
   @override
   ReaderTitleSpec titleFor(ReaderEngineContext context) {
     return ReaderTitleSpec(
-      title: viewState.comicTitle,
-      subtitle: viewState.episodeTitle,
+      title: ComicTextResolver.workTitle(
+        l10n,
+        viewState.comicTitle,
+        viewState.comicId,
+      ),
+      subtitle: ComicTextResolver.chapterTitle(
+        l10n,
+        viewState.episodeTitle,
+        viewState.sourceTid,
+      ),
     );
   }
 
   @override
-  String? topHint(ReaderEngineContext context) => viewState.hint;
+  String? topHint(ReaderEngineContext context) => viewState.noticeCode == null
+      ? null
+      : ComicTextResolver.readerNotice(l10n, viewState.noticeCode!);
 
   @override
   List<ReaderToolbarAction> topActions(ReaderEngineContext context) {
@@ -111,19 +125,21 @@ class ComicReaderCapability extends ReaderCapability {
       ReaderToolbarAction(
         id: 'bookmark',
         icon: viewState.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-        label: viewState.isBookmarked ? '取消书签' : '添加书签',
+        label: viewState.isBookmarked
+            ? l10n.comicBookmarkRemove
+            : l10n.comicBookmarkAdd,
         onPressed: onToggleBookmark,
       ),
       ReaderToolbarAction(
         id: 'open-thread',
         icon: Icons.open_in_new,
-        label: '打开原帖',
+        label: l10n.comicOpenSourceThread,
         onPressed: onOpenSourceThread,
       ),
       ReaderToolbarAction(
         id: 'more',
         icon: Icons.more_vert,
-        label: '更多',
+        label: l10n.comicMore,
         onPressed: onShowMoreActions,
       ),
     ];
@@ -135,26 +151,26 @@ class ComicReaderCapability extends ReaderCapability {
       ReaderToolbarAction(
         id: 'mode',
         icon: _modeIcon(preferences.readerMode),
-        label: _modeLabel(preferences.readerMode),
+        label: ComicTextResolver.readerMode(l10n, preferences.readerMode),
         dismissMenu: false,
         onPressed: context.actions.cycleReaderMode,
       ),
       ReaderToolbarAction(
         id: 'catalog',
         icon: Icons.format_list_bulleted,
-        label: '章节',
+        label: l10n.comicChapterAction,
         onPressed: onShowChapterList,
       ),
       ReaderToolbarAction(
         id: 'display',
         icon: Icons.tune,
-        label: '显示',
+        label: l10n.comicDisplay,
         onPressed: context.actions.openDisplaySettings,
       ),
       ReaderToolbarAction(
         id: 'export-current-image',
         icon: Icons.download_outlined,
-        label: '下载当前图片',
+        label: l10n.comicDownloadCurrentImage,
         onPressed: context.actions.exportCurrentImage,
       ),
     ];
@@ -178,8 +194,12 @@ class ComicReaderCapability extends ReaderCapability {
           onOpenAdjacentEpisode(direction: ComicEpisodeDirection.previous),
       onNext: () =>
           onOpenAdjacentEpisode(direction: ComicEpisodeDirection.next),
-      previousTooltip: viewState.hasPreviousEpisode ? '上一话' : '已是第一话',
-      nextTooltip: viewState.hasNextEpisode ? '下一话' : '已是最后一话',
+      previousTooltip: viewState.hasPreviousEpisode
+          ? l10n.comicPreviousEpisode
+          : l10n.comicFirstEpisode,
+      nextTooltip: viewState.hasNextEpisode
+          ? l10n.comicNextEpisode
+          : l10n.comicLastEpisode,
     );
   }
 
@@ -382,18 +402,8 @@ class ComicReaderCapability extends ReaderCapability {
         return Icons.swipe_right_outlined;
     }
   }
-
-  String _modeLabel(ReaderModePreference mode) {
-    switch (mode) {
-      case ReaderModePreference.vertical:
-        return '垂直';
-      case ReaderModePreference.ltr:
-        return '左到右';
-      case ReaderModePreference.rtl:
-        return '右到左';
-    }
-  }
 }
+
 class _ComicReaderImagePreparationSink implements ReaderImagePreparationSink {
   const _ComicReaderImagePreparationSink(this.controller);
 

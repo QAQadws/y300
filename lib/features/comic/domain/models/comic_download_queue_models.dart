@@ -1,5 +1,25 @@
 enum ComicDownloadQueueStatus { pending, running, cancelRequested, failed }
 
+enum ComicDownloadFailureCode {
+  workUnavailable,
+  episodeUnavailable,
+  noImages,
+  imageDownloadFailed,
+  storageFailed,
+  unknown,
+}
+
+extension ComicDownloadFailureCodeCodec on ComicDownloadFailureCode {
+  String get storageValue => 'comic_download_$name';
+
+  static ComicDownloadFailureCode fromStorage(String? value) {
+    return ComicDownloadFailureCode.values.firstWhere(
+      (code) => code.storageValue == value,
+      orElse: () => ComicDownloadFailureCode.unknown,
+    );
+  }
+}
+
 extension ComicDownloadQueueStatusX on ComicDownloadQueueStatus {
   String get dbValue => switch (this) {
     ComicDownloadQueueStatus.pending => 'pending',
@@ -61,6 +81,16 @@ final class ComicDownloadQueueEntry {
       status == ComicDownloadQueueStatus.pending ||
       status == ComicDownloadQueueStatus.running ||
       status == ComicDownloadQueueStatus.cancelRequested;
+
+  ComicDownloadFailureCode get failureCode =>
+      ComicDownloadFailureCodeCodec.fromStorage(lastError);
+
+  String get sourceTid {
+    final prefix = '$comicId:';
+    return episodeId.startsWith(prefix)
+        ? episodeId.substring(prefix.length)
+        : episodeId;
+  }
 }
 
 final class ComicDownloadQueueSnapshot {

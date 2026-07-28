@@ -6,6 +6,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
+import 'package:y300/features/library_shared/presentation/services/library_shelf_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 bool hasUnifiedDetailCover(LibraryDetailHeader header) {
@@ -132,7 +133,12 @@ class _HeroInfoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = header.title;
+    final title = LibraryShelfTextResolver.workTitle(
+      AppLocalizations.of(context),
+      moduleKey,
+      header.title,
+      header.workId,
+    );
     final author = _nonEmpty(header.author);
     final group = _nonEmpty(header.translationGroup);
 
@@ -266,7 +272,12 @@ class _PlainHeroInfoSection extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: _HeroMetaColumn(
               moduleKey: moduleKey,
-              title: header.title,
+              title: LibraryShelfTextResolver.workTitle(
+                AppLocalizations.of(context),
+                moduleKey,
+                header.title,
+                header.workId,
+              ),
               author: _nonEmpty(header.author),
               sourceAuthorId: _nonEmpty(header.sourceAuthorId),
               translationGroup: _nonEmpty(header.translationGroup),

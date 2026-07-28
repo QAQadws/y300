@@ -16,8 +16,14 @@ class ThreadPostLocatorNovelChapterSourceRouteResolver
   Future<NovelChapterSourceRoute> resolve(
     NovelChapterSourceReference reference,
   ) async {
-    final tid = _requirePositiveId(reference.tid, 'tid');
-    final pid = _requirePositiveId(reference.pid, 'pid');
+    final tid = _requirePositiveId(
+      reference.tid,
+      NovelChapterSourceRouteFailureCode.invalidTid,
+    );
+    final pid = _requirePositiveId(
+      reference.pid,
+      NovelChapterSourceRouteFailureCode.invalidPid,
+    );
     final sourceUri = Uri.parse('${AppConfig.siteBaseUrl}/forum.php').replace(
       queryParameters: <String, String>{
         'mod': 'redirect',
@@ -30,19 +36,27 @@ class ThreadPostLocatorNovelChapterSourceRouteResolver
     try {
       result = await _locator.locate(tid: tid, pid: pid, sourceUri: sourceUri);
     } catch (error) {
-      throw NovelChapterSourceRouteException('原帖楼层定位失败：$error');
+      throw NovelChapterSourceRouteException(
+        NovelChapterSourceRouteFailureCode.locatorFailed,
+        detail: error,
+      );
     }
     final location = result.dataOrNull;
     if (!result.isSuccess || location == null) {
       throw NovelChapterSourceRouteException(
-        result.errorOrNull?.message ?? '原帖楼层定位结果为空。',
+        NovelChapterSourceRouteFailureCode.emptyResult,
+        detail: result.errorOrNull,
       );
     }
     if (location.tid.trim() != tid || location.pid.trim() != pid) {
-      throw const NovelChapterSourceRouteException('原帖楼层定位结果与章节来源不一致。');
+      throw const NovelChapterSourceRouteException(
+        NovelChapterSourceRouteFailureCode.mismatchedResult,
+      );
     }
     if (location.page < 1) {
-      throw const NovelChapterSourceRouteException('原帖楼层页码无效。');
+      throw const NovelChapterSourceRouteException(
+        NovelChapterSourceRouteFailureCode.invalidPage,
+      );
     }
     return NovelChapterSourceRoute(
       tid: tid,
@@ -52,10 +66,13 @@ class ThreadPostLocatorNovelChapterSourceRouteResolver
     );
   }
 
-  String _requirePositiveId(String value, String field) {
+  String _requirePositiveId(
+    String value,
+    NovelChapterSourceRouteFailureCode failureCode,
+  ) {
     final normalized = value.trim();
     if (!RegExp(r'^[1-9]\d*$').hasMatch(normalized)) {
-      throw NovelChapterSourceRouteException('章节缺少有效的来源 $field。');
+      throw NovelChapterSourceRouteException(failureCode);
     }
     return normalized;
   }

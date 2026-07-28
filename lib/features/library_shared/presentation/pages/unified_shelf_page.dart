@@ -278,6 +278,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                                         'unified-shelf-category-page-${category.categoryId}',
                                       ),
                                       categoryId: category.categoryId,
+                                      moduleKey: liveState.moduleKey,
                                       items: items,
                                       displayMode: liveState.displayMode,
                                       gridColumns: liveState.gridColumnCount,
@@ -1015,6 +1016,7 @@ class _ShelfCategoryPage extends StatefulWidget {
   const _ShelfCategoryPage({
     super.key,
     required this.categoryId,
+    required this.moduleKey,
     required this.items,
     required this.displayMode,
     required this.gridColumns,
@@ -1029,6 +1031,7 @@ class _ShelfCategoryPage extends StatefulWidget {
   });
 
   final String categoryId;
+  final LibraryModuleKey moduleKey;
   final List<LibraryWorkItem> items;
   final LibraryDisplayMode displayMode;
   final int gridColumns;
@@ -1080,6 +1083,7 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage>
     final child = widget.displayMode == LibraryDisplayMode.list
         ? _WorkList(
             categoryId: widget.categoryId,
+            moduleKey: widget.moduleKey,
             items: widget.items,
             imageHeaderBuilder: widget.imageHeaderBuilder,
             useShelfCoverImage: widget.useShelfCoverImage,
@@ -1091,6 +1095,7 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage>
           )
         : _WorkGrid(
             categoryId: widget.categoryId,
+            moduleKey: widget.moduleKey,
             items: widget.items,
             gridColumns: widget.gridColumns,
             imageHeaderBuilder: widget.imageHeaderBuilder,
@@ -1170,6 +1175,7 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage>
 class _WorkGrid extends StatelessWidget {
   const _WorkGrid({
     required this.categoryId,
+    required this.moduleKey,
     required this.items,
     required this.gridColumns,
     this.imageHeaderBuilder,
@@ -1182,6 +1188,7 @@ class _WorkGrid extends StatelessWidget {
   });
 
   final String categoryId;
+  final LibraryModuleKey moduleKey;
   final List<LibraryWorkItem> items;
   final int gridColumns;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
@@ -1217,7 +1224,12 @@ class _WorkGrid extends StatelessWidget {
           return ShelfCoverCard(
             key: ValueKey<String>('unified-shelf-grid-item-${item.workId}'),
             coverKey: item.workId,
-            title: item.title,
+            title: LibraryShelfTextResolver.workTitle(
+              AppLocalizations.of(context),
+              moduleKey,
+              item.title,
+              item.workId,
+            ),
             coverImageUrl: item.coverImageUrl,
             coverLocalPath: item.coverLocalPath,
             customCoverLocalPath: item.customCoverLocalPath,
@@ -1323,6 +1335,7 @@ class _ShelfTaskProgressBanner extends StatelessWidget {
 class _WorkList extends StatelessWidget {
   const _WorkList({
     required this.categoryId,
+    required this.moduleKey,
     required this.items,
     this.imageHeaderBuilder,
     required this.useShelfCoverImage,
@@ -1334,6 +1347,7 @@ class _WorkList extends StatelessWidget {
   });
 
   final String categoryId;
+  final LibraryModuleKey moduleKey;
   final List<LibraryWorkItem> items;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final bool useShelfCoverImage;
@@ -1403,7 +1417,12 @@ class _WorkList extends StatelessWidget {
                       : null,
                   leading: leading,
                   title: Text(
-                    item.title,
+                    LibraryShelfTextResolver.workTitle(
+                      AppLocalizations.of(context),
+                      moduleKey,
+                      item.title,
+                      item.workId,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),

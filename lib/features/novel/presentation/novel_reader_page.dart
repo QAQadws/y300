@@ -16,6 +16,7 @@ import 'package:y300/features/novel/data/services/novel_reader_progress_diagnost
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
+import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
@@ -32,6 +33,7 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
 
@@ -50,6 +52,7 @@ class NovelReaderPage extends ConsumerStatefulWidget {
   @override
   ConsumerState<NovelReaderPage> createState() => _NovelReaderPageState();
 }
+
 class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     with WidgetsBindingObserver {
   late final ScrollController _scrollController;
@@ -309,9 +312,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   ReaderTopBarConfig _buildTopBarConfig(NovelReaderViewState viewState) {
+    final l10n = AppLocalizations.of(context);
     return ReaderTopBarConfig(
       title: _novelTitle(viewState),
-      subtitle: viewState.currentEpisode.episodeTitle,
+      subtitle: NovelTextResolver.chapterTitle(
+        l10n,
+        viewState.currentEpisode.episodeTitle,
+        viewState.currentEpisode.sourceTid,
+      ),
       onBack: () => _popReader(),
       actions: [
         ReaderToolbarAction(
@@ -319,13 +327,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           icon: viewState.hasCurrentEpisodeBookmark
               ? Icons.bookmark
               : Icons.bookmark_border,
-          label: viewState.hasCurrentEpisodeBookmark ? '移除章节书签' : '添加章节书签',
+          label: viewState.hasCurrentEpisodeBookmark
+              ? l10n.novelBookmarkRemove
+              : l10n.novelBookmarkAdd,
           onPressed: () => _toggleEpisodeBookmark(viewState),
         ),
         ReaderToolbarAction(
           id: 'open-thread',
           icon: Icons.open_in_new,
-          label: '打开原帖',
+          label: l10n.novelOpenSourceThread,
           onPressed: () => _openSourceThread(viewState),
         ),
       ],
@@ -346,6 +356,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderViewState viewState,
     NovelReaderController controller,
   ) {
+    final l10n = AppLocalizations.of(context);
     final isLocked = viewState.transition != null || _isProgressSeekInFlight;
     final onPrevious = viewState.hasPreviousEpisode
         ? () => unawaited(_openDifferentEpisode(controller.goToPreviousEpisode))
@@ -390,7 +401,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       current: currentIndex + 1,
       total: total,
       leadingLabel: '${currentIndex + 1}',
-      trailingLabel: isFinal ? '$total' : '计算中',
+      trailingLabel: isFinal ? '$total' : l10n.novelPageCountPending,
       sliderEnabled: isFinal,
       interactionLocked: isLocked,
       previousEnabled: viewState.hasPreviousEpisode && !isLocked,
@@ -407,17 +418,18 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderViewState viewState,
     NovelReaderController controller,
   ) {
+    final l10n = AppLocalizations.of(context);
     return [
       ReaderToolbarAction(
         id: 'catalog',
         icon: Icons.format_list_bulleted,
-        label: '目录',
+        label: l10n.novelCatalog,
         onPressed: () => _showChapterListSheet(viewState, controller),
       ),
       ReaderToolbarAction(
         id: 'display',
         icon: Icons.tune,
-        label: '显示',
+        label: l10n.novelDisplay,
         onPressed: () => _showDisplaySettingsSheet(viewState, controller),
       ),
     ];
@@ -564,7 +576,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               .onPagedPositionChanged(position);
         },
         onNavigationUnavailable: (_) {
-          _showReaderSnackBar('位置已变化，已保留当前页');
+          _showReaderSnackBar(
+            AppLocalizations.of(context).novelPositionChanged,
+          );
         },
       );
     }
@@ -1006,7 +1020,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (!mounted || didSucceed) {
       return didSucceed;
     }
-    _showReaderSnackBar('章节切换失败，已保留当前章节');
+    _showReaderSnackBar(AppLocalizations.of(context).novelChapterSwitchFailed);
     return false;
   }
 
@@ -1101,7 +1115,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     } catch (_) {
       controller.revertPreferencePreview();
       if (mounted) {
-        _showReaderSnackBar('切回滚动模式失败');
+        _showReaderSnackBar(
+          AppLocalizations.of(context).novelReturnToScrollFailed,
+        );
       }
     }
   }
@@ -1268,7 +1284,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         return;
       }
       controller.revertPreferencePreview();
-      _showReaderSnackBar('显示设置保存失败');
+      _showReaderSnackBar(
+        AppLocalizations.of(context).novelSaveDisplaySettingsFailed,
+      );
     } finally {
       if (_inFlightDisplayPreferences == preferences) {
         _inFlightDisplayPreferences = null;
@@ -1286,7 +1304,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final isBookmarked =
         latest?.hasCurrentEpisodeBookmark ??
         !viewState.hasCurrentEpisodeBookmark;
-    _showReaderSnackBar(isBookmarked ? '已添加书签' : '已移除书签');
+    final l10n = AppLocalizations.of(context);
+    _showReaderSnackBar(
+      isBookmarked ? l10n.novelBookmarkAdded : l10n.novelBookmarkRemoved,
+    );
   }
 
   Future<void> _openSourceThread(NovelReaderViewState viewState) async {
@@ -1371,7 +1392,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (!mounted || launched) {
       return;
     }
-    _showReaderSnackBar('链接打开失败');
+    _showReaderSnackBar(AppLocalizations.of(context).novelLinkOpenFailed);
   }
 
   void _openHtmlReaderImage(ThreadImageOpenRequest request) {
@@ -1401,7 +1422,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (!mounted) {
       return;
     }
-    _showReaderSnackBar('图片链接已复制');
+    _showReaderSnackBar(AppLocalizations.of(context).novelImageLinkCopied);
   }
 
   void _showReaderSnackBar(String message) {
@@ -1423,7 +1444,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (!mounted || didSucceed) {
       return;
     }
-    _showReaderSnackBar('作品更新失败，已保留当前章节');
+    _showReaderSnackBar(AppLocalizations.of(context).novelWorkUpdateFailed);
   }
 
   String _novelTitle(NovelReaderViewState viewState) {
@@ -1435,7 +1456,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (episodeTitle.isNotEmpty) {
       return episodeTitle;
     }
-    return widget.novelId;
+    return NovelTextResolver.workTitle(
+      AppLocalizations.of(context),
+      '',
+      widget.novelId,
+    );
   }
 
   String? _sourceTidFromId(String value) {
@@ -1451,6 +1476,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     return typography.contentMaxWidth < 160 ? 160 : typography.contentMaxWidth;
   }
 }
+
 class NovelReaderChapterListSheet extends StatefulWidget {
   const NovelReaderChapterListSheet({super.key, required this.viewState});
 
@@ -1487,6 +1513,7 @@ class _NovelReaderChapterListSheetState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final filteredEpisodes = _filteredEpisodes();
     return SafeArea(
       child: ConstrainedBox(
@@ -1496,14 +1523,14 @@ class _NovelReaderChapterListSheetState
         child: Column(
           key: const Key('novel-reader-chapter-list-sheet'),
           children: [
-            ReaderSheetTitle(title: '目录'),
+            ReaderSheetTitle(title: l10n.novelCatalog),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: TextField(
                 key: const Key('novel-reader-chapter-search-field'),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: '搜索章节',
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: l10n.novelSearchChapters,
                   isDense: true,
                 ),
                 onChanged: (value) {
@@ -1515,9 +1542,9 @@ class _NovelReaderChapterListSheetState
             ),
             Expanded(
               child: filteredEpisodes.isEmpty
-                  ? const Center(
-                      key: Key('novel-reader-chapter-search-empty'),
-                      child: Text('没有匹配的章节'),
+                  ? Center(
+                      key: const Key('novel-reader-chapter-search-empty'),
+                      child: Text(l10n.novelNoMatchingChapters),
                     )
                   : ListView.builder(
                       controller: _keyword.isEmpty ? _scrollController : null,
@@ -1591,6 +1618,7 @@ class _ChapterListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final isCurrent = episode.episodeId == currentEpisodeId;
     final isLastRead =
         !isCurrent && episode.episodeId == readingProgressEpisodeId;
@@ -1606,7 +1634,11 @@ class _ChapterListTile extends StatelessWidget {
             : Icons.radio_button_unchecked,
       ),
       title: Text(
-        episode.episodeTitle,
+        NovelTextResolver.chapterTitle(
+          l10n,
+          episode.episodeTitle,
+          episode.sourceTid,
+        ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1622,13 +1654,13 @@ class _ChapterListTile extends StatelessWidget {
         children: [
           if (isBookmarked)
             Text(
-              '书签',
+              l10n.novelBookmark,
               key: Key('novel-reader-chapter-bookmark-${episode.episodeId}'),
             ),
           if (isCurrent)
-            const Text('当前')
+            Text(l10n.novelCurrent)
           else if (isLastRead)
-            const Text('上次阅读'),
+            Text(l10n.novelLastRead),
         ],
       ),
       onTap: () => Navigator.of(context).pop(episode),
@@ -1648,13 +1680,22 @@ class NovelReaderNextChapterTransition extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Center(
       key: const Key('novel-reader-next-chapter-transition'),
       child: OutlinedButton.icon(
         key: const Key('novel-reader-next-chapter-button'),
         onPressed: onPressed,
         icon: const Icon(Icons.arrow_forward),
-        label: Text('下一章：${nextEpisode.episodeTitle}'),
+        label: Text(
+          l10n.novelNextChapter(
+            NovelTextResolver.chapterTitle(
+              l10n,
+              nextEpisode.episodeTitle,
+              nextEpisode.sourceTid,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1676,6 +1717,7 @@ class NovelReaderErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SafeArea(
       child: Center(
         child: SingleChildScrollView(
@@ -1690,12 +1732,12 @@ class NovelReaderErrorView extends StatelessWidget {
                   const Icon(Icons.menu_book_outlined, size: 42),
                   const SizedBox(height: 16),
                   Text(
-                    '章节暂时无法显示',
+                    l10n.novelChapterUnavailable,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    error.toString(),
+                    NovelTextResolver.readerFailure(l10n, error),
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -1709,19 +1751,19 @@ class NovelReaderErrorView extends StatelessWidget {
                         key: const Key('novel-reader-error-retry'),
                         onPressed: onRetry,
                         icon: const Icon(Icons.refresh),
-                        label: const Text('重试'),
+                        label: Text(l10n.commonRetry),
                       ),
                       OutlinedButton.icon(
                         key: const Key('novel-reader-error-update-work'),
                         onPressed: onUpdateWork,
                         icon: const Icon(Icons.sync),
-                        label: const Text('更新作品'),
+                        label: Text(l10n.novelUpdateWork),
                       ),
                       OutlinedButton.icon(
                         key: const Key('novel-reader-error-open-thread'),
                         onPressed: onOpenThread,
                         icon: const Icon(Icons.open_in_new),
-                        label: const Text('打开原帖'),
+                        label: Text(l10n.novelOpenSourceThread),
                       ),
                     ],
                   ),

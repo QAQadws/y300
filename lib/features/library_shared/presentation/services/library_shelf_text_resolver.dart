@@ -2,6 +2,7 @@ import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapt
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
+import 'package:y300/features/library_shared/presentation/services/library_title_fallback_policy.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 abstract final class LibraryShelfTextResolver {
@@ -13,6 +14,22 @@ abstract final class LibraryShelfTextResolver {
     return category.isDefault
         ? l10n.libraryShelfDefaultCategory
         : category.name;
+  }
+
+  static String workTitle(
+    AppLocalizations l10n,
+    LibraryModuleKey moduleKey,
+    String rawTitle,
+    String workId,
+  ) {
+    if (!LibraryTitleFallbackPolicy.needsWorkFallback(moduleKey, rawTitle)) {
+      return rawTitle;
+    }
+    return switch (moduleKey) {
+      LibraryModuleKey.comic => l10n.comicUntitledWork(workId),
+      LibraryModuleKey.novel => l10n.novelUntitledWork(workId),
+      LibraryModuleKey.favorite => rawTitle,
+    };
   }
 
   static String categoryLabel(

@@ -17,12 +17,14 @@ class NovelChapterHydrationViewState {
   const NovelChapterHydrationViewState({
     required this.status,
     this.progress,
-    this.errorMessage,
+    this.failureCode,
+    this.diagnosticDetail,
   });
 
   final NovelChapterHydrationViewStatus status;
   final NovelChapterSyncProgress? progress;
-  final String? errorMessage;
+  final NovelChapterSyncFailureCode? failureCode;
+  final Object? diagnosticDetail;
 
   bool get isReady => status == NovelChapterHydrationViewStatus.ready;
   bool get canRetry => status == NovelChapterHydrationViewStatus.failed;
@@ -30,13 +32,17 @@ class NovelChapterHydrationViewState {
   NovelChapterHydrationViewState copyWith({
     NovelChapterHydrationViewStatus? status,
     NovelChapterSyncProgress? progress,
-    String? errorMessage,
-    bool clearError = false,
+    NovelChapterSyncFailureCode? failureCode,
+    Object? diagnosticDetail,
+    bool clearFailure = false,
   }) {
     return NovelChapterHydrationViewState(
       status: status ?? this.status,
       progress: progress ?? this.progress,
-      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      failureCode: clearFailure ? null : (failureCode ?? this.failureCode),
+      diagnosticDetail: clearFailure
+          ? null
+          : (diagnosticDetail ?? this.diagnosticDetail),
     );
   }
 }
@@ -66,7 +72,7 @@ class NovelChapterHydrationController
     if (sourceState == null) {
       return const NovelChapterHydrationViewState(
         status: NovelChapterHydrationViewStatus.failed,
-        errorMessage: '缺少小说来源信息，无法加载章节。',
+        failureCode: NovelChapterSyncFailureCode.missingSourceState,
       );
     }
     if (sourceState.hydrationState == NovelChapterHydrationState.ready) {
@@ -77,22 +83,24 @@ class NovelChapterHydrationController
     if (sourceState.hydrationState == NovelChapterHydrationState.failed) {
       return NovelChapterHydrationViewState(
         status: NovelChapterHydrationViewStatus.failed,
-        errorMessage: sourceState.lastError ?? '章节加载失败，请重试。',
+        failureCode: NovelChapterSyncFailureCodeCodec.fromStorage(
+          sourceState.lastError,
+        ),
       );
     }
     if (sourceState.hydrationState == NovelChapterHydrationState.hydrating &&
         !ref.read(novelChapterSyncServiceProvider).hasActiveRun(_novelId)) {
-      const message = '上次章节加载被中断，请重试。';
+      const failureCode = NovelChapterSyncFailureCode.interrupted;
       await ref
           .read(novelSourceStateRepositoryProvider)
           .setHydrationState(
             novelId: _novelId,
             state: NovelChapterHydrationState.failed,
-            lastError: message,
+            lastError: failureCode.storageValue,
           );
       return const NovelChapterHydrationViewState(
         status: NovelChapterHydrationViewStatus.failed,
-        errorMessage: message,
+        failureCode: failureCode,
       );
     }
     return const NovelChapterHydrationViewState(
@@ -138,7 +146,9 @@ class NovelChapterHydrationController
           .read(novelSourceStateRepositoryProvider)
           .getSourceState(novelId: _novelId);
       if (sourceState == null) {
-        throw StateError('缺少小说来源信息。');
+        throw const NovelChapterSyncException(
+          NovelChapterSyncFailureCode.missingSourceState,
+        );
       }
       var publisherId = sourceState.publisherId?.trim() ?? '';
       if (publisherId.isEmpty) {
@@ -156,7 +166,9 @@ class NovelChapterHydrationController
         publisherId = sourceState?.publisherId?.trim() ?? '';
       }
       if (publisherId.isEmpty) {
-        throw StateError('来源帖子缺少有效的发布者 ID。');
+        throw const NovelChapterSyncException(
+          NovelChapterSyncFailureCode.missingPublisherId,
+        );
       }
 
       final detail = await ref
@@ -164,7 +176,9 @@ class NovelChapterHydrationController
           .getDetail(novelId: _novelId);
       final tid = detail?.sourceTid.trim() ?? '';
       if (tid.isEmpty) {
-        throw StateError('小说缺少来源帖子 ID。');
+        throw const NovelChapterSyncException(
+          NovelChapterSyncFailureCode.missingSourceTid,
+        );
       }
 
       final syncService = ref.read(novelChapterSyncServiceProvider);
@@ -181,7 +195,8 @@ class NovelChapterHydrationController
                 ? NovelChapterHydrationViewStatus.ready
                 : NovelChapterHydrationViewStatus.hydrating,
             progress: progress,
-            errorMessage: progress.message,
+            failureCode: progress.failureCode,
+            diagnosticDetail: progress.diagnosticDetail,
           ),
         );
       });
@@ -207,14 +222,14 @@ class NovelChapterHydrationController
         );
       }
     } catch (error) {
-      final message = _errorMessage(error);
+      final failureCode = _failureCode(error);
       try {
         await ref
             .read(novelSourceStateRepositoryProvider)
             .setHydrationState(
               novelId: _novelId,
               state: NovelChapterHydrationState.failed,
-              lastError: message,
+              lastError: failureCode.storageValue,
             );
       } catch (_) {
         // The visible error remains useful even when the source row is missing.
@@ -223,18 +238,20 @@ class NovelChapterHydrationController
         state = AsyncData(
           NovelChapterHydrationViewState(
             status: NovelChapterHydrationViewStatus.failed,
-            errorMessage: message,
+            failureCode: failureCode,
+            diagnosticDetail: error is NovelChapterSyncException
+                ? error.detail
+                : error,
           ),
         );
       }
     }
   }
 
-  String _errorMessage(Object error) {
-    return error
-        .toString()
-        .replaceAll(RegExp(r'^\w+(?:Exception)?:\s*'), '')
-        .trim();
+  NovelChapterSyncFailureCode _failureCode(Object error) {
+    return error is NovelChapterSyncException
+        ? error.code
+        : NovelChapterSyncFailureCode.synchronizationFailed;
   }
 
   void _removeOperation(Future<void> operation) {

@@ -8,6 +8,18 @@ import 'package:y300/features/novel/presentation/services/novel_reader_document_
 import 'package:y300/features/novel/presentation/services/novel_reader_shared_preferences_bridge.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 
+enum NovelReaderLoadFailureCode { noChapters, chapterContentMissing }
+
+final class NovelReaderLoadException implements Exception {
+  const NovelReaderLoadException(this.code, {this.detail});
+
+  final NovelReaderLoadFailureCode code;
+  final Object? detail;
+
+  @override
+  String toString() => 'NovelReaderLoadException(${code.name})';
+}
+
 class NovelReaderLoadContext {
   const NovelReaderLoadContext({
     required this.novelId,
@@ -79,7 +91,9 @@ class DefaultNovelReaderBootstrapService
       descending: false,
     );
     if (episodes.isEmpty) {
-      throw StateError('小说章节目录为空');
+      throw const NovelReaderLoadException(
+        NovelReaderLoadFailureCode.noChapters,
+      );
     }
     final currentEpisode = episodes.firstWhere(
       (episode) => episode.episodeId == context.requestedEpisodeId,
@@ -90,7 +104,9 @@ class DefaultNovelReaderBootstrapService
       episodeId: currentEpisode.episodeId,
     );
     if (content == null) {
-      throw StateError('章节内容不存在');
+      throw const NovelReaderLoadException(
+        NovelReaderLoadFailureCode.chapterContentMissing,
+      );
     }
 
     // Load preferences before building so traditional/simplified conversion is

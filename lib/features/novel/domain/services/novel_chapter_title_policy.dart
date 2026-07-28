@@ -37,14 +37,14 @@ class FirstMeaningfulSentenceNovelChapterTitlePolicy
   }) {
     final meaningful = _firstMeaningfulLine(normalizedPlainText);
     if (meaningful == null) {
-      return '第 ${orderIndex + 1} 章';
+      return '';
     }
 
     final sentence =
         _sentenceEnd.firstMatch(meaningful)?.group(1) ?? meaningful;
     final normalizedSentence = _collapseWhitespace(sentence);
     if (normalizedSentence.isEmpty) {
-      return '第 ${orderIndex + 1} 章';
+      return '';
     }
     return _truncate(normalizedSentence);
   }

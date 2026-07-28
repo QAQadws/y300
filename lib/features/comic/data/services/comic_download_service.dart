@@ -11,6 +11,7 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_download_execution.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
@@ -84,7 +85,9 @@ class DefaultComicDownloadService
       (item) => item.episodeId == episodeId,
     );
     if (episodeIndex < 0) {
-      throw StateError('漫画章节不存在');
+      throw const ComicDownloadFailedException(
+        ComicDownloadFailureCode.episodeUnavailable,
+      );
     }
     final episode = episodes[episodeIndex];
     final existing = await _storageService.findDownloadedComicEpisode(
@@ -129,7 +132,9 @@ class DefaultComicDownloadService
 
     final images = await _ensureEpisodeImages(episode: episode);
     if (images.isEmpty) {
-      throw StateError('当前章节没有可下载图片');
+      throw const ComicDownloadFailedException(
+        ComicDownloadFailureCode.noImages,
+      );
     }
     await observer?.onImagesResolved(images.length);
     cancellationToken?.throwIfCancellationRequested();
@@ -309,7 +314,9 @@ class DefaultComicDownloadService
   Future<ComicDetail> _requireDetail(String comicId) async {
     final detail = await _repository.getComicDetail(comicId: comicId);
     if (detail == null) {
-      throw StateError('漫画不存在或已删除');
+      throw const ComicDownloadFailedException(
+        ComicDownloadFailureCode.workUnavailable,
+      );
     }
     return detail;
   }
@@ -328,10 +335,9 @@ class DefaultComicDownloadService
     final fetched = switch (result) {
       ComicEpisodeImagesFetched(:final imageUrls) => imageUrls,
       ComicEpisodeImagesFetchFailed(:final reason, :final message) =>
-        throw StateError(
-          message?.trim().isNotEmpty == true
-              ? '章节图片获取失败：$message'
-              : '章节图片获取失败：${reason.name}',
+        throw ComicDownloadFailedException(
+          ComicDownloadFailureCode.imageDownloadFailed,
+          detail: message?.trim().isNotEmpty == true ? message : reason.name,
         ),
     };
     if (fetched.isEmpty) {
@@ -395,7 +401,10 @@ class DefaultComicDownloadService
     );
     final path = result.localPath;
     if (!result.success || path == null || path.trim().isEmpty) {
-      throw StateError('图片下载失败：${image.effectiveSourceUrl}');
+      throw ComicDownloadFailedException(
+        ComicDownloadFailureCode.imageDownloadFailed,
+        detail: image.effectiveSourceUrl,
+      );
     }
 
     await _repository.updateEpisodeImageCacheStatus(

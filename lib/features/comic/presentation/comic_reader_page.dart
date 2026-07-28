@@ -8,6 +8,7 @@ import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart'
 import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
 import 'package:y300/features/comic/presentation/comic_reader_capability.dart';
+import 'package:y300/features/comic/presentation/comic_text_resolver.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
 import 'package:y300/features/comic/presentation/providers/comic_comment_providers.dart';
@@ -19,6 +20,7 @@ import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 enum _ComicReaderMoreAction { markReadToggle, setCurrentPageAsCover }
 
@@ -53,6 +55,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final preferencesState = ref.watch(readerPreferencesControllerProvider);
     final preferences = preferencesState.value ?? ReaderPreferences.defaults();
     final state = ref.watch(comicReaderControllerProvider(_readerArgs));
@@ -66,7 +69,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         error: (error, stackTrace) => _buildReaderErrorState(error),
         data: (viewState) {
           if (viewState.images.isEmpty) {
-            return const Center(child: Text('当前章节没有可阅读图片'));
+            return Center(child: Text(l10n.comicNoImages));
           }
           final controller = _controller();
           final commentSessionKey = ComicCommentSessionKey(
@@ -101,6 +104,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
                   preferences: preferences,
                   imageHeaderBuilder: imageHeaderBuilder,
                   controller: controller,
+                  l10n: l10n,
                   diagnosticRecorder: widget.diagnosticRecorder,
                   exitResult: _exitResultFor(viewState),
                   commentTailSurface: commentTail,
@@ -148,9 +152,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
 
   /// 阅读器错误态：拉单话图片失败显示根因 + 重试；解析失败不出重试按钮。
   Widget _buildReaderErrorState(Object error) {
-    final hint = error is ComicEpisodeImagesUnavailable
-        ? error.displayHint
-        : '加载阅读器失败：$error';
+    final l10n = AppLocalizations.of(context);
+    final hint = ComicTextResolver.readerFailure(l10n, error);
     final retryable =
         error is! ComicEpisodeImagesUnavailable || error.isRetryable;
     return Center(
@@ -165,7 +168,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
               FilledButton(
                 onPressed: () =>
                     ref.invalidate(comicReaderControllerProvider(_readerArgs)),
-                child: const Text('重试'),
+                child: Text(l10n.commonRetry),
               ),
             ],
           ],
@@ -226,11 +229,17 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     final controller = _controller();
     switch (action) {
       case _ComicReaderMoreAction.markReadToggle:
-        final message = await controller.setCurrentEpisodeRead(
+        final notice = await controller.setCurrentEpisodeRead(
           !viewState.isCurrentEpisodeRead,
         );
-        if (mounted && message != null) {
-          showTransientSnackBar(context, message);
+        if (mounted && notice != null) {
+          showTransientSnackBar(
+            context,
+            ComicTextResolver.readerNotice(
+              AppLocalizations.of(context),
+              notice,
+            ),
+          );
         }
       case _ComicReaderMoreAction.setCurrentPageAsCover:
         await _handleSetCoverWithFocus();
@@ -238,9 +247,12 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   }
 
   Future<void> _toggleBookmark() async {
-    final message = await _controller().toggleBookmark();
-    if (mounted && message != null) {
-      showTransientSnackBar(context, message);
+    final notice = await _controller().toggleBookmark();
+    if (mounted && notice != null) {
+      showTransientSnackBar(
+        context,
+        ComicTextResolver.readerNotice(AppLocalizations.of(context), notice),
+      );
     }
   }
 
@@ -250,34 +262,41 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     final localPath = await controller.prepareCurrentImageForCover();
     if (localPath == null || localPath.trim().isEmpty || !mounted) {
       if (mounted) {
-        showTransientSnackBar(context, '当前页图片缓存失败，无法设为封面');
+        showTransientSnackBar(
+          context,
+          AppLocalizations.of(context).comicCoverImageUnavailable,
+        );
       }
       return;
     }
     final focus = await CoverFocalPointPicker.show(
       context,
       image: FileImage(io.File(localPath)),
-      title: '调整封面焦点',
+      title: AppLocalizations.of(context).comicSetCoverFocus,
     );
     if (focus == null || !mounted) {
       // 取消选区则不改动封面。
       return;
     }
-    final message = await controller.setCurrentImageAsCover(
+    final notice = await controller.setCurrentImageAsCover(
       focusX: focus.x,
       focusY: focus.y,
     );
-    if (mounted && message != null) {
-      showTransientSnackBar(context, message);
+    if (mounted && notice != null) {
+      showTransientSnackBar(
+        context,
+        ComicTextResolver.readerNotice(AppLocalizations.of(context), notice),
+      );
     }
   }
 
   Future<void> _showMoreActionSheet(ComicReaderViewState viewState) async {
+    final l10n = AppLocalizations.of(context);
     final action = await showModalBottomSheet<_ComicReaderMoreAction>(
       context: context,
       showDragHandle: true,
       builder: (context) => ReaderActionSheet<_ComicReaderMoreAction>(
-        title: '更多操作',
+        title: l10n.comicMoreActions,
         items: [
           ReaderActionSheetItem<_ComicReaderMoreAction>(
             id: 'mark-read-toggle',
@@ -285,13 +304,15 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
             icon: viewState.isCurrentEpisodeRead
                 ? Icons.radio_button_unchecked
                 : Icons.check_circle_outline,
-            label: viewState.isCurrentEpisodeRead ? '标记本章未读' : '标记本章已读',
+            label: viewState.isCurrentEpisodeRead
+                ? l10n.comicMarkEpisodeUnread
+                : l10n.comicMarkEpisodeRead,
           ),
-          const ReaderActionSheetItem<_ComicReaderMoreAction>(
+          ReaderActionSheetItem<_ComicReaderMoreAction>(
             id: 'set-cover',
             value: _ComicReaderMoreAction.setCurrentPageAsCover,
             icon: Icons.image_outlined,
-            label: '将当前页设为封面',
+            label: l10n.comicSetCurrentPageCover,
           ),
         ],
       ),
@@ -303,6 +324,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   }
 
   Future<void> _showChapterListSheet(ComicReaderViewState viewState) async {
+    final l10n = AppLocalizations.of(context);
     final selected = await showModalBottomSheet<ComicReaderChapterEntry>(
       context: context,
       showDragHandle: true,
@@ -310,7 +332,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const ReaderSheetTitle(title: '章节列表'),
+            ReaderSheetTitle(title: l10n.comicChapterList),
             for (final chapter in viewState.chapters)
               ListTile(
                 key: ValueKey<String>(
@@ -323,11 +345,17 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
                       : Icons.radio_button_unchecked,
                 ),
                 title: Text(
-                  chapter.title,
+                  ComicTextResolver.chapterTitle(
+                    l10n,
+                    chapter.title,
+                    chapter.sourceTid,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                trailing: chapter.isCurrent ? const Text('当前') : null,
+                trailing: chapter.isCurrent
+                    ? Text(l10n.comicCurrentChapter)
+                    : null,
                 onTap: () => Navigator.of(context).pop(chapter),
               ),
           ],
@@ -402,14 +430,22 @@ class _ReaderNextChapterTransition extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '下一章：${chapter.title}',
+                        AppLocalizations.of(context).comicNextChapterTitle(
+                          ComicTextResolver.chapterTitle(
+                            AppLocalizations.of(context),
+                            chapter.title,
+                            chapter.sourceTid,
+                          ),
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleSmall,
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        isSwitchingEpisode ? '正在切换章节' : '点击进入下一章',
+                        isSwitchingEpisode
+                            ? AppLocalizations.of(context).comicSwitchingEpisode
+                            : AppLocalizations.of(context).comicOpenNextEpisode,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -480,7 +516,10 @@ class _ReaderOpeningPlaceholderState extends State<_ReaderOpeningPlaceholder> {
       color: widget.background,
       child: Center(
         child: _showCopy
-            ? Text('正在打开章节', style: Theme.of(context).textTheme.bodySmall)
+            ? Text(
+                AppLocalizations.of(context).comicOpeningEpisode,
+                style: Theme.of(context).textTheme.bodySmall,
+              )
             : const SizedBox.shrink(),
       ),
     );

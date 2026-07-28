@@ -65,7 +65,9 @@ void main() {
               _NoopImageCacheService(),
             ),
           ],
-          child: const LocalizedTestApp(home: NovelDetailPage(novelId: 'novel:1')),
+          child: const LocalizedTestApp(
+            home: NovelDetailPage(novelId: 'novel:1'),
+          ),
         ),
       );
 
@@ -147,7 +149,9 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
-        child: const LocalizedTestApp(home: NovelDetailPage(novelId: 'novel:1')),
+        child: const LocalizedTestApp(
+          home: NovelDetailPage(novelId: 'novel:1'),
+        ),
       ),
     );
 
@@ -230,7 +234,9 @@ void main() {
           ),
           imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
-        child: const LocalizedTestApp(home: NovelDetailPage(novelId: 'novel:1')),
+        child: const LocalizedTestApp(
+          home: NovelDetailPage(novelId: 'novel:1'),
+        ),
       ),
     );
 
@@ -462,7 +468,7 @@ void main() {
       find.byKey(const Key('novel-source-route-failure-dialog')),
       findsOneWidget,
     );
-    expect(find.textContaining('测试定位失败'), findsOneWidget);
+    expect(find.text('原帖楼层定位失败：test_failure'), findsOneWidget);
     expect(
       find.byKey(const Key('novel-source-route-open-thread-home')),
       findsOneWidget,
@@ -639,7 +645,10 @@ class _FakeNovelChapterSourceRouteResolver
 
   factory _FakeNovelChapterSourceRouteResolver.failure() {
     return _FakeNovelChapterSourceRouteResolver._(
-      error: const NovelChapterSourceRouteException('测试定位失败'),
+      error: const NovelChapterSourceRouteException(
+        NovelChapterSourceRouteFailureCode.locatorFailed,
+        detail: 'test_failure',
+      ),
     );
   }
 

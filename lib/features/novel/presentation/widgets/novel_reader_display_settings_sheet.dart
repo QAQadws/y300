@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class NovelReaderDisplaySettingsSheet extends StatefulWidget {
   const NovelReaderDisplaySettingsSheet({
@@ -29,6 +31,7 @@ class _NovelReaderDisplaySettingsSheetState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SafeArea(
       top: false,
       child: ConstrainedBox(
@@ -41,13 +44,13 @@ class _NovelReaderDisplaySettingsSheetState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const ReaderSheetTitle(title: '显示设置'),
+              ReaderSheetTitle(title: l10n.novelDisplaySettings),
               _SettingsSection(
-                title: '排版',
+                title: l10n.novelTypography,
                 children: [
                   _SettingsSlider(
                     key: const Key('novel-reader-font-size-slider'),
-                    label: '字号',
+                    label: l10n.novelFontSize,
                     value: _draft.fontSize,
                     min: 14,
                     max: 30,
@@ -58,7 +61,7 @@ class _NovelReaderDisplaySettingsSheetState
                   ),
                   _SettingsSlider(
                     key: const Key('novel-reader-line-height-slider'),
-                    label: '间隔',
+                    label: l10n.novelLineSpacing,
                     value: _draft.lineHeight,
                     min: 1.2,
                     max: 2.4,
@@ -70,7 +73,7 @@ class _NovelReaderDisplaySettingsSheetState
                 ],
               ),
               _SettingsSection(
-                title: '主题',
+                title: l10n.novelTheme,
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -80,7 +83,7 @@ class _NovelReaderDisplaySettingsSheetState
                       children: [
                         _ThemeChip(
                           key: const Key('novel-theme-light'),
-                          label: '浅色',
+                          label: l10n.novelThemeLight,
                           selected:
                               _draft.themePreset ==
                               NovelReaderThemePreset.light,
@@ -92,7 +95,7 @@ class _NovelReaderDisplaySettingsSheetState
                         ),
                         _ThemeChip(
                           key: const Key('novel-theme-sepia'),
-                          label: '护眼',
+                          label: l10n.novelThemeSepia,
                           selected:
                               _draft.themePreset ==
                               NovelReaderThemePreset.sepia,
@@ -104,7 +107,7 @@ class _NovelReaderDisplaySettingsSheetState
                         ),
                         _ThemeChip(
                           key: const Key('novel-theme-dark'),
-                          label: '深色',
+                          label: l10n.novelThemeDark,
                           selected:
                               _draft.themePreset == NovelReaderThemePreset.dark,
                           onSelected: () => _applyPreferences(
@@ -115,7 +118,7 @@ class _NovelReaderDisplaySettingsSheetState
                         ),
                         _ThemeChip(
                           key: const Key('novel-theme-follow-system'),
-                          label: '跟随系统',
+                          label: l10n.novelThemeSystem,
                           selected:
                               _draft.themePreset ==
                               NovelReaderThemePreset.followSystem,
@@ -131,23 +134,25 @@ class _NovelReaderDisplaySettingsSheetState
                 ],
               ),
               _SettingsSection(
-                title: '阅读',
+                title: l10n.novelReading,
                 children: [
                   ReaderSegmentControl<NovelReaderFlowMode>(
                     key: const Key('novel-reader-flow-mode-control'),
-                    label: '阅读模式',
+                    label: l10n.novelReadingMode,
                     value: _draft.flowMode,
                     values: NovelReaderFlowMode.values,
-                    labelBuilder: _flowModeLabel,
+                    labelBuilder: (value) =>
+                        NovelTextResolver.flowMode(l10n, value),
                     onChanged: (value) =>
                         _applyPreferences(_draft.copyWith(flowMode: value)),
                   ),
                   ReaderSegmentControl<NovelReaderConversionMode>(
                     key: const Key('novel-reader-conversion-mode-control'),
-                    label: '简繁',
+                    label: l10n.novelConversionMode,
                     value: _draft.conversionMode,
                     values: NovelReaderConversionMode.values,
-                    labelBuilder: _conversionModeLabel,
+                    labelBuilder: (value) =>
+                        NovelTextResolver.conversionMode(l10n, value),
                     onChanged: (value) => _applyPreferences(
                       _draft.copyWith(conversionMode: value),
                     ),
@@ -155,7 +160,7 @@ class _NovelReaderDisplaySettingsSheetState
                   SwitchListTile.adaptive(
                     key: const Key('novel-reader-safe-area-switch'),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                    title: const Text('安全显示正文'),
+                    title: Text(l10n.novelSafeContent),
                     value: _draft.safeAreaEnabled,
                     onChanged: (value) => _applyPreferences(
                       _draft.copyWith(safeAreaEnabled: value),
@@ -182,28 +187,6 @@ class _NovelReaderDisplaySettingsSheetState
 
   double _snap(double value, double step) {
     return (value / step).roundToDouble() * step;
-  }
-
-  String _conversionModeLabel(NovelReaderConversionMode value) {
-    switch (value) {
-      case NovelReaderConversionMode.none:
-        return '原文';
-      case NovelReaderConversionMode.toSimplified:
-        return '简体';
-      case NovelReaderConversionMode.toTraditional:
-        return '繁体';
-    }
-  }
-
-  String _flowModeLabel(NovelReaderFlowMode value) {
-    switch (value) {
-      case NovelReaderFlowMode.vertical:
-        return '滚动';
-      case NovelReaderFlowMode.pagedLtr:
-        return '分页 LTR';
-      case NovelReaderFlowMode.pagedRtl:
-        return '分页 RTL';
-    }
   }
 }
 

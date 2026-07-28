@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/comic/data/repositories/comic_download_queue_repository.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
@@ -340,7 +342,7 @@ final class ComicDownloadQueueService implements ComicDownloadQueue {
     } catch (error) {
       await _queueRepository.markFailed(
         id: entry.id,
-        error: _stableError(error),
+        error: _stableFailureCode(error).storageValue,
         now: _nowProvider(),
       );
     } finally {
@@ -362,15 +364,14 @@ final class ComicDownloadQueueService implements ComicDownloadQueue {
     return normalized.isEmpty ? fallback : normalized;
   }
 
-  String _stableError(Object error) {
-    final message = error.toString().trim();
-    const prefixes = <String>['Bad state: ', 'StateError: ', 'Exception: '];
-    for (final prefix in prefixes) {
-      if (message.startsWith(prefix)) {
-        return message.substring(prefix.length).trim();
-      }
+  ComicDownloadFailureCode _stableFailureCode(Object error) {
+    if (error is ComicDownloadFailedException) {
+      return error.code;
     }
-    return message.isEmpty ? '下载失败' : message;
+    if (error is io.FileSystemException) {
+      return ComicDownloadFailureCode.storageFailed;
+    }
+    return ComicDownloadFailureCode.unknown;
   }
 }
 

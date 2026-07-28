@@ -34,14 +34,14 @@ void main() {
     expect(_title(policy, '本帖最后由 咕哒子鸭 于2025-5-419:36编辑正文第一句。后句。'), '正文第一句。');
   });
 
-  test('falls back to a stable ordinal title for empty metadata text', () {
+  test('leaves empty metadata text for presentation fallback', () {
     expect(
       policy.buildTitle(
         normalizedPlainText: '简介\n目录',
         orderIndex: 4,
         pid: '5001',
       ),
-      '第 5 章',
+      isEmpty,
     );
   });
 

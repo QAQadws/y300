@@ -16,11 +16,9 @@ void main() {
       ),
     );
 
-    final semantics = tester.getSemantics(
-      find.text(ComicCommentCopy.unavailable),
-    );
-    expect(semantics.label, ComicCommentCopy.unavailable);
-    expect(find.text(ComicCommentCopy.retry), findsOneWidget);
+    final semantics = tester.getSemantics(find.text('评论暂不可用'));
+    expect(semantics.label, '评论暂不可用');
+    expect(find.text('重试'), findsOneWidget);
 
     await tester.pumpWidget(
       const LocalizedTestApp(
@@ -34,7 +32,19 @@ void main() {
     final loadingSemantics = tester.getSemantics(
       find.byType(ComicCommentFeedbackSurface),
     );
-    expect(loadingSemantics.label, ComicCommentCopy.loading);
+    expect(loadingSemantics.label, '评论加载中');
+
+    await tester.pumpWidget(
+      const LocalizedTestApp(
+        locale: Locale('zh', 'TW'),
+        home: Scaffold(
+          body: ComicCommentFeedbackSurface(
+            kind: ComicCommentFeedbackKind.unavailable,
+          ),
+        ),
+      ),
+    );
+    expect(find.text('評論暫不可用'), findsOneWidget);
   });
 
   testWidgets('consolidated feedback states keep a local visual baseline', (

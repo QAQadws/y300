@@ -2,6 +2,7 @@ import 'package:y300/features/library_shared/data/repositories/library_state_rep
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_operation_failure.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -47,7 +48,9 @@ class NovelDetailAdapter
   Future<LibraryDetailHeader> loadHeader({required String workId}) async {
     final detail = await _repository.getDetail(novelId: workId);
     if (detail == null) {
-      throw StateError('小说不存在或已删除');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.workNotFound,
+      );
     }
     final workState = await _stateRepository.getWorkState(
       moduleKey: LibraryModuleKey.novel,
@@ -211,7 +214,9 @@ class NovelDetailAdapter
   Future<DetailRefreshResult> refreshWork({required String workId}) async {
     final updateServiceFactory = _chapterUpdateServiceFactory;
     if (updateServiceFactory == null) {
-      throw StateError('小说章节同步服务尚未配置。');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
     }
     final result = await updateServiceFactory().update(workId);
     return DetailRefreshResult.chaptersChanged(
@@ -248,7 +253,9 @@ class NovelDetailAdapter
         customTitle: customTitle,
       );
     }
-    throw StateError('当前小说仓储不支持编辑作品信息');
+    throw const LibraryOperationException(
+      LibraryOperationFailureCode.unsupported,
+    );
   }
 
   @override
@@ -260,7 +267,9 @@ class NovelDetailAdapter
   }) async {
     final repository = _repository;
     if (repository is! NovelCustomCoverWriter) {
-      throw StateError('当前小说仓储不支持自定义封面');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
     }
     final cached = await _coverCacheService.copyProtectedCoverFromLocalFile(
       cacheKey: ImageCacheKeys.customCover(
@@ -273,7 +282,9 @@ class NovelDetailAdapter
     );
     final protectedPath = cached?.localPath?.trim();
     if (protectedPath == null || protectedPath.isEmpty) {
-      throw StateError('封面图片缓存失败');
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.cacheWriteFailed,
+      );
     }
     await (repository as NovelCustomCoverWriter).updateCustomCover(
       novelId: workId,
@@ -305,7 +316,9 @@ class NovelDetailAdapter
         focusY: focusY,
       );
     }
-    throw StateError('当前小说仓储不支持自定义封面');
+    throw const LibraryOperationException(
+      LibraryOperationFailureCode.unsupported,
+    );
   }
 
   @override
@@ -315,7 +328,9 @@ class NovelDetailAdapter
       final writer = repository as NovelCustomCoverWriter;
       return writer.removeCustomCover(novelId: workId);
     }
-    throw StateError('当前小说仓储不支持自定义封面');
+    throw const LibraryOperationException(
+      LibraryOperationFailureCode.unsupported,
+    );
   }
 
   bool _hasText(String? value) => value?.trim().isNotEmpty ?? false;

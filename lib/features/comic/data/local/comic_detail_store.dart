@@ -129,7 +129,7 @@ class ComicDetailStore {
             customValue: normalizedTitle,
             sourceValue: row['source_title'] as String?,
             fallbackValue: row['title'] as String?,
-            emptyFallback: '未命名漫画',
+            emptyFallback: '',
           ),
           'author': displayNullable(
             customValue: normalizedAuthor,
@@ -203,7 +203,7 @@ class ComicDetailStore {
           customValue: nextCustomTitle,
           sourceValue: row['source_title'] as String?,
           fallbackValue: row['title'] as String?,
-          emptyFallback: '未命名漫画',
+          emptyFallback: '',
         ),
         'author': displayNullable(
           customValue: nextCustomAuthor,
@@ -351,7 +351,7 @@ class ComicDetailStore {
         customValue: customTitle,
         sourceValue: sourceTitle,
         fallbackValue: existing?.title,
-        emptyFallback: '未命名漫画',
+        emptyFallback: '',
       ),
       sourceTitle: sourceTitle,
       customTitle: customTitle,
@@ -439,7 +439,7 @@ class ComicDetailStore {
       return normalized;
     }
     final fallback = rawTitle.trim();
-    return fallback.isEmpty ? '未命名漫画' : fallback;
+    return fallback;
   }
 
   String? resolveComicAuthor(ParsedComicPost parsedPost) {

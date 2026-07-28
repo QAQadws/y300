@@ -260,7 +260,7 @@ void main() {
     ).loadAll(sourceTid: '570140');
 
     expect(result.errorCode, ComicCommentLoadErrorCode.rateLimited);
-    expect(result.errorMessage, '请求过于频繁，请稍后重试');
+    expect(result.diagnosticDetail, ApiErrorType.server.name);
   });
 
   test('times out a slow page without blocking the reader forever', () async {

@@ -265,12 +265,13 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
       }
       if (runBegan) {
         try {
+          final failureCode = _failureCode(error);
           await _sourceStateRepository.setHydrationState(
             novelId: novelId,
             state: request.mode == NovelChapterSyncMode.initialFull
                 ? NovelChapterHydrationState.failed
                 : NovelChapterHydrationState.ready,
-            lastError: _errorMessage(error),
+            lastError: failureCode.storageValue,
           );
         } catch (_) {
           // A missing source row is already represented by the original error.
@@ -285,7 +286,10 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
           currentPage: page,
           totalPages: totalPages,
           acceptedCount: acceptedCount,
-          message: _errorMessage(error),
+          failureCode: _failureCode(error),
+          diagnosticDetail: error is NovelChapterSyncException
+              ? error.detail
+              : error,
         ),
       );
       developer.log(
@@ -363,8 +367,10 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
     return normalized;
   }
 
-  String _errorMessage(Object error) {
-    return error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+  NovelChapterSyncFailureCode _failureCode(Object error) {
+    return error is NovelChapterSyncException
+        ? error.code
+        : NovelChapterSyncFailureCode.synchronizationFailed;
   }
 
   static String _defaultRunId(String novelId, DateTime startedAt) {

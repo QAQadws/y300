@@ -71,6 +71,49 @@ void main() {
         rawName,
       );
     });
+
+    test('localizes empty work titles without changing raw titles', () {
+      const rawTitle = 'Raw 漫畫标题 01';
+      for (final locale in <AppLocalizationsZh>[simplified, traditional]) {
+        expect(
+          LibraryShelfTextResolver.workTitle(
+            locale,
+            LibraryModuleKey.comic,
+            rawTitle,
+            'comic:100',
+          ),
+          rawTitle,
+        );
+      }
+
+      expect(
+        LibraryShelfTextResolver.workTitle(
+          simplified,
+          LibraryModuleKey.comic,
+          '',
+          'comic:100',
+        ),
+        simplified.comicUntitledWork('comic:100'),
+      );
+      expect(
+        LibraryShelfTextResolver.workTitle(
+          traditional,
+          LibraryModuleKey.novel,
+          '',
+          'novel:200',
+        ),
+        traditional.novelUntitledWork('novel:200'),
+      );
+      expect(
+        LibraryShelfTextResolver.workTitle(
+          traditional,
+          LibraryModuleKey.comic,
+          '未命名漫画',
+          'comic:100',
+        ),
+        traditional.comicUntitledWork('comic:100'),
+      );
+    });
   });
 
   group('LibraryDetailTextResolver', () {
@@ -95,6 +138,14 @@ void main() {
       expect(
         LibraryDetailTextResolver.chapterTitle(traditional, rawTitle, '571564'),
         rawTitle,
+      );
+      expect(
+        LibraryDetailTextResolver.chapterTitle(
+          traditional,
+          '章节 571564',
+          '571564',
+        ),
+        traditional.libraryChapterFallbackTitle('571564'),
       );
 
       const host = 'bbs.yamibo.com';
