@@ -21,7 +21,9 @@ class ThreadImageReaderCapability extends ReaderCapability {
     required this.request,
     required this.imageHeaderBuilder,
     this.diagnosticRecorder = const NoopContinuousImageDiagnosticRecorder(),
-    this.title = '图片阅读',
+    required this.title,
+    required this.displayLabel,
+    required this.downloadLabel,
   });
 
   final ThreadImageOpenRequest request;
@@ -30,6 +32,8 @@ class ThreadImageReaderCapability extends ReaderCapability {
   @override
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String title;
+  final String displayLabel;
+  final String downloadLabel;
 
   @override
   ReaderKind get readerKind => ReaderKind.thread;
@@ -62,13 +66,13 @@ class ThreadImageReaderCapability extends ReaderCapability {
       ReaderToolbarAction(
         id: 'display',
         icon: Icons.tune,
-        label: '显示',
+        label: displayLabel,
         onPressed: context.actions.openDisplaySettings,
       ),
       ReaderToolbarAction(
         id: 'export-current-image',
         icon: Icons.download_outlined,
-        label: '下载当前图片',
+        label: downloadLabel,
         onPressed: context.actions.exportCurrentImage,
       ),
     ];

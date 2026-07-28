@@ -17,6 +17,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 typedef ThreadPostHtmlFirstImageFallback =
     void Function(ThreadPost post, ForumHtmlImageRequest request);
@@ -381,7 +382,7 @@ class ThreadPostHtmlBodyError extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Text(
-          '正文渲染失败，可长按楼层复制正文或打开原帖查看。',
+          AppLocalizations.of(context).threadHtmlRenderFailed,
           style: Theme.of(
             context,
           ).textTheme.bodyMedium?.copyWith(color: colors.onErrorContainer),

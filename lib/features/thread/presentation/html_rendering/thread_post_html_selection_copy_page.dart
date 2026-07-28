@@ -7,6 +7,7 @@ import 'package:y300/features/thread/presentation/html_rendering/thread_post_htm
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
   const ThreadPostHtmlSelectionCopyPage({
@@ -37,7 +38,10 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
     return Scaffold(
       key: const Key('thread-post-html-selection-copy-page'),
       backgroundColor: palette.background,
-      appBar: AppBar(centerTitle: false, title: const Text('选择复制')),
+      appBar: AppBar(
+        centerTitle: false,
+        title: Text(AppLocalizations.of(context).threadSelectionCopyTitle),
+      ),
       body: SelectionArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),

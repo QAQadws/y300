@@ -250,6 +250,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
                 selectedOptionIds: state.selectedPollOptionIds,
                 isSubmitting: state.isPollVoteSubmitting,
                 hint: state.pollVoteHint,
+                notice: state.pollVoteNotice,
                 onToggleOption: (option) =>
                     onTogglePollOption(post.poll!, option),
                 onSubmit: () => onSubmitPollVote(post.poll!),
@@ -533,6 +534,7 @@ class ThreadPostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final renderContext = this.renderContext;
     final detailState = state;
     final resolvedPalette = renderContext?.palette ?? palette;
@@ -566,7 +568,10 @@ class ThreadPostCard extends StatelessWidget {
     ThreadPostHtmlFirstImageFallback? imageFallback;
     if (interactionPolicy.allowImageFallbackCopy && onCopyActionUrl != null) {
       imageFallback = (post, request) {
-        onCopyActionUrl?.call('${post.number}# 图片', request.url);
+        onCopyActionUrl?.call(
+          '${post.number}# ${l10n.threadDetailImageLink}',
+          request.url,
+        );
       };
     }
     final card = Container(
@@ -677,6 +682,7 @@ class ThreadPostCard extends StatelessWidget {
                   detailState?.selectedPollOptionIds ?? const <String>{},
               isSubmitting: detailState?.isPollVoteSubmitting ?? false,
               hint: detailState?.pollVoteHint,
+              notice: detailState?.pollVoteNotice,
               onToggleOption: (option) =>
                   onTogglePollOption?.call(post.poll!, option),
               onSubmit: () => onSubmitPollVote?.call(post.poll!),
@@ -730,13 +736,14 @@ class _FirstPostThreadSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     return Column(
       key: const Key('thread-detail-first-post-summary'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          state.subject.isNotEmpty ? state.subject : '帖子详情',
+          state.subject.isNotEmpty ? state.subject : l10n.threadDetailTitle,
           style: textTheme.titleMedium?.copyWith(
             color: palette.title,
             fontWeight: FontWeight.w800,
@@ -765,6 +772,7 @@ class _PostHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     final views = viewsLabel?.trim();
     final replies = repliesLabel?.trim();
@@ -781,7 +789,9 @@ class _PostHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                   onTap: onOpenAuthorProfile,
                   child: Text(
-                    post.author.isNotEmpty ? post.author : '匿名',
+                    post.author.isNotEmpty
+                        ? post.author
+                        : l10n.threadDetailAnonymous,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.labelLarge?.copyWith(

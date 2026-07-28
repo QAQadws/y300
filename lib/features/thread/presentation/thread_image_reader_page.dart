@@ -4,6 +4,7 @@ import 'package:y300/features/reader_shared/domain/continuous_image/continuous_i
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_reader_capability.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 帖子图片阅读器页面。
 ///
@@ -25,6 +26,7 @@ class ThreadImageReaderPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return ImageReaderEngine(
       key: const Key('thread-image-reader-engine'),
       listKey: const Key('thread-image-reader-list'),
@@ -34,6 +36,9 @@ class ThreadImageReaderPage extends StatelessWidget {
         request: request,
         imageHeaderBuilder: imageHeaderBuilder,
         diagnosticRecorder: diagnosticRecorder,
+        title: l10n.threadImageReaderTitle,
+        displayLabel: l10n.threadImageDisplay,
+        downloadLabel: l10n.threadImageDownload,
       ),
     );
   }

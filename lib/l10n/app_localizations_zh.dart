@@ -1065,6 +1065,341 @@ class AppLocalizationsZh extends AppLocalizations {
   String moreStorageHistoryEntries(int count) {
     return '浏览记录：$count';
   }
+
+  @override
+  String get threadDetailTitle => '帖子详情';
+
+  @override
+  String get threadDetailRefresh => '刷新帖子详情';
+
+  @override
+  String get threadDetailOnlyAuthor => '只看该作者';
+
+  @override
+  String get threadDetailAllPosts => '显示全部楼层';
+
+  @override
+  String get threadDetailReverseOrder => '倒序浏览';
+
+  @override
+  String get threadDetailNormalOrder => '正序浏览';
+
+  @override
+  String get threadDetailPreviousPage => '上一页';
+
+  @override
+  String get threadDetailNextPage => '下一页';
+
+  @override
+  String get threadDetailNoMore => '没有更多';
+
+  @override
+  String threadDetailPage(int page) {
+    return '第$page页';
+  }
+
+  @override
+  String get threadDetailReply => '回复';
+
+  @override
+  String get threadDetailReplyPost => '回复帖子';
+
+  @override
+  String get threadDetailEdit => '编辑';
+
+  @override
+  String get threadDetailShare => '分享';
+
+  @override
+  String get threadDetailCopyLink => '复制链接';
+
+  @override
+  String get threadDetailPostLink => '帖子链接';
+
+  @override
+  String get threadDetailFloorLink => '楼层链接';
+
+  @override
+  String get threadDetailExternalLink => '外部链接';
+
+  @override
+  String get threadDetailHomeLink => '首页链接';
+
+  @override
+  String get threadDetailReplyLink => '楼层回复链接';
+
+  @override
+  String threadDetailCopySuccess(String target) {
+    return '$target已复制';
+  }
+
+  @override
+  String get threadDetailFavorite => '收藏帖子';
+
+  @override
+  String get threadDetailUnfavorite => '已收藏';
+
+  @override
+  String get threadDetailOpenSource => '打开原帖';
+
+  @override
+  String get threadDetailMore => '更多';
+
+  @override
+  String get threadDetailDisplaySettings => '显示设置';
+
+  @override
+  String get threadDetailBackHome => '返回首页';
+
+  @override
+  String get threadDetailSelectCopy => '选择复制';
+
+  @override
+  String get threadDetailCopyAll => '全部复制';
+
+  @override
+  String threadDetailLoadFailed(String error) {
+    return '帖子详情加载失败：$error';
+  }
+
+  @override
+  String threadDetailRefreshFailed(String error) {
+    return '刷新帖子详情失败：$error';
+  }
+
+  @override
+  String threadDetailPageLoadFailed(String error) {
+    return '页面加载失败：$error';
+  }
+
+  @override
+  String get threadDetailFloorLocatorFailed => '楼层定位失败，已打开帖子';
+
+  @override
+  String get threadDetailUidMissing => '用户 UID 缺失';
+
+  @override
+  String threadFavoriteFailed(String error) {
+    return '收藏操作失败：$error';
+  }
+
+  @override
+  String get threadLoginRequired => '请先登录后再操作';
+
+  @override
+  String get threadPermissionDenied => '没有执行此操作的权限';
+
+  @override
+  String get threadUnsupported => '当前暂不支持此操作';
+
+  @override
+  String get threadDetailAnonymous => '匿名';
+
+  @override
+  String get threadDetailImageLink => '图片链接';
+
+  @override
+  String get threadDetailPostBody => '正文';
+
+  @override
+  String get threadPollVote => '投票';
+
+  @override
+  String get threadPollMultipleChoice => '可多选';
+
+  @override
+  String get threadPollDeadline => '截止时间';
+
+  @override
+  String get threadPollResults => '投票结果';
+
+  @override
+  String get threadPollSubmit => '提交';
+
+  @override
+  String threadPollMaxChoices(int count) {
+    return '最多可选 $count 项';
+  }
+
+  @override
+  String get threadPollSelectOption => '请选择投票选项';
+
+  @override
+  String get threadPollVoteSuccess => '投票成功';
+
+  @override
+  String threadPollVoteFailed(String error) {
+    return '投票失败：$error';
+  }
+
+  @override
+  String threadPollVotes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 票',
+      zero: '0 票',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get threadRatingTitle => '评分';
+
+  @override
+  String get threadRatingSubmit => '确定';
+
+  @override
+  String get threadRatingScore => '积分';
+
+  @override
+  String get threadRatingReasonHint => '评分理由';
+
+  @override
+  String get threadRatingNotifyAuthor => '通知作者';
+
+  @override
+  String threadRatingRange(int min, int max) {
+    return '范围 $min~$max';
+  }
+
+  @override
+  String threadRatingRangeWithRemaining(String range, int remaining) {
+    String _temp0 = intl.Intl.pluralLogic(
+      remaining,
+      locale: localeName,
+      other: '$remaining',
+      zero: '0',
+    );
+    return '$range，今日剩余 $_temp0';
+  }
+
+  @override
+  String threadRatingRemaining(int count) {
+    return '今日剩余 $count';
+  }
+
+  @override
+  String get threadRatingParticipants => '参与人数';
+
+  @override
+  String threadRatingParticipantsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '参与人数 $count',
+      zero: '参与人数 0',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get threadRatingPoints => '积分';
+
+  @override
+  String get threadRatingReason => '理由';
+
+  @override
+  String get threadRatingLoadFailed => '完整评分加载失败';
+
+  @override
+  String get threadRatingRetry => '重试加载完整评分';
+
+  @override
+  String get threadRatingExpand => '展开完整评分';
+
+  @override
+  String get threadRatingUnknownUser => '用户';
+
+  @override
+  String get threadRatingSuccess => '评分成功';
+
+  @override
+  String threadRatingFailed(String error) {
+    return '评分失败：$error';
+  }
+
+  @override
+  String get threadCommentTitle => '点评';
+
+  @override
+  String get threadCommentSubmit => '发布';
+
+  @override
+  String get threadCommentContent => '点评内容';
+
+  @override
+  String get threadCommentSuccess => '点评成功';
+
+  @override
+  String threadCommentFailed(String error) {
+    return '点评失败：$error';
+  }
+
+  @override
+  String get threadReplyContentRequired => '请输入回复内容';
+
+  @override
+  String get threadReplySuccess => '回复成功';
+
+  @override
+  String threadReplyFailed(String error) {
+    return '回复失败：$error';
+  }
+
+  @override
+  String get threadAttachmentOpen => '打开附件';
+
+  @override
+  String get threadImageSave => '保存图片';
+
+  @override
+  String get threadImageDownload => '下载当前图片';
+
+  @override
+  String get threadImageReaderTitle => '图片阅读';
+
+  @override
+  String get threadImageDisplay => '显示';
+
+  @override
+  String get threadHtmlConversionOriginal => '原文';
+
+  @override
+  String get threadHtmlConversionSimplified => '简体';
+
+  @override
+  String get threadHtmlConversionTraditional => '繁体';
+
+  @override
+  String get threadHtmlConversionSettings => '阅读设置';
+
+  @override
+  String get threadHtmlFontSize => '字号';
+
+  @override
+  String get threadHtmlLineSpacing => '间隔';
+
+  @override
+  String get threadHtmlPreserveAuthorFontSize => '保留作者字号';
+
+  @override
+  String get threadHtmlReset => '恢复默认';
+
+  @override
+  String get threadHtmlCollapseContent => '折叠内容';
+
+  @override
+  String get threadHtmlRenderFailed => '正文渲染失败，可长按楼层复制正文或打开原帖查看。';
+
+  @override
+  String get threadSelectionCopyTitle => '选择复制';
+
+  @override
+  String get threadDetailScrollTop => '滚动到顶部';
+
+  @override
+  String get threadDetailScrollBottom => '滚动到底部';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -2128,4 +2463,339 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String moreStorageHistoryEntries(int count) {
     return '瀏覽記錄：$count';
   }
+
+  @override
+  String get threadDetailTitle => '帖子詳情';
+
+  @override
+  String get threadDetailRefresh => '重新整理帖子詳情';
+
+  @override
+  String get threadDetailOnlyAuthor => '只看該作者';
+
+  @override
+  String get threadDetailAllPosts => '顯示全部樓層';
+
+  @override
+  String get threadDetailReverseOrder => '倒序瀏覽';
+
+  @override
+  String get threadDetailNormalOrder => '正序瀏覽';
+
+  @override
+  String get threadDetailPreviousPage => '上一頁';
+
+  @override
+  String get threadDetailNextPage => '下一頁';
+
+  @override
+  String get threadDetailNoMore => '沒有更多';
+
+  @override
+  String threadDetailPage(int page) {
+    return '第$page頁';
+  }
+
+  @override
+  String get threadDetailReply => '回覆';
+
+  @override
+  String get threadDetailReplyPost => '回覆帖子';
+
+  @override
+  String get threadDetailEdit => '編輯';
+
+  @override
+  String get threadDetailShare => '分享';
+
+  @override
+  String get threadDetailCopyLink => '複製連結';
+
+  @override
+  String get threadDetailPostLink => '帖子連結';
+
+  @override
+  String get threadDetailFloorLink => '樓層連結';
+
+  @override
+  String get threadDetailExternalLink => '外部連結';
+
+  @override
+  String get threadDetailHomeLink => '首頁連結';
+
+  @override
+  String get threadDetailReplyLink => '樓層回覆連結';
+
+  @override
+  String threadDetailCopySuccess(String target) {
+    return '$target已複製';
+  }
+
+  @override
+  String get threadDetailFavorite => '收藏帖子';
+
+  @override
+  String get threadDetailUnfavorite => '已收藏';
+
+  @override
+  String get threadDetailOpenSource => '開啟原帖';
+
+  @override
+  String get threadDetailMore => '更多';
+
+  @override
+  String get threadDetailDisplaySettings => '顯示設定';
+
+  @override
+  String get threadDetailBackHome => '返回首頁';
+
+  @override
+  String get threadDetailSelectCopy => '選擇複製';
+
+  @override
+  String get threadDetailCopyAll => '全部複製';
+
+  @override
+  String threadDetailLoadFailed(String error) {
+    return '帖子詳情載入失敗：$error';
+  }
+
+  @override
+  String threadDetailRefreshFailed(String error) {
+    return '重新整理帖子詳情失敗：$error';
+  }
+
+  @override
+  String threadDetailPageLoadFailed(String error) {
+    return '頁面載入失敗：$error';
+  }
+
+  @override
+  String get threadDetailFloorLocatorFailed => '樓層定位失敗，已開啟帖子';
+
+  @override
+  String get threadDetailUidMissing => '使用者 UID 缺失';
+
+  @override
+  String threadFavoriteFailed(String error) {
+    return '收藏操作失敗：$error';
+  }
+
+  @override
+  String get threadLoginRequired => '請先登入後再操作';
+
+  @override
+  String get threadPermissionDenied => '沒有執行此操作的權限';
+
+  @override
+  String get threadUnsupported => '目前暫不支援此操作';
+
+  @override
+  String get threadDetailAnonymous => '匿名';
+
+  @override
+  String get threadDetailImageLink => '圖片連結';
+
+  @override
+  String get threadDetailPostBody => '正文';
+
+  @override
+  String get threadPollVote => '投票';
+
+  @override
+  String get threadPollMultipleChoice => '可複選';
+
+  @override
+  String get threadPollDeadline => '截止時間';
+
+  @override
+  String get threadPollResults => '投票結果';
+
+  @override
+  String get threadPollSubmit => '提交';
+
+  @override
+  String threadPollMaxChoices(int count) {
+    return '最多可選 $count 項';
+  }
+
+  @override
+  String get threadPollSelectOption => '請選擇投票選項';
+
+  @override
+  String get threadPollVoteSuccess => '投票成功';
+
+  @override
+  String threadPollVoteFailed(String error) {
+    return '投票失敗：$error';
+  }
+
+  @override
+  String threadPollVotes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 票',
+      zero: '0 票',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get threadRatingTitle => '評分';
+
+  @override
+  String get threadRatingSubmit => '確定';
+
+  @override
+  String get threadRatingScore => '積分';
+
+  @override
+  String get threadRatingReasonHint => '評分理由';
+
+  @override
+  String get threadRatingNotifyAuthor => '通知作者';
+
+  @override
+  String threadRatingRange(int min, int max) {
+    return '範圍 $min~$max';
+  }
+
+  @override
+  String threadRatingRangeWithRemaining(String range, int remaining) {
+    String _temp0 = intl.Intl.pluralLogic(
+      remaining,
+      locale: localeName,
+      other: '$remaining',
+      zero: '0',
+    );
+    return '$range，今日剩餘 $_temp0';
+  }
+
+  @override
+  String threadRatingRemaining(int count) {
+    return '今日剩餘 $count';
+  }
+
+  @override
+  String get threadRatingParticipants => '參與人數';
+
+  @override
+  String threadRatingParticipantsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '參與人數 $count',
+      zero: '參與人數 0',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get threadRatingPoints => '積分';
+
+  @override
+  String get threadRatingReason => '理由';
+
+  @override
+  String get threadRatingLoadFailed => '完整評分載入失敗';
+
+  @override
+  String get threadRatingRetry => '重試載入完整評分';
+
+  @override
+  String get threadRatingExpand => '展開完整評分';
+
+  @override
+  String get threadRatingUnknownUser => '使用者';
+
+  @override
+  String get threadRatingSuccess => '評分成功';
+
+  @override
+  String threadRatingFailed(String error) {
+    return '評分失敗：$error';
+  }
+
+  @override
+  String get threadCommentTitle => '點評';
+
+  @override
+  String get threadCommentSubmit => '發佈';
+
+  @override
+  String get threadCommentContent => '點評內容';
+
+  @override
+  String get threadCommentSuccess => '點評成功';
+
+  @override
+  String threadCommentFailed(String error) {
+    return '點評失敗：$error';
+  }
+
+  @override
+  String get threadReplyContentRequired => '請輸入回覆內容';
+
+  @override
+  String get threadReplySuccess => '回覆成功';
+
+  @override
+  String threadReplyFailed(String error) {
+    return '回覆失敗：$error';
+  }
+
+  @override
+  String get threadAttachmentOpen => '開啟附件';
+
+  @override
+  String get threadImageSave => '儲存圖片';
+
+  @override
+  String get threadImageDownload => '下載目前圖片';
+
+  @override
+  String get threadImageReaderTitle => '圖片閱讀';
+
+  @override
+  String get threadImageDisplay => '顯示';
+
+  @override
+  String get threadHtmlConversionOriginal => '原文';
+
+  @override
+  String get threadHtmlConversionSimplified => '簡體';
+
+  @override
+  String get threadHtmlConversionTraditional => '繁體';
+
+  @override
+  String get threadHtmlConversionSettings => '閱讀設定';
+
+  @override
+  String get threadHtmlFontSize => '字號';
+
+  @override
+  String get threadHtmlLineSpacing => '間隔';
+
+  @override
+  String get threadHtmlPreserveAuthorFontSize => '保留作者字號';
+
+  @override
+  String get threadHtmlReset => '恢復預設';
+
+  @override
+  String get threadHtmlCollapseContent => '摺疊內容';
+
+  @override
+  String get threadHtmlRenderFailed => '正文渲染失敗，可長按樓層複製正文或開啟原帖查看。';
+
+  @override
+  String get threadSelectionCopyTitle => '選擇複製';
+
+  @override
+  String get threadDetailScrollTop => '滾動到頂部';
+
+  @override
+  String get threadDetailScrollBottom => '滾動到底部';
 }

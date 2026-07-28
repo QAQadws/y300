@@ -17,6 +17,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   const ForumHtmlWidgetPostRenderer({
@@ -106,6 +107,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       buildAsync: buildAsync,
       customStylesBuilder: stylePolicy.customStylesFor,
       customWidgetBuilder: (element) => _buildCustomWidget(
+        context,
         element,
         stylePolicy,
         resolvedPreferences,
@@ -145,6 +147,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   }
 
   Widget? _buildCustomWidget(
+    BuildContext context,
     html_dom.Element element,
     ForumHtmlStylePolicy stylePolicy,
     ForumHtmlReaderPreferences resolvedPreferences,
@@ -164,7 +167,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     return ForumCollapseBlock(
       titleHtml:
           _firstChildWithClass(element, 'showcollapse_title')?.innerHtml ??
-          '折叠内容',
+          AppLocalizations.of(context).threadHtmlCollapseContent,
       contentHtml: _collapseContentHtml(element),
       initiallyExpanded: stylePolicy.isForumCollapseInitiallyExpanded(element),
       sourceId: collapseId,

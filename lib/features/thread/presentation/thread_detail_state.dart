@@ -1,6 +1,7 @@
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 
 enum ThreadPostRatingsLoadStatus { idle, loading, loaded, failure }
 
@@ -9,31 +10,43 @@ final class ThreadPostRatingsViewState {
     required this.status,
     this.details,
     this.errorMessage,
+    this.failure,
   });
 
   const ThreadPostRatingsViewState.idle()
     : status = ThreadPostRatingsLoadStatus.idle,
       details = null,
-      errorMessage = null;
+      errorMessage = null,
+      failure = null;
 
   const ThreadPostRatingsViewState.loading()
     : status = ThreadPostRatingsLoadStatus.loading,
       details = null,
-      errorMessage = null;
+      errorMessage = null,
+      failure = null;
 
   const ThreadPostRatingsViewState.loaded(ThreadPostRatingDetails value)
     : status = ThreadPostRatingsLoadStatus.loaded,
       details = value,
-      errorMessage = null;
+      errorMessage = null,
+      failure = null;
 
   const ThreadPostRatingsViewState.failure(String message)
     : status = ThreadPostRatingsLoadStatus.failure,
       details = null,
-      errorMessage = message;
+      errorMessage = message,
+      failure = null;
+
+  const ThreadPostRatingsViewState.failureWith(ThreadActionFailure value)
+    : status = ThreadPostRatingsLoadStatus.failure,
+      details = null,
+      errorMessage = null,
+      failure = value;
 
   final ThreadPostRatingsLoadStatus status;
   final ThreadPostRatingDetails? details;
   final String? errorMessage;
+  final ThreadActionFailure? failure;
 }
 
 class ThreadDetailPageState {
@@ -75,6 +88,10 @@ class ThreadDetailPageState {
     required this.isReplySubmitting,
     required this.replyHint,
     this.errorMessage,
+    this.loadFailure,
+    this.threadFavoriteNotice,
+    this.pollVoteNotice,
+    this.replyNotice,
   });
 
   final String tid;
@@ -114,6 +131,10 @@ class ThreadDetailPageState {
   final bool isReplySubmitting;
   final String? replyHint;
   final String? errorMessage;
+  final ThreadActionFailure? loadFailure;
+  final ThreadActionNotice? threadFavoriteNotice;
+  final ThreadActionNotice? pollVoteNotice;
+  final ThreadActionNotice? replyNotice;
 
   bool get isOnlyAuthorView =>
       (queryParameters['authorid']?.trim().isNotEmpty ?? false);
@@ -161,6 +182,10 @@ class ThreadDetailPageState {
       isReplySubmitting: false,
       replyHint: null,
       errorMessage: null,
+      loadFailure: null,
+      threadFavoriteNotice: null,
+      pollVoteNotice: null,
+      replyNotice: null,
     );
   }
 
@@ -202,10 +227,18 @@ class ThreadDetailPageState {
     bool? isReplySubmitting,
     String? replyHint,
     String? errorMessage,
+    ThreadActionFailure? loadFailure,
+    ThreadActionNotice? threadFavoriteNotice,
+    ThreadActionNotice? pollVoteNotice,
+    ThreadActionNotice? replyNotice,
     bool clearReplyHint = false,
     bool clearThreadFavoriteHint = false,
     bool clearPollVoteHint = false,
     bool clearError = false,
+    bool clearLoadFailure = false,
+    bool clearThreadFavoriteNotice = false,
+    bool clearPollVoteNotice = false,
+    bool clearReplyNotice = false,
     bool clearSourceTagName = false,
     bool clearTypeName = false,
     bool clearLastPage = false,
@@ -272,6 +305,14 @@ class ThreadDetailPageState {
       isReplySubmitting: isReplySubmitting ?? this.isReplySubmitting,
       replyHint: clearReplyHint ? null : (replyHint ?? this.replyHint),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      loadFailure: clearLoadFailure ? null : (loadFailure ?? this.loadFailure),
+      threadFavoriteNotice: clearThreadFavoriteNotice
+          ? null
+          : (threadFavoriteNotice ?? this.threadFavoriteNotice),
+      pollVoteNotice: clearPollVoteNotice
+          ? null
+          : (pollVoteNotice ?? this.pollVoteNotice),
+      replyNotice: clearReplyNotice ? null : (replyNotice ?? this.replyNotice),
     );
   }
 }

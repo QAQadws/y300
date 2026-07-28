@@ -16,6 +16,7 @@ import 'package:y300/features/thread/data/repositories/thread_post_ratings_repos
 import 'package:y300/features/thread/data/repositories/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 
 class ThreadDetailArgs {
@@ -89,6 +90,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         page: currentPage == null || currentPage <= 0 ? 1 : currentPage,
         previous: const <ThreadPost>[],
         queryParameters: current?.queryParameters ?? const <String, String>{},
+        failureCode: ThreadUiErrorCode.refreshFailed,
       ),
     );
   }
@@ -141,7 +143,17 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       },
       failure: (error) {
         return AsyncData(
-          current.copyWith(isLoadingMore: false, errorMessage: error.message),
+          current.copyWith(
+            isLoadingMore: false,
+            errorMessage: error.message,
+            loadFailure: ThreadActionFailure(
+              code: error.type == ApiErrorType.unauthorized
+                  ? ThreadUiErrorCode.loginRequired
+                  : ThreadUiErrorCode.pageLoadFailed,
+              detail: error.message,
+              message: error.message,
+            ),
+          ),
         );
       },
     );
@@ -273,12 +285,23 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           isThreadFavoriteActionLoading: false,
           isThreadFavorited: true,
           threadFavoriteHint: data.message,
+          threadFavoriteNotice: ThreadActionNotice(
+            code: ThreadActionNoticeCode.success,
+            action: ThreadActionKind.favorite,
+            detail: data.message,
+          ),
         ),
       ),
       failure: (error) => AsyncData(
         afterAction.copyWith(
           isThreadFavoriteActionLoading: false,
           threadFavoriteHint: error.message,
+          threadFavoriteNotice: ThreadActionNotice(
+            code: _noticeCodeFor(error),
+            action: ThreadActionKind.favorite,
+            detail: error.message,
+            message: error.message,
+          ),
         ),
       ),
     );
@@ -305,7 +328,11 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
             selected.length >= maxChoices) {
           state = AsyncData(
             current.copyWith(
-              pollVoteHint: '最多可选 $maxChoices 项',
+              pollVoteNotice: ThreadActionNotice(
+                code: ThreadActionNoticeCode.validation,
+                action: ThreadActionKind.vote,
+                maxChoices: maxChoices,
+              ),
               clearError: true,
             ),
           );
@@ -334,7 +361,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
     final selected = current.selectedPollOptionIds.toList(growable: false);
     if (selected.isEmpty) {
-      state = AsyncData(current.copyWith(pollVoteHint: '请选择投票选项'));
+      state = AsyncData(
+        current.copyWith(
+          pollVoteNotice: const ThreadActionNotice(
+            code: ThreadActionNoticeCode.validation,
+            action: ThreadActionKind.vote,
+          ),
+        ),
+      );
       return;
     }
 
@@ -364,6 +398,12 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         afterSubmit.copyWith(
           isPollVoteSubmitting: false,
           pollVoteHint: error.message,
+          pollVoteNotice: ThreadActionNotice(
+            code: _noticeCodeFor(error),
+            action: ThreadActionKind.vote,
+            detail: error.message,
+            message: error.message,
+          ),
         ),
       );
       return;
@@ -384,7 +424,12 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       reloaded.copyWith(
         isThreadFavorited: afterSubmit.isThreadFavorited,
         threadFavoriteHint: afterSubmit.threadFavoriteHint,
-        pollVoteHint: message.isEmpty ? '投票成功' : message,
+        pollVoteHint: message.isEmpty ? null : message,
+        pollVoteNotice: ThreadActionNotice(
+          code: ThreadActionNoticeCode.success,
+          action: ThreadActionKind.vote,
+          detail: message,
+        ),
         selectedPollOptionIds: const <String>{},
         isPollVoteSubmitting: false,
       ),
@@ -448,7 +493,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       ApiSuccess<ThreadPostRatingDetails>(:final data) =>
         ThreadPostRatingsViewState.loaded(data),
       ApiFailure<ThreadPostRatingDetails>(:final error) =>
-        ThreadPostRatingsViewState.failure(error.message),
+        ThreadPostRatingsViewState.failureWith(
+          ThreadActionFailure(
+            code: _errorCodeFor(error, ThreadUiErrorCode.unknown),
+            action: ThreadActionKind.ratings,
+            detail: error.message,
+            message: error.message,
+          ),
+        ),
     };
     state = AsyncData(
       latest.copyWith(
@@ -597,7 +649,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
     final message = current.replyText.trim();
     if (message.isEmpty) {
-      state = AsyncData(current.copyWith(replyHint: '请输入回复内容'));
+      state = AsyncData(
+        current.copyWith(
+          replyNotice: const ThreadActionNotice(
+            code: ThreadActionNoticeCode.validation,
+            action: ThreadActionKind.reply,
+          ),
+        ),
+      );
       return;
     }
 
@@ -621,13 +680,24 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         afterSubmit.copyWith(
           isReplySubmitting: false,
           replyText: '',
-          replyHint: data.message.isEmpty ? '回复成功' : data.message,
+          replyHint: data.message.isEmpty ? null : data.message,
+          replyNotice: ThreadActionNotice(
+            code: ThreadActionNoticeCode.success,
+            action: ThreadActionKind.reply,
+            detail: data.message,
+          ),
         ),
       ),
       failure: (error) => AsyncData(
         afterSubmit.copyWith(
           isReplySubmitting: false,
           replyHint: error.message,
+          replyNotice: ThreadActionNotice(
+            code: _noticeCodeFor(error),
+            action: ThreadActionKind.reply,
+            detail: error.message,
+            message: error.message,
+          ),
         ),
       ),
     );
@@ -649,6 +719,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           replyText: latest.replyText,
           isThreadFavorited: latest.isThreadFavorited,
           threadFavoriteHint: latest.threadFavoriteHint,
+          threadFavoriteNotice: latest.threadFavoriteNotice,
+          replyNotice: latest.replyNotice,
         ),
       );
     }
@@ -658,6 +730,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     required int page,
     required List<ThreadPost> previous,
     required Map<String, String> queryParameters,
+    ThreadUiErrorCode? failureCode,
   }) async {
     _ratingsContentGeneration += 1;
     _ratingsLoadTokens.clear();
@@ -799,6 +872,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           previous: previous,
           queryParameters: queryParameters,
           message: '帖子详情处理失败（$stage）：${_oneLine(error.toString())}',
+          failure: ThreadActionFailure(
+            code:
+                failureCode ??
+                (page == 1
+                    ? ThreadUiErrorCode.loadFailed
+                    : ThreadUiErrorCode.pageLoadFailed),
+            detail: error.toString(),
+          ),
         );
       }
     }
@@ -815,6 +896,16 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       previous: previous,
       queryParameters: queryParameters,
       message: error.message,
+      failure: ThreadActionFailure(
+        code: error.type == ApiErrorType.unauthorized
+            ? ThreadUiErrorCode.loginRequired
+            : (failureCode ??
+                  (page == 1
+                      ? ThreadUiErrorCode.loadFailed
+                      : ThreadUiErrorCode.pageLoadFailed)),
+        detail: error.message,
+        message: error.message,
+      ),
     );
   }
 
@@ -823,6 +914,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     required List<ThreadPost> previous,
     required Map<String, String> queryParameters,
     required String message,
+    required ThreadActionFailure failure,
   }) {
     return ThreadDetailPageState(
       tid: _args.tid,
@@ -861,6 +953,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       isReplySubmitting: false,
       replyHint: null,
       errorMessage: message,
+      loadFailure: failure,
     );
   }
 
@@ -878,6 +971,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       page: page,
       previous: const <ThreadPost>[],
       queryParameters: nextQuery,
+      failureCode: ThreadUiErrorCode.pageLoadFailed,
     );
     final afterLoading = state.value ?? current;
     state = AsyncData(
@@ -1006,6 +1100,22 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   ThreadRepository _readRepository() {
     return ref.read(threadRepositoryProvider);
+  }
+
+  ThreadActionNoticeCode _noticeCodeFor(ApiError error) {
+    return switch (error.type) {
+      ApiErrorType.unauthorized => ThreadActionNoticeCode.loginRequired,
+      ApiErrorType.business => ThreadActionNoticeCode.failure,
+      _ => ThreadActionNoticeCode.failure,
+    };
+  }
+
+  ThreadUiErrorCode _errorCodeFor(ApiError error, ThreadUiErrorCode fallback) {
+    return switch (error.type) {
+      ApiErrorType.unauthorized => ThreadUiErrorCode.loginRequired,
+      ApiErrorType.business => fallback,
+      _ => fallback,
+    };
   }
 
   Future<void> _invalidateCurrentThreadCache(String tid) async {

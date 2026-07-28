@@ -26,6 +26,7 @@ class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       key: const Key('thread-post-comment-section'),
       padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
@@ -38,7 +39,7 @@ class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection> {
         children: [
           _CollapsibleSectionHeader(
             key: const Key('thread-post-comment-header'),
-            label: '点评',
+            label: l10n.threadCommentTitle,
             icon: Icons.chat_bubble_outline,
             palette: widget.palette,
             showSummaries: !_expanded,
@@ -234,7 +235,9 @@ class ThreadPostCommentRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final authorLabel = comment.author.isEmpty ? '用户' : comment.author;
+    final authorLabel = comment.author.isEmpty
+        ? AppLocalizations.of(context).threadDetailAnonymous
+        : comment.author;
     final authorProfileTap = onOpenAuthorProfile == null
         ? null
         : () => onOpenAuthorProfile!(comment);
@@ -435,8 +438,9 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final effectiveSummary = _effectiveSummary();
+    final effectiveSummary = _effectiveSummary(l10n);
     final collapsedSummary = _ThreadPostRatingCollapseSummary.from(
       effectiveSummary,
     );
@@ -452,7 +456,7 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
         children: [
           _CollapsibleSectionHeader(
             key: const Key('thread-post-rating-header'),
-            label: '评分',
+            label: l10n.threadRatingTitle,
             icon: Icons.favorite_outline,
             palette: widget.palette,
             showSummaries: !_expanded,
@@ -491,7 +495,7 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
                               flex: 2,
                               child: Text(
                                 effectiveSummary.participantText.isEmpty
-                                    ? '参与人数'
+                                    ? l10n.threadRatingParticipants
                                     : effectiveSummary.participantText,
                                 style: textTheme.labelSmall?.copyWith(
                                   color: widget.palette.muted,
@@ -503,7 +507,7 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
                               flex: 2,
                               child: Text(
                                 effectiveSummary.scoreText.isEmpty
-                                    ? '积分'
+                                    ? l10n.threadRatingPoints
                                     : effectiveSummary.scoreText,
                                 style: textTheme.labelSmall?.copyWith(
                                   color: widget.palette.muted,
@@ -514,7 +518,7 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
                             Expanded(
                               flex: 3,
                               child: Text(
-                                '理由',
+                                l10n.threadRatingReason,
                                 style: textTheme.labelSmall?.copyWith(
                                   color: widget.palette.muted,
                                   fontWeight: FontWeight.w800,
@@ -542,13 +546,15 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
     );
   }
 
-  ThreadPostRatingSummary _effectiveSummary() {
+  ThreadPostRatingSummary _effectiveSummary(AppLocalizations l10n) {
     final details = widget.viewState.details;
     if (details == null) {
       return widget.summary;
     }
     return ThreadPostRatingSummary(
-      participantText: '参与人数 ${details.participantCount}',
+      participantText: l10n.threadRatingParticipantsCount(
+        details.participantCount,
+      ),
       scoreText: details.totalScoreText,
       ratings: details.ratings,
       viewAllUrl: widget.summary.viewAllUrl,
@@ -569,8 +575,8 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
       return null;
     }
     return widget.viewState.status == ThreadPostRatingsLoadStatus.failure
-        ? '重试加载完整评分'
-        : '展开完整评分';
+        ? AppLocalizations.of(context).threadRatingRetry
+        : AppLocalizations.of(context).threadRatingExpand;
   }
 
   Widget _buildLoadStatus(BuildContext context) {
@@ -601,9 +607,14 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
             children: [
               Expanded(
                 child: Text(
-                  widget.viewState.errorMessage?.trim().isNotEmpty == true
+                  widget.viewState.failure != null
+                      ? ThreadTextResolver.actionFailure(
+                          AppLocalizations.of(context),
+                          widget.viewState.failure!,
+                        )
+                      : widget.viewState.errorMessage?.trim().isNotEmpty == true
                       ? widget.viewState.errorMessage!
-                      : '完整评分加载失败',
+                      : AppLocalizations.of(context).threadRatingLoadFailed,
                   key: const Key('thread-post-rating-load-error'),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: widget.palette.muted,
@@ -613,7 +624,7 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
               ),
               IconButton(
                 key: const Key('thread-post-rating-retry-button'),
-                tooltip: '重试加载完整评分',
+                tooltip: AppLocalizations.of(context).threadRatingRetry,
                 visualDensity: VisualDensity.compact,
                 onPressed: widget.onLoadAllRatings,
                 icon: Icon(
@@ -641,6 +652,7 @@ class ThreadPostRatingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -651,7 +663,9 @@ class ThreadPostRatingRow extends StatelessWidget {
             Expanded(
               flex: 2,
               child: Text(
-                rating.userName.isEmpty ? '用户' : rating.userName,
+                rating.userName.isEmpty
+                    ? l10n.threadRatingUnknownUser
+                    : rating.userName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: textTheme.labelSmall?.copyWith(

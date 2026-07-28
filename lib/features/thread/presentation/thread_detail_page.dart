@@ -29,6 +29,7 @@ import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
@@ -43,10 +44,12 @@ import 'package:y300/features/thread/presentation/services/thread_post_image_dim
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_button.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ThreadDetailPage extends ConsumerStatefulWidget {
   const ThreadDetailPage({
@@ -114,6 +117,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final args = ThreadDetailArgs(
       tid: widget.tid,
       subject: widget.subject,
@@ -137,16 +141,16 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
       (previous, next) {
-        final previousHint = previous?.value?.threadFavoriteHint;
-        final nextHint = next.value?.threadFavoriteHint;
-        if (nextHint == null ||
-            nextHint.trim().isEmpty ||
-            nextHint == previousHint) {
+        final previousNotice = previous?.value?.threadFavoriteNotice;
+        final nextNotice = next.value?.threadFavoriteNotice;
+        if (nextNotice == null || nextNotice == previousNotice) {
           return;
         }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(nextHint)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ThreadTextResolver.actionNotice(l10n, nextNotice)),
+          ),
+        );
       },
     );
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
@@ -186,7 +190,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         actions: [
           IconButton(
             key: const Key('thread-detail-favorite-button'),
-            tooltip: state.isThreadFavorited ? '已收藏' : '收藏帖子',
+            tooltip: state.isThreadFavorited
+                ? l10n.threadDetailUnfavorite
+                : l10n.threadDetailFavorite,
             onPressed:
                 asyncState.value == null ||
                     state.isThreadFavoriteActionLoading ||
@@ -207,7 +213,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
           ),
           IconButton(
             key: const Key('thread-detail-appbar-reply-button'),
-            tooltip: '回复帖子',
+            tooltip: l10n.threadDetailReplyPost,
             onPressed: asyncState.value == null
                 ? null
                 : () {
@@ -237,7 +243,17 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     ? const SizedBox.shrink()
                     : state.errorMessage != null && state.posts.isEmpty
                     ? _ThreadErrorView(
-                        message: state.errorMessage!,
+                        message: state.loadFailure == null
+                            ? ThreadTextResolver.loadFailure(
+                                l10n,
+                                ThreadUiErrorCode.loadFailed,
+                                state.errorMessage,
+                              )
+                            : ThreadTextResolver.loadFailure(
+                                l10n,
+                                state.loadFailure!.code,
+                                state.loadFailure!.detail,
+                              ),
                         onRetry: controller.refresh,
                       )
                     : ForumPullToRefresh(
@@ -507,12 +523,18 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final fid = state.fid.trim();
     final tid = state.tid.trim();
     if (replyUrl == null || replyUrl.isEmpty || fid.isEmpty || tid.isEmpty) {
-      await _copyUrl('楼层回复链接', post.replyUrl ?? '');
+      await _copyUrl(
+        AppLocalizations.of(context).threadDetailReplyLink,
+        post.replyUrl ?? '',
+      );
       return;
     }
     final replyFormUri = Uri.tryParse(replyUrl);
     if (replyFormUri == null) {
-      await _copyUrl('楼层回复链接', replyUrl);
+      await _copyUrl(
+        AppLocalizations.of(context).threadDetailReplyLink,
+        replyUrl,
+      );
       return;
     }
     final result = await Navigator.of(context).push<ReplyComposerResult>(
@@ -543,7 +565,14 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       return;
     }
     if (formResult case ApiFailure<ThreadPostRateForm>(:final error)) {
-      _showSnackBar(error.message);
+      _showActionFailure(
+        ThreadActionFailure(
+          code: ThreadUiErrorCode.rateFailed,
+          action: ThreadActionKind.rate,
+          detail: error.message,
+          message: error.message,
+        ),
+      );
       return;
     }
     final form = (formResult as ApiSuccess<ThreadPostRateForm>).data;
@@ -562,9 +591,21 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       return;
     }
     submitResult.when(
-      success: (data) =>
-          _showSnackBar(data.message.trim().isEmpty ? '评分成功' : data.message),
-      failure: (error) => _showSnackBar(error.message),
+      success: (data) => _showActionNotice(
+        ThreadActionNotice(
+          code: ThreadActionNoticeCode.success,
+          action: ThreadActionKind.rate,
+          detail: data.message,
+        ),
+      ),
+      failure: (error) => _showActionFailure(
+        ThreadActionFailure(
+          code: ThreadUiErrorCode.rateFailed,
+          action: ThreadActionKind.rate,
+          detail: error.message,
+          message: error.message,
+        ),
+      ),
     );
   }
 
@@ -578,7 +619,14 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       return;
     }
     if (formResult case ApiFailure<ThreadPostCommentForm>(:final error)) {
-      _showSnackBar(error.message);
+      _showActionFailure(
+        ThreadActionFailure(
+          code: ThreadUiErrorCode.commentFailed,
+          action: ThreadActionKind.comment,
+          detail: error.message,
+          message: error.message,
+        ),
+      );
       return;
     }
     final form = (formResult as ApiSuccess<ThreadPostCommentForm>).data;
@@ -597,9 +645,21 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       return;
     }
     submitResult.when(
-      success: (data) =>
-          _showSnackBar(data.message.trim().isEmpty ? '点评成功' : data.message),
-      failure: (error) => _showSnackBar(error.message),
+      success: (data) => _showActionNotice(
+        ThreadActionNotice(
+          code: ThreadActionNoticeCode.success,
+          action: ThreadActionKind.comment,
+          detail: data.message,
+        ),
+      ),
+      failure: (error) => _showActionFailure(
+        ThreadActionFailure(
+          code: ThreadUiErrorCode.commentFailed,
+          action: ThreadActionKind.comment,
+          detail: error.message,
+          message: error.message,
+        ),
+      ),
     );
   }
 
@@ -610,18 +670,27 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     if (!mounted || result == null || !result.sent) {
       return;
     }
-    _showSnackBar(result.message.trim().isEmpty ? '回复成功' : result.message);
+    _showActionNotice(
+      ThreadActionNotice(
+        code: ThreadActionNoticeCode.success,
+        action: ThreadActionKind.reply,
+        detail: result.message,
+      ),
+    );
     await ref
         .read(threadDetailControllerProvider(args).notifier)
         .refreshAfterMutation();
   }
 
   Future<void> _copyActionUrl(String label, String url) {
-    return _copyUrl('$label链接', url);
+    return _copyUrl(label, url);
   }
 
   Future<void> _copyThreadUrl(ThreadDetailPageState state) {
-    return _copyUrl('帖子链接', _threadUrlForCopy(state));
+    return _copyUrl(
+      AppLocalizations.of(context).threadDetailPostLink,
+      _threadUrlForCopy(state),
+    );
   }
 
   void _openDisplaySettings() {
@@ -669,7 +738,10 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   void _openPostImages(ThreadPost post, ThreadPostImageOpenRequest request) {
     final readerRequest = request.readerRequest;
     if (readerRequest == null || readerRequest.continuousImages.isEmpty) {
-      _copyUrl('${post.number}# 图片链接', request.image.url);
+      _copyUrl(
+        '${post.number}# ${AppLocalizations.of(context).threadDetailImageLink}',
+        request.image.url,
+      );
       return;
     }
     Navigator.of(context).push(
@@ -736,17 +808,23 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final text = const ThreadPostBodyPlainTextExtractor().extract(
       plan.document,
     );
-    return _copyUrl('${post.number}# 正文', text);
+    return _copyUrl(
+      '${post.number}# ${AppLocalizations.of(context).threadDetailPostBody}',
+      text,
+    );
   }
 
   void _copyHtmlFirstImageUrl(ThreadPost post, ForumHtmlImageRequest request) {
-    _copyUrl('${post.number}# 图片', request.url);
+    _copyUrl(
+      '${post.number}# ${AppLocalizations.of(context).threadDetailImageLink}',
+      request.url,
+    );
   }
 
   void _openAuthorProfile(ThreadPost post) {
     final uid = post.authorId.trim();
     if (uid.isEmpty) {
-      _showSnackBar('用户 UID 缺失');
+      _showSnackBar(AppLocalizations.of(context).threadDetailUidMissing);
       return;
     }
     _openManagedWebView(_authorProfileUri(uid));
@@ -755,7 +833,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   void _openCommentAuthorProfile(ThreadPostCommentEntry comment) {
     final uid = _commentAuthorUid(comment);
     if (uid == null || uid.isEmpty) {
-      _showSnackBar('用户 UID 缺失');
+      _showSnackBar(AppLocalizations.of(context).threadDetailUidMissing);
       return;
     }
     _openManagedWebView(_authorProfileUri(uid));
@@ -810,14 +888,17 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   void _openForumLink(String url) {
     final destination = const YamiboForumLinkResolver().resolve(url);
     if (destination == null) {
-      _copyUrl('链接', url);
+      _copyUrl(AppLocalizations.of(context).threadDetailCopyLink, url);
       return;
     }
     switch (destination.kind) {
       case YamiboForumLinkKind.thread:
         final tid = destination.tid;
         if (tid == null || tid.isEmpty) {
-          _copyUrl('帖子链接', destination.uri.toString());
+          _copyUrl(
+            AppLocalizations.of(context).threadDetailPostLink,
+            destination.uri.toString(),
+          );
           return;
         }
         Navigator.of(context).push(
@@ -839,7 +920,10 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         _openManagedWebView(destination.uri);
         return;
       case YamiboForumLinkKind.external:
-        _copyUrl('外部链接', destination.uri.toString());
+        _copyUrl(
+          AppLocalizations.of(context).threadDetailExternalLink,
+          destination.uri.toString(),
+        );
         return;
     }
   }
@@ -848,7 +932,10 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final tid = destination.tid?.trim();
     final pid = destination.pid?.trim();
     if (tid == null || tid.isEmpty || pid == null || pid.isEmpty) {
-      _copyUrl('楼层链接', destination.uri.toString());
+      _copyUrl(
+        AppLocalizations.of(context).threadDetailFloorLink,
+        destination.uri.toString(),
+      );
       return;
     }
     final directPage = destination.page;
@@ -866,7 +953,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       _pushThreadPost(tid: data.tid, page: data.page, pid: data.pid);
       return;
     }
-    _showSnackBar('楼层定位失败，已打开帖子');
+    _showSnackBar(AppLocalizations.of(context).threadDetailFloorLocatorFailed);
     _pushThreadPost(tid: tid, page: 1, pid: pid);
   }
 
@@ -913,7 +1000,21 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     if (!mounted) {
       return;
     }
-    _showSnackBar('$label已复制');
+    _showSnackBar(
+      ThreadTextResolver.copySuccess(AppLocalizations.of(context), label),
+    );
+  }
+
+  void _showActionFailure(ThreadActionFailure failure) {
+    _showSnackBar(
+      ThreadTextResolver.actionFailure(AppLocalizations.of(context), failure),
+    );
+  }
+
+  void _showActionNotice(ThreadActionNotice notice) {
+    _showSnackBar(
+      ThreadTextResolver.actionNotice(AppLocalizations.of(context), notice),
+    );
   }
 
   void _showSnackBar(String message) {
@@ -937,7 +1038,9 @@ class _ThreadDetailAppBarTitle extends StatelessWidget {
         ? parsedForumName
         : fallbackForumName;
     return Text(
-      forumName == null || forumName.isEmpty ? '' : forumName,
+      forumName == null || forumName.isEmpty
+          ? AppLocalizations.of(context).threadDetailTitle
+          : forumName,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
@@ -965,25 +1068,37 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return PopupMenuButton<String>(
       key: const Key('thread-detail-more-menu'),
-      tooltip: '更多',
+      tooltip: l10n.threadDetailMore,
       itemBuilder: (context) => [
         PopupMenuItem<String>(
           value: state.isOnlyAuthorView ? 'all-posts' : 'only-author',
-          child: Text(state.isOnlyAuthorView ? '显示全部楼层' : '只看该作者'),
+          child: Text(
+            state.isOnlyAuthorView
+                ? l10n.threadDetailAllPosts
+                : l10n.threadDetailOnlyAuthor,
+          ),
         ),
         PopupMenuItem<String>(
           value: state.isReverseOrderView ? 'normal-order' : 'reverse-order',
-          child: Text(state.isReverseOrderView ? '正序浏览' : '倒序浏览'),
+          child: Text(
+            state.isReverseOrderView
+                ? l10n.threadDetailNormalOrder
+                : l10n.threadDetailReverseOrder,
+          ),
         ),
-        const PopupMenuItem<String>(
+        PopupMenuItem<String>(
           key: Key('thread-detail-display-settings-menu-item'),
           value: 'display-settings',
-          child: Text('显示设置'),
+          child: Text(l10n.threadDetailDisplaySettings),
         ),
         if (state.homeUrl?.trim().isNotEmpty == true)
-          const PopupMenuItem<String>(value: 'home', child: Text('返回首页')),
+          PopupMenuItem<String>(
+            value: 'home',
+            child: Text(l10n.threadDetailBackHome),
+          ),
       ],
       onSelected: (value) {
         switch (value) {
@@ -1003,7 +1118,7 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
             onDisplaySettings();
             return;
           case 'home':
-            onCopyUrl('首页链接', state.homeUrl!);
+            onCopyUrl(l10n.threadDetailHomeLink, state.homeUrl!);
             return;
         }
       },
@@ -1020,6 +1135,7 @@ class _ThreadPostActionSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
@@ -1032,7 +1148,7 @@ class _ThreadPostActionSheet extends StatelessWidget {
                 key: const Key('thread-post-reply-action'),
                 dense: true,
                 leading: const Icon(Icons.reply_outlined),
-                title: const Text('回复'),
+                title: Text(l10n.threadDetailReply),
                 onTap: () => Navigator.of(context).pop(_ThreadPostAction.reply),
               ),
               if (post.rateUrl?.trim().isNotEmpty == true)
@@ -1040,7 +1156,7 @@ class _ThreadPostActionSheet extends StatelessWidget {
                   key: const Key('thread-post-rate-action'),
                   dense: true,
                   leading: const Icon(Icons.favorite_border),
-                  title: const Text('评分'),
+                  title: Text(l10n.threadRatingTitle),
                   onTap: () =>
                       Navigator.of(context).pop(_ThreadPostAction.rate),
                 ),
@@ -1049,7 +1165,7 @@ class _ThreadPostActionSheet extends StatelessWidget {
                   key: const Key('thread-post-comment-action'),
                   dense: true,
                   leading: const Icon(Icons.chat_bubble_outline),
-                  title: const Text('点评'),
+                  title: Text(l10n.threadCommentTitle),
                   onTap: () =>
                       Navigator.of(context).pop(_ThreadPostAction.comment),
                 ),
@@ -1057,7 +1173,7 @@ class _ThreadPostActionSheet extends StatelessWidget {
                 key: const Key('thread-post-select-copy-action'),
                 dense: true,
                 leading: const Icon(Icons.text_fields),
-                title: const Text('选择复制'),
+                title: Text(l10n.threadDetailSelectCopy),
                 onTap: () =>
                     Navigator.of(context).pop(_ThreadPostAction.selectCopy),
               ),
@@ -1065,7 +1181,7 @@ class _ThreadPostActionSheet extends StatelessWidget {
                 key: const Key('thread-post-copy-all-action'),
                 dense: true,
                 leading: const Icon(Icons.copy_all_outlined),
-                title: const Text('全部复制'),
+                title: Text(l10n.threadDetailCopyAll),
                 onTap: () =>
                     Navigator.of(context).pop(_ThreadPostAction.copyAll),
               ),
@@ -1085,6 +1201,7 @@ class _ThreadErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -1096,7 +1213,7 @@ class _ThreadErrorView extends StatelessWidget {
             FilledButton(
               key: const Key('thread-detail-retry-button'),
               onPressed: onRetry,
-              child: const Text('重试'),
+              child: Text(l10n.commonRetry),
             ),
           ],
         ),

@@ -34,6 +34,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return SafeArea(
@@ -47,7 +48,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
             Row(
               children: [
                 Text(
-                  '评分',
+                  l10n.threadRatingTitle,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -55,7 +56,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
                 const Spacer(),
                 IconButton(
                   key: const Key('thread-post-rate-close-button'),
-                  tooltip: '关闭',
+                  tooltip: l10n.commonClose,
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close),
                 ),
@@ -65,7 +66,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
             Row(
               children: [
                 Text(
-                  '积分',
+                  l10n.threadRatingScore,
                   style: theme.textTheme.labelLarge?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -98,7 +99,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
                 ),
               ],
             ),
-            Text(_scoreHint, style: theme.textTheme.labelSmall),
+            Text(_scoreHint(l10n), style: theme.textTheme.labelSmall),
             if (widget.form.reasonOptions.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(
@@ -123,8 +124,8 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
               controller: _reasonController,
               minLines: 1,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '评分理由',
+              decoration: InputDecoration(
+                labelText: l10n.threadRatingReasonHint,
                 border: OutlineInputBorder(),
               ),
               onChanged: (_) => setState(() {}),
@@ -135,7 +136,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
               contentPadding: EdgeInsets.zero,
               value: _notifyAuthor,
               onChanged: (value) => setState(() => _notifyAuthor = value),
-              title: const Text('通知作者'),
+              title: Text(l10n.threadRatingNotifyAuthor),
             ),
             const SizedBox(height: 8),
             SizedBox(
@@ -154,7 +155,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
                           ),
                         );
                       },
-                child: const Text('确定'),
+                child: Text(l10n.threadRatingSubmit),
               ),
             ),
           ],
@@ -163,13 +164,14 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
     );
   }
 
-  String get _scoreHint {
-    final range = '范围 ${widget.form.scoreMin}~${widget.form.scoreMax}';
+  String _scoreHint(AppLocalizations l10n) {
     final remaining = widget.form.todayRemaining;
-    if (remaining <= 0) {
-      return range;
-    }
-    return '$range，今日剩余 $remaining';
+    return ThreadTextResolver.ratingRange(
+      l10n,
+      widget.form.scoreMin,
+      widget.form.scoreMax,
+      remaining,
+    );
   }
 }
 
@@ -199,6 +201,7 @@ class _ThreadPostCommentSheetState extends State<ThreadPostCommentSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final maxLength = widget.form.maxLength <= 0 ? 200 : widget.form.maxLength;
@@ -214,7 +217,7 @@ class _ThreadPostCommentSheetState extends State<ThreadPostCommentSheet> {
             Row(
               children: [
                 Text(
-                  '点评',
+                  l10n.threadCommentTitle,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -222,7 +225,7 @@ class _ThreadPostCommentSheetState extends State<ThreadPostCommentSheet> {
                 const Spacer(),
                 IconButton(
                   key: const Key('thread-post-comment-close-button'),
-                  tooltip: '关闭',
+                  tooltip: l10n.commonClose,
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close),
                 ),
@@ -236,8 +239,8 @@ class _ThreadPostCommentSheetState extends State<ThreadPostCommentSheet> {
               minLines: 2,
               maxLines: 5,
               maxLength: maxLength,
-              decoration: const InputDecoration(
-                labelText: '点评内容',
+              decoration: InputDecoration(
+                labelText: l10n.threadCommentContent,
                 border: OutlineInputBorder(),
               ),
               onChanged: (_) => setState(() {}),
@@ -257,7 +260,7 @@ class _ThreadPostCommentSheetState extends State<ThreadPostCommentSheet> {
                           ),
                         );
                       },
-                child: const Text('发布'),
+                child: Text(l10n.threadCommentSubmit),
               ),
             ),
           ],

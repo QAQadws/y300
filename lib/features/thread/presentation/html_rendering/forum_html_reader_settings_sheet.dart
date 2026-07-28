@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
   const ForumHtmlReaderSettingsSheet({
@@ -19,6 +20,7 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final preferences =
         ref.watch(forumHtmlReaderPreferencesControllerProvider).value ??
         ForumHtmlReaderPreferences.defaults();
@@ -54,7 +56,7 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
             ],
             _TypographySlider(
               key: const Key('forum-html-reader-font-scale-slider'),
-              label: '字号',
+              label: l10n.threadHtmlFontSize,
               value: typography.fontScale,
               min: 0.7,
               max: 2.0,
@@ -64,7 +66,7 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
             ),
             _TypographySlider(
               key: const Key('forum-html-reader-line-height-slider'),
-              label: '间隔',
+              label: l10n.threadHtmlLineSpacing,
               value: typography.lineHeightScale,
               min: 1.0,
               max: 2.5,
@@ -77,7 +79,7 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
               SwitchListTile(
                 key: const Key('forum-html-reader-preserve-font-size-switch'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('保留作者字号'),
+                title: Text(l10n.threadHtmlPreserveAuthorFontSize),
                 value: preferences.preserveAuthorFontSize,
                 onChanged: controller.setPreserveAuthorFontSize,
               ),
@@ -88,7 +90,7 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
                 child: TextButton(
                   key: const Key('forum-html-reader-reset-button'),
                   onPressed: () => controller.reset(),
-                  child: const Text('恢复默认'),
+                  child: Text(l10n.threadHtmlReset),
                 ),
               ),
             ],
@@ -110,26 +112,30 @@ class _ConversionModeSegmentedControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SizedBox(
       width: double.infinity,
       child: SegmentedButton<TextConversionMode>(
         key: const Key('forum-html-reader-conversion-mode-control'),
-        segments: const [
+        segments: [
           ButtonSegment(
             value: TextConversionMode.none,
-            label: Text('原文', key: Key('forum-html-reader-conversion-none')),
+            label: Text(
+              l10n.threadHtmlConversionOriginal,
+              key: const Key('forum-html-reader-conversion-none'),
+            ),
           ),
           ButtonSegment(
             value: TextConversionMode.toSimplified,
             label: Text(
-              '简体',
+              l10n.threadHtmlConversionSimplified,
               key: Key('forum-html-reader-conversion-simplified'),
             ),
           ),
           ButtonSegment(
             value: TextConversionMode.toTraditional,
             label: Text(
-              '繁体',
+              l10n.threadHtmlConversionTraditional,
               key: Key('forum-html-reader-conversion-traditional'),
             ),
           ),

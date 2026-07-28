@@ -1752,6 +1752,576 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'浏览记录：{count}'**
   String moreStorageHistoryEntries(int count);
+
+  /// No description provided for @threadDetailTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子详情'**
+  String get threadDetailTitle;
+
+  /// No description provided for @threadDetailRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新帖子详情'**
+  String get threadDetailRefresh;
+
+  /// No description provided for @threadDetailOnlyAuthor.
+  ///
+  /// In zh, this message translates to:
+  /// **'只看该作者'**
+  String get threadDetailOnlyAuthor;
+
+  /// No description provided for @threadDetailAllPosts.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示全部楼层'**
+  String get threadDetailAllPosts;
+
+  /// No description provided for @threadDetailReverseOrder.
+  ///
+  /// In zh, this message translates to:
+  /// **'倒序浏览'**
+  String get threadDetailReverseOrder;
+
+  /// No description provided for @threadDetailNormalOrder.
+  ///
+  /// In zh, this message translates to:
+  /// **'正序浏览'**
+  String get threadDetailNormalOrder;
+
+  /// No description provided for @threadDetailPreviousPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一页'**
+  String get threadDetailPreviousPage;
+
+  /// No description provided for @threadDetailNextPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一页'**
+  String get threadDetailNextPage;
+
+  /// No description provided for @threadDetailNoMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有更多'**
+  String get threadDetailNoMore;
+
+  /// No description provided for @threadDetailPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'第{page}页'**
+  String threadDetailPage(int page);
+
+  /// No description provided for @threadDetailReply.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复'**
+  String get threadDetailReply;
+
+  /// No description provided for @threadDetailReplyPost.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复帖子'**
+  String get threadDetailReplyPost;
+
+  /// No description provided for @threadDetailEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑'**
+  String get threadDetailEdit;
+
+  /// No description provided for @threadDetailShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享'**
+  String get threadDetailShare;
+
+  /// No description provided for @threadDetailCopyLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制链接'**
+  String get threadDetailCopyLink;
+
+  /// No description provided for @threadDetailPostLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子链接'**
+  String get threadDetailPostLink;
+
+  /// No description provided for @threadDetailFloorLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'楼层链接'**
+  String get threadDetailFloorLink;
+
+  /// No description provided for @threadDetailExternalLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'外部链接'**
+  String get threadDetailExternalLink;
+
+  /// No description provided for @threadDetailHomeLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'首页链接'**
+  String get threadDetailHomeLink;
+
+  /// No description provided for @threadDetailReplyLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'楼层回复链接'**
+  String get threadDetailReplyLink;
+
+  /// No description provided for @threadDetailCopySuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'{target}已复制'**
+  String threadDetailCopySuccess(String target);
+
+  /// No description provided for @threadDetailFavorite.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏帖子'**
+  String get threadDetailFavorite;
+
+  /// No description provided for @threadDetailUnfavorite.
+  ///
+  /// In zh, this message translates to:
+  /// **'已收藏'**
+  String get threadDetailUnfavorite;
+
+  /// No description provided for @threadDetailOpenSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开原帖'**
+  String get threadDetailOpenSource;
+
+  /// No description provided for @threadDetailMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get threadDetailMore;
+
+  /// No description provided for @threadDetailDisplaySettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示设置'**
+  String get threadDetailDisplaySettings;
+
+  /// No description provided for @threadDetailBackHome.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回首页'**
+  String get threadDetailBackHome;
+
+  /// No description provided for @threadDetailSelectCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择复制'**
+  String get threadDetailSelectCopy;
+
+  /// No description provided for @threadDetailCopyAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部复制'**
+  String get threadDetailCopyAll;
+
+  /// No description provided for @threadDetailLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子详情加载失败：{error}'**
+  String threadDetailLoadFailed(String error);
+
+  /// No description provided for @threadDetailRefreshFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新帖子详情失败：{error}'**
+  String threadDetailRefreshFailed(String error);
+
+  /// No description provided for @threadDetailPageLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'页面加载失败：{error}'**
+  String threadDetailPageLoadFailed(String error);
+
+  /// No description provided for @threadDetailFloorLocatorFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'楼层定位失败，已打开帖子'**
+  String get threadDetailFloorLocatorFailed;
+
+  /// No description provided for @threadDetailUidMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'用户 UID 缺失'**
+  String get threadDetailUidMissing;
+
+  /// No description provided for @threadFavoriteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏操作失败：{error}'**
+  String threadFavoriteFailed(String error);
+
+  /// No description provided for @threadLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先登录后再操作'**
+  String get threadLoginRequired;
+
+  /// No description provided for @threadPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有执行此操作的权限'**
+  String get threadPermissionDenied;
+
+  /// No description provided for @threadUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前暂不支持此操作'**
+  String get threadUnsupported;
+
+  /// No description provided for @threadDetailAnonymous.
+  ///
+  /// In zh, this message translates to:
+  /// **'匿名'**
+  String get threadDetailAnonymous;
+
+  /// No description provided for @threadDetailImageLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片链接'**
+  String get threadDetailImageLink;
+
+  /// No description provided for @threadDetailPostBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文'**
+  String get threadDetailPostBody;
+
+  /// No description provided for @threadPollVote.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票'**
+  String get threadPollVote;
+
+  /// No description provided for @threadPollMultipleChoice.
+  ///
+  /// In zh, this message translates to:
+  /// **'可多选'**
+  String get threadPollMultipleChoice;
+
+  /// No description provided for @threadPollDeadline.
+  ///
+  /// In zh, this message translates to:
+  /// **'截止时间'**
+  String get threadPollDeadline;
+
+  /// No description provided for @threadPollResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票结果'**
+  String get threadPollResults;
+
+  /// No description provided for @threadPollSubmit.
+  ///
+  /// In zh, this message translates to:
+  /// **'提交'**
+  String get threadPollSubmit;
+
+  /// No description provided for @threadPollMaxChoices.
+  ///
+  /// In zh, this message translates to:
+  /// **'最多可选 {count} 项'**
+  String threadPollMaxChoices(int count);
+
+  /// No description provided for @threadPollSelectOption.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择投票选项'**
+  String get threadPollSelectOption;
+
+  /// No description provided for @threadPollVoteSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票成功'**
+  String get threadPollVoteSuccess;
+
+  /// No description provided for @threadPollVoteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票失败：{error}'**
+  String threadPollVoteFailed(String error);
+
+  /// No description provided for @threadPollVotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {0 票} other {{count} 票}}'**
+  String threadPollVotes(int count);
+
+  /// No description provided for @threadRatingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'评分'**
+  String get threadRatingTitle;
+
+  /// No description provided for @threadRatingSubmit.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定'**
+  String get threadRatingSubmit;
+
+  /// No description provided for @threadRatingScore.
+  ///
+  /// In zh, this message translates to:
+  /// **'积分'**
+  String get threadRatingScore;
+
+  /// No description provided for @threadRatingReasonHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'评分理由'**
+  String get threadRatingReasonHint;
+
+  /// No description provided for @threadRatingNotifyAuthor.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知作者'**
+  String get threadRatingNotifyAuthor;
+
+  /// No description provided for @threadRatingRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'范围 {min}~{max}'**
+  String threadRatingRange(int min, int max);
+
+  /// No description provided for @threadRatingRangeWithRemaining.
+  ///
+  /// In zh, this message translates to:
+  /// **'{range}，今日剩余 {remaining, plural, =0 {0} other {{remaining}}}'**
+  String threadRatingRangeWithRemaining(String range, int remaining);
+
+  /// No description provided for @threadRatingRemaining.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日剩余 {count}'**
+  String threadRatingRemaining(int count);
+
+  /// No description provided for @threadRatingParticipants.
+  ///
+  /// In zh, this message translates to:
+  /// **'参与人数'**
+  String get threadRatingParticipants;
+
+  /// No description provided for @threadRatingParticipantsCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {参与人数 0} other {参与人数 {count}}}'**
+  String threadRatingParticipantsCount(int count);
+
+  /// No description provided for @threadRatingPoints.
+  ///
+  /// In zh, this message translates to:
+  /// **'积分'**
+  String get threadRatingPoints;
+
+  /// No description provided for @threadRatingReason.
+  ///
+  /// In zh, this message translates to:
+  /// **'理由'**
+  String get threadRatingReason;
+
+  /// No description provided for @threadRatingLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'完整评分加载失败'**
+  String get threadRatingLoadFailed;
+
+  /// No description provided for @threadRatingRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试加载完整评分'**
+  String get threadRatingRetry;
+
+  /// No description provided for @threadRatingExpand.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开完整评分'**
+  String get threadRatingExpand;
+
+  /// No description provided for @threadRatingUnknownUser.
+  ///
+  /// In zh, this message translates to:
+  /// **'用户'**
+  String get threadRatingUnknownUser;
+
+  /// No description provided for @threadRatingSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'评分成功'**
+  String get threadRatingSuccess;
+
+  /// No description provided for @threadRatingFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'评分失败：{error}'**
+  String threadRatingFailed(String error);
+
+  /// No description provided for @threadCommentTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'点评'**
+  String get threadCommentTitle;
+
+  /// No description provided for @threadCommentSubmit.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布'**
+  String get threadCommentSubmit;
+
+  /// No description provided for @threadCommentContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'点评内容'**
+  String get threadCommentContent;
+
+  /// No description provided for @threadCommentSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'点评成功'**
+  String get threadCommentSuccess;
+
+  /// No description provided for @threadCommentFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'点评失败：{error}'**
+  String threadCommentFailed(String error);
+
+  /// No description provided for @threadReplyContentRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入回复内容'**
+  String get threadReplyContentRequired;
+
+  /// No description provided for @threadReplySuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复成功'**
+  String get threadReplySuccess;
+
+  /// No description provided for @threadReplyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复失败：{error}'**
+  String threadReplyFailed(String error);
+
+  /// No description provided for @threadAttachmentOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开附件'**
+  String get threadAttachmentOpen;
+
+  /// No description provided for @threadImageSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存图片'**
+  String get threadImageSave;
+
+  /// No description provided for @threadImageDownload.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载当前图片'**
+  String get threadImageDownload;
+
+  /// No description provided for @threadImageReaderTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片阅读'**
+  String get threadImageReaderTitle;
+
+  /// No description provided for @threadImageDisplay.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示'**
+  String get threadImageDisplay;
+
+  /// No description provided for @threadHtmlConversionOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'原文'**
+  String get threadHtmlConversionOriginal;
+
+  /// No description provided for @threadHtmlConversionSimplified.
+  ///
+  /// In zh, this message translates to:
+  /// **'简体'**
+  String get threadHtmlConversionSimplified;
+
+  /// No description provided for @threadHtmlConversionTraditional.
+  ///
+  /// In zh, this message translates to:
+  /// **'繁体'**
+  String get threadHtmlConversionTraditional;
+
+  /// No description provided for @threadHtmlConversionSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读设置'**
+  String get threadHtmlConversionSettings;
+
+  /// No description provided for @threadHtmlFontSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'字号'**
+  String get threadHtmlFontSize;
+
+  /// No description provided for @threadHtmlLineSpacing.
+  ///
+  /// In zh, this message translates to:
+  /// **'间隔'**
+  String get threadHtmlLineSpacing;
+
+  /// No description provided for @threadHtmlPreserveAuthorFontSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留作者字号'**
+  String get threadHtmlPreserveAuthorFontSize;
+
+  /// No description provided for @threadHtmlReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认'**
+  String get threadHtmlReset;
+
+  /// No description provided for @threadHtmlCollapseContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'折叠内容'**
+  String get threadHtmlCollapseContent;
+
+  /// No description provided for @threadHtmlRenderFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文渲染失败，可长按楼层复制正文或打开原帖查看。'**
+  String get threadHtmlRenderFailed;
+
+  /// No description provided for @threadSelectionCopyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择复制'**
+  String get threadSelectionCopyTitle;
+
+  /// No description provided for @threadDetailScrollTop.
+  ///
+  /// In zh, this message translates to:
+  /// **'滚动到顶部'**
+  String get threadDetailScrollTop;
+
+  /// No description provided for @threadDetailScrollBottom.
+  ///
+  /// In zh, this message translates to:
+  /// **'滚动到底部'**
+  String get threadDetailScrollBottom;
 }
 
 class _AppLocalizationsDelegate

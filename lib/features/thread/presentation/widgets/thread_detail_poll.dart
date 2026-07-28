@@ -13,6 +13,7 @@ class ThreadPollCard extends StatefulWidget {
     required this.onToggleOption,
     required this.onSubmit,
     required this.palette,
+    this.notice,
   });
 
   final ThreadPoll poll;
@@ -22,6 +23,7 @@ class ThreadPollCard extends StatefulWidget {
   final ValueChanged<ThreadPollOption> onToggleOption;
   final VoidCallback onSubmit;
   final ThreadDetailNativePalette palette;
+  final ThreadActionNotice? notice;
 
   @override
   State<ThreadPollCard> createState() => _ThreadPollCardState();
@@ -39,6 +41,12 @@ class _ThreadPollCardState extends State<ThreadPollCard> {
         !widget.isSubmitting &&
         (widget.poll.actionUrl?.trim().isNotEmpty ?? false);
     final statusText = widget.poll.statusText?.trim();
+    final localizedHint = widget.notice == null
+        ? widget.hint?.trim()
+        : ThreadTextResolver.actionNotice(
+            AppLocalizations.of(context),
+            widget.notice!,
+          );
     return Container(
       key: const Key('thread-poll-card'),
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -111,9 +119,9 @@ class _ThreadPollCardState extends State<ThreadPollCard> {
                   ),
                   const SizedBox(height: 8),
                 ],
-                if (widget.hint?.trim().isNotEmpty == true) ...[
+                if (localizedHint?.isNotEmpty == true) ...[
                   Text(
-                    widget.hint!.trim(),
+                    localizedHint!,
                     key: const Key('thread-poll-vote-hint'),
                     style: textTheme.labelSmall?.copyWith(
                       color: widget.palette.muted,
@@ -134,7 +142,7 @@ class _ThreadPollCardState extends State<ThreadPollCard> {
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('提交'),
+                          : Text(AppLocalizations.of(context).threadPollSubmit),
                     ),
                   ),
               ],
@@ -232,7 +240,9 @@ class ThreadPollOptionTile extends StatelessWidget {
                 if (option.voteCount != null) ...[
                   const SizedBox(height: 3),
                   Text(
-                    '${option.voteCount} 票',
+                    AppLocalizations.of(
+                      context,
+                    ).threadPollVotes(option.voteCount!),
                     style: Theme.of(
                       context,
                     ).textTheme.labelSmall?.copyWith(color: palette.softText),

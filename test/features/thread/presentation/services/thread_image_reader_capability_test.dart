@@ -7,6 +7,7 @@ import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_reader_capability.dart';
+import 'package:y300/l10n/app_localizations_zh.dart';
 
 void main() {
   const item = ContinuousImageItem(
@@ -19,6 +20,7 @@ void main() {
   );
 
   ThreadImageReaderCapability buildCapability() {
+    final l10n = AppLocalizationsZh();
     return ThreadImageReaderCapability(
       request: ThreadImageOpenRequest(
         tid: '573279',
@@ -35,6 +37,9 @@ void main() {
         continuousImages: const [item],
       ),
       imageHeaderBuilder: null,
+      title: l10n.threadImageReaderTitle,
+      displayLabel: l10n.threadImageDisplay,
+      downloadLabel: l10n.threadImageDownload,
     );
   }
 

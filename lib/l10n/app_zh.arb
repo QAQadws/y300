@@ -528,5 +528,155 @@
   "moreStorageHistoryEntries": "浏览记录：{count}",
   "@moreStorageHistoryEntries": {
     "placeholders": {"count": {"type": "int"}}
-  }
+  },
+
+  "threadDetailTitle": "帖子详情",
+  "threadDetailRefresh": "刷新帖子详情",
+  "threadDetailOnlyAuthor": "只看该作者",
+  "threadDetailAllPosts": "显示全部楼层",
+  "threadDetailReverseOrder": "倒序浏览",
+  "threadDetailNormalOrder": "正序浏览",
+  "threadDetailPreviousPage": "上一页",
+  "threadDetailNextPage": "下一页",
+  "threadDetailNoMore": "没有更多",
+  "threadDetailPage": "第{page}页",
+  "@threadDetailPage": {
+    "placeholders": {"page": {"type": "int"}}
+  },
+  "threadDetailReply": "回复",
+  "threadDetailReplyPost": "回复帖子",
+  "threadDetailEdit": "编辑",
+  "threadDetailShare": "分享",
+  "threadDetailCopyLink": "复制链接",
+  "threadDetailPostLink": "帖子链接",
+  "threadDetailFloorLink": "楼层链接",
+  "threadDetailExternalLink": "外部链接",
+  "threadDetailHomeLink": "首页链接",
+  "threadDetailReplyLink": "楼层回复链接",
+  "threadDetailCopySuccess": "{target}已复制",
+  "@threadDetailCopySuccess": {
+    "placeholders": {"target": {"type": "String"}}
+  },
+  "threadDetailFavorite": "收藏帖子",
+  "threadDetailUnfavorite": "已收藏",
+  "threadDetailOpenSource": "打开原帖",
+  "threadDetailMore": "更多",
+  "threadDetailDisplaySettings": "显示设置",
+  "threadDetailBackHome": "返回首页",
+  "threadDetailSelectCopy": "选择复制",
+  "threadDetailCopyAll": "全部复制",
+  "threadDetailLoadFailed": "帖子详情加载失败：{error}",
+  "@threadDetailLoadFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadDetailRefreshFailed": "刷新帖子详情失败：{error}",
+  "@threadDetailRefreshFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadDetailPageLoadFailed": "页面加载失败：{error}",
+  "@threadDetailPageLoadFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadDetailFloorLocatorFailed": "楼层定位失败，已打开帖子",
+  "threadDetailUidMissing": "用户 UID 缺失",
+  "threadFavoriteFailed": "收藏操作失败：{error}",
+  "@threadFavoriteFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadLoginRequired": "请先登录后再操作",
+  "threadPermissionDenied": "没有执行此操作的权限",
+  "threadUnsupported": "当前暂不支持此操作",
+  "threadDetailAnonymous": "匿名",
+  "threadDetailImageLink": "图片链接",
+  "threadDetailPostBody": "正文",
+  "threadPollVote": "投票",
+  "threadPollMultipleChoice": "可多选",
+  "threadPollDeadline": "截止时间",
+  "threadPollResults": "投票结果",
+  "threadPollSubmit": "提交",
+  "threadPollMaxChoices": "最多可选 {count} 项",
+  "@threadPollMaxChoices": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "threadPollSelectOption": "请选择投票选项",
+  "threadPollVoteSuccess": "投票成功",
+  "threadPollVoteFailed": "投票失败：{error}",
+  "@threadPollVoteFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadPollVotes": "{count, plural, =0 {0 票} other {{count} 票}}",
+  "@threadPollVotes": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "threadRatingTitle": "评分",
+  "threadRatingSubmit": "确定",
+  "threadRatingScore": "积分",
+  "threadRatingReasonHint": "评分理由",
+  "threadRatingNotifyAuthor": "通知作者",
+  "threadRatingRange": "范围 {min}~{max}",
+  "@threadRatingRange": {
+    "placeholders": {
+      "min": {"type": "int"},
+      "max": {"type": "int"}
+    }
+  },
+  "threadRatingRangeWithRemaining": "{range}，今日剩余 {remaining, plural, =0 {0} other {{remaining}}}",
+  "@threadRatingRangeWithRemaining": {
+    "placeholders": {
+      "range": {"type": "String"},
+      "remaining": {"type": "int"}
+    }
+  },
+  "threadRatingRemaining": "今日剩余 {count}",
+  "@threadRatingRemaining": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "threadRatingParticipants": "参与人数",
+  "threadRatingParticipantsCount": "{count, plural, =0 {参与人数 0} other {参与人数 {count}}}",
+  "@threadRatingParticipantsCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "threadRatingPoints": "积分",
+  "threadRatingReason": "理由",
+  "threadRatingLoadFailed": "完整评分加载失败",
+  "threadRatingRetry": "重试加载完整评分",
+  "threadRatingExpand": "展开完整评分",
+  "threadRatingUnknownUser": "用户",
+  "threadRatingSuccess": "评分成功",
+  "threadRatingFailed": "评分失败：{error}",
+  "@threadRatingFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadCommentTitle": "点评",
+  "threadCommentSubmit": "发布",
+  "threadCommentContent": "点评内容",
+  "threadCommentSuccess": "点评成功",
+  "threadCommentFailed": "点评失败：{error}",
+  "@threadCommentFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadReplyContentRequired": "请输入回复内容",
+  "threadReplySuccess": "回复成功",
+  "threadReplyFailed": "回复失败：{error}",
+  "@threadReplyFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadAttachmentOpen": "打开附件",
+  "threadImageSave": "保存图片",
+  "threadImageDownload": "下载当前图片",
+  "threadImageReaderTitle": "图片阅读",
+  "threadImageDisplay": "显示",
+  "threadHtmlConversionOriginal": "原文",
+  "threadHtmlConversionSimplified": "简体",
+  "threadHtmlConversionTraditional": "繁体",
+  "threadHtmlConversionSettings": "阅读设置",
+  "threadHtmlFontSize": "字号",
+  "threadHtmlLineSpacing": "间隔",
+  "threadHtmlPreserveAuthorFontSize": "保留作者字号",
+  "threadHtmlReset": "恢复默认",
+  "threadHtmlCollapseContent": "折叠内容",
+  "threadHtmlRenderFailed": "正文渲染失败，可长按楼层复制正文或打开原帖查看。",
+  "threadSelectionCopyTitle": "选择复制",
+  "threadDetailScrollTop": "滚动到顶部",
+  "threadDetailScrollBottom": "滚动到底部"
 }

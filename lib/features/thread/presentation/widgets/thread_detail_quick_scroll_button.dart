@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ThreadDetailQuickScrollButton extends StatelessWidget {
   const ThreadDetailQuickScrollButton({
@@ -70,7 +71,10 @@ class _QuickScrollButtonSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pointsToTop = coordinator.target == ThreadDetailQuickScrollTarget.top;
-    final label = pointsToTop ? '滚动到顶部' : '滚动到底部';
+    final l10n = AppLocalizations.of(context);
+    final label = pointsToTop
+        ? l10n.threadDetailScrollTop
+        : l10n.threadDetailScrollBottom;
     final rotationDuration = animationsDisabled
         ? Duration.zero
         : const Duration(milliseconds: 180);

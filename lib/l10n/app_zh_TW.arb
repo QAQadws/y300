@@ -316,5 +316,155 @@
   "moreStorageLibraryWorkState": "作品狀態",
   "moreStorageLibraryEpisodeState": "章節狀態",
   "moreStorageHistoryDatabase": "記錄資料庫",
-  "moreStorageHistoryEntries": "瀏覽記錄：{count}"
+  "moreStorageHistoryEntries": "瀏覽記錄：{count}",
+
+  "threadDetailTitle": "帖子詳情",
+  "threadDetailRefresh": "重新整理帖子詳情",
+  "threadDetailOnlyAuthor": "只看該作者",
+  "threadDetailAllPosts": "顯示全部樓層",
+  "threadDetailReverseOrder": "倒序瀏覽",
+  "threadDetailNormalOrder": "正序瀏覽",
+  "threadDetailPreviousPage": "上一頁",
+  "threadDetailNextPage": "下一頁",
+  "threadDetailNoMore": "沒有更多",
+  "threadDetailPage": "第{page}頁",
+  "@threadDetailPage": {
+    "placeholders": {"page": {"type": "int"}}
+  },
+  "threadDetailReply": "回覆",
+  "threadDetailReplyPost": "回覆帖子",
+  "threadDetailEdit": "編輯",
+  "threadDetailShare": "分享",
+  "threadDetailCopyLink": "複製連結",
+  "threadDetailPostLink": "帖子連結",
+  "threadDetailFloorLink": "樓層連結",
+  "threadDetailExternalLink": "外部連結",
+  "threadDetailHomeLink": "首頁連結",
+  "threadDetailReplyLink": "樓層回覆連結",
+  "threadDetailCopySuccess": "{target}已複製",
+  "@threadDetailCopySuccess": {
+    "placeholders": {"target": {"type": "String"}}
+  },
+  "threadDetailFavorite": "收藏帖子",
+  "threadDetailUnfavorite": "已收藏",
+  "threadDetailOpenSource": "開啟原帖",
+  "threadDetailMore": "更多",
+  "threadDetailDisplaySettings": "顯示設定",
+  "threadDetailBackHome": "返回首頁",
+  "threadDetailSelectCopy": "選擇複製",
+  "threadDetailCopyAll": "全部複製",
+  "threadDetailLoadFailed": "帖子詳情載入失敗：{error}",
+  "@threadDetailLoadFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadDetailRefreshFailed": "重新整理帖子詳情失敗：{error}",
+  "@threadDetailRefreshFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadDetailPageLoadFailed": "頁面載入失敗：{error}",
+  "@threadDetailPageLoadFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadDetailFloorLocatorFailed": "樓層定位失敗，已開啟帖子",
+  "threadDetailUidMissing": "使用者 UID 缺失",
+  "threadFavoriteFailed": "收藏操作失敗：{error}",
+  "@threadFavoriteFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadLoginRequired": "請先登入後再操作",
+  "threadPermissionDenied": "沒有執行此操作的權限",
+  "threadUnsupported": "目前暫不支援此操作",
+  "threadDetailAnonymous": "匿名",
+  "threadDetailImageLink": "圖片連結",
+  "threadDetailPostBody": "正文",
+  "threadPollVote": "投票",
+  "threadPollMultipleChoice": "可複選",
+  "threadPollDeadline": "截止時間",
+  "threadPollResults": "投票結果",
+  "threadPollSubmit": "提交",
+  "threadPollMaxChoices": "最多可選 {count} 項",
+  "@threadPollMaxChoices": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "threadPollSelectOption": "請選擇投票選項",
+  "threadPollVoteSuccess": "投票成功",
+  "threadPollVoteFailed": "投票失敗：{error}",
+  "@threadPollVoteFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadPollVotes": "{count, plural, =0 {0 票} other {{count} 票}}",
+  "@threadPollVotes": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "threadRatingTitle": "評分",
+  "threadRatingSubmit": "確定",
+  "threadRatingScore": "積分",
+  "threadRatingReasonHint": "評分理由",
+  "threadRatingNotifyAuthor": "通知作者",
+  "threadRatingRange": "範圍 {min}~{max}",
+  "@threadRatingRange": {
+    "placeholders": {
+      "min": {"type": "int"},
+      "max": {"type": "int"}
+    }
+  },
+  "threadRatingRangeWithRemaining": "{range}，今日剩餘 {remaining, plural, =0 {0} other {{remaining}}}",
+  "@threadRatingRangeWithRemaining": {
+    "placeholders": {
+      "range": {"type": "String"},
+      "remaining": {"type": "int"}
+    }
+  },
+  "threadRatingRemaining": "今日剩餘 {count}",
+  "@threadRatingRemaining": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "threadRatingParticipants": "參與人數",
+  "threadRatingParticipantsCount": "{count, plural, =0 {參與人數 0} other {參與人數 {count}}}",
+  "@threadRatingParticipantsCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "threadRatingPoints": "積分",
+  "threadRatingReason": "理由",
+  "threadRatingLoadFailed": "完整評分載入失敗",
+  "threadRatingRetry": "重試載入完整評分",
+  "threadRatingExpand": "展開完整評分",
+  "threadRatingUnknownUser": "使用者",
+  "threadRatingSuccess": "評分成功",
+  "threadRatingFailed": "評分失敗：{error}",
+  "@threadRatingFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadCommentTitle": "點評",
+  "threadCommentSubmit": "發佈",
+  "threadCommentContent": "點評內容",
+  "threadCommentSuccess": "點評成功",
+  "threadCommentFailed": "點評失敗：{error}",
+  "@threadCommentFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadReplyContentRequired": "請輸入回覆內容",
+  "threadReplySuccess": "回覆成功",
+  "threadReplyFailed": "回覆失敗：{error}",
+  "@threadReplyFailed": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "threadAttachmentOpen": "開啟附件",
+  "threadImageSave": "儲存圖片",
+  "threadImageDownload": "下載目前圖片",
+  "threadImageReaderTitle": "圖片閱讀",
+  "threadImageDisplay": "顯示",
+  "threadHtmlConversionOriginal": "原文",
+  "threadHtmlConversionSimplified": "簡體",
+  "threadHtmlConversionTraditional": "繁體",
+  "threadHtmlConversionSettings": "閱讀設定",
+  "threadHtmlFontSize": "字號",
+  "threadHtmlLineSpacing": "間隔",
+  "threadHtmlPreserveAuthorFontSize": "保留作者字號",
+  "threadHtmlReset": "恢復預設",
+  "threadHtmlCollapseContent": "摺疊內容",
+  "threadHtmlRenderFailed": "正文渲染失敗，可長按樓層複製正文或開啟原帖查看。",
+  "threadSelectionCopyTitle": "選擇複製",
+  "threadDetailScrollTop": "滾動到頂部",
+  "threadDetailScrollBottom": "滾動到底部"
 }

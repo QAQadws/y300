@@ -28,6 +28,7 @@ class ThreadLoadMoreSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     if (isLoadingMore) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
@@ -43,7 +44,7 @@ class ThreadLoadMoreSection extends StatelessWidget {
           _ThreadPageButton(
             key: const Key('thread-detail-previous-page-button'),
             onPressed: canLoadPrevious ? onLoadPreviousPage : null,
-            label: '上一页',
+            label: l10n.threadDetailPreviousPage,
             palette: palette,
           ),
           const SizedBox(width: 6),
@@ -54,7 +55,7 @@ class ThreadLoadMoreSection extends StatelessWidget {
             lastPage: lastPage,
             hasMore: hasMore,
             enabled: true,
-            label: '第 $currentPage 页',
+            label: l10n.threadDetailPage(currentPage),
             style: _threadPageButtonStyle(context, palette),
             onSelected: onLoadPageNumber,
           ),
@@ -62,7 +63,9 @@ class ThreadLoadMoreSection extends StatelessWidget {
           _ThreadPageButton(
             key: const Key('thread-detail-load-more-button'),
             onPressed: hasMore ? onLoadNextPage : null,
-            label: hasMore ? '下一页' : '没有更多',
+            label: hasMore
+                ? l10n.threadDetailNextPage
+                : l10n.threadDetailNoMore,
             palette: palette,
           ),
         ],
