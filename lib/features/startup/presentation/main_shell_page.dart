@@ -21,6 +21,7 @@ import 'package:y300/features/history/presentation/history_page.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_notification_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/presentation/selection/selection_action_bar.dart';
+import 'package:y300/features/library_shared/presentation/selection/selection_action_text_resolver.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
@@ -146,6 +147,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     // 启动进度->系统通知桥接，让收藏同步/漫画搜索等待进入通知栏。
     ref.watch(libraryTaskNotificationBridgeProvider);
     final selectionHost = ref.watch(shelfSelectionHostControllerProvider);
+    final l10n = AppLocalizations.of(context);
     final navigationState = ref
         .watch(mainNavigationSettingsControllerProvider)
         .value;
@@ -195,6 +197,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                     actions:
                         selectionHost.state?.selectionActions ??
                         const <SelectionAction>[],
+                    l10n: l10n,
                     onActionTap: _handleSelectionActionTap,
                   )
                 : NavigationBar(
@@ -220,6 +223,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   }
 
   Future<void> _handleSelectionActionTap(SelectionAction action) async {
+    final l10n = AppLocalizations.of(context);
     final selectionHost = ref.read(shelfSelectionHostControllerProvider);
     if (!selectionHost.isActive) {
       return;
@@ -251,12 +255,16 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       if (!mounted) {
         return;
       }
-      _showSelectionMessage(result.message);
+      _showSelectionMessage(
+        SelectionActionTextResolver.resultMessage(l10n, action.id, result),
+      );
     } catch (error) {
       if (!mounted) {
         return;
       }
-      _showSelectionMessage('批量操作失败：$error');
+      _showSelectionMessage(
+        l10n.startupBatchActionFailed(_safeErrorSummary(error)),
+      );
     }
   }
 
@@ -264,13 +272,17 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     SelectionAction action,
     ShelfSelectionHostState? state,
   ) {
+    final l10n = AppLocalizations.of(context);
     final selectedCount = state?.selectedCount ?? 0;
     final title = action.id == SelectionActionIds.unfavorite
-        ? '确认取消收藏'
-        : '确认执行操作';
+        ? l10n.startupConfirmUnfavoriteTitle
+        : l10n.startupConfirmActionTitle;
     final content = action.id == SelectionActionIds.unfavorite
-        ? '将取消已选 $selectedCount 项收藏。若作品已无其它活跃收藏来源，相关本地作品、章节、封面缓存和下载也会被清除。是否继续？'
-        : '将对已选 $selectedCount 项执行“${action.label}”，是否继续？';
+        ? l10n.startupConfirmUnfavoriteBody(selectedCount)
+        : l10n.startupConfirmActionBody(
+            selectedCount,
+            SelectionActionTextResolver.label(l10n, action.id),
+          );
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -280,11 +292,11 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
+              child: Text(l10n.commonCancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确定'),
+              child: Text(l10n.commonConfirm),
             ),
           ],
         );
@@ -306,6 +318,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     final available = categories
         .where((category) => category.categoryId != state.activeCategoryId)
         .toList(growable: false);
+    final l10n = AppLocalizations.of(context);
     final selected = await showModalBottomSheet<String>(
       context: context,
       builder: (sheetContext) {
@@ -313,6 +326,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
           child: ListView(
             shrinkWrap: true,
             children: [
+              ListTile(title: Text(l10n.startupSelectCategory), enabled: false),
               for (final category in available)
                 ListTile(
                   title: Text(category.name),
@@ -323,7 +337,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.add),
-                title: const Text('新建分类'),
+                title: Text(l10n.startupCreateCategory),
                 onTap: () {
                   Navigator.of(
                     sheetContext,
@@ -363,6 +377,14 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(trimmed)));
+  }
+
+  String _safeErrorSummary(Object error) {
+    final summary = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (summary.isEmpty) {
+      return AppLocalizations.of(context).commonUnknownError;
+    }
+    return summary.length <= 160 ? summary : '${summary.substring(0, 157)}...';
   }
 
   MainShellDestination _resolveCurrentDestination(
@@ -460,23 +482,24 @@ class _CreateSelectionCategoryDialogState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return AlertDialog(
       key: const Key('selection-create-category-dialog'),
-      title: const Text('新建分类'),
+      title: Text(l10n.startupCreateCategory),
       content: TextField(
         key: const Key('selection-create-category-name-field'),
         controller: _controller,
         autofocus: true,
-        decoration: const InputDecoration(hintText: '请输入分类名称'),
+        decoration: InputDecoration(hintText: l10n.startupCategoryNameHint),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.commonCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: const Text('确定'),
+          child: Text(l10n.commonConfirm),
         ),
       ],
     );

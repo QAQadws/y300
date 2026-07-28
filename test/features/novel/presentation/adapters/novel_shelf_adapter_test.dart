@@ -174,7 +174,7 @@ void main() {
       categoryAssignUseCase: assignUseCase,
     );
 
-    await adapter.runSelectionAction(
+    final result = await adapter.runSelectionAction(
       const SelectionActionExecutionRequest(
         actionId: SelectionActionIds.assignCategory,
         workIds: <String>{'novel-a'},
@@ -184,6 +184,9 @@ void main() {
     );
     expect(assignUseCase.lastSourceCategoryId, 'default');
     expect(assignUseCase.lastTargetCategoryId, 'archive');
+    expect(result.code, SelectionActionResultCode.success);
+    expect(result.succeededCount, 1);
+    expect(result.failedCount, 0);
   });
 
   test('NovelShelfAdapter delegates unfavorite with novel kind', () async {
@@ -207,6 +210,8 @@ void main() {
       'novel-b': ThreadContentKind.novel,
     });
     expect(result.changed, isTrue);
+    expect(result.code, SelectionActionResultCode.success);
+    expect(result.succeededCount, 1);
   });
 }
 

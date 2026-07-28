@@ -193,6 +193,217 @@ abstract class AppLocalizations {
   /// **'更多'**
   String get appNavigationMore;
 
+  /// 多选主壳标题；count 是当前选中的项目数量
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {未选择项目} other {已选 {count} 项}}'**
+  String startupSelectionSelectedCount(int count);
+
+  /// No description provided for @startupSelectionExit.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出多选'**
+  String get startupSelectionExit;
+
+  /// No description provided for @startupSelectionSelectAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全选当前分类'**
+  String get startupSelectionSelectAll;
+
+  /// No description provided for @startupSelectionInvert.
+  ///
+  /// In zh, this message translates to:
+  /// **'反选当前分类'**
+  String get startupSelectionInvert;
+
+  /// No description provided for @startupSelectionActionAssignCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置分类'**
+  String get startupSelectionActionAssignCategory;
+
+  /// No description provided for @startupSelectionActionMarkAllRead.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部已读'**
+  String get startupSelectionActionMarkAllRead;
+
+  /// No description provided for @startupSelectionActionMarkAllUnread.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部未读'**
+  String get startupSelectionActionMarkAllUnread;
+
+  /// No description provided for @startupSelectionActionDownload.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载'**
+  String get startupSelectionActionDownload;
+
+  /// No description provided for @startupSelectionActionUnfavorite.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消收藏'**
+  String get startupSelectionActionUnfavorite;
+
+  /// No description provided for @startupSelectionActionGeneric.
+  ///
+  /// In zh, this message translates to:
+  /// **'执行操作'**
+  String get startupSelectionActionGeneric;
+
+  /// 批量操作异常提示；error 是经过清理的安全错误摘要
+  ///
+  /// In zh, this message translates to:
+  /// **'批量操作失败：{error}'**
+  String startupBatchActionFailed(String error);
+
+  /// No description provided for @startupConfirmUnfavoriteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认取消收藏'**
+  String get startupConfirmUnfavoriteTitle;
+
+  /// No description provided for @startupConfirmActionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认执行操作'**
+  String get startupConfirmActionTitle;
+
+  /// 取消收藏确认正文；count 是选中项目数量
+  ///
+  /// In zh, this message translates to:
+  /// **'将取消已选 {count, plural, =0 {0 项} other {{count} 项}}收藏。若作品已无其它活跃收藏来源，相关本地作品、章节、封面缓存和下载也会被清除。是否继续？'**
+  String startupConfirmUnfavoriteBody(int count);
+
+  /// 普通多选动作确认正文；action 是由稳定 action id 映射的本地化名称
+  ///
+  /// In zh, this message translates to:
+  /// **'将对已选 {count, plural, =0 {0 项} other {{count} 项}}执行“{action}”，是否继续？'**
+  String startupConfirmActionBody(int count, String action);
+
+  /// No description provided for @startupSelectCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择分类'**
+  String get startupSelectCategory;
+
+  /// No description provided for @startupCreateCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建分类'**
+  String get startupCreateCategory;
+
+  /// No description provided for @startupCategoryNameHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入分类名称'**
+  String get startupCategoryNameHint;
+
+  /// 批量设置分类成功提示；count 是成功处理的项目数量
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {没有项目设置分类} other {已为 {count} 项设置分类}}'**
+  String startupSelectionCategoryAssigned(int count);
+
+  /// 批量设置分类部分失败提示
+  ///
+  /// In zh, this message translates to:
+  /// **'{succeededCount, plural, =0 {没有项目设置分类} other {已为 {succeededCount} 项设置分类}}；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}'**
+  String startupSelectionCategoryAssignedPartial(
+    int succeededCount,
+    int failedCount,
+  );
+
+  /// 批量阅读状态修改成功提示；state 是已读或未读的本地化名称
+  ///
+  /// In zh, this message translates to:
+  /// **'已将 {count, plural, =0 {0 项} other {{count} 项}}标记为{state}'**
+  String startupSelectionReadStateChanged(int count, String state);
+
+  /// 批量阅读状态修改部分失败提示
+  ///
+  /// In zh, this message translates to:
+  /// **'已将 {succeededCount, plural, =0 {0 项} other {{succeededCount} 项}}标记为{state}；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}'**
+  String startupSelectionReadStateChangedPartial(
+    int succeededCount,
+    int failedCount,
+    String state,
+  );
+
+  /// No description provided for @startupSelectionRead.
+  ///
+  /// In zh, this message translates to:
+  /// **'已读'**
+  String get startupSelectionRead;
+
+  /// No description provided for @startupSelectionUnread.
+  ///
+  /// In zh, this message translates to:
+  /// **'未读'**
+  String get startupSelectionUnread;
+
+  /// 批量下载入队提示；count 是新加入队列的章节数量
+  ///
+  /// In zh, this message translates to:
+  /// **'已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入下载队列'**
+  String startupSelectionDownloadQueued(int count);
+
+  /// 批量下载入队部分失败提示
+  ///
+  /// In zh, this message translates to:
+  /// **'已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入下载队列；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}'**
+  String startupSelectionDownloadQueuedPartial(int count, int failedCount);
+
+  /// No description provided for @startupSelectionDownloadAlreadyQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'所选章节已在下载队列中'**
+  String get startupSelectionDownloadAlreadyQueued;
+
+  /// No description provided for @startupSelectionNothingToDownload.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有需要下载的章节'**
+  String get startupSelectionNothingToDownload;
+
+  /// 批量取消收藏成功提示；count 是成功取消的项目数量
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消 {count, plural, =0 {0 项} other {{count} 项}}收藏'**
+  String startupSelectionUnfavorite(int count);
+
+  /// 批量取消收藏部分失败提示
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消 {succeededCount, plural, =0 {0 项} other {{succeededCount} 项}}收藏；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}'**
+  String startupSelectionUnfavoritePartial(int succeededCount, int failedCount);
+
+  /// 当前书架不支持某个批量动作；action 是本地化动作名称
+  ///
+  /// In zh, this message translates to:
+  /// **'当前不支持批量{action}'**
+  String startupSelectionUnsupported(String action);
+
+  /// No description provided for @startupSelectionMissingTargetCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择目标分类'**
+  String get startupSelectionMissingTargetCategory;
+
+  /// No description provided for @startupSelectionNoValidItems.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可处理的项目'**
+  String get startupSelectionNoValidItems;
+
+  /// 批量动作没有产生变化；action 是本地化动作名称
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可执行的{action}'**
+  String startupSelectionNoChange(String action);
+
   /// No description provided for @moreTitle.
   ///
   /// In zh, this message translates to:

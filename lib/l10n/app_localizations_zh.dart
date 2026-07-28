@@ -59,6 +59,236 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appNavigationMore => '更多';
 
   @override
+  String startupSelectionSelectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选 $count 项',
+      zero: '未选择项目',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get startupSelectionExit => '退出多选';
+
+  @override
+  String get startupSelectionSelectAll => '全选当前分类';
+
+  @override
+  String get startupSelectionInvert => '反选当前分类';
+
+  @override
+  String get startupSelectionActionAssignCategory => '设置分类';
+
+  @override
+  String get startupSelectionActionMarkAllRead => '全部已读';
+
+  @override
+  String get startupSelectionActionMarkAllUnread => '全部未读';
+
+  @override
+  String get startupSelectionActionDownload => '下载';
+
+  @override
+  String get startupSelectionActionUnfavorite => '取消收藏';
+
+  @override
+  String get startupSelectionActionGeneric => '执行操作';
+
+  @override
+  String startupBatchActionFailed(String error) {
+    return '批量操作失败：$error';
+  }
+
+  @override
+  String get startupConfirmUnfavoriteTitle => '确认取消收藏';
+
+  @override
+  String get startupConfirmActionTitle => '确认执行操作';
+
+  @override
+  String startupConfirmUnfavoriteBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 项',
+      zero: '0 项',
+    );
+    return '将取消已选 $_temp0收藏。若作品已无其它活跃收藏来源，相关本地作品、章节、封面缓存和下载也会被清除。是否继续？';
+  }
+
+  @override
+  String startupConfirmActionBody(int count, String action) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 项',
+      zero: '0 项',
+    );
+    return '将对已选 $_temp0执行“$action”，是否继续？';
+  }
+
+  @override
+  String get startupSelectCategory => '选择分类';
+
+  @override
+  String get startupCreateCategory => '新建分类';
+
+  @override
+  String get startupCategoryNameHint => '请输入分类名称';
+
+  @override
+  String startupSelectionCategoryAssigned(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已为 $count 项设置分类',
+      zero: '没有项目设置分类',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String startupSelectionCategoryAssignedPartial(
+    int succeededCount,
+    int failedCount,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      succeededCount,
+      locale: localeName,
+      other: '已为 $succeededCount 项设置分类',
+      zero: '没有项目设置分类',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failedCount,
+      locale: localeName,
+      other: '失败 $failedCount 项',
+      zero: '没有失败项目',
+    );
+    return '$_temp0；$_temp1';
+  }
+
+  @override
+  String startupSelectionReadStateChanged(int count, String state) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 项',
+      zero: '0 项',
+    );
+    return '已将 $_temp0标记为$state';
+  }
+
+  @override
+  String startupSelectionReadStateChangedPartial(
+    int succeededCount,
+    int failedCount,
+    String state,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      succeededCount,
+      locale: localeName,
+      other: '$succeededCount 项',
+      zero: '0 项',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failedCount,
+      locale: localeName,
+      other: '失败 $failedCount 项',
+      zero: '没有失败项目',
+    );
+    return '已将 $_temp0标记为$state；$_temp1';
+  }
+
+  @override
+  String get startupSelectionRead => '已读';
+
+  @override
+  String get startupSelectionUnread => '未读';
+
+  @override
+  String startupSelectionDownloadQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个章节',
+      zero: '0 个章节',
+    );
+    return '已将 $_temp0加入下载队列';
+  }
+
+  @override
+  String startupSelectionDownloadQueuedPartial(int count, int failedCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个章节',
+      zero: '0 个章节',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failedCount,
+      locale: localeName,
+      other: '失败 $failedCount 项',
+      zero: '没有失败项目',
+    );
+    return '已将 $_temp0加入下载队列；$_temp1';
+  }
+
+  @override
+  String get startupSelectionDownloadAlreadyQueued => '所选章节已在下载队列中';
+
+  @override
+  String get startupSelectionNothingToDownload => '没有需要下载的章节';
+
+  @override
+  String startupSelectionUnfavorite(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 项',
+      zero: '0 项',
+    );
+    return '已取消 $_temp0收藏';
+  }
+
+  @override
+  String startupSelectionUnfavoritePartial(
+    int succeededCount,
+    int failedCount,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      succeededCount,
+      locale: localeName,
+      other: '$succeededCount 项',
+      zero: '0 项',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failedCount,
+      locale: localeName,
+      other: '失败 $failedCount 项',
+      zero: '没有失败项目',
+    );
+    return '已取消 $_temp0收藏；$_temp1';
+  }
+
+  @override
+  String startupSelectionUnsupported(String action) {
+    return '当前不支持批量$action';
+  }
+
+  @override
+  String get startupSelectionMissingTargetCategory => '请选择目标分类';
+
+  @override
+  String get startupSelectionNoValidItems => '没有可处理的项目';
+
+  @override
+  String startupSelectionNoChange(String action) {
+    return '没有可执行的$action';
+  }
+
+  @override
   String get moreTitle => '更多';
 
   @override
@@ -593,6 +823,236 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get appNavigationMore => '更多';
+
+  @override
+  String startupSelectionSelectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已選 $count 項',
+      zero: '未選擇項目',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get startupSelectionExit => '退出多選';
+
+  @override
+  String get startupSelectionSelectAll => '全選目前分類';
+
+  @override
+  String get startupSelectionInvert => '反選目前分類';
+
+  @override
+  String get startupSelectionActionAssignCategory => '設定分類';
+
+  @override
+  String get startupSelectionActionMarkAllRead => '全部已讀';
+
+  @override
+  String get startupSelectionActionMarkAllUnread => '全部未讀';
+
+  @override
+  String get startupSelectionActionDownload => '下載';
+
+  @override
+  String get startupSelectionActionUnfavorite => '取消收藏';
+
+  @override
+  String get startupSelectionActionGeneric => '執行操作';
+
+  @override
+  String startupBatchActionFailed(String error) {
+    return '批次操作失敗：$error';
+  }
+
+  @override
+  String get startupConfirmUnfavoriteTitle => '確認取消收藏';
+
+  @override
+  String get startupConfirmActionTitle => '確認執行操作';
+
+  @override
+  String startupConfirmUnfavoriteBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 項',
+      zero: '0 項',
+    );
+    return '將取消已選 $_temp0收藏。若作品已無其他活躍收藏來源，相關本機作品、章節、封面快取和下載也會被清除。是否繼續？';
+  }
+
+  @override
+  String startupConfirmActionBody(int count, String action) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 項',
+      zero: '0 項',
+    );
+    return '將對已選 $_temp0執行「$action」，是否繼續？';
+  }
+
+  @override
+  String get startupSelectCategory => '選擇分類';
+
+  @override
+  String get startupCreateCategory => '新增分類';
+
+  @override
+  String get startupCategoryNameHint => '請輸入分類名稱';
+
+  @override
+  String startupSelectionCategoryAssigned(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已為 $count 項設定分類',
+      zero: '沒有項目設定分類',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String startupSelectionCategoryAssignedPartial(
+    int succeededCount,
+    int failedCount,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      succeededCount,
+      locale: localeName,
+      other: '已為 $succeededCount 項設定分類',
+      zero: '沒有項目設定分類',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failedCount,
+      locale: localeName,
+      other: '失敗 $failedCount 項',
+      zero: '沒有失敗項目',
+    );
+    return '$_temp0；$_temp1';
+  }
+
+  @override
+  String startupSelectionReadStateChanged(int count, String state) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 項',
+      zero: '0 項',
+    );
+    return '已將 $_temp0標記為$state';
+  }
+
+  @override
+  String startupSelectionReadStateChangedPartial(
+    int succeededCount,
+    int failedCount,
+    String state,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      succeededCount,
+      locale: localeName,
+      other: '$succeededCount 項',
+      zero: '0 項',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failedCount,
+      locale: localeName,
+      other: '失敗 $failedCount 項',
+      zero: '沒有失敗項目',
+    );
+    return '已將 $_temp0標記為$state；$_temp1';
+  }
+
+  @override
+  String get startupSelectionRead => '已讀';
+
+  @override
+  String get startupSelectionUnread => '未讀';
+
+  @override
+  String startupSelectionDownloadQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個章節',
+      zero: '0 個章節',
+    );
+    return '已將 $_temp0加入下載佇列';
+  }
+
+  @override
+  String startupSelectionDownloadQueuedPartial(int count, int failedCount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個章節',
+      zero: '0 個章節',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failedCount,
+      locale: localeName,
+      other: '失敗 $failedCount 項',
+      zero: '沒有失敗項目',
+    );
+    return '已將 $_temp0加入下載佇列；$_temp1';
+  }
+
+  @override
+  String get startupSelectionDownloadAlreadyQueued => '所選章節已在下載佇列中';
+
+  @override
+  String get startupSelectionNothingToDownload => '沒有需要下載的章節';
+
+  @override
+  String startupSelectionUnfavorite(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 項',
+      zero: '0 項',
+    );
+    return '已取消 $_temp0收藏';
+  }
+
+  @override
+  String startupSelectionUnfavoritePartial(
+    int succeededCount,
+    int failedCount,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      succeededCount,
+      locale: localeName,
+      other: '$succeededCount 項',
+      zero: '0 項',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failedCount,
+      locale: localeName,
+      other: '失敗 $failedCount 項',
+      zero: '沒有失敗項目',
+    );
+    return '已取消 $_temp0收藏；$_temp1';
+  }
+
+  @override
+  String startupSelectionUnsupported(String action) {
+    return '目前不支援批次$action';
+  }
+
+  @override
+  String get startupSelectionMissingTargetCategory => '請選擇目標分類';
+
+  @override
+  String get startupSelectionNoValidItems => '沒有可處理的項目';
+
+  @override
+  String startupSelectionNoChange(String action) {
+    return '沒有可執行的$action';
+  }
 
   @override
   String get moreTitle => '更多';

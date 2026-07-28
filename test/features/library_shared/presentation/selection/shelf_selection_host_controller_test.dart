@@ -26,7 +26,7 @@ void main() {
         selectedCount: 1,
         selectedWorkIds: const <String>{'comic-1'},
         selectionActions: const <SelectionAction>[
-          SelectionAction(id: 'download', icon: Icons.download, label: '下载'),
+          SelectionAction(id: 'download', icon: Icons.download),
         ],
         delegate: _idleDelegate(),
       );
@@ -41,8 +41,8 @@ void main() {
         selectedCount: 2,
         selectedWorkIds: const <String>{'comic-1', 'comic-2'},
         selectionActions: const <SelectionAction>[
-          SelectionAction(id: 'download', icon: Icons.download, label: '下载'),
-          SelectionAction(id: 'unfavorite', icon: Icons.delete, label: '取消收藏'),
+          SelectionAction(id: 'download', icon: Icons.download),
+          SelectionAction(id: 'unfavorite', icon: Icons.delete),
         ],
       );
 
@@ -68,7 +68,7 @@ void main() {
         selectedCount: 1,
         selectedWorkIds: const <String>{'favorite:100'},
         selectionActions: const <SelectionAction>[
-          SelectionAction(id: 'unfavorite', icon: Icons.delete, label: '取消收藏'),
+          SelectionAction(id: 'unfavorite', icon: Icons.delete),
         ],
         delegate: _idleDelegate(),
       );
@@ -79,7 +79,7 @@ void main() {
         selectedCount: 9,
         selectedWorkIds: const <String>{'ignored'},
         selectionActions: const <SelectionAction>[
-          SelectionAction(id: 'ignored', icon: Icons.info, label: 'ignored'),
+          SelectionAction(id: 'ignored', icon: Icons.info),
         ],
       );
       controller.deactivate(staleOwner);
@@ -101,7 +101,7 @@ void main() {
         selectedCount: 1,
         selectedWorkIds: const <String>{'comic-1'},
         selectionActions: const <SelectionAction>[
-          SelectionAction(id: 'download', icon: Icons.download, label: '下载'),
+          SelectionAction(id: 'download', icon: Icons.download),
         ],
         delegate: ShelfSelectionHostDelegate(
           exitSelection: () async {
@@ -113,10 +113,7 @@ void main() {
           createCategory: (name) async => 'created',
           runSelectionAction: (request) async {
             calls.add('run:${request.actionId}');
-            return const SelectionActionResult(
-              message: 'done',
-              changed: true,
-            );
+            return const SelectionActionResult(message: 'done', changed: true);
           },
           refreshAfterAction: () async {
             calls.add('refresh');
@@ -141,7 +138,7 @@ void main() {
         selectedCount: 1,
         selectedWorkIds: const <String>{'novel-1'},
         selectionActions: const <SelectionAction>[
-          SelectionAction(id: 'mark-all-read', icon: Icons.done_all, label: '全部已读'),
+          SelectionAction(id: 'mark-all-read', icon: Icons.done_all),
         ],
         delegate: ShelfSelectionHostDelegate(
           exitSelection: () async => fail('should not exit'),
@@ -150,10 +147,7 @@ void main() {
           loadAvailableCategories: () async => const <LibraryCategory>[],
           createCategory: (name) async => 'created',
           runSelectionAction: (request) async {
-            return const SelectionActionResult(
-              message: 'noop',
-              changed: false,
-            );
+            return const SelectionActionResult(message: 'noop', changed: false);
           },
           refreshAfterAction: () async => fail('should not refresh'),
         ),
@@ -176,7 +170,7 @@ void main() {
         selectedCount: 1,
         selectedWorkIds: const <String>{'favorite:100'},
         selectionActions: const <SelectionAction>[
-          SelectionAction(id: 'unfavorite', icon: Icons.delete, label: '取消收藏'),
+          SelectionAction(id: 'unfavorite', icon: Icons.delete),
         ],
         delegate: ShelfSelectionHostDelegate(
           exitSelection: () async => fail('should not exit'),
@@ -205,10 +199,7 @@ void main() {
       final owner = Object();
       disposedController.dispose();
 
-      expect(
-        () => disposedController.deactivate(owner),
-        returnsNormally,
-      );
+      expect(() => disposedController.deactivate(owner), returnsNormally);
       expect(disposedController.isActive, isFalse);
       expect(disposedController.state, isNull);
     });
@@ -226,7 +217,7 @@ void main() {
           selectedCount: 1,
           selectedWorkIds: const <String>{'comic-1'},
           selectionActions: const <SelectionAction>[
-            SelectionAction(id: 'download', icon: Icons.download, label: '下载'),
+            SelectionAction(id: 'download', icon: Icons.download),
           ],
           delegate: _idleDelegate(),
         ),
@@ -239,7 +230,7 @@ void main() {
           selectedCount: 2,
           selectedWorkIds: const <String>{'comic-1', 'comic-2'},
           selectionActions: const <SelectionAction>[
-            SelectionAction(id: 'download', icon: Icons.download, label: '下载'),
+            SelectionAction(id: 'download', icon: Icons.download),
           ],
         ),
         returnsNormally,

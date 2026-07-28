@@ -40,6 +40,116 @@
   "appNavigationHistory": "记录",
   "appNavigationMore": "更多",
 
+  "startupSelectionSelectedCount": "{count, plural, =0 {未选择项目} other {已选 {count} 项}}",
+  "@startupSelectionSelectedCount": {
+    "description": "多选主壳标题；count 是当前选中的项目数量",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "startupSelectionExit": "退出多选",
+  "startupSelectionSelectAll": "全选当前分类",
+  "startupSelectionInvert": "反选当前分类",
+  "startupSelectionActionAssignCategory": "设置分类",
+  "startupSelectionActionMarkAllRead": "全部已读",
+  "startupSelectionActionMarkAllUnread": "全部未读",
+  "startupSelectionActionDownload": "下载",
+  "startupSelectionActionUnfavorite": "取消收藏",
+  "startupSelectionActionGeneric": "执行操作",
+  "startupBatchActionFailed": "批量操作失败：{error}",
+  "@startupBatchActionFailed": {
+    "description": "批量操作异常提示；error 是经过清理的安全错误摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "startupConfirmUnfavoriteTitle": "确认取消收藏",
+  "startupConfirmActionTitle": "确认执行操作",
+  "startupConfirmUnfavoriteBody": "将取消已选 {count, plural, =0 {0 项} other {{count} 项}}收藏。若作品已无其它活跃收藏来源，相关本地作品、章节、封面缓存和下载也会被清除。是否继续？",
+  "@startupConfirmUnfavoriteBody": {
+    "description": "取消收藏确认正文；count 是选中项目数量",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "startupConfirmActionBody": "将对已选 {count, plural, =0 {0 项} other {{count} 项}}执行“{action}”，是否继续？",
+  "@startupConfirmActionBody": {
+    "description": "普通多选动作确认正文；action 是由稳定 action id 映射的本地化名称",
+    "placeholders": {
+      "count": {"type": "int"},
+      "action": {"type": "String"}
+    }
+  },
+  "startupSelectCategory": "选择分类",
+  "startupCreateCategory": "新建分类",
+  "startupCategoryNameHint": "请输入分类名称",
+  "startupSelectionCategoryAssigned": "{count, plural, =0 {没有项目设置分类} other {已为 {count} 项设置分类}}",
+  "@startupSelectionCategoryAssigned": {
+    "description": "批量设置分类成功提示；count 是成功处理的项目数量",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "startupSelectionCategoryAssignedPartial": "{succeededCount, plural, =0 {没有项目设置分类} other {已为 {succeededCount} 项设置分类}}；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
+  "@startupSelectionCategoryAssignedPartial": {
+    "description": "批量设置分类部分失败提示",
+    "placeholders": {
+      "succeededCount": {"type": "int"},
+      "failedCount": {"type": "int"}
+    }
+  },
+  "startupSelectionReadStateChanged": "已将 {count, plural, =0 {0 项} other {{count} 项}}标记为{state}",
+  "@startupSelectionReadStateChanged": {
+    "description": "批量阅读状态修改成功提示；state 是已读或未读的本地化名称",
+    "placeholders": {
+      "count": {"type": "int"},
+      "state": {"type": "String"}
+    }
+  },
+  "startupSelectionReadStateChangedPartial": "已将 {succeededCount, plural, =0 {0 项} other {{succeededCount} 项}}标记为{state}；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
+  "@startupSelectionReadStateChangedPartial": {
+    "description": "批量阅读状态修改部分失败提示",
+    "placeholders": {
+      "succeededCount": {"type": "int"},
+      "failedCount": {"type": "int"},
+      "state": {"type": "String"}
+    }
+  },
+  "startupSelectionRead": "已读",
+  "startupSelectionUnread": "未读",
+  "startupSelectionDownloadQueued": "已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入下载队列",
+  "@startupSelectionDownloadQueued": {
+    "description": "批量下载入队提示；count 是新加入队列的章节数量",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "startupSelectionDownloadQueuedPartial": "已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入下载队列；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
+  "@startupSelectionDownloadQueuedPartial": {
+    "description": "批量下载入队部分失败提示",
+    "placeholders": {
+      "count": {"type": "int"},
+      "failedCount": {"type": "int"}
+    }
+  },
+  "startupSelectionDownloadAlreadyQueued": "所选章节已在下载队列中",
+  "startupSelectionNothingToDownload": "没有需要下载的章节",
+  "startupSelectionUnfavorite": "已取消 {count, plural, =0 {0 项} other {{count} 项}}收藏",
+  "@startupSelectionUnfavorite": {
+    "description": "批量取消收藏成功提示；count 是成功取消的项目数量",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "startupSelectionUnfavoritePartial": "已取消 {succeededCount, plural, =0 {0 项} other {{succeededCount} 项}}收藏；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
+  "@startupSelectionUnfavoritePartial": {
+    "description": "批量取消收藏部分失败提示",
+    "placeholders": {
+      "succeededCount": {"type": "int"},
+      "failedCount": {"type": "int"}
+    }
+  },
+  "startupSelectionUnsupported": "当前不支持批量{action}",
+  "@startupSelectionUnsupported": {
+    "description": "当前书架不支持某个批量动作；action 是本地化动作名称",
+    "placeholders": {"action": {"type": "String"}}
+  },
+  "startupSelectionMissingTargetCategory": "请选择目标分类",
+  "startupSelectionNoValidItems": "没有可处理的项目",
+  "startupSelectionNoChange": "没有可执行的{action}",
+  "@startupSelectionNoChange": {
+    "description": "批量动作没有产生变化；action 是本地化动作名称",
+    "placeholders": {"action": {"type": "String"}}
+  },
+
   "moreTitle": "更多",
   "moreMyProfile": "我的资料",
   "moreMyProfileSignedOutSubtitle": "登录后查看个人资料、消息提醒",

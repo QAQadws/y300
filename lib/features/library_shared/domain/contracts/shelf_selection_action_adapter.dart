@@ -5,31 +5,58 @@ class SelectionAction {
   const SelectionAction({
     required this.id,
     required this.icon,
-    required this.label,
     this.destructive = false,
     this.needsConfirm = false,
+    @Deprecated('Use presentation localization by action id.') this.label,
   });
 
   final String id;
   final IconData icon;
-  final String label;
   final bool destructive;
   final bool needsConfirm;
+
+  /// Compatibility field for adapters that have not migrated yet.
+  ///
+  /// Shared presentation must resolve labels from [id] and AppLocalizations.
+  @Deprecated('Use presentation localization by action id.')
+  final String? label;
+}
+
+enum SelectionActionResultCode {
+  legacyMessage,
+  success,
+  partialFailure,
+  unsupported,
+  missingTargetCategory,
+  noValidItems,
+  noChange,
 }
 
 /// 书架批量操作执行结果。
 class SelectionActionResult {
   const SelectionActionResult({
-    required this.message,
+    this.code = SelectionActionResultCode.legacyMessage,
+    this.message,
     this.changed = false,
+    this.succeededCount = 0,
     this.failedCount = 0,
+    this.enqueuedCount = 0,
+    this.deduplicatedCount = 0,
   });
 
-  final String message;
-  final bool changed;
-  final int failedCount;
+  final SelectionActionResultCode code;
 
-  bool get hasFailure => failedCount > 0;
+  /// Compatibility field for pre-localization adapters.
+  @Deprecated('Use code and numeric result fields.')
+  final String? message;
+  final bool changed;
+  final int succeededCount;
+  final int failedCount;
+  final int enqueuedCount;
+  final int deduplicatedCount;
+
+  bool get hasFailure =>
+      failedCount > 0 || code == SelectionActionResultCode.partialFailure;
 }
 
 /// 一次批量操作请求。

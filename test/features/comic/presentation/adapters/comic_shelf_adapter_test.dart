@@ -345,6 +345,9 @@ void main() {
       expect(useCase.lastSourceCategoryId, 'default');
       expect(useCase.lastTargetCategoryId, 'romance');
       expect(result.changed, isTrue);
+      expect(result.code, SelectionActionResultCode.success);
+      expect(result.succeededCount, 2);
+      expect(result.failedCount, 0);
     },
   );
 
@@ -358,14 +361,14 @@ void main() {
         readingStateBatchWriter: writer,
       );
 
-      await adapter.runSelectionAction(
+      final readResult = await adapter.runSelectionAction(
         const SelectionActionExecutionRequest(
           actionId: SelectionActionIds.markAllRead,
           workIds: <String>{'comic-a'},
           activeCategoryId: 'default',
         ),
       );
-      await adapter.runSelectionAction(
+      final unreadResult = await adapter.runSelectionAction(
         const SelectionActionExecutionRequest(
           actionId: SelectionActionIds.markAllUnread,
           workIds: <String>{'comic-b'},
@@ -379,6 +382,10 @@ void main() {
       expect(writer.calls.first.isRead, isTrue);
       expect(writer.calls.last.workIds, <String>{'comic-b'});
       expect(writer.calls.last.isRead, isFalse);
+      expect(readResult.code, SelectionActionResultCode.success);
+      expect(readResult.succeededCount, 1);
+      expect(unreadResult.code, SelectionActionResultCode.success);
+      expect(unreadResult.succeededCount, 1);
     },
   );
 
@@ -400,6 +407,9 @@ void main() {
 
     expect(useCase.lastComicIds, <String>{'comic-a', 'comic-b'});
     expect(result.changed, isTrue);
+    expect(result.code, SelectionActionResultCode.success);
+    expect(result.enqueuedCount, 3);
+    expect(result.deduplicatedCount, 0);
   });
 
   test('ComicShelfAdapter delegates unfavorite with comic kind', () async {
@@ -423,6 +433,8 @@ void main() {
       'comic-b': ThreadContentKind.comic,
     });
     expect(result.changed, isTrue);
+    expect(result.code, SelectionActionResultCode.success);
+    expect(result.succeededCount, 1);
   });
 }
 

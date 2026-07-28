@@ -87,8 +87,6 @@ class FavoriteShelfAdapter
       const LibraryCoverImageAdapter();
 
   static const String _moduleTitle = '\u6536\u85cf';
-  static const String _assignLabel = '\u8bbe\u7f6e\u5206\u7c7b';
-  static const String _unfavoriteLabel = '\u53d6\u6d88\u6536\u85cf';
 
   @override
   ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => _taskProgress;
@@ -101,7 +99,6 @@ class FavoriteShelfAdapter
         const SelectionAction(
           id: SelectionActionIds.assignCategory,
           icon: Icons.label_outline,
-          label: _assignLabel,
         ),
       );
     }
@@ -110,7 +107,6 @@ class FavoriteShelfAdapter
         const SelectionAction(
           id: SelectionActionIds.unfavorite,
           icon: Icons.favorite_border,
-          label: _unfavoriteLabel,
           destructive: true,
           needsConfirm: true,
         ),
@@ -311,10 +307,12 @@ class FavoriteShelfAdapter
       case SelectionActionIds.markAllUnread:
       case SelectionActionIds.download:
         return const SelectionActionResult(
-          message: 'Favorite shelf does not support this batch action',
+          code: SelectionActionResultCode.unsupported,
         );
     }
-    return const SelectionActionResult(message: 'Unsupported favorite action');
+    return const SelectionActionResult(
+      code: SelectionActionResultCode.unsupported,
+    );
   }
 
   Future<SelectionActionResult> _runAssignCategory(
@@ -324,24 +322,27 @@ class FavoriteShelfAdapter
     final targetCategoryId = request.targetCategoryId?.trim();
     if (useCase == null) {
       return const SelectionActionResult(
-        message: 'Favorite shelf does not support batch category assignment',
+        code: SelectionActionResultCode.unsupported,
       );
     }
     if (targetCategoryId == null || targetCategoryId.isEmpty) {
-      return const SelectionActionResult(message: 'Missing target category');
+      return const SelectionActionResult(
+        code: SelectionActionResultCode.missingTargetCategory,
+      );
     }
     final result = await useCase.assign(
       workIds: request.workIds,
       sourceCategoryId: request.activeCategoryId,
       targetCategoryId: targetCategoryId,
     );
+    final failedCount = result.failedWorkIds.length;
     return SelectionActionResult(
-      message: _buildAssignMessage(
-        assignedCount: result.assignedWorkIds.length,
-        failedCount: result.failedWorkIds.length,
-      ),
+      code: failedCount > 0
+          ? SelectionActionResultCode.partialFailure
+          : SelectionActionResultCode.success,
       changed: result.assignedWorkIds.isNotEmpty,
-      failedCount: result.failedWorkIds.length,
+      succeededCount: result.assignedWorkIds.length,
+      failedCount: failedCount,
     );
   }
 
@@ -351,7 +352,7 @@ class FavoriteShelfAdapter
     final useCase = _unfavoriteThreadUseCaseResolver();
     if (useCase == null) {
       return const SelectionActionResult(
-        message: 'Favorite shelf does not support batch unfavorite',
+        code: SelectionActionResultCode.unsupported,
       );
     }
     final tids = <String>{};
@@ -366,18 +367,18 @@ class FavoriteShelfAdapter
     }
     if (tids.isEmpty) {
       return SelectionActionResult(
-        message: 'No valid favorite threads to unfavorite',
+        code: SelectionActionResultCode.noValidItems,
         failedCount: invalidCount,
       );
     }
     final result = await useCase.callMany(tids);
     final failedCount = result.failedTids.length + invalidCount;
     return SelectionActionResult(
-      message: _buildUnfavoriteMessage(
-        succeededCount: result.succeededTids.length,
-        failedCount: failedCount,
-      ),
+      code: failedCount > 0
+          ? SelectionActionResultCode.partialFailure
+          : SelectionActionResultCode.success,
       changed: result.succeededTids.isNotEmpty,
+      succeededCount: result.succeededTids.length,
       failedCount: failedCount,
     );
   }
@@ -525,38 +526,6 @@ class FavoriteShelfAdapter
       case ThreadContentKind.forum:
         return null;
     }
-  }
-
-  String _buildAssignMessage({
-    required int assignedCount,
-    required int failedCount,
-  }) {
-    if (assignedCount == 0 && failedCount == 0) {
-      return 'No favorites were moved';
-    }
-    if (failedCount == 0) {
-      return 'Moved $assignedCount favorites';
-    }
-    if (assignedCount == 0) {
-      return 'Failed to move favorites';
-    }
-    return 'Moved $assignedCount favorites, failed $failedCount';
-  }
-
-  String _buildUnfavoriteMessage({
-    required int succeededCount,
-    required int failedCount,
-  }) {
-    if (succeededCount == 0 && failedCount == 0) {
-      return 'No valid favorite threads to unfavorite';
-    }
-    if (failedCount == 0) {
-      return 'Unfavorited $succeededCount items';
-    }
-    if (succeededCount == 0) {
-      return 'Failed to unfavorite';
-    }
-    return 'Unfavorited $succeededCount items, failed $failedCount';
   }
 }
 

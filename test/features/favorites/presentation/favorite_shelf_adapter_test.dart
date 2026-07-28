@@ -309,6 +309,8 @@ void main() {
 
     expect(useCase.lastTids, <String>{'100', '101'});
     expect(result.changed, isTrue);
+    expect(result.code, SelectionActionResultCode.success);
+    expect(result.succeededCount, 2);
     expect(result.failedCount, 0);
   });
 
@@ -330,6 +332,8 @@ void main() {
 
     expect(useCase.lastTids, <String>{'100'});
     expect(result.changed, isTrue);
+    expect(result.code, SelectionActionResultCode.partialFailure);
+    expect(result.succeededCount, 1);
     expect(result.failedCount, 1);
   });
 }

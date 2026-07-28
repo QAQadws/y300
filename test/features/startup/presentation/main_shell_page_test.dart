@@ -50,6 +50,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+import 'package:y300/l10n/app_localizations_zh.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -124,6 +125,8 @@ void main() {
 
     await _pumpMainShellReady(tester);
 
+    final l10n = AppLocalizationsZh();
+
     expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
     final initialNavigationBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
@@ -132,12 +135,12 @@ void main() {
         .cast<NavigationDestination>()
         .toList(growable: false);
     expect(destinations.map((destination) => destination.label), <String>[
-      '论坛',
-      '收藏',
-      '漫画',
-      '小说',
-      '记录',
-      '更多',
+      l10n.appNavigationForum,
+      l10n.appNavigationFavorites,
+      l10n.appNavigationComic,
+      l10n.appNavigationNovel,
+      l10n.appNavigationHistory,
+      l10n.appNavigationMore,
     ]);
     expect(_navigationIconData(destinations[1].icon), Icons.explore_outlined);
     expect(_navigationIconData(destinations[1].selectedIcon!), Icons.explore);
@@ -652,7 +655,6 @@ void main() {
           SelectionAction(
             id: SelectionActionIds.download,
             icon: Icons.download_outlined,
-            label: '下载',
           ),
         ],
         delegate: _selectionDelegate(),
@@ -729,7 +731,6 @@ void main() {
         SelectionAction(
           id: SelectionActionIds.download,
           icon: Icons.download_outlined,
-          label: '下载',
         ),
       ],
       delegate: _selectionDelegate(
@@ -780,7 +781,6 @@ void main() {
           SelectionAction(
             id: SelectionActionIds.assignCategory,
             icon: Icons.label_outline,
-            label: '标签',
           ),
         ],
         delegate: ShelfSelectionHostDelegate(
@@ -891,7 +891,6 @@ void main() {
         SelectionAction(
           id: SelectionActionIds.unfavorite,
           icon: Icons.delete_outline,
-          label: '取消收藏',
           destructive: true,
           needsConfirm: true,
         ),

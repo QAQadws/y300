@@ -17,6 +17,7 @@ import 'package:y300/features/library_shared/presentation/selection/selection_ap
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
@@ -483,6 +484,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     if (_selectionEnabled && _selectionController.isSelecting) {
       return SelectionAppBar(
         selectedCount: _selectionController.selectedCount,
+        l10n: AppLocalizations.of(context),
         onClose: () {
           _exitSelection();
         },

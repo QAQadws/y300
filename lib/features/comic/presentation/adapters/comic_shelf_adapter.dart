@@ -107,11 +107,6 @@ class ComicShelfAdapter
   static const String _mergeDuplicatesActionId = 'merge-duplicates';
   static const String _moduleTitle = '\u6f2b\u753b';
   static const String _mergeDuplicatesLabel = '\u5408\u5e76\u91cd\u590d';
-  static const String _assignLabel = '\u8bbe\u7f6e\u5206\u7c7b';
-  static const String _markAllReadLabel = '\u5168\u90e8\u5df2\u8bfb';
-  static const String _markAllUnreadLabel = '\u5168\u90e8\u672a\u8bfb';
-  static const String _downloadLabel = '\u4e0b\u8f7d';
-  static const String _unfavoriteLabel = '\u53d6\u6d88\u6536\u85cf';
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
@@ -150,7 +145,6 @@ class ComicShelfAdapter
         const SelectionAction(
           id: SelectionActionIds.assignCategory,
           icon: Icons.label_outline,
-          label: _assignLabel,
         ),
       );
     }
@@ -159,14 +153,12 @@ class ComicShelfAdapter
         const SelectionAction(
           id: SelectionActionIds.markAllRead,
           icon: Icons.done_all,
-          label: _markAllReadLabel,
         ),
       );
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.markAllUnread,
           icon: Icons.remove_done,
-          label: _markAllUnreadLabel,
         ),
       );
     }
@@ -175,7 +167,6 @@ class ComicShelfAdapter
         const SelectionAction(
           id: SelectionActionIds.download,
           icon: Icons.download,
-          label: _downloadLabel,
         ),
       );
     }
@@ -184,7 +175,6 @@ class ComicShelfAdapter
         const SelectionAction(
           id: SelectionActionIds.unfavorite,
           icon: Icons.star_border,
-          label: _unfavoriteLabel,
           destructive: true,
           needsConfirm: true,
         ),
@@ -392,7 +382,9 @@ class ComicShelfAdapter
       case SelectionActionIds.unfavorite:
         return _runUnfavorite(request);
     }
-    return const SelectionActionResult(message: 'Unsupported comic action');
+    return const SelectionActionResult(
+      code: SelectionActionResultCode.unsupported,
+    );
   }
 
   Future<SelectionActionResult> _runAssignCategory(
@@ -402,24 +394,27 @@ class ComicShelfAdapter
     final targetCategoryId = request.targetCategoryId?.trim();
     if (useCase == null) {
       return const SelectionActionResult(
-        message: 'Comic shelf does not support batch category assignment',
+        code: SelectionActionResultCode.unsupported,
       );
     }
     if (targetCategoryId == null || targetCategoryId.isEmpty) {
-      return const SelectionActionResult(message: 'Missing target category');
+      return const SelectionActionResult(
+        code: SelectionActionResultCode.missingTargetCategory,
+      );
     }
     final result = await useCase.assign(
       workIds: request.workIds,
       sourceCategoryId: request.activeCategoryId,
       targetCategoryId: targetCategoryId,
     );
+    final failedCount = result.failedWorkIds.length;
     return SelectionActionResult(
-      message: _buildAssignMessage(
-        assignedCount: result.assignedWorkIds.length,
-        failedCount: result.failedWorkIds.length,
-      ),
+      code: failedCount > 0
+          ? SelectionActionResultCode.partialFailure
+          : SelectionActionResultCode.success,
       changed: result.assignedWorkIds.isNotEmpty,
-      failedCount: result.failedWorkIds.length,
+      succeededCount: result.assignedWorkIds.length,
+      failedCount: failedCount,
     );
   }
 
@@ -430,24 +425,28 @@ class ComicShelfAdapter
     final writer = _readingStateBatchWriterResolver();
     if (writer == null) {
       return const SelectionActionResult(
-        message: 'Comic shelf does not support batch read-state changes',
+        code: SelectionActionResultCode.unsupported,
       );
     }
     final normalizedWorkIds = _normalizedWorkIds(request.workIds);
     if (normalizedWorkIds.isEmpty) {
-      return const SelectionActionResult(message: 'No valid comics selected');
+      return const SelectionActionResult(
+        code: SelectionActionResultCode.noValidItems,
+      );
     }
     await writer.setWorksRead(
       module: LibraryModuleKey.comic,
       workIds: normalizedWorkIds,
       isRead: isRead,
     );
+    final failedCount = request.workIds.length - normalizedWorkIds.length;
     return SelectionActionResult(
-      message: isRead
-          ? 'Marked selected comics as fully read'
-          : 'Marked selected comics as fully unread',
+      code: failedCount > 0
+          ? SelectionActionResultCode.partialFailure
+          : SelectionActionResultCode.success,
       changed: true,
-      failedCount: request.workIds.length - normalizedWorkIds.length,
+      succeededCount: normalizedWorkIds.length,
+      failedCount: failedCount,
     );
   }
 
@@ -457,21 +456,24 @@ class ComicShelfAdapter
     final useCase = _bulkDownloadUseCaseResolver();
     if (useCase == null) {
       return const SelectionActionResult(
-        message: 'Comic shelf does not support batch download',
+        code: SelectionActionResultCode.unsupported,
       );
     }
     final normalizedWorkIds = _normalizedWorkIds(request.workIds);
     final result = await useCase.downloadComics(normalizedWorkIds);
     final invalidCount = request.workIds.length - normalizedWorkIds.length;
-    final message = result.enqueuedCount > 0
-        ? '已将 ${result.enqueuedCount} 个章节加入下载队列'
-        : result.deduplicatedCount > 0
-        ? '所选章节已在下载队列中'
-        : '没有需要下载的章节';
+    final changed = result.enqueuedCount > 0 || result.deduplicatedCount > 0;
+    final failedCode = invalidCount > 0
+        ? SelectionActionResultCode.partialFailure
+        : changed
+        ? SelectionActionResultCode.success
+        : SelectionActionResultCode.noChange;
     return SelectionActionResult(
-      message: message,
-      changed: result.enqueuedCount > 0 || result.deduplicatedCount > 0,
+      code: failedCode,
+      changed: changed,
       failedCount: invalidCount,
+      enqueuedCount: result.enqueuedCount,
+      deduplicatedCount: result.deduplicatedCount,
     );
   }
 
@@ -481,7 +483,7 @@ class ComicShelfAdapter
     final useCase = _unfavoriteWorkUseCaseResolver();
     if (useCase == null) {
       return const SelectionActionResult(
-        message: 'Comic shelf does not support batch unfavorite',
+        code: SelectionActionResultCode.unsupported,
       );
     }
     final workKinds = <String, ThreadContentKind>{};
@@ -496,18 +498,18 @@ class ComicShelfAdapter
     }
     if (workKinds.isEmpty) {
       return SelectionActionResult(
-        message: 'No valid comics to unfavorite',
+        code: SelectionActionResultCode.noValidItems,
         failedCount: invalidCount,
       );
     }
     final result = await useCase.callMany(workKinds: workKinds);
     final failedCount = result.failedTids.length + invalidCount;
     return SelectionActionResult(
-      message: _buildUnfavoriteMessage(
-        succeededCount: result.succeededTids.length,
-        failedCount: failedCount,
-      ),
+      code: failedCount > 0
+          ? SelectionActionResultCode.partialFailure
+          : SelectionActionResultCode.success,
       changed: result.succeededTids.isNotEmpty,
+      succeededCount: result.succeededTids.length,
       failedCount: failedCount,
     );
   }
@@ -699,38 +701,6 @@ class ComicShelfAdapter
         .map((workId) => workId.trim())
         .where((workId) => workId.isNotEmpty)
         .toSet();
-  }
-
-  String _buildAssignMessage({
-    required int assignedCount,
-    required int failedCount,
-  }) {
-    if (assignedCount == 0 && failedCount == 0) {
-      return 'No comics were moved';
-    }
-    if (failedCount == 0) {
-      return 'Moved $assignedCount comics';
-    }
-    if (assignedCount == 0) {
-      return 'Failed to move comics';
-    }
-    return 'Moved $assignedCount comics, failed $failedCount';
-  }
-
-  String _buildUnfavoriteMessage({
-    required int succeededCount,
-    required int failedCount,
-  }) {
-    if (succeededCount == 0 && failedCount == 0) {
-      return 'No valid comics to unfavorite';
-    }
-    if (failedCount == 0) {
-      return 'Unfavorited $succeededCount items';
-    }
-    if (succeededCount == 0) {
-      return 'Failed to unfavorite';
-    }
-    return 'Unfavorited $succeededCount items, failed $failedCount';
   }
 
   String? _sourceCoverImageUrl({
