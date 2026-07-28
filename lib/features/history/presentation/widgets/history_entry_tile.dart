@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
+import 'package:y300/features/history/presentation/history_text_resolver.dart';
 import 'package:y300/features/history/presentation/widgets/history_thumbnail.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 typedef HistoryThumbnailBuilder =
     Widget Function(BuildContext context, HistoryEntry entry);
@@ -26,13 +29,9 @@ class HistoryEntryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final localTime = entry.lastVisitedAt.toLocal();
-    final timeText =
-        '${_twoDigits(localTime.hour)}:${_twoDigits(localTime.minute)}';
-    final typeLabel = switch (entry.target.type) {
-      HistoryTargetType.thread => '帖子',
-      HistoryTargetType.comic => '漫画',
-      HistoryTargetType.novel => '小说',
-    };
+    final l10n = AppLocalizations.of(context);
+    final timeText = DateFormat.Hm(l10n.localeName).format(localTime);
+    final typeLabel = HistoryTextResolver.typeLabel(l10n, entry.target.type);
     final semanticsLabel =
         '$typeLabel，${entry.title}，${entry.contextLabel}，$timeText';
 
@@ -95,7 +94,7 @@ class HistoryEntryTile extends StatelessWidget {
                     key: ValueKey<String>(
                       'history-entry-delete-${entry.target}',
                     ),
-                    tooltip: '删除记录',
+                    tooltip: l10n.historyDelete,
                     onPressed: onDelete,
                     icon: const Icon(Icons.delete_outline),
                   ),
@@ -107,6 +106,4 @@ class HistoryEntryTile extends StatelessWidget {
       ),
     );
   }
-
-  String _twoDigits(int value) => value.toString().padLeft(2, '0');
 }

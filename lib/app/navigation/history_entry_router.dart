@@ -79,13 +79,11 @@ class HistoryEntryRouter {
         HistoryTargetType.thread => await _buildThreadDestination(entry),
         HistoryTargetType.comic => await _buildWorkDestination(
           entry,
-          label: '漫画',
           exists: _comicWorkExists,
           builder: _comicPageBuilder,
         ),
         HistoryTargetType.novel => await _buildWorkDestination(
           entry,
-          label: '小说',
           exists: _novelWorkExists,
           builder: _novelPageBuilder,
         ),
@@ -94,10 +92,14 @@ class HistoryEntryRouter {
         return page;
       }
       if (page is! Widget) {
-        return const HistoryOpenUnavailable(message: '记录目标无效');
+        return const HistoryOpenUnavailable(
+          code: HistoryOpenUnavailableCode.targetMissing,
+        );
       }
       if (!context.mounted) {
-        return const HistoryOpenUnavailable(message: '当前页面已关闭');
+        return const HistoryOpenUnavailable(
+          code: HistoryOpenUnavailableCode.pageClosed,
+        );
       }
       unawaited(
         Navigator.of(
@@ -113,7 +115,9 @@ class HistoryEntryRouter {
   Future<Object> _buildThreadDestination(HistoryEntry entry) async {
     final tid = _normalizeTid(entry.target.id);
     if (tid == null) {
-      return const HistoryOpenUnavailable(message: '帖子记录已失效');
+      return const HistoryOpenUnavailable(
+        code: HistoryOpenUnavailableCode.threadExpired,
+      );
     }
     final mode = await _loadForumMode();
     if (mode == ForumShellMode.native) {
@@ -128,7 +132,6 @@ class HistoryEntryRouter {
 
   Future<Object> _buildWorkDestination(
     HistoryEntry entry, {
-    required String label,
     required HistoryWorkAvailabilityLoader exists,
     required HistoryWorkPageBuilder builder,
   }) async {
@@ -136,13 +139,15 @@ class HistoryEntryRouter {
     final fallbackTid = _normalizeTid(entry.sourceTid);
     if (workId.isEmpty) {
       return HistoryOpenUnavailable(
-        message: '$label记录已失效',
+        code: HistoryOpenUnavailableCode.targetMissing,
+        targetType: entry.target.type,
         fallbackTid: fallbackTid,
       );
     }
     if (!await exists(workId)) {
       return HistoryOpenUnavailable(
-        message: '$label作品已从本地移除',
+        code: HistoryOpenUnavailableCode.localWorkRemoved,
+        targetType: entry.target.type,
         fallbackTid: fallbackTid,
       );
     }

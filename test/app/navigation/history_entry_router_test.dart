@@ -162,6 +162,78 @@ void main() {
     expect(destinations, <String>['native:527325', 'webview:527325']);
   });
 
+  testWidgets('returns stable unavailable codes for invalid history targets', (
+    tester,
+  ) async {
+    final router = HistoryEntryRouter(
+      loadForumMode: () async => ForumShellMode.native,
+      comicWorkExists: _workExists,
+      novelWorkExists: _workExists,
+    );
+    late BuildContext context;
+    await tester.pumpWidget(
+      _routerHarness(onContext: (value) => context = value),
+    );
+
+    final missingWork = await router.open(
+      context,
+      _entry(type: HistoryTargetType.comic, id: ' ', title: '漫画'),
+    );
+    final expiredThread = await router.open(
+      context,
+      _entry(type: HistoryTargetType.thread, id: 'not-a-tid', title: '帖子'),
+    );
+
+    expect(
+      missingWork,
+      isA<HistoryOpenUnavailable>().having(
+        (result) => result.code,
+        'code',
+        HistoryOpenUnavailableCode.targetMissing,
+      ),
+    );
+    expect(
+      expiredThread,
+      isA<HistoryOpenUnavailable>().having(
+        (result) => result.code,
+        'code',
+        HistoryOpenUnavailableCode.threadExpired,
+      ),
+    );
+  });
+
+  testWidgets('returns page-closed code when the source context is gone', (
+    tester,
+  ) async {
+    final router = HistoryEntryRouter(
+      loadForumMode: () async => ForumShellMode.native,
+      comicWorkExists: _workExists,
+      novelWorkExists: _workExists,
+      nativeThreadPageBuilder: (tid, subject, page) {
+        return const _DestinationPage(label: 'native-thread');
+      },
+    );
+    late BuildContext context;
+    await tester.pumpWidget(
+      _routerHarness(onContext: (value) => context = value),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    final result = await router.open(
+      context,
+      _entry(type: HistoryTargetType.thread, id: '100', title: '帖子'),
+    );
+
+    expect(
+      result,
+      isA<HistoryOpenUnavailable>().having(
+        (value) => value.code,
+        'code',
+        HistoryOpenUnavailableCode.pageClosed,
+      ),
+    );
+  });
+
   testWidgets('returns source fallback when a local work was removed', (
     tester,
   ) async {
@@ -206,13 +278,31 @@ void main() {
     expect(
       comicResult,
       isA<HistoryOpenUnavailable>()
-          .having((result) => result.message, 'message', '漫画作品已从本地移除')
+          .having(
+            (result) => result.code,
+            'code',
+            HistoryOpenUnavailableCode.localWorkRemoved,
+          )
+          .having(
+            (result) => result.targetType,
+            'targetType',
+            HistoryTargetType.comic,
+          )
           .having((result) => result.fallbackTid, 'fallbackTid', '527325'),
     );
     expect(
       novelResult,
       isA<HistoryOpenUnavailable>()
-          .having((result) => result.message, 'message', '小说作品已从本地移除')
+          .having(
+            (result) => result.code,
+            'code',
+            HistoryOpenUnavailableCode.localWorkRemoved,
+          )
+          .having(
+            (result) => result.targetType,
+            'targetType',
+            HistoryTargetType.novel,
+          )
           .having((result) => result.fallbackTid, 'fallbackTid', isNull),
     );
     expect(builtWorks, isEmpty);

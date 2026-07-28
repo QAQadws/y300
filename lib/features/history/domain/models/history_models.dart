@@ -217,11 +217,32 @@ final class HistoryOpenSuccess extends HistoryOpenResult {
   const HistoryOpenSuccess();
 }
 
-final class HistoryOpenUnavailable extends HistoryOpenResult {
-  const HistoryOpenUnavailable({required this.message, this.fallbackTid});
+enum HistoryOpenUnavailableCode {
+  legacyMessage,
+  targetMissing,
+  pageClosed,
+  threadExpired,
+  localWorkRemoved,
+  nativeUnavailable,
+  loginRequired,
+}
 
-  final String message;
+final class HistoryOpenUnavailable extends HistoryOpenResult {
+  const HistoryOpenUnavailable({
+    this.code = HistoryOpenUnavailableCode.legacyMessage,
+    this.targetType,
+    this.fallbackTid,
+    this.detail,
+    @Deprecated('Use code and detail for presentation.') this.message,
+  });
+
+  final HistoryOpenUnavailableCode code;
+  final HistoryTargetType? targetType;
   final String? fallbackTid;
+  final String? detail;
+
+  @Deprecated('Use code and detail for presentation.')
+  final String? message;
 }
 
 final class HistoryOpenFailure extends HistoryOpenResult {

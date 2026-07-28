@@ -145,6 +145,12 @@ abstract class AppLocalizations {
   /// **'关闭'**
   String get commonClose;
 
+  /// No description provided for @commonClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空'**
+  String get commonClear;
+
   /// No description provided for @commonRetry.
   ///
   /// In zh, this message translates to:
@@ -156,6 +162,186 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'未知错误'**
   String get commonUnknownError;
+
+  /// No description provided for @historyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录'**
+  String get historyTitle;
+
+  /// No description provided for @historySearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索记录'**
+  String get historySearchHint;
+
+  /// No description provided for @historySearchOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索记录'**
+  String get historySearchOpen;
+
+  /// No description provided for @historySearchClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出搜索'**
+  String get historySearchClose;
+
+  /// No description provided for @historySearchClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除搜索'**
+  String get historySearchClear;
+
+  /// No description provided for @historyClearAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空记录'**
+  String get historyClearAll;
+
+  /// No description provided for @historyDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除记录'**
+  String get historyDelete;
+
+  /// No description provided for @historyOpenSourceThread.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开原帖'**
+  String get historyOpenSourceThread;
+
+  /// No description provided for @historyOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开失败，请稍后重试'**
+  String get historyOpenFailed;
+
+  /// 打开历史目标失败的安全摘要；error 已由 presentation 层清理
+  ///
+  /// In zh, this message translates to:
+  /// **'打开失败：{error}'**
+  String historyOpenFailedDetail(String error);
+
+  /// No description provided for @historyDeleteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除记录失败'**
+  String get historyDeleteFailed;
+
+  /// No description provided for @historyClearAllFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空记录失败'**
+  String get historyClearAllFailed;
+
+  /// No description provided for @historyClearAllTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空全部记录'**
+  String get historyClearAllTitle;
+
+  /// No description provided for @historyClearAllBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览记录将被清空，但不会删除收藏、书架作品或下载内容。'**
+  String get historyClearAllBody;
+
+  /// No description provided for @historyNoResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有搜索结果'**
+  String get historyNoResults;
+
+  /// No description provided for @historyEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有浏览记录'**
+  String get historyEmpty;
+
+  /// No description provided for @historyLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录加载失败'**
+  String get historyLoadFailed;
+
+  /// No description provided for @historyLoadMoreFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载失败，点击重试'**
+  String get historyLoadMoreFailed;
+
+  /// No description provided for @historyTypeThread.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子'**
+  String get historyTypeThread;
+
+  /// No description provided for @historyTypeComic.
+  ///
+  /// In zh, this message translates to:
+  /// **'漫画'**
+  String get historyTypeComic;
+
+  /// No description provided for @historyTypeNovel.
+  ///
+  /// In zh, this message translates to:
+  /// **'小说'**
+  String get historyTypeNovel;
+
+  /// No description provided for @historySourceThread.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源原帖'**
+  String get historySourceThread;
+
+  /// No description provided for @historyToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今天'**
+  String get historyToday;
+
+  /// 历史日期分组相对今天的天数
+  ///
+  /// In zh, this message translates to:
+  /// **'{days, plural, =1 {1 天前} other {{days} 天前}}'**
+  String historyDaysAgo(int days);
+
+  /// No description provided for @historyTargetInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录目标无效'**
+  String get historyTargetInvalid;
+
+  /// No description provided for @historyPageClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前页面已关闭'**
+  String get historyPageClosed;
+
+  /// No description provided for @historyThreadExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子记录已失效'**
+  String get historyThreadExpired;
+
+  /// 历史中的漫画或小说作品不再存在时显示；type 是本地化类型名称
+  ///
+  /// In zh, this message translates to:
+  /// **'该{type}作品已从本地移除'**
+  String historyWorkUnavailable(String type);
+
+  /// No description provided for @historyNativeUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前无法打开原生页面'**
+  String get historyNativeUnavailable;
+
+  /// No description provided for @historyLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先登录后再打开此记录'**
+  String get historyLoginRequired;
 
   /// No description provided for @appNavigationForum.
   ///

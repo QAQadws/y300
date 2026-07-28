@@ -8,9 +8,11 @@ import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_clock.dart';
 import 'package:y300/features/history/domain/services/history_date_grouping_policy.dart';
 import 'package:y300/features/history/presentation/controllers/history_controller.dart';
+import 'package:y300/features/history/presentation/history_text_resolver.dart';
 import 'package:y300/features/history/presentation/models/history_view_state.dart';
 import 'package:y300/features/history/presentation/widgets/history_day_section.dart';
 import 'package:y300/features/history/presentation/widgets/history_entry_tile.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 typedef HistoryEntryOpenCallback =
     Future<HistoryOpenResult> Function(
@@ -126,11 +128,12 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   }
 
   PreferredSizeWidget _buildAppBar(HistoryViewState state) {
+    final l10n = AppLocalizations.of(context);
     if (_searchActive) {
       return AppBar(
         leading: IconButton(
           key: const Key('history-search-close'),
-          tooltip: '退出搜索',
+          tooltip: l10n.historySearchClose,
           onPressed: _closeSearch,
           icon: const Icon(Icons.arrow_back),
         ),
@@ -140,13 +143,13 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           focusNode: _searchFocusNode,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
-            hintText: '搜索记录',
+            hintText: l10n.historySearchHint,
             border: InputBorder.none,
             suffixIcon: _searchController.text.isEmpty
                 ? null
                 : IconButton(
                     key: const Key('history-search-clear'),
-                    tooltip: '清除搜索',
+                    tooltip: l10n.historySearchClear,
                     onPressed: () {
                       _searchController.clear();
                       _controller.updateSearchText('');
@@ -163,18 +166,18 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       );
     }
     return AppBar(
-      title: const Text('记录'),
+      title: Text(l10n.historyTitle),
       actions: [
         IconButton(
           key: const Key('history-search-button'),
-          tooltip: '搜索记录',
+          tooltip: l10n.historySearchOpen,
           onPressed: _openSearch,
           icon: const Icon(Icons.search),
         ),
         if (state.items.isNotEmpty)
           IconButton(
             key: const Key('history-clear-all-button'),
-            tooltip: '清空记录',
+            tooltip: l10n.historyClearAll,
             onPressed: _confirmClearAll,
             icon: const Icon(Icons.delete_sweep_outlined),
           ),
@@ -206,7 +209,13 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       slivers: [
         for (final group in groups) ...[
           SliverToBoxAdapter(
-            child: HistoryDaySectionHeader(label: group.label),
+            child: HistoryDaySectionHeader(
+              dateKey: _dateKey(group.localDate),
+              label: HistoryTextResolver.dateGroupLabel(
+                AppLocalizations.of(context),
+                group,
+              ),
+            ),
           ),
           SliverList.builder(
             itemCount: group.entries.length,
@@ -243,7 +252,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                 key: const Key('history-load-more-retry'),
                 onPressed: _controller.loadMore,
                 icon: const Icon(Icons.refresh),
-                label: const Text('加载失败，点击重试'),
+                label: Text(AppLocalizations.of(context).historyLoadMoreFailed),
               ),
             ),
           )
@@ -294,13 +303,19 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   }
 
   void _handleOpenResult(HistoryEntry entry, HistoryOpenResult result) {
+    final l10n = AppLocalizations.of(context);
     switch (result) {
       case HistoryOpenSuccess():
         return;
       case final HistoryOpenUnavailable unavailable:
         _showUnavailable(entry, unavailable);
-      case HistoryOpenFailure():
-        _showMessage('打开失败，请稍后重试');
+      case final HistoryOpenFailure failure:
+        final detail = HistoryTextResolver.safeErrorSummary(failure.error);
+        _showMessage(
+          detail == null
+              ? l10n.historyOpenFailed
+              : l10n.historyOpenFailedDetail(detail),
+        );
     }
   }
 
@@ -309,21 +324,32 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     HistoryOpenUnavailable unavailable,
   ) {
     final fallbackTid = _normalizeTid(unavailable.fallbackTid);
+    final l10n = AppLocalizations.of(context);
+    final detail = unavailable.code == HistoryOpenUnavailableCode.legacyMessage
+        ? null
+        : HistoryTextResolver.safeErrorSummary(unavailable.detail);
+    final message = HistoryTextResolver.unavailableMessage(l10n, unavailable);
     final messenger = ScaffoldMessenger.of(context);
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(unavailable.message),
+          content: detail == null
+              ? Text(message)
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [Text(message), Text(detail)],
+                ),
           action: fallbackTid != null
               ? SnackBarAction(
-                  label: '打开原帖',
+                  label: l10n.historyOpenSourceThread,
                   onPressed: () {
                     unawaited(_openSourceThread(entry, fallbackTid));
                   },
                 )
               : SnackBarAction(
-                  label: '删除记录',
+                  label: l10n.historyDelete,
                   onPressed: () {
                     unawaited(_deleteEntry(entry));
                   },
@@ -339,7 +365,8 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     final fallback = HistoryEntry(
       target: HistoryTargetKey(type: HistoryTargetType.thread, id: tid),
       title: source.title,
-      contextLabel: source.forumName ?? '来源原帖',
+      contextLabel:
+          source.forumName ?? AppLocalizations.of(context).historySourceThread,
       forumName: source.forumName,
       lastSurface: HistoryVisitSurface.threadNative,
       firstVisitedAt: source.firstVisitedAt,
@@ -366,7 +393,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       await _controller.deleteEntry(entry);
     } catch (_) {
       if (mounted) {
-        _showMessage('删除记录失败');
+        _showMessage(AppLocalizations.of(context).historyDeleteFailed);
       }
       return;
     }
@@ -377,16 +404,16 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('清空全部记录'),
-          content: const Text('浏览记录将被清空，但不会删除收藏、书架作品或下载内容。'),
+          title: Text(AppLocalizations.of(context).historyClearAllTitle),
+          content: Text(AppLocalizations.of(context).historyClearAllBody),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(context).commonCancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('清空'),
+              child: Text(AppLocalizations.of(context).commonClear),
             ),
           ],
         );
@@ -399,7 +426,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       await _controller.clearAll();
     } catch (_) {
       if (mounted) {
-        _showMessage('清空记录失败');
+        _showMessage(AppLocalizations.of(context).historyClearAllFailed);
       }
     }
   }
@@ -408,6 +435,13 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _dateKey(DateTime value) {
+    final year = value.year.toString().padLeft(4, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
   }
 }
 
@@ -418,9 +452,10 @@ class _HistoryEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Center(
       key: Key(searching ? 'history-search-empty' : 'history-empty'),
-      child: Text(searching ? '没有搜索结果' : '还没有浏览记录'),
+      child: Text(searching ? l10n.historyNoResults : l10n.historyEmpty),
     );
   }
 }
@@ -433,6 +468,7 @@ class _HistoryErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Center(
       key: const Key('history-error'),
       child: Padding(
@@ -440,7 +476,10 @@ class _HistoryErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('记录加载失败', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              l10n.historyLoadFailed,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               message,
@@ -453,7 +492,7 @@ class _HistoryErrorState extends StatelessWidget {
               key: const Key('history-retry'),
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(l10n.commonRetry),
             ),
           ],
         ),

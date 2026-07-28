@@ -6,6 +6,7 @@ import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/repositories/history_repository.dart';
 import 'package:y300/features/history/domain/services/history_use_cases.dart';
+import 'package:y300/features/history/presentation/history_text_resolver.dart';
 import 'package:y300/features/history/presentation/models/history_view_state.dart';
 
 final historyControllerProvider = Provider<HistoryController>((ref) {
@@ -105,7 +106,7 @@ class HistoryController extends ChangeNotifier {
       }
       _state = _state.copyWith(
         isInitialLoading: false,
-        errorMessage: error.toString(),
+        errorMessage: _safeErrorDetail(error),
         isLoadingMore: false,
       );
       _notify();
@@ -181,7 +182,7 @@ class HistoryController extends ChangeNotifier {
       }
       _state = _state.copyWith(
         isLoadingMore: false,
-        loadMoreError: error.toString(),
+        loadMoreError: _safeErrorDetail(error),
       );
       _notify();
     }
@@ -264,6 +265,11 @@ class HistoryController extends ChangeNotifier {
 
   bool _isCurrent(int generation) {
     return !_disposed && generation == _queryGeneration;
+  }
+
+  String _safeErrorDetail(Object error) {
+    return HistoryTextResolver.safeErrorSummary(error) ??
+        error.runtimeType.toString();
   }
 
   void _notify() {

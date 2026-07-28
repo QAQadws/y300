@@ -5,12 +5,12 @@ typedef HistoryLocalTimeConverter = DateTime Function(DateTime value);
 class HistoryDateGroup {
   const HistoryDateGroup({
     required this.localDate,
-    required this.label,
+    required this.daysAgo,
     required this.entries,
   });
 
   final DateTime localDate;
-  final String label;
+  final int daysAgo;
   final List<HistoryEntry> entries;
 }
 
@@ -50,21 +50,11 @@ class HistoryDateGroupingPolicy {
         final daysAgo = todayOrdinal - _calendarOrdinal(day);
         return HistoryDateGroup(
           localDate: day,
-          label: _labelFor(day, daysAgo),
+          daysAgo: daysAgo,
           entries: List<HistoryEntry>.unmodifiable(dayEntries),
         );
       }),
     );
-  }
-
-  String _labelFor(DateTime day, int daysAgo) {
-    if (daysAgo == 0) {
-      return '今天';
-    }
-    if (daysAgo >= 1 && daysAgo <= 6) {
-      return '$daysAgo 天前';
-    }
-    return '${day.year}/${day.month}/${day.day}';
   }
 
   int _calendarOrdinal(DateTime value) {

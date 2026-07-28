@@ -35,10 +35,115 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonClose => '关闭';
 
   @override
+  String get commonClear => '清空';
+
+  @override
   String get commonRetry => '重试';
 
   @override
   String get commonUnknownError => '未知错误';
+
+  @override
+  String get historyTitle => '记录';
+
+  @override
+  String get historySearchHint => '搜索记录';
+
+  @override
+  String get historySearchOpen => '搜索记录';
+
+  @override
+  String get historySearchClose => '退出搜索';
+
+  @override
+  String get historySearchClear => '清除搜索';
+
+  @override
+  String get historyClearAll => '清空记录';
+
+  @override
+  String get historyDelete => '删除记录';
+
+  @override
+  String get historyOpenSourceThread => '打开原帖';
+
+  @override
+  String get historyOpenFailed => '打开失败，请稍后重试';
+
+  @override
+  String historyOpenFailedDetail(String error) {
+    return '打开失败：$error';
+  }
+
+  @override
+  String get historyDeleteFailed => '删除记录失败';
+
+  @override
+  String get historyClearAllFailed => '清空记录失败';
+
+  @override
+  String get historyClearAllTitle => '清空全部记录';
+
+  @override
+  String get historyClearAllBody => '浏览记录将被清空，但不会删除收藏、书架作品或下载内容。';
+
+  @override
+  String get historyNoResults => '没有搜索结果';
+
+  @override
+  String get historyEmpty => '还没有浏览记录';
+
+  @override
+  String get historyLoadFailed => '记录加载失败';
+
+  @override
+  String get historyLoadMoreFailed => '加载失败，点击重试';
+
+  @override
+  String get historyTypeThread => '帖子';
+
+  @override
+  String get historyTypeComic => '漫画';
+
+  @override
+  String get historyTypeNovel => '小说';
+
+  @override
+  String get historySourceThread => '来源原帖';
+
+  @override
+  String get historyToday => '今天';
+
+  @override
+  String historyDaysAgo(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days 天前',
+      one: '1 天前',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get historyTargetInvalid => '记录目标无效';
+
+  @override
+  String get historyPageClosed => '当前页面已关闭';
+
+  @override
+  String get historyThreadExpired => '帖子记录已失效';
+
+  @override
+  String historyWorkUnavailable(String type) {
+    return '该$type作品已从本地移除';
+  }
+
+  @override
+  String get historyNativeUnavailable => '当前无法打开原生页面';
+
+  @override
+  String get historyLoginRequired => '请先登录后再打开此记录';
 
   @override
   String get appNavigationForum => '论坛';
@@ -801,10 +906,115 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get commonClose => '關閉';
 
   @override
+  String get commonClear => '清空';
+
+  @override
   String get commonRetry => '重試';
 
   @override
   String get commonUnknownError => '未知錯誤';
+
+  @override
+  String get historyTitle => '記錄';
+
+  @override
+  String get historySearchHint => '搜尋記錄';
+
+  @override
+  String get historySearchOpen => '搜尋記錄';
+
+  @override
+  String get historySearchClose => '退出搜尋';
+
+  @override
+  String get historySearchClear => '清除搜尋';
+
+  @override
+  String get historyClearAll => '清空記錄';
+
+  @override
+  String get historyDelete => '刪除記錄';
+
+  @override
+  String get historyOpenSourceThread => '開啟原帖';
+
+  @override
+  String get historyOpenFailed => '開啟失敗，請稍後重試';
+
+  @override
+  String historyOpenFailedDetail(String error) {
+    return '開啟失敗：$error';
+  }
+
+  @override
+  String get historyDeleteFailed => '刪除記錄失敗';
+
+  @override
+  String get historyClearAllFailed => '清空記錄失敗';
+
+  @override
+  String get historyClearAllTitle => '清空全部記錄';
+
+  @override
+  String get historyClearAllBody => '瀏覽記錄將被清空，但不會刪除收藏、書架作品或下載內容。';
+
+  @override
+  String get historyNoResults => '沒有搜尋結果';
+
+  @override
+  String get historyEmpty => '還沒有瀏覽記錄';
+
+  @override
+  String get historyLoadFailed => '記錄載入失敗';
+
+  @override
+  String get historyLoadMoreFailed => '載入失敗，點擊重試';
+
+  @override
+  String get historyTypeThread => '帖子';
+
+  @override
+  String get historyTypeComic => '漫畫';
+
+  @override
+  String get historyTypeNovel => '小說';
+
+  @override
+  String get historySourceThread => '來源原帖';
+
+  @override
+  String get historyToday => '今天';
+
+  @override
+  String historyDaysAgo(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days 天前',
+      one: '1 天前',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get historyTargetInvalid => '記錄目標無效';
+
+  @override
+  String get historyPageClosed => '目前頁面已關閉';
+
+  @override
+  String get historyThreadExpired => '帖子記錄已失效';
+
+  @override
+  String historyWorkUnavailable(String type) {
+    return '該$type作品已從本機移除';
+  }
+
+  @override
+  String get historyNativeUnavailable => '目前無法開啟原生頁面';
+
+  @override
+  String get historyLoginRequired => '請先登入後再開啟此記錄';
 
   @override
   String get appNavigationForum => '論壇';

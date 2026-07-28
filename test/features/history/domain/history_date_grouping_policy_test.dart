@@ -43,12 +43,8 @@ void main() {
       toLocal: toShanghai,
     );
 
-    expect(groups.map((group) => group.label), <String>[
-      '今天',
-      '1 天前',
-      '6 天前',
-      '2026/7/8',
-    ]);
+    expect(groups.map((group) => group.daysAgo), <int>[0, 1, 6, 9]);
+    expect(groups.last.localDate, DateTime(2026, 7, 8));
     expect(groups.first.entries.single.target.id, 'today');
   });
 
@@ -84,5 +80,29 @@ void main() {
       'thread:1',
       'thread:2',
     ]);
+  });
+
+  test('keeps seven-day and cross-year groups as calendar dates', () {
+    final groups = policy.group(
+      <HistoryEntry>[
+        historyEntry(
+          type: HistoryTargetType.thread,
+          id: 'year-end',
+          title: 'year-end',
+          visitedAt: DateTime.utc(2026, 1, 1, 1),
+        ),
+        historyEntry(
+          type: HistoryTargetType.comic,
+          id: 'seven-days',
+          title: 'seven-days',
+          visitedAt: DateTime.utc(2025, 12, 25, 1),
+        ),
+      ],
+      now: DateTime.utc(2026, 1, 1, 12),
+      toLocal: (value) => value.toUtc(),
+    );
+
+    expect(groups.map((group) => group.daysAgo), <int>[0, 7]);
+    expect(groups.last.localDate, DateTime(2025, 12, 25));
   });
 }
