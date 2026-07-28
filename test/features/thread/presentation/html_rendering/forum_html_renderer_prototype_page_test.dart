@@ -171,6 +171,35 @@ void main() {
     expect(find.textContaining('适配前景：1/1'), findsOneWidget);
   });
 
+  testWidgets('localizes Traditional Chinese prototype chrome', (tester) async {
+    await tester.pumpWidget(
+      _wrapWithProviders(
+        ForumHtmlRendererPrototypePage(
+          samples: samples,
+          assetBundle: _FakeAssetBundle(
+            assets: const <String, String>{
+              'assets/prototypes/forum_html/one.html':
+                  '<html><body><div class="message">第一个样例</div></body></html>',
+              'assets/prototypes/forum_html/two.html':
+                  '<html><body><div class="message">第二个样例</div></body></html>',
+            },
+          ),
+        ),
+        locale: const Locale('zh', 'TW'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final settingsButton = tester.widget<IconButton>(
+      find.byKey(const Key('forum-html-prototype-reader-settings-button')),
+    );
+    expect(settingsButton.tooltip, '閱讀設定');
+    expect(find.text('淺色'), findsOneWidget);
+    expect(find.textContaining('範例：样例一'), findsOneWidget);
+    expect(find.textContaining('原始 HTML：'), findsOneWidget);
+    expect(find.textContaining('轉換文字節點：0 個'), findsOneWidget);
+  });
+
   testWidgets('switches selected sample and reloads asset', (tester) async {
     await tester.pumpWidget(
       _wrapWithProviders(
@@ -374,7 +403,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('第一个樣例', findRichText: true), findsOneWidget);
-    expect(find.textContaining('转换模式：转繁'), findsOneWidget);
+    expect(find.textContaining('转换模式：繁体'), findsOneWidget);
     expect(find.textContaining('转换器：fake:toTraditional'), findsOneWidget);
     expect(find.textContaining('转换文本节点：1 个'), findsOneWidget);
 
@@ -382,7 +411,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('第二个樣例', findRichText: true), findsOneWidget);
-    expect(find.textContaining('转换模式：转繁'), findsOneWidget);
+    expect(find.textContaining('转换模式：繁体'), findsOneWidget);
   });
 
   testWidgets('reader settings sheet updates preview summary', (tester) async {
@@ -516,6 +545,7 @@ const _mobileThreadHtml = '''
 Widget _wrapWithProviders(
   Widget child, {
   ForumHtmlReaderPreferences? initialPreferences,
+  Locale? locale,
 }) {
   final preferencesRepository = _FakeForumHtmlReaderPreferencesRepository(
     initialPreferences ?? ForumHtmlReaderPreferences.defaults(),
@@ -533,7 +563,7 @@ Widget _wrapWithProviders(
         },
       ),
     ],
-    child: LocalizedTestApp(home: child),
+    child: LocalizedTestApp(locale: locale, home: child),
   );
 }
 

@@ -43,6 +43,58 @@ void main() {
     expect(find.text('嗨！28君好'), findsOneWidget);
     expect(find.text('好的，我QQ就是2834758851'), findsOneWidget);
   });
+
+  testWidgets('localizes Traditional Chinese chrome and preserves messages', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          myMessageRepositoryProvider.overrideWithValue(
+            const _FakeMyMessageRepository(),
+          ),
+          imageRequestHeaderBuilderProvider.overrideWithValue(
+            const _StaticImageHeaderBuilder(),
+          ),
+        ],
+        child: const LocalizedTestApp(
+          locale: Locale('zh', 'TW'),
+          home: MyMessageCenterPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('訊息提醒'), findsOneWidget);
+    expect(find.text('提醒 1'), findsOneWidget);
+    expect(find.text('筱林透'), findsOneWidget);
+  });
+
+  testWidgets('localizes Traditional Chinese chrome and preserves messages', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          myMessageRepositoryProvider.overrideWithValue(
+            const _FakeMyMessageRepository(),
+          ),
+          imageRequestHeaderBuilderProvider.overrideWithValue(
+            const _StaticImageHeaderBuilder(),
+          ),
+        ],
+        child: const LocalizedTestApp(
+          locale: Locale('zh', 'TW'),
+          home: MyMessageCenterPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('訊息提醒'), findsOneWidget);
+    expect(find.text('提醒 1'), findsOneWidget);
+    expect(find.text('筱林透'), findsOneWidget);
+  });
 }
 
 class _FakeMyMessageRepository implements MyMessageRepository {

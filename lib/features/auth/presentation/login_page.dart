@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/presentation/auth_text_resolver.dart';
 import 'package:y300/features/auth/presentation/login_controller.dart';
 import 'package:y300/features/auth/presentation/login_state.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class LoginPage extends ConsumerWidget {
   const LoginPage({super.key});
@@ -12,27 +14,28 @@ class LoginPage extends ConsumerWidget {
     final asyncState = ref.watch(loginControllerProvider);
     final controller = ref.read(loginControllerProvider.notifier);
     final state = asyncState.value ?? LoginPageState.initial();
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('登录')),
+      appBar: AppBar(title: Text(l10n.authLoginTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           TextField(
             key: const Key('login-username-field'),
-            decoration: const InputDecoration(
-              labelText: '用户名',
-              hintText: '请输入论坛账号',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: l10n.authUsername,
+              hintText: l10n.authUsernameHint,
+              border: const OutlineInputBorder(),
             ),
             onChanged: controller.updateUsername,
           ),
           const SizedBox(height: 12),
           TextField(
             key: const Key('login-password-field'),
-            decoration: const InputDecoration(
-              labelText: '密码',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: l10n.authPassword,
+              border: const OutlineInputBorder(),
             ),
             obscureText: true,
             onChanged: controller.updatePassword,
@@ -48,9 +51,9 @@ class LoginPage extends ConsumerWidget {
                       ref
                           .read(authSessionControllerProvider.notifier)
                           .acceptSession(session);
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(const SnackBar(content: Text('登录成功')));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(l10n.authLoginSuccess)),
+                      );
                       Navigator.of(context).pop(true);
                     }
                   },
@@ -60,22 +63,14 @@ class LoginPage extends ConsumerWidget {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('登录'),
+                : Text(l10n.authLoginTitle),
           ),
-          if (state.errorMessage != null) ...[
+          if (state.failure != null) ...[
             const SizedBox(height: 12),
             Text(
-              state.errorMessage!,
+              AuthTextResolver.loginFailure(l10n, state.failure!),
               key: const Key('login-error-text'),
               style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ],
-          if (state.successMessage != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              state.successMessage!,
-              key: const Key('login-success-text'),
-              style: TextStyle(color: Theme.of(context).colorScheme.primary),
             ),
           ],
         ],

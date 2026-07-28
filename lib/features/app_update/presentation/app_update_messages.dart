@@ -1,4 +1,5 @@
 import 'package:upgrader/upgrader.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// Y300's update dialog copy.
 ///
@@ -6,28 +7,36 @@ import 'package:upgrader/upgrader.dart';
 /// product vocabulary, so this keeps the update dialog concise and stable
 /// regardless of the device locale.
 final class Y300UpgraderMessages extends UpgraderMessages {
-  Y300UpgraderMessages() : super(code: 'zh');
+  Y300UpgraderMessages(this._l10n) : super(code: _l10n.localeName);
+
+  AppLocalizations _l10n;
+
+  void updateLocalization(AppLocalizations l10n) {
+    _l10n = l10n;
+  }
 
   @override
-  String get title => '发现新版本';
+  String get title => _l10n.appUpdateDialogTitle;
 
   @override
-  String get body =>
-      '{{appName}} v{{currentAppStoreVersion}} 已发布，当前版本为 '
-      'v{{currentInstalledVersion}}';
+  String get body => _l10n.appUpdateDialogBody(
+    '{{appName}}',
+    '{{currentAppStoreVersion}}',
+    '{{currentInstalledVersion}}',
+  );
 
   @override
-  String get prompt => '是否立即更新？';
+  String get prompt => _l10n.appUpdateDialogPrompt;
 
   @override
-  String get releaseNotes => '更新说明';
+  String get releaseNotes => _l10n.appUpdateDialogReleaseNotes;
 
   @override
-  String get buttonTitleIgnore => '忽略';
+  String get buttonTitleIgnore => _l10n.appUpdateDialogIgnore;
 
   @override
-  String get buttonTitleLater => '关闭';
+  String get buttonTitleLater => _l10n.appUpdateDialogLater;
 
   @override
-  String get buttonTitleUpdate => '更新';
+  String get buttonTitleUpdate => _l10n.appUpdateDialogUpdate;
 }

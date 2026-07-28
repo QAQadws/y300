@@ -62,4 +62,16 @@ void main() {
       contains('用户组:百合幼苗'),
     );
   });
+
+  test('keeps a missing server title empty for presentation fallback', () {
+    const parser = UserProfileHtmlParser();
+
+    final profile = parser.parse(
+      '<div class="userinfo"><h2 class="name">alice</h2></div>',
+      fallbackUid: '509957',
+    );
+
+    expect(profile.username, 'alice');
+    expect(profile.title, isEmpty);
+  });
 }

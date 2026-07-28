@@ -14,6 +14,8 @@ import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 
 final userProfileProvider = FutureProvider.autoDispose
@@ -63,7 +65,7 @@ Future<String> _resolveCurrentUid(Ref ref) async {
       data.uid.trim(),
     ApiSuccess() => throw const ApiError(
       type: ApiErrorType.business,
-      message: '当前用户 UID 缺失，请先登录',
+      message: 'auth.current_user_uid_missing',
     ),
     ApiFailure(:final error) => throw error,
   };
@@ -79,14 +81,15 @@ class UserProfilePage extends ConsumerWidget {
     final asyncProfile = ref.watch(userProfileProvider(uid));
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
     final palette = _UserProfilePalette.resolve(Theme.of(context));
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
-        title: Text(asyncProfile.value?.title ?? '个人资料'),
+        title: Text(_profilePageTitle(l10n, asyncProfile.value)),
         actions: [
           IconButton(
-            tooltip: '首页',
+            tooltip: AppLocalizations.of(context).profileHome,
             onPressed: () =>
                 Navigator.of(context).popUntil((route) => route.isFirst),
             icon: const Icon(Icons.home_outlined),
@@ -119,14 +122,17 @@ class MyProfilePage extends ConsumerWidget {
     final asyncProfile = ref.watch(myUserProfileProvider);
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
     final palette = _UserProfilePalette.resolve(Theme.of(context));
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
-        title: Text(asyncProfile.value?.title ?? '我的资料'),
+        title: Text(
+          _profilePageTitle(l10n, asyncProfile.value, isMyProfile: true),
+        ),
         actions: [
           IconButton(
-            tooltip: '首页',
+            tooltip: AppLocalizations.of(context).profileHome,
             onPressed: () =>
                 Navigator.of(context).popUntil((route) => route.isFirst),
             icon: const Icon(Icons.home_outlined),
@@ -368,7 +374,7 @@ class _ActionGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actions = _buildActions();
+    final actions = _buildActions(context);
     return Container(
       key: const Key('user-profile-actions'),
       padding: const EdgeInsets.all(18),
@@ -391,65 +397,79 @@ class _ActionGrid extends StatelessWidget {
     );
   }
 
-  List<_ProfileAction> _buildActions() {
+  List<_ProfileAction> _buildActions(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     if (profile.actions.isNotEmpty) {
-      return [
-        for (final action in profile.actions)
-          _ProfileAction(
-            action.label,
-            _iconForActionLabel(action.label),
-            action.url,
-            onTap: isMyProfile && action.label.contains('消息')
-                ? onOpenMessages
-                : isMyProfile && action.label.contains('日志')
-                ? onOpenBlogs
-                : null,
-          ),
-      ];
+      return [for (final action in profile.actions) _fromServerAction(action)];
     }
     if (isMyProfile) {
       return <_ProfileAction>[
-        _ProfileAction('我的主题', Icons.chat_bubble, profile.threadUrl),
-        _ProfileAction('我的日志', Icons.sms, profile.blogUrl, onTap: onOpenBlogs),
-        _ProfileAction('我的收藏', Icons.star, profile.favoriteUrl),
         _ProfileAction(
-          '消息提醒',
+          l10n.profileMyThreads,
+          Icons.chat_bubble,
+          profile.threadUrl,
+        ),
+        _ProfileAction(
+          l10n.profileMyBlogs,
+          Icons.sms,
+          profile.blogUrl,
+          onTap: onOpenBlogs,
+        ),
+        _ProfileAction(
+          l10n.profileMyFavorites,
+          Icons.star,
+          profile.favoriteUrl,
+        ),
+        _ProfileAction(
+          l10n.profileMessages,
           Icons.notifications,
           profile.messageUrl,
           onTap: onOpenMessages,
         ),
-        _ProfileAction('我的好友', Icons.people_alt, profile.friendUrl),
-        _ProfileAction('每日签到', Icons.edit_note, profile.signUrl),
+        _ProfileAction(
+          l10n.profileMyFriends,
+          Icons.people_alt,
+          profile.friendUrl,
+        ),
+        _ProfileAction(
+          l10n.profileDailyCheckIn,
+          Icons.edit_note,
+          profile.signUrl,
+        ),
       ];
     }
     return <_ProfileAction>[
-      _ProfileAction('Ta的主题', Icons.chat_bubble, profile.threadUrl),
-      _ProfileAction('Ta的日志', Icons.sms, profile.blogUrl),
-      _ProfileAction('发短消息', Icons.message, profile.messageUrl),
-      _ProfileAction('加为好友', Icons.person_add_alt_1, profile.friendUrl),
+      _ProfileAction(
+        l10n.profileTheirThreads,
+        Icons.chat_bubble,
+        profile.threadUrl,
+      ),
+      _ProfileAction(l10n.profileTheirBlogs, Icons.sms, profile.blogUrl),
+      _ProfileAction(
+        l10n.profileSendMessage,
+        Icons.message,
+        profile.messageUrl,
+      ),
+      _ProfileAction(
+        l10n.profileAddFriend,
+        Icons.person_add_alt_1,
+        profile.friendUrl,
+      ),
     ];
   }
 
-  IconData _iconForActionLabel(String label) {
-    if (label.contains('主题')) {
-      return Icons.chat_bubble;
-    }
-    if (label.contains('日志')) {
-      return Icons.sms;
-    }
-    if (label.contains('收藏')) {
-      return Icons.star;
-    }
-    if (label.contains('消息') || label.contains('短消息')) {
-      return Icons.notifications;
-    }
-    if (label.contains('好友')) {
-      return Icons.people_alt;
-    }
-    if (label.contains('签到')) {
-      return Icons.edit_note;
-    }
-    return Icons.chevron_right;
+  _ProfileAction _fromServerAction(UserProfileAction action) {
+    final kind = _profileActionKind(action.url);
+    return _ProfileAction(
+      action.label,
+      kind.icon,
+      action.url,
+      onTap: isMyProfile && kind == _ProfileActionKind.messages
+          ? onOpenMessages
+          : isMyProfile && kind == _ProfileActionKind.blogs
+          ? onOpenBlogs
+          : null,
+    );
   }
 }
 
@@ -470,9 +490,13 @@ class _ActionTile extends StatelessWidget {
             action.onTap ??
             (action.url == null
                 ? null
-                : () => ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('暂未接入该操作')))),
+                : () => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        AppLocalizations.of(context).profileActionUnavailable,
+                      ),
+                    ),
+                  )),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
@@ -517,7 +541,7 @@ class _SignatureSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SectionCard(
       key: const Key('user-profile-signature'),
-      title: '个人签名',
+      title: AppLocalizations.of(context).profileSignature,
       palette: palette,
       child: DefaultTextStyle.merge(
         style: Theme.of(
@@ -551,7 +575,7 @@ class _DetailsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SectionCard(
       key: const Key('user-profile-details'),
-      title: '个人资料',
+      title: AppLocalizations.of(context).profileDetails,
       palette: palette,
       child: Column(
         children: [
@@ -659,12 +683,15 @@ class _UserProfileError extends StatelessWidget {
             Icon(Icons.error_outline, color: palette.accent, size: 34),
             const SizedBox(height: 12),
             Text(
-              error.toString(),
+              _profileErrorText(context, error),
               textAlign: TextAlign.center,
               style: TextStyle(color: palette.body),
             ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('重试')),
+            FilledButton(
+              onPressed: onRetry,
+              child: Text(AppLocalizations.of(context).commonRetry),
+            ),
           ],
         ),
       ),
@@ -679,6 +706,66 @@ class _ProfileAction {
   final IconData icon;
   final String? url;
   final VoidCallback? onTap;
+}
+
+enum _ProfileActionKind {
+  threads(Icons.chat_bubble),
+  blogs(Icons.sms),
+  favorites(Icons.star),
+  messages(Icons.notifications),
+  friends(Icons.people_alt),
+  checkIn(Icons.edit_note),
+  other(Icons.chevron_right);
+
+  const _ProfileActionKind(this.icon);
+
+  final IconData icon;
+}
+
+_ProfileActionKind _profileActionKind(String? rawUrl) {
+  final uri = Uri.tryParse(rawUrl?.trim() ?? '');
+  if (uri == null) {
+    return _ProfileActionKind.other;
+  }
+  final query = uri.queryParameters;
+  return switch (query['do']) {
+    'thread' => _ProfileActionKind.threads,
+    'blog' => _ProfileActionKind.blogs,
+    'favorite' => _ProfileActionKind.favorites,
+    'pm' => _ProfileActionKind.messages,
+    _ when query['ac'] == 'friend' => _ProfileActionKind.friends,
+    _
+        when uri.path.endsWith('/plugin.php') &&
+            query['id']?.startsWith('zqlj_sign') == true =>
+      _ProfileActionKind.checkIn,
+    _ => _ProfileActionKind.other,
+  };
+}
+
+String _profileErrorText(BuildContext context, Object error) {
+  final l10n = AppLocalizations.of(context);
+  if (error case ApiError(message: 'auth.current_user_uid_missing')) {
+    return l10n.profileLoginRequired;
+  }
+  return l10n.profileLoadFailed(LocalizedErrorSummary.resolve(l10n, error));
+}
+
+String _profilePageTitle(
+  AppLocalizations l10n,
+  UserProfileData? profile, {
+  bool isMyProfile = false,
+}) {
+  final rawTitle = profile?.title.trim();
+  if (rawTitle?.isNotEmpty == true) {
+    return profile!.title;
+  }
+  if (isMyProfile) {
+    return l10n.profileMyTitle;
+  }
+  final username = profile?.username.trim();
+  return username?.isNotEmpty == true
+      ? l10n.profileUserTitle(username!)
+      : l10n.profileTitle;
 }
 
 @immutable

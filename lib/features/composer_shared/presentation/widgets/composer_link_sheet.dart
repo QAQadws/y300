@@ -68,7 +68,7 @@ class _ComposerLinkSheetState extends State<_ComposerLinkSheet> {
               textInputAction: TextInputAction.next,
               decoration: InputDecoration(
                 labelText: l10n.composerLinkUrl,
-                hintText: 'https://example.com',
+                hintText: l10n.composerLinkUrlHint,
                 errorText: _urlErrorText,
                 border: const OutlineInputBorder(),
               ),

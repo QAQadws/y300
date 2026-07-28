@@ -20,18 +20,15 @@ class LoginController extends AsyncNotifier<LoginPageState> {
   }
 
   /// 避免在 AsyncLoading 等状态直接访问 value 导致空值分支不清晰。
-  LoginPageState get _current => state.asData?.value ?? LoginPageState.initial();
+  LoginPageState get _current =>
+      state.asData?.value ?? LoginPageState.initial();
 
   void updateUsername(String value) {
-    state = AsyncData(
-      _current.copyWith(username: value, clearError: true, clearSuccess: true),
-    );
+    state = AsyncData(_current.copyWith(username: value, clearError: true));
   }
 
   void updatePassword(String value) {
-    state = AsyncData(
-      _current.copyWith(password: value, clearError: true, clearSuccess: true),
-    );
+    state = AsyncData(_current.copyWith(password: value, clearError: true));
   }
 
   Future<SessionInfo?> submit() async {
@@ -45,42 +42,29 @@ class LoginController extends AsyncNotifier<LoginPageState> {
     if (username.isEmpty || password.isEmpty) {
       state = AsyncData(
         _current.copyWith(
-          errorMessage: '请输入用户名和密码',
-          clearSuccess: true,
+          failure: const AuthLoginFailure(
+            code: AuthLoginFailureCode.credentialsRequired,
+          ),
         ),
       );
       return null;
     }
 
-    state = AsyncData(
-      _current.copyWith(
-        isSubmitting: true,
-        clearError: true,
-        clearSuccess: true,
-      ),
-    );
+    state = AsyncData(_current.copyWith(isSubmitting: true, clearError: true));
 
     final result = await _repository
         .login(username: username, password: password)
         .timeout(
           _submitTimeout,
           onTimeout: () => const ApiFailure(
-            ApiError(
-              type: ApiErrorType.timeout,
-              message: '登录超时，请检查网络后重试',
-            ),
+            ApiError(type: ApiErrorType.timeout, message: 'auth.login.timeout'),
           ),
         );
 
     return result.when(
       success: (session) {
         state = AsyncData(
-          _current.copyWith(
-            isSubmitting: false,
-            successMessage:
-                '欢迎回来，${session.username.isNotEmpty ? session.username : username}',
-            clearError: true,
-          ),
+          _current.copyWith(isSubmitting: false, clearError: true),
         );
         return session;
       },
@@ -88,8 +72,12 @@ class LoginController extends AsyncNotifier<LoginPageState> {
         state = AsyncData(
           _current.copyWith(
             isSubmitting: false,
-            errorMessage: error.message,
-            clearSuccess: true,
+            failure: AuthLoginFailure(
+              code: error.type == ApiErrorType.timeout
+                  ? AuthLoginFailureCode.timeout
+                  : AuthLoginFailureCode.requestFailed,
+              detail: error,
+            ),
           ),
         );
         return null;

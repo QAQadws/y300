@@ -8,6 +8,7 @@ import 'package:y300/features/app_update/domain/models/app_update_download_reque
 import 'package:y300/features/app_update/domain/models/app_update_launch_result.dart';
 import 'package:y300/features/app_update/presentation/app_update_feedback_messages.dart';
 import 'package:y300/features/app_update/presentation/controllers/app_update_prompt_coordinator.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 
 class AppUpdateAlertHost extends ConsumerStatefulWidget {
@@ -56,6 +57,7 @@ class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost>
   @override
   Widget build(BuildContext context) {
     final coordinator = ref.watch(appUpdatePromptCoordinatorProvider);
+    coordinator.updateLocalization(AppLocalizations.of(context));
     return UpgradeAlert(
       key: _alertKey,
       upgrader: coordinator.upgrader,
@@ -107,6 +109,7 @@ class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost>
       showTransientSnackBar(
         context,
         appUpdateDownloadRequestFailureMessage(
+          AppLocalizations.of(context),
           (result as AppUpdateDownloadRequestFailure).failure.code,
         ),
       );
@@ -121,6 +124,9 @@ class _AppUpdateAlertHostState extends ConsumerState<AppUpdateAlertHost>
       return;
     }
     final failure = (result as AppUpdateLaunchFailure).failure;
-    showTransientSnackBar(context, appUpdateLaunchFailureMessage(failure.code));
+    showTransientSnackBar(
+      context,
+      appUpdateLaunchFailureMessage(AppLocalizations.of(context), failure.code),
+    );
   }
 }

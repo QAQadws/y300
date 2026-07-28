@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// A lazy, anchored page picker for native forum pagination surfaces.
 ///
@@ -189,7 +190,7 @@ class _NativePageListPopupEntryState extends State<_NativePageListPopupEntry> {
           return Semantics(
             button: true,
             selected: selected,
-            label: '第$page页',
+            label: AppLocalizations.of(context).commonPage(page),
             child: InkWell(
               key: Key('${widget.menuKeyPrefix}-page-option-$page'),
               onTap: () => Navigator.of(context).pop(page),

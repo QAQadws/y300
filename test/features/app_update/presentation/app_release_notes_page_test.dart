@@ -87,7 +87,9 @@ Future<void> _pumpPage(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [appReleaseNotesServiceProvider.overrideWithValue(service)],
-      child: LocalizedTestApp(home: AppReleaseNotesPage(installedVersion: version)),
+      child: LocalizedTestApp(
+        home: AppReleaseNotesPage(installedVersion: version),
+      ),
     ),
   );
   await tester.pumpAndSettle();

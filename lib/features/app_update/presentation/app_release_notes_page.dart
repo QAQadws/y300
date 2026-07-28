@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:version/version.dart';
 import 'package:y300/features/app_update/data/providers/app_update_providers.dart';
 import 'package:y300/features/app_update/domain/models/app_release_notes_load_result.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class AppReleaseNotesPage extends ConsumerStatefulWidget {
   const AppReleaseNotesPage({super.key, required this.installedVersion});
@@ -30,7 +31,9 @@ class _AppReleaseNotesPageState extends ConsumerState<AppReleaseNotesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('更新日志')),
+      appBar: AppBar(
+        title: Text(AppLocalizations.of(context).moreAboutReleaseNotes),
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -84,7 +87,7 @@ class _AppReleaseNotesPageState extends ConsumerState<AppReleaseNotesPage> {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Text(
-          '当前版本暂无更新日志',
+          AppLocalizations.of(context).appUpdateReleaseNotesEmpty,
           key: const Key('app-release-notes-empty'),
           style: Theme.of(context).textTheme.bodyLarge,
           textAlign: TextAlign.center,
@@ -107,7 +110,7 @@ class _AppReleaseNotesPageState extends ConsumerState<AppReleaseNotesPage> {
             ),
             const SizedBox(height: 12),
             Text(
-              '更新日志暂不可用',
+              AppLocalizations.of(context).appUpdateReleaseNotesUnavailable,
               key: const Key('app-release-notes-failure'),
               style: Theme.of(context).textTheme.titleMedium,
             ),
@@ -116,7 +119,7 @@ class _AppReleaseNotesPageState extends ConsumerState<AppReleaseNotesPage> {
               key: const Key('app-release-notes-retry'),
               onPressed: _isLoading ? null : () => _load(forceRefresh: true),
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(AppLocalizations.of(context).commonRetry),
             ),
           ],
         ),

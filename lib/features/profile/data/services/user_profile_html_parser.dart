@@ -26,7 +26,7 @@ class UserProfileHtmlParser {
     return UserProfileData(
       uid: uid,
       username: username.isEmpty ? uid : username,
-      title: title.isEmpty ? '${username.isEmpty ? uid : username}的资料' : title,
+      title: title,
       avatarUrl: _resolve(
         document.querySelector('.avatar_m img')?.attributes['src'],
       ),

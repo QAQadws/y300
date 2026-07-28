@@ -29,7 +29,7 @@ class ProfileBlogHtmlParser {
         .toList(growable: false);
 
     return ProfileBlogListPageData(
-      title: _cleanText(document.querySelector('.header h2')?.text ?? '日志'),
+      title: _cleanText(document.querySelector('.header h2')?.text ?? ''),
       activeView: activeView,
       activeOrder: activeOrder,
       viewTabs: List<ProfileBlogNavigationTab>.unmodifiable(viewTabs),

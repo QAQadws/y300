@@ -187,9 +187,37 @@ void main() {
       await tester.pump();
 
       expect(searchService.searchCallCount, 0);
-      expect(find.text('后台搜索 正在等待搜索 预计耗时10.5s'), findsOneWidget);
+      expect(find.text('后台搜索 正在等待搜索，预计 10.5 秒'), findsOneWidget);
     },
   );
+
+  testWidgets('ForumSearchPage localizes Traditional Chinese chrome', (
+    tester,
+  ) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    addTearDown(queueSnapshot.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          discuzSearchServiceProvider.overrideWithValue(
+            _FakeDiscuzSearchService(),
+          ),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+        ],
+        child: const LocalizedTestApp(
+          locale: Locale('zh', 'TW'),
+          home: ForumSearchPage(),
+        ),
+      ),
+    );
+
+    expect(find.text('搜尋'), findsOneWidget);
+    expect(find.text('輸入關鍵字'), findsOneWidget);
+  });
 }
 
 ComicSearchRefreshQueueEntry _queueEntry({

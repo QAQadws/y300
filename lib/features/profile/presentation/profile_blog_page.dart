@@ -8,7 +8,10 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/profile/data/models/profile_blog_models.dart';
 import 'package:y300/features/profile/data/repositories/profile_blog_repository.dart';
+import 'package:y300/features/profile/presentation/profile_text_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
+import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 
 @immutable
@@ -89,15 +92,16 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
   Widget build(BuildContext context) {
     final asyncData = ref.watch(profileBlogListProvider(_request));
     final palette = _ProfileBlogPalette.resolve(Theme.of(context));
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
-        title: const Text('日志'),
+        title: Text(l10n.profileBlogTitle),
         actions: [
           IconButton(
-            tooltip: '写日志',
-            onPressed: () => _showTodo('发表新日志暂未接入'),
+            tooltip: l10n.profileBlogWrite,
+            onPressed: () => _showTodo(l10n.profileBlogWriteUnavailable),
             icon: const Icon(Icons.edit_note),
           ),
         ],
@@ -162,10 +166,18 @@ class ProfileBlogDetailPage extends ConsumerWidget {
     final asyncData = ref.watch(profileBlogDetailProvider(url));
     final palette = _ProfileBlogPalette.resolve(Theme.of(context));
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final l10n = AppLocalizations.of(context);
+    final rawTitle = asyncData.value?.title.trim();
 
     return Scaffold(
       backgroundColor: palette.background,
-      appBar: AppBar(title: Text(asyncData.value?.title ?? '日志')),
+      appBar: AppBar(
+        title: Text(
+          rawTitle?.isNotEmpty == true
+              ? asyncData.value!.title
+              : l10n.profileBlogTitle,
+        ),
+      ),
       body: asyncData.when(
         data: (data) => _ProfileBlogDetailContent(
           data: data,
@@ -223,7 +235,9 @@ class _ProfileBlogListContent extends StatelessWidget {
           ),
         if (data.items.isEmpty)
           _ProfileBlogEmptyState(
-            message: data.emptyMessage ?? '还没有相关的日志',
+            message:
+                data.emptyMessage ??
+                AppLocalizations.of(context).profileBlogEmpty,
             palette: palette,
           )
         else
@@ -276,7 +290,10 @@ class _ViewTabs extends StatelessWidget {
           for (final view in ProfileBlogView.values)
             Expanded(
               child: _TabButton(
-                label: view.label,
+                label: ProfileTextResolver.blogView(
+                  AppLocalizations.of(context),
+                  view,
+                ),
                 selected: activeView == view,
                 palette: palette,
                 onTap: () => onSelect(view),
@@ -310,7 +327,12 @@ class _OrderTabs extends StatelessWidget {
         children: [
           for (final order in ProfileBlogOrder.values)
             ChoiceChip(
-              label: Text(order.label),
+              label: Text(
+                ProfileTextResolver.blogOrder(
+                  AppLocalizations.of(context),
+                  order,
+                ),
+              ),
               selected: activeOrder == order,
               onSelected: (_) => onSelect(order),
               showCheckmark: false,
@@ -479,14 +501,16 @@ class _PaginationBar extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            '第 ${pagination.currentPage} / ${pagination.totalPages} 页',
+            AppLocalizations.of(
+              context,
+            ).commonPageOf(pagination.currentPage, pagination.totalPages),
             style: TextStyle(color: palette.muted),
           ),
           const SizedBox(width: 12),
           FilledButton.tonal(
             key: const Key('profile-blog-next-page-button'),
             onPressed: onLoadNextPage,
-            child: const Text('下一页'),
+            child: Text(AppLocalizations.of(context).commonNextPage),
           ),
         ],
       ),
@@ -543,7 +567,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
         if (data.comments.isNotEmpty) ...[
           const SizedBox(height: 14),
           Text(
-            '日志评论',
+            AppLocalizations.of(context).profileBlogComments,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: palette.title,
               fontWeight: FontWeight.w800,
@@ -564,11 +588,15 @@ class _ProfileBlogDetailContent extends StatelessWidget {
           const SizedBox(height: 8),
           OutlinedButton.icon(
             key: const Key('profile-blog-comment-placeholder'),
-            onPressed: () => ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('日志评论提交暂未接入'))),
+            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppLocalizations.of(context).profileBlogCommentUnavailable,
+                ),
+              ),
+            ),
             icon: const Icon(Icons.comment_outlined),
-            label: const Text('评论'),
+            label: Text(AppLocalizations.of(context).profileBlogComment),
           ),
         ],
       ],
@@ -615,7 +643,7 @@ class _BlogDetailCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  _detailMeta(data),
+                  _detailMeta(context, data),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(
@@ -648,12 +676,13 @@ class _BlogDetailCard extends StatelessWidget {
     );
   }
 
-  String _detailMeta(ProfileBlogDetailData data) {
+  String _detailMeta(BuildContext context, ProfileBlogDetailData data) {
+    final l10n = AppLocalizations.of(context);
     final parts = <String>[
       if (data.author.trim().isNotEmpty) data.author.trim(),
       if (data.dateline.trim().isNotEmpty) data.dateline.trim(),
-      '浏览 ${data.views}',
-      '评论 ${data.commentsCount}',
+      l10n.profileBlogViews(data.views),
+      l10n.profileBlogCommentCount(data.commentsCount),
     ];
     return parts.join(' · ');
   }
@@ -808,12 +837,20 @@ class _ProfileBlogError extends StatelessWidget {
             Icon(Icons.error_outline, color: palette.accent, size: 34),
             const SizedBox(height: 12),
             Text(
-              error.toString(),
+              AppLocalizations.of(context).profileBlogLoadFailed(
+                LocalizedErrorSummary.resolve(
+                  AppLocalizations.of(context),
+                  error,
+                ),
+              ),
               textAlign: TextAlign.center,
               style: TextStyle(color: palette.body),
             ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('重试')),
+            FilledButton(
+              onPressed: onRetry,
+              child: Text(AppLocalizations.of(context).commonRetry),
+            ),
           ],
         ),
       ),

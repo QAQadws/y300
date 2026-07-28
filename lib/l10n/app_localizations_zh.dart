@@ -3477,6 +3477,595 @@ class AppLocalizationsZh extends AppLocalizations {
   String composerAttachmentFallback(String aid) {
     return '图片 $aid';
   }
+
+  @override
+  String get composerLinkUrlHint => 'https://example.com';
+
+  @override
+  String get commonSearch => '搜索';
+
+  @override
+  String get commonMenu => '菜单';
+
+  @override
+  String get commonPreviousPage => '上一页';
+
+  @override
+  String get commonNextPage => '下一页';
+
+  @override
+  String commonPage(int page) {
+    return '第$page页';
+  }
+
+  @override
+  String commonPageOf(int page, int total) {
+    return '第 $page / $total 页';
+  }
+
+  @override
+  String get commonImageLoading => '图片加载中';
+
+  @override
+  String get commonNetworkError => '网络连接失败';
+
+  @override
+  String get commonTimeoutError => '请求超时';
+
+  @override
+  String get commonUnauthorizedError => '登录状态已失效';
+
+  @override
+  String get commonServerError => '服务器暂时不可用';
+
+  @override
+  String get commonParseError => '内容解析失败';
+
+  @override
+  String get commonRequestError => '请求失败';
+
+  @override
+  String get authLoginTitle => '登录';
+
+  @override
+  String get authUsername => '用户名';
+
+  @override
+  String get authUsernameHint => '请输入论坛账号';
+
+  @override
+  String get authPassword => '密码';
+
+  @override
+  String get authLoginSuccess => '登录成功';
+
+  @override
+  String get authCredentialsRequired => '请输入用户名和密码';
+
+  @override
+  String get authLoginTimeout => '登录超时，请检查网络后重试';
+
+  @override
+  String get authLoginRejected => '账号或密码错误';
+
+  @override
+  String authLoginFailed(String error) {
+    return '登录失败：$error';
+  }
+
+  @override
+  String authLoginWelcome(String username) {
+    return '欢迎回来，$username';
+  }
+
+  @override
+  String authWebViewVerificationFailed(String error) {
+    return '登录校验失败：$error';
+  }
+
+  @override
+  String get appUpdateDialogTitle => '发现新版本';
+
+  @override
+  String appUpdateDialogBody(
+    String appName,
+    String latestVersion,
+    String installedVersion,
+  ) {
+    return '$appName v$latestVersion 已发布，当前版本为 v$installedVersion';
+  }
+
+  @override
+  String get appUpdateDialogPrompt => '是否立即更新？';
+
+  @override
+  String get appUpdateDialogReleaseNotes => '更新说明';
+
+  @override
+  String get appUpdateDialogIgnore => '忽略';
+
+  @override
+  String get appUpdateDialogLater => '关闭';
+
+  @override
+  String get appUpdateDialogUpdate => '更新';
+
+  @override
+  String get appUpdateCheck => '检查更新';
+
+  @override
+  String get appUpdateVersionLoading => '当前版本：读取中';
+
+  @override
+  String appUpdateCurrentVersion(String version) {
+    return '当前版本：$version';
+  }
+
+  @override
+  String get appUpdateUpToDate => '已是最新版本';
+
+  @override
+  String get appUpdateReleaseNotesEmpty => '当前版本暂无更新日志';
+
+  @override
+  String get appUpdateReleaseNotesUnavailable => '更新日志暂不可用';
+
+  @override
+  String get appUpdateDownloadNetworkUnavailable => '网络不可用，无法开始下载更新';
+
+  @override
+  String get appUpdateDownloadTimeout => '更新检查超时，请稍后重试';
+
+  @override
+  String get appUpdateDownloadInvalid => '当前更新信息无效，请稍后重试';
+
+  @override
+  String get appUpdateDownloadInProgress => '更新下载正在进行中，请稍候';
+
+  @override
+  String get appUpdateDownloadFailed => '无法开始更新下载，请稍后重试';
+
+  @override
+  String get appUpdateCheckNetworkUnavailable => '网络不可用，检查更新失败';
+
+  @override
+  String get appUpdateCheckTimeout => '检查更新超时，请稍后重试';
+
+  @override
+  String get appUpdateCheckRateLimited => '检查更新过于频繁，请稍后重试';
+
+  @override
+  String get appUpdateInstalledVersionUnavailable => '无法读取当前应用版本';
+
+  @override
+  String get appUpdateCheckFailed => '检查更新失败，请稍后重试';
+
+  @override
+  String get appUpdateInvalidUrl => '更新下载地址无效，请稍后重试';
+
+  @override
+  String get appUpdateBrowserUnavailable => '无法打开下载链接，请确认设备已安装浏览器';
+
+  @override
+  String get appUpdateOpenUrlFailed => '打开下载链接失败，请稍后重试';
+
+  @override
+  String get appUpdateLaunchFailed => '打开更新下载链接失败，请稍后重试';
+
+  @override
+  String get searchTitle => '搜索';
+
+  @override
+  String get searchInputHint => '输入关键词';
+
+  @override
+  String get searchLoadMore => '查看更多';
+
+  @override
+  String searchRetryAfter(int seconds) {
+    return '请 $seconds 秒后重试';
+  }
+
+  @override
+  String get searchNoResults => '未找到结果';
+
+  @override
+  String searchFailed(String error) {
+    return '搜索失败：$error';
+  }
+
+  @override
+  String searchLoadMoreFailed(String error) {
+    return '加载更多失败：$error';
+  }
+
+  @override
+  String get searchForumFallback => '论坛搜索';
+
+  @override
+  String searchQueueWaiting(String subject, String seconds) {
+    return '$subject 正在等待搜索，预计 $seconds 秒';
+  }
+
+  @override
+  String searchResultTid(String tid) {
+    return 'TID：$tid';
+  }
+
+  @override
+  String get tagTitleFallback => '标签';
+
+  @override
+  String tagLoadFailed(String error) {
+    return '标签页加载失败：$error';
+  }
+
+  @override
+  String tagRelatedThreads(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个相关帖子',
+      zero: '暂无相关帖子',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tagReplies(int count) {
+    return '回复 $count';
+  }
+
+  @override
+  String tagViews(int count) {
+    return '查看 $count';
+  }
+
+  @override
+  String tagLastPost(String value) {
+    return '最后发表 $value';
+  }
+
+  @override
+  String get tagMore => '更多';
+
+  @override
+  String get tagEmpty => '暂无相关帖子';
+
+  @override
+  String get profileTitle => '个人资料';
+
+  @override
+  String get profileMyTitle => '我的资料';
+
+  @override
+  String profileUserTitle(String username) {
+    return '$username的资料';
+  }
+
+  @override
+  String get profileHome => '首页';
+
+  @override
+  String get profileLoginRequired => '请先登录后查看个人资料';
+
+  @override
+  String get profileMyThreads => '我的主题';
+
+  @override
+  String get profileMyBlogs => '我的日志';
+
+  @override
+  String get profileMyFavorites => '我的收藏';
+
+  @override
+  String get profileMessages => '消息提醒';
+
+  @override
+  String get profileMyFriends => '我的好友';
+
+  @override
+  String get profileDailyCheckIn => '每日签到';
+
+  @override
+  String get profileTheirThreads => 'Ta的主题';
+
+  @override
+  String get profileTheirBlogs => 'Ta的日志';
+
+  @override
+  String get profileSendMessage => '发短消息';
+
+  @override
+  String get profileAddFriend => '加为好友';
+
+  @override
+  String get profileActionUnavailable => '暂未接入该操作';
+
+  @override
+  String get profileSignature => '个人签名';
+
+  @override
+  String get profileDetails => '个人资料';
+
+  @override
+  String profileLoadFailed(String error) {
+    return '资料加载失败：$error';
+  }
+
+  @override
+  String get profileBlogTitle => '日志';
+
+  @override
+  String get profileBlogWrite => '写日志';
+
+  @override
+  String get profileBlogWriteUnavailable => '发表新日志暂未接入';
+
+  @override
+  String get profileBlogEmpty => '还没有相关的日志';
+
+  @override
+  String get profileBlogFriends => '好友的日志';
+
+  @override
+  String get profileBlogMine => '我的日志';
+
+  @override
+  String get profileBlogExplore => '随便看看';
+
+  @override
+  String get profileBlogLatest => '最新发表的日志';
+
+  @override
+  String get profileBlogRecommended => '推荐阅读的日志';
+
+  @override
+  String get profileBlogComments => '日志评论';
+
+  @override
+  String get profileBlogCommentUnavailable => '日志评论提交暂未接入';
+
+  @override
+  String get profileBlogComment => '评论';
+
+  @override
+  String profileBlogViews(int count) {
+    return '浏览 $count';
+  }
+
+  @override
+  String profileBlogCommentCount(int count) {
+    return '评论 $count';
+  }
+
+  @override
+  String profileBlogLoadFailed(String error) {
+    return '日志加载失败：$error';
+  }
+
+  @override
+  String get profileMessageCenterTitle => '消息提醒';
+
+  @override
+  String profileNotificationsTab(int count) {
+    return '提醒 $count';
+  }
+
+  @override
+  String profileMessagesTab(int count) {
+    return '消息 $count';
+  }
+
+  @override
+  String get profileNoNotifications => '暂无提醒';
+
+  @override
+  String get profileSystemNotification => '系统提醒';
+
+  @override
+  String get profileNoMessages => '暂无消息';
+
+  @override
+  String get profilePrivateMessage => '私信';
+
+  @override
+  String profileMessageTo(String name) {
+    return '发给 $name';
+  }
+
+  @override
+  String get profileNewBadge => '新';
+
+  @override
+  String profileMessagesLoadFailed(String error) {
+    return '消息加载失败：$error';
+  }
+
+  @override
+  String get threadPrototypeTitle => 'HTML 正文渲染原型';
+
+  @override
+  String threadPrototypeLoadFailed(String error) {
+    return '样例加载失败：$error';
+  }
+
+  @override
+  String get threadPrototypeEmptyResult => '样例加载失败：结果为空';
+
+  @override
+  String threadPrototypeMissingAsset(String sourcePath, String assetPath) {
+    return '本地样例未找到，请从 $sourcePath 复制到 $assetPath';
+  }
+
+  @override
+  String threadPrototypeLink(String url) {
+    return '链接：$url';
+  }
+
+  @override
+  String get threadPrototypeThemeLight => '浅色';
+
+  @override
+  String get threadPrototypeThemeDark => '深色';
+
+  @override
+  String threadPrototypeJitterCopied(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已复制 $count 条抖动日志',
+      zero: '未复制抖动日志',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypeImageOpened(int postNumber, int index) {
+    return '$postNumber# 图片：$index';
+  }
+
+  @override
+  String get threadPrototypeActionUnsupported => '原型页暂不执行该帖子操作';
+
+  @override
+  String get threadPrototypeJitterTitle => '记录抖动日志';
+
+  @override
+  String get threadPrototypeJitterRecording => '记录中，关闭后复制日志';
+
+  @override
+  String threadPrototypeJitterCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已记录 $count 条',
+      zero: '尚未记录',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get threadPrototypeCopyLog => '复制日志';
+
+  @override
+  String get threadPrototypeThreadSummarySemantics => 'HTML 原型帖子样例摘要';
+
+  @override
+  String get threadPrototypeSummarySemantics => 'HTML 原型样例摘要';
+
+  @override
+  String threadPrototypeSample(String sample) {
+    return '样例：$sample';
+  }
+
+  @override
+  String threadPrototypeThread(String subject) {
+    return '帖子：$subject';
+  }
+
+  @override
+  String threadPrototypePage(int page, String total) {
+    return '页码：$page/$total';
+  }
+
+  @override
+  String threadPrototypePosts(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '楼层：$count 个',
+      zero: '楼层：0 个',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypeConversionMode(String mode) {
+    return '转换模式：$mode';
+  }
+
+  @override
+  String threadPrototypeConverter(String converterId) {
+    return '转换器：$converterId';
+  }
+
+  @override
+  String threadPrototypeConvertedNodes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '转换文本节点：$count 个',
+      zero: '转换文本节点：0 个',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypePreviewTheme(String theme) {
+    return '预览主题：$theme';
+  }
+
+  @override
+  String threadPrototypeTypography(int fontScale, String lineHeight) {
+    return '字号 $fontScale% / 间隔 $lineHeight×';
+  }
+
+  @override
+  String threadPrototypeThemeAdaptation(String authorFontMode) {
+    String _temp0 = intl.Intl.selectLogic(authorFontMode, {
+      'preserved': '主题适配：始终启用 / 作者字号保留',
+      'unified': '主题适配：始终启用 / 作者字号统一',
+      'other': '主题适配：始终启用',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypeRawHtmlLength(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '原 HTML：$count 字符',
+      zero: '原 HTML：0 字符',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypeFragmentLength(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '正文 fragment：$count 字符',
+      zero: '正文 fragment：0 字符',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypeAdaptedColors(
+    int remappedForeground,
+    int explicitForeground,
+    int remappedBackground,
+    int explicitBackground,
+  ) {
+    return '适配前景：$remappedForeground/$explicitForeground · 适配背景：$remappedBackground/$explicitBackground';
+  }
+
+  @override
+  String threadPrototypeAdaptationFallbacks(
+    int semanticFallback,
+    int unsupported,
+    int concealed,
+  ) {
+    return '语义回退：$semanticFallback · 不支持：$unsupported · 隐藏：$concealed';
+  }
+
+  @override
+  String threadPrototypeMinimumContrast(String value) {
+    return '最低可见对比度：$value';
+  }
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -6952,5 +7541,594 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String composerAttachmentFallback(String aid) {
     return '圖片 $aid';
+  }
+
+  @override
+  String get composerLinkUrlHint => 'https://example.com';
+
+  @override
+  String get commonSearch => '搜尋';
+
+  @override
+  String get commonMenu => '選單';
+
+  @override
+  String get commonPreviousPage => '上一頁';
+
+  @override
+  String get commonNextPage => '下一頁';
+
+  @override
+  String commonPage(int page) {
+    return '第$page頁';
+  }
+
+  @override
+  String commonPageOf(int page, int total) {
+    return '第 $page / $total 頁';
+  }
+
+  @override
+  String get commonImageLoading => '圖片載入中';
+
+  @override
+  String get commonNetworkError => '網路連線失敗';
+
+  @override
+  String get commonTimeoutError => '請求逾時';
+
+  @override
+  String get commonUnauthorizedError => '登入狀態已失效';
+
+  @override
+  String get commonServerError => '伺服器目前無法使用';
+
+  @override
+  String get commonParseError => '內容解析失敗';
+
+  @override
+  String get commonRequestError => '請求失敗';
+
+  @override
+  String get authLoginTitle => '登入';
+
+  @override
+  String get authUsername => '使用者名稱';
+
+  @override
+  String get authUsernameHint => '請輸入論壇帳號';
+
+  @override
+  String get authPassword => '密碼';
+
+  @override
+  String get authLoginSuccess => '登入成功';
+
+  @override
+  String get authCredentialsRequired => '請輸入使用者名稱和密碼';
+
+  @override
+  String get authLoginTimeout => '登入逾時，請檢查網路後重試';
+
+  @override
+  String get authLoginRejected => '帳號或密碼錯誤';
+
+  @override
+  String authLoginFailed(String error) {
+    return '登入失敗：$error';
+  }
+
+  @override
+  String authLoginWelcome(String username) {
+    return '歡迎回來，$username';
+  }
+
+  @override
+  String authWebViewVerificationFailed(String error) {
+    return '登入驗證失敗：$error';
+  }
+
+  @override
+  String get appUpdateDialogTitle => '發現新版本';
+
+  @override
+  String appUpdateDialogBody(
+    String appName,
+    String latestVersion,
+    String installedVersion,
+  ) {
+    return '$appName v$latestVersion 已發佈，目前版本為 v$installedVersion';
+  }
+
+  @override
+  String get appUpdateDialogPrompt => '是否立即更新？';
+
+  @override
+  String get appUpdateDialogReleaseNotes => '更新說明';
+
+  @override
+  String get appUpdateDialogIgnore => '忽略';
+
+  @override
+  String get appUpdateDialogLater => '關閉';
+
+  @override
+  String get appUpdateDialogUpdate => '更新';
+
+  @override
+  String get appUpdateCheck => '檢查更新';
+
+  @override
+  String get appUpdateVersionLoading => '目前版本：讀取中';
+
+  @override
+  String appUpdateCurrentVersion(String version) {
+    return '目前版本：$version';
+  }
+
+  @override
+  String get appUpdateUpToDate => '已是最新版本';
+
+  @override
+  String get appUpdateReleaseNotesEmpty => '目前版本沒有更新日誌';
+
+  @override
+  String get appUpdateReleaseNotesUnavailable => '更新日誌目前無法使用';
+
+  @override
+  String get appUpdateDownloadNetworkUnavailable => '網路無法使用，無法開始下載更新';
+
+  @override
+  String get appUpdateDownloadTimeout => '更新檢查逾時，請稍後重試';
+
+  @override
+  String get appUpdateDownloadInvalid => '目前更新資訊無效，請稍後重試';
+
+  @override
+  String get appUpdateDownloadInProgress => '更新正在下載，請稍候';
+
+  @override
+  String get appUpdateDownloadFailed => '無法開始下載更新，請稍後重試';
+
+  @override
+  String get appUpdateCheckNetworkUnavailable => '網路無法使用，檢查更新失敗';
+
+  @override
+  String get appUpdateCheckTimeout => '檢查更新逾時，請稍後重試';
+
+  @override
+  String get appUpdateCheckRateLimited => '檢查更新過於頻繁，請稍後重試';
+
+  @override
+  String get appUpdateInstalledVersionUnavailable => '無法讀取目前應用程式版本';
+
+  @override
+  String get appUpdateCheckFailed => '檢查更新失敗，請稍後重試';
+
+  @override
+  String get appUpdateInvalidUrl => '更新下載網址無效，請稍後重試';
+
+  @override
+  String get appUpdateBrowserUnavailable => '無法開啟下載連結，請確認裝置已安裝瀏覽器';
+
+  @override
+  String get appUpdateOpenUrlFailed => '開啟下載連結失敗，請稍後重試';
+
+  @override
+  String get appUpdateLaunchFailed => '開啟更新下載連結失敗，請稍後重試';
+
+  @override
+  String get searchTitle => '搜尋';
+
+  @override
+  String get searchInputHint => '輸入關鍵字';
+
+  @override
+  String get searchLoadMore => '查看更多';
+
+  @override
+  String searchRetryAfter(int seconds) {
+    return '請在 $seconds 秒後重試';
+  }
+
+  @override
+  String get searchNoResults => '找不到結果';
+
+  @override
+  String searchFailed(String error) {
+    return '搜尋失敗：$error';
+  }
+
+  @override
+  String searchLoadMoreFailed(String error) {
+    return '載入更多失敗：$error';
+  }
+
+  @override
+  String get searchForumFallback => '論壇搜尋';
+
+  @override
+  String searchQueueWaiting(String subject, String seconds) {
+    return '$subject 正在等待搜尋，預計 $seconds 秒';
+  }
+
+  @override
+  String searchResultTid(String tid) {
+    return 'TID：$tid';
+  }
+
+  @override
+  String get tagTitleFallback => '標籤';
+
+  @override
+  String tagLoadFailed(String error) {
+    return '標籤頁載入失敗：$error';
+  }
+
+  @override
+  String tagRelatedThreads(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個相關帖子',
+      zero: '目前沒有相關帖子',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tagReplies(int count) {
+    return '回覆 $count';
+  }
+
+  @override
+  String tagViews(int count) {
+    return '瀏覽 $count';
+  }
+
+  @override
+  String tagLastPost(String value) {
+    return '最後發表 $value';
+  }
+
+  @override
+  String get tagMore => '更多';
+
+  @override
+  String get tagEmpty => '目前沒有相關帖子';
+
+  @override
+  String get profileTitle => '個人資料';
+
+  @override
+  String get profileMyTitle => '我的資料';
+
+  @override
+  String profileUserTitle(String username) {
+    return '$username 的資料';
+  }
+
+  @override
+  String get profileHome => '首頁';
+
+  @override
+  String get profileLoginRequired => '請先登入後查看個人資料';
+
+  @override
+  String get profileMyThreads => '我的主題';
+
+  @override
+  String get profileMyBlogs => '我的日誌';
+
+  @override
+  String get profileMyFavorites => '我的收藏';
+
+  @override
+  String get profileMessages => '訊息提醒';
+
+  @override
+  String get profileMyFriends => '我的好友';
+
+  @override
+  String get profileDailyCheckIn => '每日簽到';
+
+  @override
+  String get profileTheirThreads => 'Ta 的主題';
+
+  @override
+  String get profileTheirBlogs => 'Ta 的日誌';
+
+  @override
+  String get profileSendMessage => '傳送短訊息';
+
+  @override
+  String get profileAddFriend => '加為好友';
+
+  @override
+  String get profileActionUnavailable => '目前尚未支援此操作';
+
+  @override
+  String get profileSignature => '個人簽名';
+
+  @override
+  String get profileDetails => '個人資料';
+
+  @override
+  String profileLoadFailed(String error) {
+    return '資料載入失敗：$error';
+  }
+
+  @override
+  String get profileBlogTitle => '日誌';
+
+  @override
+  String get profileBlogWrite => '寫日誌';
+
+  @override
+  String get profileBlogWriteUnavailable => '目前尚未支援發表新日誌';
+
+  @override
+  String get profileBlogEmpty => '還沒有相關日誌';
+
+  @override
+  String get profileBlogFriends => '好友的日誌';
+
+  @override
+  String get profileBlogMine => '我的日誌';
+
+  @override
+  String get profileBlogExplore => '隨便看看';
+
+  @override
+  String get profileBlogLatest => '最新發表的日誌';
+
+  @override
+  String get profileBlogRecommended => '推薦閱讀的日誌';
+
+  @override
+  String get profileBlogComments => '日誌留言';
+
+  @override
+  String get profileBlogCommentUnavailable => '目前尚未支援提交日誌留言';
+
+  @override
+  String get profileBlogComment => '留言';
+
+  @override
+  String profileBlogViews(int count) {
+    return '瀏覽 $count';
+  }
+
+  @override
+  String profileBlogCommentCount(int count) {
+    return '留言 $count';
+  }
+
+  @override
+  String profileBlogLoadFailed(String error) {
+    return '日誌載入失敗：$error';
+  }
+
+  @override
+  String get profileMessageCenterTitle => '訊息提醒';
+
+  @override
+  String profileNotificationsTab(int count) {
+    return '提醒 $count';
+  }
+
+  @override
+  String profileMessagesTab(int count) {
+    return '訊息 $count';
+  }
+
+  @override
+  String get profileNoNotifications => '目前沒有提醒';
+
+  @override
+  String get profileSystemNotification => '系統提醒';
+
+  @override
+  String get profileNoMessages => '目前沒有訊息';
+
+  @override
+  String get profilePrivateMessage => '私人訊息';
+
+  @override
+  String profileMessageTo(String name) {
+    return '傳送給 $name';
+  }
+
+  @override
+  String get profileNewBadge => '新';
+
+  @override
+  String profileMessagesLoadFailed(String error) {
+    return '訊息載入失敗：$error';
+  }
+
+  @override
+  String get threadPrototypeTitle => 'HTML 正文渲染原型';
+
+  @override
+  String threadPrototypeLoadFailed(String error) {
+    return '範例載入失敗：$error';
+  }
+
+  @override
+  String get threadPrototypeEmptyResult => '範例載入失敗：結果為空';
+
+  @override
+  String threadPrototypeMissingAsset(String sourcePath, String assetPath) {
+    return '找不到本機範例，請從 $sourcePath 複製到 $assetPath';
+  }
+
+  @override
+  String threadPrototypeLink(String url) {
+    return '連結：$url';
+  }
+
+  @override
+  String get threadPrototypeThemeLight => '淺色';
+
+  @override
+  String get threadPrototypeThemeDark => '深色';
+
+  @override
+  String threadPrototypeJitterCopied(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已複製 $count 筆抖動記錄',
+      zero: '未複製抖動記錄',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypeImageOpened(int postNumber, int index) {
+    return '$postNumber# 圖片：$index';
+  }
+
+  @override
+  String get threadPrototypeActionUnsupported => '原型頁目前不執行該帖子操作';
+
+  @override
+  String get threadPrototypeJitterTitle => '記錄抖動資訊';
+
+  @override
+  String get threadPrototypeJitterRecording => '記錄中，關閉後可複製記錄';
+
+  @override
+  String threadPrototypeJitterCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已記錄 $count 筆',
+      zero: '尚未記錄',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get threadPrototypeCopyLog => '複製記錄';
+
+  @override
+  String get threadPrototypeThreadSummarySemantics => 'HTML 原型帖子範例摘要';
+
+  @override
+  String get threadPrototypeSummarySemantics => 'HTML 原型範例摘要';
+
+  @override
+  String threadPrototypeSample(String sample) {
+    return '範例：$sample';
+  }
+
+  @override
+  String threadPrototypeThread(String subject) {
+    return '帖子：$subject';
+  }
+
+  @override
+  String threadPrototypePage(int page, String total) {
+    return '頁碼：$page/$total';
+  }
+
+  @override
+  String threadPrototypePosts(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '樓層：$count 個',
+      zero: '樓層：0 個',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypeConversionMode(String mode) {
+    return '轉換模式：$mode';
+  }
+
+  @override
+  String threadPrototypeConverter(String converterId) {
+    return '轉換器：$converterId';
+  }
+
+  @override
+  String threadPrototypeConvertedNodes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '轉換文字節點：$count 個',
+      zero: '轉換文字節點：0 個',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypePreviewTheme(String theme) {
+    return '預覽主題：$theme';
+  }
+
+  @override
+  String threadPrototypeTypography(int fontScale, String lineHeight) {
+    return '字型大小 $fontScale% / 行距 $lineHeight×';
+  }
+
+  @override
+  String threadPrototypeThemeAdaptation(String authorFontMode) {
+    String _temp0 = intl.Intl.selectLogic(authorFontMode, {
+      'preserved': '主題調整：一律啟用 / 保留作者字型大小',
+      'unified': '主題調整：一律啟用 / 統一作者字型大小',
+      'other': '主題調整：一律啟用',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypeRawHtmlLength(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '原始 HTML：$count 個字元',
+      zero: '原始 HTML：0 個字元',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypeFragmentLength(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '正文 fragment：$count 個字元',
+      zero: '正文 fragment：0 個字元',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String threadPrototypeAdaptedColors(
+    int remappedForeground,
+    int explicitForeground,
+    int remappedBackground,
+    int explicitBackground,
+  ) {
+    return '調整前景：$remappedForeground/$explicitForeground · 調整背景：$remappedBackground/$explicitBackground';
+  }
+
+  @override
+  String threadPrototypeAdaptationFallbacks(
+    int semanticFallback,
+    int unsupported,
+    int concealed,
+  ) {
+    return '語意回退：$semanticFallback · 不支援：$unsupported · 隱藏：$concealed';
+  }
+
+  @override
+  String threadPrototypeMinimumContrast(String value) {
+    return '最低可見對比度：$value';
   }
 }

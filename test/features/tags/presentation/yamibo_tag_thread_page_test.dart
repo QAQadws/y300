@@ -46,6 +46,31 @@ void main() {
     expect(repository.requestedUrls.last, contains('page=2'));
     expect(find.byKey(const Key('yamibo-tag-thread-572515')), findsOneWidget);
   });
+
+  testWidgets('localizes Traditional Chinese metrics and preserves raw data', (
+    tester,
+  ) async {
+    final repository = _FakeTagThreadPageRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          yamiboTagThreadPageRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const LocalizedTestApp(
+          locale: Locale('zh', 'TW'),
+          home: YamiboTagThreadPage(
+            url:
+                'https://bbs.yamibo.com/misc.php?mod=tag&id=21920&type=thread&page=1',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+
+    expect(find.text('回覆 14 · 瀏覽 3092'), findsOneWidget);
+    expect(find.text('【个人汉化】[きさらぎ壱吾]晒猫'), findsOneWidget);
+  });
 }
 
 class _FakeTagThreadPageRepository implements YamiboTagThreadPageRepository {

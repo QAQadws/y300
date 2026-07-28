@@ -78,6 +78,34 @@ void main() {
       findsWidgets,
     );
   });
+
+  testWidgets('ProfileBlogPage localizes chrome and preserves raw titles', (
+    tester,
+  ) async {
+    final repository = _FakeProfileBlogRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          profileBlogRepositoryProvider.overrideWithValue(repository),
+          imageRequestHeaderBuilderProvider.overrideWithValue(
+            const _StaticImageHeaderBuilder(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(
+            _FailingImageCacheService(),
+          ),
+        ],
+        child: const LocalizedTestApp(
+          locale: Locale('zh', 'TW'),
+          home: ProfileBlogPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('隨便看看'), findsOneWidget);
+    expect(find.text('最新發表的日誌'), findsOneWidget);
+    expect(find.text('一种体验'), findsOneWidget);
+  });
 }
 
 class _FailingImageCacheService implements ImageCacheService {
@@ -202,7 +230,7 @@ class _FakeProfileBlogRepository implements ProfileBlogRepository {
     return [
       for (final view in ProfileBlogView.values)
         ProfileBlogNavigationTab(
-          label: view.label,
+          label: view.queryValue,
           url: 'https://bbs.yamibo.com/home.php?view=${view.queryValue}',
           isActive: view == activeView,
         ),
@@ -213,7 +241,7 @@ class _FakeProfileBlogRepository implements ProfileBlogRepository {
     return [
       for (final order in ProfileBlogOrder.values)
         ProfileBlogNavigationTab(
-          label: order.label,
+          label: order.queryValue,
           url: 'https://bbs.yamibo.com/home.php?order=${order.queryValue}',
           isActive: order == activeOrder,
         ),

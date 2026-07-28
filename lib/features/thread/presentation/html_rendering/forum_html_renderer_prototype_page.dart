@@ -21,6 +21,8 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
+import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/services/localized_error_summary.dart';
 
 class ForumHtmlRendererPrototypePage extends ConsumerStatefulWidget {
   const ForumHtmlRendererPrototypePage({
@@ -65,6 +67,7 @@ class _ForumHtmlRendererPrototypePageState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final preferencesAsync = ref.watch(
       forumHtmlReaderPreferencesControllerProvider,
     );
@@ -80,11 +83,11 @@ class _ForumHtmlRendererPrototypePageState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('HTML 正文渲染原型'),
+        title: Text(l10n.threadPrototypeTitle),
         actions: [
           IconButton(
             key: const Key('forum-html-prototype-reader-settings-button'),
-            tooltip: '阅读设置',
+            tooltip: l10n.threadHtmlConversionSettings,
             icon: const Icon(Icons.tune),
             onPressed: _openReaderSettings,
           ),
@@ -121,7 +124,9 @@ class _ForumHtmlRendererPrototypePageState
                   if (snapshot.hasError) {
                     return _ErrorState(
                       sample: _selectedSample,
-                      message: '样例加载失败：${snapshot.error}',
+                      message: l10n.threadPrototypeLoadFailed(
+                        LocalizedErrorSummary.resolve(l10n, snapshot.error),
+                      ),
                     );
                   }
 
@@ -129,15 +134,16 @@ class _ForumHtmlRendererPrototypePageState
                   if (result == null) {
                     return _ErrorState(
                       sample: _selectedSample,
-                      message: '样例加载失败：结果为空',
+                      message: l10n.threadPrototypeEmptyResult,
                     );
                   }
                   if (result.isMissingLocalAsset) {
                     return _ErrorState(
                       sample: _selectedSample,
-                      message:
-                          '本地样例未找到，请从 ${_selectedSample.sourceDocPath} '
-                          '复制到 ${_selectedSample.assetPath}',
+                      message: l10n.threadPrototypeMissingAsset(
+                        _selectedSample.sourceDocPath,
+                        _selectedSample.assetPath,
+                      ),
                     );
                   }
                   final previewTheme = _previewThemeData(_previewBrightness);
@@ -207,7 +213,7 @@ class _ForumHtmlRendererPrototypePageState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         key: const Key('forum-html-prototype-link-snackbar'),
-        content: Text('链接：$url'),
+        content: Text(AppLocalizations.of(context).threadPrototypeLink(url)),
       ),
     );
     return true;
@@ -348,28 +354,32 @@ class _ConversionSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: SegmentedButton<TextConversionMode>(
         key: const Key('forum-html-prototype-conversion-selector'),
-        segments: const [
+        segments: [
           ButtonSegment(
             value: TextConversionMode.none,
-            label: Text('原文', key: Key('forum-html-prototype-conversion-none')),
+            label: Text(
+              l10n.threadHtmlConversionOriginal,
+              key: const Key('forum-html-prototype-conversion-none'),
+            ),
           ),
           ButtonSegment(
             value: TextConversionMode.toSimplified,
             label: Text(
-              '转简',
-              key: Key('forum-html-prototype-conversion-simplified'),
+              l10n.threadHtmlConversionSimplified,
+              key: const Key('forum-html-prototype-conversion-simplified'),
             ),
           ),
           ButtonSegment(
             value: TextConversionMode.toTraditional,
             label: Text(
-              '转繁',
-              key: Key('forum-html-prototype-conversion-traditional'),
+              l10n.threadHtmlConversionTraditional,
+              key: const Key('forum-html-prototype-conversion-traditional'),
             ),
           ),
         ],
@@ -391,22 +401,23 @@ class _ThemePreviewSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: SizedBox(
         width: double.infinity,
         child: SegmentedButton<ForumHtmlBrightness>(
           key: const Key('forum-html-prototype-theme-preview-selector'),
-          segments: const [
+          segments: [
             ButtonSegment(
               value: ForumHtmlBrightness.light,
-              icon: Icon(Icons.light_mode_outlined),
-              label: Text('浅色'),
+              icon: const Icon(Icons.light_mode_outlined),
+              label: Text(l10n.threadPrototypeThemeLight),
             ),
             ButtonSegment(
               value: ForumHtmlBrightness.dark,
-              icon: Icon(Icons.dark_mode_outlined),
-              label: Text('深色'),
+              icon: const Icon(Icons.dark_mode_outlined),
+              label: Text(l10n.threadPrototypeThemeDark),
             ),
           ],
           selected: {brightness},
@@ -690,7 +701,11 @@ class _LoadedThreadDetailSampleViewState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         key: const Key('forum-html-prototype-jitter-log-copied-snackbar'),
-        content: Text('已复制 ${_jitterLog.length} 条抖动日志'),
+        content: Text(
+          AppLocalizations.of(
+            context,
+          ).threadPrototypeJitterCopied(_jitterLog.length),
+        ),
       ),
     );
   }
@@ -793,16 +808,22 @@ class _LoadedThreadDetailSampleViewState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         key: const Key('forum-html-prototype-image-reader-snackbar'),
-        content: Text('${post.number}# 图片：${request.initialIndex + 1}'),
+        content: Text(
+          AppLocalizations.of(
+            context,
+          ).threadPrototypeImageOpened(post.number, request.initialIndex + 1),
+        ),
       ),
     );
   }
 
   void _showUnsupportedAction() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        key: Key('forum-html-prototype-thread-action-snackbar'),
-        content: Text('原型页暂不执行该帖子操作'),
+      SnackBar(
+        key: const Key('forum-html-prototype-thread-action-snackbar'),
+        content: Text(
+          AppLocalizations.of(context).threadPrototypeActionUnsupported,
+        ),
       ),
     );
   }
@@ -826,6 +847,7 @@ class _JitterDiagnosticsControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
     return DecoratedBox(
       key: const Key('forum-html-prototype-jitter-log-panel'),
       decoration: BoxDecoration(
@@ -845,12 +867,14 @@ class _JitterDiagnosticsControls extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '记录抖动日志',
+                        l10n.threadPrototypeJitterTitle,
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        recording ? '记录中，关闭后复制日志' : '已记录 $logCount 条',
+                        recording
+                            ? l10n.threadPrototypeJitterRecording
+                            : l10n.threadPrototypeJitterCount(logCount),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),
@@ -871,14 +895,14 @@ class _JitterDiagnosticsControls extends StatelessWidget {
                   key: const Key('forum-html-prototype-jitter-log-copy'),
                   onPressed: recording || logCount == 0 ? null : onCopy,
                   icon: const Icon(Icons.copy_all_outlined),
-                  label: const Text('复制日志'),
+                  label: Text(l10n.threadPrototypeCopyLog),
                 ),
                 const SizedBox(width: 8),
                 TextButton.icon(
                   key: const Key('forum-html-prototype-jitter-log-clear'),
                   onPressed: logCount == 0 ? null : onClear,
                   icon: const Icon(Icons.delete_outline),
-                  label: const Text('清空'),
+                  label: Text(l10n.commonClear),
                 ),
               ],
             ),
@@ -907,8 +931,9 @@ class _ThreadDebugSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
     return Semantics(
-      label: 'HTML 原型帖子样例摘要',
+      label: l10n.threadPrototypeThreadSummarySemantics,
       child: DecoratedBox(
         key: const Key('forum-html-prototype-thread-debug-summary'),
         decoration: BoxDecoration(
@@ -922,21 +947,48 @@ class _ThreadDebugSummary extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('样例：${sample.title}'),
-                Text('帖子：${threadData.subject}'),
+                Text(l10n.threadPrototypeSample(sample.title)),
+                Text(l10n.threadPrototypeThread(threadData.subject)),
                 Text(
-                  '页码：${threadData.currentPage}/${threadData.lastPage ?? '?'}',
+                  l10n.threadPrototypePage(
+                    threadData.currentPage,
+                    threadData.lastPage?.toString() ?? '?',
+                  ),
                 ),
-                Text('楼层：${threadData.posts.length} 个'),
-                Text('转换模式：${_conversionModeLabel(conversionMode)}'),
-                Text('转换器：${conversionResult.converterId}'),
-                Text('转换文本节点：${conversionResult.convertedTextNodeCount} 个'),
+                Text(l10n.threadPrototypePosts(threadData.posts.length)),
                 Text(
-                  '预览主题：${Theme.of(context).brightness == Brightness.dark ? '深色' : '浅色'}',
+                  l10n.threadPrototypeConversionMode(
+                    _prototypeConversionModeLabel(l10n, conversionMode),
+                  ),
                 ),
-                Text(preferences.typographyDebugLabel),
                 Text(
-                  '主题适配：始终启用 / 作者字号${preferences.preserveAuthorFontSize ? '保留' : '统一'}',
+                  l10n.threadPrototypeConverter(conversionResult.converterId),
+                ),
+                Text(
+                  l10n.threadPrototypeConvertedNodes(
+                    conversionResult.convertedTextNodeCount,
+                  ),
+                ),
+                Text(
+                  l10n.threadPrototypePreviewTheme(
+                    _prototypeThemeLabel(
+                      l10n,
+                      Theme.of(context).brightness == Brightness.dark,
+                    ),
+                  ),
+                ),
+                Text(
+                  l10n.threadPrototypeTypography(
+                    (preferences.typography.fontScale * 100).round(),
+                    preferences.typography.lineHeightScale.toStringAsFixed(1),
+                  ),
+                ),
+                Text(
+                  l10n.threadPrototypeThemeAdaptation(
+                    preferences.preserveAuthorFontSize
+                        ? 'preserved'
+                        : 'unified',
+                  ),
                 ),
               ],
             ),
@@ -944,14 +996,6 @@ class _ThreadDebugSummary extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _conversionModeLabel(TextConversionMode mode) {
-    return switch (mode) {
-      TextConversionMode.none => '原文',
-      TextConversionMode.toSimplified => '转简',
-      TextConversionMode.toTraditional => '转繁',
-    };
   }
 }
 
@@ -977,8 +1021,9 @@ class _DebugSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
     return Semantics(
-      label: 'HTML 原型样例摘要',
+      label: l10n.threadPrototypeSummarySemantics,
       child: DecoratedBox(
         key: const Key('forum-html-prototype-debug-summary'),
         decoration: BoxDecoration(
@@ -992,36 +1037,68 @@ class _DebugSummary extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('样例：${sample.title}'),
-                Text('原 HTML：${input.rawHtml.length} 字符'),
-                Text('正文 fragment：${input.fragmentHtml.length} 字符'),
-                Text('转换模式：${_conversionModeLabel(conversionMode)}'),
-                Text('转换器：${conversionResult.converterId}'),
-                Text('转换文本节点：${conversionResult.convertedTextNodeCount} 个'),
+                Text(l10n.threadPrototypeSample(sample.title)),
+                Text(l10n.threadPrototypeRawHtmlLength(input.rawHtml.length)),
                 Text(
-                  '预览主题：${theme.brightness == ForumHtmlBrightness.dark ? '深色' : '浅色'}',
+                  l10n.threadPrototypeFragmentLength(input.fragmentHtml.length),
+                ),
+                Text(
+                  l10n.threadPrototypeConversionMode(
+                    _prototypeConversionModeLabel(l10n, conversionMode),
+                  ),
+                ),
+                Text(
+                  l10n.threadPrototypeConverter(conversionResult.converterId),
+                ),
+                Text(
+                  l10n.threadPrototypeConvertedNodes(
+                    conversionResult.convertedTextNodeCount,
+                  ),
+                ),
+                Text(
+                  l10n.threadPrototypePreviewTheme(
+                    _prototypeThemeLabel(
+                      l10n,
+                      theme.brightness == ForumHtmlBrightness.dark,
+                    ),
+                  ),
                   key: const Key('forum-html-prototype-preview-theme'),
                 ),
                 Text(
-                  '适配前景：${adaptationStats.remappedForegroundCount}/'
-                  '${adaptationStats.explicitForegroundCount} · '
-                  '适配背景：${adaptationStats.remappedBackgroundCount}/'
-                  '${adaptationStats.explicitBackgroundCount}',
+                  l10n.threadPrototypeAdaptedColors(
+                    adaptationStats.remappedForegroundCount,
+                    adaptationStats.explicitForegroundCount,
+                    adaptationStats.remappedBackgroundCount,
+                    adaptationStats.explicitBackgroundCount,
+                  ),
                   key: const Key('forum-html-prototype-adaptation-counts'),
                 ),
                 Text(
-                  '语义回退：${adaptationStats.semanticFallbackCount} · '
-                  '不支持：${adaptationStats.unsupportedColorCount} · '
-                  '隐藏：${adaptationStats.concealedTextRangeCount}',
+                  l10n.threadPrototypeAdaptationFallbacks(
+                    adaptationStats.semanticFallbackCount,
+                    adaptationStats.unsupportedColorCount,
+                    adaptationStats.concealedTextRangeCount,
+                  ),
                 ),
                 Text(
-                  '最低可见对比度：'
-                  '${adaptationStats.minimumResultContrast?.toStringAsFixed(2) ?? '-'}',
+                  l10n.threadPrototypeMinimumContrast(
+                    adaptationStats.minimumResultContrast?.toStringAsFixed(2) ??
+                        '-',
+                  ),
                   key: const Key('forum-html-prototype-minimum-contrast'),
                 ),
-                Text(preferences.typographyDebugLabel),
                 Text(
-                  '主题适配：始终启用 / 作者字号${preferences.preserveAuthorFontSize ? '保留' : '统一'}',
+                  l10n.threadPrototypeTypography(
+                    (preferences.typography.fontScale * 100).round(),
+                    preferences.typography.lineHeightScale.toStringAsFixed(1),
+                  ),
+                ),
+                Text(
+                  l10n.threadPrototypeThemeAdaptation(
+                    preferences.preserveAuthorFontSize
+                        ? 'preserved'
+                        : 'unified',
+                  ),
                 ),
               ],
             ),
@@ -1030,14 +1107,23 @@ class _DebugSummary extends StatelessWidget {
       ),
     );
   }
+}
 
-  String _conversionModeLabel(TextConversionMode mode) {
-    return switch (mode) {
-      TextConversionMode.none => '原文',
-      TextConversionMode.toSimplified => '转简',
-      TextConversionMode.toTraditional => '转繁',
-    };
-  }
+String _prototypeConversionModeLabel(
+  AppLocalizations l10n,
+  TextConversionMode mode,
+) {
+  return switch (mode) {
+    TextConversionMode.none => l10n.threadHtmlConversionOriginal,
+    TextConversionMode.toSimplified => l10n.threadHtmlConversionSimplified,
+    TextConversionMode.toTraditional => l10n.threadHtmlConversionTraditional,
+  };
+}
+
+String _prototypeThemeLabel(AppLocalizations l10n, bool isDark) {
+  return isDark
+      ? l10n.threadPrototypeThemeDark
+      : l10n.threadPrototypeThemeLight;
 }
 
 ThemeData _previewThemeData(ForumHtmlBrightness brightness) {

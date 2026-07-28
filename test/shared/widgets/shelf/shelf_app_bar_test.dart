@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/shared/widgets/shelf/shelf_app_bar.dart';
 
 void main() {
-  testWidgets('ShelfAppBar shows title and menu/search actions', (tester) async {
+  testWidgets('ShelfAppBar shows title and menu/search actions', (
+    tester,
+  ) async {
     String? selected;
 
     await tester.pumpWidget(
@@ -15,10 +17,7 @@ void main() {
             onSearchTap: () {},
             onMenuSelected: (value) => selected = value,
             menuItems: const [
-              PopupMenuItem<String>(
-                value: 'add-category',
-                child: Text('新建分类'),
-              ),
+              PopupMenuItem<String>(value: 'add-category', child: Text('新建分类')),
             ],
           ),
         ),
@@ -36,5 +35,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(selected, 'add-category');
+  });
+
+  testWidgets('ShelfAppBar localizes default tooltips', (tester) async {
+    await tester.pumpWidget(
+      const LocalizedTestApp(
+        locale: Locale('zh', 'TW'),
+        home: Scaffold(appBar: ShelfAppBar(title: 'Raw title')),
+      ),
+    );
+
+    expect(find.byTooltip('搜尋'), findsOneWidget);
+    expect(find.byTooltip('選單'), findsOneWidget);
+    expect(find.text('Raw title'), findsOneWidget);
   });
 }

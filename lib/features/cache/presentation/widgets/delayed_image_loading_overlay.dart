@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// Adds a non-blocking loading indicator after one uninterrupted load deadline.
 ///
@@ -73,7 +74,7 @@ class _DelayedImageLoadingOverlayState
           child: IgnorePointer(
             child: Center(
               child: Semantics(
-                label: '图片加载中',
+                label: AppLocalizations.of(context).commonImageLoading,
                 child: SizedBox(
                   key: const Key('cached-library-image-loading-indicator'),
                   width: 24,

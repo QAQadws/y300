@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,8 +22,14 @@ void main() {
 
       expect(find.byType(LoginPage), findsOneWidget);
 
-      await tester.enterText(find.byKey(const Key('login-username-field')), 'tester');
-      await tester.enterText(find.byKey(const Key('login-password-field')), '123456');
+      await tester.enterText(
+        find.byKey(const Key('login-username-field')),
+        'tester',
+      );
+      await tester.enterText(
+        find.byKey(const Key('login-password-field')),
+        '123456',
+      );
       await tester.tap(find.byKey(const Key('login-submit-button')));
       await tester.pumpAndSettle();
 
@@ -43,13 +49,40 @@ void main() {
 
       await tester.pumpWidget(_buildTestApp(repository));
 
-      await tester.enterText(find.byKey(const Key('login-username-field')), 'tester');
-      await tester.enterText(find.byKey(const Key('login-password-field')), 'wrong');
+      await tester.enterText(
+        find.byKey(const Key('login-username-field')),
+        'tester',
+      );
+      await tester.enterText(
+        find.byKey(const Key('login-password-field')),
+        'wrong',
+      );
       await tester.tap(find.byKey(const Key('login-submit-button')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('login-error-text')), findsOneWidget);
       expect(find.text('账号或密码错误'), findsOneWidget);
+    });
+
+    testWidgets('localizes Traditional Chinese chrome', (tester) async {
+      final repository = _FakeAuthRepository(
+        shouldSucceed: false,
+        username: '原始用户名',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [authRepositoryProvider.overrideWithValue(repository)],
+          child: const LocalizedTestApp(
+            locale: Locale('zh', 'TW'),
+            home: LoginPage(),
+          ),
+        ),
+      );
+
+      expect(find.text('登入'), findsWidgets);
+      expect(find.text('使用者名稱'), findsOneWidget);
+      expect(find.text('密碼'), findsOneWidget);
     });
   });
 }
@@ -89,9 +122,7 @@ class _LoginHostPageState extends State<_LoginHostPage> {
               key: const Key('open-login-page-button'),
               onPressed: () async {
                 final result = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute<bool>(
-                    builder: (_) => const LoginPage(),
-                  ),
+                  MaterialPageRoute<bool>(builder: (_) => const LoginPage()),
                 );
                 setState(() {
                   _result = result;

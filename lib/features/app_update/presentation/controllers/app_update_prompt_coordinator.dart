@@ -13,6 +13,7 @@ import 'package:y300/features/app_update/domain/services/app_update_download_ser
 import 'package:y300/features/app_update/domain/services/app_update_launcher.dart';
 import 'package:y300/features/app_update/presentation/app_update_messages.dart';
 import 'package:y300/features/app_update/presentation/app_update_upgrader.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 final class AppUpdatePromptCoordinator {
   AppUpdatePromptCoordinator({
@@ -62,6 +63,13 @@ final class AppUpdatePromptCoordinator {
   void cancelPendingPrompt() {
     if (upgrader is AppUpdateManualPromptGate) {
       (upgrader as AppUpdateManualPromptGate).cancelManualPrompt();
+    }
+  }
+
+  void updateLocalization(AppLocalizations l10n) {
+    final messages = upgrader.state.messages;
+    if (messages is Y300UpgraderMessages) {
+      messages.updateLocalization(l10n);
     }
   }
 
@@ -288,7 +296,9 @@ final class AppUpdatePromptCoordinator {
     );
     return Y300Upgrader(
       durationUntilAlertAgain: alertAgainAfter,
-      messages: Y300UpgraderMessages(),
+      messages: Y300UpgraderMessages(
+        lookupAppLocalizations(AppLocalizations.supportedLocales.first),
+      ),
       storeController: UpgraderStoreController(
         onAndroid: () => store,
         onFuchsia: null,

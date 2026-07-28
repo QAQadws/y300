@@ -161,13 +161,7 @@ Future<void> _pumpHost(
       overrides: [
         appUpdatePromptCoordinatorProvider.overrideWithValue(coordinator),
       ],
-      child: LocalizedTestApp(
-        locale: Locale('en'),
-        supportedLocales: const [Locale('en')],
-        localizationsDelegates:
-            LocalizedTestApp.frameworkAndQuillLocalizationsDelegates,
-        home: AppUpdateAlertHost(child: child),
-      ),
+      child: LocalizedTestApp(home: AppUpdateAlertHost(child: child)),
     ),
   );
   coordinator.upgrader.updateStream();
@@ -216,6 +210,11 @@ final class _DisplayUpgrader extends Upgrader
 
   @override
   String appName() => 'Y300';
+
+  @override
+  UpgraderMessages determineMessages(BuildContext context) {
+    return UpgraderMessages(code: 'en');
+  }
 
   @override
   Future<UpgraderVersionInfo?> updateVersionInfo() async {

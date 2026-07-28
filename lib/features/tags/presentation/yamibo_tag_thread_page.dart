@@ -4,6 +4,8 @@ import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dar
 import 'package:y300/features/tags/domain/models/yamibo_tag_thread_page.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/services/localized_error_summary.dart';
 
 class YamiboTagThreadPage extends ConsumerWidget {
   const YamiboTagThreadPage({super.key, required this.url, this.title = ''});
@@ -21,6 +23,7 @@ class YamiboTagThreadPage extends ConsumerWidget {
     final state = asyncState.value ?? YamiboTagThreadPageState.initial(args);
     final palette = ForumDisplayThemePalette.resolve(Theme.of(context));
     final data = state.data;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       key: const Key('yamibo-tag-thread-page'),
@@ -29,7 +32,9 @@ class YamiboTagThreadPage extends ConsumerWidget {
         title: Text(
           data?.tagName.trim().isNotEmpty == true
               ? data!.tagName
-              : (state.title.trim().isNotEmpty ? state.title : '标签'),
+              : (state.title.trim().isNotEmpty
+                    ? state.title
+                    : l10n.tagTitleFallback),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -38,7 +43,9 @@ class YamiboTagThreadPage extends ConsumerWidget {
           ? const Center(child: CircularProgressIndicator())
           : data == null
           ? _TagPageErrorView(
-              message: state.errorMessage ?? '标签页加载失败',
+              message: l10n.tagLoadFailed(
+                LocalizedErrorSummary.resolve(l10n, state.errorMessage),
+              ),
               onRetry: controller.refresh,
             )
           : RefreshIndicator(
@@ -51,7 +58,9 @@ class YamiboTagThreadPage extends ConsumerWidget {
                   const SizedBox(height: 10),
                   if (state.errorMessage?.trim().isNotEmpty == true)
                     _InlineError(
-                      message: state.errorMessage!,
+                      message: l10n.tagLoadFailed(
+                        LocalizedErrorSummary.resolve(l10n, state.errorMessage),
+                      ),
                       palette: palette,
                     ),
                   if (data.threads.isEmpty)
@@ -96,10 +105,10 @@ class _TagHeaderCard extends StatelessWidget {
     final page = data.pagination.currentPage;
     final total = data.pagination.totalPages;
     final pageLabel = page == null
-        ? '${data.threads.length} 个相关帖子'
+        ? AppLocalizations.of(context).tagRelatedThreads(data.threads.length)
         : total == null
-        ? '第 $page 页'
-        : '第 $page / $total 页';
+        ? AppLocalizations.of(context).commonPage(page)
+        : AppLocalizations.of(context).commonPageOf(page, total);
     return Container(
       key: const Key('yamibo-tag-header-card'),
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
@@ -156,8 +165,10 @@ class _TagThreadCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final metrics = <String>[
-      if (thread.replyCount != null) '回复 ${thread.replyCount}',
-      if (thread.viewCount != null) '查看 ${thread.viewCount}',
+      if (thread.replyCount != null)
+        AppLocalizations.of(context).tagReplies(thread.replyCount!),
+      if (thread.viewCount != null)
+        AppLocalizations.of(context).tagViews(thread.viewCount!),
     ].join(' · ');
     final authorLine = <String>[
       if (thread.authorName?.trim().isNotEmpty == true) thread.authorName!,
@@ -236,7 +247,7 @@ class _TagThreadCard extends StatelessWidget {
                 if (lastPostLine.isNotEmpty) ...[
                   const SizedBox(height: 7),
                   Text(
-                    '最后发表 $lastPostLine',
+                    AppLocalizations.of(context).tagLastPost(lastPostLine),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.labelSmall?.copyWith(
@@ -285,7 +296,7 @@ class _TagPager extends StatelessWidget {
             onPressed: previous == null || isLoading
                 ? null
                 : () => onOpenUrl(previous),
-            child: const Text('上一页'),
+            child: Text(AppLocalizations.of(context).commonPreviousPage),
           ),
           const SizedBox(width: 8),
           FilledButton.tonal(
@@ -297,7 +308,11 @@ class _TagPager extends StatelessWidget {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Text(next == data.moreUrl ? '更多' : '下一页'),
+                : Text(
+                    next == data.moreUrl
+                        ? AppLocalizations.of(context).tagMore
+                        : AppLocalizations.of(context).commonNextPage,
+                  ),
           ),
         ],
       ),
@@ -372,7 +387,7 @@ class _EmptyTagThreadList extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: _tagCardDecoration(palette),
       child: Text(
-        '暂无相关帖子',
+        AppLocalizations.of(context).tagEmpty,
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
           color: palette.muted,
@@ -402,7 +417,7 @@ class _TagPageErrorView extends StatelessWidget {
             FilledButton(
               key: const Key('yamibo-tag-retry-button'),
               onPressed: onRetry,
-              child: const Text('重试'),
+              child: Text(AppLocalizations.of(context).commonRetry),
             ),
           ],
         ),

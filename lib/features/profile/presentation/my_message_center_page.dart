@@ -8,6 +8,8 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/profile/data/models/my_message_models.dart';
 import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
+import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/services/localized_error_summary.dart';
 
 final myMessageCenterProvider = FutureProvider.autoDispose<MyMessageCenterData>(
   (ref) async {
@@ -32,7 +34,9 @@ class MyMessageCenterPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: palette.background,
-      appBar: AppBar(title: const Text('消息提醒')),
+      appBar: AppBar(
+        title: Text(AppLocalizations.of(context).profileMessageCenterTitle),
+      ),
       body: asyncData.when(
         data: (data) => _MessageCenterContent(
           data: data,
@@ -75,8 +79,16 @@ class _MessageCenterContent extends StatelessWidget {
               unselectedLabelColor: palette.muted,
               indicatorColor: palette.accent,
               tabs: [
-                Tab(text: '提醒 ${data.notifications.count}'),
-                Tab(text: '消息 ${data.privateMessages.count}'),
+                Tab(
+                  text: AppLocalizations.of(
+                    context,
+                  ).profileNotificationsTab(data.notifications.count),
+                ),
+                Tab(
+                  text: AppLocalizations.of(
+                    context,
+                  ).profileMessagesTab(data.privateMessages.count),
+                ),
               ],
             ),
           ),
@@ -117,7 +129,7 @@ class _NotificationList extends StatelessWidget {
     if (page.items.isEmpty) {
       return _EmptyState(
         icon: Icons.notifications_none,
-        text: '暂无提醒',
+        text: AppLocalizations.of(context).profileNoNotifications,
         palette: palette,
       );
     }
@@ -133,7 +145,7 @@ class _NotificationList extends StatelessWidget {
           palette: palette,
           isNew: item.isNew,
           leading: Icons.notifications_active_outlined,
-          title: _notificationTitle(item),
+          title: _notificationTitle(context, item),
           subtitle: item.dateline,
           child: DefaultTextStyle.merge(
             style: Theme.of(
@@ -157,10 +169,12 @@ class _NotificationList extends StatelessWidget {
     );
   }
 
-  String _notificationTitle(MyNotificationItem item) {
+  String _notificationTitle(BuildContext context, MyNotificationItem item) {
     final author = item.author.trim();
     if (author.isEmpty) {
-      return item.type.isEmpty ? '系统提醒' : item.type;
+      return item.type.isEmpty
+          ? AppLocalizations.of(context).profileSystemNotification
+          : item.type;
     }
     return author;
   }
@@ -177,7 +191,7 @@ class _PrivateMessageList extends StatelessWidget {
     if (page.items.isEmpty) {
       return _EmptyState(
         icon: Icons.mail_outline,
-        text: '暂无消息',
+        text: AppLocalizations.of(context).profileNoMessages,
         palette: palette,
       );
     }
@@ -193,8 +207,10 @@ class _PrivateMessageList extends StatelessWidget {
           palette: palette,
           isNew: item.isNew,
           leading: Icons.mail_outline,
-          title: item.subject.trim().isEmpty ? '私信' : item.subject,
-          subtitle: _messageSubtitle(item),
+          title: item.subject.trim().isEmpty
+              ? AppLocalizations.of(context).profilePrivateMessage
+              : item.subject,
+          subtitle: _messageSubtitle(context, item),
           child: Text(
             item.message,
             style: Theme.of(
@@ -206,10 +222,11 @@ class _PrivateMessageList extends StatelessWidget {
     );
   }
 
-  String _messageSubtitle(MyPrivateMessageItem item) {
+  String _messageSubtitle(BuildContext context, MyPrivateMessageItem item) {
     final names = <String>[
       if (item.fromName.trim().isNotEmpty) item.fromName.trim(),
-      if (item.toName.trim().isNotEmpty) '发给 ${item.toName.trim()}',
+      if (item.toName.trim().isNotEmpty)
+        AppLocalizations.of(context).profileMessageTo(item.toName.trim()),
     ];
     if (item.dateline.trim().isNotEmpty) {
       names.add(item.dateline.trim());
@@ -327,7 +344,7 @@ class _NewBadge extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         child: Text(
-          '新',
+          AppLocalizations.of(context).profileNewBadge,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: palette.badgeForeground,
             fontWeight: FontWeight.w800,
@@ -386,12 +403,20 @@ class _MessageCenterError extends StatelessWidget {
             Icon(Icons.error_outline, color: palette.accent, size: 34),
             const SizedBox(height: 12),
             Text(
-              error.toString(),
+              AppLocalizations.of(context).profileMessagesLoadFailed(
+                LocalizedErrorSummary.resolve(
+                  AppLocalizations.of(context),
+                  error,
+                ),
+              ),
               textAlign: TextAlign.center,
               style: TextStyle(color: palette.body),
             ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('重试')),
+            FilledButton(
+              onPressed: onRetry,
+              child: Text(AppLocalizations.of(context).commonRetry),
+            ),
           ],
         ),
       ),

@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
-import 'package:y300/features/library_shared/presentation/services/library_task_text_resolver.dart';
 import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/presentation/search_text_resolver.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -26,7 +26,7 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
   final TextEditingController _controller = TextEditingController();
   bool _loading = false;
   bool _loadingMore = false;
-  String? _hint;
+  SearchNotice? _notice;
   String? _nextPageUrl;
   List<DiscuzSearchResultItem> _items = const <DiscuzSearchResultItem>[];
 
@@ -42,16 +42,16 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
       return;
     }
     final service = ref.read(discuzSearchServiceProvider);
-    final waitingMessage = _searchWaitingMessage(service);
-    if (waitingMessage != null) {
+    final waitingNotice = _searchWaitingNotice(service);
+    if (waitingNotice != null) {
       setState(() {
-        _hint = waitingMessage;
+        _notice = waitingNotice;
       });
       return;
     }
     setState(() {
       _loading = true;
-      _hint = null;
+      _notice = null;
     });
     try {
       final result = await service.searchForum(
@@ -68,11 +68,11 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
           final seconds = result.retryAfter.inSeconds <= 0
               ? 1
               : result.retryAfter.inSeconds;
-          _hint = '请 $seconds 秒后重试';
+          _notice = SearchRateLimitedNotice(seconds);
           _items = const <DiscuzSearchResultItem>[];
           _nextPageUrl = null;
         } else {
-          _hint = result.items.isEmpty ? '未找到结果' : null;
+          _notice = result.items.isEmpty ? const SearchNoResultsNotice() : null;
           _items = result.items;
           _nextPageUrl = result.nextPageUrl;
         }
@@ -83,32 +83,33 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
       }
       setState(() {
         _loading = false;
-        _hint = '搜索失败：$error';
+        _notice = SearchFailedNotice(error);
         _items = const <DiscuzSearchResultItem>[];
         _nextPageUrl = null;
       });
     }
   }
 
-  String? _searchWaitingMessage(ForumSearchService service) {
+  SearchNotice? _searchWaitingNotice(ForumSearchService service) {
     final comicQueue = ref.read(comicSearchRefreshQueueSnapshotProvider).value;
-    final comicQueueMessage = _comicQueueWaitingMessage(comicQueue);
-    if (comicQueueMessage != null) {
-      return comicQueueMessage;
+    final comicQueueNotice = _comicQueueWaitingNotice(comicQueue);
+    if (comicQueueNotice != null) {
+      return comicQueueNotice;
     }
     final Object serviceObject = service;
     if (serviceObject is! ForumSearchQueueStateReader) {
       return null;
     }
-    return _schedulerWaitingMessage(serviceObject.snapshot.value);
+    return _schedulerWaitingNotice(serviceObject.snapshot.value);
   }
 
-  String? _comicQueueWaitingMessage(ComicSearchRefreshQueueSnapshot snapshot) {
+  SearchNotice? _comicQueueWaitingNotice(
+    ComicSearchRefreshQueueSnapshot snapshot,
+  ) {
     if (!snapshot.active) {
       return null;
     }
-    return LibraryTaskTextResolver.message(
-      AppLocalizations.of(context),
+    return SearchLibraryTaskNotice(
       LibraryShelfTaskProgress(
         code: LibraryShelfTaskProgressCode.comicSearchWaiting,
         subject: snapshot.headTitle,
@@ -118,21 +119,14 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
     );
   }
 
-  String? _schedulerWaitingMessage(ForumSearchSchedulerSnapshot snapshot) {
+  SearchNotice? _schedulerWaitingNotice(ForumSearchSchedulerSnapshot snapshot) {
     if (!snapshot.active) {
       return null;
     }
-    final keyword = snapshot.headKeyword?.trim();
-    final title = keyword == null || keyword.isEmpty ? '论坛搜索' : keyword;
-    return '$title 正在等待搜索 预计耗时${_formatSeconds(snapshot.estimatedWait)}s';
-  }
-
-  String _formatSeconds(Duration duration) {
-    final tenths = (duration.inMilliseconds / 100).round();
-    if (tenths % 10 == 0) {
-      return '${tenths ~/ 10}';
-    }
-    return (tenths / 10).toStringAsFixed(1);
+    return SearchQueueWaitingNotice(
+      subject: snapshot.headKeyword,
+      estimatedWait: snapshot.estimatedWait,
+    );
   }
 
   Future<void> _loadMore() async {
@@ -145,7 +139,7 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
     }
     setState(() {
       _loadingMore = true;
-      _hint = null;
+      _notice = null;
     });
     try {
       final service = ref.read(discuzSearchServiceProvider);
@@ -167,16 +161,17 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
       }
       setState(() {
         _loadingMore = false;
-        _hint = '加载更多失败：$error';
+        _notice = SearchLoadMoreFailedNotice(error);
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('搜索'),
+        title: Text(l10n.searchTitle),
         actions: [
           IconButton(
             key: const Key('forum-search-submit-button'),
@@ -194,19 +189,22 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
               controller: _controller,
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _search(),
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: '输入关键词',
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                hintText: l10n.searchInputHint,
               ),
             ),
           ),
           if (_loading) const LinearProgressIndicator(),
-          if (_hint != null)
+          if (_notice != null)
             Padding(
               padding: const EdgeInsets.all(12),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text(_hint!, key: const Key('forum-search-hint')),
+                child: Text(
+                  SearchTextResolver.notice(l10n, _notice!),
+                  key: const Key('forum-search-hint'),
+                ),
               ),
             ),
           Expanded(
@@ -216,7 +214,7 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
                 for (final item in _items) ...[
                   ListTile(
                     title: Text(item.title),
-                    subtitle: Text('Tid: ${item.tid}'),
+                    subtitle: Text(l10n.searchResultTid(item.tid)),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -241,7 +239,7 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
                     child: OutlinedButton(
                       key: const Key('forum-search-load-more-button'),
                       onPressed: _loadMore,
-                      child: const Text('查看更多'),
+                      child: Text(l10n.searchLoadMore),
                     ),
                   ),
               ],

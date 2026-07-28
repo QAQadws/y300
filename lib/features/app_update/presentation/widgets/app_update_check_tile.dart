@@ -4,6 +4,7 @@ import 'package:y300/features/app_update/data/providers/app_update_providers.dar
 import 'package:y300/features/app_update/domain/models/app_update_check_result.dart';
 import 'package:y300/features/app_update/presentation/app_update_feedback_messages.dart';
 import 'package:y300/features/app_update/presentation/controllers/app_update_prompt_coordinator.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 
 class AppUpdateCheckTile extends ConsumerStatefulWidget {
@@ -21,6 +22,7 @@ class _AppUpdateCheckTileState extends ConsumerState<AppUpdateCheckTile> {
   @override
   Widget build(BuildContext context) {
     final coordinator = ref.watch(appUpdatePromptCoordinatorProvider);
+    final l10n = AppLocalizations.of(context);
     return StreamBuilder<String?>(
       initialData: coordinator.installedVersion,
       stream: coordinator.installedVersionStream,
@@ -29,12 +31,12 @@ class _AppUpdateCheckTileState extends ConsumerState<AppUpdateCheckTile> {
         return ListTile(
           key: const Key('about-check-update-entry'),
           leading: const Icon(Icons.system_update_alt_outlined),
-          title: const Text('检查更新'),
+          title: Text(l10n.appUpdateCheck),
           subtitle: widget.showVersionSubtitle
               ? Text(
                   version == null || version.isEmpty
-                      ? '当前版本：读取中'
-                      : '当前版本：$version',
+                      ? l10n.appUpdateVersionLoading
+                      : l10n.appUpdateCurrentVersion(version),
                 )
               : null,
           trailing: _checking
@@ -62,10 +64,16 @@ class _AppUpdateCheckTileState extends ConsumerState<AppUpdateCheckTile> {
       case AppUpdateCheckFailure(:final failure):
         showTransientSnackBar(
           context,
-          appUpdateCheckFailureMessage(failure.code),
+          appUpdateCheckFailureMessage(
+            AppLocalizations.of(context),
+            failure.code,
+          ),
         );
       case AppUpdateCheckUpToDate():
-        showTransientSnackBar(context, '已是最新版本');
+        showTransientSnackBar(
+          context,
+          AppLocalizations.of(context).appUpdateUpToDate,
+        );
       case AppUpdateCheckAvailable():
         coordinator.requestPrompt();
         return;

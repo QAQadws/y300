@@ -23,6 +23,7 @@ import 'package:y300/features/more/presentation/more_debug_tools.dart';
 import 'package:y300/features/more/presentation/more_text_resolver.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/services/localized_error_summary.dart';
 
 class MorePage extends ConsumerStatefulWidget {
   const MorePage({super.key});
@@ -375,11 +376,15 @@ class _MorePageState extends ConsumerState<MorePage> {
       return;
     }
 
-    final message =
-        ref.read(authSessionControllerProvider).asData?.value.errorMessage ??
-        AppLocalizations.of(
-          context,
-        ).moreLogoutFailed(AppLocalizations.of(context).commonUnknownError);
+    final l10n = AppLocalizations.of(context);
+    final failure = ref
+        .read(authSessionControllerProvider)
+        .asData
+        ?.value
+        .logoutFailure;
+    final message = l10n.moreLogoutFailed(
+      LocalizedErrorSummary.resolve(l10n, failure),
+    );
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));

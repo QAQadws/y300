@@ -1,30 +1,45 @@
 import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
-String appUpdateDownloadRequestFailureMessage(AppUpdateFailureCode code) {
+String appUpdateDownloadRequestFailureMessage(
+  AppLocalizations l10n,
+  AppUpdateFailureCode code,
+) {
   return switch (code) {
-    AppUpdateFailureCode.networkUnavailable => '网络不可用，无法开始下载更新',
-    AppUpdateFailureCode.requestTimeout => '更新检查超时，请稍后重试',
-    AppUpdateFailureCode.invalidPayload => '当前更新信息无效，请稍后重试',
-    AppUpdateFailureCode.apkDownloadStartFailed => '更新下载正在进行中，请稍候',
-    _ => '无法开始更新下载，请稍后重试',
+    AppUpdateFailureCode.networkUnavailable =>
+      l10n.appUpdateDownloadNetworkUnavailable,
+    AppUpdateFailureCode.requestTimeout => l10n.appUpdateDownloadTimeout,
+    AppUpdateFailureCode.invalidPayload => l10n.appUpdateDownloadInvalid,
+    AppUpdateFailureCode.apkDownloadStartFailed =>
+      l10n.appUpdateDownloadInProgress,
+    _ => l10n.appUpdateDownloadFailed,
   };
 }
 
-String appUpdateCheckFailureMessage(AppUpdateFailureCode code) {
+String appUpdateCheckFailureMessage(
+  AppLocalizations l10n,
+  AppUpdateFailureCode code,
+) {
   return switch (code) {
-    AppUpdateFailureCode.networkUnavailable => '网络不可用，检查更新失败',
-    AppUpdateFailureCode.requestTimeout => '检查更新超时，请稍后重试',
-    AppUpdateFailureCode.rateLimited => '检查更新过于频繁，请稍后重试',
-    AppUpdateFailureCode.installedVersionUnavailable => '无法读取当前应用版本',
-    _ => '检查更新失败，请稍后重试',
+    AppUpdateFailureCode.networkUnavailable =>
+      l10n.appUpdateCheckNetworkUnavailable,
+    AppUpdateFailureCode.requestTimeout => l10n.appUpdateCheckTimeout,
+    AppUpdateFailureCode.rateLimited => l10n.appUpdateCheckRateLimited,
+    AppUpdateFailureCode.installedVersionUnavailable =>
+      l10n.appUpdateInstalledVersionUnavailable,
+    _ => l10n.appUpdateCheckFailed,
   };
 }
 
-String appUpdateLaunchFailureMessage(AppUpdateFailureCode code) {
+String appUpdateLaunchFailureMessage(
+  AppLocalizations l10n,
+  AppUpdateFailureCode code,
+) {
   return switch (code) {
-    AppUpdateFailureCode.invalidAssetUrl => '更新下载地址无效，请稍后重试',
-    AppUpdateFailureCode.externalLaunchUnavailable => '无法打开下载链接，请确认设备已安装浏览器',
-    AppUpdateFailureCode.externalLaunchFailed => '打开下载链接失败，请稍后重试',
-    _ => '打开更新下载链接失败，请稍后重试',
+    AppUpdateFailureCode.invalidAssetUrl => l10n.appUpdateInvalidUrl,
+    AppUpdateFailureCode.externalLaunchUnavailable =>
+      l10n.appUpdateBrowserUnavailable,
+    AppUpdateFailureCode.externalLaunchFailed => l10n.appUpdateOpenUrlFailed,
+    _ => l10n.appUpdateLaunchFailed,
   };
 }

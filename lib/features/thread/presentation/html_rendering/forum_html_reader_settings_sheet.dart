@@ -199,10 +199,3 @@ class _TypographySlider extends StatelessWidget {
     );
   }
 }
-
-extension ForumHtmlReaderPreferencesDebugLabel on ForumHtmlReaderPreferences {
-  String get typographyDebugLabel {
-    return '字号 ${(typography.fontScale * 100).round()}% / '
-        '间隔 ${typography.lineHeightScale.toStringAsFixed(1)}×';
-  }
-}

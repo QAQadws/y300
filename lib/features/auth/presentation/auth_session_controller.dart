@@ -14,21 +14,21 @@ class AuthSessionViewState {
     required this.uid,
     required this.username,
     required this.isLoggingOut,
-    this.errorMessage,
+    this.logoutFailure,
   });
 
   final bool isLoggedIn;
   final String uid;
   final String username;
   final bool isLoggingOut;
-  final String? errorMessage;
+  final Object? logoutFailure;
 
   const AuthSessionViewState.signedOut()
     : isLoggedIn = false,
       uid = '',
       username = '',
       isLoggingOut = false,
-      errorMessage = null;
+      logoutFailure = null;
 
   factory AuthSessionViewState.fromSession(SessionInfo session) {
     return AuthSessionViewState(
@@ -44,7 +44,7 @@ class AuthSessionViewState {
     String? uid,
     String? username,
     bool? isLoggingOut,
-    String? errorMessage,
+    Object? logoutFailure,
     bool clearError = false,
   }) {
     return AuthSessionViewState(
@@ -52,7 +52,7 @@ class AuthSessionViewState {
       uid: uid ?? this.uid,
       username: username ?? this.username,
       isLoggingOut: isLoggingOut ?? this.isLoggingOut,
-      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      logoutFailure: clearError ? null : (logoutFailure ?? this.logoutFailure),
     );
   }
 }
@@ -93,10 +93,7 @@ class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
       return true;
     } catch (error) {
       state = AsyncData(
-        current.copyWith(
-          isLoggingOut: false,
-          errorMessage: _logoutErrorMessage(error),
-        ),
+        current.copyWith(isLoggingOut: false, logoutFailure: error),
       );
       return false;
     }
@@ -116,12 +113,5 @@ class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
       success: AuthSessionViewState.fromSession,
       failure: (_) => const AuthSessionViewState.signedOut(),
     );
-  }
-
-  String _logoutErrorMessage(Object error) {
-    if (error is StateError) {
-      return error.message;
-    }
-    return '退出登录失败：$error';
   }
 }

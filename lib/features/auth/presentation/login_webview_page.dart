@@ -5,6 +5,8 @@ import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/features/auth/data/services/webview_login_progress.dart';
 import 'package:y300/features/auth/data/services/webview_login_session_resolver.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/presentation/auth_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 基于 WebView 的登录页。
 ///
@@ -38,7 +40,7 @@ class _LoginWebViewPageState extends ConsumerState<LoginWebViewPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('登录'),
+        title: Text(AppLocalizations.of(context).authLoginTitle),
         bottom: _loadProgress < 100
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(2),
@@ -106,10 +108,19 @@ class _LoginWebViewPageState extends ConsumerState<LoginWebViewPage> {
               .acceptSession(session);
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()
-            ..showSnackBar(const SnackBar(content: Text('登录成功')));
+            ..showSnackBar(
+              SnackBar(
+                content: Text(AppLocalizations.of(context).authLoginSuccess),
+              ),
+            );
           Navigator.of(context).pop(true);
         case WebViewLoginFailed(:final message):
-          setState(() => _errorMessage = '登录校验失败：$message');
+          setState(
+            () => _errorMessage = AuthTextResolver.webViewFailure(
+              AppLocalizations.of(context),
+              message,
+            ),
+          );
         case WebViewLoginPending():
           // 用户还没提交或还在登录页，静默等待下一次页面加载。
           break;

@@ -5668,6 +5668,889 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'图片 {aid}'**
   String composerAttachmentFallback(String aid);
+
+  /// No description provided for @composerLinkUrlHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'https://example.com'**
+  String get composerLinkUrlHint;
+
+  /// No description provided for @commonSearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索'**
+  String get commonSearch;
+
+  /// No description provided for @commonMenu.
+  ///
+  /// In zh, this message translates to:
+  /// **'菜单'**
+  String get commonMenu;
+
+  /// No description provided for @commonPreviousPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一页'**
+  String get commonPreviousPage;
+
+  /// No description provided for @commonNextPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一页'**
+  String get commonNextPage;
+
+  /// No description provided for @commonPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'第{page}页'**
+  String commonPage(int page);
+
+  /// No description provided for @commonPageOf.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {page} / {total} 页'**
+  String commonPageOf(int page, int total);
+
+  /// No description provided for @commonImageLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片加载中'**
+  String get commonImageLoading;
+
+  /// No description provided for @commonNetworkError.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络连接失败'**
+  String get commonNetworkError;
+
+  /// No description provided for @commonTimeoutError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求超时'**
+  String get commonTimeoutError;
+
+  /// No description provided for @commonUnauthorizedError.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录状态已失效'**
+  String get commonUnauthorizedError;
+
+  /// No description provided for @commonServerError.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器暂时不可用'**
+  String get commonServerError;
+
+  /// No description provided for @commonParseError.
+  ///
+  /// In zh, this message translates to:
+  /// **'内容解析失败'**
+  String get commonParseError;
+
+  /// No description provided for @commonRequestError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求失败'**
+  String get commonRequestError;
+
+  /// No description provided for @authLoginTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录'**
+  String get authLoginTitle;
+
+  /// No description provided for @authUsername.
+  ///
+  /// In zh, this message translates to:
+  /// **'用户名'**
+  String get authUsername;
+
+  /// No description provided for @authUsernameHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入论坛账号'**
+  String get authUsernameHint;
+
+  /// No description provided for @authPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码'**
+  String get authPassword;
+
+  /// No description provided for @authLoginSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录成功'**
+  String get authLoginSuccess;
+
+  /// No description provided for @authCredentialsRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入用户名和密码'**
+  String get authCredentialsRequired;
+
+  /// No description provided for @authLoginTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录超时，请检查网络后重试'**
+  String get authLoginTimeout;
+
+  /// No description provided for @authLoginRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'账号或密码错误'**
+  String get authLoginRejected;
+
+  /// No description provided for @authLoginFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录失败：{error}'**
+  String authLoginFailed(String error);
+
+  /// No description provided for @authLoginWelcome.
+  ///
+  /// In zh, this message translates to:
+  /// **'欢迎回来，{username}'**
+  String authLoginWelcome(String username);
+
+  /// No description provided for @authWebViewVerificationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录校验失败：{error}'**
+  String authWebViewVerificationFailed(String error);
+
+  /// No description provided for @appUpdateDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现新版本'**
+  String get appUpdateDialogTitle;
+
+  /// No description provided for @appUpdateDialogBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'{appName} v{latestVersion} 已发布，当前版本为 v{installedVersion}'**
+  String appUpdateDialogBody(
+    String appName,
+    String latestVersion,
+    String installedVersion,
+  );
+
+  /// No description provided for @appUpdateDialogPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'是否立即更新？'**
+  String get appUpdateDialogPrompt;
+
+  /// No description provided for @appUpdateDialogReleaseNotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新说明'**
+  String get appUpdateDialogReleaseNotes;
+
+  /// No description provided for @appUpdateDialogIgnore.
+  ///
+  /// In zh, this message translates to:
+  /// **'忽略'**
+  String get appUpdateDialogIgnore;
+
+  /// No description provided for @appUpdateDialogLater.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get appUpdateDialogLater;
+
+  /// No description provided for @appUpdateDialogUpdate.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新'**
+  String get appUpdateDialogUpdate;
+
+  /// No description provided for @appUpdateCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查更新'**
+  String get appUpdateCheck;
+
+  /// No description provided for @appUpdateVersionLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本：读取中'**
+  String get appUpdateVersionLoading;
+
+  /// No description provided for @appUpdateCurrentVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本：{version}'**
+  String appUpdateCurrentVersion(String version);
+
+  /// No description provided for @appUpdateUpToDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'已是最新版本'**
+  String get appUpdateUpToDate;
+
+  /// No description provided for @appUpdateReleaseNotesEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本暂无更新日志'**
+  String get appUpdateReleaseNotesEmpty;
+
+  /// No description provided for @appUpdateReleaseNotesUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新日志暂不可用'**
+  String get appUpdateReleaseNotesUnavailable;
+
+  /// No description provided for @appUpdateDownloadNetworkUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络不可用，无法开始下载更新'**
+  String get appUpdateDownloadNetworkUnavailable;
+
+  /// No description provided for @appUpdateDownloadTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新检查超时，请稍后重试'**
+  String get appUpdateDownloadTimeout;
+
+  /// No description provided for @appUpdateDownloadInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前更新信息无效，请稍后重试'**
+  String get appUpdateDownloadInvalid;
+
+  /// No description provided for @appUpdateDownloadInProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新下载正在进行中，请稍候'**
+  String get appUpdateDownloadInProgress;
+
+  /// No description provided for @appUpdateDownloadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法开始更新下载，请稍后重试'**
+  String get appUpdateDownloadFailed;
+
+  /// No description provided for @appUpdateCheckNetworkUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络不可用，检查更新失败'**
+  String get appUpdateCheckNetworkUnavailable;
+
+  /// No description provided for @appUpdateCheckTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查更新超时，请稍后重试'**
+  String get appUpdateCheckTimeout;
+
+  /// No description provided for @appUpdateCheckRateLimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查更新过于频繁，请稍后重试'**
+  String get appUpdateCheckRateLimited;
+
+  /// No description provided for @appUpdateInstalledVersionUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取当前应用版本'**
+  String get appUpdateInstalledVersionUnavailable;
+
+  /// No description provided for @appUpdateCheckFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查更新失败，请稍后重试'**
+  String get appUpdateCheckFailed;
+
+  /// No description provided for @appUpdateInvalidUrl.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新下载地址无效，请稍后重试'**
+  String get appUpdateInvalidUrl;
+
+  /// No description provided for @appUpdateBrowserUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法打开下载链接，请确认设备已安装浏览器'**
+  String get appUpdateBrowserUnavailable;
+
+  /// No description provided for @appUpdateOpenUrlFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开下载链接失败，请稍后重试'**
+  String get appUpdateOpenUrlFailed;
+
+  /// No description provided for @appUpdateLaunchFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开更新下载链接失败，请稍后重试'**
+  String get appUpdateLaunchFailed;
+
+  /// No description provided for @searchTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索'**
+  String get searchTitle;
+
+  /// No description provided for @searchInputHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入关键词'**
+  String get searchInputHint;
+
+  /// No description provided for @searchLoadMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看更多'**
+  String get searchLoadMore;
+
+  /// No description provided for @searchRetryAfter.
+  ///
+  /// In zh, this message translates to:
+  /// **'请 {seconds} 秒后重试'**
+  String searchRetryAfter(int seconds);
+
+  /// No description provided for @searchNoResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到结果'**
+  String get searchNoResults;
+
+  /// No description provided for @searchFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索失败：{error}'**
+  String searchFailed(String error);
+
+  /// No description provided for @searchLoadMoreFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载更多失败：{error}'**
+  String searchLoadMoreFailed(String error);
+
+  /// No description provided for @searchForumFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛搜索'**
+  String get searchForumFallback;
+
+  /// No description provided for @searchQueueWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'{subject} 正在等待搜索，预计 {seconds} 秒'**
+  String searchQueueWaiting(String subject, String seconds);
+
+  /// No description provided for @searchResultTid.
+  ///
+  /// In zh, this message translates to:
+  /// **'TID：{tid}'**
+  String searchResultTid(String tid);
+
+  /// No description provided for @tagTitleFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'标签'**
+  String get tagTitleFallback;
+
+  /// No description provided for @tagLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'标签页加载失败：{error}'**
+  String tagLoadFailed(String error);
+
+  /// No description provided for @tagRelatedThreads.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {暂无相关帖子} other {{count} 个相关帖子}}'**
+  String tagRelatedThreads(int count);
+
+  /// No description provided for @tagReplies.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复 {count}'**
+  String tagReplies(int count);
+
+  /// No description provided for @tagViews.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看 {count}'**
+  String tagViews(int count);
+
+  /// No description provided for @tagLastPost.
+  ///
+  /// In zh, this message translates to:
+  /// **'最后发表 {value}'**
+  String tagLastPost(String value);
+
+  /// No description provided for @tagMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get tagMore;
+
+  /// No description provided for @tagEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无相关帖子'**
+  String get tagEmpty;
+
+  /// No description provided for @profileTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人资料'**
+  String get profileTitle;
+
+  /// No description provided for @profileMyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的资料'**
+  String get profileMyTitle;
+
+  /// 服务器未提供资料页标题时由应用生成的标题；username 保持原文
+  ///
+  /// In zh, this message translates to:
+  /// **'{username}的资料'**
+  String profileUserTitle(String username);
+
+  /// No description provided for @profileHome.
+  ///
+  /// In zh, this message translates to:
+  /// **'首页'**
+  String get profileHome;
+
+  /// No description provided for @profileLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先登录后查看个人资料'**
+  String get profileLoginRequired;
+
+  /// No description provided for @profileMyThreads.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的主题'**
+  String get profileMyThreads;
+
+  /// No description provided for @profileMyBlogs.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的日志'**
+  String get profileMyBlogs;
+
+  /// No description provided for @profileMyFavorites.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的收藏'**
+  String get profileMyFavorites;
+
+  /// No description provided for @profileMessages.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息提醒'**
+  String get profileMessages;
+
+  /// No description provided for @profileMyFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的好友'**
+  String get profileMyFriends;
+
+  /// No description provided for @profileDailyCheckIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'每日签到'**
+  String get profileDailyCheckIn;
+
+  /// No description provided for @profileTheirThreads.
+  ///
+  /// In zh, this message translates to:
+  /// **'Ta的主题'**
+  String get profileTheirThreads;
+
+  /// No description provided for @profileTheirBlogs.
+  ///
+  /// In zh, this message translates to:
+  /// **'Ta的日志'**
+  String get profileTheirBlogs;
+
+  /// No description provided for @profileSendMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'发短消息'**
+  String get profileSendMessage;
+
+  /// No description provided for @profileAddFriend.
+  ///
+  /// In zh, this message translates to:
+  /// **'加为好友'**
+  String get profileAddFriend;
+
+  /// No description provided for @profileActionUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂未接入该操作'**
+  String get profileActionUnavailable;
+
+  /// No description provided for @profileSignature.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人签名'**
+  String get profileSignature;
+
+  /// No description provided for @profileDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人资料'**
+  String get profileDetails;
+
+  /// No description provided for @profileLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'资料加载失败：{error}'**
+  String profileLoadFailed(String error);
+
+  /// No description provided for @profileBlogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志'**
+  String get profileBlogTitle;
+
+  /// No description provided for @profileBlogWrite.
+  ///
+  /// In zh, this message translates to:
+  /// **'写日志'**
+  String get profileBlogWrite;
+
+  /// No description provided for @profileBlogWriteUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'发表新日志暂未接入'**
+  String get profileBlogWriteUnavailable;
+
+  /// No description provided for @profileBlogEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有相关的日志'**
+  String get profileBlogEmpty;
+
+  /// No description provided for @profileBlogFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'好友的日志'**
+  String get profileBlogFriends;
+
+  /// No description provided for @profileBlogMine.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的日志'**
+  String get profileBlogMine;
+
+  /// No description provided for @profileBlogExplore.
+  ///
+  /// In zh, this message translates to:
+  /// **'随便看看'**
+  String get profileBlogExplore;
+
+  /// No description provided for @profileBlogLatest.
+  ///
+  /// In zh, this message translates to:
+  /// **'最新发表的日志'**
+  String get profileBlogLatest;
+
+  /// No description provided for @profileBlogRecommended.
+  ///
+  /// In zh, this message translates to:
+  /// **'推荐阅读的日志'**
+  String get profileBlogRecommended;
+
+  /// No description provided for @profileBlogComments.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志评论'**
+  String get profileBlogComments;
+
+  /// No description provided for @profileBlogCommentUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志评论提交暂未接入'**
+  String get profileBlogCommentUnavailable;
+
+  /// No description provided for @profileBlogComment.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论'**
+  String get profileBlogComment;
+
+  /// No description provided for @profileBlogViews.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览 {count}'**
+  String profileBlogViews(int count);
+
+  /// No description provided for @profileBlogCommentCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论 {count}'**
+  String profileBlogCommentCount(int count);
+
+  /// No description provided for @profileBlogLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志加载失败：{error}'**
+  String profileBlogLoadFailed(String error);
+
+  /// No description provided for @profileMessageCenterTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息提醒'**
+  String get profileMessageCenterTitle;
+
+  /// No description provided for @profileNotificationsTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'提醒 {count}'**
+  String profileNotificationsTab(int count);
+
+  /// No description provided for @profileMessagesTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息 {count}'**
+  String profileMessagesTab(int count);
+
+  /// No description provided for @profileNoNotifications.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无提醒'**
+  String get profileNoNotifications;
+
+  /// No description provided for @profileSystemNotification.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统提醒'**
+  String get profileSystemNotification;
+
+  /// No description provided for @profileNoMessages.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无消息'**
+  String get profileNoMessages;
+
+  /// No description provided for @profilePrivateMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'私信'**
+  String get profilePrivateMessage;
+
+  /// No description provided for @profileMessageTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'发给 {name}'**
+  String profileMessageTo(String name);
+
+  /// No description provided for @profileNewBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'新'**
+  String get profileNewBadge;
+
+  /// No description provided for @profileMessagesLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息加载失败：{error}'**
+  String profileMessagesLoadFailed(String error);
+
+  /// No description provided for @threadPrototypeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'HTML 正文渲染原型'**
+  String get threadPrototypeTitle;
+
+  /// No description provided for @threadPrototypeLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'样例加载失败：{error}'**
+  String threadPrototypeLoadFailed(String error);
+
+  /// No description provided for @threadPrototypeEmptyResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'样例加载失败：结果为空'**
+  String get threadPrototypeEmptyResult;
+
+  /// No description provided for @threadPrototypeMissingAsset.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地样例未找到，请从 {sourcePath} 复制到 {assetPath}'**
+  String threadPrototypeMissingAsset(String sourcePath, String assetPath);
+
+  /// No description provided for @threadPrototypeLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接：{url}'**
+  String threadPrototypeLink(String url);
+
+  /// No description provided for @threadPrototypeThemeLight.
+  ///
+  /// In zh, this message translates to:
+  /// **'浅色'**
+  String get threadPrototypeThemeLight;
+
+  /// No description provided for @threadPrototypeThemeDark.
+  ///
+  /// In zh, this message translates to:
+  /// **'深色'**
+  String get threadPrototypeThemeDark;
+
+  /// No description provided for @threadPrototypeJitterCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {未复制抖动日志} other {已复制 {count} 条抖动日志}}'**
+  String threadPrototypeJitterCopied(int count);
+
+  /// No description provided for @threadPrototypeImageOpened.
+  ///
+  /// In zh, this message translates to:
+  /// **'{postNumber}# 图片：{index}'**
+  String threadPrototypeImageOpened(int postNumber, int index);
+
+  /// No description provided for @threadPrototypeActionUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'原型页暂不执行该帖子操作'**
+  String get threadPrototypeActionUnsupported;
+
+  /// No description provided for @threadPrototypeJitterTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录抖动日志'**
+  String get threadPrototypeJitterTitle;
+
+  /// No description provided for @threadPrototypeJitterRecording.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录中，关闭后复制日志'**
+  String get threadPrototypeJitterRecording;
+
+  /// No description provided for @threadPrototypeJitterCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {尚未记录} other {已记录 {count} 条}}'**
+  String threadPrototypeJitterCount(int count);
+
+  /// No description provided for @threadPrototypeCopyLog.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制日志'**
+  String get threadPrototypeCopyLog;
+
+  /// No description provided for @threadPrototypeThreadSummarySemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'HTML 原型帖子样例摘要'**
+  String get threadPrototypeThreadSummarySemantics;
+
+  /// No description provided for @threadPrototypeSummarySemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'HTML 原型样例摘要'**
+  String get threadPrototypeSummarySemantics;
+
+  /// No description provided for @threadPrototypeSample.
+  ///
+  /// In zh, this message translates to:
+  /// **'样例：{sample}'**
+  String threadPrototypeSample(String sample);
+
+  /// No description provided for @threadPrototypeThread.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子：{subject}'**
+  String threadPrototypeThread(String subject);
+
+  /// No description provided for @threadPrototypePage.
+  ///
+  /// In zh, this message translates to:
+  /// **'页码：{page}/{total}'**
+  String threadPrototypePage(int page, String total);
+
+  /// No description provided for @threadPrototypePosts.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {楼层：0 个} other {楼层：{count} 个}}'**
+  String threadPrototypePosts(int count);
+
+  /// No description provided for @threadPrototypeConversionMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'转换模式：{mode}'**
+  String threadPrototypeConversionMode(String mode);
+
+  /// No description provided for @threadPrototypeConverter.
+  ///
+  /// In zh, this message translates to:
+  /// **'转换器：{converterId}'**
+  String threadPrototypeConverter(String converterId);
+
+  /// No description provided for @threadPrototypeConvertedNodes.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {转换文本节点：0 个} other {转换文本节点：{count} 个}}'**
+  String threadPrototypeConvertedNodes(int count);
+
+  /// No description provided for @threadPrototypePreviewTheme.
+  ///
+  /// In zh, this message translates to:
+  /// **'预览主题：{theme}'**
+  String threadPrototypePreviewTheme(String theme);
+
+  /// No description provided for @threadPrototypeTypography.
+  ///
+  /// In zh, this message translates to:
+  /// **'字号 {fontScale}% / 间隔 {lineHeight}×'**
+  String threadPrototypeTypography(int fontScale, String lineHeight);
+
+  /// No description provided for @threadPrototypeThemeAdaptation.
+  ///
+  /// In zh, this message translates to:
+  /// **'{authorFontMode, select, preserved {主题适配：始终启用 / 作者字号保留} unified {主题适配：始终启用 / 作者字号统一} other {主题适配：始终启用}}'**
+  String threadPrototypeThemeAdaptation(String authorFontMode);
+
+  /// No description provided for @threadPrototypeRawHtmlLength.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {原 HTML：0 字符} other {原 HTML：{count} 字符}}'**
+  String threadPrototypeRawHtmlLength(int count);
+
+  /// No description provided for @threadPrototypeFragmentLength.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {正文 fragment：0 字符} other {正文 fragment：{count} 字符}}'**
+  String threadPrototypeFragmentLength(int count);
+
+  /// No description provided for @threadPrototypeAdaptedColors.
+  ///
+  /// In zh, this message translates to:
+  /// **'适配前景：{remappedForeground}/{explicitForeground} · 适配背景：{remappedBackground}/{explicitBackground}'**
+  String threadPrototypeAdaptedColors(
+    int remappedForeground,
+    int explicitForeground,
+    int remappedBackground,
+    int explicitBackground,
+  );
+
+  /// No description provided for @threadPrototypeAdaptationFallbacks.
+  ///
+  /// In zh, this message translates to:
+  /// **'语义回退：{semanticFallback} · 不支持：{unsupported} · 隐藏：{concealed}'**
+  String threadPrototypeAdaptationFallbacks(
+    int semanticFallback,
+    int unsupported,
+    int concealed,
+  );
+
+  /// No description provided for @threadPrototypeMinimumContrast.
+  ///
+  /// In zh, this message translates to:
+  /// **'最低可见对比度：{value}'**
+  String threadPrototypeMinimumContrast(String value);
 }
 
 class _AppLocalizationsDelegate

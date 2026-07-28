@@ -1,25 +1,31 @@
+enum AuthLoginFailureCode { credentialsRequired, timeout, requestFailed }
+
+class AuthLoginFailure {
+  const AuthLoginFailure({required this.code, this.detail});
+
+  final AuthLoginFailureCode code;
+  final Object? detail;
+}
+
 class LoginPageState {
   const LoginPageState({
     required this.username,
     required this.password,
     required this.isSubmitting,
-    this.errorMessage,
-    this.successMessage,
+    this.failure,
   });
 
   final String username;
   final String password;
   final bool isSubmitting;
-  final String? errorMessage;
-  final String? successMessage;
+  final AuthLoginFailure? failure;
 
   factory LoginPageState.initial() {
     return const LoginPageState(
       username: '',
       password: '',
       isSubmitting: false,
-      errorMessage: null,
-      successMessage: null,
+      failure: null,
     );
   }
 
@@ -27,17 +33,14 @@ class LoginPageState {
     String? username,
     String? password,
     bool? isSubmitting,
-    String? errorMessage,
-    String? successMessage,
+    AuthLoginFailure? failure,
     bool clearError = false,
-    bool clearSuccess = false,
   }) {
     return LoginPageState(
       username: username ?? this.username,
       password: password ?? this.password,
       isSubmitting: isSubmitting ?? this.isSubmitting,
-      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      successMessage: clearSuccess ? null : (successMessage ?? this.successMessage),
+      failure: clearError ? null : (failure ?? this.failure),
     );
   }
 }

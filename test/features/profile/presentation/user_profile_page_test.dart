@@ -88,6 +88,64 @@ void main() {
     expect(avatarImage.request?.ownerId, '509957');
   });
 
+  testWidgets('UserProfilePage localizes an app-generated title fallback', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          userProfileRepositoryProvider.overrideWithValue(
+            _FakeUserProfileRepository(
+              const UserProfileData(
+                uid: '509957',
+                username: 'alice',
+                title: '',
+              ),
+            ),
+          ),
+          imageRequestHeaderBuilderProvider.overrideWithValue(
+            const _StaticImageHeaderBuilder(),
+          ),
+        ],
+        child: const LocalizedTestApp(
+          locale: Locale('zh', 'TW'),
+          home: UserProfilePage(uid: '509957'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('alice 的資料'), findsOneWidget);
+    expect(find.text('alice的资料'), findsNothing);
+  });
+
+  testWidgets('UserProfilePage localizes fallback actions and preserves data', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          userProfileRepositoryProvider.overrideWithValue(
+            _FakeUserProfileRepository(_profile),
+          ),
+          imageRequestHeaderBuilderProvider.overrideWithValue(
+            const _StaticImageHeaderBuilder(),
+          ),
+        ],
+        child: const LocalizedTestApp(
+          locale: Locale('zh', 'TW'),
+          home: UserProfilePage(uid: '509957'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ta 的主題'), findsOneWidget);
+    expect(find.text('傳送短訊息'), findsOneWidget);
+    expect(find.text('alice的资料'), findsWidgets);
+    expect(find.text('百合達人'), findsOneWidget);
+  });
+
   testWidgets('MyProfilePage renders my actions and opens message center', (
     tester,
   ) async {
@@ -110,13 +168,7 @@ void main() {
             const _StaticImageHeaderBuilder(),
           ),
         ],
-        child: const LocalizedTestApp(
-          locale: Locale('en'),
-          supportedLocales: [Locale('en')],
-          localizationsDelegates:
-              LocalizedTestApp.frameworkAndQuillLocalizationsDelegates,
-          home: MyProfilePage(),
-        ),
+        child: const LocalizedTestApp(home: MyProfilePage()),
       ),
     );
 
@@ -134,7 +186,7 @@ void main() {
     expect(find.byKey(const Key('profile-blog-list')), findsOneWidget);
     expect(find.text('还没有相关的日志'), findsOneWidget);
 
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('消息提醒'));
@@ -243,7 +295,7 @@ class _FakeProfileBlogRepository implements ProfileBlogRepository {
         viewTabs: [
           for (final item in ProfileBlogView.values)
             ProfileBlogNavigationTab(
-              label: item.label,
+              label: item.queryValue,
               url: 'https://bbs.yamibo.com/home.php?view=${item.queryValue}',
               isActive: item == view,
             ),

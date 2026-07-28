@@ -1,21 +1,19 @@
 enum ProfileBlogView {
-  friends('好友的日志', 'we'),
-  mine('我的日志', 'me'),
-  all('随便看看', 'all');
+  friends('we'),
+  mine('me'),
+  all('all');
 
-  const ProfileBlogView(this.label, this.queryValue);
+  const ProfileBlogView(this.queryValue);
 
-  final String label;
   final String queryValue;
 }
 
 enum ProfileBlogOrder {
-  latest('最新发表的日志', 'dateline'),
-  hot('推荐阅读的日志', 'hot');
+  latest('dateline'),
+  hot('hot');
 
-  const ProfileBlogOrder(this.label, this.queryValue);
+  const ProfileBlogOrder(this.queryValue);
 
-  final String label;
   final String queryValue;
 }
 
