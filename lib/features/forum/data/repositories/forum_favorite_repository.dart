@@ -95,10 +95,7 @@ class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
         'op': 'delete',
         'favid': normalizedFavid,
       },
-      data: <String, String>{
-        'formhash': formhash,
-        'deletesubmit': 'true',
-      },
+      data: <String, String>{'formhash': formhash, 'deletesubmit': 'true'},
     );
     return response.when(
       success: (data) => _mapUnfavoriteMutationResponse(data),
@@ -113,7 +110,10 @@ class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
         final formhash = data.formhash.trim();
         if (formhash.isEmpty) {
           return const ApiFailure<String>(
-            ApiError(type: ApiErrorType.business, message: 'formhash 为空，无法提交版块收藏操作'),
+            ApiError(
+              type: ApiErrorType.business,
+              message: 'formhash 为空，无法提交版块收藏操作',
+            ),
           );
         }
         return ApiSuccess<String>(formhash);
@@ -137,7 +137,8 @@ class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
     final code = _readCode(response).toLowerCase();
     final loweredMessage = message.toLowerCase();
     final alreadyApplied = _isAlreadyFavorited(code, loweredMessage);
-    final success = alreadyApplied ||
+    final success =
+        alreadyApplied ||
         code.contains('success') ||
         code.contains('succeed') ||
         code == 'favorite_do_success' ||
@@ -156,6 +157,9 @@ class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
       ForumFavoriteMutationResult(
         message: message,
         alreadyApplied: alreadyApplied,
+        code: alreadyApplied
+            ? ForumFavoriteMutationCode.alreadyApplied
+            : ForumFavoriteMutationCode.applied,
       ),
     );
   }
@@ -167,7 +171,8 @@ class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
     final code = _readCode(response).toLowerCase();
     final loweredMessage = message.toLowerCase();
     final alreadyApplied = _isAlreadyUnfavorited(code, loweredMessage);
-    final success = alreadyApplied ||
+    final success =
+        alreadyApplied ||
         code.contains('success') ||
         code.contains('succeed') ||
         code == 'do_success' ||
@@ -186,6 +191,9 @@ class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
       ForumFavoriteMutationResult(
         message: message,
         alreadyApplied: alreadyApplied,
+        code: alreadyApplied
+            ? ForumFavoriteMutationCode.alreadyApplied
+            : ForumFavoriteMutationCode.applied,
       ),
     );
   }
@@ -194,7 +202,10 @@ class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
     final messageNode = response.message;
     return ParseUtils.asString(
       messageNode?['messagestr'],
-      fallback: ParseUtils.asString(messageNode?['messageval'], fallback: fallback),
+      fallback: ParseUtils.asString(
+        messageNode?['messageval'],
+        fallback: fallback,
+      ),
     );
   }
 
@@ -224,7 +235,9 @@ class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
   }
 }
 
-final forumFavoriteRepositoryProvider = Provider<ForumFavoriteRepository>((ref) {
+final forumFavoriteRepositoryProvider = Provider<ForumFavoriteRepository>((
+  ref,
+) {
   return DefaultForumFavoriteRepository(
     apiClient: ref.watch(apiClientProvider),
     profileRepository: ref.watch(profileRepositoryProvider),

@@ -44,6 +44,198 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonUnknownError => '未知错误';
 
   @override
+  String get forumHomeTitle => '论坛首页';
+
+  @override
+  String get forumHomeSearch => '搜索论坛';
+
+  @override
+  String get forumHomeRefresh => '刷新论坛首页';
+
+  @override
+  String get forumHomeEmpty => '暂无论坛版块';
+
+  @override
+  String forumHomeLoadFailed(String error) {
+    return '论坛首页加载失败：$error';
+  }
+
+  @override
+  String forumHomeRefreshFailed(String error) {
+    return '刷新论坛首页失败：$error';
+  }
+
+  @override
+  String get forumHomeFavoriteForums => '我收藏的版块';
+
+  @override
+  String get forumHomeUncategorized => '未分类';
+
+  @override
+  String get forumDisplayTitle => '帖子列表';
+
+  @override
+  String get forumDisplaySearch => '搜索本版';
+
+  @override
+  String get forumDisplayCreateThread => '发帖';
+
+  @override
+  String get forumDisplayToday => '今日';
+
+  @override
+  String get forumDisplayThreads => '主题';
+
+  @override
+  String get forumDisplayRank => '排名';
+
+  @override
+  String get forumDisplaySubForum => '子版块';
+
+  @override
+  String get forumDisplayAnnouncements => '公告';
+
+  @override
+  String get forumDisplayPinned => '置顶';
+
+  @override
+  String get forumDisplayAnonymous => '匿名';
+
+  @override
+  String get forumDisplayPreviousPage => '上一页';
+
+  @override
+  String get forumDisplayNextPage => '下一页';
+
+  @override
+  String get forumDisplayNoMore => '没有更多';
+
+  @override
+  String forumDisplayPage(int page) {
+    return '第$page页';
+  }
+
+  @override
+  String get forumDisplayEmpty => '暂无帖子';
+
+  @override
+  String forumDisplayLoadFailed(String error) {
+    return '帖子列表加载失败：$error';
+  }
+
+  @override
+  String get forumDisplayCopiedLink => '已复制帖子链接';
+
+  @override
+  String get forumShellNative => '解析模式';
+
+  @override
+  String get forumShellWebView => 'WebView 模式';
+
+  @override
+  String get forumWebViewLoading => '正在加载论坛页面';
+
+  @override
+  String forumWebViewLoadFailed(String error) {
+    return '论坛页面加载失败：$error';
+  }
+
+  @override
+  String get forumWebViewRetry => '重试加载';
+
+  @override
+  String get forumWebViewOpenExternal => '在外部打开';
+
+  @override
+  String get forumWebViewOpenExternalFailed => '打开外部链接失败';
+
+  @override
+  String get forumWebViewClose => '关闭论坛页面';
+
+  @override
+  String get forumWebViewReplyThread => '回复帖子';
+
+  @override
+  String get forumWebViewRefresh => '刷新页面';
+
+  @override
+  String get forumWebViewBackHome => '返回首页';
+
+  @override
+  String get forumWebViewFeatureInProgress => '功能开发中';
+
+  @override
+  String get forumWebViewProcessing => '处理中';
+
+  @override
+  String get forumWebViewFavoriteForum => '收藏本版';
+
+  @override
+  String get forumWebViewUnfavoriteForum => '取消收藏';
+
+  @override
+  String get forumWebViewCancelFavorite => '取消收藏';
+
+  @override
+  String get forumWebViewFavoriteSuccess => '已收藏本版';
+
+  @override
+  String get forumWebViewUnfavoriteSuccess => '已取消收藏本版';
+
+  @override
+  String forumWebViewActionFailed(String error) {
+    return '操作失败，请稍后重试：$error';
+  }
+
+  @override
+  String get forumWebViewFavoriteForumsTitle => '取消收藏';
+
+  @override
+  String forumWebViewFavoriteForumsLoadFailed(String error) {
+    return '加载收藏版块失败：$error';
+  }
+
+  @override
+  String get forumWebViewNoFavoriteForums => '暂无收藏版块';
+
+  @override
+  String get forumWebViewAuthorOnly => '只看楼主';
+
+  @override
+  String get forumWebViewAllPosts => '看全部';
+
+  @override
+  String get forumWebViewNormalOrder => '正序浏览';
+
+  @override
+  String get forumWebViewReverseOrder => '倒序浏览';
+
+  @override
+  String get forumWebViewLocationFallback => '楼层定位失败，已打开帖子';
+
+  @override
+  String get forumWebViewPostLinkFallback => '帖子链接解析失败，已在网页中打开';
+
+  @override
+  String get forumWebViewReplySuccess => '回复成功';
+
+  @override
+  String get forumWebViewPostSuccess => '发布成功';
+
+  @override
+  String forumWebViewForumSearch(String board) {
+    return '$board搜索';
+  }
+
+  @override
+  String get forumWebViewSearchForum => '论坛搜索';
+
+  @override
+  String forumWebViewForumByFid(String fid) {
+    return 'fid=$fid';
+  }
+
+  @override
   String get historyTitle => '记录';
 
   @override
@@ -913,6 +1105,198 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get commonUnknownError => '未知錯誤';
+
+  @override
+  String get forumHomeTitle => '論壇首頁';
+
+  @override
+  String get forumHomeSearch => '搜尋論壇';
+
+  @override
+  String get forumHomeRefresh => '重新整理論壇首頁';
+
+  @override
+  String get forumHomeEmpty => '目前沒有論壇版塊';
+
+  @override
+  String forumHomeLoadFailed(String error) {
+    return '論壇首頁載入失敗：$error';
+  }
+
+  @override
+  String forumHomeRefreshFailed(String error) {
+    return '重新整理論壇首頁失敗：$error';
+  }
+
+  @override
+  String get forumHomeFavoriteForums => '我收藏的版塊';
+
+  @override
+  String get forumHomeUncategorized => '未分類';
+
+  @override
+  String get forumDisplayTitle => '帖子列表';
+
+  @override
+  String get forumDisplaySearch => '搜尋本版';
+
+  @override
+  String get forumDisplayCreateThread => '發帖';
+
+  @override
+  String get forumDisplayToday => '今日';
+
+  @override
+  String get forumDisplayThreads => '主題';
+
+  @override
+  String get forumDisplayRank => '排名';
+
+  @override
+  String get forumDisplaySubForum => '子版塊';
+
+  @override
+  String get forumDisplayAnnouncements => '公告';
+
+  @override
+  String get forumDisplayPinned => '置頂';
+
+  @override
+  String get forumDisplayAnonymous => '匿名';
+
+  @override
+  String get forumDisplayPreviousPage => '上一頁';
+
+  @override
+  String get forumDisplayNextPage => '下一頁';
+
+  @override
+  String get forumDisplayNoMore => '沒有更多';
+
+  @override
+  String forumDisplayPage(int page) {
+    return '第$page頁';
+  }
+
+  @override
+  String get forumDisplayEmpty => '目前沒有帖子';
+
+  @override
+  String forumDisplayLoadFailed(String error) {
+    return '帖子列表載入失敗：$error';
+  }
+
+  @override
+  String get forumDisplayCopiedLink => '已複製帖子連結';
+
+  @override
+  String get forumShellNative => '解析模式';
+
+  @override
+  String get forumShellWebView => 'WebView 模式';
+
+  @override
+  String get forumWebViewLoading => '正在載入論壇頁面';
+
+  @override
+  String forumWebViewLoadFailed(String error) {
+    return '論壇頁面載入失敗：$error';
+  }
+
+  @override
+  String get forumWebViewRetry => '重試載入';
+
+  @override
+  String get forumWebViewOpenExternal => '在外部開啟';
+
+  @override
+  String get forumWebViewOpenExternalFailed => '開啟外部連結失敗';
+
+  @override
+  String get forumWebViewClose => '關閉論壇頁面';
+
+  @override
+  String get forumWebViewReplyThread => '回覆帖子';
+
+  @override
+  String get forumWebViewRefresh => '重新整理頁面';
+
+  @override
+  String get forumWebViewBackHome => '返回首頁';
+
+  @override
+  String get forumWebViewFeatureInProgress => '功能開發中';
+
+  @override
+  String get forumWebViewProcessing => '處理中';
+
+  @override
+  String get forumWebViewFavoriteForum => '收藏本版';
+
+  @override
+  String get forumWebViewUnfavoriteForum => '取消收藏';
+
+  @override
+  String get forumWebViewCancelFavorite => '取消收藏';
+
+  @override
+  String get forumWebViewFavoriteSuccess => '已收藏本版';
+
+  @override
+  String get forumWebViewUnfavoriteSuccess => '已取消收藏本版';
+
+  @override
+  String forumWebViewActionFailed(String error) {
+    return '操作失敗，請稍後重試：$error';
+  }
+
+  @override
+  String get forumWebViewFavoriteForumsTitle => '取消收藏';
+
+  @override
+  String forumWebViewFavoriteForumsLoadFailed(String error) {
+    return '載入收藏版塊失敗：$error';
+  }
+
+  @override
+  String get forumWebViewNoFavoriteForums => '目前沒有收藏版塊';
+
+  @override
+  String get forumWebViewAuthorOnly => '只看樓主';
+
+  @override
+  String get forumWebViewAllPosts => '看全部';
+
+  @override
+  String get forumWebViewNormalOrder => '正序瀏覽';
+
+  @override
+  String get forumWebViewReverseOrder => '倒序瀏覽';
+
+  @override
+  String get forumWebViewLocationFallback => '樓層定位失敗，已開啟帖子';
+
+  @override
+  String get forumWebViewPostLinkFallback => '帖子連結解析失敗，已在網頁中開啟';
+
+  @override
+  String get forumWebViewReplySuccess => '回覆成功';
+
+  @override
+  String get forumWebViewPostSuccess => '發布成功';
+
+  @override
+  String forumWebViewForumSearch(String board) {
+    return '$board搜尋';
+  }
+
+  @override
+  String get forumWebViewSearchForum => '論壇搜尋';
+
+  @override
+  String forumWebViewForumByFid(String fid) {
+    return 'fid=$fid';
+  }
 
   @override
   String get historyTitle => '記錄';

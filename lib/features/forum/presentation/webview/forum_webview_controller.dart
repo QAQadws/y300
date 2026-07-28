@@ -385,16 +385,7 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     if (pageTitle != null) {
       return pageTitle;
     }
-    if (fid != null) {
-      return 'fid=$fid';
-    }
-    return switch (pageKind) {
-      ForumWebViewPageKind.forumDisplay => '帖子列表',
-      ForumWebViewPageKind.threadDetail => '帖子详情',
-      ForumWebViewPageKind.search => '搜索',
-      ForumWebViewPageKind.other => '百合会论坛',
-      ForumWebViewPageKind.home => null,
-    };
+    return null;
   }
 
   /// Synchronously resolves board name from cached [forumTagLookupProvider] data.

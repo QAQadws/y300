@@ -11,19 +11,18 @@ import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
+import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 const Duration _forumHomeSilentRefreshThreshold = Duration(seconds: 60);
 
 class ForumHomePage extends ConsumerStatefulWidget {
-  const ForumHomePage({
-    super.key,
-    this.isActive = true,
-  });
+  const ForumHomePage({super.key, this.isActive = true});
 
   final bool isActive;
 
@@ -42,8 +41,7 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _authSubscription =
-        ref.listenManual<AsyncValue<AuthSessionViewState>>(
+    _authSubscription = ref.listenManual<AsyncValue<AuthSessionViewState>>(
       authSessionControllerProvider,
       (previous, next) {
         final nextState = next.asData?.value;
@@ -104,6 +102,7 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final authState = ref.watch(authSessionControllerProvider);
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
     final resolvedAuthState = authState.asData?.value;
@@ -114,11 +113,11 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('论坛首页'),
+        title: Text(l10n.forumHomeTitle),
         actions: [
           IconButton(
             key: const Key('forum-home-search-button'),
-            tooltip: '搜索论坛',
+            tooltip: l10n.forumHomeSearch,
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -193,25 +192,32 @@ class _ResolvedForumHomeBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     ref.listen<AsyncValue<ForumHomePageState>>(forumHomeControllerProvider, (
       previous,
       next,
     ) {
-      final previousHint = previous?.asData?.value.refreshHint;
-      final nextHint = next.asData?.value.refreshHint;
-      if (nextHint == null || nextHint == previousHint) {
+      final previousNotice = previous?.asData?.value.refreshNotice;
+      final nextNotice = next.asData?.value.refreshNotice;
+      if (nextNotice == null ||
+          (nextNotice.code == previousNotice?.code &&
+              nextNotice.detail == previousNotice?.detail)) {
         return;
       }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(nextHint)));
+        ..showSnackBar(
+          SnackBar(
+            content: Text(ForumTextResolver.homeNotice(l10n, nextNotice)),
+          ),
+        );
     });
 
     final state = ref.watch(forumHomeControllerProvider);
     return state.when(
       loading: () => const _ForumHomeLoadingBody(),
       error: (error, _) => _ForumHomeErrorView(
-        message: error.toString(),
+        message: ForumTextResolver.homeLoadFailure(l10n, error),
         onRetry: () => ref
             .read(forumHomeControllerProvider.notifier)
             .refresh(forceNetwork: true),
@@ -247,13 +253,15 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
   void didUpdateWidget(covariant _ForumHomeContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     final activeKeys = {
-      for (final section in widget.state.viewData.sections) _sectionKey(section),
+      for (final section in widget.state.viewData.sections)
+        _sectionKey(section),
     };
     _collapsedSectionKeys.removeWhere((key) => !activeKeys.contains(key));
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final palette = ForumHomeNativePalette.resolve(Theme.of(context));
     return RefreshIndicator(
       onRefresh: () => ref
@@ -274,14 +282,20 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
                   onOpen: (item) => _openCarouselTarget(context, ref, item),
                   isActive: widget.isActive,
                 ),
+                if (widget.state.viewData.sections.isEmpty &&
+                    widget.state.viewData.carouselItems.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Center(child: Text(l10n.forumHomeEmpty)),
+                  ),
                 for (final section in widget.state.viewData.sections)
                   ForumHomeSectionCard(
-                    title: section.title,
+                    title: ForumTextResolver.sectionTitle(l10n, section),
                     isCollapsed: _collapsedSectionKeys.contains(
                       _sectionKey(section),
                     ),
                     onToggle: () => _toggleSection(section),
-                    children: _buildRows(context, section),
+                    children: _buildRows(context, section, l10n),
                   ),
               ],
             ),
@@ -316,7 +330,11 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
     return '${section.type.name}:${section.title}';
   }
 
-  List<Widget> _buildRows(BuildContext context, ForumSection section) {
+  List<Widget> _buildRows(
+    BuildContext context,
+    ForumSection section,
+    AppLocalizations l10n,
+  ) {
     final rows = <_ForumHomeRowData>[
       for (final forum in section.items)
         _ForumHomeRowData(
@@ -346,6 +364,7 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
           title: rows[index].title,
           description: rows[index].description,
           todayPosts: rows[index].todayPosts,
+          todayLabel: l10n.forumDisplayToday,
           isLast: index == rows.length - 1,
           onTap: rows[index].onTap,
         ),
@@ -377,9 +396,7 @@ class _ForumHomeLoadingBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.expand(
-      key: Key('forum-home-loading-body'),
-    );
+    return const SizedBox.expand(key: Key('forum-home-loading-body'));
   }
 }
 
@@ -418,7 +435,7 @@ class _ForumHomeErrorView extends StatelessWidget {
             FilledButton(
               key: const Key('forum-home-retry-button'),
               onPressed: onRetry,
-              child: const Text('重试'),
+              child: Text(AppLocalizations.of(context).commonRetry),
             ),
           ],
         ),

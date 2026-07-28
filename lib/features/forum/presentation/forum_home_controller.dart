@@ -7,7 +7,9 @@ import 'package:y300/features/forum/data/repositories/forum_home_repository.dart
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 
-final forumHomeNowProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+final forumHomeNowProvider = Provider<DateTime Function()>(
+  (ref) => DateTime.now,
+);
 
 final forumHomeControllerProvider =
     AsyncNotifierProvider.autoDispose<ForumHomeController, ForumHomePageState>(
@@ -41,16 +43,16 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
     try {
       final nextState = await _fetchForumHome(cachePolicy: cachePolicy);
       state = AsyncData(
-        nextState.copyWith(
-          isRefreshing: false,
-          clearHint: true,
-        ),
+        nextState.copyWith(isRefreshing: false, clearHint: true),
       );
     } catch (error) {
       state = AsyncData(
         current.copyWith(
           isRefreshing: false,
-          refreshHint: '刷新失败：$error',
+          refreshNotice: ForumHomeNotice(
+            code: ForumHomeNoticeCode.refreshFailed,
+            detail: error.toString(),
+          ),
         ),
       );
     }
@@ -119,7 +121,7 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
     if (favoriteItems.isNotEmpty) {
       sections.add(
         ForumSection(
-          title: '我收藏的版块',
+          title: '',
           type: ForumSectionType.favorite,
           items: favoriteItems,
         ),
@@ -217,7 +219,8 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
     if (uncategorized.isNotEmpty) {
       sections.add(
         ForumSection(
-          title: '未分类',
+          title: '',
+          type: ForumSectionType.uncategorized,
           items: [
             for (final forum in uncategorized)
               ForumHomeForumDisplayItem(
@@ -227,7 +230,6 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
                 todayPosts: _legacyTodayPosts(forum),
               ),
           ],
-          type: ForumSectionType.regular,
         ),
       );
     }

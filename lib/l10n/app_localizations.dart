@@ -163,6 +163,354 @@ abstract class AppLocalizations {
   /// **'未知错误'**
   String get commonUnknownError;
 
+  /// No description provided for @forumHomeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛首页'**
+  String get forumHomeTitle;
+
+  /// No description provided for @forumHomeSearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索论坛'**
+  String get forumHomeSearch;
+
+  /// No description provided for @forumHomeRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新论坛首页'**
+  String get forumHomeRefresh;
+
+  /// No description provided for @forumHomeEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无论坛版块'**
+  String get forumHomeEmpty;
+
+  /// 论坛首页首屏加载失败；error 是 presentation 层清理后的安全摘要
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛首页加载失败：{error}'**
+  String forumHomeLoadFailed(String error);
+
+  /// 论坛首页刷新失败；error 是 presentation 层清理后的安全摘要
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新论坛首页失败：{error}'**
+  String forumHomeRefreshFailed(String error);
+
+  /// No description provided for @forumHomeFavoriteForums.
+  ///
+  /// In zh, this message translates to:
+  /// **'我收藏的版块'**
+  String get forumHomeFavoriteForums;
+
+  /// No description provided for @forumHomeUncategorized.
+  ///
+  /// In zh, this message translates to:
+  /// **'未分类'**
+  String get forumHomeUncategorized;
+
+  /// No description provided for @forumDisplayTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子列表'**
+  String get forumDisplayTitle;
+
+  /// No description provided for @forumDisplaySearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索本版'**
+  String get forumDisplaySearch;
+
+  /// No description provided for @forumDisplayCreateThread.
+  ///
+  /// In zh, this message translates to:
+  /// **'发帖'**
+  String get forumDisplayCreateThread;
+
+  /// No description provided for @forumDisplayToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日'**
+  String get forumDisplayToday;
+
+  /// No description provided for @forumDisplayThreads.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题'**
+  String get forumDisplayThreads;
+
+  /// No description provided for @forumDisplayRank.
+  ///
+  /// In zh, this message translates to:
+  /// **'排名'**
+  String get forumDisplayRank;
+
+  /// No description provided for @forumDisplaySubForum.
+  ///
+  /// In zh, this message translates to:
+  /// **'子版块'**
+  String get forumDisplaySubForum;
+
+  /// No description provided for @forumDisplayAnnouncements.
+  ///
+  /// In zh, this message translates to:
+  /// **'公告'**
+  String get forumDisplayAnnouncements;
+
+  /// No description provided for @forumDisplayPinned.
+  ///
+  /// In zh, this message translates to:
+  /// **'置顶'**
+  String get forumDisplayPinned;
+
+  /// No description provided for @forumDisplayAnonymous.
+  ///
+  /// In zh, this message translates to:
+  /// **'匿名'**
+  String get forumDisplayAnonymous;
+
+  /// No description provided for @forumDisplayPreviousPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一页'**
+  String get forumDisplayPreviousPage;
+
+  /// No description provided for @forumDisplayNextPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一页'**
+  String get forumDisplayNextPage;
+
+  /// No description provided for @forumDisplayNoMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有更多'**
+  String get forumDisplayNoMore;
+
+  /// 论坛列表当前页按钮；page 是当前页码
+  ///
+  /// In zh, this message translates to:
+  /// **'第{page}页'**
+  String forumDisplayPage(int page);
+
+  /// No description provided for @forumDisplayEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无帖子'**
+  String get forumDisplayEmpty;
+
+  /// 论坛列表加载失败；error 是 presentation 层清理后的安全摘要
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子列表加载失败：{error}'**
+  String forumDisplayLoadFailed(String error);
+
+  /// No description provided for @forumDisplayCopiedLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制帖子链接'**
+  String get forumDisplayCopiedLink;
+
+  /// No description provided for @forumShellNative.
+  ///
+  /// In zh, this message translates to:
+  /// **'解析模式'**
+  String get forumShellNative;
+
+  /// No description provided for @forumShellWebView.
+  ///
+  /// In zh, this message translates to:
+  /// **'WebView 模式'**
+  String get forumShellWebView;
+
+  /// No description provided for @forumWebViewLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在加载论坛页面'**
+  String get forumWebViewLoading;
+
+  /// 受管论坛 WebView 加载失败；error 是安全摘要
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛页面加载失败：{error}'**
+  String forumWebViewLoadFailed(String error);
+
+  /// No description provided for @forumWebViewRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试加载'**
+  String get forumWebViewRetry;
+
+  /// No description provided for @forumWebViewOpenExternal.
+  ///
+  /// In zh, this message translates to:
+  /// **'在外部打开'**
+  String get forumWebViewOpenExternal;
+
+  /// No description provided for @forumWebViewOpenExternalFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开外部链接失败'**
+  String get forumWebViewOpenExternalFailed;
+
+  /// No description provided for @forumWebViewClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭论坛页面'**
+  String get forumWebViewClose;
+
+  /// No description provided for @forumWebViewReplyThread.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复帖子'**
+  String get forumWebViewReplyThread;
+
+  /// No description provided for @forumWebViewRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新页面'**
+  String get forumWebViewRefresh;
+
+  /// No description provided for @forumWebViewBackHome.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回首页'**
+  String get forumWebViewBackHome;
+
+  /// No description provided for @forumWebViewFeatureInProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'功能开发中'**
+  String get forumWebViewFeatureInProgress;
+
+  /// No description provided for @forumWebViewProcessing.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理中'**
+  String get forumWebViewProcessing;
+
+  /// No description provided for @forumWebViewFavoriteForum.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏本版'**
+  String get forumWebViewFavoriteForum;
+
+  /// No description provided for @forumWebViewUnfavoriteForum.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消收藏'**
+  String get forumWebViewUnfavoriteForum;
+
+  /// No description provided for @forumWebViewCancelFavorite.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消收藏'**
+  String get forumWebViewCancelFavorite;
+
+  /// No description provided for @forumWebViewFavoriteSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'已收藏本版'**
+  String get forumWebViewFavoriteSuccess;
+
+  /// No description provided for @forumWebViewUnfavoriteSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消收藏本版'**
+  String get forumWebViewUnfavoriteSuccess;
+
+  /// WebView 论坛操作失败；error 是安全摘要
+  ///
+  /// In zh, this message translates to:
+  /// **'操作失败，请稍后重试：{error}'**
+  String forumWebViewActionFailed(String error);
+
+  /// No description provided for @forumWebViewFavoriteForumsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消收藏'**
+  String get forumWebViewFavoriteForumsTitle;
+
+  /// 收藏版块列表加载失败；error 是安全摘要
+  ///
+  /// In zh, this message translates to:
+  /// **'加载收藏版块失败：{error}'**
+  String forumWebViewFavoriteForumsLoadFailed(String error);
+
+  /// No description provided for @forumWebViewNoFavoriteForums.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无收藏版块'**
+  String get forumWebViewNoFavoriteForums;
+
+  /// No description provided for @forumWebViewAuthorOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'只看楼主'**
+  String get forumWebViewAuthorOnly;
+
+  /// No description provided for @forumWebViewAllPosts.
+  ///
+  /// In zh, this message translates to:
+  /// **'看全部'**
+  String get forumWebViewAllPosts;
+
+  /// No description provided for @forumWebViewNormalOrder.
+  ///
+  /// In zh, this message translates to:
+  /// **'正序浏览'**
+  String get forumWebViewNormalOrder;
+
+  /// No description provided for @forumWebViewReverseOrder.
+  ///
+  /// In zh, this message translates to:
+  /// **'倒序浏览'**
+  String get forumWebViewReverseOrder;
+
+  /// No description provided for @forumWebViewLocationFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'楼层定位失败，已打开帖子'**
+  String get forumWebViewLocationFallback;
+
+  /// No description provided for @forumWebViewPostLinkFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子链接解析失败，已在网页中打开'**
+  String get forumWebViewPostLinkFallback;
+
+  /// No description provided for @forumWebViewReplySuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复成功'**
+  String get forumWebViewReplySuccess;
+
+  /// No description provided for @forumWebViewPostSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布成功'**
+  String get forumWebViewPostSuccess;
+
+  /// 当前版块搜索页标题；board 是服务器返回的版块名
+  ///
+  /// In zh, this message translates to:
+  /// **'{board}搜索'**
+  String forumWebViewForumSearch(String board);
+
+  /// No description provided for @forumWebViewSearchForum.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛搜索'**
+  String get forumWebViewSearchForum;
+
+  /// 无法解析版块名称时的安全标题；fid 是原始版块 ID
+  ///
+  /// In zh, this message translates to:
+  /// **'fid={fid}'**
+  String forumWebViewForumByFid(String fid);
+
   /// No description provided for @historyTitle.
   ///
   /// In zh, this message translates to:

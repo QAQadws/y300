@@ -442,6 +442,7 @@ class ForumHomeForumRow extends StatelessWidget {
     required this.title,
     required this.description,
     required this.todayPosts,
+    required this.todayLabel,
     required this.isLast,
     required this.onTap,
   });
@@ -449,6 +450,7 @@ class ForumHomeForumRow extends StatelessWidget {
   final String title;
   final String description;
   final int? todayPosts;
+  final String todayLabel;
   final bool isLast;
   final VoidCallback onTap;
 
@@ -492,6 +494,7 @@ class ForumHomeForumRow extends StatelessWidget {
                       const SizedBox(width: 8),
                       _TodayBadge(
                         todayPosts: todayPosts,
+                        label: todayLabel,
                         textTheme: textTheme,
                         palette: palette,
                       ),
@@ -523,11 +526,13 @@ class ForumHomeForumRow extends StatelessWidget {
 class _TodayBadge extends StatelessWidget {
   const _TodayBadge({
     required this.todayPosts,
+    required this.label,
     required this.textTheme,
     required this.palette,
   });
 
   final int? todayPosts;
+  final String label;
   final TextTheme textTheme;
   final ForumHomeNativePalette palette;
 
@@ -559,7 +564,7 @@ class _TodayBadge extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '今日',
+                      label,
                       style: textTheme.bodyMedium?.copyWith(
                         color: palette.todayText,
                       ),

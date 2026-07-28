@@ -85,7 +85,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-    expect(find.text('百合会论坛'), findsOneWidget);
+    expect(find.text('论坛首页'), findsOneWidget);
   });
 
   testWidgets('ForumShellPage keeps placeholder before native mode resolves', (

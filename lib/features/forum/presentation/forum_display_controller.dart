@@ -177,6 +177,10 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
       isLoadingMore: false,
       threads: const <ForumThreadSummary>[],
       query: query,
+      failure: ForumDisplayFailure(
+        code: ForumDisplayFailureCode.loadFailed,
+        detail: error.message,
+      ),
       errorMessage: error.message,
     );
   }

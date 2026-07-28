@@ -34,6 +34,101 @@
   "commonRetry": "重试",
   "commonUnknownError": "未知错误",
 
+  "forumHomeTitle": "论坛首页",
+  "forumHomeSearch": "搜索论坛",
+  "forumHomeRefresh": "刷新论坛首页",
+  "forumHomeEmpty": "暂无论坛版块",
+  "forumHomeLoadFailed": "论坛首页加载失败：{error}",
+  "@forumHomeLoadFailed": {
+    "description": "论坛首页首屏加载失败；error 是 presentation 层清理后的安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumHomeRefreshFailed": "刷新论坛首页失败：{error}",
+  "@forumHomeRefreshFailed": {
+    "description": "论坛首页刷新失败；error 是 presentation 层清理后的安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumHomeFavoriteForums": "我收藏的版块",
+  "forumHomeUncategorized": "未分类",
+  "forumDisplayTitle": "帖子列表",
+  "forumDisplaySearch": "搜索本版",
+  "forumDisplayCreateThread": "发帖",
+  "forumDisplayToday": "今日",
+  "forumDisplayThreads": "主题",
+  "forumDisplayRank": "排名",
+  "forumDisplaySubForum": "子版块",
+  "forumDisplayAnnouncements": "公告",
+  "forumDisplayPinned": "置顶",
+  "forumDisplayAnonymous": "匿名",
+  "forumDisplayPreviousPage": "上一页",
+  "forumDisplayNextPage": "下一页",
+  "forumDisplayNoMore": "没有更多",
+  "forumDisplayPage": "第{page}页",
+  "@forumDisplayPage": {
+    "description": "论坛列表当前页按钮；page 是当前页码",
+    "placeholders": {"page": {"type": "int"}}
+  },
+  "forumDisplayEmpty": "暂无帖子",
+  "forumDisplayLoadFailed": "帖子列表加载失败：{error}",
+  "@forumDisplayLoadFailed": {
+    "description": "论坛列表加载失败；error 是 presentation 层清理后的安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumDisplayCopiedLink": "已复制帖子链接",
+  "forumShellNative": "解析模式",
+  "forumShellWebView": "WebView 模式",
+  "forumWebViewLoading": "正在加载论坛页面",
+  "forumWebViewLoadFailed": "论坛页面加载失败：{error}",
+  "@forumWebViewLoadFailed": {
+    "description": "受管论坛 WebView 加载失败；error 是安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumWebViewRetry": "重试加载",
+  "forumWebViewOpenExternal": "在外部打开",
+  "forumWebViewOpenExternalFailed": "打开外部链接失败",
+  "forumWebViewClose": "关闭论坛页面",
+  "forumWebViewReplyThread": "回复帖子",
+  "forumWebViewRefresh": "刷新页面",
+  "forumWebViewBackHome": "返回首页",
+  "forumWebViewFeatureInProgress": "功能开发中",
+  "forumWebViewProcessing": "处理中",
+  "forumWebViewFavoriteForum": "收藏本版",
+  "forumWebViewUnfavoriteForum": "取消收藏",
+  "forumWebViewCancelFavorite": "取消收藏",
+  "forumWebViewFavoriteSuccess": "已收藏本版",
+  "forumWebViewUnfavoriteSuccess": "已取消收藏本版",
+  "forumWebViewActionFailed": "操作失败，请稍后重试：{error}",
+  "@forumWebViewActionFailed": {
+    "description": "WebView 论坛操作失败；error 是安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumWebViewFavoriteForumsTitle": "取消收藏",
+  "forumWebViewFavoriteForumsLoadFailed": "加载收藏版块失败：{error}",
+  "@forumWebViewFavoriteForumsLoadFailed": {
+    "description": "收藏版块列表加载失败；error 是安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumWebViewNoFavoriteForums": "暂无收藏版块",
+  "forumWebViewAuthorOnly": "只看楼主",
+  "forumWebViewAllPosts": "看全部",
+  "forumWebViewNormalOrder": "正序浏览",
+  "forumWebViewReverseOrder": "倒序浏览",
+  "forumWebViewLocationFallback": "楼层定位失败，已打开帖子",
+  "forumWebViewPostLinkFallback": "帖子链接解析失败，已在网页中打开",
+  "forumWebViewReplySuccess": "回复成功",
+  "forumWebViewPostSuccess": "发布成功",
+  "forumWebViewForumSearch": "{board}搜索",
+  "@forumWebViewForumSearch": {
+    "description": "当前版块搜索页标题；board 是服务器返回的版块名",
+    "placeholders": {"board": {"type": "String"}}
+  },
+  "forumWebViewSearchForum": "论坛搜索",
+  "forumWebViewForumByFid": "fid={fid}",
+  "@forumWebViewForumByFid": {
+    "description": "无法解析版块名称时的安全标题；fid 是原始版块 ID",
+    "placeholders": {"fid": {"type": "String"}}
+  },
+
   "historyTitle": "记录",
   "historySearchHint": "搜索记录",
   "historySearchOpen": "搜索记录",

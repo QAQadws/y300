@@ -1,7 +1,16 @@
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 
-enum ForumSectionType { regular, favorite }
+enum ForumSectionType { regular, favorite, uncategorized }
+
+enum ForumHomeNoticeCode { refreshFailed }
+
+class ForumHomeNotice {
+  const ForumHomeNotice({required this.code, this.detail});
+
+  final ForumHomeNoticeCode code;
+  final String? detail;
+}
 
 class ForumHomeForumDisplayItem {
   const ForumHomeForumDisplayItem({
@@ -68,6 +77,8 @@ class ForumHomePageState {
     required this.requestProfile,
     required this.isRefreshing,
     required this.lastUpdatedAt,
+    this.refreshNotice,
+    @Deprecated('Use refreshNotice and presentation localization instead.')
     this.refreshHint,
   });
 
@@ -75,6 +86,10 @@ class ForumHomePageState {
   final DocumentRequestProfile requestProfile;
   final bool isRefreshing;
   final DateTime lastUpdatedAt;
+
+  final ForumHomeNotice? refreshNotice;
+
+  @Deprecated('Use refreshNotice and presentation localization instead.')
   final String? refreshHint;
 
   ForumHomePageState copyWith({
@@ -82,6 +97,7 @@ class ForumHomePageState {
     DocumentRequestProfile? requestProfile,
     bool? isRefreshing,
     DateTime? lastUpdatedAt,
+    ForumHomeNotice? refreshNotice,
     String? refreshHint,
     bool clearHint = false,
   }) {
@@ -90,6 +106,7 @@ class ForumHomePageState {
       requestProfile: requestProfile ?? this.requestProfile,
       isRefreshing: isRefreshing ?? this.isRefreshing,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      refreshNotice: clearHint ? null : (refreshNotice ?? this.refreshNotice),
       refreshHint: clearHint ? null : (refreshHint ?? this.refreshHint),
     );
   }

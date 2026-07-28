@@ -10,6 +10,7 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_controller.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
+import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_widgets.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
@@ -19,6 +20,7 @@ import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ForumDisplayPage extends ConsumerStatefulWidget {
   const ForumDisplayPage({super.key, required this.fid, this.title = ''});
@@ -44,6 +46,7 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final args = ForumDisplayArgs(fid: widget.fid, title: widget.title);
     final asyncState = ref.watch(forumDisplayControllerProvider(args));
     final controller = ref.read(forumDisplayControllerProvider(args).notifier);
@@ -76,13 +79,13 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
           if (searchFid != null)
             IconButton(
               key: const Key('forum-display-search-button'),
-              tooltip: '搜索本版',
+              tooltip: l10n.forumDisplaySearch,
               onPressed: () => _openSearch(context, searchFid),
               icon: const Icon(Icons.search),
             ),
           IconButton(
             key: const Key('forum-display-compose-button'),
-            tooltip: '发帖',
+            tooltip: l10n.forumDisplayCreateThread,
             onPressed: () => _openComposer(context, state),
             icon: const Icon(Icons.edit_outlined),
           ),
@@ -90,9 +93,11 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
       ),
       body: (asyncState.isLoading && state.threads.isEmpty)
           ? const ForumDisplayInitialLoading()
-          : state.errorMessage != null && state.threads.isEmpty
+          : (state.failure != null || state.errorMessage != null) &&
+                state.threads.isEmpty
           ? ForumDisplayErrorView(
-              message: state.errorMessage!,
+              failure: state.failure,
+              legacyDetail: state.errorMessage,
               onRetry: () => controller.refresh(forceNetwork: true),
             )
           : ForumPullToRefresh(
@@ -251,7 +256,11 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     }
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('已复制帖子链接')));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).forumDisplayCopiedLink),
+        ),
+      );
   }
 
   String? _threadLinkForCopy(ForumThreadSummary thread) {
@@ -326,13 +335,14 @@ class _ForumDisplayAppBarTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final textStyle = DefaultTextStyle.of(context).style;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          state.title.isNotEmpty ? state.title : '帖子列表',
+          ForumTextResolver.forumDisplayTitle(l10n, state.title),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -343,13 +353,19 @@ class _ForumDisplayAppBarTitle extends StatelessWidget {
             key: const Key('forum-display-appbar-stats'),
             mainAxisSize: MainAxisSize.min,
             children: [
-              _AppBarStatText(label: '今日', value: state.todayPosts),
-              const SizedBox(width: 10),
-              Flexible(
-                child: _AppBarStatText(label: '主题', value: state.totalThreads),
+              _AppBarStatText(
+                label: l10n.forumDisplayToday,
+                value: state.todayPosts,
               ),
               const SizedBox(width: 10),
-              _AppBarStatText(label: '排名', value: state.rank),
+              Flexible(
+                child: _AppBarStatText(
+                  label: l10n.forumDisplayThreads,
+                  value: state.totalThreads,
+                ),
+              ),
+              const SizedBox(width: 10),
+              _AppBarStatText(label: l10n.forumDisplayRank, value: state.rank),
             ],
           ),
         ),

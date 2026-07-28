@@ -14,6 +14,101 @@
   "commonRetry": "重試",
   "commonUnknownError": "未知錯誤",
 
+  "forumHomeTitle": "論壇首頁",
+  "forumHomeSearch": "搜尋論壇",
+  "forumHomeRefresh": "重新整理論壇首頁",
+  "forumHomeEmpty": "目前沒有論壇版塊",
+  "forumHomeLoadFailed": "論壇首頁載入失敗：{error}",
+  "@forumHomeLoadFailed": {
+    "description": "論壇首頁首屏載入失敗；error 是 presentation 層清理後的安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumHomeRefreshFailed": "重新整理論壇首頁失敗：{error}",
+  "@forumHomeRefreshFailed": {
+    "description": "論壇首頁重新整理失敗；error 是 presentation 層清理後的安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumHomeFavoriteForums": "我收藏的版塊",
+  "forumHomeUncategorized": "未分類",
+  "forumDisplayTitle": "帖子列表",
+  "forumDisplaySearch": "搜尋本版",
+  "forumDisplayCreateThread": "發帖",
+  "forumDisplayToday": "今日",
+  "forumDisplayThreads": "主題",
+  "forumDisplayRank": "排名",
+  "forumDisplaySubForum": "子版塊",
+  "forumDisplayAnnouncements": "公告",
+  "forumDisplayPinned": "置頂",
+  "forumDisplayAnonymous": "匿名",
+  "forumDisplayPreviousPage": "上一頁",
+  "forumDisplayNextPage": "下一頁",
+  "forumDisplayNoMore": "沒有更多",
+  "forumDisplayPage": "第{page}頁",
+  "@forumDisplayPage": {
+    "description": "論壇列表目前頁按鈕；page 是目前頁碼",
+    "placeholders": {"page": {"type": "int"}}
+  },
+  "forumDisplayEmpty": "目前沒有帖子",
+  "forumDisplayLoadFailed": "帖子列表載入失敗：{error}",
+  "@forumDisplayLoadFailed": {
+    "description": "論壇列表載入失敗；error 是 presentation 層清理後的安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumDisplayCopiedLink": "已複製帖子連結",
+  "forumShellNative": "解析模式",
+  "forumShellWebView": "WebView 模式",
+  "forumWebViewLoading": "正在載入論壇頁面",
+  "forumWebViewLoadFailed": "論壇頁面載入失敗：{error}",
+  "@forumWebViewLoadFailed": {
+    "description": "受管論壇 WebView 載入失敗；error 是安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumWebViewRetry": "重試載入",
+  "forumWebViewOpenExternal": "在外部開啟",
+  "forumWebViewOpenExternalFailed": "開啟外部連結失敗",
+  "forumWebViewClose": "關閉論壇頁面",
+  "forumWebViewReplyThread": "回覆帖子",
+  "forumWebViewRefresh": "重新整理頁面",
+  "forumWebViewBackHome": "返回首頁",
+  "forumWebViewFeatureInProgress": "功能開發中",
+  "forumWebViewProcessing": "處理中",
+  "forumWebViewFavoriteForum": "收藏本版",
+  "forumWebViewUnfavoriteForum": "取消收藏",
+  "forumWebViewCancelFavorite": "取消收藏",
+  "forumWebViewFavoriteSuccess": "已收藏本版",
+  "forumWebViewUnfavoriteSuccess": "已取消收藏本版",
+  "forumWebViewActionFailed": "操作失敗，請稍後重試：{error}",
+  "@forumWebViewActionFailed": {
+    "description": "WebView 論壇操作失敗；error 是安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumWebViewFavoriteForumsTitle": "取消收藏",
+  "forumWebViewFavoriteForumsLoadFailed": "載入收藏版塊失敗：{error}",
+  "@forumWebViewFavoriteForumsLoadFailed": {
+    "description": "收藏版塊列表載入失敗；error 是安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "forumWebViewNoFavoriteForums": "目前沒有收藏版塊",
+  "forumWebViewAuthorOnly": "只看樓主",
+  "forumWebViewAllPosts": "看全部",
+  "forumWebViewNormalOrder": "正序瀏覽",
+  "forumWebViewReverseOrder": "倒序瀏覽",
+  "forumWebViewLocationFallback": "樓層定位失敗，已開啟帖子",
+  "forumWebViewPostLinkFallback": "帖子連結解析失敗，已在網頁中開啟",
+  "forumWebViewReplySuccess": "回覆成功",
+  "forumWebViewPostSuccess": "發布成功",
+  "forumWebViewForumSearch": "{board}搜尋",
+  "@forumWebViewForumSearch": {
+    "description": "目前版塊搜尋頁標題；board 是伺服器返回的版塊名稱",
+    "placeholders": {"board": {"type": "String"}}
+  },
+  "forumWebViewSearchForum": "論壇搜尋",
+  "forumWebViewForumByFid": "fid={fid}",
+  "@forumWebViewForumByFid": {
+    "description": "無法解析版塊名稱時的安全標題；fid 是原始版塊 ID",
+    "placeholders": {"fid": {"type": "String"}}
+  },
+
   "historyTitle": "記錄",
   "historySearchHint": "搜尋記錄",
   "historySearchOpen": "搜尋記錄",

@@ -22,6 +22,7 @@ import 'package:y300/features/forum/domain/services/forum_webview_thread_documen
 import 'package:y300/features/forum/domain/services/forum_webview_thread_link_router.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_visual_policy_resolver.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
+import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/features/forum/presentation/mappers/forum_webview_history_visit_mapper.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
@@ -40,6 +41,7 @@ import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ForumWebViewPage extends ConsumerStatefulWidget {
   const ForumWebViewPage({super.key});
@@ -520,7 +522,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       );
       return;
     }
-    _showSnackBar(ScaffoldMessenger.of(context), '楼层定位失败，已打开帖子');
+    _showSnackBar(
+      ScaffoldMessenger.of(context),
+      AppLocalizations.of(context).forumWebViewLocationFallback,
+    );
     _pushNativeThread(tid: resolution.tid!);
   }
 
@@ -544,7 +549,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       }
     }
     final messenger = ScaffoldMessenger.of(context);
-    _showSnackBar(messenger, '帖子链接解析失败，已在网页中打开');
+    _showSnackBar(
+      messenger,
+      AppLocalizations.of(context).forumWebViewPostLinkFallback,
+    );
     await _openThreadLinkInWebView(resolution);
   }
 
@@ -581,7 +589,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     required SystemUiOverlayStyle overlayStyle,
     required bool popOnRootBack,
   }) {
-    final title = _resolveTitle(state);
+    final l10n = AppLocalizations.of(context);
+    final title = ForumTextResolver.webViewTitle(l10n, state);
 
     return AppBar(
       automaticallyImplyLeading: false,
@@ -605,7 +614,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         if (_canShowSearchButton(state))
           IconButton(
             key: const Key('forum-webview-search-button'),
-            tooltip: _searchTooltip(state),
+            tooltip: ForumTextResolver.searchTooltip(l10n, state),
             onPressed: () {
               unawaited(_loadSearchPage(driver, state));
             },
@@ -614,7 +623,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         if (_canOpenThreadReply(state))
           IconButton(
             key: const Key('forum-webview-thread-reply-button'),
-            tooltip: '回复帖子',
+            tooltip: l10n.forumWebViewReplyThread,
             onPressed: () {
               unawaited(_openThreadReplyComposer(context, state, driver));
             },
@@ -626,69 +635,75 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           onSelected: (value) {
             unawaited(_handleMoreMenuSelected(context, state, driver, value));
           },
-          itemBuilder: (context) => _buildMoreMenuItems(state),
+          itemBuilder: (context) => _buildMoreMenuItems(context, state),
         ),
       ],
     );
   }
 
-  List<PopupMenuEntry<String>> _buildMoreMenuItems(ForumWebViewState state) {
-    const refreshItem = PopupMenuItem<String>(
+  List<PopupMenuEntry<String>> _buildMoreMenuItems(
+    BuildContext context,
+    ForumWebViewState state,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    final refreshItem = PopupMenuItem<String>(
       key: Key('forum-webview-refresh-action'),
       value: _refreshPageAction,
-      child: Text('刷新页面'),
+      child: Text(l10n.forumWebViewRefresh),
     );
 
     switch (state.pageKind) {
       case ForumWebViewPageKind.home:
         return <PopupMenuEntry<String>>[
           refreshItem,
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             key: Key('forum-webview-home-unfavorite-action'),
             value: _homeUnfavoriteAction,
-            child: Text('取消收藏'),
+            child: Text(l10n.forumWebViewCancelFavorite),
           ),
         ];
       case ForumWebViewPageKind.forumDisplay:
         return <PopupMenuEntry<String>>[
           refreshItem,
-          ..._buildForumDisplayMoreMenuItems(state),
+          ..._buildForumDisplayMoreMenuItems(context, state),
         ];
       case ForumWebViewPageKind.threadDetail:
         return <PopupMenuEntry<String>>[
           refreshItem,
-          ..._buildThreadDetailMoreMenuItems(state),
+          ..._buildThreadDetailMoreMenuItems(context, state),
         ];
       case ForumWebViewPageKind.search:
         return <PopupMenuEntry<String>>[
           refreshItem,
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             key: Key('forum-webview-search-home-action'),
             value: _searchGoHomeAction,
-            child: Text('返回首页'),
+            child: Text(l10n.forumWebViewBackHome),
           ),
         ];
       case ForumWebViewPageKind.other:
         return <PopupMenuEntry<String>>[
           refreshItem,
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             enabled: false,
             value: 'placeholder',
-            child: Text('功能开发中'),
+            child: Text(l10n.forumWebViewFeatureInProgress),
           ),
         ];
     }
   }
 
   List<PopupMenuEntry<String>> _buildForumDisplayMoreMenuItems(
+    BuildContext context,
     ForumWebViewState state,
   ) {
+    final l10n = AppLocalizations.of(context);
     if (state.isFavoriteMutationLoading) {
-      return const <PopupMenuEntry<String>>[
+      return <PopupMenuEntry<String>>[
         PopupMenuItem<String>(
           enabled: false,
           value: 'favorite-loading',
-          child: Text('处理中'),
+          child: Text(l10n.forumWebViewProcessing),
         ),
       ];
     }
@@ -698,32 +713,38 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         value: state.currentFavoriteForum == null
             ? _forumFavoriteAction
             : _forumUnfavoriteAction,
-        child: Text(state.currentFavoriteForum == null ? '收藏本版' : '取消收藏'),
+        child: Text(
+          state.currentFavoriteForum == null
+              ? l10n.forumWebViewFavoriteForum
+              : l10n.forumWebViewUnfavoriteForum,
+        ),
       ),
     ];
   }
 
   List<PopupMenuEntry<String>> _buildThreadDetailMoreMenuItems(
+    BuildContext context,
     ForumWebViewState state,
   ) {
+    final l10n = AppLocalizations.of(context);
     final menu =
         state.threadDetailMenu ?? _buildFallbackThreadDetailMenu(state);
 
     final items = <PopupMenuEntry<String>>[];
     if (!menu.isAuthorOnly && menu.authorOnlyUri != null) {
       items.add(
-        const PopupMenuItem<String>(
+        PopupMenuItem<String>(
           key: Key('forum-webview-thread-author-action'),
           value: _threadAuthorOnlyAction,
-          child: Text('只看楼主'),
+          child: Text(l10n.forumWebViewAuthorOnly),
         ),
       );
     } else if (menu.isAuthorOnly && menu.normalThreadUri != null) {
       items.add(
-        const PopupMenuItem<String>(
+        PopupMenuItem<String>(
           key: Key('forum-webview-thread-author-action'),
           value: _threadNormalThreadAction,
-          child: Text('看全部'),
+          child: Text(l10n.forumWebViewAllPosts),
         ),
       );
     }
@@ -734,14 +755,18 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         value: menu.isReverseOrder
             ? _threadNormalOrderAction
             : _threadReverseOrderAction,
-        child: Text(menu.isReverseOrder ? '正序浏览' : '倒序浏览'),
+        child: Text(
+          menu.isReverseOrder
+              ? l10n.forumWebViewNormalOrder
+              : l10n.forumWebViewReverseOrder,
+        ),
       ),
     );
     items.add(
-      const PopupMenuItem<String>(
+      PopupMenuItem<String>(
         key: Key('forum-webview-thread-home-action'),
         value: _threadGoHomeAction,
-        child: Text('返回首页'),
+        child: Text(l10n.forumWebViewBackHome),
       ),
     );
     return items;
@@ -761,36 +786,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       reverseOrderUri: navigator.buildReverseOrderUri(state.currentUri),
       normalOrderUri: navigator.buildNormalOrderUri(state.currentUri),
     );
-  }
-
-  String _resolveTitle(ForumWebViewState state) {
-    switch (state.pageKind) {
-      case ForumWebViewPageKind.home:
-        return '百合会论坛';
-      case ForumWebViewPageKind.forumDisplay:
-      case ForumWebViewPageKind.threadDetail:
-        return state.boardName ?? '百合会论坛';
-      case ForumWebViewPageKind.search:
-        if (state.searchScope == ForumWebViewSearchScope.curForum) {
-          if (state.boardName != null) {
-            return '${state.boardName}搜索';
-          }
-          if (state.fid != null) {
-            return 'fid=${state.fid}搜索';
-          }
-        }
-        return '论坛搜索';
-      case ForumWebViewPageKind.other:
-        return state.pageTitle ?? '百合会论坛';
-    }
-  }
-
-  String _searchTooltip(ForumWebViewState state) {
-    if (state.pageKind == ForumWebViewPageKind.forumDisplay &&
-        (state.fid ?? '').trim().isNotEmpty) {
-      return '搜索本版';
-    }
-    return '搜索论坛';
   }
 
   bool _canShowSearchButton(ForumWebViewState state) {
@@ -822,6 +817,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final l10n = AppLocalizations.of(context);
     final result = await navigator.push<ReplyComposerResult>(
       MaterialPageRoute<ReplyComposerResult>(
         builder: (_) => ReplyComposerPage(
@@ -842,7 +838,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (messenger != null) {
       _showSnackBar(
         messenger,
-        result.message.trim().isEmpty ? '回复成功' : result.message,
+        result.message.trim().isEmpty
+            ? l10n.forumWebViewReplySuccess
+            : result.message,
       );
     }
     await driver.reload();
@@ -858,6 +856,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final driver = ref.read(forumWebViewDriverProvider);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final l10n = AppLocalizations.of(context);
     final result = await navigator.push<ReplyComposerResult>(
       MaterialPageRoute<ReplyComposerResult>(
         builder: (_) => ReplyComposerPage(
@@ -879,7 +878,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (messenger != null) {
       _showSnackBar(
         messenger,
-        result.message.trim().isEmpty ? '回复成功' : result.message,
+        result.message.trim().isEmpty
+            ? l10n.forumWebViewReplySuccess
+            : result.message,
       );
     }
     await driver.reload();
@@ -895,6 +896,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final driver = ref.read(forumWebViewDriverProvider);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final l10n = AppLocalizations.of(context);
     final result = await navigator.push<PostingComposerResult>(
       MaterialPageRoute<PostingComposerResult>(
         builder: (_) => PostingComposerPage(
@@ -913,7 +915,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (messenger != null) {
       _showSnackBar(
         messenger,
-        result.message.trim().isEmpty ? '发布成功' : result.message,
+        result.message.trim().isEmpty
+            ? l10n.forumWebViewPostSuccess
+            : result.message,
       );
     }
     // 方案 §4.2 本期保持简单：仅刷新当前 WebView。新帖 tid 已经在
@@ -1007,7 +1011,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
     if (messenger != null) {
-      _showSnackBar(messenger, '打开外部链接失败');
+      _showSnackBar(
+        messenger,
+        AppLocalizations.of(context).forumWebViewOpenExternalFailed,
+      );
     }
   }
 
@@ -1076,6 +1083,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           context: context,
           driver: driver,
           reloadUri: state.currentUri,
+          successMessage: AppLocalizations.of(
+            context,
+          ).forumWebViewFavoriteSuccess,
           action: ref
               .read(forumWebViewControllerProvider.notifier)
               .favoriteCurrentForum,
@@ -1086,6 +1096,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           context: context,
           driver: driver,
           reloadUri: state.currentUri,
+          successMessage: AppLocalizations.of(
+            context,
+          ).forumWebViewUnfavoriteSuccess,
           action: ref
               .read(forumWebViewControllerProvider.notifier)
               .unfavoriteCurrentForum,
@@ -1138,6 +1151,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     BuildContext context,
     ForumWebViewDriver driver,
   ) {
+    final l10n = AppLocalizations.of(context);
     final controller = ref.read(forumWebViewControllerProvider.notifier);
     final navigator = ref.read(forumWebViewNavigatorProvider);
     final messenger = ScaffoldMessenger.of(context);
@@ -1154,13 +1168,11 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             if (!mounted || !messenger.mounted) {
               return;
             }
-            if (result case ApiSuccess<ForumFavoriteMutationResult>(
-              :final data,
-            )) {
+            if (result case ApiSuccess<ForumFavoriteMutationResult>()) {
               if (sheetNavigator.mounted) {
                 sheetNavigator.pop();
               }
-              _showSnackBar(messenger, data.message);
+              _showSnackBar(messenger, l10n.forumWebViewUnfavoriteSuccess);
               final referrerUri =
                   ref
                       .read(forumWebViewControllerProvider)
@@ -1175,8 +1187,13 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
               );
               return;
             }
-            final message = result.errorOrNull?.message ?? '取消收藏失败，请稍后重试';
-            _showSnackBar(messenger, message);
+            _showSnackBar(
+              messenger,
+              ForumTextResolver.webViewActionFailure(
+                l10n,
+                result.errorOrNull?.message,
+              ),
+            );
           },
         );
       },
@@ -1187,20 +1204,24 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     required BuildContext context,
     required ForumWebViewDriver driver,
     required Uri reloadUri,
+    required String successMessage,
     required Future<ApiResult<ForumFavoriteMutationResult>> Function() action,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = AppLocalizations.of(context);
     final result = await action();
     if (!mounted || !messenger.mounted) {
       return;
     }
-    if (result case ApiSuccess<ForumFavoriteMutationResult>(:final data)) {
-      _showSnackBar(messenger, data.message);
+    if (result case ApiSuccess<ForumFavoriteMutationResult>()) {
+      _showSnackBar(messenger, successMessage);
       await _loadManagedUri(driver, reloadUri, referrerUri: reloadUri);
       return;
     }
-    final message = result.errorOrNull?.message ?? '操作失败，请稍后重试';
-    _showSnackBar(messenger, message);
+    _showSnackBar(
+      messenger,
+      ForumTextResolver.webViewActionFailure(l10n, result.errorOrNull?.message),
+    );
   }
 
   void _showSnackBar(ScaffoldMessengerState messenger, String message) {
@@ -1322,7 +1343,10 @@ class _FavoriteForumPickerSheetState extends State<_FavoriteForumPickerSheet> {
             final result = snapshot.data;
             if (result == null) {
               return _FavoriteForumPickerErrorView(
-                message: '加载收藏版块失败',
+                message: ForumTextResolver.favoriteForumsLoadFailure(
+                  AppLocalizations.of(context),
+                  null,
+                ),
                 onRetry: _reload,
               );
             }
@@ -1330,14 +1354,22 @@ class _FavoriteForumPickerSheetState extends State<_FavoriteForumPickerSheet> {
             return result.when(
               success: (forums) {
                 if (forums.isEmpty) {
-                  return const Center(child: Text('暂无收藏版块'));
+                  return Center(
+                    child: Text(
+                      AppLocalizations.of(context).forumWebViewNoFavoriteForums,
+                    ),
+                  );
                 }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Text('取消收藏'),
+                      child: Text(
+                        AppLocalizations.of(
+                          context,
+                        ).forumWebViewFavoriteForumsTitle,
+                      ),
                     ),
                     Expanded(
                       child: ListView.separated(
@@ -1352,7 +1384,11 @@ class _FavoriteForumPickerSheetState extends State<_FavoriteForumPickerSheet> {
                             ),
                             enabled: _submittingFavid == null,
                             title: Text(forum.title),
-                            subtitle: Text('fid=${forum.fid}'),
+                            subtitle: Text(
+                              AppLocalizations.of(
+                                context,
+                              ).forumWebViewForumByFid(forum.fid),
+                            ),
                             trailing: isSubmitting
                                 ? const SizedBox(
                                     width: 18,
@@ -1373,7 +1409,10 @@ class _FavoriteForumPickerSheetState extends State<_FavoriteForumPickerSheet> {
                 );
               },
               failure: (error) => _FavoriteForumPickerErrorView(
-                message: error.message,
+                message: ForumTextResolver.favoriteForumsLoadFailure(
+                  AppLocalizations.of(context),
+                  error.message,
+                ),
                 onRetry: _reload,
               ),
             );
@@ -1425,7 +1464,7 @@ class _FavoriteForumPickerErrorView extends StatelessWidget {
             FilledButton(
               key: const Key('forum-favorite-forum-picker-retry'),
               onPressed: onRetry,
-              child: const Text('重试'),
+              child: Text(AppLocalizations.of(context).commonRetry),
             ),
           ],
         ),

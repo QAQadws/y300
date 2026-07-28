@@ -7,12 +7,14 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/domain/services/forum_chrome_image_adapter.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
+import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ForumDisplayContent extends StatefulWidget {
   const ForumDisplayContent({
@@ -392,16 +394,22 @@ class ForumDisplayInitialLoading extends StatelessWidget {
 class ForumDisplayErrorView extends StatelessWidget {
   const ForumDisplayErrorView({
     super.key,
-    required this.message,
+    this.failure,
+    this.legacyDetail,
     required this.onRetry,
   });
 
-  final String message;
+  final ForumDisplayFailure? failure;
+  final String? legacyDetail;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final palette = ForumDisplayThemePalette.resolve(Theme.of(context));
+    final message = failure == null
+        ? ForumTextResolver.legacyDisplayFailure(l10n, legacyDetail)
+        : ForumTextResolver.displayFailure(l10n, failure!);
     return ColoredBox(
       color: palette.background,
       child: Center(
@@ -421,7 +429,7 @@ class ForumDisplayErrorView extends StatelessWidget {
               FilledButton(
                 key: const Key('forum-display-retry-button'),
                 onPressed: onRetry,
-                child: const Text('重试'),
+                child: Text(l10n.commonRetry),
               ),
             ],
           ),
@@ -902,7 +910,7 @@ class _SubForumListState extends State<_SubForumList> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '子版块',
+                          AppLocalizations.of(context).forumDisplaySubForum,
                           style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(
                                 color: widget.palette.title,
@@ -1046,7 +1054,8 @@ class _TopEntrySection extends StatelessWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '公告 / 置顶',
+                          '${AppLocalizations.of(context).forumDisplayAnnouncements} / '
+                          '${AppLocalizations.of(context).forumDisplayPinned}',
                           style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(
                                 color: palette.title,
@@ -1137,7 +1146,11 @@ class _TopEntryTile extends StatelessWidget {
               _SmallBadge(
                 label: entry.badgeLabel.isNotEmpty
                     ? entry.badgeLabel
-                    : (entry.isAnnouncement ? '公告' : '置顶'),
+                    : (entry.isAnnouncement
+                          ? AppLocalizations.of(
+                              context,
+                            ).forumDisplayAnnouncements
+                          : AppLocalizations.of(context).forumDisplayPinned),
                 accentColor: entry.isAnnouncement
                     ? palette.warning
                     : palette.accent,
@@ -1410,7 +1423,9 @@ class _ThreadAuthorBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          thread.author.isNotEmpty ? thread.author : '匿名',
+          thread.author.isNotEmpty
+              ? thread.author
+              : AppLocalizations.of(context).forumDisplayAnonymous,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: authorStyle,
@@ -1730,7 +1745,7 @@ class _LoadMoreSection extends StatelessWidget {
         children: [
           _PageButton(
             key: const Key('forum-display-prev-page-button'),
-            label: '上一页',
+            label: AppLocalizations.of(context).forumDisplayPreviousPage,
             enabled: canLoadPrevious && !isLoadingMore,
             emphasized: false,
             onPressed: onLoadPrevious,
@@ -1761,7 +1776,9 @@ class _LoadMoreSection extends StatelessWidget {
           else
             _PageButton(
               key: const Key('forum-display-load-more-button'),
-              label: hasMore ? '下一页' : '没有更多',
+              label: hasMore
+                  ? AppLocalizations.of(context).forumDisplayNextPage
+                  : AppLocalizations.of(context).forumDisplayNoMore,
               enabled: hasMore,
               emphasized: false,
               onPressed: onLoadMore,
@@ -1799,7 +1816,7 @@ class _CurrentPageButton extends StatelessWidget {
       lastPage: lastPage,
       hasMore: hasMore,
       enabled: enabled,
-      label: '第$currentPage页',
+      label: AppLocalizations.of(context).forumDisplayPage(currentPage),
       style: _pageButtonStyle(context, enabled, palette, emphasized: true),
       onSelected: onSelected,
     );
@@ -1877,7 +1894,7 @@ class _EmptyThreadList extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 36),
         child: Center(
           child: Text(
-            '暂无帖子',
+            AppLocalizations.of(context).forumDisplayEmpty,
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: palette.softText),

@@ -109,7 +109,7 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-      expect(find.text('百合会论坛'), findsOneWidget);
+    expect(find.text('论坛首页'), findsOneWidget);
       expect(find.byKey(const Key('forum-webview-back-button')), findsNothing);
       expect(
         find.byKey(const Key('forum-webview-search-button')),
@@ -940,7 +940,7 @@ void main() {
     await tester.tap(find.text('取消收藏'));
     await tester.pumpAndSettle();
 
-    expect(find.text('加载失败'), findsOneWidget);
+    expect(find.text('加载收藏版块失败：加载失败'), findsOneWidget);
 
     await tester.tap(
       find.byKey(const Key('forum-favorite-forum-picker-retry')),
@@ -977,7 +977,7 @@ void main() {
         find.byKey(const Key('forum-favorite-forum-picker')),
         findsNothing,
       );
-      expect(find.text('取消收藏成功'), findsOneWidget);
+      expect(find.text('已取消收藏本版'), findsOneWidget);
       expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
       expect(driver.loadedUris.length, 2);
       expect(
@@ -1115,7 +1115,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(favoriteRepository.favoriteCalls, <String>['55']);
-      expect(find.text('收藏成功'), findsOneWidget);
+      expect(find.text('已收藏本版'), findsOneWidget);
       expect(driver.loadedUris.last.toString(), forumDisplayUrl);
       expect(driver.loadRequests.last.headers['Referer'], forumDisplayUrl);
     },
@@ -1149,7 +1149,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
-      expect(find.text('取消收藏成功'), findsOneWidget);
+      expect(find.text('已取消收藏本版'), findsOneWidget);
       expect(driver.loadedUris.last.toString(), forumDisplayUrl);
       expect(driver.loadRequests.last.headers['Referer'], forumDisplayUrl);
     },
