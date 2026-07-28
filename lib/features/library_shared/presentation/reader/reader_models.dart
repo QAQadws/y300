@@ -106,8 +106,8 @@ class ReaderProgressConfig {
     this.previousEnabled = true,
     this.nextEnabled = true,
     this.interactionLocked = false,
-    this.previousTooltip = '上一章',
-    this.nextTooltip = '下一章',
+    this.previousTooltip,
+    this.nextTooltip,
     this.previousIcon = Icons.skip_previous,
     this.nextIcon = Icons.skip_next,
   }) : value = null,
@@ -130,8 +130,8 @@ class ReaderProgressConfig {
     this.nextEnabled = true,
     this.sliderEnabled = true,
     this.interactionLocked = false,
-    this.previousTooltip = '上一章',
-    this.nextTooltip = '下一章',
+    this.previousTooltip,
+    this.nextTooltip,
     this.previousIcon = Icons.skip_previous,
     this.nextIcon = Icons.skip_next,
     this.leadingLabel,
@@ -157,8 +157,8 @@ class ReaderProgressConfig {
     this.nextEnabled = true,
     this.sliderEnabled = true,
     this.interactionLocked = false,
-    this.previousTooltip = '上一章',
-    this.nextTooltip = '下一章',
+    this.previousTooltip,
+    this.nextTooltip,
     this.previousIcon = Icons.skip_previous,
     this.nextIcon = Icons.skip_next,
   }) : current = null,
@@ -181,8 +181,8 @@ class ReaderProgressConfig {
   final bool nextEnabled;
   final bool sliderEnabled;
   final bool interactionLocked;
-  final String previousTooltip;
-  final String nextTooltip;
+  final String? previousTooltip;
+  final String? nextTooltip;
   final IconData previousIcon;
   final IconData nextIcon;
 }

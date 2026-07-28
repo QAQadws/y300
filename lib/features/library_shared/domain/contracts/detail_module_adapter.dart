@@ -5,16 +5,29 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 
 enum DetailRefreshStatus { immediate, queued, skipped }
 
+enum DetailRefreshOutcomeCode {
+  updated,
+  chaptersChanged,
+  alreadyCurrent,
+  noUpdates,
+  queued,
+  unavailable,
+}
+
 class DetailRefreshResult {
   const DetailRefreshResult({
     required this.status,
-    this.message,
+    required this.outcomeCode,
+    this.insertedCount = 0,
+    this.updatedCount = 0,
     this.queuePosition,
     this.estimatedDuration,
   });
 
   final DetailRefreshStatus status;
-  final String? message;
+  final DetailRefreshOutcomeCode outcomeCode;
+  final int insertedCount;
+  final int updatedCount;
   final int? queuePosition;
   final Duration? estimatedDuration;
 
@@ -22,31 +35,38 @@ class DetailRefreshResult {
 
   static const immediate = DetailRefreshResult(
     status: DetailRefreshStatus.immediate,
+    outcomeCode: DetailRefreshOutcomeCode.updated,
   );
 
   static const skipped = DetailRefreshResult(
     status: DetailRefreshStatus.skipped,
+    outcomeCode: DetailRefreshOutcomeCode.unavailable,
   );
+
+  factory DetailRefreshResult.chaptersChanged({
+    required int insertedCount,
+    required int updatedCount,
+  }) {
+    return DetailRefreshResult(
+      status: DetailRefreshStatus.immediate,
+      outcomeCode: insertedCount == 0 && updatedCount == 0
+          ? DetailRefreshOutcomeCode.alreadyCurrent
+          : DetailRefreshOutcomeCode.chaptersChanged,
+      insertedCount: insertedCount,
+      updatedCount: updatedCount,
+    );
+  }
 
   factory DetailRefreshResult.queued({
     required Duration estimatedDuration,
     int? queuePosition,
-    String? message,
   }) {
     return DetailRefreshResult(
       status: DetailRefreshStatus.queued,
-      message: message ?? '更新预计耗时${_formatSeconds(estimatedDuration)}s',
+      outcomeCode: DetailRefreshOutcomeCode.queued,
       queuePosition: queuePosition,
       estimatedDuration: estimatedDuration,
     );
-  }
-
-  static String _formatSeconds(Duration duration) {
-    final tenths = (duration.inMilliseconds / 100).round();
-    if (tenths % 10 == 0) {
-      return '${tenths ~/ 10}';
-    }
-    return (tenths / 10).toStringAsFixed(1);
   }
 }
 
@@ -194,11 +214,42 @@ class DetailManagedChapter {
   final bool isHidden;
 }
 
+enum DetailChapterRemovalWarningCode {
+  downloadTaskCleanupFailed,
+  downloadFileCleanupFailed,
+}
+
 class DetailChapterRemovalResult {
-  const DetailChapterRemovalResult({required this.removed, this.warning});
+  const DetailChapterRemovalResult({
+    required this.removed,
+    this.warnings = const <DetailChapterRemovalWarningCode>{},
+  });
 
   final bool removed;
-  final String? warning;
+  final Set<DetailChapterRemovalWarningCode> warnings;
+}
+
+enum DetailManualChapterInputErrorCode {
+  emptyInput,
+  invalidUrl,
+  unsupportedScheme,
+  unexpectedHost,
+  unsupportedThreadUrl,
+  missingTid,
+}
+
+enum DetailManualChapterAddOutcomeCode { added, duplicate, invalidInput }
+
+class DetailManualChapterAddOutcome {
+  const DetailManualChapterAddOutcome({
+    required this.code,
+    this.inputErrorCode,
+    this.expectedHost,
+  });
+
+  final DetailManualChapterAddOutcomeCode code;
+  final DetailManualChapterInputErrorCode? inputErrorCode;
+  final String? expectedHost;
 }
 
 /// 章节管理可选能力。
@@ -213,9 +264,9 @@ abstract interface class DetailChapterManagementAdapter {
 
   /// 按用户输入的帖子链接或 tid 添加手动章节。
   ///
-  /// 输入非法时抛出 [FormatException]，其 message 直接面向用户展示；章节
-  /// 已存在时返回 false。
-  Future<bool> addManualChapter({
+  /// Expected validation failures are returned as stable codes. Unexpected
+  /// repository or I/O failures still throw.
+  Future<DetailManualChapterAddOutcome> addManualChapter({
     required String workId,
     required String input,
   });
@@ -223,7 +274,7 @@ abstract interface class DetailChapterManagementAdapter {
   /// 移除手动章节。解析章节不可移除，返回 removed=false。
   ///
   /// 数据库记录删除成功后，外部下载文件清理失败不会伪装成整个操作失败，
-  /// 通过 [DetailChapterRemovalResult.warning] 向 UI 暴露清理告警。
+  /// 通过 [DetailChapterRemovalResult.warnings] 向 UI 暴露清理告警。
   Future<DetailChapterRemovalResult> removeManualChapter({
     required String workId,
     required String episodeId,
@@ -270,25 +321,20 @@ abstract class DetailMetadataEditor {
 
 class DetailMetadataEditorConfig {
   const DetailMetadataEditorConfig({
-    this.authorLabel = '作者',
-    this.translationGroupLabel = '汉化组',
-    this.sourceAuthorLabel = '来源作者',
-    this.sourceTranslationGroupLabel = '来源汉化组',
-    this.showAuthor = true,
-    this.showTranslationGroup = true,
-    this.showSearchTitle = true,
+    this.fields = const <LibraryMetadataField>{
+      LibraryMetadataField.title,
+      LibraryMetadataField.author,
+      LibraryMetadataField.translationGroup,
+      LibraryMetadataField.searchTitle,
+    },
     this.fallbackToDisplaySourceValues = true,
   });
 
-  final String authorLabel;
-  final String translationGroupLabel;
-  final String sourceAuthorLabel;
-  final String sourceTranslationGroupLabel;
-  final bool showAuthor;
-  final bool showTranslationGroup;
-  final bool showSearchTitle;
+  final Set<LibraryMetadataField> fields;
   final bool fallbackToDisplaySourceValues;
 }
+
+enum LibraryMetadataField { title, author, translationGroup, searchTitle }
 
 /// 作品目录 URL 编辑能力。
 ///
@@ -300,10 +346,32 @@ abstract class DetailCatalogEditor {
   });
 
   /// 保存用户目录覆盖值。传入 null 或空白表示恢复使用来源目录。
-  Future<void> updateCatalogOverride({
+  Future<DetailCatalogUpdateOutcome> updateCatalogOverride({
     required String workId,
     String? catalogUrl,
   });
+}
+
+enum DetailCatalogInputErrorCode {
+  invalidUrl,
+  incompleteUrl,
+  unsupportedScheme,
+  unexpectedHost,
+  notTagCatalog,
+}
+
+enum DetailCatalogUpdateOutcomeCode { saved, invalidInput }
+
+class DetailCatalogUpdateOutcome {
+  const DetailCatalogUpdateOutcome({
+    required this.code,
+    this.inputErrorCode,
+    this.expectedHost,
+  });
+
+  final DetailCatalogUpdateOutcomeCode code;
+  final DetailCatalogInputErrorCode? inputErrorCode;
+  final String? expectedHost;
 }
 
 class DetailCatalogConfiguration {

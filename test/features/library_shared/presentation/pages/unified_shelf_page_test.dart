@@ -15,6 +15,7 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
+import 'package:y300/l10n/app_localizations_zh.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
@@ -86,7 +87,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
-    expect(find.text('Default 2'), findsOneWidget);
+    final l10n = AppLocalizationsZh();
+    expect(
+      find.text(
+        l10n.libraryShelfCategoryMatchCount(
+          l10n.libraryShelfDefaultCategory,
+          2,
+        ),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('filter sheet and display mode switch work', (tester) async {
@@ -531,7 +541,8 @@ void main() {
   ) async {
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(
       const LibraryShelfTaskProgress(
-        message: '正在解析: 收藏帖',
+        code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+        subject: '收藏帖',
         current: 3,
         total: 10,
       ),
@@ -553,7 +564,7 @@ void main() {
       find.byKey(const Key('unified-shelf-task-progress-bar')),
       findsOneWidget,
     );
-    expect(find.text('正在解析: 收藏帖'), findsOneWidget);
+    expect(find.text('正在读取《收藏帖》'), findsOneWidget);
     expect(find.text('3/10'), findsOneWidget);
 
     progress.value = null;
@@ -570,7 +581,8 @@ void main() {
     final palette = const ShelfThemePaletteResolver().resolve(theme);
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(
       const LibraryShelfTaskProgress(
-        message: '正在解析: 收藏帖',
+        code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+        subject: '收藏帖',
         current: 1,
         total: 2,
       ),
@@ -658,7 +670,11 @@ void main() {
     tester,
   ) async {
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(
-      const LibraryShelfTaskProgress(message: '排队漫画 正在等待搜索 预计耗时21s'),
+      const LibraryShelfTaskProgress(
+        code: LibraryShelfTaskProgressCode.comicSearchWaiting,
+        subject: '排队漫画',
+        estimatedDuration: Duration(seconds: 21),
+      ),
     );
     addTearDown(progress.dispose);
     await tester.pumpWidget(
@@ -683,13 +699,13 @@ void main() {
       find.byKey(const Key('unified-shelf-task-progress-count')),
       findsNothing,
     );
-    expect(find.text('排队漫画 正在等待搜索 预计耗时21s'), findsOneWidget);
+    expect(find.text('《排队漫画》正在等待搜索，预计 21 秒'), findsOneWidget);
   });
 
   testWidgets('hidden task progress does not render banner', (tester) async {
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(
       const LibraryShelfTaskProgress(
-        message: '正在预热封面',
+        code: LibraryShelfTaskProgressCode.coverWarmup,
         source: LibraryMutationSource.coverWarmup,
         visible: false,
       ),
@@ -712,7 +728,7 @@ void main() {
       find.byKey(const Key('unified-shelf-task-progress-bar')),
       findsNothing,
     );
-    expect(find.text('正在预热封面'), findsNothing);
+    expect(find.text('正在准备封面'), findsNothing);
   });
 
   testWidgets('initial loading does not flash empty shelf state', (
@@ -1237,9 +1253,6 @@ class _FakeShelfAdapter
   LibraryDisplayMode get defaultDisplayMode => initialDisplayMode;
 
   @override
-  String get moduleTitle => 'Comic';
-
-  @override
   Future<Object> buildDetailRouteArgument({required String workId}) async =>
       workId;
 
@@ -1326,19 +1339,19 @@ class _FakeSelectableShelfAdapter extends _FakeShelfAdapter
     SelectionAction(
       id: SelectionActionIds.assignCategory,
       icon: Icons.edit_outlined,
-      label: '设置分类',
     ),
     SelectionAction(
       id: SelectionActionIds.download,
       icon: Icons.download_outlined,
-      label: '下载',
     ),
   ];
 
   @override
-  Future<SelectionActionResult> runSelectionAction(
+  Future<SelectionActionOutcome> runSelectionAction(
     SelectionActionExecutionRequest request,
   ) async {
-    return const SelectionActionResult(message: 'noop');
+    return const SelectionActionOutcome(
+      code: SelectionActionOutcomeCode.noChange,
+    );
   }
 }

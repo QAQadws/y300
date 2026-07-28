@@ -137,9 +137,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.byKey(
-          const Key('unified-detail-chapter-management-rename-input'),
-        ),
+        find.byKey(const Key('unified-detail-chapter-management-rename-input')),
         text,
       );
       await tester.tap(
@@ -298,7 +296,7 @@ class _FakeManagementAdapter implements DetailChapterManagementAdapter {
   }) async => List<DetailManagedChapter>.from(chapters);
 
   @override
-  Future<bool> addManualChapter({
+  Future<DetailManualChapterAddOutcome> addManualChapter({
     required String workId,
     required String input,
   }) async {
@@ -311,7 +309,9 @@ class _FakeManagementAdapter implements DetailChapterManagementAdapter {
         isHidden: false,
       ),
     );
-    return true;
+    return const DetailManualChapterAddOutcome(
+      code: DetailManualChapterAddOutcomeCode.added,
+    );
   }
 
   @override

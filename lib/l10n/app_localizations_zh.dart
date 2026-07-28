@@ -41,6 +41,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonRetry => '重试';
 
   @override
+  String get commonApply => '应用';
+
+  @override
+  String get commonSave => '保存';
+
+  @override
+  String get commonDelete => '删除';
+
+  @override
+  String get commonRemove => '移除';
+
+  @override
   String get commonUnknownError => '未知错误';
 
   @override
@@ -356,7 +368,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appNavigationMore => '更多';
 
   @override
-  String startupSelectionSelectedCount(int count) {
+  String librarySelectionSelectedCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -367,45 +379,45 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get startupSelectionExit => '退出多选';
+  String get librarySelectionExit => '退出多选';
 
   @override
-  String get startupSelectionSelectAll => '全选当前分类';
+  String get librarySelectionSelectAll => '全选当前分类';
 
   @override
-  String get startupSelectionInvert => '反选当前分类';
+  String get librarySelectionInvert => '反选当前分类';
 
   @override
-  String get startupSelectionActionAssignCategory => '设置分类';
+  String get librarySelectionActionAssignCategory => '设置分类';
 
   @override
-  String get startupSelectionActionMarkAllRead => '全部已读';
+  String get librarySelectionActionMarkAllRead => '全部已读';
 
   @override
-  String get startupSelectionActionMarkAllUnread => '全部未读';
+  String get librarySelectionActionMarkAllUnread => '全部未读';
 
   @override
-  String get startupSelectionActionDownload => '下载';
+  String get librarySelectionActionDownload => '下载';
 
   @override
-  String get startupSelectionActionUnfavorite => '取消收藏';
+  String get librarySelectionActionUnfavorite => '取消收藏';
 
   @override
-  String get startupSelectionActionGeneric => '执行操作';
+  String get librarySelectionActionGeneric => '执行操作';
 
   @override
-  String startupBatchActionFailed(String error) {
+  String librarySelectionActionFailed(String error) {
     return '批量操作失败：$error';
   }
 
   @override
-  String get startupConfirmUnfavoriteTitle => '确认取消收藏';
+  String get librarySelectionConfirmUnfavoriteTitle => '确认取消收藏';
 
   @override
-  String get startupConfirmActionTitle => '确认执行操作';
+  String get librarySelectionConfirmActionTitle => '确认执行操作';
 
   @override
-  String startupConfirmUnfavoriteBody(int count) {
+  String librarySelectionConfirmUnfavoriteBody(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -416,7 +428,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String startupConfirmActionBody(int count, String action) {
+  String librarySelectionConfirmActionBody(int count, String action) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -427,16 +439,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get startupSelectCategory => '选择分类';
+  String get librarySelectionSelectCategory => '选择分类';
 
   @override
-  String get startupCreateCategory => '新建分类';
+  String get librarySelectionCreateCategory => '新建分类';
 
   @override
-  String get startupCategoryNameHint => '请输入分类名称';
+  String get librarySelectionCategoryNameHint => '请输入分类名称';
 
   @override
-  String startupSelectionCategoryAssigned(int count) {
+  String librarySelectionCategoryAssigned(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -447,7 +459,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String startupSelectionCategoryAssignedPartial(
+  String librarySelectionCategoryAssignedPartial(
     int succeededCount,
     int failedCount,
   ) {
@@ -467,7 +479,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String startupSelectionReadStateChanged(int count, String state) {
+  String librarySelectionReadStateChanged(int count, String state) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -478,7 +490,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String startupSelectionReadStateChangedPartial(
+  String librarySelectionReadStateChangedPartial(
     int succeededCount,
     int failedCount,
     String state,
@@ -499,13 +511,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get startupSelectionRead => '已读';
+  String get librarySelectionRead => '已读';
 
   @override
-  String get startupSelectionUnread => '未读';
+  String get librarySelectionUnread => '未读';
 
   @override
-  String startupSelectionDownloadQueued(int count) {
+  String librarySelectionDownloadQueued(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -516,7 +528,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String startupSelectionDownloadQueuedPartial(int count, int failedCount) {
+  String librarySelectionDownloadQueuedPartial(int count, int failedCount) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -533,13 +545,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get startupSelectionDownloadAlreadyQueued => '所选章节已在下载队列中';
+  String get librarySelectionDownloadAlreadyQueued => '所选章节已在下载队列中';
 
   @override
-  String get startupSelectionNothingToDownload => '没有需要下载的章节';
+  String get librarySelectionNothingToDownload => '没有需要下载的章节';
 
   @override
-  String startupSelectionUnfavorite(int count) {
+  String librarySelectionUnfavorite(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -550,7 +562,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String startupSelectionUnfavoritePartial(
+  String librarySelectionUnfavoritePartial(
     int succeededCount,
     int failedCount,
   ) {
@@ -570,19 +582,820 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String startupSelectionUnsupported(String action) {
+  String librarySelectionUnsupported(String action) {
     return '当前不支持批量$action';
   }
 
   @override
-  String get startupSelectionMissingTargetCategory => '请选择目标分类';
+  String get librarySelectionMissingTargetCategory => '请选择目标分类';
 
   @override
-  String get startupSelectionNoValidItems => '没有可处理的项目';
+  String get librarySelectionNoValidItems => '没有可处理的项目';
 
   @override
-  String startupSelectionNoChange(String action) {
+  String librarySelectionNoChange(String action) {
     return '没有可执行的$action';
+  }
+
+  @override
+  String libraryShelfTitle(String module) {
+    String _temp0 = intl.Intl.selectLogic(module, {
+      'comic': '漫画',
+      'novel': '小说',
+      'favorite': '收藏',
+      'other': '书架',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String libraryShelfLoadFailed(String error) {
+    return '加载书架失败：$error';
+  }
+
+  @override
+  String get libraryShelfEmpty => '书架为空';
+
+  @override
+  String get libraryShelfSearch => '搜索书架';
+
+  @override
+  String get libraryShelfSearchHint => '搜索作品';
+
+  @override
+  String get libraryShelfFilterAndSort => '筛选与排序';
+
+  @override
+  String get libraryShelfCreateCategory => '新建分类';
+
+  @override
+  String get libraryShelfRenameCategory => '重命名当前分类';
+
+  @override
+  String get libraryShelfDeleteCategory => '删除当前分类';
+
+  @override
+  String get libraryShelfDeleteCategoryTitle => '删除分类';
+
+  @override
+  String get libraryShelfDeleteCategoryBody => '删除后，该分类中的作品会移动到默认分类。是否继续？';
+
+  @override
+  String get libraryShelfDefaultCategory => '默认';
+
+  @override
+  String get libraryShelfDefaultCategoryCannotRename => '默认分类不支持重命名';
+
+  @override
+  String get libraryShelfDefaultCategoryCannotDelete => '默认分类不支持删除';
+
+  @override
+  String get libraryShelfCategoryNameHint => '请输入分类名称';
+
+  @override
+  String libraryShelfCategoryMatchCount(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count',
+      zero: '0',
+    );
+    return '$name $_temp0';
+  }
+
+  @override
+  String get libraryShelfUpdate => '更新书架';
+
+  @override
+  String get libraryShelfRandomOpen => '随机打开作品';
+
+  @override
+  String get libraryShelfNoRandomWork => '当前分类没有可打开的作品';
+
+  @override
+  String get libraryShelfFilter => '筛选';
+
+  @override
+  String get libraryShelfSort => '排序';
+
+  @override
+  String get libraryShelfDisplayMode => '显示';
+
+  @override
+  String get libraryShelfGrid => '网格';
+
+  @override
+  String get libraryShelfList => '列表';
+
+  @override
+  String get libraryShelfColumnsPerRow => '每行个数';
+
+  @override
+  String get libraryShelfFilterDownloaded => '已下载';
+
+  @override
+  String get libraryShelfFilterUnread => '未读';
+
+  @override
+  String get libraryShelfFilterRead => '阅读过';
+
+  @override
+  String get libraryShelfFilterBookmarked => '有书签';
+
+  @override
+  String get libraryShelfSortName => '名称';
+
+  @override
+  String get libraryShelfSortChapterCount => '章节数';
+
+  @override
+  String get libraryShelfSortLastReadAt => '最近阅读';
+
+  @override
+  String get libraryShelfSortLastCheckedAt => '最近检查';
+
+  @override
+  String get libraryShelfSortUnreadCount => '未读章节数';
+
+  @override
+  String get libraryShelfSortWorkUpdatedAt => '作品更新时间';
+
+  @override
+  String get libraryShelfSortFetchedAt => '获取时间';
+
+  @override
+  String get libraryShelfSortFavoriteAddedAt => '收藏日期';
+
+  @override
+  String get libraryShelfMergeDuplicates => '合并重复';
+
+  @override
+  String libraryShelfMergeDuplicatesSuccess(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个重复作品',
+      zero: '0 个重复作品',
+    );
+    return '已合并 $_temp0';
+  }
+
+  @override
+  String get libraryShelfMergeDuplicatesNoChange => '没有可合并的重复作品';
+
+  @override
+  String get libraryShelfActionUnsupported => '当前书架不支持此操作';
+
+  @override
+  String get libraryTaskCoverWarmup => '正在准备封面';
+
+  @override
+  String get libraryTaskFavoriteSyncFetching => '正在获取收藏列表';
+
+  @override
+  String get libraryTaskFavoriteSyncSaving => '正在保存收藏数据';
+
+  @override
+  String get libraryTaskFavoriteSyncLoadingDetails => '正在读取收藏详情';
+
+  @override
+  String libraryTaskFavoriteSyncLoadingDetailsSubject(String subject) {
+    return '正在读取《$subject》';
+  }
+
+  @override
+  String get libraryTaskFavoriteSyncFinishing => '正在完成收藏同步';
+
+  @override
+  String get libraryTaskComicSearchWaiting => '漫画搜索正在等待';
+
+  @override
+  String libraryTaskComicSearchWaitingSubject(String subject) {
+    return '《$subject》正在等待搜索';
+  }
+
+  @override
+  String libraryTaskComicSearchWaitingDuration(
+    String subject,
+    String duration,
+  ) {
+    return '《$subject》正在等待搜索，预计 $duration';
+  }
+
+  @override
+  String libraryTaskDurationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 秒',
+      one: '1 秒',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String libraryTaskDurationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 分钟',
+      one: '1 分钟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get libraryTaskFavoriteSyncNotificationTitle => '收藏同步';
+
+  @override
+  String get libraryTaskComicSearchNotificationTitle => '漫画搜索';
+
+  @override
+  String get libraryTaskNotificationTitle => '书架任务';
+
+  @override
+  String get libraryDetailDownload => '下载';
+
+  @override
+  String get libraryDetailFilterAndSort => '筛选与排序';
+
+  @override
+  String get libraryDetailRefresh => '刷新';
+
+  @override
+  String get libraryDetailChangeCategory => '修改分类';
+
+  @override
+  String get libraryDetailEditMetadata => '编辑作品信息';
+
+  @override
+  String get libraryDetailConfigureCatalog => '配置目录';
+
+  @override
+  String get libraryDetailManageChapters => '管理章节';
+
+  @override
+  String get libraryDetailSetCustomCover => '自定义封面';
+
+  @override
+  String get libraryDetailRemoveCustomCover => '取消封面';
+
+  @override
+  String get libraryDetailEditIntro => '编辑简介';
+
+  @override
+  String get libraryDetailIntroHint => '请输入简介';
+
+  @override
+  String get libraryDetailNoIntro => '暂无简介';
+
+  @override
+  String get libraryDetailContinue => '继续';
+
+  @override
+  String get libraryDetailIntro => '简介';
+
+  @override
+  String libraryDetailLoadFailed(String error) {
+    return '加载详情失败：$error';
+  }
+
+  @override
+  String get libraryDetailInShelf => '在书架中';
+
+  @override
+  String get libraryDetailAddToShelf => '添加到书架';
+
+  @override
+  String get libraryDetailUpdate => '更新';
+
+  @override
+  String get libraryDetailSourceThread => '原帖';
+
+  @override
+  String get libraryDetailNoNovelCover => '小说无封面';
+
+  @override
+  String get libraryDetailAuthor => '作者';
+
+  @override
+  String get libraryDetailTranslator => '翻译者';
+
+  @override
+  String get libraryDetailTranslationGroup => '汉化组';
+
+  @override
+  String get libraryDetailPublisher => '发布者';
+
+  @override
+  String libraryDetailMetadataSemantics(String label, String value) {
+    return '$label：$value';
+  }
+
+  @override
+  String get libraryDetailDownloadUnread => '下载未读章节';
+
+  @override
+  String get libraryDetailDownloadAll => '下载全部章节';
+
+  @override
+  String libraryDetailDeleteDownloadFailed(String error) {
+    return '删除下载失败：$error';
+  }
+
+  @override
+  String libraryDetailDownloadFailed(String error) {
+    return '下载失败：$error';
+  }
+
+  @override
+  String get libraryDetailReadStateUpdateFailed => '阅读状态更新失败';
+
+  @override
+  String get libraryDetailAllChapters => '全部章节';
+
+  @override
+  String get libraryDetailDownloaded => '已下载';
+
+  @override
+  String get libraryDetailUnread => '未读';
+
+  @override
+  String get libraryDetailBookmarked => '已加书签';
+
+  @override
+  String libraryDetailExcludeFilter(String label) {
+    return '排除$label';
+  }
+
+  @override
+  String get libraryDetailFilter => '筛选';
+
+  @override
+  String get libraryDetailSort => '排序';
+
+  @override
+  String get libraryDetailSortBySource => '按来源';
+
+  @override
+  String get libraryDetailAddBookmark => '添加书签';
+
+  @override
+  String get libraryDetailRemoveBookmark => '移除书签';
+
+  @override
+  String get libraryDetailResetWorkReading => '重置本作品阅读';
+
+  @override
+  String get libraryDetailDeleteChapterDownload => '删除该章节下载';
+
+  @override
+  String get libraryDetailManageChaptersDescription => '显示或隐藏章节，手动添加或移除章节';
+
+  @override
+  String get libraryDetailResetReadingTitle => '重置本作品阅读？';
+
+  @override
+  String get libraryDetailResetReadingBody =>
+      '全部章节将变为未读，所有阅读进度和上次阅读位置都会被清除。书签和下载不会受影响。';
+
+  @override
+  String get libraryDetailResetReadingConfirm => '重置';
+
+  @override
+  String get libraryDetailResetReadingFailed => '重置作品阅读失败';
+
+  @override
+  String libraryDetailRefreshFailed(String error) {
+    return '更新失败：$error';
+  }
+
+  @override
+  String get libraryDetailRefreshUpdated => '已更新';
+
+  @override
+  String libraryDetailRefreshChaptersChanged(
+    int insertedCount,
+    int updatedCount,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      insertedCount,
+      locale: localeName,
+      other: '已新增 $insertedCount 章',
+      zero: '未新增章节',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      updatedCount,
+      locale: localeName,
+      other: '更新 $updatedCount 章',
+      zero: '未更新章节',
+    );
+    return '$_temp0，$_temp1';
+  }
+
+  @override
+  String get libraryDetailRefreshAlreadyCurrent => '已是最新章节';
+
+  @override
+  String get libraryDetailRefreshNoUpdates => '未发现新的章节';
+
+  @override
+  String libraryDetailRefreshQueued(String duration) {
+    return '已加入更新队列，预计 $duration';
+  }
+
+  @override
+  String libraryDetailRefreshQueuedAtPosition(int position, String duration) {
+    String _temp0 = intl.Intl.pluralLogic(
+      position,
+      locale: localeName,
+      other: '有 $position 个任务',
+      zero: '没有等待任务',
+    );
+    return '已加入更新队列，前方 $_temp0，预计 $duration';
+  }
+
+  @override
+  String get libraryDetailRefreshUnavailable => '暂无可更新内容';
+
+  @override
+  String libraryDetailCatalogLoadFailed(String error) {
+    return '读取目录配置失败：$error';
+  }
+
+  @override
+  String get libraryDetailMetadataTitle => '标题';
+
+  @override
+  String get libraryDetailMetadataSearchTitle => '更新搜索关键词';
+
+  @override
+  String get libraryDetailMetadataSearchHelp => '留空时优先使用自定义标题，否则使用当前作品标题';
+
+  @override
+  String get libraryDetailMetadataSourceTitle => '来源标题';
+
+  @override
+  String get libraryDetailMetadataSourceAuthor => '来源作者';
+
+  @override
+  String get libraryDetailMetadataSourceTranslationGroup => '来源汉化组';
+
+  @override
+  String libraryDetailSourceValue(String label, String value) {
+    return '$label：$value';
+  }
+
+  @override
+  String libraryDetailSourceEmpty(String label) {
+    return '$label：无';
+  }
+
+  @override
+  String get libraryDetailCatalogUrl => '目录 URL';
+
+  @override
+  String libraryDetailCatalogSource(String url) {
+    return '来源目录：$url';
+  }
+
+  @override
+  String get libraryDetailCatalogSourceEmpty => '来源目录：无';
+
+  @override
+  String libraryDetailCatalogSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String get libraryDetailCatalogInvalidUrl => '请输入有效的目录 URL';
+
+  @override
+  String get libraryDetailCatalogIncompleteUrl => '目录 URL 不完整';
+
+  @override
+  String get libraryDetailCatalogUnsupportedScheme => '目录 URL 仅支持 HTTP 或 HTTPS';
+
+  @override
+  String libraryDetailCatalogUnexpectedHost(String host) {
+    return '目录 URL 必须来自 $host';
+  }
+
+  @override
+  String get libraryDetailCatalogNotTagCatalog => '请输入标签目录页面的 URL';
+
+  @override
+  String libraryDetailCoverUpdateFailed(String error) {
+    return '封面更新失败：$error';
+  }
+
+  @override
+  String get libraryDetailCoverUpdated => '封面已更新';
+
+  @override
+  String libraryDetailCoverRemoveFailed(String error) {
+    return '取消封面失败：$error';
+  }
+
+  @override
+  String get libraryDetailCoverRemoved => '已取消封面';
+
+  @override
+  String libraryChapterCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '共 $count 章',
+      zero: '共 0 章',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String libraryChapterFallbackTitle(String tid) {
+    return '章节 $tid';
+  }
+
+  @override
+  String get libraryChapterBookmarkSemantics => '已添加书签';
+
+  @override
+  String get libraryChapterDownloading => '正在下载';
+
+  @override
+  String get libraryChapterDownloadedDelete => '已下载，点击删除下载';
+
+  @override
+  String get libraryChapterDownload => '下载该章节';
+
+  @override
+  String get libraryChapterClearReadState => '清除阅读状态';
+
+  @override
+  String get libraryChapterMarkRead => '标记已读';
+
+  @override
+  String libraryChapterCurrentPage(int page) {
+    return '第 $page 页';
+  }
+
+  @override
+  String libraryChapterCurrentPageOfTotal(int page, int total) {
+    return '第 $page 页，共 $total 页';
+  }
+
+  @override
+  String get libraryChapterLastRead => '上次阅读';
+
+  @override
+  String libraryChapterProgressSemantics(String subtitle, String progress) {
+    return '$subtitle，$progress';
+  }
+
+  @override
+  String get libraryChapterFilterAny => '不限';
+
+  @override
+  String libraryChapterFilterOnly(String label) {
+    return '只看$label';
+  }
+
+  @override
+  String libraryChapterFilterExclude(String label) {
+    return '排除$label';
+  }
+
+  @override
+  String get libraryChapterManagementLoading => '正在读取章节';
+
+  @override
+  String libraryChapterManagementSummary(
+    int total,
+    int parsed,
+    int manual,
+    int hidden,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '共 $total 章',
+      zero: '共 0 章',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      parsed,
+      locale: localeName,
+      other: '解析 $parsed 章',
+      zero: '解析 0 章',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      manual,
+      locale: localeName,
+      other: '手动 $manual 章',
+      zero: '手动 0 章',
+    );
+    String _temp3 = intl.Intl.pluralLogic(
+      hidden,
+      locale: localeName,
+      other: '隐藏 $hidden 章',
+      zero: '隐藏 0 章',
+    );
+    return '$_temp0 · $_temp1 · $_temp2 · $_temp3';
+  }
+
+  @override
+  String get libraryChapterFilterLabel => '筛选章节';
+
+  @override
+  String get libraryChapterFilterHint => '按标题或 TID 搜索';
+
+  @override
+  String get libraryChapterClearFilter => '清除筛选';
+
+  @override
+  String get libraryChapterAdd => '添加章节';
+
+  @override
+  String get libraryChapterAddHint => '粘贴帖子链接或直接输入 TID';
+
+  @override
+  String get libraryChapterAddHelp =>
+      '支持 forum.php、thread-xxx.html、api/mobile 等链接形式';
+
+  @override
+  String get libraryChapterShowAll => '全部显示';
+
+  @override
+  String get libraryChapterHideAll => '全部隐藏';
+
+  @override
+  String get libraryChapterManagementEmpty => '暂无章节，可在上方粘贴帖子链接手动添加';
+
+  @override
+  String get libraryChapterManagementNoMatches => '没有匹配的章节';
+
+  @override
+  String get libraryChapterShow => '显示该章节';
+
+  @override
+  String get libraryChapterHide => '隐藏该章节';
+
+  @override
+  String get libraryChapterHidden => '已隐藏';
+
+  @override
+  String get libraryChapterRename => '重命名该章节';
+
+  @override
+  String get libraryChapterRemove => '移除该章节';
+
+  @override
+  String get libraryChapterAdded => '已添加章节';
+
+  @override
+  String get libraryChapterDuplicate => '该章节已存在';
+
+  @override
+  String libraryChapterAddFailed(String error) {
+    return '添加失败：$error';
+  }
+
+  @override
+  String get libraryChapterInputEmpty => '请输入帖子链接或 TID';
+
+  @override
+  String get libraryChapterInputInvalidUrl => '请输入有效的帖子链接或 TID';
+
+  @override
+  String get libraryChapterInputUnsupportedScheme => '帖子链接仅支持 HTTP 或 HTTPS';
+
+  @override
+  String libraryChapterInputUnexpectedHost(String host) {
+    return '帖子链接必须来自 $host';
+  }
+
+  @override
+  String get libraryChapterInputUnsupportedThreadUrl => '不支持此帖子链接形式';
+
+  @override
+  String get libraryChapterInputMissingTid => '帖子链接中缺少有效的 TID';
+
+  @override
+  String libraryChapterVisibilityUpdateFailed(String error) {
+    return '更新显示状态失败：$error';
+  }
+
+  @override
+  String get libraryChapterRestoredSourceTitle => '已恢复来源章节名';
+
+  @override
+  String get libraryChapterRenamed => '已重命名章节';
+
+  @override
+  String libraryChapterRenameFailed(String error) {
+    return '重命名失败：$error';
+  }
+
+  @override
+  String get libraryChapterAllHidden => '已隐藏全部章节';
+
+  @override
+  String get libraryChapterAllShown => '已显示全部章节';
+
+  @override
+  String libraryChapterBulkUpdateFailed(String error) {
+    return '批量更新失败：$error';
+  }
+
+  @override
+  String get libraryChapterRemoveTitle => '移除该章节？';
+
+  @override
+  String libraryChapterRemoveBody(String title) {
+    return '将删除手动添加的“$title”及其阅读记录与下载任务，此操作不可撤销。';
+  }
+
+  @override
+  String get libraryChapterParsedCannotRemove => '解析章节不可移除，可改为隐藏';
+
+  @override
+  String get libraryChapterRemoved => '已移除章节';
+
+  @override
+  String libraryChapterRemovedWithWarnings(String warnings) {
+    return '章节已移除，但$warnings';
+  }
+
+  @override
+  String get libraryChapterDownloadTaskCleanupFailed => '下载任务清理失败';
+
+  @override
+  String get libraryChapterDownloadFileCleanupFailed => '章节下载文件清理失败';
+
+  @override
+  String libraryChapterRemoveFailed(String error) {
+    return '移除失败：$error';
+  }
+
+  @override
+  String get libraryChapterRenameTitle => '重命名章节';
+
+  @override
+  String get libraryChapterName => '章节名';
+
+  @override
+  String get libraryChapterRestoreDefaultTitleHelp => '留空恢复默认章节名';
+
+  @override
+  String libraryChapterRestoreSourceTitleHelp(String title) {
+    return '留空恢复来源章节名：$title';
+  }
+
+  @override
+  String get libraryChapterManual => '手动';
+
+  @override
+  String get libraryChapterParsed => '解析';
+
+  @override
+  String libraryChapterLoadFailed(String error) {
+    return '读取章节失败：$error';
+  }
+
+  @override
+  String get libraryCoverFocalTitle => '调整封面焦点';
+
+  @override
+  String get libraryCoverFocalHelp => '拖动选框选择封面取景区域，原图不会被裁剪';
+
+  @override
+  String get libraryCoverImageLoadFailed => '图片加载失败';
+
+  @override
+  String get libraryCoverCenter => '居中';
+
+  @override
+  String get libraryErrorRedactedLink => '[链接已隐藏]';
+
+  @override
+  String get libraryErrorRedactedSecret => '[敏感信息已隐藏]';
+
+  @override
+  String get readerBack => '返回';
+
+  @override
+  String get readerPrevious => '上一章';
+
+  @override
+  String get readerNext => '下一章';
+
+  @override
+  String readerSelectedSemantics(String label) {
+    return '$label，已选择';
+  }
+
+  @override
+  String readerProgressSemantics(String current, String total) {
+    return '阅读进度：$current / $total';
   }
 
   @override
@@ -1439,6 +2252,18 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get commonRetry => '重試';
 
   @override
+  String get commonApply => '套用';
+
+  @override
+  String get commonSave => '儲存';
+
+  @override
+  String get commonDelete => '刪除';
+
+  @override
+  String get commonRemove => '移除';
+
+  @override
   String get commonUnknownError => '未知錯誤';
 
   @override
@@ -1754,7 +2579,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get appNavigationMore => '更多';
 
   @override
-  String startupSelectionSelectedCount(int count) {
+  String librarySelectionSelectedCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -1765,45 +2590,45 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get startupSelectionExit => '退出多選';
+  String get librarySelectionExit => '退出多選';
 
   @override
-  String get startupSelectionSelectAll => '全選目前分類';
+  String get librarySelectionSelectAll => '全選目前分類';
 
   @override
-  String get startupSelectionInvert => '反選目前分類';
+  String get librarySelectionInvert => '反選目前分類';
 
   @override
-  String get startupSelectionActionAssignCategory => '設定分類';
+  String get librarySelectionActionAssignCategory => '設定分類';
 
   @override
-  String get startupSelectionActionMarkAllRead => '全部已讀';
+  String get librarySelectionActionMarkAllRead => '全部已讀';
 
   @override
-  String get startupSelectionActionMarkAllUnread => '全部未讀';
+  String get librarySelectionActionMarkAllUnread => '全部未讀';
 
   @override
-  String get startupSelectionActionDownload => '下載';
+  String get librarySelectionActionDownload => '下載';
 
   @override
-  String get startupSelectionActionUnfavorite => '取消收藏';
+  String get librarySelectionActionUnfavorite => '取消收藏';
 
   @override
-  String get startupSelectionActionGeneric => '執行操作';
+  String get librarySelectionActionGeneric => '執行操作';
 
   @override
-  String startupBatchActionFailed(String error) {
+  String librarySelectionActionFailed(String error) {
     return '批次操作失敗：$error';
   }
 
   @override
-  String get startupConfirmUnfavoriteTitle => '確認取消收藏';
+  String get librarySelectionConfirmUnfavoriteTitle => '確認取消收藏';
 
   @override
-  String get startupConfirmActionTitle => '確認執行操作';
+  String get librarySelectionConfirmActionTitle => '確認執行操作';
 
   @override
-  String startupConfirmUnfavoriteBody(int count) {
+  String librarySelectionConfirmUnfavoriteBody(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -1814,7 +2639,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String startupConfirmActionBody(int count, String action) {
+  String librarySelectionConfirmActionBody(int count, String action) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -1825,16 +2650,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get startupSelectCategory => '選擇分類';
+  String get librarySelectionSelectCategory => '選擇分類';
 
   @override
-  String get startupCreateCategory => '新增分類';
+  String get librarySelectionCreateCategory => '新增分類';
 
   @override
-  String get startupCategoryNameHint => '請輸入分類名稱';
+  String get librarySelectionCategoryNameHint => '請輸入分類名稱';
 
   @override
-  String startupSelectionCategoryAssigned(int count) {
+  String librarySelectionCategoryAssigned(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -1845,7 +2670,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String startupSelectionCategoryAssignedPartial(
+  String librarySelectionCategoryAssignedPartial(
     int succeededCount,
     int failedCount,
   ) {
@@ -1865,7 +2690,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String startupSelectionReadStateChanged(int count, String state) {
+  String librarySelectionReadStateChanged(int count, String state) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -1876,7 +2701,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String startupSelectionReadStateChangedPartial(
+  String librarySelectionReadStateChangedPartial(
     int succeededCount,
     int failedCount,
     String state,
@@ -1897,13 +2722,13 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get startupSelectionRead => '已讀';
+  String get librarySelectionRead => '已讀';
 
   @override
-  String get startupSelectionUnread => '未讀';
+  String get librarySelectionUnread => '未讀';
 
   @override
-  String startupSelectionDownloadQueued(int count) {
+  String librarySelectionDownloadQueued(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -1914,7 +2739,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String startupSelectionDownloadQueuedPartial(int count, int failedCount) {
+  String librarySelectionDownloadQueuedPartial(int count, int failedCount) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -1931,13 +2756,13 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get startupSelectionDownloadAlreadyQueued => '所選章節已在下載佇列中';
+  String get librarySelectionDownloadAlreadyQueued => '所選章節已在下載佇列中';
 
   @override
-  String get startupSelectionNothingToDownload => '沒有需要下載的章節';
+  String get librarySelectionNothingToDownload => '沒有需要下載的章節';
 
   @override
-  String startupSelectionUnfavorite(int count) {
+  String librarySelectionUnfavorite(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -1948,7 +2773,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String startupSelectionUnfavoritePartial(
+  String librarySelectionUnfavoritePartial(
     int succeededCount,
     int failedCount,
   ) {
@@ -1968,19 +2793,820 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String startupSelectionUnsupported(String action) {
+  String librarySelectionUnsupported(String action) {
     return '目前不支援批次$action';
   }
 
   @override
-  String get startupSelectionMissingTargetCategory => '請選擇目標分類';
+  String get librarySelectionMissingTargetCategory => '請選擇目標分類';
 
   @override
-  String get startupSelectionNoValidItems => '沒有可處理的項目';
+  String get librarySelectionNoValidItems => '沒有可處理的項目';
 
   @override
-  String startupSelectionNoChange(String action) {
+  String librarySelectionNoChange(String action) {
     return '沒有可執行的$action';
+  }
+
+  @override
+  String libraryShelfTitle(String module) {
+    String _temp0 = intl.Intl.selectLogic(module, {
+      'comic': '漫畫',
+      'novel': '小說',
+      'favorite': '收藏',
+      'other': '書架',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String libraryShelfLoadFailed(String error) {
+    return '載入書架失敗：$error';
+  }
+
+  @override
+  String get libraryShelfEmpty => '書架為空';
+
+  @override
+  String get libraryShelfSearch => '搜尋書架';
+
+  @override
+  String get libraryShelfSearchHint => '搜尋作品';
+
+  @override
+  String get libraryShelfFilterAndSort => '篩選與排序';
+
+  @override
+  String get libraryShelfCreateCategory => '新增分類';
+
+  @override
+  String get libraryShelfRenameCategory => '重新命名目前分類';
+
+  @override
+  String get libraryShelfDeleteCategory => '刪除目前分類';
+
+  @override
+  String get libraryShelfDeleteCategoryTitle => '刪除分類';
+
+  @override
+  String get libraryShelfDeleteCategoryBody => '刪除後，此分類中的作品會移至預設分類。是否繼續？';
+
+  @override
+  String get libraryShelfDefaultCategory => '預設';
+
+  @override
+  String get libraryShelfDefaultCategoryCannotRename => '預設分類不支援重新命名';
+
+  @override
+  String get libraryShelfDefaultCategoryCannotDelete => '預設分類不支援刪除';
+
+  @override
+  String get libraryShelfCategoryNameHint => '請輸入分類名稱';
+
+  @override
+  String libraryShelfCategoryMatchCount(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count',
+      zero: '0',
+    );
+    return '$name $_temp0';
+  }
+
+  @override
+  String get libraryShelfUpdate => '更新書架';
+
+  @override
+  String get libraryShelfRandomOpen => '隨機開啟作品';
+
+  @override
+  String get libraryShelfNoRandomWork => '目前分類沒有可開啟的作品';
+
+  @override
+  String get libraryShelfFilter => '篩選';
+
+  @override
+  String get libraryShelfSort => '排序';
+
+  @override
+  String get libraryShelfDisplayMode => '顯示';
+
+  @override
+  String get libraryShelfGrid => '網格';
+
+  @override
+  String get libraryShelfList => '列表';
+
+  @override
+  String get libraryShelfColumnsPerRow => '每列數量';
+
+  @override
+  String get libraryShelfFilterDownloaded => '已下載';
+
+  @override
+  String get libraryShelfFilterUnread => '未讀';
+
+  @override
+  String get libraryShelfFilterRead => '讀過';
+
+  @override
+  String get libraryShelfFilterBookmarked => '有書籤';
+
+  @override
+  String get libraryShelfSortName => '名稱';
+
+  @override
+  String get libraryShelfSortChapterCount => '章節數';
+
+  @override
+  String get libraryShelfSortLastReadAt => '最近閱讀';
+
+  @override
+  String get libraryShelfSortLastCheckedAt => '最近檢查';
+
+  @override
+  String get libraryShelfSortUnreadCount => '未讀章節數';
+
+  @override
+  String get libraryShelfSortWorkUpdatedAt => '作品更新時間';
+
+  @override
+  String get libraryShelfSortFetchedAt => '取得時間';
+
+  @override
+  String get libraryShelfSortFavoriteAddedAt => '收藏日期';
+
+  @override
+  String get libraryShelfMergeDuplicates => '合併重複項目';
+
+  @override
+  String libraryShelfMergeDuplicatesSuccess(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個重複作品',
+      zero: '0 個重複作品',
+    );
+    return '已合併 $_temp0';
+  }
+
+  @override
+  String get libraryShelfMergeDuplicatesNoChange => '沒有可合併的重複作品';
+
+  @override
+  String get libraryShelfActionUnsupported => '目前書架不支援此操作';
+
+  @override
+  String get libraryTaskCoverWarmup => '正在準備封面';
+
+  @override
+  String get libraryTaskFavoriteSyncFetching => '正在取得收藏列表';
+
+  @override
+  String get libraryTaskFavoriteSyncSaving => '正在儲存收藏資料';
+
+  @override
+  String get libraryTaskFavoriteSyncLoadingDetails => '正在讀取收藏詳情';
+
+  @override
+  String libraryTaskFavoriteSyncLoadingDetailsSubject(String subject) {
+    return '正在讀取《$subject》';
+  }
+
+  @override
+  String get libraryTaskFavoriteSyncFinishing => '正在完成收藏同步';
+
+  @override
+  String get libraryTaskComicSearchWaiting => '漫畫搜尋正在等待';
+
+  @override
+  String libraryTaskComicSearchWaitingSubject(String subject) {
+    return '《$subject》正在等待搜尋';
+  }
+
+  @override
+  String libraryTaskComicSearchWaitingDuration(
+    String subject,
+    String duration,
+  ) {
+    return '《$subject》正在等待搜尋，預計 $duration';
+  }
+
+  @override
+  String libraryTaskDurationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 秒',
+      one: '1 秒',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String libraryTaskDurationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 分鐘',
+      one: '1 分鐘',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get libraryTaskFavoriteSyncNotificationTitle => '收藏同步';
+
+  @override
+  String get libraryTaskComicSearchNotificationTitle => '漫畫搜尋';
+
+  @override
+  String get libraryTaskNotificationTitle => '書架工作';
+
+  @override
+  String get libraryDetailDownload => '下載';
+
+  @override
+  String get libraryDetailFilterAndSort => '篩選與排序';
+
+  @override
+  String get libraryDetailRefresh => '重新整理';
+
+  @override
+  String get libraryDetailChangeCategory => '修改分類';
+
+  @override
+  String get libraryDetailEditMetadata => '編輯作品資訊';
+
+  @override
+  String get libraryDetailConfigureCatalog => '設定目錄';
+
+  @override
+  String get libraryDetailManageChapters => '管理章節';
+
+  @override
+  String get libraryDetailSetCustomCover => '自訂封面';
+
+  @override
+  String get libraryDetailRemoveCustomCover => '取消封面';
+
+  @override
+  String get libraryDetailEditIntro => '編輯簡介';
+
+  @override
+  String get libraryDetailIntroHint => '請輸入簡介';
+
+  @override
+  String get libraryDetailNoIntro => '目前沒有簡介';
+
+  @override
+  String get libraryDetailContinue => '繼續';
+
+  @override
+  String get libraryDetailIntro => '簡介';
+
+  @override
+  String libraryDetailLoadFailed(String error) {
+    return '載入詳情失敗：$error';
+  }
+
+  @override
+  String get libraryDetailInShelf => '已在書架中';
+
+  @override
+  String get libraryDetailAddToShelf => '加入書架';
+
+  @override
+  String get libraryDetailUpdate => '更新';
+
+  @override
+  String get libraryDetailSourceThread => '原帖';
+
+  @override
+  String get libraryDetailNoNovelCover => '小說無封面';
+
+  @override
+  String get libraryDetailAuthor => '作者';
+
+  @override
+  String get libraryDetailTranslator => '翻譯者';
+
+  @override
+  String get libraryDetailTranslationGroup => '漢化組';
+
+  @override
+  String get libraryDetailPublisher => '發布者';
+
+  @override
+  String libraryDetailMetadataSemantics(String label, String value) {
+    return '$label：$value';
+  }
+
+  @override
+  String get libraryDetailDownloadUnread => '下載未讀章節';
+
+  @override
+  String get libraryDetailDownloadAll => '下載全部章節';
+
+  @override
+  String libraryDetailDeleteDownloadFailed(String error) {
+    return '刪除下載失敗：$error';
+  }
+
+  @override
+  String libraryDetailDownloadFailed(String error) {
+    return '下載失敗：$error';
+  }
+
+  @override
+  String get libraryDetailReadStateUpdateFailed => '閱讀狀態更新失敗';
+
+  @override
+  String get libraryDetailAllChapters => '全部章節';
+
+  @override
+  String get libraryDetailDownloaded => '已下載';
+
+  @override
+  String get libraryDetailUnread => '未讀';
+
+  @override
+  String get libraryDetailBookmarked => '已加書籤';
+
+  @override
+  String libraryDetailExcludeFilter(String label) {
+    return '排除$label';
+  }
+
+  @override
+  String get libraryDetailFilter => '篩選';
+
+  @override
+  String get libraryDetailSort => '排序';
+
+  @override
+  String get libraryDetailSortBySource => '依來源';
+
+  @override
+  String get libraryDetailAddBookmark => '加入書籤';
+
+  @override
+  String get libraryDetailRemoveBookmark => '移除書籤';
+
+  @override
+  String get libraryDetailResetWorkReading => '重設本作品閱讀狀態';
+
+  @override
+  String get libraryDetailDeleteChapterDownload => '刪除此章節下載';
+
+  @override
+  String get libraryDetailManageChaptersDescription => '顯示或隱藏章節，手動新增或移除章節';
+
+  @override
+  String get libraryDetailResetReadingTitle => '重設本作品閱讀狀態？';
+
+  @override
+  String get libraryDetailResetReadingBody =>
+      '全部章節將變為未讀，所有閱讀進度和上次閱讀位置都會被清除。書籤和下載不受影響。';
+
+  @override
+  String get libraryDetailResetReadingConfirm => '重設';
+
+  @override
+  String get libraryDetailResetReadingFailed => '重設作品閱讀狀態失敗';
+
+  @override
+  String libraryDetailRefreshFailed(String error) {
+    return '更新失敗：$error';
+  }
+
+  @override
+  String get libraryDetailRefreshUpdated => '已更新';
+
+  @override
+  String libraryDetailRefreshChaptersChanged(
+    int insertedCount,
+    int updatedCount,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      insertedCount,
+      locale: localeName,
+      other: '已新增 $insertedCount 章',
+      zero: '未新增章節',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      updatedCount,
+      locale: localeName,
+      other: '更新 $updatedCount 章',
+      zero: '未更新章節',
+    );
+    return '$_temp0，$_temp1';
+  }
+
+  @override
+  String get libraryDetailRefreshAlreadyCurrent => '已是最新章節';
+
+  @override
+  String get libraryDetailRefreshNoUpdates => '未發現新章節';
+
+  @override
+  String libraryDetailRefreshQueued(String duration) {
+    return '已加入更新佇列，預計 $duration';
+  }
+
+  @override
+  String libraryDetailRefreshQueuedAtPosition(int position, String duration) {
+    String _temp0 = intl.Intl.pluralLogic(
+      position,
+      locale: localeName,
+      other: '有 $position 個工作',
+      zero: '沒有等待工作',
+    );
+    return '已加入更新佇列，前方 $_temp0，預計 $duration';
+  }
+
+  @override
+  String get libraryDetailRefreshUnavailable => '目前沒有可更新的內容';
+
+  @override
+  String libraryDetailCatalogLoadFailed(String error) {
+    return '讀取目錄設定失敗：$error';
+  }
+
+  @override
+  String get libraryDetailMetadataTitle => '標題';
+
+  @override
+  String get libraryDetailMetadataSearchTitle => '更新搜尋關鍵字';
+
+  @override
+  String get libraryDetailMetadataSearchHelp => '留空時優先使用自訂標題，否則使用目前作品標題';
+
+  @override
+  String get libraryDetailMetadataSourceTitle => '來源標題';
+
+  @override
+  String get libraryDetailMetadataSourceAuthor => '來源作者';
+
+  @override
+  String get libraryDetailMetadataSourceTranslationGroup => '來源漢化組';
+
+  @override
+  String libraryDetailSourceValue(String label, String value) {
+    return '$label：$value';
+  }
+
+  @override
+  String libraryDetailSourceEmpty(String label) {
+    return '$label：無';
+  }
+
+  @override
+  String get libraryDetailCatalogUrl => '目錄 URL';
+
+  @override
+  String libraryDetailCatalogSource(String url) {
+    return '來源目錄：$url';
+  }
+
+  @override
+  String get libraryDetailCatalogSourceEmpty => '來源目錄：無';
+
+  @override
+  String libraryDetailCatalogSaveFailed(String error) {
+    return '儲存失敗：$error';
+  }
+
+  @override
+  String get libraryDetailCatalogInvalidUrl => '請輸入有效的目錄 URL';
+
+  @override
+  String get libraryDetailCatalogIncompleteUrl => '目錄 URL 不完整';
+
+  @override
+  String get libraryDetailCatalogUnsupportedScheme => '目錄 URL 僅支援 HTTP 或 HTTPS';
+
+  @override
+  String libraryDetailCatalogUnexpectedHost(String host) {
+    return '目錄 URL 必須來自 $host';
+  }
+
+  @override
+  String get libraryDetailCatalogNotTagCatalog => '請輸入標籤目錄頁面的 URL';
+
+  @override
+  String libraryDetailCoverUpdateFailed(String error) {
+    return '封面更新失敗：$error';
+  }
+
+  @override
+  String get libraryDetailCoverUpdated => '封面已更新';
+
+  @override
+  String libraryDetailCoverRemoveFailed(String error) {
+    return '取消封面失敗：$error';
+  }
+
+  @override
+  String get libraryDetailCoverRemoved => '已取消封面';
+
+  @override
+  String libraryChapterCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '共 $count 章',
+      zero: '共 0 章',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String libraryChapterFallbackTitle(String tid) {
+    return '章節 $tid';
+  }
+
+  @override
+  String get libraryChapterBookmarkSemantics => '已加入書籤';
+
+  @override
+  String get libraryChapterDownloading => '正在下載';
+
+  @override
+  String get libraryChapterDownloadedDelete => '已下載，點擊刪除下載';
+
+  @override
+  String get libraryChapterDownload => '下載此章節';
+
+  @override
+  String get libraryChapterClearReadState => '清除閱讀狀態';
+
+  @override
+  String get libraryChapterMarkRead => '標記為已讀';
+
+  @override
+  String libraryChapterCurrentPage(int page) {
+    return '第 $page 頁';
+  }
+
+  @override
+  String libraryChapterCurrentPageOfTotal(int page, int total) {
+    return '第 $page 頁，共 $total 頁';
+  }
+
+  @override
+  String get libraryChapterLastRead => '上次閱讀';
+
+  @override
+  String libraryChapterProgressSemantics(String subtitle, String progress) {
+    return '$subtitle，$progress';
+  }
+
+  @override
+  String get libraryChapterFilterAny => '不限';
+
+  @override
+  String libraryChapterFilterOnly(String label) {
+    return '只看$label';
+  }
+
+  @override
+  String libraryChapterFilterExclude(String label) {
+    return '排除$label';
+  }
+
+  @override
+  String get libraryChapterManagementLoading => '正在讀取章節';
+
+  @override
+  String libraryChapterManagementSummary(
+    int total,
+    int parsed,
+    int manual,
+    int hidden,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '共 $total 章',
+      zero: '共 0 章',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      parsed,
+      locale: localeName,
+      other: '解析 $parsed 章',
+      zero: '解析 0 章',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      manual,
+      locale: localeName,
+      other: '手動 $manual 章',
+      zero: '手動 0 章',
+    );
+    String _temp3 = intl.Intl.pluralLogic(
+      hidden,
+      locale: localeName,
+      other: '隱藏 $hidden 章',
+      zero: '隱藏 0 章',
+    );
+    return '$_temp0 · $_temp1 · $_temp2 · $_temp3';
+  }
+
+  @override
+  String get libraryChapterFilterLabel => '篩選章節';
+
+  @override
+  String get libraryChapterFilterHint => '依標題或 TID 搜尋';
+
+  @override
+  String get libraryChapterClearFilter => '清除篩選';
+
+  @override
+  String get libraryChapterAdd => '新增章節';
+
+  @override
+  String get libraryChapterAddHint => '貼上帖子連結或直接輸入 TID';
+
+  @override
+  String get libraryChapterAddHelp =>
+      '支援 forum.php、thread-xxx.html、api/mobile 等連結形式';
+
+  @override
+  String get libraryChapterShowAll => '全部顯示';
+
+  @override
+  String get libraryChapterHideAll => '全部隱藏';
+
+  @override
+  String get libraryChapterManagementEmpty => '目前沒有章節，可在上方貼上帖子連結手動新增';
+
+  @override
+  String get libraryChapterManagementNoMatches => '沒有符合的章節';
+
+  @override
+  String get libraryChapterShow => '顯示此章節';
+
+  @override
+  String get libraryChapterHide => '隱藏此章節';
+
+  @override
+  String get libraryChapterHidden => '已隱藏';
+
+  @override
+  String get libraryChapterRename => '重新命名此章節';
+
+  @override
+  String get libraryChapterRemove => '移除此章節';
+
+  @override
+  String get libraryChapterAdded => '已新增章節';
+
+  @override
+  String get libraryChapterDuplicate => '此章節已存在';
+
+  @override
+  String libraryChapterAddFailed(String error) {
+    return '新增失敗：$error';
+  }
+
+  @override
+  String get libraryChapterInputEmpty => '請輸入帖子連結或 TID';
+
+  @override
+  String get libraryChapterInputInvalidUrl => '請輸入有效的帖子連結或 TID';
+
+  @override
+  String get libraryChapterInputUnsupportedScheme => '帖子連結僅支援 HTTP 或 HTTPS';
+
+  @override
+  String libraryChapterInputUnexpectedHost(String host) {
+    return '帖子連結必須來自 $host';
+  }
+
+  @override
+  String get libraryChapterInputUnsupportedThreadUrl => '不支援此帖子連結形式';
+
+  @override
+  String get libraryChapterInputMissingTid => '帖子連結中缺少有效的 TID';
+
+  @override
+  String libraryChapterVisibilityUpdateFailed(String error) {
+    return '更新顯示狀態失敗：$error';
+  }
+
+  @override
+  String get libraryChapterRestoredSourceTitle => '已恢復來源章節名';
+
+  @override
+  String get libraryChapterRenamed => '已重新命名章節';
+
+  @override
+  String libraryChapterRenameFailed(String error) {
+    return '重新命名失敗：$error';
+  }
+
+  @override
+  String get libraryChapterAllHidden => '已隱藏全部章節';
+
+  @override
+  String get libraryChapterAllShown => '已顯示全部章節';
+
+  @override
+  String libraryChapterBulkUpdateFailed(String error) {
+    return '批次更新失敗：$error';
+  }
+
+  @override
+  String get libraryChapterRemoveTitle => '移除此章節？';
+
+  @override
+  String libraryChapterRemoveBody(String title) {
+    return '將刪除手動新增的「$title」及其閱讀記錄與下載工作，此操作無法復原。';
+  }
+
+  @override
+  String get libraryChapterParsedCannotRemove => '解析章節不可移除，可改為隱藏';
+
+  @override
+  String get libraryChapterRemoved => '已移除章節';
+
+  @override
+  String libraryChapterRemovedWithWarnings(String warnings) {
+    return '章節已移除，但$warnings';
+  }
+
+  @override
+  String get libraryChapterDownloadTaskCleanupFailed => '下載工作清理失敗';
+
+  @override
+  String get libraryChapterDownloadFileCleanupFailed => '章節下載檔案清理失敗';
+
+  @override
+  String libraryChapterRemoveFailed(String error) {
+    return '移除失敗：$error';
+  }
+
+  @override
+  String get libraryChapterRenameTitle => '重新命名章節';
+
+  @override
+  String get libraryChapterName => '章節名';
+
+  @override
+  String get libraryChapterRestoreDefaultTitleHelp => '留空以恢復預設章節名';
+
+  @override
+  String libraryChapterRestoreSourceTitleHelp(String title) {
+    return '留空以恢復來源章節名：$title';
+  }
+
+  @override
+  String get libraryChapterManual => '手動';
+
+  @override
+  String get libraryChapterParsed => '解析';
+
+  @override
+  String libraryChapterLoadFailed(String error) {
+    return '讀取章節失敗：$error';
+  }
+
+  @override
+  String get libraryCoverFocalTitle => '調整封面焦點';
+
+  @override
+  String get libraryCoverFocalHelp => '拖曳選框以選擇封面取景區域，原圖不會被裁切';
+
+  @override
+  String get libraryCoverImageLoadFailed => '圖片載入失敗';
+
+  @override
+  String get libraryCoverCenter => '置中';
+
+  @override
+  String get libraryErrorRedactedLink => '[連結已隱藏]';
+
+  @override
+  String get libraryErrorRedactedSecret => '[敏感資訊已隱藏]';
+
+  @override
+  String get readerBack => '返回';
+
+  @override
+  String get readerPrevious => '上一章';
+
+  @override
+  String get readerNext => '下一章';
+
+  @override
+  String readerSelectedSemantics(String label) {
+    return '$label，已選取';
+  }
+
+  @override
+  String readerProgressSemantics(String current, String total) {
+    return '閱讀進度：$current / $total';
   }
 
   @override

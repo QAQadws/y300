@@ -7,23 +7,15 @@ class SelectionAction {
     required this.icon,
     this.destructive = false,
     this.needsConfirm = false,
-    @Deprecated('Use presentation localization by action id.') this.label,
   });
 
   final String id;
   final IconData icon;
   final bool destructive;
   final bool needsConfirm;
-
-  /// Compatibility field for adapters that have not migrated yet.
-  ///
-  /// Shared presentation must resolve labels from [id] and AppLocalizations.
-  @Deprecated('Use presentation localization by action id.')
-  final String? label;
 }
 
-enum SelectionActionResultCode {
-  legacyMessage,
+enum SelectionActionOutcomeCode {
   success,
   partialFailure,
   unsupported,
@@ -33,10 +25,9 @@ enum SelectionActionResultCode {
 }
 
 /// 书架批量操作执行结果。
-class SelectionActionResult {
-  const SelectionActionResult({
-    this.code = SelectionActionResultCode.legacyMessage,
-    this.message,
+class SelectionActionOutcome {
+  const SelectionActionOutcome({
+    required this.code,
     this.changed = false,
     this.succeededCount = 0,
     this.failedCount = 0,
@@ -44,11 +35,7 @@ class SelectionActionResult {
     this.deduplicatedCount = 0,
   });
 
-  final SelectionActionResultCode code;
-
-  /// Compatibility field for pre-localization adapters.
-  @Deprecated('Use code and numeric result fields.')
-  final String? message;
+  final SelectionActionOutcomeCode code;
   final bool changed;
   final int succeededCount;
   final int failedCount;
@@ -56,7 +43,7 @@ class SelectionActionResult {
   final int deduplicatedCount;
 
   bool get hasFailure =>
-      failedCount > 0 || code == SelectionActionResultCode.partialFailure;
+      failedCount > 0 || code == SelectionActionOutcomeCode.partialFailure;
 }
 
 /// 一次批量操作请求。
@@ -81,7 +68,7 @@ class SelectionActionExecutionRequest {
 abstract class ShelfSelectionActionAdapter {
   List<SelectionAction> get selectionActions;
 
-  Future<SelectionActionResult> runSelectionAction(
+  Future<SelectionActionOutcome> runSelectionAction(
     SelectionActionExecutionRequest request,
   );
 }

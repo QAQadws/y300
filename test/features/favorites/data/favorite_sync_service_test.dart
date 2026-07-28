@@ -690,10 +690,10 @@ void main() {
         .where(
           (progress) =>
               progress.phase == FavoriteSyncProgressPhase.loadingDetails &&
-              progress.message.startsWith('正在解析: '),
+              progress.subject == '漫画',
         )
         .toList(growable: false);
-    expect(parsingProgress.first.message, '正在解析: 漫画');
+    expect(parsingProgress.first.subject, '漫画');
     expect(parsingProgress.first.current, 1);
     expect(parsingProgress.first.total, 3);
     expect(service.progress.value.isActive, isFalse);

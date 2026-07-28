@@ -244,18 +244,22 @@ class LibraryDetailHeader {
 }
 
 /// 通用章节阅读进度展示模型。
+enum LibraryChapterProgressKind { currentPage, lastRead }
+
 class LibraryChapterProgressInfo {
   const LibraryChapterProgressInfo({
-    required this.label,
+    required this.kind,
     required this.isCurrent,
+    this.currentPage,
+    this.totalPages,
     this.fraction,
-    this.semanticLabel,
   });
 
-  final String label;
+  final LibraryChapterProgressKind kind;
   final bool isCurrent;
+  final int? currentPage;
+  final int? totalPages;
   final double? fraction;
-  final String? semanticLabel;
 }
 
 /// 通用章节行模型。

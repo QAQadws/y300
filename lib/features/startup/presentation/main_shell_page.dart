@@ -24,6 +24,9 @@ import 'package:y300/features/library_shared/presentation/selection/selection_ac
 import 'package:y300/features/library_shared/presentation/selection/selection_action_text_resolver.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
+import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
+import 'package:y300/features/library_shared/presentation/services/library_shelf_text_resolver.dart';
+import 'package:y300/features/library_shared/presentation/services/library_task_text_resolver.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/more/presentation/data_storage_controller.dart';
 import 'package:y300/features/novel/presentation/novel_tab_page.dart';
@@ -142,12 +145,18 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     ref.watch(favoriteSyncTaskProgressRegistrationProvider);
     ref.watch(comicSearchQueueTaskProgressRegistrationProvider);
     // 启动进度->系统通知桥接，让收藏同步/漫画搜索等待进入通知栏。
-    ref.watch(libraryTaskNotificationBridgeProvider);
+    ref
+        .watch(libraryTaskNotificationBridgeProvider)
+        .start(
+          localeId: l10n.localeName,
+          textResolver: (progress) =>
+              LibraryTaskTextResolver.notification(l10n, progress),
+        );
     final selectionHost = ref.watch(shelfSelectionHostControllerProvider);
-    final l10n = AppLocalizations.of(context);
     final navigationState = ref
         .watch(mainNavigationSettingsControllerProvider)
         .value;
@@ -263,7 +272,9 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
         return;
       }
       _showSelectionMessage(
-        l10n.startupBatchActionFailed(_safeErrorSummary(error)),
+        l10n.librarySelectionActionFailed(
+          LibraryErrorSummary.resolve(l10n, error),
+        ),
       );
     }
   }
@@ -275,11 +286,11 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     final l10n = AppLocalizations.of(context);
     final selectedCount = state?.selectedCount ?? 0;
     final title = action.id == SelectionActionIds.unfavorite
-        ? l10n.startupConfirmUnfavoriteTitle
-        : l10n.startupConfirmActionTitle;
+        ? l10n.librarySelectionConfirmUnfavoriteTitle
+        : l10n.librarySelectionConfirmActionTitle;
     final content = action.id == SelectionActionIds.unfavorite
-        ? l10n.startupConfirmUnfavoriteBody(selectedCount)
-        : l10n.startupConfirmActionBody(
+        ? l10n.librarySelectionConfirmUnfavoriteBody(selectedCount)
+        : l10n.librarySelectionConfirmActionBody(
             selectedCount,
             SelectionActionTextResolver.label(l10n, action.id),
           );
@@ -326,10 +337,15 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
           child: ListView(
             shrinkWrap: true,
             children: [
-              ListTile(title: Text(l10n.startupSelectCategory), enabled: false),
+              ListTile(
+                title: Text(l10n.librarySelectionSelectCategory),
+                enabled: false,
+              ),
               for (final category in available)
                 ListTile(
-                  title: Text(category.name),
+                  title: Text(
+                    LibraryShelfTextResolver.categoryName(l10n, category),
+                  ),
                   onTap: () {
                     Navigator.of(sheetContext).pop(category.categoryId);
                   },
@@ -337,7 +353,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.add),
-                title: Text(l10n.startupCreateCategory),
+                title: Text(l10n.librarySelectionCreateCategory),
                 onTap: () {
                   Navigator.of(
                     sheetContext,
@@ -377,14 +393,6 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(trimmed)));
-  }
-
-  String _safeErrorSummary(Object error) {
-    final summary = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (summary.isEmpty) {
-      return AppLocalizations.of(context).commonUnknownError;
-    }
-    return summary.length <= 160 ? summary : '${summary.substring(0, 157)}...';
   }
 
   MainShellDestination _resolveCurrentDestination(
@@ -485,12 +493,14 @@ class _CreateSelectionCategoryDialogState
     final l10n = AppLocalizations.of(context);
     return AlertDialog(
       key: const Key('selection-create-category-dialog'),
-      title: Text(l10n.startupCreateCategory),
+      title: Text(l10n.librarySelectionCreateCategory),
       content: TextField(
         key: const Key('selection-create-category-name-field'),
         controller: _controller,
         autofocus: true,
-        decoration: InputDecoration(hintText: l10n.startupCategoryNameHint),
+        decoration: InputDecoration(
+          hintText: l10n.librarySelectionCategoryNameHint,
+        ),
       ),
       actions: [
         TextButton(

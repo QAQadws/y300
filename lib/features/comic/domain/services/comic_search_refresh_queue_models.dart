@@ -1,11 +1,6 @@
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 
-enum ComicSearchRefreshQueueStatus {
-  pending,
-  running,
-  completed,
-  failed,
-}
+enum ComicSearchRefreshQueueStatus { pending, running, completed, failed }
 
 extension ComicSearchRefreshQueueStatusX on ComicSearchRefreshQueueStatus {
   String get dbValue {
@@ -36,12 +31,7 @@ extension ComicSearchRefreshQueueStatusX on ComicSearchRefreshQueueStatus {
   }
 }
 
-enum ComicSearchRefreshOrigin {
-  favoriteSync,
-  detailManual,
-  backfill,
-  unknown,
-}
+enum ComicSearchRefreshOrigin { favoriteSync, detailManual, backfill, unknown }
 
 extension ComicSearchRefreshOriginX on ComicSearchRefreshOrigin {
   String get dbValue {
@@ -155,30 +145,12 @@ class ComicSearchRefreshQueueSnapshot {
 
   int get totalCount => entries.length;
   bool get active => entries.isNotEmpty;
-  ComicSearchRefreshQueueEntry? get head => entries.isEmpty ? null : entries.first;
+  ComicSearchRefreshQueueEntry? get head =>
+      entries.isEmpty ? null : entries.first;
   String? get headTitle => head?.title;
 
   Duration get estimatedDuration {
     return Duration(milliseconds: cadence.inMilliseconds * totalCount);
-  }
-
-  String? get waitingMessage {
-    final title = headTitle?.trim();
-    if (title == null || title.isEmpty) {
-      return null;
-    }
-    // Title is already the cleaned book name produced by the title analyzer
-    // (stage 2), so we only wrap it for display and avoid leaking raw thread
-    // noise. Stage 4 reuses this wording as the comic search notification body.
-    return '《$title》正在等待漫画搜索 预计耗时${_formatSeconds(estimatedDuration)}s';
-  }
-
-  String _formatSeconds(Duration duration) {
-    final tenths = (duration.inMilliseconds / 100).round();
-    if (tenths % 10 == 0) {
-      return '${tenths ~/ 10}';
-    }
-    return (tenths / 10).toStringAsFixed(1);
   }
 
   static const empty = ComicSearchRefreshQueueSnapshot(

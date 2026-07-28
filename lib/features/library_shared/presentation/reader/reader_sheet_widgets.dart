@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ReaderActionSheetItem<T extends Object> {
   const ReaderActionSheetItem({
@@ -150,7 +151,9 @@ class _ReaderChoiceButton extends StatelessWidget {
       button: true,
       selected: selected,
       enabled: enabled,
-      label: selected ? '$label，已选择' : label,
+      label: selected
+          ? AppLocalizations.of(context).readerSelectedSemantics(label)
+          : label,
       child: OutlinedButton(
         onPressed: enabled ? onPressed : null,
         style: OutlinedButton.styleFrom(

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
+import 'package:y300/features/library_shared/presentation/services/library_detail_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 章节管理面板。
 ///
@@ -68,9 +70,12 @@ class _UnifiedDetailChapterManagementSheetState
       });
     } catch (error) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context);
         setState(() {
           _loading = false;
-          _loadError = '读取章节失败：$error';
+          _loadError = l10n.libraryChapterLoadFailed(
+            LibraryDetailTextResolver.safeError(l10n, error),
+          );
         });
       }
     }
@@ -122,6 +127,7 @@ class _UnifiedDetailChapterManagementSheetState
   }
 
   Widget _buildHeader(ThemeData theme) {
+    final l10n = AppLocalizations.of(context);
     final manualCount = _chapters.where((item) => item.isManual).length;
     final hiddenCount = _chapters.where((item) => item.isHidden).length;
     return Row(
@@ -130,12 +136,20 @@ class _UnifiedDetailChapterManagementSheetState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('管理章节', style: theme.textTheme.titleMedium),
+              Text(
+                l10n.libraryDetailManageChapters,
+                style: theme.textTheme.titleMedium,
+              ),
               const SizedBox(height: 2),
               Text(
                 _loading
-                    ? '正在读取…'
-                    : '共 ${_chapters.length} 章 · 解析 ${_chapters.length - manualCount} · 手动 $manualCount · 已隐藏 $hiddenCount',
+                    ? l10n.libraryChapterManagementLoading
+                    : l10n.libraryChapterManagementSummary(
+                        _chapters.length,
+                        _chapters.length - manualCount,
+                        manualCount,
+                        hiddenCount,
+                      ),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -144,7 +158,7 @@ class _UnifiedDetailChapterManagementSheetState
           ),
         ),
         IconButton(
-          tooltip: '关闭',
+          tooltip: l10n.commonClose,
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
         ),
@@ -153,19 +167,20 @@ class _UnifiedDetailChapterManagementSheetState
   }
 
   Widget _buildSearchField() {
+    final l10n = AppLocalizations.of(context);
     return TextField(
       key: const Key('unified-detail-chapter-management-search'),
       controller: _searchController,
       enabled: !_loading && _loadError == null,
       onChanged: (value) => setState(() => _searchQuery = value.trim()),
       decoration: InputDecoration(
-        labelText: '筛选章节',
-        hintText: '按标题或 TID 搜索',
+        labelText: l10n.libraryChapterFilterLabel,
+        hintText: l10n.libraryChapterFilterHint,
         prefixIcon: const Icon(Icons.search),
         suffixIcon: _searchQuery.isEmpty
             ? null
             : IconButton(
-                tooltip: '清除筛选',
+                tooltip: l10n.libraryChapterClearFilter,
                 icon: const Icon(Icons.clear),
                 onPressed: () {
                   _searchController.clear();
@@ -178,6 +193,7 @@ class _UnifiedDetailChapterManagementSheetState
   }
 
   Widget _buildAddField() {
+    final l10n = AppLocalizations.of(context);
     return TextField(
       key: const Key('unified-detail-chapter-management-input'),
       controller: _inputController,
@@ -187,9 +203,9 @@ class _UnifiedDetailChapterManagementSheetState
       autocorrect: false,
       enableSuggestions: false,
       decoration: InputDecoration(
-        labelText: '添加章节',
-        hintText: '粘贴帖子链接或直接输入 tid',
-        helperText: '支持 forum.php、thread-xxx.html、api/mobile 等链接形态',
+        labelText: l10n.libraryChapterAdd,
+        hintText: l10n.libraryChapterAddHint,
+        helperText: l10n.libraryChapterAddHelp,
         helperMaxLines: 2,
         errorText: _inputError,
         errorMaxLines: 3,
@@ -205,7 +221,7 @@ class _UnifiedDetailChapterManagementSheetState
               )
             : IconButton(
                 key: const Key('unified-detail-chapter-management-add'),
-                tooltip: '添加',
+                tooltip: l10n.libraryChapterAdd,
                 icon: const Icon(Icons.add_circle_outline),
                 onPressed: _addChapter,
               ),
@@ -219,6 +235,7 @@ class _UnifiedDetailChapterManagementSheetState
   }
 
   Widget _buildBulkActions() {
+    final l10n = AppLocalizations.of(context);
     final canBulk = !_loading && _chapters.isNotEmpty && !_bulkBusy;
     return Row(
       children: [
@@ -227,7 +244,7 @@ class _UnifiedDetailChapterManagementSheetState
             key: const Key('unified-detail-chapter-management-show-all'),
             onPressed: canBulk ? () => _setAllHidden(false) : null,
             icon: const Icon(Icons.visibility_outlined, size: 18),
-            label: const Text('全部显示'),
+            label: Text(l10n.libraryChapterShowAll),
           ),
         ),
         const SizedBox(width: 10),
@@ -236,7 +253,7 @@ class _UnifiedDetailChapterManagementSheetState
             key: const Key('unified-detail-chapter-management-hide-all'),
             onPressed: canBulk ? () => _setAllHidden(true) : null,
             icon: const Icon(Icons.visibility_off_outlined, size: 18),
-            label: const Text('全部隐藏'),
+            label: Text(l10n.libraryChapterHideAll),
           ),
         ),
       ],
@@ -270,7 +287,7 @@ class _UnifiedDetailChapterManagementSheetState
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Center(
           child: Text(
-            '暂无章节，可在上方粘贴帖子链接手动添加',
+            AppLocalizations.of(context).libraryChapterManagementEmpty,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -291,7 +308,7 @@ class _UnifiedDetailChapterManagementSheetState
     if (chapters.isEmpty) {
       return Center(
         child: Text(
-          '没有匹配的章节',
+          AppLocalizations.of(context).libraryChapterManagementNoMatches,
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -308,6 +325,7 @@ class _UnifiedDetailChapterManagementSheetState
   }
 
   Widget _buildChapterRow(ThemeData theme, DetailManagedChapter chapter) {
+    final l10n = AppLocalizations.of(context);
     final busy = _busyEpisodeIds.contains(chapter.episodeId);
     final dimmed = chapter.isHidden;
     final titleColor = dimmed
@@ -324,7 +342,9 @@ class _UnifiedDetailChapterManagementSheetState
         key: ValueKey<String>(
           'unified-detail-chapter-management-visibility-${chapter.episodeId}',
         ),
-        tooltip: chapter.isHidden ? '显示该章节' : '隐藏该章节',
+        tooltip: chapter.isHidden
+            ? l10n.libraryChapterShow
+            : l10n.libraryChapterHide,
         icon: Icon(
           chapter.isHidden
               ? Icons.visibility_off_outlined
@@ -338,7 +358,11 @@ class _UnifiedDetailChapterManagementSheetState
             : () => _toggleHidden(chapter, !chapter.isHidden),
       ),
       title: Text(
-        chapter.title,
+        LibraryDetailTextResolver.chapterTitle(
+          l10n,
+          chapter.title,
+          chapter.sourceTid,
+        ),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: theme.textTheme.bodyMedium?.copyWith(color: titleColor),
@@ -351,7 +375,8 @@ class _UnifiedDetailChapterManagementSheetState
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Tid:${chapter.sourceTid}${chapter.isHidden ? ' · 已隐藏' : ''}',
+                'Tid:${chapter.sourceTid}'
+                '${chapter.isHidden ? ' · ${l10n.libraryChapterHidden}' : ''}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -376,7 +401,7 @@ class _UnifiedDetailChapterManagementSheetState
                   key: ValueKey<String>(
                     'unified-detail-chapter-management-rename-${chapter.episodeId}',
                   ),
-                  tooltip: '重命名该章节',
+                  tooltip: l10n.libraryChapterRename,
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: _bulkBusy ? null : () => _promptRename(chapter),
                 ),
@@ -385,7 +410,7 @@ class _UnifiedDetailChapterManagementSheetState
                     key: ValueKey<String>(
                       'unified-detail-chapter-management-remove-${chapter.episodeId}',
                     ),
-                    tooltip: '移除该章节',
+                    tooltip: l10n.libraryChapterRemove,
                     icon: const Icon(Icons.delete_outline),
                     onPressed: _bulkBusy ? null : () => _confirmRemove(chapter),
                   ),
@@ -401,30 +426,42 @@ class _UnifiedDetailChapterManagementSheetState
       _inputError = null;
     });
     try {
-      final added = await widget.adapter.addManualChapter(
+      final outcome = await widget.adapter.addManualChapter(
         workId: widget.workId,
         input: input,
       );
       if (!mounted) {
         return;
       }
-      if (!added) {
-        setState(() => _inputError = '该章节已存在');
+      if (outcome.code == DetailManualChapterAddOutcomeCode.duplicate) {
+        setState(() {
+          _inputError = AppLocalizations.of(context).libraryChapterDuplicate;
+        });
+        return;
+      }
+      if (outcome.code == DetailManualChapterAddOutcomeCode.invalidInput) {
+        setState(() {
+          _inputError = LibraryDetailTextResolver.manualChapterInputError(
+            AppLocalizations.of(context),
+            outcome,
+          );
+        });
         return;
       }
       _inputController.clear();
       _notifyChanged();
       await _load();
       if (mounted) {
-        _showMessage('已添加章节');
-      }
-    } on FormatException catch (error) {
-      if (mounted) {
-        setState(() => _inputError = error.message);
+        _showMessage(AppLocalizations.of(context).libraryChapterAdded);
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _inputError = '添加失败：$error');
+        final l10n = AppLocalizations.of(context);
+        setState(() {
+          _inputError = l10n.libraryChapterAddFailed(
+            LibraryDetailTextResolver.safeError(l10n, error),
+          );
+        });
       }
     } finally {
       if (mounted) {
@@ -456,6 +493,8 @@ class _UnifiedDetailChapterManagementSheetState
                   ? DetailManagedChapter(
                       episodeId: item.episodeId,
                       title: item.title,
+                      sourceTitle: item.sourceTitle,
+                      customTitle: item.customTitle,
                       sourceTid: item.sourceTid,
                       isManual: item.isManual,
                       isHidden: isHidden,
@@ -466,7 +505,12 @@ class _UnifiedDetailChapterManagementSheetState
       });
     } catch (error) {
       if (mounted) {
-        _showMessage('更新显示状态失败：$error');
+        final l10n = AppLocalizations.of(context);
+        _showMessage(
+          l10n.libraryChapterVisibilityUpdateFailed(
+            LibraryDetailTextResolver.safeError(l10n, error),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -480,7 +524,14 @@ class _UnifiedDetailChapterManagementSheetState
     // 返回 null = 用户取消，返回对象且 customTitle 为 null = 用户要求恢复。
     final result = await showDialog<_ChapterRenameResult>(
       context: context,
-      builder: (dialogContext) => _ChapterRenameDialog(chapter: chapter),
+      builder: (dialogContext) => _ChapterRenameDialog(
+        chapter: chapter,
+        initialTitle: LibraryDetailTextResolver.chapterTitle(
+          AppLocalizations.of(dialogContext),
+          chapter.title,
+          chapter.sourceTid,
+        ),
+      ),
     );
     if (result == null || !mounted) {
       return;
@@ -498,12 +549,19 @@ class _UnifiedDetailChapterManagementSheetState
       await _load();
       if (mounted) {
         _showMessage(
-          result.customTitle == null ? '已恢复来源章节名' : '已重命名章节',
+          result.customTitle == null
+              ? AppLocalizations.of(context).libraryChapterRestoredSourceTitle
+              : AppLocalizations.of(context).libraryChapterRenamed,
         );
       }
     } catch (error) {
       if (mounted) {
-        _showMessage('重命名失败：$error');
+        final l10n = AppLocalizations.of(context);
+        _showMessage(
+          l10n.libraryChapterRenameFailed(
+            LibraryDetailTextResolver.safeError(l10n, error),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -522,11 +580,20 @@ class _UnifiedDetailChapterManagementSheetState
       _notifyChanged();
       await _load();
       if (mounted) {
-        _showMessage(isHidden ? '已隐藏全部章节' : '已显示全部章节');
+        _showMessage(
+          isHidden
+              ? AppLocalizations.of(context).libraryChapterAllHidden
+              : AppLocalizations.of(context).libraryChapterAllShown,
+        );
       }
     } catch (error) {
       if (mounted) {
-        _showMessage('批量更新失败：$error');
+        final l10n = AppLocalizations.of(context);
+        _showMessage(
+          l10n.libraryChapterBulkUpdateFailed(
+            LibraryDetailTextResolver.safeError(l10n, error),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -540,19 +607,29 @@ class _UnifiedDetailChapterManagementSheetState
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('移除该章节？'),
-          content: Text('将删除手动添加的「${chapter.title}」及其阅读记录与下载任务，此操作不可撤销。'),
+          title: Text(
+            AppLocalizations.of(dialogContext).libraryChapterRemoveTitle,
+          ),
+          content: Text(
+            AppLocalizations.of(dialogContext).libraryChapterRemoveBody(
+              LibraryDetailTextResolver.chapterTitle(
+                AppLocalizations.of(dialogContext),
+                chapter.title,
+                chapter.sourceTid,
+              ),
+            ),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(dialogContext).commonCancel),
             ),
             FilledButton(
               key: const Key(
                 'unified-detail-chapter-management-remove-confirm',
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('移除'),
+              child: Text(AppLocalizations.of(dialogContext).commonRemove),
             ),
           ],
         );
@@ -572,17 +649,21 @@ class _UnifiedDetailChapterManagementSheetState
       }
       await _load();
       if (mounted) {
-        if (!result.removed) {
-          _showMessage('解析章节不可移除，可改为隐藏');
-        } else if (result.warning != null) {
-          _showMessage('章节已移除，但${result.warning}');
-        } else {
-          _showMessage('已移除章节');
-        }
+        _showMessage(
+          LibraryDetailTextResolver.chapterRemovalOutcome(
+            AppLocalizations.of(context),
+            result,
+          ),
+        );
       }
     } catch (error) {
       if (mounted) {
-        _showMessage('移除失败：$error');
+        final l10n = AppLocalizations.of(context);
+        _showMessage(
+          l10n.libraryChapterRemoveFailed(
+            LibraryDetailTextResolver.safeError(l10n, error),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -611,9 +692,13 @@ class _ChapterRenameResult {
 /// 与「编辑作品信息」同一套交互：输入框回填当前展示名，helper 说明清空后会
 /// 退回哪个来源名，因此“改名”和“还原”共用一个输入框，不需要额外的还原按钮。
 class _ChapterRenameDialog extends StatefulWidget {
-  const _ChapterRenameDialog({required this.chapter});
+  const _ChapterRenameDialog({
+    required this.chapter,
+    required this.initialTitle,
+  });
 
   final DetailManagedChapter chapter;
+  final String initialTitle;
 
   @override
   State<_ChapterRenameDialog> createState() => _ChapterRenameDialogState();
@@ -627,7 +712,7 @@ class _ChapterRenameDialogState extends State<_ChapterRenameDialog> {
     super.initState();
     // 回填展示名而不是只回填自定义名：未改名的章节也应该能在原名上小改，
     // 而不是面对一个空输入框重新打字。
-    _controller = TextEditingController(text: widget.chapter.title);
+    _controller = TextEditingController(text: widget.initialTitle);
   }
 
   @override
@@ -638,19 +723,20 @@ class _ChapterRenameDialogState extends State<_ChapterRenameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final sourceTitle = widget.chapter.sourceTitle;
     return AlertDialog(
-      title: const Text('重命名章节'),
+      title: Text(l10n.libraryChapterRenameTitle),
       content: TextField(
         key: const Key('unified-detail-chapter-management-rename-input'),
         controller: _controller,
         autofocus: true,
         textInputAction: TextInputAction.done,
         decoration: InputDecoration(
-          labelText: '章节名',
+          labelText: l10n.libraryChapterName,
           helperText: sourceTitle == null
-              ? '留空恢复默认章节名'
-              : '留空恢复来源章节名：$sourceTitle',
+              ? l10n.libraryChapterRestoreDefaultTitleHelp
+              : l10n.libraryChapterRestoreSourceTitleHelp(sourceTitle),
           helperMaxLines: 3,
         ),
         onSubmitted: (_) => _submit(),
@@ -658,12 +744,12 @@ class _ChapterRenameDialogState extends State<_ChapterRenameDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.commonCancel),
         ),
         FilledButton(
           key: const Key('unified-detail-chapter-management-rename-confirm'),
           onPressed: _submit,
-          child: const Text('保存'),
+          child: Text(l10n.commonSave),
         ),
       ],
     );
@@ -702,7 +788,9 @@ class _SourceBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
-        isManual ? '手动' : '解析',
+        isManual
+            ? AppLocalizations.of(context).libraryChapterManual
+            : AppLocalizations.of(context).libraryChapterParsed,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: foreground,
           fontWeight: FontWeight.w600,

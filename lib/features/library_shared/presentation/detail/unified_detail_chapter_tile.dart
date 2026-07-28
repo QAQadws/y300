@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/presentation/services/library_detail_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class UnifiedDetailChapterTile extends StatelessWidget {
   const UnifiedDetailChapterTile({
@@ -29,6 +31,7 @@ class UnifiedDetailChapterTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final titleColor = chapter.isRead
@@ -65,13 +68,17 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                             ),
                             size: 20,
                             color: scheme.primary,
-                            semanticLabel: '已添加书签',
+                            semanticLabel: l10n.libraryChapterBookmarkSemantics,
                           ),
                           const SizedBox(width: 8),
                         ],
                         Expanded(
                           child: Text(
-                            chapter.title,
+                            LibraryDetailTextResolver.chapterTitle(
+                              l10n,
+                              chapter.title,
+                              chapter.sourceTid,
+                            ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleSmall?.copyWith(
@@ -100,10 +107,10 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                 const SizedBox(width: 8),
                 IconButton(
                   tooltip: isDownloading
-                      ? '正在下载'
+                      ? l10n.libraryChapterDownloading
                       : chapter.isDownloaded
-                      ? '已下载，点击删除下载'
-                      : '下载该章节',
+                      ? l10n.libraryChapterDownloadedDelete
+                      : l10n.libraryChapterDownload,
                   iconSize: downloadIconSize,
                   onPressed: isDownloading ? null : onToggleDownload,
                   icon: isDownloading
@@ -131,7 +138,9 @@ class UnifiedDetailChapterTile extends StatelessWidget {
     if (toggleReadState == null) {
       return tile;
     }
-    final actionLabel = chapter.isRead ? '清除阅读状态' : '标记已读';
+    final actionLabel = chapter.isRead
+        ? l10n.libraryChapterClearReadState
+        : l10n.libraryChapterMarkRead;
     final actionIcon = chapter.isRead ? Icons.remove_done : Icons.done;
     final backgroundColor = chapter.isRead
         ? scheme.secondaryContainer
@@ -363,6 +372,10 @@ class _ChapterSubtitle extends StatelessWidget {
       color: (style.color ?? Theme.of(context).colorScheme.onSurfaceVariant)
           .withAlpha(150),
     );
+    final progressLabel = LibraryDetailTextResolver.chapterProgress(
+      AppLocalizations.of(context),
+      progress,
+    );
     final text = RichText(
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -371,7 +384,7 @@ class _ChapterSubtitle extends StatelessWidget {
         children: [
           TextSpan(text: subtitle),
           const TextSpan(text: '  ·  '),
-          TextSpan(text: progress.label, style: progressStyle),
+          TextSpan(text: progressLabel, style: progressStyle),
         ],
       ),
     );
@@ -379,7 +392,9 @@ class _ChapterSubtitle extends StatelessWidget {
       key: ValueKey<String>(
         'unified-detail-chapter-inline-progress-$episodeId',
       ),
-      label: '$subtitle，${progress.semanticLabel ?? progress.label}',
+      label: AppLocalizations.of(
+        context,
+      ).libraryChapterProgressSemantics(subtitle, progressLabel),
       child: ExcludeSemantics(child: text),
     );
   }

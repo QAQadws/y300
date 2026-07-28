@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:y300/core/media/cover_crop_geometry.dart';
 import 'package:y300/core/media/cover_focal_point.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 封面焦点选区对话框结果。
 typedef CoverFocalPointResult = CoverFocalPoint;
@@ -24,13 +25,13 @@ class CoverFocalPointPicker extends StatefulWidget {
     required this.image,
     this.initialFocus,
     this.aspectRatio = kCoverFocalAspectRatio,
-    this.title = '调整封面焦点',
+    this.title,
   });
 
   final ImageProvider image;
   final CoverFocalPoint? initialFocus;
   final double aspectRatio;
-  final String title;
+  final String? title;
 
   /// 以模态对话框形式打开，返回选定焦点；取消返回 null。
   static Future<CoverFocalPoint?> show(
@@ -38,7 +39,7 @@ class CoverFocalPointPicker extends StatefulWidget {
     required ImageProvider image,
     CoverFocalPoint? initialFocus,
     double aspectRatio = kCoverFocalAspectRatio,
-    String title = '调整封面焦点',
+    String? title,
   }) {
     return showDialog<CoverFocalPoint>(
       context: context,
@@ -124,6 +125,7 @@ class _CoverFocalPointPickerState extends State<CoverFocalPointPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Dialog(
       insetPadding: const EdgeInsets.all(20),
       child: ConstrainedBox(
@@ -135,12 +137,12 @@ class _CoverFocalPointPickerState extends State<CoverFocalPointPicker> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                widget.title,
+                widget.title ?? l10n.libraryCoverFocalTitle,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 4),
               Text(
-                '拖动选框选择封面取景区域，原图不会被裁剪',
+                l10n.libraryCoverFocalHelp,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
@@ -156,10 +158,10 @@ class _CoverFocalPointPickerState extends State<CoverFocalPointPicker> {
 
   Widget _buildStage() {
     if (_imageFailed) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(40),
-          child: Text('图片加载失败'),
+          padding: const EdgeInsets.all(40),
+          child: Text(AppLocalizations.of(context).libraryCoverImageLoadFailed),
         ),
       );
     }
@@ -204,22 +206,23 @@ class _CoverFocalPointPickerState extends State<CoverFocalPointPicker> {
   }
 
   Widget _buildActions(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         TextButton(
           onPressed: () => setState(() => _focus = CoverFocalPoint.center),
-          child: const Text('居中'),
+          child: Text(l10n.libraryCoverCenter),
         ),
         const Spacer(),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.commonCancel),
         ),
         const SizedBox(width: 8),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_focus),
-          child: const Text('确定'),
+          child: Text(l10n.commonConfirm),
         ),
       ],
     );
@@ -268,8 +271,8 @@ class _CropOverlay extends StatelessWidget {
       final nextImageTopLeft = CoverCropGeometry.clampCropTopLeft(
         imageSize: imageSize,
         cropSize: cropImageSize,
-        cropTopLeft: cropImageTopLeft +
-            Offset(delta.dx / scaleX, delta.dy / scaleY),
+        cropTopLeft:
+            cropImageTopLeft + Offset(delta.dx / scaleX, delta.dy / scaleY),
       );
       onFocusChanged(
         CoverCropGeometry.focusFromCropTopLeft(

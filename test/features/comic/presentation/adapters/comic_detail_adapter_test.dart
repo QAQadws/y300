@@ -77,13 +77,14 @@ void main() {
       stateRepository: _FakeLibraryStateRepository(),
     );
 
-    expect(
-      () => adapter.updateCatalogOverride(
-        workId: 'comic:1',
-        catalogUrl: 'https://example.com/catalog',
-      ),
-      throwsFormatException,
+    final outcome = await adapter.updateCatalogOverride(
+      workId: 'comic:1',
+      catalogUrl: 'https://example.com/catalog',
     );
+
+    expect(outcome.code, DetailCatalogUpdateOutcomeCode.invalidInput);
+    expect(outcome.inputErrorCode, DetailCatalogInputErrorCode.unexpectedHost);
+    expect(outcome.expectedHost, 'bbs.yamibo.com');
   });
 
   test(
@@ -625,7 +626,12 @@ void main() {
         (chapter) => chapter.episodeId == 'comic:1:90',
       );
 
-      expect(current.progressInfo?.label, '第 3 页');
+      expect(
+        current.progressInfo?.kind,
+        LibraryChapterProgressKind.currentPage,
+      );
+      expect(current.progressInfo?.currentPage, 3);
+      expect(current.progressInfo?.totalPages, 5);
       expect(current.progressInfo?.isCurrent, isTrue);
       expect(current.progressInfo?.fraction, closeTo(3 / 5, 0.0001));
     },
@@ -671,15 +677,15 @@ void main() {
         chapters
             .singleWhere((chapter) => chapter.episodeId == 'comic:1:90')
             .progressInfo
-            ?.label,
-        '第 3 页',
+            ?.currentPage,
+        3,
       );
       expect(
         chapters
             .singleWhere((chapter) => chapter.episodeId == 'comic:1:120')
             .progressInfo
-            ?.label,
-        '第 2 页',
+            ?.currentPage,
+        2,
       );
     },
   );
@@ -764,7 +770,7 @@ void main() {
         (chapter) => chapter.episodeId == 'comic:1:90',
       );
 
-      expect(current.progressInfo?.label, '第 5 页');
+      expect(current.progressInfo?.currentPage, 5);
       expect(current.progressInfo?.fraction, 1);
 
       final readAdapter = ComicDetailAdapter(

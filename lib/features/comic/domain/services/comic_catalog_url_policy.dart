@@ -1,6 +1,24 @@
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 
+enum ComicCatalogUrlInputErrorCode {
+  invalidUrl,
+  incompleteUrl,
+  unsupportedScheme,
+  unexpectedHost,
+  notTagCatalog,
+}
+
+class ComicCatalogUrlInputException implements Exception {
+  const ComicCatalogUrlInputException(this.code, {this.expectedHost});
+
+  final ComicCatalogUrlInputErrorCode code;
+  final String? expectedHost;
+
+  @override
+  String toString() => 'ComicCatalogUrlInputException(${code.name})';
+}
+
 /// Validates and normalizes catalog URLs entered by users.
 ///
 /// The catalog fetcher always uses the Yamibo authenticated HTML client, so
@@ -22,22 +40,33 @@ class ComicCatalogUrlPolicy {
     try {
       normalized = _tagPageParsing.normalizeCatalogEntryUrl(value);
     } on FormatException {
-      throw const FormatException('目录 URL 格式无效');
+      throw const ComicCatalogUrlInputException(
+        ComicCatalogUrlInputErrorCode.invalidUrl,
+      );
     }
     final uri = Uri.tryParse(normalized);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      throw const FormatException('请输入完整的目录 URL');
+      throw const ComicCatalogUrlInputException(
+        ComicCatalogUrlInputErrorCode.incompleteUrl,
+      );
     }
     if (uri.scheme != 'http' && uri.scheme != 'https') {
-      throw const FormatException('目录 URL 仅支持 http 或 https');
+      throw const ComicCatalogUrlInputException(
+        ComicCatalogUrlInputErrorCode.unsupportedScheme,
+      );
     }
 
     final siteUri = Uri.parse(AppConfig.siteBaseUrl);
     if (uri.host.toLowerCase() != siteUri.host.toLowerCase()) {
-      throw FormatException('目录 URL 必须来自 ${siteUri.host}');
+      throw ComicCatalogUrlInputException(
+        ComicCatalogUrlInputErrorCode.unexpectedHost,
+        expectedHost: siteUri.host,
+      );
     }
     if (!_tagPageParsing.isTagCatalogUrl(uri.toString())) {
-      throw const FormatException('请输入 Yamibo 标签目录 URL');
+      throw const ComicCatalogUrlInputException(
+        ComicCatalogUrlInputErrorCode.notTagCatalog,
+      );
     }
     return uri.removeFragment().toString();
   }

@@ -7,12 +7,12 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 typedef SelectionHostAsyncVoidCallback = Future<void> Function();
 typedef SelectionHostLoadCategoriesCallback =
     Future<List<LibraryCategory>> Function();
-typedef SelectionHostCreateCategoryCallback = Future<String> Function(
-  String name,
-);
-typedef SelectionHostRunActionCallback = Future<SelectionActionResult> Function(
-  SelectionActionExecutionRequest request,
-);
+typedef SelectionHostCreateCategoryCallback =
+    Future<String> Function(String name);
+typedef SelectionHostRunActionCallback =
+    Future<SelectionActionOutcome> Function(
+      SelectionActionExecutionRequest request,
+    );
 
 class ShelfSelectionHostDelegate {
   const ShelfSelectionHostDelegate({
@@ -38,7 +38,6 @@ class ShelfSelectionHostState {
   const ShelfSelectionHostState({
     required this.ownerToken,
     required this.moduleKey,
-    required this.moduleTitle,
     required this.activeCategoryId,
     required this.selectedCount,
     required this.selectionActions,
@@ -46,7 +45,6 @@ class ShelfSelectionHostState {
 
   final Object ownerToken;
   final LibraryModuleKey moduleKey;
-  final String moduleTitle;
   final String activeCategoryId;
   final int selectedCount;
   final List<SelectionAction> selectionActions;
@@ -59,7 +57,6 @@ class ShelfSelectionHostState {
     return ShelfSelectionHostState(
       ownerToken: ownerToken,
       moduleKey: moduleKey,
-      moduleTitle: moduleTitle,
       activeCategoryId: activeCategoryId ?? this.activeCategoryId,
       selectedCount: selectedCount ?? this.selectedCount,
       selectionActions: selectionActions ?? this.selectionActions,
@@ -77,14 +74,12 @@ class ShelfSelectionHostController extends ChangeNotifier {
 
   bool get isActive => !_disposed && _state != null && _delegate != null;
 
-  Set<String> get selectedWorkIds => UnmodifiableSetView<String>(
-        _selectedWorkIds,
-      );
+  Set<String> get selectedWorkIds =>
+      UnmodifiableSetView<String>(_selectedWorkIds);
 
   void activate({
     required Object ownerToken,
     required LibraryModuleKey moduleKey,
-    required String moduleTitle,
     required String activeCategoryId,
     required int selectedCount,
     required Set<String> selectedWorkIds,
@@ -99,7 +94,6 @@ class ShelfSelectionHostController extends ChangeNotifier {
     _state = ShelfSelectionHostState(
       ownerToken: ownerToken,
       moduleKey: moduleKey,
-      moduleTitle: moduleTitle,
       activeCategoryId: activeCategoryId,
       selectedCount: selectedCount,
       selectionActions: List<SelectionAction>.unmodifiable(selectionActions),
@@ -171,7 +165,7 @@ class ShelfSelectionHostController extends ChangeNotifier {
     return delegate.createCategory(name);
   }
 
-  Future<SelectionActionResult> executeAction({
+  Future<SelectionActionOutcome> executeAction({
     required String actionId,
     String? targetCategoryId,
   }) async {

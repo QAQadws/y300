@@ -127,7 +127,7 @@ class UnifiedDetailController {
   }) async {
     final readStateAdapter = _readStateAdapter;
     if (readStateAdapter == null) {
-      throw UnsupportedError('当前作品不支持章节已读状态');
+      throw UnsupportedError('chapterReadState');
     }
     if (isCurrentlyRead) {
       await readStateAdapter.resetChapterReadingState(
@@ -162,7 +162,7 @@ class UnifiedDetailController {
   }) async {
     final downloadAdapter = _downloadAdapter;
     if (downloadAdapter == null) {
-      throw UnsupportedError('当前作品不支持章节下载');
+      throw UnsupportedError('chapterDownload');
     }
     await downloadAdapter.markChapterDownloaded(
       workId: _workId,
@@ -175,7 +175,7 @@ class UnifiedDetailController {
   Future<void> resetWorkReadingState() async {
     final resetAdapter = _workReadingResetAdapter;
     if (resetAdapter == null) {
-      throw UnsupportedError('当前作品不支持整部阅读重置');
+      throw UnsupportedError('workReadingReset');
     }
     await resetAdapter.resetWorkReadingState(workId: _workId);
     await _loadChaptersOnly();
@@ -184,7 +184,7 @@ class UnifiedDetailController {
   Future<void> deleteChapterDownload({required String episodeId}) async {
     final downloadAdapter = _downloadAdapter;
     if (downloadAdapter == null) {
-      throw UnsupportedError('当前作品不支持章节下载');
+      throw UnsupportedError('chapterDownload');
     }
     await downloadAdapter.deleteChapterDownload(
       workId: _workId,

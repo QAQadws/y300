@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
+import 'package:y300/features/library_shared/presentation/services/library_detail_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class UnifiedDetailMetadataSheet extends StatefulWidget {
   const UnifiedDetailMetadataSheet({
@@ -10,11 +13,7 @@ class UnifiedDetailMetadataSheet extends StatefulWidget {
     required this.titleSourceText,
     required this.authorSourceText,
     required this.groupSourceText,
-    this.authorLabel = '作者',
-    this.translationGroupLabel = '汉化组',
-    this.showAuthor = true,
-    this.showTranslationGroup = true,
-    this.showSearchTitle = true,
+    required this.fields,
     required this.onSave,
   });
 
@@ -25,11 +24,7 @@ class UnifiedDetailMetadataSheet extends StatefulWidget {
   final String titleSourceText;
   final String authorSourceText;
   final String groupSourceText;
-  final String authorLabel;
-  final String translationGroupLabel;
-  final bool showAuthor;
-  final bool showTranslationGroup;
-  final bool showSearchTitle;
+  final Set<LibraryMetadataField> fields;
   final Future<void> Function({
     String? customTitle,
     String? customAuthor,
@@ -73,6 +68,7 @@ class _UnifiedDetailMetadataSheetState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -87,41 +83,59 @@ class _UnifiedDetailMetadataSheetState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('编辑作品信息', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              _MetadataTextField(
-                fieldKey: const Key('unified-detail-custom-title-input'),
-                controller: _titleController,
-                label: '标题',
-                sourceText: widget.titleSourceText,
+              Text(
+                l10n.libraryDetailEditMetadata,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              if (widget.showAuthor) ...[
+              const SizedBox(height: 12),
+              if (widget.fields.contains(LibraryMetadataField.title))
+                _MetadataTextField(
+                  fieldKey: const Key('unified-detail-custom-title-input'),
+                  controller: _titleController,
+                  label: LibraryDetailTextResolver.metadataField(
+                    l10n,
+                    LibraryMetadataField.title,
+                  ),
+                  sourceText: widget.titleSourceText,
+                ),
+              if (widget.fields.contains(LibraryMetadataField.author)) ...[
                 const SizedBox(height: 10),
                 _MetadataTextField(
                   fieldKey: const Key('unified-detail-custom-author-input'),
                   controller: _authorController,
-                  label: widget.authorLabel,
+                  label: LibraryDetailTextResolver.metadataField(
+                    l10n,
+                    LibraryMetadataField.author,
+                  ),
                   sourceText: widget.authorSourceText,
                 ),
               ],
-              if (widget.showTranslationGroup) ...[
+              if (widget.fields.contains(
+                LibraryMetadataField.translationGroup,
+              )) ...[
                 const SizedBox(height: 10),
                 _MetadataTextField(
                   fieldKey: const Key('unified-detail-custom-group-input'),
                   controller: _groupController,
-                  label: widget.translationGroupLabel,
+                  label: LibraryDetailTextResolver.metadataField(
+                    l10n,
+                    LibraryMetadataField.translationGroup,
+                  ),
                   sourceText: widget.groupSourceText,
                 ),
               ],
-              if (widget.showSearchTitle) ...[
+              if (widget.fields.contains(LibraryMetadataField.searchTitle)) ...[
                 const SizedBox(height: 10),
                 _MetadataTextField(
                   fieldKey: const Key(
                     'unified-detail-custom-search-title-input',
                   ),
                   controller: _searchController,
-                  label: '更新搜索关键词',
-                  sourceText: '留空时优先使用自定义标题，否则使用当前作品标题',
+                  label: LibraryDetailTextResolver.metadataField(
+                    l10n,
+                    LibraryMetadataField.searchTitle,
+                  ),
+                  sourceText: l10n.libraryDetailMetadataSearchHelp,
                 ),
               ],
               const SizedBox(height: 14),
@@ -132,7 +146,7 @@ class _UnifiedDetailMetadataSheetState
                       onPressed: _saving
                           ? null
                           : () => Navigator.of(context).pop(),
-                      child: const Text('取消'),
+                      child: Text(l10n.commonCancel),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -140,7 +154,7 @@ class _UnifiedDetailMetadataSheetState
                     child: FilledButton(
                       key: const Key('unified-detail-save-metadata'),
                       onPressed: _saving ? null : _save,
-                      child: const Text('保存'),
+                      child: Text(l10n.commonSave),
                     ),
                   ),
                 ],
@@ -158,10 +172,20 @@ class _UnifiedDetailMetadataSheetState
     });
     try {
       await widget.onSave(
-        customTitle: _emptyToNull(_titleController.text),
-        customAuthor: _emptyToNull(_authorController.text),
-        customTranslationGroup: _emptyToNull(_groupController.text),
-        customSearchTitle: _emptyToNull(_searchController.text),
+        customTitle: widget.fields.contains(LibraryMetadataField.title)
+            ? _emptyToNull(_titleController.text)
+            : null,
+        customAuthor: widget.fields.contains(LibraryMetadataField.author)
+            ? _emptyToNull(_authorController.text)
+            : null,
+        customTranslationGroup:
+            widget.fields.contains(LibraryMetadataField.translationGroup)
+            ? _emptyToNull(_groupController.text)
+            : null,
+        customSearchTitle:
+            widget.fields.contains(LibraryMetadataField.searchTitle)
+            ? _emptyToNull(_searchController.text)
+            : null,
       );
       if (!mounted) {
         return;

@@ -100,8 +100,9 @@ void main() {
     final hub = DefaultLibraryTaskProgressHub();
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(
       const LibraryShelfTaskProgress(
-        message: 'Novel refresh active',
-        source: LibraryMutationSource.novelRefresh,
+        code: LibraryShelfTaskProgressCode.coverWarmup,
+        subject: 'Novel cover warmup',
+        source: LibraryMutationSource.coverWarmup,
       ),
     );
     final registration = hub.registerSource(
@@ -117,10 +118,10 @@ void main() {
       taskProgressHub: hub,
     );
 
-    expect(adapter.taskProgress?.value?.message, 'Novel refresh active');
+    expect(adapter.taskProgress?.value?.subject, 'Novel cover warmup');
     expect(
       adapter.taskProgress?.value?.source,
-      LibraryMutationSource.novelRefresh,
+      LibraryMutationSource.coverWarmup,
     );
   });
 
@@ -184,7 +185,7 @@ void main() {
     );
     expect(assignUseCase.lastSourceCategoryId, 'default');
     expect(assignUseCase.lastTargetCategoryId, 'archive');
-    expect(result.code, SelectionActionResultCode.success);
+    expect(result.code, SelectionActionOutcomeCode.success);
     expect(result.succeededCount, 1);
     expect(result.failedCount, 0);
   });
@@ -210,7 +211,7 @@ void main() {
       'novel-b': ThreadContentKind.novel,
     });
     expect(result.changed, isTrue);
-    expect(result.code, SelectionActionResultCode.success);
+    expect(result.code, SelectionActionOutcomeCode.success);
     expect(result.succeededCount, 1);
   });
 }

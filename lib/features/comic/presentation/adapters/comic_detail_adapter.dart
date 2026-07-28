@@ -305,7 +305,7 @@ class ComicDetailAdapter
           workId: item.comicId,
           title: item.episodeTitle?.trim().isNotEmpty == true
               ? item.episodeTitle!
-              : '章节 ${item.sourceTid}',
+              : '',
           orderIndex: item.orderIndex,
           sourceTid: item.sourceTid,
           publishTimeText: item.publishTimeText,
@@ -340,19 +340,20 @@ class ComicDetailAdapter
     if (images.isEmpty) {
       final pageNumber = rawImageIndex + 1;
       return LibraryChapterProgressInfo(
-        label: '第 $pageNumber 页',
+        kind: LibraryChapterProgressKind.currentPage,
         isCurrent: true,
-        semanticLabel: '当前读到第 $pageNumber 页',
+        currentPage: pageNumber,
       );
     }
 
     final clampedImageIndex = rawImageIndex.clamp(0, images.length - 1).toInt();
     final pageNumber = clampedImageIndex + 1;
     return LibraryChapterProgressInfo(
-      label: '第 $pageNumber 页',
+      kind: LibraryChapterProgressKind.currentPage,
       isCurrent: true,
+      currentPage: pageNumber,
+      totalPages: images.length,
       fraction: pageNumber / images.length,
-      semanticLabel: '当前读到第 $pageNumber 页，共 ${images.length} 页',
     );
   }
 
@@ -772,7 +773,7 @@ class ComicDetailAdapter
     }
     return const DetailRefreshResult(
       status: DetailRefreshStatus.skipped,
-      message: '未提取到新的章节链接',
+      outcomeCode: DetailRefreshOutcomeCode.noUpdates,
     );
   }
 
@@ -922,7 +923,7 @@ class ComicDetailAdapter
   }
 
   @override
-  Future<void> updateCatalogOverride({
+  Future<DetailCatalogUpdateOutcome> updateCatalogOverride({
     required String workId,
     String? catalogUrl,
   }) async {
@@ -930,8 +931,22 @@ class ComicDetailAdapter
     if (detail == null) {
       throw StateError('漫画不存在或已删除');
     }
-    final normalized = _catalogUrlPolicy.normalizeOverride(catalogUrl);
-    final source = _catalogUrlPolicy.normalizeOverride(detail.catalogUrl);
+    late final String? normalized;
+    try {
+      normalized = _catalogUrlPolicy.normalizeOverride(catalogUrl);
+    } on ComicCatalogUrlInputException catch (error) {
+      return DetailCatalogUpdateOutcome(
+        code: DetailCatalogUpdateOutcomeCode.invalidInput,
+        inputErrorCode: _mapCatalogInputError(error.code),
+        expectedHost: error.expectedHost,
+      );
+    }
+    String? source;
+    try {
+      source = _catalogUrlPolicy.normalizeOverride(detail.catalogUrl);
+    } on ComicCatalogUrlInputException {
+      source = null;
+    }
     final repository = _repository;
     if (repository is! ComicCatalogOverrideRepository) {
       throw StateError('当前漫画仓储不支持配置目录');
@@ -940,6 +955,9 @@ class ComicDetailAdapter
     await catalogRepository.updateCustomCatalogUrl(
       comicId: workId,
       catalogUrl: normalized == source ? null : normalized,
+    );
+    return const DetailCatalogUpdateOutcome(
+      code: DetailCatalogUpdateOutcomeCode.saved,
     );
   }
 
@@ -960,7 +978,7 @@ class ComicDetailAdapter
             episodeId: item.episodeId,
             title: item.episodeTitle?.trim().isNotEmpty == true
                 ? item.episodeTitle!.trim()
-                : '章节 ${item.sourceTid}',
+                : '',
             // 来源名可能为空（早期解析没拿到标题），面板会退回展示同一个
             // 「章节 tid」兜底文案，避免提示成“清空后会变成空标题”。
             sourceTitle: item.sourceEpisodeTitle?.trim().isNotEmpty == true
@@ -978,15 +996,29 @@ class ComicDetailAdapter
   }
 
   @override
-  Future<bool> addManualChapter({
+  Future<DetailManualChapterAddOutcome> addManualChapter({
     required String workId,
     required String input,
   }) async {
-    final target = _manualEpisodeUrlPolicy.parse(input);
-    return _episodeManagementRepository.addManualEpisode(
+    late final ManualEpisodeTarget target;
+    try {
+      target = _manualEpisodeUrlPolicy.parse(input);
+    } on ComicManualEpisodeInputException catch (error) {
+      return DetailManualChapterAddOutcome(
+        code: DetailManualChapterAddOutcomeCode.invalidInput,
+        inputErrorCode: _mapManualChapterInputError(error.code),
+        expectedHost: error.expectedHost,
+      );
+    }
+    final added = await _episodeManagementRepository.addManualEpisode(
       comicId: workId,
       sourceTid: target.tid,
       sourceUrl: target.sourceUrl,
+    );
+    return DetailManualChapterAddOutcome(
+      code: added
+          ? DetailManualChapterAddOutcomeCode.added
+          : DetailManualChapterAddOutcomeCode.duplicate,
     );
   }
 
@@ -1004,11 +1036,11 @@ class ComicDetailAdapter
     if (!removed) {
       return const DetailChapterRemovalResult(removed: false);
     }
-    String? warning;
+    final warnings = <DetailChapterRemovalWarningCode>{};
     try {
       await _downloadQueue?.cancelEpisode(workId, episodeId);
     } catch (error) {
-      warning ??= '下载任务清理失败';
+      warnings.add(DetailChapterRemovalWarningCode.downloadTaskCleanupFailed);
       debugPrint('[ComicEpisodeManagement] cancel download failed: $error');
     }
     try {
@@ -1017,10 +1049,13 @@ class ComicDetailAdapter
         episodeId: episodeId,
       );
     } catch (error) {
-      warning ??= '章节下载文件清理失败';
+      warnings.add(DetailChapterRemovalWarningCode.downloadFileCleanupFailed);
       debugPrint('[ComicEpisodeManagement] delete download failed: $error');
     }
-    return DetailChapterRemovalResult(removed: true, warning: warning);
+    return DetailChapterRemovalResult(
+      removed: true,
+      warnings: Set<DetailChapterRemovalWarningCode>.unmodifiable(warnings),
+    );
   }
 
   @override
@@ -1234,6 +1269,42 @@ class ComicDetailAdapter
       TriStateFilterValue.exclude => !flag,
     };
   }
+}
+
+DetailCatalogInputErrorCode _mapCatalogInputError(
+  ComicCatalogUrlInputErrorCode code,
+) {
+  return switch (code) {
+    ComicCatalogUrlInputErrorCode.invalidUrl =>
+      DetailCatalogInputErrorCode.invalidUrl,
+    ComicCatalogUrlInputErrorCode.incompleteUrl =>
+      DetailCatalogInputErrorCode.incompleteUrl,
+    ComicCatalogUrlInputErrorCode.unsupportedScheme =>
+      DetailCatalogInputErrorCode.unsupportedScheme,
+    ComicCatalogUrlInputErrorCode.unexpectedHost =>
+      DetailCatalogInputErrorCode.unexpectedHost,
+    ComicCatalogUrlInputErrorCode.notTagCatalog =>
+      DetailCatalogInputErrorCode.notTagCatalog,
+  };
+}
+
+DetailManualChapterInputErrorCode _mapManualChapterInputError(
+  ComicManualEpisodeInputErrorCode code,
+) {
+  return switch (code) {
+    ComicManualEpisodeInputErrorCode.emptyInput =>
+      DetailManualChapterInputErrorCode.emptyInput,
+    ComicManualEpisodeInputErrorCode.invalidUrl =>
+      DetailManualChapterInputErrorCode.invalidUrl,
+    ComicManualEpisodeInputErrorCode.unsupportedScheme =>
+      DetailManualChapterInputErrorCode.unsupportedScheme,
+    ComicManualEpisodeInputErrorCode.unexpectedHost =>
+      DetailManualChapterInputErrorCode.unexpectedHost,
+    ComicManualEpisodeInputErrorCode.unsupportedThreadUrl =>
+      DetailManualChapterInputErrorCode.unsupportedThreadUrl,
+    ComicManualEpisodeInputErrorCode.missingTid =>
+      DetailManualChapterInputErrorCode.missingTid,
+  };
 }
 
 bool _isBlank(String? value) => value == null || value.trim().isEmpty;

@@ -28,23 +28,33 @@ void main() {
     expect(target.sourceUrl, contains('tid=573440'));
   });
 
-  test('rejects invalid or untrusted inputs', () {
-    const invalid = <String>[
-      '',
-      '0',
-      '-1',
-      'abc',
-      'https://example.com/forum.php?mod=viewthread&tid=573440',
-      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&tid=573440',
-      'https://bbs.yamibo.com/api/mobile/index.php?module=login&tid=573440',
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0',
-    ];
+  test('rejects invalid or untrusted inputs with stable codes', () {
+    const invalid = <String, ComicManualEpisodeInputErrorCode>{
+      '': ComicManualEpisodeInputErrorCode.emptyInput,
+      '0': ComicManualEpisodeInputErrorCode.unsupportedThreadUrl,
+      '-1': ComicManualEpisodeInputErrorCode.unsupportedThreadUrl,
+      'abc': ComicManualEpisodeInputErrorCode.unsupportedThreadUrl,
+      'https://example.com/forum.php?mod=viewthread&tid=573440':
+          ComicManualEpisodeInputErrorCode.unexpectedHost,
+      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&tid=573440':
+          ComicManualEpisodeInputErrorCode.unsupportedThreadUrl,
+      'https://bbs.yamibo.com/api/mobile/index.php?module=login&tid=573440':
+          ComicManualEpisodeInputErrorCode.unsupportedThreadUrl,
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0':
+          ComicManualEpisodeInputErrorCode.missingTid,
+    };
 
-    for (final input in invalid) {
+    for (final entry in invalid.entries) {
       expect(
-        () => policy.parse(input),
-        throwsA(isA<FormatException>()),
-        reason: input,
+        () => policy.parse(entry.key),
+        throwsA(
+          isA<ComicManualEpisodeInputException>().having(
+            (error) => error.code,
+            'code',
+            entry.value,
+          ),
+        ),
+        reason: entry.key,
       );
     }
   });

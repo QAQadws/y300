@@ -6,6 +6,8 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
+import 'package:y300/features/library_shared/presentation/services/library_task_text_resolver.dart';
+import 'package:y300/l10n/app_localizations_zh.dart';
 
 void main() {
   group('DefaultLibraryTaskNotificationBridge', () {
@@ -32,7 +34,12 @@ void main() {
         hub: hub,
         notificationService: service,
       );
-      bridge.start();
+      final l10n = AppLocalizationsZh();
+      bridge.start(
+        localeId: l10n.localeName,
+        textResolver: (progress) =>
+            LibraryTaskTextResolver.notification(l10n, progress),
+      );
     });
 
     tearDown(() {
@@ -44,7 +51,8 @@ void main() {
 
     test('favorite sync active shows favorite notification with progress', () {
       favoriteSource.value = const LibraryShelfTaskProgress(
-        message: '正在解析: 收藏帖',
+        code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+        subject: '收藏帖',
         current: 3,
         total: 10,
         source: LibraryMutationSource.favoriteSync,
@@ -54,14 +62,15 @@ void main() {
       final notification = service.shown.single;
       expect(notification.key, LibraryTaskNotificationKey.favoriteSync);
       expect(notification.title, '收藏同步');
-      expect(notification.body, '正在解析: 收藏帖');
+      expect(notification.body, '正在读取《收藏帖》');
       expect(notification.current, 3);
       expect(notification.total, 10);
     });
 
     test('favorite sync clearing to null clears favorite notification', () {
       favoriteSource.value = const LibraryShelfTaskProgress(
-        message: '正在解析: 收藏帖',
+        code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+        subject: '收藏帖',
         source: LibraryMutationSource.favoriteSync,
       );
       expect(service.shown, hasLength(1));
@@ -75,15 +84,17 @@ void main() {
 
     test('comic search queue active shows comic notification', () {
       comicSource.value = const LibraryShelfTaskProgress(
-        message: '《作品名》正在等待漫画搜索 预计耗时10.5s',
+        code: LibraryShelfTaskProgressCode.comicSearchWaiting,
+        subject: '作品名',
+        estimatedDuration: Duration(milliseconds: 10500),
         source: LibraryMutationSource.comicSearchQueue,
       );
 
       expect(service.shown, hasLength(1));
       final notification = service.shown.single;
       expect(notification.key, LibraryTaskNotificationKey.comicSearchQueue);
-      expect(notification.title, '漫画搜索等待中');
-      expect(notification.body, '《作品名》正在等待漫画搜索 预计耗时10.5s');
+      expect(notification.title, '漫画搜索');
+      expect(notification.body, '《作品名》正在等待搜索，预计 11 秒');
       // Queue waiting has no current/total, so it renders indeterminate.
       expect(notification.hasDeterminateProgress, isFalse);
     });
@@ -92,7 +103,7 @@ void main() {
       // Cover warmup surfaces on the comic module but with a different source,
       // so the comic search-queue channel must ignore it.
       comicSource.value = const LibraryShelfTaskProgress(
-        message: '预热封面',
+        code: LibraryShelfTaskProgressCode.coverWarmup,
         source: LibraryMutationSource.coverWarmup,
         visible: false,
       );
@@ -104,7 +115,7 @@ void main() {
     test('unrelated favorite source progress does not notify', () {
       // Same module channel, but a thread favorite action rather than sync.
       favoriteSource.value = const LibraryShelfTaskProgress(
-        message: '收藏中',
+        code: LibraryShelfTaskProgressCode.favoriteSyncFetching,
         source: LibraryMutationSource.threadFavoriteAction,
       );
 
@@ -113,14 +124,16 @@ void main() {
 
     test('repeated identical progress does not re-show', () {
       const progress = LibraryShelfTaskProgress(
-        message: '正在解析: 收藏帖',
+        code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+        subject: '收藏帖',
         current: 3,
         total: 10,
         source: LibraryMutationSource.favoriteSync,
       );
       favoriteSource.value = progress;
       favoriteSource.value = const LibraryShelfTaskProgress(
-        message: '正在解析: 收藏帖',
+        code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+        subject: '收藏帖',
         current: 3,
         total: 10,
         source: LibraryMutationSource.favoriteSync,
@@ -131,13 +144,15 @@ void main() {
 
     test('changed progress re-shows', () {
       favoriteSource.value = const LibraryShelfTaskProgress(
-        message: '正在解析: 收藏帖',
+        code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+        subject: '收藏帖',
         current: 3,
         total: 10,
         source: LibraryMutationSource.favoriteSync,
       );
       favoriteSource.value = const LibraryShelfTaskProgress(
-        message: '正在解析: 收藏帖',
+        code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+        subject: '收藏帖',
         current: 4,
         total: 10,
         source: LibraryMutationSource.favoriteSync,
@@ -149,11 +164,13 @@ void main() {
 
     test('favorite and comic notifications use distinct keys', () {
       favoriteSource.value = const LibraryShelfTaskProgress(
-        message: '正在解析',
+        code: LibraryShelfTaskProgressCode.favoriteSyncFetching,
         source: LibraryMutationSource.favoriteSync,
       );
       comicSource.value = const LibraryShelfTaskProgress(
-        message: '《作品名》正在等待漫画搜索 预计耗时10.5s',
+        code: LibraryShelfTaskProgressCode.comicSearchWaiting,
+        subject: '作品名',
+        estimatedDuration: Duration(milliseconds: 10500),
         source: LibraryMutationSource.comicSearchQueue,
       );
 
@@ -171,11 +188,30 @@ void main() {
 
       expect(
         () => favoriteSource.value = const LibraryShelfTaskProgress(
-          message: '正在解析',
+          code: LibraryShelfTaskProgressCode.favoriteSyncFetching,
           source: LibraryMutationSource.favoriteSync,
         ),
         returnsNormally,
       );
+    });
+
+    test('locale change republishes an active notification', () {
+      favoriteSource.value = const LibraryShelfTaskProgress(
+        code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+        subject: 'Raw Server Title',
+        source: LibraryMutationSource.favoriteSync,
+      );
+      final traditional = AppLocalizationsZhTw();
+
+      bridge.start(
+        localeId: traditional.localeName,
+        textResolver: (progress) =>
+            LibraryTaskTextResolver.notification(traditional, progress),
+      );
+
+      expect(service.shown, hasLength(2));
+      expect(service.shown.last.title, '收藏同步');
+      expect(service.shown.last.body, '正在讀取《Raw Server Title》');
     });
   });
 }
@@ -185,14 +221,14 @@ class _FakeNotificationService implements LibraryTaskNotificationService {
   final List<LibraryTaskNotificationKey> cleared =
       <LibraryTaskNotificationKey>[];
   bool throwOnShow = false;
-  final ValueNotifier<LibraryTaskNotificationPermissionState?> _permissionState =
-      ValueNotifier<LibraryTaskNotificationPermissionState?>(
-        LibraryTaskNotificationPermissionState.granted,
-      );
+  final ValueNotifier<LibraryTaskNotificationPermissionState?>
+  _permissionState = ValueNotifier<LibraryTaskNotificationPermissionState?>(
+    LibraryTaskNotificationPermissionState.granted,
+  );
 
   @override
-  ValueListenable<LibraryTaskNotificationPermissionState?> get permissionState =>
-      _permissionState;
+  ValueListenable<LibraryTaskNotificationPermissionState?>
+  get permissionState => _permissionState;
 
   @override
   Future<void> initialize() async {}

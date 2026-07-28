@@ -647,7 +647,6 @@ void main() {
       selectionHost.activate(
         ownerToken: Object(),
         moduleKey: LibraryModuleKey.comic,
-        moduleTitle: '漫画',
         activeCategoryId: 'default',
         selectedCount: 1,
         selectedWorkIds: const <String>{'comic-1'},
@@ -723,7 +722,6 @@ void main() {
     selectionHost.activate(
       ownerToken: Object(),
       moduleKey: LibraryModuleKey.comic,
-      moduleTitle: '漫画',
       activeCategoryId: 'default',
       selectedCount: 1,
       selectedWorkIds: const <String>{'comic-1'},
@@ -736,7 +734,9 @@ void main() {
       delegate: _selectionDelegate(
         onRun: (request) async {
           calls.add(request.actionId);
-          return const SelectionActionResult(message: 'done');
+          return const SelectionActionOutcome(
+            code: SelectionActionOutcomeCode.noChange,
+          );
         },
       ),
     );
@@ -773,7 +773,6 @@ void main() {
       selectionHost.activate(
         ownerToken: Object(),
         moduleKey: LibraryModuleKey.comic,
-        moduleTitle: '漫画',
         activeCategoryId: 'default',
         selectedCount: 1,
         selectedWorkIds: const <String>{'comic-1'},
@@ -794,7 +793,9 @@ void main() {
           },
           runSelectionAction: (request) async {
             requests.add(request);
-            return const SelectionActionResult(message: 'done');
+            return const SelectionActionOutcome(
+              code: SelectionActionOutcomeCode.noChange,
+            );
           },
           refreshAfterAction: () async {},
         ),
@@ -883,7 +884,6 @@ void main() {
     selectionHost.activate(
       ownerToken: Object(),
       moduleKey: LibraryModuleKey.favorite,
-      moduleTitle: '收藏',
       activeCategoryId: 'default',
       selectedCount: 2,
       selectedWorkIds: const <String>{'favorite:100', 'favorite:101'},
@@ -898,7 +898,11 @@ void main() {
       delegate: _selectionDelegate(
         onRun: (request) async {
           runCount += 1;
-          return const SelectionActionResult(message: 'done', changed: true);
+          return const SelectionActionOutcome(
+            code: SelectionActionOutcomeCode.success,
+            changed: true,
+            succeededCount: 2,
+          );
         },
       ),
     );
@@ -1024,7 +1028,7 @@ IconData? _navigationIconData(Widget widget) {
 }
 
 ShelfSelectionHostDelegate _selectionDelegate({
-  Future<SelectionActionResult> Function(
+  Future<SelectionActionOutcome> Function(
     SelectionActionExecutionRequest request,
   )?
   onRun,
@@ -1038,7 +1042,9 @@ ShelfSelectionHostDelegate _selectionDelegate({
     runSelectionAction:
         onRun ??
         (request) async {
-          return const SelectionActionResult(message: 'noop');
+          return const SelectionActionOutcome(
+            code: SelectionActionOutcomeCode.noChange,
+          );
         },
     refreshAfterAction: () async {},
   );

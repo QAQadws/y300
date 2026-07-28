@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
+import 'package:y300/features/library_shared/presentation/services/library_detail_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class UnifiedDetailCatalogSheet extends StatefulWidget {
   const UnifiedDetailCatalogSheet({
@@ -10,7 +13,7 @@ class UnifiedDetailCatalogSheet extends StatefulWidget {
 
   final String initialCatalogUrl;
   final String? sourceCatalogUrl;
-  final Future<void> Function(String? catalogUrl) onSave;
+  final Future<DetailCatalogUpdateOutcome> Function(String? catalogUrl) onSave;
 
   @override
   State<UnifiedDetailCatalogSheet> createState() =>
@@ -36,6 +39,7 @@ class _UnifiedDetailCatalogSheetState extends State<UnifiedDetailCatalogSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -50,7 +54,10 @@ class _UnifiedDetailCatalogSheetState extends State<UnifiedDetailCatalogSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('配置目录', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                l10n.libraryDetailConfigureCatalog,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 12),
               TextField(
                 key: const Key('unified-detail-catalog-url-input'),
@@ -60,8 +67,8 @@ class _UnifiedDetailCatalogSheetState extends State<UnifiedDetailCatalogSheet> {
                 autocorrect: false,
                 enableSuggestions: false,
                 decoration: InputDecoration(
-                  labelText: '目录 URL',
-                  helperText: _sourceText(widget.sourceCatalogUrl),
+                  labelText: l10n.libraryDetailCatalogUrl,
+                  helperText: _sourceText(l10n, widget.sourceCatalogUrl),
                   helperMaxLines: 3,
                   errorText: _errorText,
                   errorMaxLines: 3,
@@ -80,7 +87,7 @@ class _UnifiedDetailCatalogSheetState extends State<UnifiedDetailCatalogSheet> {
                       onPressed: _saving
                           ? null
                           : () => Navigator.of(context).pop(),
-                      child: const Text('取消'),
+                      child: Text(l10n.commonCancel),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -88,7 +95,7 @@ class _UnifiedDetailCatalogSheetState extends State<UnifiedDetailCatalogSheet> {
                     child: FilledButton(
                       key: const Key('unified-detail-save-catalog'),
                       onPressed: _saving ? null : _save,
-                      child: const Text('保存'),
+                      child: Text(l10n.commonSave),
                     ),
                   ),
                 ],
@@ -106,17 +113,30 @@ class _UnifiedDetailCatalogSheetState extends State<UnifiedDetailCatalogSheet> {
       _errorText = null;
     });
     try {
-      await widget.onSave(_emptyToNull(_catalogController.text));
-      if (mounted) {
-        Navigator.of(context).pop();
+      final outcome = await widget.onSave(
+        _emptyToNull(_catalogController.text),
+      );
+      if (!mounted) {
+        return;
       }
-    } on FormatException catch (error) {
-      if (mounted) {
-        setState(() => _errorText = error.message);
+      if (outcome.code == DetailCatalogUpdateOutcomeCode.invalidInput) {
+        setState(() {
+          _errorText = LibraryDetailTextResolver.catalogInputError(
+            AppLocalizations.of(context),
+            outcome,
+          );
+        });
+        return;
       }
+      Navigator.of(context).pop();
     } catch (error) {
       if (mounted) {
-        setState(() => _errorText = '保存失败：$error');
+        final l10n = AppLocalizations.of(context);
+        setState(() {
+          _errorText = l10n.libraryDetailCatalogSaveFailed(
+            LibraryDetailTextResolver.safeError(l10n, error),
+          );
+        });
       }
     } finally {
       if (mounted) {
@@ -126,9 +146,11 @@ class _UnifiedDetailCatalogSheetState extends State<UnifiedDetailCatalogSheet> {
   }
 }
 
-String _sourceText(String? sourceCatalogUrl) {
+String _sourceText(AppLocalizations l10n, String? sourceCatalogUrl) {
   final source = sourceCatalogUrl?.trim();
-  return '来源目录：${source == null || source.isEmpty ? '无' : source}';
+  return source == null || source.isEmpty
+      ? l10n.libraryDetailCatalogSourceEmpty
+      : l10n.libraryDetailCatalogSource(source);
 }
 
 String? _emptyToNull(String value) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_chrome_palette.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ReaderProgressControl extends StatelessWidget {
   const ReaderProgressControl({super.key, required this.config});
@@ -9,6 +10,7 @@ class ReaderProgressControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final palette = const ReaderChromePaletteResolver().resolve(
       Theme.of(context),
     );
@@ -36,7 +38,7 @@ class ReaderProgressControl extends StatelessWidget {
       children: [
         IconButton(
           key: const Key('shared-reader-prev-button'),
-          tooltip: config.previousTooltip,
+          tooltip: config.previousTooltip ?? l10n.readerPrevious,
           onPressed: config.previousEnabled ? config.onPrevious : null,
           icon: Icon(config.previousIcon),
         ),
@@ -69,6 +71,11 @@ class ReaderProgressControl extends StatelessWidget {
                         divisions: isDiscrete
                             ? (safeTotal! > 1 ? safeTotal - 1 : null)
                             : config.divisions,
+                        semanticFormatterCallback: (_) =>
+                            l10n.readerProgressSemantics(
+                              leadingLabel,
+                              trailingLabel,
+                            ),
                         onChangeStart: sliderEnabled
                             ? config.onChangeStart
                             : null,
@@ -92,7 +99,7 @@ class ReaderProgressControl extends StatelessWidget {
         ),
         IconButton(
           key: const Key('shared-reader-next-button'),
-          tooltip: config.nextTooltip,
+          tooltip: config.nextTooltip ?? l10n.readerNext,
           onPressed: config.nextEnabled ? config.onNext : null,
           icon: Icon(config.nextIcon),
         ),

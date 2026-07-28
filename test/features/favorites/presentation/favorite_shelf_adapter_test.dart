@@ -246,7 +246,8 @@ void main() {
       final hub = DefaultLibraryTaskProgressHub();
       final progress = ValueNotifier<LibraryShelfTaskProgress?>(
         const LibraryShelfTaskProgress(
-          message: 'Parsing favorite thread',
+          code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+          subject: 'Parsing favorite thread',
           current: 1,
           total: 3,
           source: LibraryMutationSource.favoriteSync,
@@ -266,7 +267,7 @@ void main() {
         taskProgressHub: hub,
       );
 
-      expect(adapter.taskProgress?.value?.message, 'Parsing favorite thread');
+      expect(adapter.taskProgress?.value?.subject, 'Parsing favorite thread');
       expect(
         adapter.taskProgress?.value?.source,
         LibraryMutationSource.favoriteSync,
@@ -309,7 +310,7 @@ void main() {
 
     expect(useCase.lastTids, <String>{'100', '101'});
     expect(result.changed, isTrue);
-    expect(result.code, SelectionActionResultCode.success);
+    expect(result.code, SelectionActionOutcomeCode.success);
     expect(result.succeededCount, 2);
     expect(result.failedCount, 0);
   });
@@ -332,7 +333,7 @@ void main() {
 
     expect(useCase.lastTids, <String>{'100'});
     expect(result.changed, isTrue);
-    expect(result.code, SelectionActionResultCode.partialFailure);
+    expect(result.code, SelectionActionOutcomeCode.partialFailure);
     expect(result.succeededCount, 1);
     expect(result.failedCount, 1);
   });

@@ -16,7 +16,8 @@ class FavoriteSyncShelfTaskProgressListenable extends ChangeNotifier
   }
 
   final ValueListenable<FavoriteSyncProgress> _source;
-  final ValueListenable<LibraryTaskNotificationPermissionState?> _permissionState;
+  final ValueListenable<LibraryTaskNotificationPermissionState?>
+  _permissionState;
 
   @override
   LibraryShelfTaskProgress? get value {
@@ -25,7 +26,22 @@ class FavoriteSyncShelfTaskProgressListenable extends ChangeNotifier
       return null;
     }
     return LibraryShelfTaskProgress(
-      message: progress.message,
+      code: switch (progress.phase) {
+        FavoriteSyncProgressPhase.fetchingList =>
+          LibraryShelfTaskProgressCode.favoriteSyncFetching,
+        FavoriteSyncProgressPhase.savingList =>
+          LibraryShelfTaskProgressCode.favoriteSyncSaving,
+        FavoriteSyncProgressPhase.loadingDetails =>
+          LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
+        FavoriteSyncProgressPhase.finishing =>
+          LibraryShelfTaskProgressCode.favoriteSyncFinishing,
+        FavoriteSyncProgressPhase.idle ||
+        FavoriteSyncProgressPhase.completed ||
+        FavoriteSyncProgressPhase.failed => throw StateError(
+          'Inactive favorite sync progress was exposed.',
+        ),
+      },
+      subject: progress.subject,
       current: progress.current,
       total: progress.total,
       source: LibraryMutationSource.favoriteSync,
@@ -35,8 +51,7 @@ class FavoriteSyncShelfTaskProgressListenable extends ChangeNotifier
   }
 
   bool get _isNotificationPermissionGranted =>
-      _permissionState.value ==
-      LibraryTaskNotificationPermissionState.granted;
+      _permissionState.value == LibraryTaskNotificationPermissionState.granted;
 
   void _handleChange() {
     notifyListeners();

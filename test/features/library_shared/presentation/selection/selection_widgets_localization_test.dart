@@ -33,7 +33,7 @@ void main() {
     );
     expect(
       button.tooltip,
-      AppLocalizationsZh().startupSelectionActionUnfavorite,
+      AppLocalizationsZh().librarySelectionActionUnfavorite,
     );
     expect(tester.takeException(), isNull);
   });
@@ -55,12 +55,12 @@ void main() {
       ),
     );
 
-    expect(find.text(l10n.startupSelectionSelectedCount(2)), findsOneWidget);
+    expect(find.text(l10n.librarySelectionSelectedCount(2)), findsOneWidget);
     expect(
       tester
           .widget<IconButton>(find.byKey(const Key('selection-app-bar-close')))
           .tooltip,
-      l10n.startupSelectionExit,
+      l10n.librarySelectionExit,
     );
     expect(
       tester
@@ -68,13 +68,13 @@ void main() {
             find.byKey(const Key('selection-app-bar-select-all')),
           )
           .tooltip,
-      l10n.startupSelectionSelectAll,
+      l10n.librarySelectionSelectAll,
     );
     expect(
       tester
           .widget<IconButton>(find.byKey(const Key('selection-app-bar-invert')))
           .tooltip,
-      l10n.startupSelectionInvert,
+      l10n.librarySelectionInvert,
     );
   });
 }

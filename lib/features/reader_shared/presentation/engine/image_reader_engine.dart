@@ -2297,8 +2297,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       progress: ReaderProgressConfig.discrete(
         current: currentIndex + 1,
         total: total,
-        previousTooltip: nav?.previousTooltip ?? '上一章',
-        nextTooltip: nav?.nextTooltip ?? '下一章',
+        previousTooltip: nav?.previousTooltip,
+        nextTooltip: nav?.nextTooltip,
         nextIcon: nav?.nextIcon ?? Icons.skip_next,
         previousEnabled: nav?.hasPrevious ?? false,
         nextEnabled: nav?.hasNext ?? false,

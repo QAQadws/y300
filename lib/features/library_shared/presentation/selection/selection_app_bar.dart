@@ -26,24 +26,24 @@ class SelectionAppBar extends StatelessWidget implements PreferredSizeWidget {
       key: const Key('selection-app-bar'),
       leading: IconButton(
         key: const Key('selection-app-bar-close'),
-        tooltip: l10n.startupSelectionExit,
+        tooltip: l10n.librarySelectionExit,
         icon: const Icon(Icons.close),
         onPressed: onClose,
       ),
       title: Text(
-        l10n.startupSelectionSelectedCount(selectedCount),
+        l10n.librarySelectionSelectedCount(selectedCount),
         key: const Key('selection-app-bar-title'),
       ),
       actions: [
         IconButton(
           key: const Key('selection-app-bar-select-all'),
-          tooltip: l10n.startupSelectionSelectAll,
+          tooltip: l10n.librarySelectionSelectAll,
           icon: const Icon(Icons.select_all),
           onPressed: onSelectAll,
         ),
         IconButton(
           key: const Key('selection-app-bar-invert'),
-          tooltip: l10n.startupSelectionInvert,
+          tooltip: l10n.librarySelectionInvert,
           icon: const Icon(Icons.flip_to_back),
           onPressed: onInvertSelection,
         ),

@@ -3,8 +3,8 @@ import 'package:y300/features/comic/domain/services/comic_episode_refresh_servic
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 
 void main() {
-  group('ComicSearchRefreshQueueSnapshot waiting message', () {
-    test('waitingMessage wraps clean head title and uses fractional second format', () {
+  group('ComicSearchRefreshQueueSnapshot structured status', () {
+    test('keeps raw head title and estimated duration', () {
       final snapshot = ComicSearchRefreshQueueSnapshot(
         entries: <ComicSearchRefreshQueueEntry>[
           _entry(id: 1, title: 'Queued Comic'),
@@ -13,44 +13,34 @@ void main() {
       );
 
       expect(snapshot.estimatedDuration, const Duration(milliseconds: 10500));
-      expect(
-        snapshot.waitingMessage,
-        '《Queued Comic》正在等待漫画搜索 预计耗时10.5s',
-      );
+      expect(snapshot.headTitle, 'Queued Comic');
     });
 
-    test('waitingMessage keeps integer second format when tenths end with zero', () {
+    test('multiplies queue size by cadence', () {
       final snapshot = ComicSearchRefreshQueueSnapshot(
         entries: <ComicSearchRefreshQueueEntry>[
           _entry(id: 1, title: 'Queued Comic'),
+          _entry(id: 2, title: 'Second Comic'),
         ],
         cadence: const Duration(seconds: 10),
       );
 
-      expect(snapshot.estimatedDuration, const Duration(seconds: 10));
-      expect(
-        snapshot.waitingMessage,
-        '《Queued Comic》正在等待漫画搜索 预计耗时10s',
-      );
+      expect(snapshot.estimatedDuration, const Duration(seconds: 20));
+      expect(snapshot.headTitle, 'Queued Comic');
     });
 
-    test('waitingMessage returns null when head title is blank', () {
+    test('does not rewrite a blank raw head title', () {
       final snapshot = ComicSearchRefreshQueueSnapshot(
-        entries: <ComicSearchRefreshQueueEntry>[
-          _entry(id: 1, title: '   '),
-        ],
+        entries: <ComicSearchRefreshQueueEntry>[_entry(id: 1, title: '   ')],
         cadence: const Duration(milliseconds: 10500),
       );
 
-      expect(snapshot.waitingMessage, isNull);
+      expect(snapshot.headTitle, '   ');
     });
   });
 }
 
-ComicSearchRefreshQueueEntry _entry({
-  required int id,
-  required String title,
-}) {
+ComicSearchRefreshQueueEntry _entry({required int id, required String title}) {
   return ComicSearchRefreshQueueEntry(
     id: id,
     comicId: 'comic:$id',

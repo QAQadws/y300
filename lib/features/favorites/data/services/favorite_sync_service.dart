@@ -27,13 +27,15 @@ enum FavoriteSyncProgressPhase {
 class FavoriteSyncProgress {
   const FavoriteSyncProgress({
     required this.phase,
-    required this.message,
+    this.subject,
     this.current = 0,
     this.total,
   });
 
   final FavoriteSyncProgressPhase phase;
-  final String message;
+
+  /// Raw work title used only as a presentation placeholder.
+  final String? subject;
   final int current;
   final int? total;
 
@@ -59,7 +61,6 @@ class FavoriteSyncProgress {
 
   static const idle = FavoriteSyncProgress(
     phase: FavoriteSyncProgressPhase.idle,
-    message: '',
   );
 }
 
@@ -179,27 +180,18 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     try {
       final result = await body();
       _emitProgress(
-        const FavoriteSyncProgress(
-          phase: FavoriteSyncProgressPhase.completed,
-          message: '收藏同步完成',
-        ),
+        const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.completed),
       );
       return result;
     } on _FavoriteSyncFailure catch (error) {
       _emitProgress(
-        FavoriteSyncProgress(
-          phase: FavoriteSyncProgressPhase.failed,
-          message: error.message,
-        ),
+        FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
       );
       await _localRepository.markSyncFailure(error.message);
       throw StateError(error.message);
     } catch (error) {
       _emitProgress(
-        FavoriteSyncProgress(
-          phase: FavoriteSyncProgressPhase.failed,
-          message: '$error',
-        ),
+        FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
       );
       await _localRepository.markSyncFailure('$error');
       rethrow;
@@ -213,7 +205,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     _emitProgress(
       const FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.fetchingList,
-        message: '正在读取收藏列表 1/?',
         current: 0,
       ),
     );
@@ -229,7 +220,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     _emitProgress(
       FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.fetchingList,
-        message: '正在读取收藏列表 1/${_estimatedPageCount(firstPage)}',
         current: 1,
         total: _estimatedPageCount(firstPage),
       ),
@@ -262,7 +252,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.savingList,
-          message: '正在写入收藏列表 ${index + 1}/${pages.length}',
           current: index + 1,
           total: pages.length,
         ),
@@ -301,10 +290,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       await _mergeAllComicDuplicatesAfterFirstSync();
     }
     _emitProgress(
-      const FavoriteSyncProgress(
-        phase: FavoriteSyncProgressPhase.finishing,
-        message: '正在整理收藏同步结果',
-      ),
+      const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.finishing),
     );
     await _localRepository.finishSync(
       mode: mode,
@@ -340,7 +326,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     _emitProgress(
       const FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.fetchingList,
-        message: '正在读取新增收藏列表 1/?',
         current: 0,
       ),
     );
@@ -367,7 +352,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.fetchingList,
-          message: '正在查找新增收藏第 $nextPageNumber 页',
           current: pages.length,
         ),
       );
@@ -389,7 +373,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.savingList,
-          message: '正在写入新增收藏 ${index + 1}/${pages.length}',
           current: index + 1,
           total: pages.length,
         ),
@@ -428,7 +411,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.loadingDetails,
-          message: '正在解析: ${record.title}',
+          subject: record.title,
           current: 1,
           total: 1,
         ),
@@ -511,7 +494,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.fetchingList,
-          message: '正在读取收藏列表 $nextPageNumber/$estimatedTotal',
           current: nextPageNumber - 1,
           total: estimatedTotal,
         ),
@@ -528,7 +510,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.fetchingList,
-          message: '正在读取收藏列表 $nextPageNumber/$estimatedTotal',
           current: nextPageNumber,
           total: estimatedTotal,
         ),
@@ -549,7 +530,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.fetchingList,
-          message: '正在读取新增收藏第 $nextPageNumber 页',
           current: pages.length + 1,
         ),
       );
@@ -657,7 +637,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         _emitProgress(
           FavoriteSyncProgress(
             phase: FavoriteSyncProgressPhase.loadingDetails,
-            message: '正在解析: ${record.title}',
+            subject: record.title,
             current: processedCount + 1,
             total: totalMissingDetails,
           ),

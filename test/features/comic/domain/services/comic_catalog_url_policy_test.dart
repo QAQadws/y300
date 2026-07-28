@@ -17,7 +17,13 @@ void main() {
         () => policy.normalizeOverride(
           'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=571564',
         ),
-        throwsFormatException,
+        throwsA(
+          isA<ComicCatalogUrlInputException>().having(
+            (error) => error.code,
+            'code',
+            ComicCatalogUrlInputErrorCode.notTagCatalog,
+          ),
+        ),
       );
     });
 
@@ -25,7 +31,13 @@ void main() {
       expect(
         () =>
             policy.normalizeOverride('https://bbs.yamibo.com/misc.php?mod=tag'),
-        throwsFormatException,
+        throwsA(
+          isA<ComicCatalogUrlInputException>().having(
+            (error) => error.code,
+            'code',
+            ComicCatalogUrlInputErrorCode.notTagCatalog,
+          ),
+        ),
       );
     });
   });

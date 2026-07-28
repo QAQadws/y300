@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_chrome_palette.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ReaderTopOverlayBar extends StatelessWidget {
-  const ReaderTopOverlayBar({
-    super.key,
-    required this.config,
-  });
+  const ReaderTopOverlayBar({super.key, required this.config});
 
   final ReaderTopBarConfig config;
 
   @override
   Widget build(BuildContext context) {
-    final palette =
-        const ReaderChromePaletteResolver().resolve(Theme.of(context));
+    final palette = const ReaderChromePaletteResolver().resolve(
+      Theme.of(context),
+    );
     return Material(
       key: const Key('shared-reader-top-overlay-bar'),
       color: palette.chromeBackground,
@@ -25,7 +24,7 @@ class ReaderTopOverlayBar extends StatelessWidget {
             children: [
               IconButton(
                 key: const Key('shared-reader-top-back-button'),
-                tooltip: '返回',
+                tooltip: AppLocalizations.of(context).readerBack,
                 onPressed: config.onBack,
                 icon: const Icon(Icons.arrow_back),
               ),
@@ -35,8 +34,10 @@ class ReaderTopOverlayBar extends StatelessWidget {
                   onTap: config.onTitleTap,
                   borderRadius: BorderRadius.circular(6),
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 6,
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,

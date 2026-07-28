@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
+import 'package:y300/features/library_shared/presentation/services/library_task_text_resolver.dart';
 import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class ForumSearchPage extends ConsumerStatefulWidget {
   const ForumSearchPage({
@@ -62,7 +65,9 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
       setState(() {
         _loading = false;
         if (result.rateLimited) {
-          final seconds = result.retryAfter.inSeconds <= 0 ? 1 : result.retryAfter.inSeconds;
+          final seconds = result.retryAfter.inSeconds <= 0
+              ? 1
+              : result.retryAfter.inSeconds;
           _hint = '请 $seconds 秒后重试';
           _items = const <DiscuzSearchResultItem>[];
           _nextPageUrl = null;
@@ -102,11 +107,15 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
     if (!snapshot.active) {
       return null;
     }
-    final message = snapshot.waitingMessage?.trim();
-    if (message != null && message.isNotEmpty) {
-      return message;
-    }
-    return '正在等待搜索 预计耗时${_formatSeconds(snapshot.estimatedDuration)}s';
+    return LibraryTaskTextResolver.message(
+      AppLocalizations.of(context),
+      LibraryShelfTaskProgress(
+        code: LibraryShelfTaskProgressCode.comicSearchWaiting,
+        subject: snapshot.headTitle,
+        estimatedDuration: snapshot.estimatedDuration,
+        total: snapshot.totalCount,
+      ),
+    );
   }
 
   String? _schedulerWaitingMessage(ForumSearchSchedulerSnapshot snapshot) {
@@ -128,7 +137,10 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
 
   Future<void> _loadMore() async {
     final nextPageUrl = _nextPageUrl;
-    if (_loading || _loadingMore || nextPageUrl == null || nextPageUrl.trim().isEmpty) {
+    if (_loading ||
+        _loadingMore ||
+        nextPageUrl == null ||
+        nextPageUrl.trim().isEmpty) {
       return;
     }
     setState(() {

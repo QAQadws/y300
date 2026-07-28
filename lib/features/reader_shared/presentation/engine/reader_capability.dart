@@ -48,8 +48,8 @@ class ReaderChapterNavSpec {
     required this.hasNext,
     required this.onPrevious,
     required this.onNext,
-    this.previousTooltip = '上一章',
-    this.nextTooltip = '下一章',
+    this.previousTooltip,
+    this.nextTooltip,
     this.nextIcon = Icons.skip_next,
   });
 
@@ -57,8 +57,8 @@ class ReaderChapterNavSpec {
   final bool hasNext;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
-  final String previousTooltip;
-  final String nextTooltip;
+  final String? previousTooltip;
+  final String? nextTooltip;
   final IconData nextIcon;
 }
 

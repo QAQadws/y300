@@ -18,8 +18,11 @@ import 'package:y300/features/library_shared/presentation/detail/unified_detail_
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_misc_sections.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
 import 'package:y300/features/library_shared/presentation/services/route_content_presentation_guard.dart';
+import 'package:y300/features/library_shared/presentation/services/library_detail_text_resolver.dart';
+import 'package:y300/features/library_shared/presentation/services/library_shelf_text_resolver.dart';
 import 'package:y300/features/library_shared/presentation/widgets/cover_focal_point_picker.dart';
 import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 /// 统一详情页骨架（Phase 4）
 ///
@@ -273,6 +276,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final state = _controller.state;
     final header = state.header;
     final topInset = MediaQuery.of(context).padding.top;
@@ -326,61 +330,64 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                 if (_supportsChapterDownloads)
                   PopupMenuButton<String>(
                     key: const Key('unified-detail-appbar-download'),
-                    tooltip: '下载',
+                    tooltip: l10n.libraryDetailDownload,
                     icon: const Icon(Icons.file_download),
                     onSelected: _handleDownloadMenuAction,
                     itemBuilder: _downloadMenuItems,
                   ),
                 IconButton(
                   key: const Key('unified-detail-appbar-filter'),
-                  tooltip: '筛选与排序',
+                  tooltip: l10n.libraryDetailFilterAndSort,
                   icon: const Icon(Icons.filter_list),
                   onPressed: _showChapterFilterSheet,
                 ),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
                   itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'refresh', child: Text('刷新')),
-                    const PopupMenuItem(
+                    PopupMenuItem(
+                      value: 'refresh',
+                      child: Text(l10n.libraryDetailRefresh),
+                    ),
+                    PopupMenuItem(
                       value: 'change-category',
-                      child: Text('修改分类'),
+                      child: Text(l10n.libraryDetailChangeCategory),
                     ),
                     if (widget.adapter is DetailMetadataEditor)
-                      const PopupMenuItem(
-                        key: Key('unified-detail-edit-metadata'),
+                      PopupMenuItem(
+                        key: const Key('unified-detail-edit-metadata'),
                         value: 'edit-metadata',
-                        child: Text('编辑作品信息'),
+                        child: Text(l10n.libraryDetailEditMetadata),
                       ),
                     if (widget.adapter is DetailCatalogEditor)
-                      const PopupMenuItem(
-                        key: Key('unified-detail-configure-catalog'),
+                      PopupMenuItem(
+                        key: const Key('unified-detail-configure-catalog'),
                         value: 'configure-catalog',
-                        child: Text('配置目录'),
+                        child: Text(l10n.libraryDetailConfigureCatalog),
                       ),
                     // 章节长按之外的第二个入口：隐藏全部章节后列表为空，
                     // 长按目标随之消失，只靠长按会把“全部显示”永久锁死。
                     if (_chapterManagementAdapter != null)
-                      const PopupMenuItem(
-                        key: Key('unified-detail-manage-chapters'),
+                      PopupMenuItem(
+                        key: const Key('unified-detail-manage-chapters'),
                         value: 'manage-chapters',
-                        child: Text('管理章节'),
+                        child: Text(l10n.libraryDetailManageChapters),
                       ),
                     if (_supportsCoverEditing) ...[
-                      const PopupMenuItem(
-                        key: Key('unified-detail-set-cover'),
+                      PopupMenuItem(
+                        key: const Key('unified-detail-set-cover'),
                         value: 'set-custom-cover',
-                        child: Text('自定义封面'),
+                        child: Text(l10n.libraryDetailSetCustomCover),
                       ),
                       if (_canRemoveCover)
-                        const PopupMenuItem(
-                          key: Key('unified-detail-remove-cover'),
+                        PopupMenuItem(
+                          key: const Key('unified-detail-remove-cover'),
                           value: 'remove-custom-cover',
-                          child: Text('取消封面'),
+                          child: Text(l10n.libraryDetailRemoveCustomCover),
                         ),
                     ],
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'edit-intro',
-                      child: Text('编辑简介'),
+                      child: Text(l10n.libraryDetailEditIntro),
                     ),
                   ],
                   onSelected: (value) async {
@@ -442,7 +449,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       child: UnifiedDetailIntroSection(
                         intro: header.intro?.trim().isNotEmpty == true
                             ? header.intro!
-                            : '暂无简介',
+                            : l10n.libraryDetailNoIntro,
                         expanded: _introExpanded,
                         onToggle: () =>
                             setState(() => _introExpanded = !_introExpanded),
@@ -461,6 +468,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     child: UnifiedDetailChapterToolbar(
                       chapterCount: state.chapters.length,
                       filterSummary: _chapterFilterSummary(state.filters),
+                      hasActiveFilter: _hasActiveChapterFilter(state.filters),
                       modeControl: widget.chapterModeControl,
                     ),
                   ),
@@ -520,7 +528,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
           }
         },
         icon: const Icon(Icons.play_arrow),
-        label: const Text('继续'),
+        label: Text(l10n.libraryDetailContinue),
       ),
     );
   }
@@ -558,7 +566,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
         }
       } catch (error) {
         if (mounted) {
-          _showDetailSnackBar('删除下载失败：$error');
+          final l10n = AppLocalizations.of(context);
+          _showDetailSnackBar(
+            l10n.libraryDetailDeleteDownloadFailed(
+              LibraryDetailTextResolver.safeError(l10n, error),
+            ),
+          );
         }
       }
       return;
@@ -574,7 +587,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       );
     } catch (error) {
       if (mounted) {
-        _showDetailSnackBar('下载失败：$error');
+        final l10n = AppLocalizations.of(context);
+        _showDetailSnackBar(
+          l10n.libraryDetailDownloadFailed(
+            LibraryDetailTextResolver.safeError(l10n, error),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -600,7 +618,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       );
     } catch (_) {
       if (mounted) {
-        _showDetailSnackBar('阅读状态更新失败');
+        _showDetailSnackBar(
+          AppLocalizations.of(context).libraryDetailReadStateUpdateFailed,
+        );
       }
     } finally {
       if (mounted) {
@@ -620,10 +640,17 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     return '$date  Tid:${chapter.sourceTid ?? '-'}';
   }
 
-  List<PopupMenuEntry<String>> _downloadMenuItems(BuildContext _) {
-    return const [
-      PopupMenuItem(value: 'download-unread', child: Text('未读')),
-      PopupMenuItem(value: 'download-all', child: Text('全部')),
+  List<PopupMenuEntry<String>> _downloadMenuItems(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return [
+      PopupMenuItem(
+        value: 'download-unread',
+        child: Text(l10n.libraryDetailDownloadUnread),
+      ),
+      PopupMenuItem(
+        value: 'download-all',
+        child: Text(l10n.libraryDetailDownloadAll),
+      ),
     ];
   }
 
@@ -642,29 +669,46 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       }
     } catch (error) {
       if (mounted) {
-        _showDetailSnackBar('下载失败：$error');
+        final l10n = AppLocalizations.of(context);
+        _showDetailSnackBar(
+          l10n.libraryDetailDownloadFailed(
+            LibraryDetailTextResolver.safeError(l10n, error),
+          ),
+        );
       }
     }
   }
 
   String _chapterFilterSummary(LibraryFilterSet filters) {
-    if (filters.isDefault) {
-      return '全部章节';
+    final l10n = AppLocalizations.of(context);
+    if (!_hasActiveChapterFilter(filters)) {
+      return l10n.libraryDetailAllChapters;
     }
     final labels = <String>[
       if (_supportsChapterDownloads)
-        ?_filterSummaryPart('已下载', filters.downloaded),
-      if (_supportsChapterReadState) ?_filterSummaryPart('未读', filters.unread),
-      ?_filterSummaryPart('已加书签', filters.bookmarked),
+        ?_filterSummaryPart(l10n.libraryDetailDownloaded, filters.downloaded),
+      if (_supportsChapterReadState)
+        ?_filterSummaryPart(l10n.libraryDetailUnread, filters.unread),
+      ?_filterSummaryPart(l10n.libraryDetailBookmarked, filters.bookmarked),
     ];
-    return labels.isEmpty ? '全部章节' : labels.join(' / ');
+    return labels.isEmpty ? l10n.libraryDetailAllChapters : labels.join(' / ');
+  }
+
+  bool _hasActiveChapterFilter(LibraryFilterSet filters) {
+    return (_supportsChapterDownloads &&
+            filters.downloaded != TriStateFilterValue.ignore) ||
+        (_supportsChapterReadState &&
+            filters.unread != TriStateFilterValue.ignore) ||
+        filters.bookmarked != TriStateFilterValue.ignore;
   }
 
   String? _filterSummaryPart(String label, TriStateFilterValue value) {
     return switch (value) {
       TriStateFilterValue.ignore => null,
       TriStateFilterValue.include => label,
-      TriStateFilterValue.exclude => '排除$label',
+      TriStateFilterValue.exclude => AppLocalizations.of(
+        context,
+      ).libraryDetailExcludeFilter(label),
     };
   }
 
@@ -691,6 +735,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            final l10n = AppLocalizations.of(context);
             final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.86;
             return SafeArea(
               child: ConstrainedBox(
@@ -702,13 +747,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const UnifiedDetailSheetSectionHeader(title: '筛选'),
+                        UnifiedDetailSheetSectionHeader(
+                          title: l10n.libraryDetailFilter,
+                        ),
                         if (_supportsChapterDownloads)
                           UnifiedDetailTriStateLine(
                             lineKey: const Key(
                               'unified-detail-filter-downloaded',
                             ),
-                            label: '已下载',
+                            label: l10n.libraryDetailDownloaded,
                             value: selectedFilters.downloaded,
                             onChanged: (v) => setSheetState(
                               () => selectedFilters = selectedFilters.copyWith(
@@ -719,7 +766,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         if (_supportsChapterReadState)
                           UnifiedDetailTriStateLine(
                             lineKey: const Key('unified-detail-filter-unread'),
-                            label: '未读',
+                            label: l10n.libraryDetailUnread,
                             value: selectedFilters.unread,
                             onChanged: (v) => setSheetState(
                               () => selectedFilters = selectedFilters.copyWith(
@@ -731,7 +778,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                           lineKey: const Key(
                             'unified-detail-filter-bookmarked',
                           ),
-                          label: '已加书签',
+                          label: l10n.libraryDetailBookmarked,
                           value: selectedFilters.bookmarked,
                           onChanged: (v) => setSheetState(
                             () => selectedFilters = selectedFilters.copyWith(
@@ -740,10 +787,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const UnifiedDetailSheetSectionHeader(title: '排序'),
+                        UnifiedDetailSheetSectionHeader(
+                          title: l10n.libraryDetailSort,
+                        ),
                         LibrarySortOptionTile(
                           key: const Key('unified-detail-sort-source'),
-                          label: '按来源',
+                          label: l10n.libraryDetailSortBySource,
                           selected: true,
                           direction: selectedDirection,
                           onTap: () {
@@ -762,7 +811,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                               child: OutlinedButton(
                                 onPressed: () =>
                                     Navigator.of(sheetContext).pop(),
-                                child: const Text('取消'),
+                                child: Text(l10n.commonCancel),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -784,7 +833,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                                   Navigator.of(sheetContext).pop();
                                   setState(() {});
                                 },
-                                child: const Text('应用'),
+                                child: Text(l10n.commonApply),
                               ),
                             ),
                           ],
@@ -805,6 +854,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     await showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) {
+        final l10n = AppLocalizations.of(sheetContext);
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
@@ -820,7 +870,11 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         ? Icons.bookmark_remove_outlined
                         : Icons.bookmark_add_outlined,
                   ),
-                  title: Text(chapter.isBookmarked ? '移除书签' : '添加书签'),
+                  title: Text(
+                    chapter.isBookmarked
+                        ? l10n.libraryDetailRemoveBookmark
+                        : l10n.libraryDetailAddBookmark,
+                  ),
                   onTap: () async {
                     await _controller.markChapterBookmarked(
                       episodeId: chapter.episodeId,
@@ -837,7 +891,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                   ListTile(
                     key: const Key('unified-detail-work-reset-reading-action'),
                     leading: const Icon(Icons.remove_done),
-                    title: const Text('重置本漫画阅读'),
+                    title: Text(l10n.libraryDetailResetWorkReading),
                     onTap: () async {
                       if (!sheetContext.mounted) {
                         return;
@@ -849,7 +903,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                 if (_supportsChapterDownloads && chapter.isDownloaded)
                   ListTile(
                     leading: const Icon(Icons.delete_outline),
-                    title: const Text('删除该章节下载'),
+                    title: Text(l10n.libraryDetailDeleteChapterDownload),
                     onTap: () async {
                       await _controller.deleteChapterDownload(
                         episodeId: chapter.episodeId,
@@ -865,8 +919,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                   ListTile(
                     key: const Key('unified-detail-chapter-management-action'),
                     leading: const Icon(Icons.playlist_add_check),
-                    title: const Text('管理章节'),
-                    subtitle: const Text('显示/隐藏章节，手动添加或移除'),
+                    title: Text(l10n.libraryDetailManageChapters),
+                    subtitle: Text(l10n.libraryDetailManageChaptersDescription),
                     onTap: () async {
                       if (!sheetContext.mounted) {
                         return;
@@ -919,18 +973,19 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext);
         return AlertDialog(
-          title: const Text('重置本漫画阅读？'),
-          content: const Text('全部章节将变为未读，所有阅读进度和上次阅读位置都会被清除。书签和下载不会受影响。'),
+          title: Text(l10n.libraryDetailResetReadingTitle),
+          content: Text(l10n.libraryDetailResetReadingBody),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
+              child: Text(l10n.commonCancel),
             ),
             FilledButton(
               key: const Key('unified-detail-work-reset-reading-confirm'),
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('重置'),
+              child: Text(l10n.libraryDetailResetReadingConfirm),
             ),
           ],
         );
@@ -946,7 +1001,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       await _controller.resetWorkReadingState();
     } catch (_) {
       if (mounted) {
-        _showDetailSnackBar('重置漫画阅读失败');
+        _showDetailSnackBar(
+          AppLocalizations.of(context).libraryDetailResetReadingFailed,
+        );
       }
     } finally {
       if (mounted) {
@@ -1004,21 +1061,21 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       if (!mounted) {
         return;
       }
-      _showDetailSnackBar('更新失败：$error');
+      final l10n = AppLocalizations.of(context);
+      _showDetailSnackBar(
+        l10n.libraryDetailRefreshFailed(
+          LibraryDetailTextResolver.safeError(l10n, error),
+        ),
+      );
       setState(() {});
     }
   }
 
   String _refreshFeedbackMessage(DetailRefreshResult result) {
-    final message = result.message?.trim();
-    if (message != null && message.isNotEmpty) {
-      return message;
-    }
-    return switch (result.status) {
-      DetailRefreshStatus.immediate => '已更新',
-      DetailRefreshStatus.skipped => '暂无可更新内容',
-      DetailRefreshStatus.queued => '已加入更新队列',
-    };
+    return LibraryDetailTextResolver.refreshOutcome(
+      AppLocalizations.of(context),
+      result,
+    );
   }
 
   Future<void> _retryLoad() async {
@@ -1068,27 +1125,35 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             sourceValue: header.sourceTranslationGroup,
           ),
           initialSearchTitle: header.customSearchTitle ?? '',
-          titleSourceText: _sourceText(
-            '来源标题',
+          titleSourceText: LibraryDetailTextResolver.sourceValue(
+            AppLocalizations.of(sheetContext),
+            LibraryDetailTextResolver.metadataSourceField(
+              AppLocalizations.of(sheetContext),
+              LibraryMetadataField.title,
+            ),
             header.sourceTitle ?? header.title,
           ),
-          authorSourceText: _sourceText(
-            config.sourceAuthorLabel,
+          authorSourceText: LibraryDetailTextResolver.sourceValue(
+            AppLocalizations.of(sheetContext),
+            LibraryDetailTextResolver.metadataSourceField(
+              AppLocalizations.of(sheetContext),
+              LibraryMetadataField.author,
+            ),
             header.sourceAuthor ??
                 (config.fallbackToDisplaySourceValues ? header.author : null),
           ),
-          groupSourceText: _sourceText(
-            config.sourceTranslationGroupLabel,
+          groupSourceText: LibraryDetailTextResolver.sourceValue(
+            AppLocalizations.of(sheetContext),
+            LibraryDetailTextResolver.metadataSourceField(
+              AppLocalizations.of(sheetContext),
+              LibraryMetadataField.translationGroup,
+            ),
             header.sourceTranslationGroup ??
                 (config.fallbackToDisplaySourceValues
                     ? header.translationGroup
                     : null),
           ),
-          authorLabel: config.authorLabel,
-          translationGroupLabel: config.translationGroupLabel,
-          showAuthor: config.showAuthor,
-          showTranslationGroup: config.showTranslationGroup,
-          showSearchTitle: config.showSearchTitle,
+          fields: config.fields,
           onSave:
               ({
                 customTitle,
@@ -1129,7 +1194,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       );
     } catch (error) {
       if (mounted) {
-        _showDetailSnackBar('读取目录配置失败：$error');
+        final l10n = AppLocalizations.of(context);
+        _showDetailSnackBar(
+          l10n.libraryDetailCatalogLoadFailed(
+            LibraryDetailTextResolver.safeError(l10n, error),
+          ),
+        );
       }
       return;
     }
@@ -1145,14 +1215,17 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
           initialCatalogUrl: configuration.initialInputValue,
           sourceCatalogUrl: configuration.sourceCatalogUrl,
           onSave: (catalogUrl) async {
-            await editor.updateCatalogOverride(
+            final outcome = await editor.updateCatalogOverride(
               workId: widget.workId,
               catalogUrl: catalogUrl,
             );
-            await _controller.reload();
-            if (mounted) {
-              setState(() {});
+            if (outcome.code == DetailCatalogUpdateOutcomeCode.saved) {
+              await _controller.reload();
+              if (mounted) {
+                setState(() {});
+              }
             }
+            return outcome;
           },
         );
       },
@@ -1187,7 +1260,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     final focus = await CoverFocalPointPicker.show(
       context,
       image: FileImage(io.File(sourcePath)),
-      title: '调整封面焦点',
     );
     if (focus == null || !mounted) {
       return;
@@ -1203,14 +1275,19 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       if (!mounted) {
         return;
       }
-      _showDetailSnackBar('封面更新失败：$error');
+      final l10n = AppLocalizations.of(context);
+      _showDetailSnackBar(
+        l10n.libraryDetailCoverUpdateFailed(
+          LibraryDetailTextResolver.safeError(l10n, error),
+        ),
+      );
       return;
     }
     await _controller.reload();
     if (!mounted) {
       return;
     }
-    _showDetailSnackBar('封面已更新');
+    _showDetailSnackBar(AppLocalizations.of(context).libraryDetailCoverUpdated);
     setState(() {});
   }
 
@@ -1225,14 +1302,19 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       if (!mounted) {
         return;
       }
-      _showDetailSnackBar('取消封面失败：$error');
+      final l10n = AppLocalizations.of(context);
+      _showDetailSnackBar(
+        l10n.libraryDetailCoverRemoveFailed(
+          LibraryDetailTextResolver.safeError(l10n, error),
+        ),
+      );
       return;
     }
     await _controller.reload();
     if (!mounted) {
       return;
     }
-    _showDetailSnackBar('已取消封面');
+    _showDetailSnackBar(AppLocalizations.of(context).libraryDetailCoverRemoved);
     setState(() {});
   }
 
@@ -1250,7 +1332,12 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             children: categories
                 .map(
                   (item) => ListTile(
-                    title: Text(item.name),
+                    title: Text(
+                      LibraryShelfTextResolver.categoryName(
+                        AppLocalizations.of(sheetContext),
+                        item,
+                      ),
+                    ),
                     onTap: () async {
                       await widget.adapter.moveWorkToCategory(
                         workId: widget.workId,
@@ -1276,17 +1363,18 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext);
         return AlertDialog(
-          title: const Text('编辑简介'),
+          title: Text(l10n.libraryDetailEditIntro),
           content: TextField(
             controller: inputController,
             maxLines: 6,
-            decoration: const InputDecoration(hintText: '请输入简介'),
+            decoration: InputDecoration(hintText: l10n.libraryDetailIntroHint),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
+              child: Text(l10n.commonCancel),
             ),
             FilledButton(
               onPressed: () async {
@@ -1301,18 +1389,13 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                 Navigator.of(dialogContext).pop();
                 setState(() {});
               },
-              child: const Text('保存'),
+              child: Text(l10n.commonSave),
             ),
           ],
         );
       },
     );
   }
-}
-
-String _sourceText(String label, String? value) {
-  final normalized = value?.trim();
-  return '$label：${normalized == null || normalized.isEmpty ? '无' : normalized}';
 }
 
 String? _emptyToNull(String value) {

@@ -10,7 +10,6 @@ import 'package:y300/features/library_shared/domain/services/library_cover_cache
 import 'package:y300/features/library_shared/domain/services/library_source_id_comparator.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
-import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 
@@ -40,9 +39,7 @@ class NovelDetailAdapter
   @override
   DetailMetadataEditorConfig get metadataEditorConfig =>
       const DetailMetadataEditorConfig(
-        showAuthor: false,
-        showTranslationGroup: false,
-        showSearchTitle: false,
+        fields: <LibraryMetadataField>{LibraryMetadataField.title},
         fallbackToDisplaySourceValues: false,
       );
 
@@ -155,10 +152,9 @@ class NovelDetailAdapter
 
     final fraction = progress.progressPercent.clamp(0.0, 1.0).toDouble();
     return LibraryChapterProgressInfo(
-      label: '上次阅读',
+      kind: LibraryChapterProgressKind.lastRead,
       isCurrent: true,
       fraction: fraction,
-      semanticLabel: '上次阅读的章节',
     );
   }
 
@@ -218,17 +214,10 @@ class NovelDetailAdapter
       throw StateError('小说章节同步服务尚未配置。');
     }
     final result = await updateServiceFactory().update(workId);
-    return DetailRefreshResult(
-      status: DetailRefreshStatus.immediate,
-      message: _refreshResultMessage(result),
+    return DetailRefreshResult.chaptersChanged(
+      insertedCount: result.insertedCount,
+      updatedCount: result.updatedCount,
     );
-  }
-
-  String _refreshResultMessage(NovelChapterSyncResult result) {
-    if (result.insertedCount == 0 && result.updatedCount == 0) {
-      return '已是最新章节';
-    }
-    return '已新增 ${result.insertedCount} 章，更新 ${result.updatedCount} 章';
   }
 
   @override

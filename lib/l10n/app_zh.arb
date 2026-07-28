@@ -32,6 +32,10 @@
   "commonClose": "关闭",
   "commonClear": "清空",
   "commonRetry": "重试",
+  "commonApply": "应用",
+  "commonSave": "保存",
+  "commonDelete": "删除",
+  "commonRemove": "移除",
   "commonUnknownError": "未知错误",
 
   "forumHomeTitle": "论坛首页",
@@ -179,66 +183,66 @@
   "appNavigationHistory": "记录",
   "appNavigationMore": "更多",
 
-  "startupSelectionSelectedCount": "{count, plural, =0 {未选择项目} other {已选 {count} 项}}",
-  "@startupSelectionSelectedCount": {
+  "librarySelectionSelectedCount": "{count, plural, =0 {未选择项目} other {已选 {count} 项}}",
+  "@librarySelectionSelectedCount": {
     "description": "多选主壳标题；count 是当前选中的项目数量",
     "placeholders": {"count": {"type": "int"}}
   },
-  "startupSelectionExit": "退出多选",
-  "startupSelectionSelectAll": "全选当前分类",
-  "startupSelectionInvert": "反选当前分类",
-  "startupSelectionActionAssignCategory": "设置分类",
-  "startupSelectionActionMarkAllRead": "全部已读",
-  "startupSelectionActionMarkAllUnread": "全部未读",
-  "startupSelectionActionDownload": "下载",
-  "startupSelectionActionUnfavorite": "取消收藏",
-  "startupSelectionActionGeneric": "执行操作",
-  "startupBatchActionFailed": "批量操作失败：{error}",
-  "@startupBatchActionFailed": {
+  "librarySelectionExit": "退出多选",
+  "librarySelectionSelectAll": "全选当前分类",
+  "librarySelectionInvert": "反选当前分类",
+  "librarySelectionActionAssignCategory": "设置分类",
+  "librarySelectionActionMarkAllRead": "全部已读",
+  "librarySelectionActionMarkAllUnread": "全部未读",
+  "librarySelectionActionDownload": "下载",
+  "librarySelectionActionUnfavorite": "取消收藏",
+  "librarySelectionActionGeneric": "执行操作",
+  "librarySelectionActionFailed": "批量操作失败：{error}",
+  "@librarySelectionActionFailed": {
     "description": "批量操作异常提示；error 是经过清理的安全错误摘要",
     "placeholders": {"error": {"type": "String"}}
   },
-  "startupConfirmUnfavoriteTitle": "确认取消收藏",
-  "startupConfirmActionTitle": "确认执行操作",
-  "startupConfirmUnfavoriteBody": "将取消已选 {count, plural, =0 {0 项} other {{count} 项}}收藏。若作品已无其它活跃收藏来源，相关本地作品、章节、封面缓存和下载也会被清除。是否继续？",
-  "@startupConfirmUnfavoriteBody": {
+  "librarySelectionConfirmUnfavoriteTitle": "确认取消收藏",
+  "librarySelectionConfirmActionTitle": "确认执行操作",
+  "librarySelectionConfirmUnfavoriteBody": "将取消已选 {count, plural, =0 {0 项} other {{count} 项}}收藏。若作品已无其它活跃收藏来源，相关本地作品、章节、封面缓存和下载也会被清除。是否继续？",
+  "@librarySelectionConfirmUnfavoriteBody": {
     "description": "取消收藏确认正文；count 是选中项目数量",
     "placeholders": {"count": {"type": "int"}}
   },
-  "startupConfirmActionBody": "将对已选 {count, plural, =0 {0 项} other {{count} 项}}执行“{action}”，是否继续？",
-  "@startupConfirmActionBody": {
+  "librarySelectionConfirmActionBody": "将对已选 {count, plural, =0 {0 项} other {{count} 项}}执行“{action}”，是否继续？",
+  "@librarySelectionConfirmActionBody": {
     "description": "普通多选动作确认正文；action 是由稳定 action id 映射的本地化名称",
     "placeholders": {
       "count": {"type": "int"},
       "action": {"type": "String"}
     }
   },
-  "startupSelectCategory": "选择分类",
-  "startupCreateCategory": "新建分类",
-  "startupCategoryNameHint": "请输入分类名称",
-  "startupSelectionCategoryAssigned": "{count, plural, =0 {没有项目设置分类} other {已为 {count} 项设置分类}}",
-  "@startupSelectionCategoryAssigned": {
+  "librarySelectionSelectCategory": "选择分类",
+  "librarySelectionCreateCategory": "新建分类",
+  "librarySelectionCategoryNameHint": "请输入分类名称",
+  "librarySelectionCategoryAssigned": "{count, plural, =0 {没有项目设置分类} other {已为 {count} 项设置分类}}",
+  "@librarySelectionCategoryAssigned": {
     "description": "批量设置分类成功提示；count 是成功处理的项目数量",
     "placeholders": {"count": {"type": "int"}}
   },
-  "startupSelectionCategoryAssignedPartial": "{succeededCount, plural, =0 {没有项目设置分类} other {已为 {succeededCount} 项设置分类}}；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
-  "@startupSelectionCategoryAssignedPartial": {
+  "librarySelectionCategoryAssignedPartial": "{succeededCount, plural, =0 {没有项目设置分类} other {已为 {succeededCount} 项设置分类}}；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
+  "@librarySelectionCategoryAssignedPartial": {
     "description": "批量设置分类部分失败提示",
     "placeholders": {
       "succeededCount": {"type": "int"},
       "failedCount": {"type": "int"}
     }
   },
-  "startupSelectionReadStateChanged": "已将 {count, plural, =0 {0 项} other {{count} 项}}标记为{state}",
-  "@startupSelectionReadStateChanged": {
+  "librarySelectionReadStateChanged": "已将 {count, plural, =0 {0 项} other {{count} 项}}标记为{state}",
+  "@librarySelectionReadStateChanged": {
     "description": "批量阅读状态修改成功提示；state 是已读或未读的本地化名称",
     "placeholders": {
       "count": {"type": "int"},
       "state": {"type": "String"}
     }
   },
-  "startupSelectionReadStateChangedPartial": "已将 {succeededCount, plural, =0 {0 项} other {{succeededCount} 项}}标记为{state}；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
-  "@startupSelectionReadStateChangedPartial": {
+  "librarySelectionReadStateChangedPartial": "已将 {succeededCount, plural, =0 {0 项} other {{succeededCount} 项}}标记为{state}；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
+  "@librarySelectionReadStateChangedPartial": {
     "description": "批量阅读状态修改部分失败提示",
     "placeholders": {
       "succeededCount": {"type": "int"},
@@ -246,47 +250,372 @@
       "state": {"type": "String"}
     }
   },
-  "startupSelectionRead": "已读",
-  "startupSelectionUnread": "未读",
-  "startupSelectionDownloadQueued": "已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入下载队列",
-  "@startupSelectionDownloadQueued": {
+  "librarySelectionRead": "已读",
+  "librarySelectionUnread": "未读",
+  "librarySelectionDownloadQueued": "已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入下载队列",
+  "@librarySelectionDownloadQueued": {
     "description": "批量下载入队提示；count 是新加入队列的章节数量",
     "placeholders": {"count": {"type": "int"}}
   },
-  "startupSelectionDownloadQueuedPartial": "已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入下载队列；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
-  "@startupSelectionDownloadQueuedPartial": {
+  "librarySelectionDownloadQueuedPartial": "已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入下载队列；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
+  "@librarySelectionDownloadQueuedPartial": {
     "description": "批量下载入队部分失败提示",
     "placeholders": {
       "count": {"type": "int"},
       "failedCount": {"type": "int"}
     }
   },
-  "startupSelectionDownloadAlreadyQueued": "所选章节已在下载队列中",
-  "startupSelectionNothingToDownload": "没有需要下载的章节",
-  "startupSelectionUnfavorite": "已取消 {count, plural, =0 {0 项} other {{count} 项}}收藏",
-  "@startupSelectionUnfavorite": {
+  "librarySelectionDownloadAlreadyQueued": "所选章节已在下载队列中",
+  "librarySelectionNothingToDownload": "没有需要下载的章节",
+  "librarySelectionUnfavorite": "已取消 {count, plural, =0 {0 项} other {{count} 项}}收藏",
+  "@librarySelectionUnfavorite": {
     "description": "批量取消收藏成功提示；count 是成功取消的项目数量",
     "placeholders": {"count": {"type": "int"}}
   },
-  "startupSelectionUnfavoritePartial": "已取消 {succeededCount, plural, =0 {0 项} other {{succeededCount} 项}}收藏；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
-  "@startupSelectionUnfavoritePartial": {
+  "librarySelectionUnfavoritePartial": "已取消 {succeededCount, plural, =0 {0 项} other {{succeededCount} 项}}收藏；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}",
+  "@librarySelectionUnfavoritePartial": {
     "description": "批量取消收藏部分失败提示",
     "placeholders": {
       "succeededCount": {"type": "int"},
       "failedCount": {"type": "int"}
     }
   },
-  "startupSelectionUnsupported": "当前不支持批量{action}",
-  "@startupSelectionUnsupported": {
+  "librarySelectionUnsupported": "当前不支持批量{action}",
+  "@librarySelectionUnsupported": {
     "description": "当前书架不支持某个批量动作；action 是本地化动作名称",
     "placeholders": {"action": {"type": "String"}}
   },
-  "startupSelectionMissingTargetCategory": "请选择目标分类",
-  "startupSelectionNoValidItems": "没有可处理的项目",
-  "startupSelectionNoChange": "没有可执行的{action}",
-  "@startupSelectionNoChange": {
+  "librarySelectionMissingTargetCategory": "请选择目标分类",
+  "librarySelectionNoValidItems": "没有可处理的项目",
+  "librarySelectionNoChange": "没有可执行的{action}",
+  "@librarySelectionNoChange": {
     "description": "批量动作没有产生变化；action 是本地化动作名称",
     "placeholders": {"action": {"type": "String"}}
+  },
+
+  "libraryShelfTitle": "{module, select, comic {漫画} novel {小说} favorite {收藏} other {书架}}",
+  "@libraryShelfTitle": {
+    "description": "统一书架标题；module 是稳定 LibraryModuleKey 名称",
+    "placeholders": {"module": {"type": "String"}}
+  },
+  "libraryShelfLoadFailed": "加载书架失败：{error}",
+  "@libraryShelfLoadFailed": {
+    "description": "统一书架加载失败；error 是 presentation 层清理后的安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "libraryShelfEmpty": "书架为空",
+  "libraryShelfSearch": "搜索书架",
+  "libraryShelfSearchHint": "搜索作品",
+  "libraryShelfFilterAndSort": "筛选与排序",
+  "libraryShelfCreateCategory": "新建分类",
+  "libraryShelfRenameCategory": "重命名当前分类",
+  "libraryShelfDeleteCategory": "删除当前分类",
+  "libraryShelfDeleteCategoryTitle": "删除分类",
+  "libraryShelfDeleteCategoryBody": "删除后，该分类中的作品会移动到默认分类。是否继续？",
+  "libraryShelfDefaultCategory": "默认",
+  "libraryShelfDefaultCategoryCannotRename": "默认分类不支持重命名",
+  "libraryShelfDefaultCategoryCannotDelete": "默认分类不支持删除",
+  "libraryShelfCategoryNameHint": "请输入分类名称",
+  "libraryShelfCategoryMatchCount": "{name} {count, plural, =0 {0} other {{count}}}",
+  "@libraryShelfCategoryMatchCount": {
+    "description": "搜索时的分类标签；name 是数据库中的原始分类名",
+    "placeholders": {"name": {"type": "String"}, "count": {"type": "int"}}
+  },
+  "libraryShelfUpdate": "更新书架",
+  "libraryShelfRandomOpen": "随机打开作品",
+  "libraryShelfNoRandomWork": "当前分类没有可打开的作品",
+  "libraryShelfFilter": "筛选",
+  "libraryShelfSort": "排序",
+  "libraryShelfDisplayMode": "显示",
+  "libraryShelfGrid": "网格",
+  "libraryShelfList": "列表",
+  "libraryShelfColumnsPerRow": "每行个数",
+  "libraryShelfFilterDownloaded": "已下载",
+  "libraryShelfFilterUnread": "未读",
+  "libraryShelfFilterRead": "阅读过",
+  "libraryShelfFilterBookmarked": "有书签",
+  "libraryShelfSortName": "名称",
+  "libraryShelfSortChapterCount": "章节数",
+  "libraryShelfSortLastReadAt": "最近阅读",
+  "libraryShelfSortLastCheckedAt": "最近检查",
+  "libraryShelfSortUnreadCount": "未读章节数",
+  "libraryShelfSortWorkUpdatedAt": "作品更新时间",
+  "libraryShelfSortFetchedAt": "获取时间",
+  "libraryShelfSortFavoriteAddedAt": "收藏日期",
+  "libraryShelfMergeDuplicates": "合并重复",
+  "libraryShelfMergeDuplicatesSuccess": "已合并 {count, plural, =0 {0 个重复作品} other {{count} 个重复作品}}",
+  "@libraryShelfMergeDuplicatesSuccess": {
+    "description": "漫画书架合并重复项成功提示",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "libraryShelfMergeDuplicatesNoChange": "没有可合并的重复作品",
+  "libraryShelfActionUnsupported": "当前书架不支持此操作",
+
+  "libraryTaskCoverWarmup": "正在准备封面",
+  "libraryTaskFavoriteSyncFetching": "正在获取收藏列表",
+  "libraryTaskFavoriteSyncSaving": "正在保存收藏数据",
+  "libraryTaskFavoriteSyncLoadingDetails": "正在读取收藏详情",
+  "libraryTaskFavoriteSyncLoadingDetailsSubject": "正在读取《{subject}》",
+  "@libraryTaskFavoriteSyncLoadingDetailsSubject": {
+    "description": "收藏同步读取详情；subject 是原始作品标题",
+    "placeholders": {"subject": {"type": "String"}}
+  },
+  "libraryTaskFavoriteSyncFinishing": "正在完成收藏同步",
+  "libraryTaskComicSearchWaiting": "漫画搜索正在等待",
+  "libraryTaskComicSearchWaitingSubject": "《{subject}》正在等待搜索",
+  "@libraryTaskComicSearchWaitingSubject": {
+    "description": "漫画搜索队列等待；subject 是原始作品标题",
+    "placeholders": {"subject": {"type": "String"}}
+  },
+  "libraryTaskComicSearchWaitingDuration": "《{subject}》正在等待搜索，预计 {duration}",
+  "@libraryTaskComicSearchWaitingDuration": {
+    "description": "漫画搜索队列等待；subject 原样显示，duration 已本地化",
+    "placeholders": {"subject": {"type": "String"}, "duration": {"type": "String"}}
+  },
+  "libraryTaskDurationSeconds": "{count, plural, =1 {1 秒} other {{count} 秒}}",
+  "@libraryTaskDurationSeconds": {"placeholders": {"count": {"type": "int"}}},
+  "libraryTaskDurationMinutes": "{count, plural, =1 {1 分钟} other {{count} 分钟}}",
+  "@libraryTaskDurationMinutes": {"placeholders": {"count": {"type": "int"}}},
+  "libraryTaskFavoriteSyncNotificationTitle": "收藏同步",
+  "libraryTaskComicSearchNotificationTitle": "漫画搜索",
+  "libraryTaskNotificationTitle": "书架任务",
+
+  "libraryDetailDownload": "下载",
+  "libraryDetailFilterAndSort": "筛选与排序",
+  "libraryDetailRefresh": "刷新",
+  "libraryDetailChangeCategory": "修改分类",
+  "libraryDetailEditMetadata": "编辑作品信息",
+  "libraryDetailConfigureCatalog": "配置目录",
+  "libraryDetailManageChapters": "管理章节",
+  "libraryDetailSetCustomCover": "自定义封面",
+  "libraryDetailRemoveCustomCover": "取消封面",
+  "libraryDetailEditIntro": "编辑简介",
+  "libraryDetailIntroHint": "请输入简介",
+  "libraryDetailNoIntro": "暂无简介",
+  "libraryDetailContinue": "继续",
+  "libraryDetailIntro": "简介",
+  "libraryDetailLoadFailed": "加载详情失败：{error}",
+  "@libraryDetailLoadFailed": {
+    "description": "统一详情加载失败；error 是 presentation 层清理后的安全摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "libraryDetailInShelf": "在书架中",
+  "libraryDetailAddToShelf": "添加到书架",
+  "libraryDetailUpdate": "更新",
+  "libraryDetailSourceThread": "原帖",
+  "libraryDetailNoNovelCover": "小说无封面",
+  "libraryDetailAuthor": "作者",
+  "libraryDetailTranslator": "翻译者",
+  "libraryDetailTranslationGroup": "汉化组",
+  "libraryDetailPublisher": "发布者",
+  "libraryDetailMetadataSemantics": "{label}：{value}",
+  "@libraryDetailMetadataSemantics": {
+    "description": "详情头部元数据语义；value 是原始作者或发布者名称",
+    "placeholders": {"label": {"type": "String"}, "value": {"type": "String"}}
+  },
+  "libraryDetailDownloadUnread": "下载未读章节",
+  "libraryDetailDownloadAll": "下载全部章节",
+  "libraryDetailDeleteDownloadFailed": "删除下载失败：{error}",
+  "@libraryDetailDeleteDownloadFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryDetailDownloadFailed": "下载失败：{error}",
+  "@libraryDetailDownloadFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryDetailReadStateUpdateFailed": "阅读状态更新失败",
+  "libraryDetailAllChapters": "全部章节",
+  "libraryDetailDownloaded": "已下载",
+  "libraryDetailUnread": "未读",
+  "libraryDetailBookmarked": "已加书签",
+  "libraryDetailExcludeFilter": "排除{label}",
+  "@libraryDetailExcludeFilter": {"placeholders": {"label": {"type": "String"}}},
+  "libraryDetailFilter": "筛选",
+  "libraryDetailSort": "排序",
+  "libraryDetailSortBySource": "按来源",
+  "libraryDetailAddBookmark": "添加书签",
+  "libraryDetailRemoveBookmark": "移除书签",
+  "libraryDetailResetWorkReading": "重置本作品阅读",
+  "libraryDetailDeleteChapterDownload": "删除该章节下载",
+  "libraryDetailManageChaptersDescription": "显示或隐藏章节，手动添加或移除章节",
+  "libraryDetailResetReadingTitle": "重置本作品阅读？",
+  "libraryDetailResetReadingBody": "全部章节将变为未读，所有阅读进度和上次阅读位置都会被清除。书签和下载不会受影响。",
+  "libraryDetailResetReadingConfirm": "重置",
+  "libraryDetailResetReadingFailed": "重置作品阅读失败",
+  "libraryDetailRefreshFailed": "更新失败：{error}",
+  "@libraryDetailRefreshFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryDetailRefreshUpdated": "已更新",
+  "libraryDetailRefreshChaptersChanged": "{insertedCount, plural, =0 {未新增章节} other {已新增 {insertedCount} 章}}，{updatedCount, plural, =0 {未更新章节} other {更新 {updatedCount} 章}}",
+  "@libraryDetailRefreshChaptersChanged": {
+    "description": "详情刷新后的章节增删统计",
+    "placeholders": {"insertedCount": {"type": "int"}, "updatedCount": {"type": "int"}}
+  },
+  "libraryDetailRefreshAlreadyCurrent": "已是最新章节",
+  "libraryDetailRefreshNoUpdates": "未发现新的章节",
+  "libraryDetailRefreshQueued": "已加入更新队列，预计 {duration}",
+  "@libraryDetailRefreshQueued": {"placeholders": {"duration": {"type": "String"}}},
+  "libraryDetailRefreshQueuedAtPosition": "已加入更新队列，前方 {position, plural, =0 {没有等待任务} other {有 {position} 个任务}}，预计 {duration}",
+  "@libraryDetailRefreshQueuedAtPosition": {
+    "placeholders": {"position": {"type": "int"}, "duration": {"type": "String"}}
+  },
+  "libraryDetailRefreshUnavailable": "暂无可更新内容",
+  "libraryDetailCatalogLoadFailed": "读取目录配置失败：{error}",
+  "@libraryDetailCatalogLoadFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryDetailMetadataTitle": "标题",
+  "libraryDetailMetadataSearchTitle": "更新搜索关键词",
+  "libraryDetailMetadataSearchHelp": "留空时优先使用自定义标题，否则使用当前作品标题",
+  "libraryDetailMetadataSourceTitle": "来源标题",
+  "libraryDetailMetadataSourceAuthor": "来源作者",
+  "libraryDetailMetadataSourceTranslationGroup": "来源汉化组",
+  "libraryDetailSourceValue": "{label}：{value}",
+  "@libraryDetailSourceValue": {
+    "description": "只读来源字段；value 是原始服务器或用户内容",
+    "placeholders": {"label": {"type": "String"}, "value": {"type": "String"}}
+  },
+  "libraryDetailSourceEmpty": "{label}：无",
+  "@libraryDetailSourceEmpty": {"placeholders": {"label": {"type": "String"}}},
+  "libraryDetailCatalogUrl": "目录 URL",
+  "libraryDetailCatalogSource": "来源目录：{url}",
+  "@libraryDetailCatalogSource": {
+    "description": "目录来源；url 是原始 URL，仅展示不改写",
+    "placeholders": {"url": {"type": "String"}}
+  },
+  "libraryDetailCatalogSourceEmpty": "来源目录：无",
+  "libraryDetailCatalogSaveFailed": "保存失败：{error}",
+  "@libraryDetailCatalogSaveFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryDetailCatalogInvalidUrl": "请输入有效的目录 URL",
+  "libraryDetailCatalogIncompleteUrl": "目录 URL 不完整",
+  "libraryDetailCatalogUnsupportedScheme": "目录 URL 仅支持 HTTP 或 HTTPS",
+  "libraryDetailCatalogUnexpectedHost": "目录 URL 必须来自 {host}",
+  "@libraryDetailCatalogUnexpectedHost": {
+    "description": "目录 URL host 校验；host 是协议要求的原始 host",
+    "placeholders": {"host": {"type": "String"}}
+  },
+  "libraryDetailCatalogNotTagCatalog": "请输入标签目录页面的 URL",
+  "libraryDetailCoverUpdateFailed": "封面更新失败：{error}",
+  "@libraryDetailCoverUpdateFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryDetailCoverUpdated": "封面已更新",
+  "libraryDetailCoverRemoveFailed": "取消封面失败：{error}",
+  "@libraryDetailCoverRemoveFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryDetailCoverRemoved": "已取消封面",
+
+  "libraryChapterCount": "{count, plural, =0 {共 0 章} other {共 {count} 章}}",
+  "@libraryChapterCount": {"placeholders": {"count": {"type": "int"}}},
+  "libraryChapterFallbackTitle": "章节 {tid}",
+  "@libraryChapterFallbackTitle": {
+    "description": "来源章节标题为空时的显示兜底；tid 是原始帖子 ID",
+    "placeholders": {"tid": {"type": "String"}}
+  },
+  "libraryChapterBookmarkSemantics": "已添加书签",
+  "libraryChapterDownloading": "正在下载",
+  "libraryChapterDownloadedDelete": "已下载，点击删除下载",
+  "libraryChapterDownload": "下载该章节",
+  "libraryChapterClearReadState": "清除阅读状态",
+  "libraryChapterMarkRead": "标记已读",
+  "libraryChapterCurrentPage": "第 {page} 页",
+  "@libraryChapterCurrentPage": {"placeholders": {"page": {"type": "int"}}},
+  "libraryChapterCurrentPageOfTotal": "第 {page} 页，共 {total} 页",
+  "@libraryChapterCurrentPageOfTotal": {
+    "placeholders": {"page": {"type": "int"}, "total": {"type": "int"}}
+  },
+  "libraryChapterLastRead": "上次阅读",
+  "libraryChapterProgressSemantics": "{subtitle}，{progress}",
+  "@libraryChapterProgressSemantics": {
+    "description": "章节进度语义；subtitle 和 progress 都由共享 presentation 生成，章节数据保持原样",
+    "placeholders": {"subtitle": {"type": "String"}, "progress": {"type": "String"}}
+  },
+  "libraryChapterFilterAny": "不限",
+  "libraryChapterFilterOnly": "只看{label}",
+  "@libraryChapterFilterOnly": {"placeholders": {"label": {"type": "String"}}},
+  "libraryChapterFilterExclude": "排除{label}",
+  "@libraryChapterFilterExclude": {"placeholders": {"label": {"type": "String"}}},
+  "libraryChapterManagementLoading": "正在读取章节",
+  "libraryChapterManagementSummary": "{total, plural, =0 {共 0 章} other {共 {total} 章}} · {parsed, plural, =0 {解析 0 章} other {解析 {parsed} 章}} · {manual, plural, =0 {手动 0 章} other {手动 {manual} 章}} · {hidden, plural, =0 {隐藏 0 章} other {隐藏 {hidden} 章}}",
+  "@libraryChapterManagementSummary": {
+    "placeholders": {"total": {"type": "int"}, "parsed": {"type": "int"}, "manual": {"type": "int"}, "hidden": {"type": "int"}}
+  },
+  "libraryChapterFilterLabel": "筛选章节",
+  "libraryChapterFilterHint": "按标题或 TID 搜索",
+  "libraryChapterClearFilter": "清除筛选",
+  "libraryChapterAdd": "添加章节",
+  "libraryChapterAddHint": "粘贴帖子链接或直接输入 TID",
+  "libraryChapterAddHelp": "支持 forum.php、thread-xxx.html、api/mobile 等链接形式",
+  "libraryChapterShowAll": "全部显示",
+  "libraryChapterHideAll": "全部隐藏",
+  "libraryChapterManagementEmpty": "暂无章节，可在上方粘贴帖子链接手动添加",
+  "libraryChapterManagementNoMatches": "没有匹配的章节",
+  "libraryChapterShow": "显示该章节",
+  "libraryChapterHide": "隐藏该章节",
+  "libraryChapterHidden": "已隐藏",
+  "libraryChapterRename": "重命名该章节",
+  "libraryChapterRemove": "移除该章节",
+  "libraryChapterAdded": "已添加章节",
+  "libraryChapterDuplicate": "该章节已存在",
+  "libraryChapterAddFailed": "添加失败：{error}",
+  "@libraryChapterAddFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryChapterInputEmpty": "请输入帖子链接或 TID",
+  "libraryChapterInputInvalidUrl": "请输入有效的帖子链接或 TID",
+  "libraryChapterInputUnsupportedScheme": "帖子链接仅支持 HTTP 或 HTTPS",
+  "libraryChapterInputUnexpectedHost": "帖子链接必须来自 {host}",
+  "@libraryChapterInputUnexpectedHost": {
+    "description": "手动章节 host 校验；host 是协议要求的原始 host",
+    "placeholders": {"host": {"type": "String"}}
+  },
+  "libraryChapterInputUnsupportedThreadUrl": "不支持此帖子链接形式",
+  "libraryChapterInputMissingTid": "帖子链接中缺少有效的 TID",
+  "libraryChapterVisibilityUpdateFailed": "更新显示状态失败：{error}",
+  "@libraryChapterVisibilityUpdateFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryChapterRestoredSourceTitle": "已恢复来源章节名",
+  "libraryChapterRenamed": "已重命名章节",
+  "libraryChapterRenameFailed": "重命名失败：{error}",
+  "@libraryChapterRenameFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryChapterAllHidden": "已隐藏全部章节",
+  "libraryChapterAllShown": "已显示全部章节",
+  "libraryChapterBulkUpdateFailed": "批量更新失败：{error}",
+  "@libraryChapterBulkUpdateFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryChapterRemoveTitle": "移除该章节？",
+  "libraryChapterRemoveBody": "将删除手动添加的“{title}”及其阅读记录与下载任务，此操作不可撤销。",
+  "@libraryChapterRemoveBody": {
+    "description": "移除手动章节确认；title 是原始或用户自定义章节名",
+    "placeholders": {"title": {"type": "String"}}
+  },
+  "libraryChapterParsedCannotRemove": "解析章节不可移除，可改为隐藏",
+  "libraryChapterRemoved": "已移除章节",
+  "libraryChapterRemovedWithWarnings": "章节已移除，但{warnings}",
+  "@libraryChapterRemovedWithWarnings": {"placeholders": {"warnings": {"type": "String"}}},
+  "libraryChapterDownloadTaskCleanupFailed": "下载任务清理失败",
+  "libraryChapterDownloadFileCleanupFailed": "章节下载文件清理失败",
+  "libraryChapterRemoveFailed": "移除失败：{error}",
+  "@libraryChapterRemoveFailed": {"placeholders": {"error": {"type": "String"}}},
+  "libraryChapterRenameTitle": "重命名章节",
+  "libraryChapterName": "章节名",
+  "libraryChapterRestoreDefaultTitleHelp": "留空恢复默认章节名",
+  "libraryChapterRestoreSourceTitleHelp": "留空恢复来源章节名：{title}",
+  "@libraryChapterRestoreSourceTitleHelp": {
+    "description": "章节重命名说明；title 是原始来源章节名",
+    "placeholders": {"title": {"type": "String"}}
+  },
+  "libraryChapterManual": "手动",
+  "libraryChapterParsed": "解析",
+  "libraryChapterLoadFailed": "读取章节失败：{error}",
+  "@libraryChapterLoadFailed": {"placeholders": {"error": {"type": "String"}}},
+
+  "libraryCoverFocalTitle": "调整封面焦点",
+  "libraryCoverFocalHelp": "拖动选框选择封面取景区域，原图不会被裁剪",
+  "libraryCoverImageLoadFailed": "图片加载失败",
+  "libraryCoverCenter": "居中",
+
+  "libraryErrorRedactedLink": "[链接已隐藏]",
+  "libraryErrorRedactedSecret": "[敏感信息已隐藏]",
+
+  "readerBack": "返回",
+  "readerPrevious": "上一章",
+  "readerNext": "下一章",
+  "readerSelectedSemantics": "{label}，已选择",
+  "@readerSelectedSemantics": {
+    "description": "共享阅读器分段按钮选中语义；label 已由调用方本地化",
+    "placeholders": {"label": {"type": "String"}}
+  },
+  "readerProgressSemantics": "阅读进度：{current} / {total}",
+  "@readerProgressSemantics": {
+    "description": "共享阅读器进度滑块语义；current 和 total 是调用方提供的显示值",
+    "placeholders": {"current": {"type": "String"}, "total": {"type": "String"}}
   },
 
   "moreTitle": "更多",

@@ -78,7 +78,15 @@ void main() {
       final result = await controller.refresh();
 
       expect(result.status, DetailRefreshStatus.queued);
-      expect(controller.state.lastRefreshResult?.message, '更新预计耗时10.5s');
+      expect(
+        controller.state.lastRefreshResult?.outcomeCode,
+        DetailRefreshOutcomeCode.queued,
+      );
+      expect(controller.state.lastRefreshResult?.queuePosition, 1);
+      expect(
+        controller.state.lastRefreshResult?.estimatedDuration,
+        const Duration(milliseconds: 10500),
+      );
       expect(adapter.refreshWorkCount, 1);
       expect(adapter.loadHeaderCount, beforeLoadCount);
       expect(controller.state.isRefreshing, isFalse);

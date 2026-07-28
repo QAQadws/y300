@@ -106,7 +106,7 @@ void main() {
       await tester.pump();
 
       expect(searchService.searchCallCount, 0);
-      expect(find.text('《排队漫画》正在等待漫画搜索 预计耗时10.5s'), findsOneWidget);
+      expect(find.text('《排队漫画》正在等待搜索，预计 11 秒'), findsOneWidget);
       expect(find.text('测试关键词'), findsOneWidget);
     },
   );

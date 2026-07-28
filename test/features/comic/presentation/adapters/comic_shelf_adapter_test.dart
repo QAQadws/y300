@@ -260,11 +260,14 @@ void main() {
       shelfRefreshBus: bus,
     );
 
-    final result = await adapter.runMenuAction('merge-duplicates');
+    final result = await adapter.runMenuAction(
+      LibraryShelfMenuAction.mergeDuplicates,
+    );
 
-    expect(adapter.menuActions.single.id, 'merge-duplicates');
+    expect(adapter.menuActions.single, LibraryShelfMenuAction.mergeDuplicates);
+    expect(result.code, ShelfModuleActionOutcomeCode.success);
     expect(result.changed, isTrue);
-    expect(result.message, 'Merged 1 duplicate comics');
+    expect(result.affectedCount, 1);
     expect(repository.mergeAllCallCount, 1);
     expect(bus.signal.value?.modules, contains(LibraryModuleKey.comic));
     expect(bus.signal.value?.modules, contains(LibraryModuleKey.favorite));
@@ -276,7 +279,8 @@ void main() {
     final hub = DefaultLibraryTaskProgressHub();
     final progress = ValueNotifier<LibraryShelfTaskProgress?>(
       const LibraryShelfTaskProgress(
-        message: 'Comic queue active',
+        code: LibraryShelfTaskProgressCode.comicSearchWaiting,
+        subject: 'Comic queue active',
         source: LibraryMutationSource.comicSearchQueue,
       ),
     );
@@ -293,7 +297,7 @@ void main() {
       taskProgressHub: hub,
     );
 
-    expect(adapter.taskProgress?.value?.message, 'Comic queue active');
+    expect(adapter.taskProgress?.value?.subject, 'Comic queue active');
     expect(
       adapter.taskProgress?.value?.source,
       LibraryMutationSource.comicSearchQueue,
@@ -345,7 +349,7 @@ void main() {
       expect(useCase.lastSourceCategoryId, 'default');
       expect(useCase.lastTargetCategoryId, 'romance');
       expect(result.changed, isTrue);
-      expect(result.code, SelectionActionResultCode.success);
+      expect(result.code, SelectionActionOutcomeCode.success);
       expect(result.succeededCount, 2);
       expect(result.failedCount, 0);
     },
@@ -382,9 +386,9 @@ void main() {
       expect(writer.calls.first.isRead, isTrue);
       expect(writer.calls.last.workIds, <String>{'comic-b'});
       expect(writer.calls.last.isRead, isFalse);
-      expect(readResult.code, SelectionActionResultCode.success);
+      expect(readResult.code, SelectionActionOutcomeCode.success);
       expect(readResult.succeededCount, 1);
-      expect(unreadResult.code, SelectionActionResultCode.success);
+      expect(unreadResult.code, SelectionActionOutcomeCode.success);
       expect(unreadResult.succeededCount, 1);
     },
   );
@@ -407,7 +411,7 @@ void main() {
 
     expect(useCase.lastComicIds, <String>{'comic-a', 'comic-b'});
     expect(result.changed, isTrue);
-    expect(result.code, SelectionActionResultCode.success);
+    expect(result.code, SelectionActionOutcomeCode.success);
     expect(result.enqueuedCount, 3);
     expect(result.deduplicatedCount, 0);
   });
@@ -433,7 +437,7 @@ void main() {
       'comic-b': ThreadContentKind.comic,
     });
     expect(result.changed, isTrue);
-    expect(result.code, SelectionActionResultCode.success);
+    expect(result.code, SelectionActionOutcomeCode.success);
     expect(result.succeededCount, 1);
   });
 }

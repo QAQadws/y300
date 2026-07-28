@@ -6,6 +6,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 bool hasUnifiedDetailCover(LibraryDetailHeader header) {
   return <String?>[
@@ -303,9 +304,10 @@ class _HeroMetaColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final contributorLabel = moduleKey == LibraryModuleKey.novel
-        ? '翻译者'
-        : '汉化组';
+        ? l10n.libraryDetailTranslator
+        : l10n.libraryDetailTranslationGroup;
     final showContributorMetadata = moduleKey != LibraryModuleKey.novel;
 
     return DefaultTextStyle(
@@ -332,7 +334,7 @@ class _HeroMetaColumn extends StatelessWidget {
             _HeroMetadataRow(
               rowKey: const Key('unified-detail-author-row'),
               icon: Icons.person_outlined,
-              semanticLabel: '作者',
+              semanticLabel: l10n.libraryDetailAuthor,
               value: author!,
               foregroundColor: foregroundColor,
             ),
@@ -366,7 +368,7 @@ class _HeroMetaColumn extends StatelessWidget {
             _HeroMetadataRow(
               rowKey: const Key('unified-detail-publisher-row'),
               icon: Icons.account_circle_outlined,
-              semanticLabel: '发布者',
+              semanticLabel: l10n.libraryDetailPublisher,
               value: publisherName!,
               foregroundColor: foregroundColor,
             ),
@@ -407,7 +409,9 @@ class _HeroMetadataRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: '$semanticLabel：$value',
+      label: AppLocalizations.of(
+        context,
+      ).libraryDetailMetadataSemantics(semanticLabel, value),
       excludeSemantics: true,
       child: Row(
         key: rowKey,
@@ -525,6 +529,7 @@ class _HeaderActionsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Padding(
       key: const Key('unified-detail-header-actions-row'),
       // 顶部边界不留白，避免下拉时出现“被拉开”的缝隙感。
@@ -534,7 +539,9 @@ class _HeaderActionsRow extends StatelessWidget {
           Expanded(
             child: _ActionChip(
               icon: header.inShelf ? Icons.favorite : Icons.favorite_border,
-              label: header.inShelf ? '在书架中' : '添加到书架',
+              label: header.inShelf
+                  ? l10n.libraryDetailInShelf
+                  : l10n.libraryDetailAddToShelf,
               onTap: onToggleShelf,
             ),
           ),
@@ -542,7 +549,7 @@ class _HeaderActionsRow extends StatelessWidget {
           Expanded(
             child: _ActionChip(
               icon: Icons.refresh,
-              label: '更新',
+              label: l10n.libraryDetailUpdate,
               onTap: onRefresh,
             ),
           ),
@@ -550,7 +557,7 @@ class _HeaderActionsRow extends StatelessWidget {
           Expanded(
             child: _ActionChip(
               icon: Icons.open_in_new,
-              label: '原帖',
+              label: l10n.libraryDetailSourceThread,
               onTap: onOpenThread,
             ),
           ),
@@ -603,7 +610,9 @@ class _CoverImage extends StatelessWidget {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            '小说无封面',
+                            AppLocalizations.of(
+                              context,
+                            ).libraryDetailNoNovelCover,
                             style: Theme.of(context).textTheme.labelSmall,
                           ),
                         ],

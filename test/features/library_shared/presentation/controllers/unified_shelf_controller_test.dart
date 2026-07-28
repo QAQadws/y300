@@ -893,7 +893,10 @@ void main() {
           ],
         };
 
-        progress.value = const LibraryShelfTaskProgress(message: 'syncing');
+        progress.value = const LibraryShelfTaskProgress(
+          code: LibraryShelfTaskProgressCode.favoriteSyncFetching,
+          subject: 'syncing',
+        );
         progress.value = null;
         await stateChanged.future;
 
@@ -980,7 +983,8 @@ void main() {
         await controller.initialize();
         adapter.queryCallCount = 0;
         progress.value = const LibraryShelfTaskProgress(
-          message: 'warming',
+          code: LibraryShelfTaskProgressCode.coverWarmup,
+          subject: 'warming',
           source: LibraryMutationSource.coverWarmup,
           reloadOnCompletion: false,
         );
@@ -1068,9 +1072,6 @@ class _FakeShelfAdapter implements ShelfModuleAdapter {
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
-
-  @override
-  String get moduleTitle => 'comic';
 
   @override
   Future<Object> buildDetailRouteArgument({required String workId}) async =>

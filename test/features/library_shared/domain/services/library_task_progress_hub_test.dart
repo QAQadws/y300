@@ -10,7 +10,10 @@ void main() {
     test('forwards single-module progress', () {
       final hub = DefaultLibraryTaskProgressHub();
       final source = ValueNotifier<LibraryShelfTaskProgress?>(
-        const LibraryShelfTaskProgress(message: 'sync'),
+        const LibraryShelfTaskProgress(
+          code: LibraryShelfTaskProgressCode.favoriteSyncFetching,
+          subject: 'sync',
+        ),
       );
       final registration = hub.registerSource(
         modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
@@ -20,17 +23,23 @@ void main() {
       addTearDown(registration.dispose);
       addTearDown(hub.dispose);
 
-      expect(hub.progressFor(LibraryModuleKey.favorite).value?.message, 'sync');
+      expect(hub.progressFor(LibraryModuleKey.favorite).value?.subject, 'sync');
       expect(hub.progressFor(LibraryModuleKey.comic).value, isNull);
     });
 
     test('higher priority source wins', () {
       final hub = DefaultLibraryTaskProgressHub();
       final low = ValueNotifier<LibraryShelfTaskProgress?>(
-        const LibraryShelfTaskProgress(message: 'low'),
+        const LibraryShelfTaskProgress(
+          code: LibraryShelfTaskProgressCode.coverWarmup,
+          subject: 'low',
+        ),
       );
       final high = ValueNotifier<LibraryShelfTaskProgress?>(
-        const LibraryShelfTaskProgress(message: 'high'),
+        const LibraryShelfTaskProgress(
+          code: LibraryShelfTaskProgressCode.coverWarmup,
+          subject: 'high',
+        ),
       );
       final lowRegistration = hub.registerSource(
         modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
@@ -48,16 +57,22 @@ void main() {
       addTearDown(highRegistration.dispose);
       addTearDown(hub.dispose);
 
-      expect(hub.progressFor(LibraryModuleKey.favorite).value?.message, 'high');
+      expect(hub.progressFor(LibraryModuleKey.favorite).value?.subject, 'high');
     });
 
     test('later registration wins when priority ties', () {
       final hub = DefaultLibraryTaskProgressHub();
       final first = ValueNotifier<LibraryShelfTaskProgress?>(
-        const LibraryShelfTaskProgress(message: 'first'),
+        const LibraryShelfTaskProgress(
+          code: LibraryShelfTaskProgressCode.coverWarmup,
+          subject: 'first',
+        ),
       );
       final second = ValueNotifier<LibraryShelfTaskProgress?>(
-        const LibraryShelfTaskProgress(message: 'second'),
+        const LibraryShelfTaskProgress(
+          code: LibraryShelfTaskProgressCode.coverWarmup,
+          subject: 'second',
+        ),
       );
       final firstRegistration = hub.registerSource(
         modules: const <LibraryModuleKey>{LibraryModuleKey.comic},
@@ -73,16 +88,22 @@ void main() {
       addTearDown(secondRegistration.dispose);
       addTearDown(hub.dispose);
 
-      expect(hub.progressFor(LibraryModuleKey.comic).value?.message, 'second');
+      expect(hub.progressFor(LibraryModuleKey.comic).value?.subject, 'second');
     });
 
     test('disposing winning source falls back to remaining source', () {
       final hub = DefaultLibraryTaskProgressHub();
       final first = ValueNotifier<LibraryShelfTaskProgress?>(
-        const LibraryShelfTaskProgress(message: 'first'),
+        const LibraryShelfTaskProgress(
+          code: LibraryShelfTaskProgressCode.coverWarmup,
+          subject: 'first',
+        ),
       );
       final second = ValueNotifier<LibraryShelfTaskProgress?>(
-        const LibraryShelfTaskProgress(message: 'second'),
+        const LibraryShelfTaskProgress(
+          code: LibraryShelfTaskProgressCode.coverWarmup,
+          subject: 'second',
+        ),
       );
       final firstRegistration = hub.registerSource(
         modules: const <LibraryModuleKey>{LibraryModuleKey.favorite},
@@ -99,14 +120,18 @@ void main() {
 
       secondRegistration.dispose();
 
-      expect(hub.progressFor(LibraryModuleKey.favorite).value?.message, 'first');
+      expect(
+        hub.progressFor(LibraryModuleKey.favorite).value?.subject,
+        'first',
+      );
     });
 
     test('source can drive multiple modules', () {
       final hub = DefaultLibraryTaskProgressHub();
       final source = ValueNotifier<LibraryShelfTaskProgress?>(
         const LibraryShelfTaskProgress(
-          message: 'queue',
+          code: LibraryShelfTaskProgressCode.comicSearchWaiting,
+          subject: 'queue',
           source: LibraryMutationSource.comicSearchQueue,
         ),
       );
@@ -121,7 +146,7 @@ void main() {
       addTearDown(registration.dispose);
       addTearDown(hub.dispose);
 
-      expect(hub.progressFor(LibraryModuleKey.comic).value?.message, 'queue');
+      expect(hub.progressFor(LibraryModuleKey.comic).value?.subject, 'queue');
       expect(
         hub.progressFor(LibraryModuleKey.favorite).value?.source,
         LibraryMutationSource.comicSearchQueue,
@@ -132,7 +157,8 @@ void main() {
       final hub = DefaultLibraryTaskProgressHub();
       final source = ValueNotifier<LibraryShelfTaskProgress?>(
         const LibraryShelfTaskProgress(
-          message: 'warming',
+          code: LibraryShelfTaskProgressCode.coverWarmup,
+          subject: 'warming',
           source: LibraryMutationSource.coverWarmup,
           visible: false,
         ),
@@ -146,7 +172,7 @@ void main() {
       addTearDown(hub.dispose);
 
       final progress = hub.progressFor(LibraryModuleKey.comic).value;
-      expect(progress?.message, 'warming');
+      expect(progress?.subject, 'warming');
       expect(progress?.source, LibraryMutationSource.coverWarmup);
       expect(progress?.visible, isFalse);
     });
@@ -155,7 +181,8 @@ void main() {
       final hub = DefaultLibraryTaskProgressHub();
       final source = ValueNotifier<LibraryShelfTaskProgress?>(
         const LibraryShelfTaskProgress(
-          message: 'warming',
+          code: LibraryShelfTaskProgressCode.coverWarmup,
+          subject: 'warming',
           source: LibraryMutationSource.coverWarmup,
           visible: false,
           active: false,

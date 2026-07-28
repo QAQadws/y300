@@ -79,7 +79,7 @@ void main() {
       (chapter) => chapter.episodeId == 'novel:1:2',
     );
 
-    expect(current.progressInfo?.label, '上次阅读');
+    expect(current.progressInfo?.kind, LibraryChapterProgressKind.lastRead);
     expect(current.progressInfo?.fraction, 0.35);
     expect(current.progressInfo?.isCurrent, isTrue);
   });
@@ -107,7 +107,7 @@ void main() {
       (chapter) => chapter.episodeId == 'novel:1:1',
     );
 
-    expect(current.progressInfo?.label, '上次阅读');
+    expect(current.progressInfo?.kind, LibraryChapterProgressKind.lastRead);
     expect(current.progressInfo?.fraction, 0.42);
   });
 
@@ -135,8 +135,8 @@ void main() {
         chapters
             .singleWhere((chapter) => chapter.episodeId == 'novel:1:1')
             .progressInfo
-            ?.label,
-        '上次阅读',
+            ?.kind,
+        LibraryChapterProgressKind.lastRead,
       );
 
       final readAdapter = NovelDetailAdapter(
@@ -162,8 +162,8 @@ void main() {
         readChapters
             .singleWhere((chapter) => chapter.episodeId == 'novel:1:1')
             .progressInfo
-            ?.label,
-        '上次阅读',
+            ?.kind,
+        LibraryChapterProgressKind.lastRead,
       );
       expect(
         readChapters
@@ -186,7 +186,10 @@ void main() {
     final result = await adapter.refreshWork(workId: 'novel:1');
 
     expect(updateService.novelIds, <String>['novel:1']);
-    expect(result.message, '已新增 1 章，更新 2 章');
+    expect(result.status, DetailRefreshStatus.immediate);
+    expect(result.outcomeCode, DetailRefreshOutcomeCode.chaptersChanged);
+    expect(result.insertedCount, 1);
+    expect(result.updatedCount, 2);
     expect(repository.lastRefreshMode, isNull);
   });
 

@@ -16,6 +16,8 @@ import 'package:y300/features/library_shared/presentation/controllers/unified_sh
 import 'package:y300/features/library_shared/presentation/selection/selection_app_bar.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
+import 'package:y300/features/library_shared/presentation/services/library_shelf_text_resolver.dart';
+import 'package:y300/features/library_shared/presentation/services/library_task_text_resolver.dart';
 import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
@@ -140,6 +142,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final state = _controller.state;
     final imageHeaderBuilder = widget.imageHeaderBuilder;
     final categories = state.categories;
@@ -195,7 +198,10 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            '加载失败：${state.errorMessage}',
+                            LibraryShelfTextResolver.loadError(
+                              l10n,
+                              state.errorMessage,
+                            ),
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: Theme.of(context).colorScheme.error,
@@ -238,7 +244,9 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                       Divider(height: 1, color: shelfPalette.categoryDivider),
                     Expanded(
                       child: categories.isEmpty
-                          ? const _AlwaysScrollableEmptyState(message: '书架为空')
+                          ? _AlwaysScrollableEmptyState(
+                              message: l10n.libraryShelfEmpty,
+                            )
                           : ValueListenableBuilder<UnifiedShelfState>(
                               valueListenable: _controller.stateListenable,
                               builder: (context, liveState, _) {
@@ -455,7 +463,6 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     host.activate(
       ownerToken: _selectionOwnerToken,
       moduleKey: _controller.state.moduleKey,
-      moduleTitle: _controller.state.moduleTitle,
       activeCategoryId: _controller.state.selectedCategoryId,
       selectedCount: _selectionController.selectedCount,
       selectedWorkIds: _selectionController.selectedWorkIds,
@@ -499,10 +506,16 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     final moduleActions = _moduleMenuActions();
     if (!state.isSearchMode) {
       return AppBar(
-        title: Text(state.moduleTitle),
+        title: Text(
+          LibraryShelfTextResolver.moduleTitle(
+            AppLocalizations.of(context),
+            state.moduleKey,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
+            tooltip: AppLocalizations.of(context).libraryShelfSearch,
             onPressed: () async {
               await _controller.enterSearchMode();
               if (!mounted) {
@@ -513,35 +526,44 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
           ),
           IconButton(
             icon: const Icon(Icons.filter_list),
+            tooltip: AppLocalizations.of(context).libraryShelfFilterAndSort,
             onPressed: _showFilterSheet,
           ),
           PopupMenuButton<String>(
             onSelected: _handleMenuAction,
             itemBuilder: (context) => [
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'add-category',
-                child: Text('新建分类'),
+                child: Text(
+                  AppLocalizations.of(context).libraryShelfCreateCategory,
+                ),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'rename-category',
-                child: Text('重命名当前分类'),
+                child: Text(
+                  AppLocalizations.of(context).libraryShelfRenameCategory,
+                ),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'delete-category',
-                child: Text('删除当前分类'),
+                child: Text(
+                  AppLocalizations.of(context).libraryShelfDeleteCategory,
+                ),
               ),
               if (moduleActions.isNotEmpty) ...[
                 const PopupMenuDivider(),
                 ..._moduleActionItems(moduleActions),
               ],
               const PopupMenuDivider(),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'refresh-shelf',
-                child: Text('更新书架'),
+                child: Text(AppLocalizations.of(context).libraryShelfUpdate),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'random-open',
-                child: Text('随机打开作品'),
+                child: Text(
+                  AppLocalizations.of(context).libraryShelfRandomOpen,
+                ),
               ),
             ],
           ),
@@ -566,8 +588,8 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         key: const Key('unified-shelf-search-input'),
         controller: _searchController,
         autofocus: true,
-        decoration: const InputDecoration(
-          hintText: '搜索···',
+        decoration: InputDecoration(
+          hintText: AppLocalizations.of(context).libraryShelfSearchHint,
           border: InputBorder.none,
         ),
         onChanged: (value) async {
@@ -581,6 +603,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       actions: [
         IconButton(
           icon: const Icon(Icons.filter_list),
+          tooltip: AppLocalizations.of(context).libraryShelfFilterAndSort,
           onPressed: _showFilterSheet,
         ),
         PopupMenuButton<String>(
@@ -590,13 +613,13 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
               ..._moduleActionItems(moduleActions),
               const PopupMenuDivider(),
             ],
-            const PopupMenuItem<String>(
+            PopupMenuItem<String>(
               value: 'refresh-shelf',
-              child: Text('更新书架'),
+              child: Text(AppLocalizations.of(context).libraryShelfUpdate),
             ),
-            const PopupMenuItem<String>(
+            PopupMenuItem<String>(
               value: 'random-open',
-              child: Text('随机打开作品'),
+              child: Text(AppLocalizations.of(context).libraryShelfRandomOpen),
             ),
           ],
         ),
@@ -627,7 +650,12 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            const tabs = ['筛选', '排序', '显示'];
+            final l10n = AppLocalizations.of(context);
+            final tabs = [
+              l10n.libraryShelfFilter,
+              l10n.libraryShelfSort,
+              l10n.libraryShelfDisplayMode,
+            ];
             return SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
@@ -685,7 +713,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () => Navigator.of(sheetContext).pop(),
-                            child: const Text('取消'),
+                            child: Text(l10n.commonCancel),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -704,7 +732,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                               Navigator.of(sheetContext).pop();
                               setState(() {});
                             },
-                            child: const Text('应用'),
+                            child: Text(l10n.commonApply),
                           ),
                         ),
                       ],
@@ -733,15 +761,20 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     return actions
         .map(
           (action) => PopupMenuItem<String>(
-            value: _moduleActionMenuValue(action.id),
-            child: Text(action.label),
+            value: _moduleActionMenuValue(action),
+            child: Text(
+              LibraryShelfTextResolver.menuAction(
+                AppLocalizations.of(context),
+                action,
+              ),
+            ),
           ),
         )
         .toList(growable: false);
   }
 
-  String _moduleActionMenuValue(String id) {
-    return '$_moduleActionPrefix$id';
+  String _moduleActionMenuValue(LibraryShelfMenuAction action) {
+    return '$_moduleActionPrefix${action.name}';
   }
 
   Future<void> _handleMenuAction(String value) async {
@@ -752,8 +785,11 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       if (adapter is! ShelfModuleActionAdapter) {
         return;
       }
-      final actionId = value.substring(_moduleActionPrefix.length);
-      final result = await adapter.runMenuAction(actionId);
+      final actionName = value.substring(_moduleActionPrefix.length);
+      final action = LibraryShelfMenuAction.values.firstWhere(
+        (candidate) => candidate.name == actionName,
+      );
+      final result = await adapter.runMenuAction(action);
       if (!mounted) {
         return;
       }
@@ -764,9 +800,17 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         }
         setState(() {});
       }
-      if (result.message.trim().isNotEmpty) {
-        messenger.showSnackBar(SnackBar(content: Text(result.message)));
-      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            LibraryShelfTextResolver.menuOutcome(
+              AppLocalizations.of(context),
+              action,
+              result,
+            ),
+          ),
+        ),
+      );
       return;
     }
 
@@ -785,7 +829,13 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         return;
       }
       if (workId == null) {
-        messenger.showSnackBar(const SnackBar(content: Text('当前分类没有可打开的作品')));
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).libraryShelfNoRandomWork,
+            ),
+          ),
+        );
         return;
       }
       await _openWorkAndRefreshShelf(workId);
@@ -793,7 +843,9 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     }
 
     if (value == 'add-category') {
-      final name = await _showCategoryNameDialog(title: '新建分类');
+      final name = await _showCategoryNameDialog(
+        title: AppLocalizations.of(context).libraryShelfCreateCategory,
+      );
       if (name == null || name.trim().isEmpty) {
         return;
       }
@@ -812,11 +864,19 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
 
     if (value == 'rename-category') {
       if (selectedCategory.isDefault) {
-        messenger.showSnackBar(const SnackBar(content: Text('默认分类不支持重命名')));
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(
+                context,
+              ).libraryShelfDefaultCategoryCannotRename,
+            ),
+          ),
+        );
         return;
       }
       final name = await _showCategoryNameDialog(
-        title: '重命名当前分类',
+        title: AppLocalizations.of(context).libraryShelfRenameCategory,
         initialValue: selectedCategory.name,
       );
       if (name == null || name.trim().isEmpty) {
@@ -835,23 +895,37 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
 
     if (value == 'delete-category') {
       if (selectedCategory.isDefault) {
-        messenger.showSnackBar(const SnackBar(content: Text('默认分类不支持删除')));
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(
+                context,
+              ).libraryShelfDefaultCategoryCannotDelete,
+            ),
+          ),
+        );
         return;
       }
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) {
           return AlertDialog(
-            title: const Text('删除分类'),
-            content: const Text('删除后该分类作品会移动到默认分类，是否继续？'),
+            title: Text(
+              AppLocalizations.of(
+                dialogContext,
+              ).libraryShelfDeleteCategoryTitle,
+            ),
+            content: Text(
+              AppLocalizations.of(dialogContext).libraryShelfDeleteCategoryBody,
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(dialogContext).commonCancel),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: const Text('删除'),
+                child: Text(AppLocalizations.of(dialogContext).commonDelete),
               ),
             ],
           );
@@ -881,17 +955,21 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
           content: TextField(
             controller: textController,
             autofocus: true,
-            decoration: const InputDecoration(hintText: '请输入分类名称'),
+            decoration: InputDecoration(
+              hintText: AppLocalizations.of(
+                dialogContext,
+              ).libraryShelfCategoryNameHint,
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(dialogContext).commonCancel),
             ),
             FilledButton(
               onPressed: () =>
                   Navigator.of(dialogContext).pop(textController.text),
-              child: const Text('确定'),
+              child: Text(AppLocalizations.of(dialogContext).commonConfirm),
             ),
           ],
         );
@@ -924,10 +1002,12 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   String _buildCategoryLabel(LibraryCategory category) {
     final count =
         _controller.state.visibleMatchCountByCategory[category.categoryId] ?? 0;
-    if (_controller.state.keyword.trim().isEmpty) {
-      return category.name;
-    }
-    return '${category.name} $count';
+    return LibraryShelfTextResolver.categoryLabel(
+      AppLocalizations.of(context),
+      category,
+      showMatchCount: _controller.state.keyword.trim().isNotEmpty,
+      matchCount: count,
+    );
   }
 }
 
@@ -993,7 +1073,9 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage>
   Widget build(BuildContext context) {
     super.build(context);
     if (widget.items.isEmpty) {
-      return const _AlwaysScrollableEmptyState(message: '书架为空');
+      return _AlwaysScrollableEmptyState(
+        message: AppLocalizations.of(context).libraryShelfEmpty,
+      );
     }
     final child = widget.displayMode == LibraryDisplayMode.list
         ? _WorkList(
@@ -1198,7 +1280,10 @@ class _ShelfTaskProgressBanner extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    progress.message,
+                    LibraryTaskTextResolver.message(
+                      AppLocalizations.of(context),
+                      progress,
+                    ),
                     key: const Key('unified-shelf-task-progress-message'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1465,25 +1550,25 @@ class _FilterTab extends StatelessWidget {
       children: [
         if (showDownloaded)
           _TriStateLine(
-            label: '已下载',
+            label: AppLocalizations.of(context).libraryShelfFilterDownloaded,
             value: filters.downloaded,
             onChanged: (v) => onChanged(filters.copyWith(downloaded: v)),
           ),
         if (showReadState) ...[
           _TriStateLine(
-            label: '未读',
+            label: AppLocalizations.of(context).libraryShelfFilterUnread,
             value: filters.unread,
             onChanged: (v) => onChanged(filters.copyWith(unread: v)),
           ),
           _TriStateLine(
-            label: '阅读过',
+            label: AppLocalizations.of(context).libraryShelfFilterRead,
             value: filters.read,
             onChanged: (v) => onChanged(filters.copyWith(read: v)),
           ),
         ],
         if (showBookmarked)
           _TriStateLine(
-            label: '有书签',
+            label: AppLocalizations.of(context).libraryShelfFilterBookmarked,
             value: filters.bookmarked,
             onChanged: (v) => onChanged(filters.copyWith(bookmarked: v)),
           ),
@@ -1505,17 +1590,15 @@ class _SortTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const labels = <LibraryShelfSortField, String>{
-      LibraryShelfSortField.chapterCount: '章节数',
-      LibraryShelfSortField.unreadCount: '未读章节数',
-      LibraryShelfSortField.favoriteAddedAt: '收藏日期',
-    };
     return Column(
       children: availableFields
           .map((field) {
             final selected = field == sortOption.field;
             return LibrarySortOptionTile(
-              label: labels[field]!,
+              label: LibraryShelfTextResolver.sortField(
+                AppLocalizations.of(context),
+                field,
+              ),
               selected: selected,
               direction: sortOption.direction,
               onTap: () {
@@ -1565,13 +1648,13 @@ class _DisplayTab extends StatelessWidget {
           child: Column(
             children: [
               ListTile(
-                title: const Text('网格'),
+                title: Text(AppLocalizations.of(context).libraryShelfGrid),
                 leading: Radio<LibraryDisplayMode>(
                   value: LibraryDisplayMode.grid,
                 ),
               ),
               ListTile(
-                title: const Text('列表'),
+                title: Text(AppLocalizations.of(context).libraryShelfList),
                 leading: Radio<LibraryDisplayMode>(
                   value: LibraryDisplayMode.list,
                 ),
@@ -1585,7 +1668,7 @@ class _DisplayTab extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                const Text('每行个数'),
+                Text(AppLocalizations.of(context).libraryShelfColumnsPerRow),
                 Expanded(
                   child: Slider(
                     value: gridColumns.clamp(1, 10),

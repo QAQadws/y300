@@ -13,18 +13,18 @@ void main() {
         simplified,
         SelectionActionIds.assignCategory,
       ),
-      simplified.startupSelectionActionAssignCategory,
+      simplified.librarySelectionActionAssignCategory,
     );
     expect(
       SelectionActionTextResolver.label(
         traditional,
         SelectionActionIds.unfavorite,
       ),
-      traditional.startupSelectionActionUnfavorite,
+      traditional.librarySelectionActionUnfavorite,
     );
     expect(
       SelectionActionTextResolver.label(simplified, 'unknown-action'),
-      simplified.startupSelectionActionGeneric,
+      simplified.librarySelectionActionGeneric,
     );
     expect(
       SelectionActionTextResolver.label(traditional, 'unknown-action'),
@@ -37,60 +37,49 @@ void main() {
       SelectionActionTextResolver.resultMessage(
         simplified,
         SelectionActionIds.assignCategory,
-        const SelectionActionResult(
-          code: SelectionActionResultCode.success,
+        const SelectionActionOutcome(
+          code: SelectionActionOutcomeCode.success,
           changed: true,
           succeededCount: 3,
         ),
       ),
-      simplified.startupSelectionCategoryAssigned(3),
+      simplified.librarySelectionCategoryAssigned(3),
     );
     expect(
       SelectionActionTextResolver.resultMessage(
         traditional,
         SelectionActionIds.unfavorite,
-        const SelectionActionResult(
-          code: SelectionActionResultCode.partialFailure,
+        const SelectionActionOutcome(
+          code: SelectionActionOutcomeCode.partialFailure,
           changed: true,
           succeededCount: 2,
           failedCount: 1,
         ),
       ),
-      traditional.startupSelectionUnfavoritePartial(2, 1),
+      traditional.librarySelectionUnfavoritePartial(2, 1),
     );
     expect(
       SelectionActionTextResolver.resultMessage(
         simplified,
         SelectionActionIds.download,
-        const SelectionActionResult(
-          code: SelectionActionResultCode.noChange,
+        const SelectionActionOutcome(
+          code: SelectionActionOutcomeCode.noChange,
           deduplicatedCount: 2,
         ),
       ),
-      simplified.startupSelectionDownloadAlreadyQueued,
+      simplified.librarySelectionDownloadAlreadyQueued,
     );
     expect(
       SelectionActionTextResolver.resultMessage(
         simplified,
         SelectionActionIds.assignCategory,
-        const SelectionActionResult(
-          code: SelectionActionResultCode.unsupported,
+        const SelectionActionOutcome(
+          code: SelectionActionOutcomeCode.unsupported,
         ),
       ),
-      simplified.startupSelectionUnsupported(
-        simplified.startupSelectionActionAssignCategory,
+      simplified.librarySelectionUnsupported(
+        simplified.librarySelectionActionAssignCategory,
       ),
-    );
-  });
-
-  test('keeps legacy result messages as a migration fallback', () {
-    expect(
-      SelectionActionTextResolver.resultMessage(
-        simplified,
-        SelectionActionIds.download,
-        const SelectionActionResult(message: 'legacy result'),
-      ),
-      'legacy result',
     );
   });
 
@@ -99,29 +88,29 @@ void main() {
       SelectionActionTextResolver.resultMessage(
         simplified,
         SelectionActionIds.markAllRead,
-        const SelectionActionResult(
-          code: SelectionActionResultCode.partialFailure,
+        const SelectionActionOutcome(
+          code: SelectionActionOutcomeCode.partialFailure,
           succeededCount: 2,
           failedCount: 1,
         ),
       ),
-      simplified.startupSelectionReadStateChangedPartial(
+      simplified.librarySelectionReadStateChangedPartial(
         2,
         1,
-        simplified.startupSelectionRead,
+        simplified.librarySelectionRead,
       ),
     );
     expect(
       SelectionActionTextResolver.resultMessage(
         traditional,
         SelectionActionIds.download,
-        const SelectionActionResult(
-          code: SelectionActionResultCode.partialFailure,
+        const SelectionActionOutcome(
+          code: SelectionActionOutcomeCode.partialFailure,
           enqueuedCount: 3,
           failedCount: 1,
         ),
       ),
-      traditional.startupSelectionDownloadQueuedPartial(3, 1),
+      traditional.librarySelectionDownloadQueuedPartial(3, 1),
     );
   });
 }

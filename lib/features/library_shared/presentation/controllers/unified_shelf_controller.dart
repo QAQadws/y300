@@ -22,7 +22,6 @@ import 'package:y300/features/library_shared/domain/services/shelf_perf_trace.da
 class UnifiedShelfState {
   const UnifiedShelfState({
     required this.moduleKey,
-    required this.moduleTitle,
     required this.isLoading,
     required this.isSearchMode,
     required this.keyword,
@@ -38,7 +37,6 @@ class UnifiedShelfState {
   });
 
   final LibraryModuleKey moduleKey;
-  final String moduleTitle;
   final bool isLoading;
   final bool isSearchMode;
   final String keyword;
@@ -54,13 +52,11 @@ class UnifiedShelfState {
 
   static UnifiedShelfState initial({
     required LibraryModuleKey moduleKey,
-    required String moduleTitle,
     required LibraryDisplayMode defaultDisplayMode,
     LibraryShelfSortOption defaultSortOption = LibraryShelfSortOption.defaults,
   }) {
     return UnifiedShelfState(
       moduleKey: moduleKey,
-      moduleTitle: moduleTitle,
       isLoading: true,
       isSearchMode: false,
       keyword: '',
@@ -93,7 +89,6 @@ class UnifiedShelfState {
   }) {
     return UnifiedShelfState(
       moduleKey: moduleKey,
-      moduleTitle: moduleTitle,
       isLoading: isLoading ?? this.isLoading,
       isSearchMode: isSearchMode ?? this.isSearchMode,
       keyword: keyword ?? this.keyword,
@@ -213,7 +208,6 @@ class UnifiedShelfController {
     final capabilities = resolveShelfModuleCapabilities(adapter);
     return UnifiedShelfState.initial(
       moduleKey: adapter.moduleKey,
-      moduleTitle: adapter.moduleTitle,
       defaultDisplayMode: adapter.defaultDisplayMode,
       defaultSortOption: capabilities.defaultSortOption,
     );
@@ -708,7 +702,7 @@ class UnifiedShelfController {
       final progress = snapshot.isIdle
           ? null
           : LibraryShelfTaskProgress(
-              message: '正在预热封面',
+              code: LibraryShelfTaskProgressCode.coverWarmup,
               current: snapshot.runningCount,
               total: snapshot.runningCount + snapshot.pendingCount,
               source: LibraryMutationSource.coverWarmup,
@@ -858,7 +852,7 @@ class UnifiedShelfController {
     if (defaultCategory == null && defaultCount > 0) {
       final synthetic = LibraryCategory(
         categoryId: 'default',
-        name: '默认',
+        name: '',
         sortOrder: -1,
         createdAt: DateTime.fromMillisecondsSinceEpoch(0),
         visibleMatchCount: defaultCount,

@@ -12,6 +12,25 @@ class ManualEpisodeTarget {
   final String sourceUrl;
 }
 
+enum ComicManualEpisodeInputErrorCode {
+  emptyInput,
+  invalidUrl,
+  unsupportedScheme,
+  unexpectedHost,
+  unsupportedThreadUrl,
+  missingTid,
+}
+
+class ComicManualEpisodeInputException implements Exception {
+  const ComicManualEpisodeInputException(this.code, {this.expectedHost});
+
+  final ComicManualEpisodeInputErrorCode code;
+  final String? expectedHost;
+
+  @override
+  String toString() => 'ComicManualEpisodeInputException(${code.name})';
+}
+
 /// 校验并归一化用户手动输入的章节地址。
 ///
 /// 用户可能从站内任意位置复制链接（网页版 forum.php、伪静态 thread-*.html、
@@ -26,11 +45,13 @@ class ComicManualEpisodeUrlPolicy {
 
   static final RegExp _tidPattern = RegExp(r'^[1-9][0-9]*$');
 
-  /// 解析输入，失败时抛出面向用户的 [FormatException]。
+  /// Parses input and reports expected validation failures with stable codes.
   ManualEpisodeTarget parse(String rawInput) {
     final value = rawInput.trim();
     if (value.isEmpty) {
-      throw const FormatException('请输入帖子链接或 tid');
+      throw const ComicManualEpisodeInputException(
+        ComicManualEpisodeInputErrorCode.emptyInput,
+      );
     }
 
     // 纯数字直接当 tid：输入里唯一有用的信息本来就是它，没必要强迫用户拼一个
@@ -41,30 +62,43 @@ class ComicManualEpisodeUrlPolicy {
 
     final normalized = _threadUrlParser.normalizeHref(value);
     if (normalized == null) {
-      throw const FormatException('链接格式无效，请检查后重试');
+      throw const ComicManualEpisodeInputException(
+        ComicManualEpisodeInputErrorCode.invalidUrl,
+      );
     }
 
     final uri = Uri.tryParse(normalized);
     if (uri == null) {
-      throw const FormatException('链接格式无效，请检查后重试');
+      throw const ComicManualEpisodeInputException(
+        ComicManualEpisodeInputErrorCode.invalidUrl,
+      );
     }
     if (uri.hasScheme && uri.scheme != 'http' && uri.scheme != 'https') {
-      throw const FormatException('链接仅支持 http 或 https');
+      throw const ComicManualEpisodeInputException(
+        ComicManualEpisodeInputErrorCode.unsupportedScheme,
+      );
     }
 
     final siteHost = Uri.parse(AppConfig.siteBaseUrl).host;
     if (uri.host.isNotEmpty &&
         uri.host.toLowerCase() != siteHost.toLowerCase()) {
-      throw FormatException('链接必须来自 $siteHost');
+      throw ComicManualEpisodeInputException(
+        ComicManualEpisodeInputErrorCode.unexpectedHost,
+        expectedHost: siteHost,
+      );
     }
 
     if (!_threadUrlParser.isSupportedThreadUrl(normalized)) {
-      throw const FormatException('链接不是有效的帖子地址');
+      throw const ComicManualEpisodeInputException(
+        ComicManualEpisodeInputErrorCode.unsupportedThreadUrl,
+      );
     }
 
     final tid = _threadUrlParser.extractTid(normalized);
     if (tid == null || !_tidPattern.hasMatch(tid)) {
-      throw const FormatException('无法从链接中识别帖子 tid');
+      throw const ComicManualEpisodeInputException(
+        ComicManualEpisodeInputErrorCode.missingTid,
+      );
     }
     return ManualEpisodeTarget(tid: tid, sourceUrl: _viewThreadUrl(tid));
   }

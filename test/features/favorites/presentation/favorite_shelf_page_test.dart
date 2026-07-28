@@ -29,6 +29,7 @@ import 'package:y300/features/library_shared/domain/services/library_task_notifi
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+import 'package:y300/l10n/app_localizations_zh.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +37,9 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  testWidgets('FavoriteShelfPage builds unified shelf in list mode', (tester) async {
+  testWidgets('FavoriteShelfPage builds unified shelf in list mode', (
+    tester,
+  ) async {
     final bootstrapper = _RecordingFavoriteShelfBootstrapper();
     final authRepository = _FakeAuthRepository(isLoggedIn: true);
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
@@ -52,9 +55,7 @@ void main() {
           favoriteSyncServiceProvider.overrideWith(
             (ref) => _FakeFavoriteSyncService(),
           ),
-          favoriteShelfBootstrapperProvider.overrideWith(
-            (ref) => bootstrapper,
-          ),
+          favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
           authRepositoryProvider.overrideWithValue(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
@@ -75,98 +76,113 @@ void main() {
     expect(bootstrapper.startCallCount, 1);
   });
 
-  testWidgets('FavoriteShelfPage shows first-sync progress while cache is building', (
-    tester,
-  ) async {
-    final sync = _FakeFavoriteSyncService(autoComplete: false);
-    final authRepository = _FakeAuthRepository(isLoggedIn: true);
-    final bootstrapper = _RecordingFavoriteShelfBootstrapper(
-      onStart: () async {
-        await sync.sync();
-      },
-    );
-    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
-      ComicSearchRefreshQueueSnapshot.empty,
-    );
-    addTearDown(queueSnapshot.dispose);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          localFavoriteRepositoryProvider.overrideWith(
-            (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
-          ),
-          favoriteSyncServiceProvider.overrideWith((ref) => sync),
-          favoriteShelfBootstrapperProvider.overrideWith(
-            (ref) => bootstrapper,
-          ),
-          authRepositoryProvider.overrideWithValue(authRepository),
-          libraryStateRepositoryProvider.overrideWithValue(
-            _FakeLibraryStateRepository(),
-          ),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
-            queueSnapshot,
-          ),
-        ],
-        child: const LocalizedTestApp(home: FavoriteShelfPage()),
-      ),
-    );
-    await tester.pump();
+  testWidgets(
+    'FavoriteShelfPage shows first-sync progress while cache is building',
+    (tester) async {
+      final sync = _FakeFavoriteSyncService(autoComplete: false);
+      final authRepository = _FakeAuthRepository(isLoggedIn: true);
+      final bootstrapper = _RecordingFavoriteShelfBootstrapper(
+        onStart: () async {
+          await sync.sync();
+        },
+      );
+      final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      addTearDown(queueSnapshot.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            localFavoriteRepositoryProvider.overrideWith(
+              (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
+            ),
+            favoriteSyncServiceProvider.overrideWith((ref) => sync),
+            favoriteShelfBootstrapperProvider.overrideWith(
+              (ref) => bootstrapper,
+            ),
+            authRepositoryProvider.overrideWithValue(authRepository),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _FakeLibraryStateRepository(),
+            ),
+            comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+              queueSnapshot,
+            ),
+          ],
+          child: const LocalizedTestApp(home: FavoriteShelfPage()),
+        ),
+      );
+      await tester.pump();
 
-    expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsOneWidget);
-    expect(find.text('正在解析: 收藏帖'), findsOneWidget);
-    expect(bootstrapper.startCallCount, 1);
-    sync.completePendingSync();
-    await tester.pumpAndSettle();
-  });
+      expect(
+        find.byKey(const Key('unified-shelf-task-progress-bar')),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          AppLocalizationsZh().libraryTaskFavoriteSyncLoadingDetailsSubject(
+            '收藏帖',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(bootstrapper.startCallCount, 1);
+      sync.completePendingSync();
+      await tester.pumpAndSettle();
+    },
+  );
 
-  testWidgets('FavoriteShelfPage hides first-sync banner when notification permission is granted', (
-    tester,
-  ) async {
-    final sync = _FakeFavoriteSyncService(autoComplete: false);
-    final authRepository = _FakeAuthRepository(isLoggedIn: true);
-    final bootstrapper = _RecordingFavoriteShelfBootstrapper(
-      onStart: () async {
-        await sync.sync();
-      },
-    );
-    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
-      ComicSearchRefreshQueueSnapshot.empty,
-    );
-    final notificationService = _FakeLibraryTaskNotificationService(
-      initialPermission: LibraryTaskNotificationPermissionState.granted,
-    );
-    addTearDown(queueSnapshot.dispose);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          localFavoriteRepositoryProvider.overrideWith(
-            (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
-          ),
-          favoriteSyncServiceProvider.overrideWith((ref) => sync),
-          favoriteShelfBootstrapperProvider.overrideWith(
-            (ref) => bootstrapper,
-          ),
-          authRepositoryProvider.overrideWithValue(authRepository),
-          libraryStateRepositoryProvider.overrideWithValue(
-            _FakeLibraryStateRepository(),
-          ),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
-            queueSnapshot,
-          ),
-          libraryTaskNotificationServiceProvider.overrideWithValue(
-            notificationService,
-          ),
-        ],
-        child: const LocalizedTestApp(home: FavoriteShelfPage()),
-      ),
-    );
-    await tester.pump();
+  testWidgets(
+    'FavoriteShelfPage hides first-sync banner when notification permission is granted',
+    (tester) async {
+      final sync = _FakeFavoriteSyncService(autoComplete: false);
+      final authRepository = _FakeAuthRepository(isLoggedIn: true);
+      final bootstrapper = _RecordingFavoriteShelfBootstrapper(
+        onStart: () async {
+          await sync.sync();
+        },
+      );
+      final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      final notificationService = _FakeLibraryTaskNotificationService(
+        initialPermission: LibraryTaskNotificationPermissionState.granted,
+      );
+      addTearDown(queueSnapshot.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            localFavoriteRepositoryProvider.overrideWith(
+              (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
+            ),
+            favoriteSyncServiceProvider.overrideWith((ref) => sync),
+            favoriteShelfBootstrapperProvider.overrideWith(
+              (ref) => bootstrapper,
+            ),
+            authRepositoryProvider.overrideWithValue(authRepository),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _FakeLibraryStateRepository(),
+            ),
+            comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+              queueSnapshot,
+            ),
+            libraryTaskNotificationServiceProvider.overrideWithValue(
+              notificationService,
+            ),
+          ],
+          child: const LocalizedTestApp(home: FavoriteShelfPage()),
+        ),
+      );
+      await tester.pump();
 
-    expect(find.byKey(const Key('unified-shelf-task-progress-bar')), findsNothing);
-    expect(bootstrapper.startCallCount, 1);
-    sync.completePendingSync();
-    await tester.pumpAndSettle();
-  });
+      expect(
+        find.byKey(const Key('unified-shelf-task-progress-bar')),
+        findsNothing,
+      );
+      expect(bootstrapper.startCallCount, 1);
+      sync.completePendingSync();
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('FavoriteShelfPage long press activates 2 selection actions', (
     tester,
@@ -188,9 +204,7 @@ void main() {
           favoriteSyncServiceProvider.overrideWith(
             (ref) => _FakeFavoriteSyncService(),
           ),
-          favoriteShelfBootstrapperProvider.overrideWith(
-            (ref) => bootstrapper,
-          ),
+          favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
           authRepositoryProvider.overrideWithValue(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
@@ -239,9 +253,7 @@ void main() {
           favoriteSyncServiceProvider.overrideWith(
             (ref) => _FakeFavoriteSyncService(),
           ),
-          favoriteShelfBootstrapperProvider.overrideWith(
-            (ref) => bootstrapper,
-          ),
+          favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
           authRepositoryProvider.overrideWithValue(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
@@ -281,7 +293,10 @@ void main() {
         ),
       );
       expect(tester.widget<ListTile>(tileFinder).selected, isTrue);
-      expect(_borderColorForListItem(tester, itemFinder), isNot(Colors.transparent));
+      expect(
+        _borderColorForListItem(tester, itemFinder),
+        isNot(Colors.transparent),
+      );
     }
   });
 
@@ -308,9 +323,7 @@ void main() {
           favoriteSyncServiceProvider.overrideWith(
             (ref) => _FakeFavoriteSyncService(),
           ),
-          favoriteShelfBootstrapperProvider.overrideWith(
-            (ref) => bootstrapper,
-          ),
+          favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
           authRepositoryProvider.overrideWithValue(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
@@ -349,7 +362,10 @@ void main() {
       ),
     );
     expect(tester.widget<ListTile>(firstTileFinder).selected, isFalse);
-    expect(_borderColorForListItem(tester, firstItemFinder), Colors.transparent);
+    expect(
+      _borderColorForListItem(tester, firstItemFinder),
+      Colors.transparent,
+    );
 
     final secondItemFinder = find.byKey(
       const ValueKey<String>('unified-shelf-list-item-favorite:202'),
@@ -367,118 +383,119 @@ void main() {
     );
   });
 
-  testWidgets('FavoriteShelfPage retries bootstrap after login when page already exists', (
-    tester,
-  ) async {
-    final bootstrapper = _RecordingFavoriteShelfBootstrapper();
-    final authRepository = _FakeAuthRepository(isLoggedIn: false);
-    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
-      ComicSearchRefreshQueueSnapshot.empty,
-    );
-    addTearDown(queueSnapshot.dispose);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          localFavoriteRepositoryProvider.overrideWith(
-            (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
-          ),
-          favoriteSyncServiceProvider.overrideWith(
-            (ref) => _FakeFavoriteSyncService(),
-          ),
-          favoriteShelfBootstrapperProvider.overrideWith(
-            (ref) => bootstrapper,
-          ),
-          authRepositoryProvider.overrideWithValue(authRepository),
-          libraryStateRepositoryProvider.overrideWithValue(
-            _FakeLibraryStateRepository(),
-          ),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
-            queueSnapshot,
-          ),
-        ],
-        child: const LocalizedTestApp(home: FavoriteShelfPage()),
-      ),
-    );
+  testWidgets(
+    'FavoriteShelfPage retries bootstrap after login when page already exists',
+    (tester) async {
+      final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+      final authRepository = _FakeAuthRepository(isLoggedIn: false);
+      final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      addTearDown(queueSnapshot.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            localFavoriteRepositoryProvider.overrideWith(
+              (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
+            ),
+            favoriteSyncServiceProvider.overrideWith(
+              (ref) => _FakeFavoriteSyncService(),
+            ),
+            favoriteShelfBootstrapperProvider.overrideWith(
+              (ref) => bootstrapper,
+            ),
+            authRepositoryProvider.overrideWithValue(authRepository),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _FakeLibraryStateRepository(),
+            ),
+            comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+              queueSnapshot,
+            ),
+          ],
+          child: const LocalizedTestApp(home: FavoriteShelfPage()),
+        ),
+      );
 
-    await tester.pumpAndSettle();
-    expect(bootstrapper.startCallCount, 0);
+      await tester.pumpAndSettle();
+      expect(bootstrapper.startCallCount, 0);
 
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(FavoriteShelfPage)),
-    );
-    authRepository.setLoggedIn();
-    await container.read(authSessionControllerProvider.notifier).refresh();
-    await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(FavoriteShelfPage)),
+      );
+      authRepository.setLoggedIn();
+      await container.read(authSessionControllerProvider.notifier).refresh();
+      await tester.pumpAndSettle();
 
-    expect(bootstrapper.startCallCount, 1);
-  });
+      expect(bootstrapper.startCallCount, 1);
+    },
+  );
 
-  testWidgets('FavoriteShelfPage waits until active before retrying bootstrap after login', (
-    tester,
-  ) async {
-    final bootstrapper = _RecordingFavoriteShelfBootstrapper();
-    final authRepository = _FakeAuthRepository(isLoggedIn: false);
-    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
-      ComicSearchRefreshQueueSnapshot.empty,
-    );
-    var isActive = false;
-    late StateSetter hostSetState;
-    addTearDown(queueSnapshot.dispose);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          localFavoriteRepositoryProvider.overrideWith(
-            (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
-          ),
-          favoriteSyncServiceProvider.overrideWith(
-            (ref) => _FakeFavoriteSyncService(),
-          ),
-          favoriteShelfBootstrapperProvider.overrideWith(
-            (ref) => bootstrapper,
-          ),
-          authRepositoryProvider.overrideWithValue(authRepository),
-          libraryStateRepositoryProvider.overrideWithValue(
-            _FakeLibraryStateRepository(),
-          ),
-          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
-            queueSnapshot,
-          ),
-        ],
-        child: LocalizedTestApp(
-          home: StatefulBuilder(
-            builder: (context, setState) {
-              hostSetState = setState;
-              return FavoriteShelfPage(isActive: isActive);
-            },
+  testWidgets(
+    'FavoriteShelfPage waits until active before retrying bootstrap after login',
+    (tester) async {
+      final bootstrapper = _RecordingFavoriteShelfBootstrapper();
+      final authRepository = _FakeAuthRepository(isLoggedIn: false);
+      final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      var isActive = false;
+      late StateSetter hostSetState;
+      addTearDown(queueSnapshot.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            localFavoriteRepositoryProvider.overrideWith(
+              (ref) => _FakeLocalFavoriteRepository(hasSnapshot: false),
+            ),
+            favoriteSyncServiceProvider.overrideWith(
+              (ref) => _FakeFavoriteSyncService(),
+            ),
+            favoriteShelfBootstrapperProvider.overrideWith(
+              (ref) => bootstrapper,
+            ),
+            authRepositoryProvider.overrideWithValue(authRepository),
+            libraryStateRepositoryProvider.overrideWithValue(
+              _FakeLibraryStateRepository(),
+            ),
+            comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+              queueSnapshot,
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: StatefulBuilder(
+              builder: (context, setState) {
+                hostSetState = setState;
+                return FavoriteShelfPage(isActive: isActive);
+              },
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
-    expect(bootstrapper.startCallCount, 0);
+      await tester.pumpAndSettle();
+      expect(bootstrapper.startCallCount, 0);
 
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(FavoriteShelfPage)),
-    );
-    authRepository.setLoggedIn();
-    await container.read(authSessionControllerProvider.notifier).refresh();
-    await tester.pumpAndSettle();
-    expect(bootstrapper.startCallCount, 0);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(FavoriteShelfPage)),
+      );
+      authRepository.setLoggedIn();
+      await container.read(authSessionControllerProvider.notifier).refresh();
+      await tester.pumpAndSettle();
+      expect(bootstrapper.startCallCount, 0);
 
-    hostSetState(() {
-      isActive = true;
-    });
-    await tester.pumpAndSettle();
+      hostSetState(() {
+        isActive = true;
+      });
+      await tester.pumpAndSettle();
 
-    expect(bootstrapper.startCallCount, 1);
-  });
+      expect(bootstrapper.startCallCount, 1);
+    },
+  );
 }
 
 class _RecordingFavoriteShelfBootstrapper implements FavoriteShelfBootstrapper {
-  _RecordingFavoriteShelfBootstrapper({
-    Future<void> Function()? onStart,
-  }) : _onStart = onStart;
+  _RecordingFavoriteShelfBootstrapper({Future<void> Function()? onStart})
+    : _onStart = onStart;
 
   final Future<void> Function()? _onStart;
   int startCallCount = 0;
@@ -548,7 +565,9 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
   _FakeFavoriteSyncService({this.autoComplete = true});
 
   final bool autoComplete;
-  final _progress = ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
+  final _progress = ValueNotifier<FavoriteSyncProgress>(
+    FavoriteSyncProgress.idle,
+  );
   Completer<FavoriteSyncResult>? _pendingCompleter;
 
   @override
@@ -561,7 +580,7 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
   Future<FavoriteSyncResult> sync() async {
     _progress.value = const FavoriteSyncProgress(
       phase: FavoriteSyncProgressPhase.loadingDetails,
-      message: '正在解析: 收藏帖',
+      subject: '收藏帖',
       current: 1,
       total: 10,
     );
@@ -582,9 +601,7 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
   }
 
   @override
-  Future<FavoriteSyncResult> syncRecentlyAddedThread({
-    required String tid,
-  }) {
+  Future<FavoriteSyncResult> syncRecentlyAddedThread({required String tid}) {
     return sync();
   }
 
@@ -620,8 +637,8 @@ class _FakeLibraryTaskNotificationService
   final ValueNotifier<LibraryTaskNotificationPermissionState?> _permissionState;
 
   @override
-  ValueListenable<LibraryTaskNotificationPermissionState?> get permissionState =>
-      _permissionState;
+  ValueListenable<LibraryTaskNotificationPermissionState?>
+  get permissionState => _permissionState;
 
   @override
   Future<void> clear(LibraryTaskNotificationKey key) async {}
@@ -644,38 +661,42 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
     this.hasSnapshot = true,
     List<LibraryCategory>? categories,
     Map<String, List<LibraryWorkItem>>? itemsByCategory,
-  })  : _categories = categories ??
-            <LibraryCategory>[
-              LibraryCategory(
-                categoryId: favoriteDefaultCategoryId,
-                name: '默认',
-                sortOrder: 0,
-                createdAt: DateTime(2026, 1, 1),
-              ),
-            ],
-        _itemsByCategory = itemsByCategory ??
-            <String, List<LibraryWorkItem>>{
-              favoriteDefaultCategoryId: <LibraryWorkItem>[
-                LibraryWorkItem(
-                  workId: FavoriteShelfWorkId.fromTid('100'),
-                  categoryId: favoriteDefaultCategoryId,
-                  title: '收藏帖',
-                  secondaryName: '作者A',
-                  unreadCount: 0,
-                  totalChapterCount: 1,
-                  readChapterCount: 0,
-                  addedAt: DateTime(2026, 1, 1),
-                ),
-              ],
-            };
+  }) : _categories =
+           categories ??
+           <LibraryCategory>[
+             LibraryCategory(
+               categoryId: favoriteDefaultCategoryId,
+               name: '默认',
+               sortOrder: 0,
+               createdAt: DateTime(2026, 1, 1),
+             ),
+           ],
+       _itemsByCategory =
+           itemsByCategory ??
+           <String, List<LibraryWorkItem>>{
+             favoriteDefaultCategoryId: <LibraryWorkItem>[
+               LibraryWorkItem(
+                 workId: FavoriteShelfWorkId.fromTid('100'),
+                 categoryId: favoriteDefaultCategoryId,
+                 title: '收藏帖',
+                 secondaryName: '作者A',
+                 unreadCount: 0,
+                 totalChapterCount: 1,
+                 readChapterCount: 0,
+                 addedAt: DateTime(2026, 1, 1),
+               ),
+             ],
+           };
 
   final bool hasSnapshot;
   final List<LibraryCategory> _categories;
   final Map<String, List<LibraryWorkItem>> _itemsByCategory;
 
   @override
-  Future<int> countActiveThreads() async =>
-      _itemsByCategory.values.fold<int>(0, (total, items) => total + items.length);
+  Future<int> countActiveThreads() async => _itemsByCategory.values.fold<int>(
+    0,
+    (total, items) => total + items.length,
+  );
 
   @override
   Future<int> countMissingDetailRecords() async => 0;
@@ -741,13 +762,16 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }) async => const <FavoriteThreadCacheRecord>[];
 
   @override
-  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
+  Future<List<FavoriteThreadCacheRecord>>
+  getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async => const <FavoriteThreadCacheRecord>[];
 
   @override
-  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async {
+  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(
+    String workId,
+  ) async {
     final tid = FavoriteShelfWorkId.parseTid(workId) ?? '100';
     return FavoriteRouteTarget(
       tid: tid,
@@ -781,8 +805,7 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
       _itemsByCategory[categoryId] ?? const <LibraryWorkItem>[];
 
   @override
-  Future<List<LibraryCategory>> loadVisibleCategories() async =>
-      _categories;
+  Future<List<LibraryCategory>> loadVisibleCategories() async => _categories;
 
   @override
   Future<void> markSyncFailure(String message) async {}

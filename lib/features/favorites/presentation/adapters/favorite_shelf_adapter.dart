@@ -86,8 +86,6 @@ class FavoriteShelfAdapter
   final LibraryCoverImageAdapter _coverImageAdapter =
       const LibraryCoverImageAdapter();
 
-  static const String _moduleTitle = '\u6536\u85cf';
-
   @override
   ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => _taskProgress;
 
@@ -122,9 +120,6 @@ class FavoriteShelfAdapter
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.favorite;
-
-  @override
-  String get moduleTitle => _moduleTitle;
 
   @override
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.list;
@@ -295,7 +290,7 @@ class FavoriteShelfAdapter
   }
 
   @override
-  Future<SelectionActionResult> runSelectionAction(
+  Future<SelectionActionOutcome> runSelectionAction(
     SelectionActionExecutionRequest request,
   ) async {
     switch (request.actionId) {
@@ -306,28 +301,28 @@ class FavoriteShelfAdapter
       case SelectionActionIds.markAllRead:
       case SelectionActionIds.markAllUnread:
       case SelectionActionIds.download:
-        return const SelectionActionResult(
-          code: SelectionActionResultCode.unsupported,
+        return const SelectionActionOutcome(
+          code: SelectionActionOutcomeCode.unsupported,
         );
     }
-    return const SelectionActionResult(
-      code: SelectionActionResultCode.unsupported,
+    return const SelectionActionOutcome(
+      code: SelectionActionOutcomeCode.unsupported,
     );
   }
 
-  Future<SelectionActionResult> _runAssignCategory(
+  Future<SelectionActionOutcome> _runAssignCategory(
     SelectionActionExecutionRequest request,
   ) async {
     final useCase = _categoryAssignUseCaseResolver();
     final targetCategoryId = request.targetCategoryId?.trim();
     if (useCase == null) {
-      return const SelectionActionResult(
-        code: SelectionActionResultCode.unsupported,
+      return const SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.unsupported,
       );
     }
     if (targetCategoryId == null || targetCategoryId.isEmpty) {
-      return const SelectionActionResult(
-        code: SelectionActionResultCode.missingTargetCategory,
+      return const SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.missingTargetCategory,
       );
     }
     final result = await useCase.assign(
@@ -336,23 +331,23 @@ class FavoriteShelfAdapter
       targetCategoryId: targetCategoryId,
     );
     final failedCount = result.failedWorkIds.length;
-    return SelectionActionResult(
+    return SelectionActionOutcome(
       code: failedCount > 0
-          ? SelectionActionResultCode.partialFailure
-          : SelectionActionResultCode.success,
+          ? SelectionActionOutcomeCode.partialFailure
+          : SelectionActionOutcomeCode.success,
       changed: result.assignedWorkIds.isNotEmpty,
       succeededCount: result.assignedWorkIds.length,
       failedCount: failedCount,
     );
   }
 
-  Future<SelectionActionResult> _runUnfavorite(
+  Future<SelectionActionOutcome> _runUnfavorite(
     SelectionActionExecutionRequest request,
   ) async {
     final useCase = _unfavoriteThreadUseCaseResolver();
     if (useCase == null) {
-      return const SelectionActionResult(
-        code: SelectionActionResultCode.unsupported,
+      return const SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.unsupported,
       );
     }
     final tids = <String>{};
@@ -366,17 +361,17 @@ class FavoriteShelfAdapter
       tids.add(tid);
     }
     if (tids.isEmpty) {
-      return SelectionActionResult(
-        code: SelectionActionResultCode.noValidItems,
+      return SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.noValidItems,
         failedCount: invalidCount,
       );
     }
     final result = await useCase.callMany(tids);
     final failedCount = result.failedTids.length + invalidCount;
-    return SelectionActionResult(
+    return SelectionActionOutcome(
       code: failedCount > 0
-          ? SelectionActionResultCode.partialFailure
-          : SelectionActionResultCode.success,
+          ? SelectionActionOutcomeCode.partialFailure
+          : SelectionActionOutcomeCode.success,
       changed: result.succeededTids.isNotEmpty,
       succeededCount: result.succeededTids.length,
       failedCount: failedCount,

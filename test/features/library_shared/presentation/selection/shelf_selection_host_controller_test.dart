@@ -21,7 +21,6 @@ void main() {
       controller.activate(
         ownerToken: owner,
         moduleKey: LibraryModuleKey.comic,
-        moduleTitle: '漫画',
         activeCategoryId: 'default',
         selectedCount: 1,
         selectedWorkIds: const <String>{'comic-1'},
@@ -63,7 +62,6 @@ void main() {
       controller.activate(
         ownerToken: activeOwner,
         moduleKey: LibraryModuleKey.favorite,
-        moduleTitle: '收藏',
         activeCategoryId: 'default',
         selectedCount: 1,
         selectedWorkIds: const <String>{'favorite:100'},
@@ -96,7 +94,6 @@ void main() {
       controller.activate(
         ownerToken: owner,
         moduleKey: LibraryModuleKey.comic,
-        moduleTitle: '漫画',
         activeCategoryId: 'default',
         selectedCount: 1,
         selectedWorkIds: const <String>{'comic-1'},
@@ -113,7 +110,10 @@ void main() {
           createCategory: (name) async => 'created',
           runSelectionAction: (request) async {
             calls.add('run:${request.actionId}');
-            return const SelectionActionResult(message: 'done', changed: true);
+            return const SelectionActionOutcome(
+              code: SelectionActionOutcomeCode.success,
+              changed: true,
+            );
           },
           refreshAfterAction: () async {
             calls.add('refresh');
@@ -133,7 +133,6 @@ void main() {
       controller.activate(
         ownerToken: owner,
         moduleKey: LibraryModuleKey.novel,
-        moduleTitle: '小说',
         activeCategoryId: 'default',
         selectedCount: 1,
         selectedWorkIds: const <String>{'novel-1'},
@@ -147,7 +146,9 @@ void main() {
           loadAvailableCategories: () async => const <LibraryCategory>[],
           createCategory: (name) async => 'created',
           runSelectionAction: (request) async {
-            return const SelectionActionResult(message: 'noop', changed: false);
+            return const SelectionActionOutcome(
+              code: SelectionActionOutcomeCode.noChange,
+            );
           },
           refreshAfterAction: () async => fail('should not refresh'),
         ),
@@ -165,7 +166,6 @@ void main() {
       controller.activate(
         ownerToken: owner,
         moduleKey: LibraryModuleKey.favorite,
-        moduleTitle: '收藏',
         activeCategoryId: 'default',
         selectedCount: 1,
         selectedWorkIds: const <String>{'favorite:100'},
@@ -212,7 +212,6 @@ void main() {
         () => disposedController.activate(
           ownerToken: Object(),
           moduleKey: LibraryModuleKey.comic,
-          moduleTitle: '漫画',
           activeCategoryId: 'default',
           selectedCount: 1,
           selectedWorkIds: const <String>{'comic-1'},
@@ -250,7 +249,9 @@ ShelfSelectionHostDelegate _idleDelegate() {
     loadAvailableCategories: () async => const <LibraryCategory>[],
     createCategory: (name) async => 'created',
     runSelectionAction: (request) async {
-      return const SelectionActionResult(message: 'noop');
+      return const SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.noChange,
+      );
     },
     refreshAfterAction: () async {},
   );

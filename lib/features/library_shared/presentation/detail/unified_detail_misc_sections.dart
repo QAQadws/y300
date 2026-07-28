@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/library_shared/presentation/services/library_detail_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class UnifiedDetailErrorPanel extends StatelessWidget {
   const UnifiedDetailErrorPanel({
@@ -33,7 +35,12 @@ class UnifiedDetailErrorPanel extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '加载失败：$message',
+                  AppLocalizations.of(context).libraryDetailLoadFailed(
+                    LibraryDetailTextResolver.safeError(
+                      AppLocalizations.of(context),
+                      message,
+                    ),
+                  ),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -45,7 +52,7 @@ class UnifiedDetailErrorPanel extends StatelessWidget {
               TextButton(
                 key: const Key('unified-detail-error-retry'),
                 onPressed: onRetry,
-                child: const Text('重试'),
+                child: Text(AppLocalizations.of(context).commonRetry),
               ),
             ],
           ),
@@ -95,7 +102,10 @@ class UnifiedDetailIntroSection extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('简介', style: theme.textTheme.titleSmall),
+                    Text(
+                      AppLocalizations.of(context).libraryDetailIntro,
+                      style: theme.textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 6),
                     SizedBox(
                       width: double.infinity,

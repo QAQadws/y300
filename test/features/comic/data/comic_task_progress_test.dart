@@ -3,16 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/models/comic_task_progress.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_refresh_service.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
 
 void main() {
   group('ComicSearchQueueShelfTaskProgressListenable', () {
-    test('maps active queue snapshot message and keeps banner visible before permission is granted', () {
+    test('maps active queue snapshot into structured progress', () {
+      const rawTitle = '  Queued Comic  ';
       final source = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
         ComicSearchRefreshQueueSnapshot(
           entries: <ComicSearchRefreshQueueEntry>[
-            _entry(id: 1, title: 'Queued Comic'),
+            _entry(id: 1, title: rawTitle),
           ],
           cadence: const Duration(milliseconds: 10500),
         ),
@@ -30,7 +32,9 @@ void main() {
       final progress = listenable.value;
 
       expect(progress, isNotNull);
-      expect(progress?.message, source.value.waitingMessage);
+      expect(progress?.code, LibraryShelfTaskProgressCode.comicSearchWaiting);
+      expect(progress?.subject, rawTitle);
+      expect(progress?.estimatedDuration, const Duration(milliseconds: 10500));
       expect(progress?.source, LibraryMutationSource.comicSearchQueue);
       expect(progress?.visible, isTrue);
       expect(progress?.reloadOnCompletion, isTrue);
@@ -45,9 +49,10 @@ void main() {
           cadence: const Duration(milliseconds: 10500),
         ),
       );
-      final permissionState = ValueNotifier<LibraryTaskNotificationPermissionState?>(
-        LibraryTaskNotificationPermissionState.granted,
-      );
+      final permissionState =
+          ValueNotifier<LibraryTaskNotificationPermissionState?>(
+            LibraryTaskNotificationPermissionState.granted,
+          );
       addTearDown(source.dispose);
       addTearDown(permissionState.dispose);
 
@@ -59,7 +64,7 @@ void main() {
 
       expect(listenable.value, isNotNull);
       expect(listenable.value?.visible, isFalse);
-      expect(listenable.value?.message, source.value.waitingMessage);
+      expect(listenable.value?.subject, 'Queued Comic');
     });
 
     test('permission changes notify listeners and update visible state', () {
@@ -71,9 +76,10 @@ void main() {
           cadence: const Duration(milliseconds: 10500),
         ),
       );
-      final permissionState = ValueNotifier<LibraryTaskNotificationPermissionState?>(
-        LibraryTaskNotificationPermissionState.denied,
-      );
+      final permissionState =
+          ValueNotifier<LibraryTaskNotificationPermissionState?>(
+            LibraryTaskNotificationPermissionState.denied,
+          );
       addTearDown(source.dispose);
       addTearDown(permissionState.dispose);
 
@@ -93,46 +99,50 @@ void main() {
 
       expect(notificationCount, 1);
       expect(listenable.value?.visible, isFalse);
-      expect(listenable.value?.message, source.value.waitingMessage);
+      expect(listenable.value?.subject, 'Queued Comic');
     });
 
-    test('unsupported and permanently denied permission keep queue banner visible', () {
-      for (final permission in <LibraryTaskNotificationPermissionState>[
-        LibraryTaskNotificationPermissionState.unsupported,
-        LibraryTaskNotificationPermissionState.permanentlyDenied,
-      ]) {
-        final source = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
-          ComicSearchRefreshQueueSnapshot(
-            entries: <ComicSearchRefreshQueueEntry>[
-              _entry(id: 1, title: 'Queued Comic'),
-            ],
-            cadence: const Duration(milliseconds: 10500),
-          ),
-        );
-        final permissionState =
-            ValueNotifier<LibraryTaskNotificationPermissionState?>(
-              permission,
-            );
-        addTearDown(source.dispose);
-        addTearDown(permissionState.dispose);
+    test(
+      'unsupported and permanently denied permission keep queue banner visible',
+      () {
+        for (final permission in <LibraryTaskNotificationPermissionState>[
+          LibraryTaskNotificationPermissionState.unsupported,
+          LibraryTaskNotificationPermissionState.permanentlyDenied,
+        ]) {
+          final source = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+            ComicSearchRefreshQueueSnapshot(
+              entries: <ComicSearchRefreshQueueEntry>[
+                _entry(id: 1, title: 'Queued Comic'),
+              ],
+              cadence: const Duration(milliseconds: 10500),
+            ),
+          );
+          final permissionState =
+              ValueNotifier<LibraryTaskNotificationPermissionState?>(
+                permission,
+              );
+          addTearDown(source.dispose);
+          addTearDown(permissionState.dispose);
 
-        final listenable = ComicSearchQueueShelfTaskProgressListenable(
-          source,
-          permissionState,
-        );
-        addTearDown(listenable.dispose);
+          final listenable = ComicSearchQueueShelfTaskProgressListenable(
+            source,
+            permissionState,
+          );
+          addTearDown(listenable.dispose);
 
-        expect(listenable.value?.visible, isTrue);
-      }
-    });
+          expect(listenable.value?.visible, isTrue);
+        }
+      },
+    );
 
     test('returns null when queue snapshot is empty', () {
       final source = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
         ComicSearchRefreshQueueSnapshot.empty,
       );
-      final permissionState = ValueNotifier<LibraryTaskNotificationPermissionState?>(
-        LibraryTaskNotificationPermissionState.granted,
-      );
+      final permissionState =
+          ValueNotifier<LibraryTaskNotificationPermissionState?>(
+            LibraryTaskNotificationPermissionState.granted,
+          );
       addTearDown(source.dispose);
       addTearDown(permissionState.dispose);
 
@@ -146,10 +156,7 @@ void main() {
   });
 }
 
-ComicSearchRefreshQueueEntry _entry({
-  required int id,
-  required String title,
-}) {
+ComicSearchRefreshQueueEntry _entry({required int id, required String title}) {
   return ComicSearchRefreshQueueEntry(
     id: id,
     comicId: 'comic:$id',

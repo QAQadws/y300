@@ -11,7 +11,7 @@ void main() {
     final adapter = _FakeShelfModuleAdapter();
     final categories = await adapter.loadCategories();
     expect(categories, isNotEmpty);
-    expect(adapter.moduleTitle, 'Fake');
+    expect(adapter.moduleKey, LibraryModuleKey.comic);
   });
 }
 
@@ -21,9 +21,6 @@ class _FakeShelfModuleAdapter implements ShelfModuleAdapter {
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
-
-  @override
-  String get moduleTitle => 'Fake';
 
   @override
   ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => null;

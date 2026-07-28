@@ -34,8 +34,9 @@ void main() {
           title: 'Episode 2',
           orderIndex: 1,
           progressInfo: LibraryChapterProgressInfo(
-            label: '第 3 页',
+            kind: LibraryChapterProgressKind.currentPage,
             isCurrent: true,
+            currentPage: 3,
           ),
         ),
       ],

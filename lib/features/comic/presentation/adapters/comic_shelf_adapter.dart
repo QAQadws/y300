@@ -104,15 +104,8 @@ class ComicShelfAdapter
   final LibraryCoverImageAdapter _coverImageAdapter =
       const LibraryCoverImageAdapter();
 
-  static const String _mergeDuplicatesActionId = 'merge-duplicates';
-  static const String _moduleTitle = '\u6f2b\u753b';
-  static const String _mergeDuplicatesLabel = '\u5408\u5e76\u91cd\u590d';
-
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
-
-  @override
-  String get moduleTitle => _moduleTitle;
 
   @override
   ShelfModuleCapabilities get capabilities =>
@@ -130,10 +123,7 @@ class ComicShelfAdapter
       return const <LibraryShelfMenuAction>[];
     }
     return const <LibraryShelfMenuAction>[
-      LibraryShelfMenuAction(
-        id: _mergeDuplicatesActionId,
-        label: _mergeDuplicatesLabel,
-      ),
+      LibraryShelfMenuAction.mergeDuplicates,
     ];
   }
 
@@ -333,20 +323,24 @@ class ComicShelfAdapter
   }
 
   @override
-  Future<ShelfModuleActionResult> runMenuAction(String actionId) async {
-    if (actionId != _mergeDuplicatesActionId) {
-      return const ShelfModuleActionResult(message: 'Unknown comic action');
+  Future<ShelfModuleActionOutcome> runMenuAction(
+    LibraryShelfMenuAction action,
+  ) async {
+    if (action != LibraryShelfMenuAction.mergeDuplicates) {
+      return const ShelfModuleActionOutcome(
+        code: ShelfModuleActionOutcomeCode.unsupported,
+      );
     }
     final service = _duplicateMergeService;
     if (service == null) {
-      return const ShelfModuleActionResult(
-        message: 'Comic repository does not support duplicate merging',
+      return const ShelfModuleActionOutcome(
+        code: ShelfModuleActionOutcomeCode.unsupported,
       );
     }
     final summary = await service.mergeAllDuplicates();
     if (!summary.changed) {
-      return const ShelfModuleActionResult(
-        message: 'No duplicate comics were found',
+      return const ShelfModuleActionOutcome(
+        code: ShelfModuleActionOutcomeCode.noChange,
       );
     }
     _shelfRefreshBus?.notify(
@@ -360,14 +354,15 @@ class ComicShelfAdapter
         'removedComicCount': summary.removedComicCount,
       },
     );
-    return ShelfModuleActionResult(
-      message: 'Merged ${summary.removedComicCount} duplicate comics',
+    return ShelfModuleActionOutcome(
+      code: ShelfModuleActionOutcomeCode.success,
       changed: true,
+      affectedCount: summary.removedComicCount,
     );
   }
 
   @override
-  Future<SelectionActionResult> runSelectionAction(
+  Future<SelectionActionOutcome> runSelectionAction(
     SelectionActionExecutionRequest request,
   ) async {
     switch (request.actionId) {
@@ -382,24 +377,24 @@ class ComicShelfAdapter
       case SelectionActionIds.unfavorite:
         return _runUnfavorite(request);
     }
-    return const SelectionActionResult(
-      code: SelectionActionResultCode.unsupported,
+    return const SelectionActionOutcome(
+      code: SelectionActionOutcomeCode.unsupported,
     );
   }
 
-  Future<SelectionActionResult> _runAssignCategory(
+  Future<SelectionActionOutcome> _runAssignCategory(
     SelectionActionExecutionRequest request,
   ) async {
     final useCase = _categoryAssignUseCaseResolver();
     final targetCategoryId = request.targetCategoryId?.trim();
     if (useCase == null) {
-      return const SelectionActionResult(
-        code: SelectionActionResultCode.unsupported,
+      return const SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.unsupported,
       );
     }
     if (targetCategoryId == null || targetCategoryId.isEmpty) {
-      return const SelectionActionResult(
-        code: SelectionActionResultCode.missingTargetCategory,
+      return const SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.missingTargetCategory,
       );
     }
     final result = await useCase.assign(
@@ -408,30 +403,30 @@ class ComicShelfAdapter
       targetCategoryId: targetCategoryId,
     );
     final failedCount = result.failedWorkIds.length;
-    return SelectionActionResult(
+    return SelectionActionOutcome(
       code: failedCount > 0
-          ? SelectionActionResultCode.partialFailure
-          : SelectionActionResultCode.success,
+          ? SelectionActionOutcomeCode.partialFailure
+          : SelectionActionOutcomeCode.success,
       changed: result.assignedWorkIds.isNotEmpty,
       succeededCount: result.assignedWorkIds.length,
       failedCount: failedCount,
     );
   }
 
-  Future<SelectionActionResult> _runReadStateChange(
+  Future<SelectionActionOutcome> _runReadStateChange(
     SelectionActionExecutionRequest request, {
     required bool isRead,
   }) async {
     final writer = _readingStateBatchWriterResolver();
     if (writer == null) {
-      return const SelectionActionResult(
-        code: SelectionActionResultCode.unsupported,
+      return const SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.unsupported,
       );
     }
     final normalizedWorkIds = _normalizedWorkIds(request.workIds);
     if (normalizedWorkIds.isEmpty) {
-      return const SelectionActionResult(
-        code: SelectionActionResultCode.noValidItems,
+      return const SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.noValidItems,
       );
     }
     await writer.setWorksRead(
@@ -440,23 +435,23 @@ class ComicShelfAdapter
       isRead: isRead,
     );
     final failedCount = request.workIds.length - normalizedWorkIds.length;
-    return SelectionActionResult(
+    return SelectionActionOutcome(
       code: failedCount > 0
-          ? SelectionActionResultCode.partialFailure
-          : SelectionActionResultCode.success,
+          ? SelectionActionOutcomeCode.partialFailure
+          : SelectionActionOutcomeCode.success,
       changed: true,
       succeededCount: normalizedWorkIds.length,
       failedCount: failedCount,
     );
   }
 
-  Future<SelectionActionResult> _runDownload(
+  Future<SelectionActionOutcome> _runDownload(
     SelectionActionExecutionRequest request,
   ) async {
     final useCase = _bulkDownloadUseCaseResolver();
     if (useCase == null) {
-      return const SelectionActionResult(
-        code: SelectionActionResultCode.unsupported,
+      return const SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.unsupported,
       );
     }
     final normalizedWorkIds = _normalizedWorkIds(request.workIds);
@@ -464,11 +459,11 @@ class ComicShelfAdapter
     final invalidCount = request.workIds.length - normalizedWorkIds.length;
     final changed = result.enqueuedCount > 0 || result.deduplicatedCount > 0;
     final failedCode = invalidCount > 0
-        ? SelectionActionResultCode.partialFailure
+        ? SelectionActionOutcomeCode.partialFailure
         : changed
-        ? SelectionActionResultCode.success
-        : SelectionActionResultCode.noChange;
-    return SelectionActionResult(
+        ? SelectionActionOutcomeCode.success
+        : SelectionActionOutcomeCode.noChange;
+    return SelectionActionOutcome(
       code: failedCode,
       changed: changed,
       failedCount: invalidCount,
@@ -477,13 +472,13 @@ class ComicShelfAdapter
     );
   }
 
-  Future<SelectionActionResult> _runUnfavorite(
+  Future<SelectionActionOutcome> _runUnfavorite(
     SelectionActionExecutionRequest request,
   ) async {
     final useCase = _unfavoriteWorkUseCaseResolver();
     if (useCase == null) {
-      return const SelectionActionResult(
-        code: SelectionActionResultCode.unsupported,
+      return const SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.unsupported,
       );
     }
     final workKinds = <String, ThreadContentKind>{};
@@ -497,17 +492,17 @@ class ComicShelfAdapter
       workKinds[workId] = ThreadContentKind.comic;
     }
     if (workKinds.isEmpty) {
-      return SelectionActionResult(
-        code: SelectionActionResultCode.noValidItems,
+      return SelectionActionOutcome(
+        code: SelectionActionOutcomeCode.noValidItems,
         failedCount: invalidCount,
       );
     }
     final result = await useCase.callMany(workKinds: workKinds);
     final failedCount = result.failedTids.length + invalidCount;
-    return SelectionActionResult(
+    return SelectionActionOutcome(
       code: failedCount > 0
-          ? SelectionActionResultCode.partialFailure
-          : SelectionActionResultCode.success,
+          ? SelectionActionOutcomeCode.partialFailure
+          : SelectionActionOutcomeCode.success,
       changed: result.succeededTids.isNotEmpty,
       succeededCount: result.succeededTids.length,
       failedCount: failedCount,

@@ -1,22 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class UnifiedDetailChapterToolbar extends StatelessWidget {
   const UnifiedDetailChapterToolbar({
     super.key,
     required this.chapterCount,
     required this.filterSummary,
+    required this.hasActiveFilter,
     this.modeControl,
   });
 
   final int chapterCount;
   final String filterSummary;
+  final bool hasActiveFilter;
   final Widget? modeControl;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final hasActiveFilter = filterSummary != '全部章节';
+    final l10n = AppLocalizations.of(context);
     return Padding(
       key: const Key('unified-detail-chapter-toolbar'),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -27,7 +30,7 @@ class UnifiedDetailChapterToolbar extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '共$chapterCount章',
+                  l10n.libraryChapterCount(chapterCount),
                   key: const Key('unified-detail-chapter-heading'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -81,9 +84,15 @@ class UnifiedDetailTriStateLine extends StatelessWidget {
       TriStateFilterValue.exclude => Icons.indeterminate_check_box,
     };
     final stateLabel = switch (value) {
-      TriStateFilterValue.ignore => '不限',
-      TriStateFilterValue.include => '只看$label',
-      TriStateFilterValue.exclude => '排除$label',
+      TriStateFilterValue.ignore => AppLocalizations.of(
+        context,
+      ).libraryChapterFilterAny,
+      TriStateFilterValue.include => AppLocalizations.of(
+        context,
+      ).libraryChapterFilterOnly(label),
+      TriStateFilterValue.exclude => AppLocalizations.of(
+        context,
+      ).libraryChapterFilterExclude(label),
     };
 
     return ListTile(

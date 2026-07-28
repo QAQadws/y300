@@ -19,41 +19,51 @@ class DefaultLibraryTaskNotificationBridge
   DefaultLibraryTaskNotificationBridge({
     required LibraryTaskProgressHub hub,
     required LibraryTaskNotificationService notificationService,
-  })  : _hub = hub,
-        _notificationService = notificationService;
+  }) : _hub = hub,
+       _notificationService = notificationService;
 
   final LibraryTaskProgressHub _hub;
   final LibraryTaskNotificationService _notificationService;
 
-  // Each bridged channel binds one module + the mutation source it represents
-  // to a notification key, plus the title shown for that task type.
+  // Each bridged channel binds one module + mutation source to a notification
+  // identity. Presentation copy is resolved from the current locale snapshot.
   late final List<_BridgedChannel> _channels = <_BridgedChannel>[
     _BridgedChannel(
       key: LibraryTaskNotificationKey.favoriteSync,
       source: LibraryMutationSource.favoriteSync,
-      title: '收藏同步',
       listenable: _hub.progressFor(LibraryModuleKey.favorite),
     ),
     _BridgedChannel(
       key: LibraryTaskNotificationKey.comicSearchQueue,
       source: LibraryMutationSource.comicSearchQueue,
-      title: '漫画搜索等待中',
       listenable: _hub.progressFor(LibraryModuleKey.comic),
     ),
   ];
 
   bool _started = false;
+  String? _localeId;
+  LibraryTaskNotificationTextResolver? _textResolver;
 
   @override
-  void start() {
-    if (_started) {
-      return;
+  void start({
+    required String localeId,
+    required LibraryTaskNotificationTextResolver textResolver,
+  }) {
+    final localeChanged = _localeId != localeId;
+    _localeId = localeId;
+    _textResolver = textResolver;
+    if (!_started) {
+      _started = true;
+      for (final channel in _channels) {
+        channel.listener = () => _handleChannel(channel);
+        channel.listenable.addListener(channel.listener!);
+      }
     }
-    _started = true;
     for (final channel in _channels) {
-      channel.listener = () => _handleChannel(channel);
-      channel.listenable.addListener(channel.listener!);
-      // Emit once so a task already in progress at bridge start is reflected.
+      if (localeChanged) {
+        channel.lastSignature = null;
+      }
+      // Emit once so an existing task is reflected and locale changes repost.
       _handleChannel(channel);
     }
   }
@@ -73,11 +83,14 @@ class DefaultLibraryTaskNotificationBridge
       }
     }
     _started = false;
+    _localeId = null;
+    _textResolver = null;
   }
 
   void _handleChannel(_BridgedChannel channel) {
     final progress = channel.listenable.value;
-    final relevant = progress != null &&
+    final relevant =
+        progress != null &&
         progress.active &&
         progress.source == channel.source;
 
@@ -89,18 +102,24 @@ class DefaultLibraryTaskNotificationBridge
       return;
     }
 
+    final textResolver = _textResolver;
+    if (textResolver == null) {
+      return;
+    }
+
     final signature = _signatureOf(progress);
     // Skip redundant updates so we do not re-post an unchanged notification.
     if (signature == channel.lastSignature) {
       return;
     }
     channel.lastSignature = signature;
+    final text = textResolver(progress);
     unawaited(
       _showQuietly(
         LibraryTaskNotification(
           key: channel.key,
-          title: channel.title,
-          body: progress.message,
+          title: text.title,
+          body: text.body,
           current: progress.current,
           total: progress.total,
         ),
@@ -109,7 +128,9 @@ class DefaultLibraryTaskNotificationBridge
   }
 
   String _signatureOf(LibraryShelfTaskProgress progress) {
-    return '${progress.message}|${progress.current}|${progress.total}';
+    return '${_localeId ?? ''}|${progress.code.name}|${progress.subject ?? ''}'
+        '|${progress.estimatedDuration?.inMilliseconds ?? ''}'
+        '|${progress.current}|${progress.total}';
   }
 
   Future<void> _showQuietly(LibraryTaskNotification notification) async {
@@ -133,13 +154,11 @@ class _BridgedChannel {
   _BridgedChannel({
     required this.key,
     required this.source,
-    required this.title,
     required this.listenable,
   });
 
   final LibraryTaskNotificationKey key;
   final LibraryMutationSource source;
-  final String title;
   final ValueListenable<LibraryShelfTaskProgress?> listenable;
 
   VoidCallback? listener;

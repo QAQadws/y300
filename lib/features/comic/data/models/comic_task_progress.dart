@@ -16,17 +16,20 @@ class ComicSearchQueueShelfTaskProgressListenable extends ChangeNotifier
   }
 
   final ValueListenable<ComicSearchRefreshQueueSnapshot> _source;
-  final ValueListenable<LibraryTaskNotificationPermissionState?> _permissionState;
+  final ValueListenable<LibraryTaskNotificationPermissionState?>
+  _permissionState;
 
   @override
   LibraryShelfTaskProgress? get value {
     final snapshot = _source.value;
-    final message = snapshot.waitingMessage;
-    if (!snapshot.active || message == null) {
+    final title = snapshot.headTitle;
+    if (!snapshot.active || title == null || title.trim().isEmpty) {
       return null;
     }
     return LibraryShelfTaskProgress(
-      message: message,
+      code: LibraryShelfTaskProgressCode.comicSearchWaiting,
+      subject: title,
+      estimatedDuration: snapshot.estimatedDuration,
       source: LibraryMutationSource.comicSearchQueue,
       visible: !_isNotificationPermissionGranted,
       reloadOnCompletion: true,
@@ -34,8 +37,7 @@ class ComicSearchQueueShelfTaskProgressListenable extends ChangeNotifier
   }
 
   bool get _isNotificationPermissionGranted =>
-      _permissionState.value ==
-      LibraryTaskNotificationPermissionState.granted;
+      _permissionState.value == LibraryTaskNotificationPermissionState.granted;
 
   void _handleChange() {
     notifyListeners();

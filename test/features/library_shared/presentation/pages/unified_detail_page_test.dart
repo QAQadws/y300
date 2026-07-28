@@ -8,6 +8,8 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
+import 'package:y300/features/library_shared/presentation/services/library_detail_text_resolver.dart';
+import 'package:y300/l10n/app_localizations_zh.dart';
 
 void main() {
   testWidgets('UnifiedDetailPage renders header/chapter and FAB', (
@@ -264,6 +266,55 @@ void main() {
       expect(find.text('新标题'), findsWidgets);
     },
   );
+
+  testWidgets('metadata field set controls rendered and submitted values', (
+    tester,
+  ) async {
+    final adapter = _EditableDetailAdapter(
+      fields: const <LibraryMetadataField>{LibraryMetadataField.title},
+    );
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('unified-detail-edit-metadata')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('unified-detail-custom-title-input')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('unified-detail-custom-author-input')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('unified-detail-custom-group-input')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('unified-detail-custom-search-title-input')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const Key('unified-detail-save-metadata')));
+    await tester.pumpAndSettle();
+
+    expect(adapter.updateCalls, 1);
+    expect(adapter.lastCustomTitle, '测试作品');
+    expect(adapter.lastCustomAuthor, isNull);
+    expect(adapter.lastCustomTranslationGroup, isNull);
+    expect(adapter.lastCustomSearchTitle, isNull);
+  });
 
   testWidgets('UnifiedDetailPage only exposes parsed source tag', (
     tester,
@@ -743,7 +794,7 @@ void main() {
     await tester.tap(find.text('更新').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('更新预计耗时10.5s'), findsOneWidget);
+    expect(find.textContaining('已加入更新队列'), findsOneWidget);
   });
 
   testWidgets('UnifiedDetailPage renders comic progress beside source id', (
@@ -752,10 +803,10 @@ void main() {
     final adapter = _FakeDetailAdapter(
       module: LibraryModuleKey.comic,
       progressInfo: const LibraryChapterProgressInfo(
-        label: '第 3 页',
+        kind: LibraryChapterProgressKind.currentPage,
         isCurrent: true,
+        currentPage: 3,
         fraction: 0.3,
-        semanticLabel: '当前读到第 3 页',
       ),
     );
 
@@ -803,7 +854,7 @@ void main() {
   ) async {
     final adapter = _FakeDetailAdapter(
       progressInfo: const LibraryChapterProgressInfo(
-        label: '上次阅读',
+        kind: LibraryChapterProgressKind.lastRead,
         isCurrent: true,
         fraction: 0.42,
       ),
@@ -853,8 +904,9 @@ void main() {
       final adapter = _FakeDetailAdapter(
         module: LibraryModuleKey.comic,
         progressInfo: const LibraryChapterProgressInfo(
-          label: '第 3 页',
+          kind: LibraryChapterProgressKind.currentPage,
           isCurrent: true,
+          currentPage: 3,
           fraction: 0.42,
         ),
         isBookmarked: true,
@@ -949,7 +1001,10 @@ void main() {
         find.byKey(const Key('unified-detail-chapter-toolbar')),
         findsOneWidget,
       );
-      expect(find.text('共2章'), findsOneWidget);
+      expect(
+        find.text(AppLocalizationsZh().libraryChapterCount(2)),
+        findsOneWidget,
+      );
       expect(find.text('全部章节'), findsNothing);
 
       await tester.tap(find.byKey(const Key('unified-detail-appbar-filter')));
@@ -1081,7 +1136,10 @@ void main() {
     );
 
     final toolbar = find.byKey(const Key('unified-detail-chapter-toolbar'));
-    expect(find.text('共2章'), findsOneWidget);
+    expect(
+      find.text(AppLocalizationsZh().libraryChapterCount(2)),
+      findsOneWidget,
+    );
     expect(find.text('全部章节'), findsNothing);
     expect(
       find.descendant(of: toolbar, matching: find.byIcon(Icons.filter_list)),
@@ -1517,13 +1575,14 @@ void main() {
     await tester.longPress(chapter);
     await tester.pumpAndSettle();
     expect(find.text('重置本章阅读'), findsNothing);
-    expect(find.text('重置本漫画阅读'), findsOneWidget);
+    final l10n = AppLocalizationsZh();
+    expect(find.text(l10n.libraryDetailResetWorkReading), findsOneWidget);
     await tester.tap(
       find.byKey(const Key('unified-detail-work-reset-reading-action')),
     );
     await tester.pumpAndSettle();
-    expect(find.text('重置本漫画阅读？'), findsOneWidget);
-    await tester.tap(find.text('取消'));
+    expect(find.text(l10n.libraryDetailResetReadingTitle), findsOneWidget);
+    await tester.tap(find.text(l10n.commonCancel));
     await tester.pumpAndSettle();
     expect(adapter.resetWorkCallCount, 0);
 
@@ -1702,7 +1761,15 @@ void main() {
     await tester.tap(find.text('更新').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('更新预计耗时10.5s'), findsOneWidget);
+    expect(
+      find.text(
+        AppLocalizationsZh().libraryDetailRefreshQueuedAtPosition(
+          1,
+          AppLocalizationsZh().libraryTaskDurationSeconds(11),
+        ),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('UnifiedDetailPage shows refresh fallback snackbars', (
@@ -1802,7 +1869,18 @@ void main() {
 
     expect(find.byKey(const Key('unified-detail-error-panel')), findsOneWidget);
     expect(find.byKey(const Key('unified-detail-error-retry')), findsOneWidget);
-    expect(find.textContaining('加载失败'), findsOneWidget);
+    final l10n = AppLocalizationsZh();
+    expect(
+      find.text(
+        l10n.libraryDetailLoadFailed(
+          LibraryDetailTextResolver.safeError(
+            l10n,
+            StateError('header failed'),
+          ),
+        ),
+      ),
+      findsOneWidget,
+    );
     expect(presentationCount, 0);
 
     await tester.ensureVisible(
@@ -2363,6 +2441,16 @@ final class _QueuedDownloadDetailAdapter extends _FakeDetailAdapter
 
 class _EditableDetailAdapter extends _FakeDetailAdapter
     implements DetailMetadataEditor {
+  _EditableDetailAdapter({
+    this.fields = const <LibraryMetadataField>{
+      LibraryMetadataField.title,
+      LibraryMetadataField.author,
+      LibraryMetadataField.translationGroup,
+      LibraryMetadataField.searchTitle,
+    },
+  });
+
+  final Set<LibraryMetadataField> fields;
   String title = '测试作品';
   String? author = '作者A';
   String? translationGroup = '汉化组A';
@@ -2370,13 +2458,14 @@ class _EditableDetailAdapter extends _FakeDetailAdapter
   String? lastCustomAuthor;
   String? lastCustomTranslationGroup;
   String? lastCustomSearchTitle;
+  int updateCalls = 0;
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
 
   @override
   DetailMetadataEditorConfig get metadataEditorConfig =>
-      const DetailMetadataEditorConfig();
+      DetailMetadataEditorConfig(fields: fields);
 
   @override
   Future<LibraryDetailHeader> loadHeader({required String workId}) async {
@@ -2405,6 +2494,7 @@ class _EditableDetailAdapter extends _FakeDetailAdapter
     String? customTranslationGroup,
     String? customSearchTitle,
   }) async {
+    updateCalls += 1;
     lastCustomTitle = customTitle;
     lastCustomAuthor = customAuthor;
     lastCustomTranslationGroup = customTranslationGroup;
@@ -2433,11 +2523,14 @@ class _CatalogEditableDetailAdapter extends _FakeDetailAdapter
   }
 
   @override
-  Future<void> updateCatalogOverride({
+  Future<DetailCatalogUpdateOutcome> updateCatalogOverride({
     required String workId,
     String? catalogUrl,
   }) async {
     lastCatalogUrl = catalogUrl;
+    return const DetailCatalogUpdateOutcome(
+      code: DetailCatalogUpdateOutcomeCode.saved,
+    );
   }
 }
 
@@ -2483,12 +2576,14 @@ class _ManageableDetailAdapter extends _FakeDetailAdapter
   }
 
   @override
-  Future<bool> addManualChapter({
+  Future<DetailManualChapterAddOutcome> addManualChapter({
     required String workId,
     required String input,
   }) async {
     _hidden[input] = false;
-    return true;
+    return const DetailManualChapterAddOutcome(
+      code: DetailManualChapterAddOutcomeCode.added,
+    );
   }
 
   @override

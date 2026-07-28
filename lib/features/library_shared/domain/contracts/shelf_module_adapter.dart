@@ -14,9 +14,6 @@ abstract class ShelfModuleAdapter {
   /// 当前适配器对应模块。
   LibraryModuleKey get moduleKey;
 
-  /// 顶部标题文案，如“漫画”“小说”。
-  String get moduleTitle;
-
   /// 默认显示模式：漫画通常网格，小说通常列表。
   LibraryDisplayMode get defaultDisplayMode;
 
@@ -143,29 +140,42 @@ abstract class ShelfSnapshotAdapter {
 /// 统一书架据此展示“已下载”筛选；水合内容天然可离线的模块无需实现。
 abstract interface class ShelfDownloadStatusAdapter {}
 
-class ShelfModuleActionResult {
-  const ShelfModuleActionResult({required this.message, this.changed = false});
+enum LibraryShelfMenuAction { mergeDuplicates }
 
-  final String message;
+enum ShelfModuleActionOutcomeCode { success, noChange, unsupported }
+
+class ShelfModuleActionOutcome {
+  const ShelfModuleActionOutcome({
+    required this.code,
+    this.changed = false,
+    this.affectedCount = 0,
+  });
+
+  final ShelfModuleActionOutcomeCode code;
   final bool changed;
+  final int affectedCount;
 }
 
 abstract class ShelfModuleActionAdapter {
   List<LibraryShelfMenuAction> get menuActions;
 
-  Future<ShelfModuleActionResult> runMenuAction(String actionId);
+  Future<ShelfModuleActionOutcome> runMenuAction(LibraryShelfMenuAction action);
 }
 
-class LibraryShelfMenuAction {
-  const LibraryShelfMenuAction({required this.id, required this.label});
-
-  final String id;
-  final String label;
+enum LibraryShelfTaskProgressCode {
+  coverWarmup,
+  favoriteSyncFetching,
+  favoriteSyncSaving,
+  favoriteSyncLoadingDetails,
+  favoriteSyncFinishing,
+  comicSearchWaiting,
 }
 
 class LibraryShelfTaskProgress {
   const LibraryShelfTaskProgress({
-    required this.message,
+    required this.code,
+    this.subject,
+    this.estimatedDuration,
     this.current = 0,
     this.total,
     this.active = true,
@@ -174,7 +184,11 @@ class LibraryShelfTaskProgress {
     this.reloadOnCompletion = true,
   });
 
-  final String message;
+  final LibraryShelfTaskProgressCode code;
+
+  /// Raw server/user content used only as a presentation placeholder.
+  final String? subject;
+  final Duration? estimatedDuration;
   final int current;
   final int? total;
   final bool active;
