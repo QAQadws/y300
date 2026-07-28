@@ -3,11 +3,4 @@ final class AboutAppInfo {
 
   final String version;
   final String buildNumber;
-
-  String get displayVersion {
-    final normalizedBuild = buildNumber.trim();
-    return normalizedBuild.isEmpty
-        ? '版本 ${version.trim()}'
-        : '版本 ${version.trim()} ($normalizedBuild)';
-  }
 }

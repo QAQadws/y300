@@ -4,6 +4,8 @@ import 'package:y300/features/more/presentation/data_storage_controller.dart';
 import 'package:y300/features/more/presentation/data_storage_debug_actions.dart';
 import 'package:y300/features/more/presentation/data_storage_debug_overview.dart';
 import 'package:y300/features/more/presentation/data_storage_formatters.dart';
+import 'package:y300/features/more/presentation/more_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class DataStoragePage extends ConsumerWidget {
   const DataStoragePage({super.key});
@@ -11,15 +13,19 @@ class DataStoragePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(dataStorageControllerProvider);
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('数据与存储')),
+      appBar: AppBar(title: Text(l10n.moreStorageTitle)),
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('加载数据与存储设置失败：$error', textAlign: TextAlign.center),
+            child: Text(
+              l10n.moreStorageLoadFailed('$error'),
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
         data: (viewState) {
@@ -28,6 +34,7 @@ class DataStoragePage extends ConsumerWidget {
             children: [
               ...buildDataStorageDebugActionWidgets(
                 enabled: !viewState.isUpdating,
+                l10n: l10n,
                 onReloadUsage: () => ref
                     .read(dataStorageControllerProvider.notifier)
                     .reloadUsage(),
@@ -38,8 +45,8 @@ class DataStoragePage extends ConsumerWidget {
               ListTile(
                 key: const Key('data-storage-cache-usage'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  '清理缓存',
+                title: Text(
+                  l10n.moreStorageClearCache,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
                 trailing: FilledButton(
@@ -49,7 +56,7 @@ class DataStoragePage extends ConsumerWidget {
                       : () => ref
                             .read(dataStorageControllerProvider.notifier)
                             .clearCache(),
-                  child: const Text('清理'),
+                  child: Text(l10n.moreStorageClear),
                 ),
               ),
               const SizedBox(height: 4),
@@ -59,7 +66,7 @@ class DataStoragePage extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
-              buildDataStorageDebugOverview(viewState.usageReport),
+              buildDataStorageDebugOverview(viewState.usageReport, l10n),
               const SizedBox(height: 8),
               _CacheLimitControl(
                 valueBytes: viewState.cacheMaxBytes,
@@ -69,7 +76,7 @@ class DataStoragePage extends ConsumerWidget {
                     .updateCacheMaxBytes(bytes),
               ),
               Text(
-                '清理 HTML、解析快照与常规图片缓存；长期缓存、封面、下载和用户数据会保留。',
+                l10n.moreStorageCacheDescription,
                 key: const Key('data-storage-cache-hint'),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -77,8 +84,8 @@ class DataStoragePage extends ConsumerWidget {
               ListTile(
                 key: const Key('data-storage-effective-directory'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  '存储位置',
+                title: Text(
+                  l10n.moreStorageLocation,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
                 subtitle: Text(viewState.storagePath),
@@ -87,7 +94,7 @@ class DataStoragePage extends ConsumerWidget {
               ListTile(
                 key: const Key('data-storage-default-directory'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('默认位置'),
+                title: Text(l10n.moreStorageDefaultLocation),
                 subtitle: Text(viewState.defaultStoragePath),
               ),
               if (viewState.customStoragePath != null) ...[
@@ -95,7 +102,7 @@ class DataStoragePage extends ConsumerWidget {
                 ListTile(
                   key: const Key('data-storage-custom-directory'),
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('自定义位置'),
+                  title: Text(l10n.moreStorageCustomLocation),
                   subtitle: Text(viewState.customStoragePath!),
                 ),
               ],
@@ -108,7 +115,7 @@ class DataStoragePage extends ConsumerWidget {
                           .read(dataStorageControllerProvider.notifier)
                           .chooseStorageDirectory(),
                 icon: const Icon(Icons.folder_open),
-                label: const Text('选择自定义目录'),
+                label: Text(l10n.moreStorageChooseDirectory),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
@@ -120,12 +127,12 @@ class DataStoragePage extends ConsumerWidget {
                           .read(dataStorageControllerProvider.notifier)
                           .restoreDefaultStorageDirectory(),
                 icon: const Icon(Icons.restore),
-                label: const Text('恢复默认'),
+                label: Text(l10n.moreStorageRestoreDefault),
               ),
-              if (viewState.hint != null) ...[
+              if (viewState.notice != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  viewState.hint!,
+                  MoreTextResolver.storageNotice(l10n, viewState.notice!),
                   key: const Key('data-storage-hint-text'),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
@@ -186,7 +193,7 @@ class _CacheLimitControlState extends State<_CacheLimitControl> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '最大缓存：$valueMb MB',
+          AppLocalizations.of(context).moreStorageMaximumCache('$valueMb MB'),
           key: const Key('data-storage-cache-max-label'),
         ),
         Slider(

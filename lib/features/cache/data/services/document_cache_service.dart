@@ -130,7 +130,11 @@ class LocalDocumentCacheService
           final count = row['count'] as int? ?? 0;
           return StorageUsageSlice(
             id: 'document:$ownerType:$namespace',
-            label: '${_ownerLabel(ownerType)} HTML（$count）',
+            labelRef: StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.documentOwner,
+              code: ownerType,
+              count: count,
+            ),
             bytes: row['total'] as int? ?? 0,
             protected: false,
           );
@@ -140,7 +144,10 @@ class LocalDocumentCacheService
     final total = slices.fold<int>(0, (sum, slice) => sum + slice.bytes);
     return StorageUsageSection(
       bucket: StorageBucket.pageCache,
-      label: StorageBucket.pageCache.label,
+      labelRef: const StorageUsageLabelRef(
+        kind: StorageUsageLabelKind.bucket,
+        code: 'page_cache',
+      ),
       bytes: total,
       clearable: total > 0,
       slices: slices,
@@ -273,17 +280,5 @@ class LocalDocumentCacheService
   String? _normalizeNullable(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
-  }
-
-  String _ownerLabel(String ownerType) {
-    return switch (ownerType) {
-      'forum' => '论坛首页',
-      'forum_display' => '帖子列表',
-      'thread' => '帖子详情',
-      'tag' => '标签页',
-      'profile' => '个人资料',
-      'blog' => '日志',
-      _ => ownerType.isEmpty ? '页面' : ownerType,
-    };
   }
 }

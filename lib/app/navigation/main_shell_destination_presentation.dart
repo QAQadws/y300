@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 extension MainShellDestinationPresentation on MainShellDestination {
-  String get displayLabel {
+  String localizedLabel(AppLocalizations l10n) {
     return switch (this) {
-      MainShellDestination.forum => '论坛',
-      MainShellDestination.favorites => '收藏',
-      MainShellDestination.comic => '漫画',
-      MainShellDestination.novel => '小说',
-      MainShellDestination.history => '记录',
-      MainShellDestination.more => '更多',
+      MainShellDestination.forum => l10n.appNavigationForum,
+      MainShellDestination.favorites => l10n.appNavigationFavorites,
+      MainShellDestination.comic => l10n.appNavigationComic,
+      MainShellDestination.novel => l10n.appNavigationNovel,
+      MainShellDestination.history => l10n.appNavigationHistory,
+      MainShellDestination.more => l10n.appNavigationMore,
     };
   }
 

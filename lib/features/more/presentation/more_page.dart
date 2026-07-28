@@ -20,7 +20,9 @@ import 'package:y300/features/more/presentation/about_page.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/data_storage_page.dart';
 import 'package:y300/features/more/presentation/more_debug_tools.dart';
+import 'package:y300/features/more/presentation/more_text_resolver.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class MorePage extends ConsumerStatefulWidget {
   const MorePage({super.key});
@@ -48,26 +50,28 @@ class _MorePageState extends ConsumerState<MorePage> {
     final navigationState = ref
         .watch(mainNavigationSettingsControllerProvider)
         .value;
+    final l10n = AppLocalizations.of(context);
     final visibleNavigationCount =
         navigationState?.settings.visibleManagedDestinations.length ?? 5;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('更多')),
+      appBar: AppBar(title: Text(l10n.moreTitle)),
       body: ListView(
         children: [
           _AuthSessionTile(
             session: authSession,
+            l10n: l10n,
             onLogin: () => _openLoginPage(context),
             onLogout: () => _confirmAndLogout(context, ref),
           ),
           ListTile(
             key: const Key('more-my-profile-entry'),
             leading: const Icon(Icons.person_outline),
-            title: const Text('我的资料'),
+            title: Text(l10n.moreMyProfile),
             subtitle: Text(
               authSession.isLoggedIn
-                  ? _myProfileSubtitle(authSession)
-                  : '登录后查看个人资料、消息提醒',
+                  ? _myProfileSubtitle(l10n, authSession)
+                  : l10n.moreMyProfileSignedOutSubtitle,
             ),
             onTap: authSession.isLoggedIn
                 ? () => _openMyProfileWebViewPage(context, authSession)
@@ -76,24 +80,35 @@ class _MorePageState extends ConsumerState<MorePage> {
           ListTile(
             key: const Key('more-forum-mode-entry'),
             leading: const Icon(Icons.public_outlined),
-            title: const Text('论坛显示模式'),
-            subtitle: Text('当前：${forumMode.displayLabel}'),
+            title: Text(l10n.moreForumDisplayMode),
+            subtitle: Text(
+              l10n.moreForumCurrentMode(
+                MoreTextResolver.forumModeLabel(l10n, forumMode),
+              ),
+            ),
             onTap: () => _showForumModeSheet(context, ref, forumMode),
           ),
           ListTile(
             key: const Key('more-appearance-entry'),
             leading: const Icon(Icons.palette_outlined),
-            title: const Text('外观与文字'),
+            title: Text(l10n.moreAppearance),
             subtitle: Text(
-              '当前：${appearanceSettings.themePreference.displayLabel}',
+              l10n.moreCurrentTheme(
+                MoreTextResolver.themeLabel(
+                  l10n,
+                  appearanceSettings.themePreference,
+                ),
+              ),
             ),
             onTap: () => _showAppearanceSettingsSheet(context),
           ),
           ListTile(
             key: const Key('more-navigation-management-entry'),
             leading: const Icon(Icons.view_week_outlined),
-            title: const Text('导航栏管理'),
-            subtitle: Text('已显示 $visibleNavigationCount 项'),
+            title: Text(l10n.moreNavigationManagement),
+            subtitle: Text(
+              l10n.moreVisibleNavigationCount(visibleNavigationCount),
+            ),
             onTap: navigationState == null
                 ? null
                 : () {
@@ -107,8 +122,8 @@ class _MorePageState extends ConsumerState<MorePage> {
           ListTile(
             key: const Key('more-data-storage-entry'),
             leading: const Icon(Icons.storage_outlined),
-            title: const Text('数据与存储'),
-            subtitle: const Text('管理图片缓存与下载位置'),
+            title: Text(l10n.moreDataAndStorage),
+            subtitle: Text(l10n.moreDataAndStorageSubtitle),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -123,8 +138,8 @@ class _MorePageState extends ConsumerState<MorePage> {
               return ListTile(
                 key: const Key('more-download-queue-entry'),
                 leading: const Icon(Icons.downloading_outlined),
-                title: const Text('下载队列'),
-                subtitle: Text(_downloadQueueSummary(snapshot)),
+                title: Text(l10n.moreDownloadQueue),
+                subtitle: Text(_downloadQueueSummary(l10n, snapshot)),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -135,13 +150,15 @@ class _MorePageState extends ConsumerState<MorePage> {
               );
             },
           ),
-          ..._debugTools.buildTiles(context),
+          ..._debugTools.buildTiles(context, l10n),
           ListTile(
             key: const Key('more-about-entry'),
             leading: const Icon(Icons.info_outline),
-            title: const Text('关于'),
+            title: Text(l10n.moreAbout),
             subtitle: Text(
-              appInfo == null ? '应用信息' : '版本 ${appInfo.version.trim()}',
+              appInfo == null
+                  ? l10n.moreAboutSubtitle
+                  : MoreTextResolver.aboutVersion(l10n, appInfo),
             ),
             onTap: () {
               Navigator.of(context).push(
@@ -154,24 +171,31 @@ class _MorePageState extends ConsumerState<MorePage> {
     );
   }
 
-  String _downloadQueueSummary(ComicDownloadQueueSnapshot snapshot) {
+  String _downloadQueueSummary(
+    AppLocalizations l10n,
+    ComicDownloadQueueSnapshot snapshot,
+  ) {
     final active = snapshot.activeEntry;
     if (active != null) {
       final total = active.totalImages;
       final progress = total == null || total <= 0
-          ? '正在解析图片'
+          ? l10n.moreDownloadParsingImages
           : '${active.completedImages}/$total';
       final waiting = snapshot.waitingCount;
-      return '正在下载《${active.comicTitle}》 ${active.episodeTitle} · '
-          '$progress${waiting > 0 ? ' · 等待 $waiting' : ''}';
+      return l10n.moreDownloadActiveProgress(
+        active.comicTitle,
+        active.episodeTitle,
+        progress,
+        waiting,
+      );
     }
     if (snapshot.waitingCount > 0) {
-      return '等待下载 · ${snapshot.waitingCount} 个任务';
+      return l10n.moreDownloadWaiting(snapshot.waitingCount);
     }
     if (snapshot.failedCount > 0) {
-      return '${snapshot.failedCount} 个任务下载失败';
+      return l10n.moreDownloadFailed(snapshot.failedCount);
     }
-    return '暂无下载任务';
+    return l10n.moreDownloadEmpty;
   }
 
   Future<void> _showAppearanceSettingsSheet(BuildContext context) {
@@ -187,6 +211,7 @@ class _MorePageState extends ConsumerState<MorePage> {
     WidgetRef ref,
     ForumShellMode currentMode,
   ) {
+    final l10n = AppLocalizations.of(context);
     return showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) {
@@ -197,7 +222,7 @@ class _MorePageState extends ConsumerState<MorePage> {
               ListTile(
                 key: const Key('more-forum-mode-option-webview'),
                 leading: const Icon(Icons.language_outlined),
-                title: const Text('WebView 模式'),
+                title: Text(l10n.moreForumModeWebView),
                 trailing: currentMode == ForumShellMode.webview
                     ? const Icon(Icons.check)
                     : null,
@@ -211,7 +236,7 @@ class _MorePageState extends ConsumerState<MorePage> {
               ListTile(
                 key: const Key('more-forum-mode-option-native'),
                 leading: const Icon(Icons.forum_outlined),
-                title: const Text('解析模式'),
+                title: Text(l10n.moreForumModeNative),
                 trailing: currentMode == ForumShellMode.native
                     ? const Icon(Icons.check)
                     : null,
@@ -235,6 +260,7 @@ class _MorePageState extends ConsumerState<MorePage> {
     required WidgetRef ref,
     required ForumShellMode mode,
   }) async {
+    final l10n = AppLocalizations.of(pageContext);
     try {
       await ref.read(forumShellModeControllerProvider.notifier).setMode(mode);
       if (sheetContext.mounted) {
@@ -246,7 +272,9 @@ class _MorePageState extends ConsumerState<MorePage> {
       }
       ScaffoldMessenger.of(pageContext)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('论坛显示模式切换失败：$error')));
+        ..showSnackBar(
+          SnackBar(content: Text(l10n.moreForumModeSwitchFailed('$error'))),
+        );
     }
   }
 
@@ -298,29 +326,32 @@ class _MorePageState extends ConsumerState<MorePage> {
     );
   }
 
-  String _myProfileSubtitle(AuthSessionViewState session) {
+  String _myProfileSubtitle(
+    AppLocalizations l10n,
+    AuthSessionViewState session,
+  ) {
     final username = session.username.trim();
     if (username.isEmpty) {
-      return '查看个人资料、消息提醒';
+      return l10n.moreMyProfileSignedOutSubtitle;
     }
-    return '$username 的资料与消息提醒';
+    return l10n.moreMyProfileSubtitle(username);
   }
 
   Future<void> _confirmAndLogout(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('退出登录'),
-        content: const Text('退出后会清除本地论坛登录状态。'),
+        title: Text(AppLocalizations.of(context).moreLogoutConfirmTitle),
+        content: Text(AppLocalizations.of(context).moreLogoutConfirmBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context).commonCancel),
           ),
           FilledButton(
             key: const Key('more-logout-confirm-button'),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('退出'),
+            child: Text(AppLocalizations.of(context).moreLogout),
           ),
         ],
       ),
@@ -338,15 +369,17 @@ class _MorePageState extends ConsumerState<MorePage> {
 
     if (success) {
       ref.invalidate(forumHomeControllerProvider);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已退出登录')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).moreLogoutSuccess)),
+      );
       return;
     }
 
     final message =
         ref.read(authSessionControllerProvider).asData?.value.errorMessage ??
-        '退出登录失败';
+        AppLocalizations.of(
+          context,
+        ).moreLogoutFailed(AppLocalizations.of(context).commonUnknownError);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
@@ -356,11 +389,13 @@ class _MorePageState extends ConsumerState<MorePage> {
 class _AuthSessionTile extends StatelessWidget {
   const _AuthSessionTile({
     required this.session,
+    required this.l10n,
     required this.onLogin,
     required this.onLogout,
   });
 
   final AuthSessionViewState session;
+  final AppLocalizations l10n;
   final VoidCallback onLogin;
   final VoidCallback onLogout;
 
@@ -376,7 +411,7 @@ class _AuthSessionTile extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : const Icon(Icons.logout),
-        title: const Text('退出登录'),
+        title: Text(l10n.moreLogout),
         subtitle: Text(_logoutSubtitle),
         enabled: !session.isLoggingOut,
         onTap: session.isLoggingOut ? null : onLogout,
@@ -386,8 +421,8 @@ class _AuthSessionTile extends StatelessWidget {
     return ListTile(
       key: const Key('more-login-entry'),
       leading: const Icon(Icons.login),
-      title: const Text('登录'),
-      subtitle: const Text('登录论坛账号并同步登录状态'),
+      title: Text(l10n.moreLogin),
+      subtitle: Text(l10n.moreLoginSubtitle),
       onTap: onLogin,
     );
   }
@@ -395,8 +430,8 @@ class _AuthSessionTile extends StatelessWidget {
   String get _logoutSubtitle {
     final username = session.username.trim();
     if (username.isEmpty) {
-      return '退出当前论坛账号';
+      return l10n.moreLogoutSubtitle;
     }
-    return '当前账号：$username';
+    return l10n.moreLogoutSubtitleUsername(username);
   }
 }

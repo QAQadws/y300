@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_page.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class MoreDebugTools {
   const MoreDebugTools();
 
-  List<Widget> buildTiles(BuildContext context) {
+  List<Widget> buildTiles(BuildContext context, AppLocalizations l10n) {
     if (!kDebugMode) {
       return const <Widget>[];
     }
@@ -14,8 +15,8 @@ class MoreDebugTools {
       ListTile(
         key: const Key('more-composer-quill-prototype-entry'),
         leading: const Icon(Icons.edit_note_outlined),
-        title: const Text('Quill Composer 原型'),
-        subtitle: const Text('验证所见即所得到 Discuz BBCode 的转换'),
+        title: Text(l10n.moreDebugQuillComposer),
+        subtitle: Text(l10n.moreDebugQuillComposerSubtitle),
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute<void>(
@@ -27,8 +28,8 @@ class MoreDebugTools {
       ListTile(
         key: const Key('more-html-renderer-prototype-entry'),
         leading: const Icon(Icons.article_outlined),
-        title: const Text('HTML 正文渲染原型'),
-        subtitle: const Text('验证复杂正文 HTML 的原生渲染'),
+        title: Text(l10n.moreDebugHtmlRenderer),
+        subtitle: Text(l10n.moreDebugHtmlRendererSubtitle),
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute<void>(

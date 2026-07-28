@@ -216,7 +216,7 @@ void main() {
     expect(maintenance.clearImageCacheCalls, 1);
     expect(maintenance.lastClearScope, CacheClearScope.userCleanup);
     expect(value.clearableCacheBytes, 0);
-    expect(value.hint, contains('用户数据已保留'));
+    expect(value.notice?.code, DataStorageNoticeCode.cacheCleared);
   });
 
   test('clearCache reports partial participant failure', () async {
@@ -243,8 +243,8 @@ void main() {
     await container.read(dataStorageControllerProvider.notifier).clearCache();
 
     expect(
-      container.read(dataStorageControllerProvider).value!.hint,
-      '部分缓存清理失败，请稍后重试',
+      container.read(dataStorageControllerProvider).value!.notice?.code,
+      DataStorageNoticeCode.cachePartiallyCleared,
     );
   });
 
@@ -322,7 +322,7 @@ void main() {
 
     final value = container.read(dataStorageControllerProvider).value!;
     expect(value.clearableCacheBytes, 2048);
-    expect(value.hint, '存储统计已刷新');
+    expect(value.notice?.code, DataStorageNoticeCode.usageReloaded);
   });
 
   test('export cache diagnostics writes current usage report', () async {
@@ -355,7 +355,8 @@ void main() {
     final value = container.read(dataStorageControllerProvider).value!;
     expect(exporter.exportCalls, 1);
     expect(exporter.lastReport?.totalBytes, 4096);
-    expect(value.hint, contains('C:/default-storage/diagnostics/cache.json'));
+    expect(value.notice?.code, DataStorageNoticeCode.diagnosticsExported);
+    expect(value.notice?.path, 'C:/default-storage/diagnostics/cache.json');
   });
 }
 
@@ -590,7 +591,10 @@ class _FakeStorageAccountingService implements StorageAccountingService {
       sections: <StorageUsageSection>[
         StorageUsageSection(
           bucket: StorageBucket.imageCache,
-          label: StorageBucket.imageCache.label,
+          labelRef: const StorageUsageLabelRef(
+            kind: StorageUsageLabelKind.bucket,
+            code: 'image_cache',
+          ),
           bytes: imageUsageBytes,
           clearable: true,
         ),
@@ -671,7 +675,10 @@ class _FakeCacheMaintenanceService implements CacheMaintenanceService {
       sections: <StorageUsageSection>[
         StorageUsageSection(
           bucket: StorageBucket.imageCache,
-          label: StorageBucket.imageCache.label,
+          labelRef: const StorageUsageLabelRef(
+            kind: StorageUsageLabelKind.bucket,
+            code: 'image_cache',
+          ),
           bytes: imageUsageBytes,
           clearable: true,
         ),

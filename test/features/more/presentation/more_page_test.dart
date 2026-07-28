@@ -185,13 +185,7 @@ void main() {
             const _FakeForumFavoriteRepository(),
           ),
         ],
-        child: const LocalizedTestApp(
-          locale: Locale('en'),
-          supportedLocales: [Locale('en')],
-          localizationsDelegates:
-              LocalizedTestApp.frameworkAndQuillLocalizationsDelegates,
-          home: MorePage(),
-        ),
+        child: const LocalizedTestApp(home: MorePage()),
       ),
     );
     await tester.pump();
@@ -218,7 +212,7 @@ void main() {
       ),
     ]);
 
-    await tester.pageBack();
+    await tester.tap(find.byKey(const Key('forum-webview-back-button')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('more-logout-entry')));

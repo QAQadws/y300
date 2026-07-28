@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/history_entry_router.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
-import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
+import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/data/services/cache_budget_scheduler.dart';
@@ -380,7 +381,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     return NavigationDestination(
       icon: _buildNavigationIcon(destination.icon),
       selectedIcon: _buildNavigationIcon(destination.selectedIcon),
-      label: destination.displayLabel,
+      label: destination.localizedLabel(AppLocalizations.of(context)),
     );
   }
 

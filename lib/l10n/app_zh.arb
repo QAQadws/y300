@@ -25,5 +25,259 @@
         "type": "String"
       }
     }
+  },
+
+  "commonCancel": "取消",
+  "commonConfirm": "确定",
+  "commonClose": "关闭",
+  "commonRetry": "重试",
+  "commonUnknownError": "未知错误",
+
+  "appNavigationForum": "论坛",
+  "appNavigationFavorites": "收藏",
+  "appNavigationComic": "漫画",
+  "appNavigationNovel": "小说",
+  "appNavigationHistory": "记录",
+  "appNavigationMore": "更多",
+
+  "moreTitle": "更多",
+  "moreMyProfile": "我的资料",
+  "moreMyProfileSignedOutSubtitle": "登录后查看个人资料、消息提醒",
+  "moreMyProfileSubtitle": "{username} 的资料与消息提醒",
+  "@moreMyProfileSubtitle": {
+    "description": "个人资料入口副标题；username 是原始用户名，不进行内容转换",
+    "placeholders": {
+      "username": {"type": "String"}
+    }
+  },
+  "moreLogin": "登录",
+  "moreLoginSubtitle": "登录论坛账号并同步登录状态",
+  "moreLogout": "退出登录",
+  "moreLogoutSubtitle": "退出当前论坛账号",
+  "moreLogoutSubtitleUsername": "当前账号：{username}",
+  "@moreLogoutSubtitleUsername": {
+    "description": "已登录账号副标题；username 是原始用户名",
+    "placeholders": {
+      "username": {"type": "String"}
+    }
+  },
+  "moreLogoutConfirmTitle": "退出登录",
+  "moreLogoutConfirmBody": "退出后会清除本地论坛登录状态。",
+  "moreLogoutSuccess": "已退出登录",
+  "moreLogoutFailed": "退出登录失败：{error}",
+  "@moreLogoutFailed": {
+    "description": "退出登录失败提示；error 是安全的外部错误摘要",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "moreForumDisplayMode": "论坛显示模式",
+  "moreForumCurrentMode": "当前：{mode}",
+  "@moreForumCurrentMode": {
+    "placeholders": {"mode": {"type": "String"}}
+  },
+  "moreForumModeWebView": "WebView 模式",
+  "moreForumModeNative": "解析模式",
+  "moreForumModeSwitchFailed": "论坛显示模式切换失败：{error}",
+  "@moreForumModeSwitchFailed": {
+    "description": "论坛模式切换失败提示；error 是安全的外部错误摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "moreAppearance": "外观与文字",
+  "moreCurrentTheme": "当前：{theme}",
+  "@moreCurrentTheme": {
+    "placeholders": {"theme": {"type": "String"}}
+  },
+  "moreThemeSectionTitle": "主题",
+  "moreThemeLight": "浅色",
+  "moreThemeDark": "深色",
+  "moreThemeSystem": "跟随系统",
+  "moreThemeDescriptionLight": "保持浅色外观",
+  "moreThemeDescriptionDark": "使用深色外观",
+  "moreThemeDescriptionSystem": "跟随系统浅色或深色设置",
+  "moreThemeSaveFailed": "主题设置保存失败：{error}",
+  "@moreThemeSaveFailed": {
+    "description": "保存主题偏好失败提示；error 是安全的外部错误摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "moreNavigationManagement": "导航栏管理",
+  "moreVisibleNavigationCount": "已显示 {count, plural, =0 {0 项} other {{count} 项}}",
+  "@moreVisibleNavigationCount": {
+    "description": "更多页导航栏管理入口的可见项目数量",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "moreNavigationRestoreDefault": "恢复默认",
+  "moreNavigationRetry": "重试",
+  "moreNavigationDragToReorder": "拖动排序",
+  "moreNavigationMinimumOneRequired": "至少保留一个导航项",
+  "moreNavigationSaveFailed": "导航栏设置保存失败",
+  "moreDataAndStorage": "数据与存储",
+  "moreDataAndStorageSubtitle": "管理图片缓存与下载位置",
+  "moreDownloadQueue": "下载队列",
+  "moreDownloadParsingImages": "正在解析图片",
+  "moreDownloadActiveProgress": "正在下载《{comicTitle}》 {episodeTitle} · {progress}{waitingCount, plural, =0 {} other { · 等待 {waitingCount}}}",
+  "@moreDownloadActiveProgress": {
+    "description": "下载队列当前任务摘要；标题和章节名是原始业务内容",
+    "placeholders": {
+      "comicTitle": {"type": "String"},
+      "episodeTitle": {"type": "String"},
+      "progress": {"type": "String"},
+      "waitingCount": {"type": "int"}
+    }
+  },
+  "moreDownloadWaiting": "等待下载 · {count, plural, =0 {0 个任务} other {{count} 个任务}}",
+  "@moreDownloadWaiting": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "moreDownloadFailed": "{count, plural, =0 {0 个任务下载失败} other {{count} 个任务下载失败}}",
+  "@moreDownloadFailed": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "moreDownloadEmpty": "暂无下载任务",
+  "moreAbout": "关于",
+  "moreAboutSubtitle": "应用信息",
+  "moreAboutVersion": "版本 {version}",
+  "@moreAboutVersion": {
+    "placeholders": {"version": {"type": "String"}}
+  },
+  "moreAboutVersionWithBuild": "版本 {version} ({buildNumber})",
+  "@moreAboutVersionWithBuild": {
+    "placeholders": {
+      "version": {"type": "String"},
+      "buildNumber": {"type": "String"}
+    }
+  },
+  "moreAboutVersionLoading": "版本读取中",
+  "moreAboutVersionSection": "版本",
+  "moreAboutReleaseNotes": "更新日志",
+  "moreAboutProjectSection": "项目",
+  "moreAboutGitHub": "GitHub 仓库",
+  "moreAboutOpenGitHubFailed": "无法打开 GitHub 仓库",
+  "moreDebugQuillComposer": "Quill Composer 原型",
+  "moreDebugQuillComposerSubtitle": "验证所见即所得的 Discuz BBCode 转换",
+  "moreDebugHtmlRenderer": "HTML 正文渲染原型",
+  "moreDebugHtmlRendererSubtitle": "验证复杂正文 HTML 的原生渲染",
+
+  "moreStorageTitle": "数据与存储",
+  "moreStorageLoadFailed": "加载数据与存储设置失败：{error}",
+  "@moreStorageLoadFailed": {
+    "description": "数据与存储页面加载失败提示；error 是安全的外部错误摘要",
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "moreStorageClearCache": "清理缓存",
+  "moreStorageClear": "清理",
+  "moreStorageCacheDescription": "清理 HTML、解析快照与常规图片缓存；长期缓存、封面、下载和用户数据会保留。",
+  "moreStorageLocation": "存储位置",
+  "moreStorageDefaultLocation": "默认位置",
+  "moreStorageCustomLocation": "自定义位置",
+  "moreStorageChooseDirectory": "选择自定义目录",
+  "moreStorageRestoreDefault": "恢复默认",
+  "moreStorageMaximumCache": "最大缓存：{size}",
+  "@moreStorageMaximumCache": {
+    "placeholders": {"size": {"type": "String"}}
+  },
+  "moreStorageNoticeCachePartiallyCleared": "部分缓存清理失败，请稍后重试",
+  "moreStorageNoticeCacheCleared": "已清理常规缓存，长期缓存、下载与用户数据已保留",
+  "moreStorageNoticeCacheLimitUpdated": "最大缓存已更新",
+  "moreStorageNoticeDirectoryNotSelected": "未选择目录",
+  "moreStorageNoticeLocationUpdated": "存储位置已更新",
+  "moreStorageNoticeDefaultRestored": "已恢复默认存储位置",
+  "moreStorageNoticeUsageReloaded": "存储统计已刷新",
+  "moreStorageNoticeDiagnosticsExported": "缓存诊断已导出：{path}",
+  "@moreStorageNoticeDiagnosticsExported": {
+    "description": "缓存诊断导出完成提示；path 是本地文件路径",
+    "placeholders": {"path": {"type": "String"}}
+  },
+  "moreStorageUsageOverview": "缓存与数据总览",
+  "moreStorageUsageTotal": "应用数据总计：{size}",
+  "@moreStorageUsageTotal": {
+    "placeholders": {"size": {"type": "String"}}
+  },
+  "moreStorageReloadUsage": "重新统计",
+  "moreStorageExportDiagnostics": "缓存诊断导出",
+  "moreStorageBucketImageCache": "图片缓存",
+  "moreStorageBucketPageCache": "页面缓存",
+  "moreStorageBucketLibraryMetadata": "书架数据",
+  "moreStorageBucketHistory": "浏览记录",
+  "moreStorageBucketComposerDraft": "草稿",
+  "moreStorageBucketDownload": "下载内容",
+  "moreStorageBucketAppSettings": "应用设置",
+  "moreStorageCategoryClearable": "可清缓存",
+  "moreStorageCategorySticky": "长期缓存",
+  "moreStorageCategoryProtected": "受保护/下载内容",
+  "moreStorageImageRole": "{role}{qualifier}",
+  "@moreStorageImageRole": {
+    "placeholders": {
+      "role": {"type": "String"},
+      "qualifier": {"type": "String"}
+    }
+  },
+  "moreStorageImageQualifierRecentReader": "（最近阅读）",
+  "moreStorageImageQualifierSticky": "（低淘汰）",
+  "moreStorageImageQualifierProtected": "（受保护）",
+  "moreStorageImageQualifierDownloaded": "（已下载）",
+  "moreStorageImageCover": "封面",
+  "moreStorageImageCustomCover": "自定义封面",
+  "moreStorageImageComicPage": "漫画页",
+  "moreStorageImageNovelInline": "小说正文图",
+  "moreStorageImageThreadInline": "帖子图片",
+  "moreStorageImageThreadAttachment": "帖子附件图",
+  "moreStorageImageAvatar": "头像",
+  "moreStorageImageRemoteSmiley": "表情图片",
+  "moreStorageImageForumHead": "论坛头图",
+  "moreStorageImageForumIcon": "论坛图标",
+  "moreStorageImageBlogInline": "日志图片",
+  "moreStorageImageUnknown": "未分类图片",
+  "moreStorageDocumentForum": "论坛首页",
+  "moreStorageDocumentForumDisplay": "帖子列表",
+  "moreStorageDocumentThread": "帖子详情",
+  "moreStorageDocumentTag": "标签页",
+  "moreStorageDocumentProfile": "个人资料",
+  "moreStorageDocumentBlog": "日志",
+  "moreStorageDocumentUnknown": "页面",
+  "moreStorageDocumentHtml": "{owner} HTML（{count}）",
+  "@moreStorageDocumentHtml": {
+    "placeholders": {
+      "owner": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "moreStorageSnapshot": "{snapshotType}快照（{count}）",
+  "@moreStorageSnapshot": {
+    "placeholders": {
+      "snapshotType": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "moreStorageSnapshotForumHome": "论坛首页",
+  "moreStorageSnapshotForumDisplay": "帖子列表",
+  "moreStorageSnapshotThreadDetail": "帖子详情",
+  "moreStorageSnapshotUnknown": "页面解析",
+  "moreStorageComposerDraft": "发帖/回复草稿（{count}）",
+  "@moreStorageComposerDraft": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "moreStorageDownloadComics": "漫画下载",
+  "moreStorageDownloadNovels": "小说下载",
+  "moreStorageDownloadFavorites": "收藏快照",
+  "moreStorageDatabase": "本地数据库",
+  "moreStorageLibraryCount": "{kind}：{count}",
+  "@moreStorageLibraryCount": {
+    "placeholders": {
+      "kind": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "moreStorageLibraryComics": "漫画作品",
+  "moreStorageLibraryComicEpisodes": "漫画章节",
+  "moreStorageLibraryNovels": "小说作品",
+  "moreStorageLibraryNovelEpisodes": "小说章节",
+  "moreStorageLibraryFavorites": "收藏帖子",
+  "moreStorageLibraryWorkState": "作品状态",
+  "moreStorageLibraryEpisodeState": "章节状态",
+  "moreStorageHistoryDatabase": "记录数据库",
+  "moreStorageHistoryEntries": "浏览记录：{count}",
+  "@moreStorageHistoryEntries": {
+    "placeholders": {"count": {"type": "int"}}
   }
 }

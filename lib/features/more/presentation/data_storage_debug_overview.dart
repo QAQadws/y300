@@ -2,18 +2,24 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/more/presentation/data_storage_formatters.dart';
+import 'package:y300/features/more/presentation/more_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
-Widget buildDataStorageDebugOverview(StorageUsageReport report) {
+Widget buildDataStorageDebugOverview(
+  StorageUsageReport report,
+  AppLocalizations l10n,
+) {
   if (!kDebugMode) {
     return const SizedBox.shrink();
   }
-  return _StorageUsageOverview(report: report);
+  return _StorageUsageOverview(report: report, l10n: l10n);
 }
 
 class _StorageUsageOverview extends StatelessWidget {
-  const _StorageUsageOverview({required this.report});
+  const _StorageUsageOverview({required this.report, required this.l10n});
 
   final StorageUsageReport report;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -21,15 +27,17 @@ class _StorageUsageOverview extends StatelessWidget {
       key: const Key('data-storage-usage-overview'),
       initiallyExpanded: false,
       tilePadding: EdgeInsets.zero,
-      title: const Text(
-        '缓存与数据总览',
+      title: Text(
+        l10n.moreStorageUsageOverview,
         style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
       ),
-      subtitle: Text('应用数据总计：${formatDataStorageBytes(report.totalBytes)}'),
+      subtitle: Text(
+        l10n.moreStorageUsageTotal(formatDataStorageBytes(report.totalBytes)),
+      ),
       children: [
         const SizedBox(height: 4),
         for (final section in report.sections) ...[
-          _StorageUsageSectionTile(section: section),
+          _StorageUsageSectionTile(section: section, l10n: l10n),
           const SizedBox(height: 8),
         ],
       ],
@@ -38,9 +46,10 @@ class _StorageUsageOverview extends StatelessWidget {
 }
 
 class _StorageUsageSectionTile extends StatelessWidget {
-  const _StorageUsageSectionTile({required this.section});
+  const _StorageUsageSectionTile({required this.section, required this.l10n});
 
   final StorageUsageSection section;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +62,7 @@ class _StorageUsageSectionTile extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                section.label,
+                MoreTextResolver.storageLabel(l10n, section.labelRef),
                 style: textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -75,7 +84,7 @@ class _StorageUsageSectionTile extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      category.label,
+                      MoreTextResolver.storageLabel(l10n, category.labelRef),
                       style: textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -96,7 +105,7 @@ class _StorageUsageSectionTile extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      slice.label,
+                      MoreTextResolver.storageLabel(l10n, slice.labelRef),
                       style: textTheme.bodySmall,
                       overflow: TextOverflow.ellipsis,
                     ),

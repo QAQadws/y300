@@ -157,7 +157,12 @@ void main() {
     expect(section.bucket, StorageBucket.pageCache);
     expect(section.clearable, isTrue);
     expect(section.bytes, greaterThan(0));
-    expect(section.slices.single.label, 'test.snapshot快照（1）');
+    expect(
+      section.slices.single.labelRef?.kind,
+      StorageUsageLabelKind.snapshotType,
+    );
+    expect(section.slices.single.labelRef?.code, 'test.snapshot');
+    expect(section.slices.single.labelRef?.count, 1);
   });
 
   test(

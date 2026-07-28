@@ -6,6 +6,8 @@ import 'package:y300/features/app_update/presentation/app_release_notes_page.dar
 import 'package:y300/features/app_update/presentation/widgets/app_update_check_tile.dart';
 import 'package:y300/features/more/data/about_providers.dart';
 import 'package:y300/features/more/domain/models/about_app_info.dart';
+import 'package:y300/features/more/presentation/more_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class AboutPage extends ConsumerStatefulWidget {
@@ -25,8 +27,9 @@ class _AboutPageState extends ConsumerState<AboutPage> {
   @override
   Widget build(BuildContext context) {
     final appInfo = ref.watch(aboutAppInfoProvider);
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('关于')),
+      appBar: AppBar(title: Text(l10n.moreAbout)),
       body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
@@ -37,23 +40,23 @@ class _AboutPageState extends ConsumerState<AboutPage> {
               padding: const EdgeInsets.only(bottom: 32),
               children: [
                 _AboutHeader(appInfo: appInfo.value),
-                const _AboutSectionLabel('版本'),
+                _AboutSectionLabel(l10n.moreAboutVersionSection),
                 const AppUpdateCheckTile(showVersionSubtitle: false),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 ListTile(
                   key: const Key('about-release-notes-entry'),
                   leading: const Icon(Icons.history_outlined),
-                  title: const Text('更新日志'),
+                  title: Text(l10n.moreAboutReleaseNotes),
                   trailing: const Icon(Icons.chevron_right),
                   enabled: _installedVersion(appInfo.value) != null,
                   onTap: () => _openReleaseNotes(appInfo.value),
                 ),
                 const SizedBox(height: 12),
-                const _AboutSectionLabel('项目'),
+                _AboutSectionLabel(l10n.moreAboutProjectSection),
                 ListTile(
                   key: const Key('about-github-entry'),
                   leading: const FaIcon(FontAwesomeIcons.github),
-                  title: const Text('GitHub 仓库'),
+                  title: Text(l10n.moreAboutGitHub),
                   trailing: const Icon(Icons.open_in_new),
                   onTap: _openGitHubRepository,
                 ),
@@ -98,7 +101,11 @@ class _AboutPageState extends ConsumerState<AboutPage> {
     }
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('无法打开 GitHub 仓库')));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).moreAboutOpenGitHubFailed),
+        ),
+      );
   }
 }
 
@@ -123,7 +130,10 @@ class _AboutHeader extends StatelessWidget {
           Text('Y300', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 6),
           Text(
-            appInfo?.displayVersion ?? '版本读取中',
+            MoreTextResolver.aboutVersion(
+              AppLocalizations.of(context),
+              appInfo,
+            ),
             key: const Key('about-version-label'),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,

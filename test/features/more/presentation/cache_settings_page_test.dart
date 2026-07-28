@@ -181,27 +181,39 @@ void main() {
                 sections: const <StorageUsageSection>[
                   StorageUsageSection(
                     bucket: StorageBucket.imageCache,
-                    label: '图片缓存',
+                    labelRef: StorageUsageLabelRef(
+                      kind: StorageUsageLabelKind.bucket,
+                      code: 'image_cache',
+                    ),
                     bytes: 4096,
                     clearable: true,
                     categories: <StorageUsageCategory>[
                       StorageUsageCategory(
                         id: 'clearable',
-                        label: '可清缓存',
+                        labelRef: StorageUsageLabelRef(
+                          kind: StorageUsageLabelKind.imageCategory,
+                          code: 'clearable',
+                        ),
                         bytes: 1024,
                         clearable: true,
                         protected: false,
                       ),
                       StorageUsageCategory(
                         id: 'sticky',
-                        label: '长期缓存',
+                        labelRef: StorageUsageLabelRef(
+                          kind: StorageUsageLabelKind.imageCategory,
+                          code: 'sticky',
+                        ),
                         bytes: 2048,
                         clearable: false,
                         protected: false,
                       ),
                       StorageUsageCategory(
                         id: 'protected',
-                        label: '受保护/下载内容',
+                        labelRef: StorageUsageLabelRef(
+                          kind: StorageUsageLabelKind.imageCategory,
+                          code: 'protected',
+                        ),
                         bytes: 1024,
                         clearable: false,
                         protected: true,
@@ -210,7 +222,10 @@ void main() {
                     slices: <StorageUsageSlice>[
                       StorageUsageSlice(
                         id: 'image:thread',
-                        label: '帖子图片',
+                        labelRef: StorageUsageLabelRef(
+                          kind: StorageUsageLabelKind.imageRole,
+                          code: 'thread_inline',
+                        ),
                         bytes: 1024,
                         protected: false,
                       ),
@@ -218,19 +233,29 @@ void main() {
                   ),
                   StorageUsageSection(
                     bucket: StorageBucket.libraryMetadata,
-                    label: '书架数据',
+                    labelRef: StorageUsageLabelRef(
+                      kind: StorageUsageLabelKind.bucket,
+                      code: 'library_metadata',
+                    ),
                     bytes: 2048,
                     clearable: false,
                   ),
                   StorageUsageSection(
                     bucket: StorageBucket.history,
-                    label: '浏览记录',
+                    labelRef: StorageUsageLabelRef(
+                      kind: StorageUsageLabelKind.bucket,
+                      code: 'history',
+                    ),
                     bytes: 1024,
                     clearable: false,
                     slices: <StorageUsageSlice>[
                       StorageUsageSlice(
                         id: 'history:entries',
-                        label: '浏览记录：12',
+                        labelRef: StorageUsageLabelRef(
+                          kind: StorageUsageLabelKind.historyKind,
+                          code: 'entries',
+                          count: 12,
+                        ),
                         bytes: 0,
                         protected: true,
                       ),
@@ -238,7 +263,10 @@ void main() {
                   ),
                   StorageUsageSection(
                     bucket: StorageBucket.download,
-                    label: '下载内容',
+                    labelRef: StorageUsageLabelRef(
+                      kind: StorageUsageLabelKind.bucket,
+                      code: 'download',
+                    ),
                     bytes: 1024 * 1024,
                     clearable: false,
                   ),

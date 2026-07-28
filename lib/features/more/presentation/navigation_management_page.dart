@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
+import 'package:y300/features/more/presentation/more_text_resolver.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 
 class NavigationManagementPage extends ConsumerWidget {
@@ -14,17 +16,18 @@ class NavigationManagementPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncState = ref.watch(mainNavigationSettingsControllerProvider);
     final currentState = asyncState.value;
+    final l10n = AppLocalizations.of(context);
     final controller = ref.read(
       mainNavigationSettingsControllerProvider.notifier,
     );
     return Scaffold(
       key: const Key('navigation-management-page'),
       appBar: AppBar(
-        title: const Text('导航栏管理'),
+        title: Text(l10n.moreNavigationManagement),
         actions: [
           IconButton(
             key: const Key('navigation-management-reset'),
-            tooltip: '恢复默认',
+            tooltip: l10n.moreNavigationRestoreDefault,
             onPressed: currentState == null || currentState.isSaving
                 ? null
                 : () => unawaited(
@@ -42,7 +45,7 @@ class NavigationManagementPage extends ConsumerWidget {
             onPressed: () =>
                 ref.invalidate(mainNavigationSettingsControllerProvider),
             icon: const Icon(Icons.refresh),
-            label: const Text('重试'),
+            label: Text(l10n.moreNavigationRetry),
           ),
         ),
         data: (state) {
@@ -73,7 +76,9 @@ class NavigationManagementPage extends ConsumerWidget {
                     children: [
                       ListTile(
                         leading: Icon(destination.icon),
-                        title: Text(destination.displayLabel),
+                        title: Text(
+                          MoreTextResolver.navigationLabel(l10n, destination),
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -95,7 +100,7 @@ class NavigationManagementPage extends ConsumerWidget {
                                     ),
                             ),
                             Tooltip(
-                              message: '拖动排序',
+                              message: l10n.moreNavigationDragToReorder,
                               child: ReorderableDragStartListener(
                                 index: index,
                                 enabled: !state.isSaving,
@@ -136,14 +141,20 @@ class NavigationManagementPage extends ConsumerWidget {
       await mutation();
     } on MainNavigationMinimumVisibleException {
       if (context.mounted) {
-        showTransientSnackBar(context, '至少保留一个导航项');
+        showTransientSnackBar(
+          context,
+          AppLocalizations.of(context).moreNavigationMinimumOneRequired,
+        );
       }
     } on MainNavigationMutationInProgressException {
       // Controls are disabled while saving; ignore a callback already queued
       // by the previous frame.
     } catch (_) {
       if (context.mounted) {
-        showTransientSnackBar(context, '导航栏设置保存失败');
+        showTransientSnackBar(
+          context,
+          AppLocalizations.of(context).moreNavigationSaveFailed,
+        );
       }
     }
   }

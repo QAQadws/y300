@@ -168,7 +168,11 @@ class LocalParsedSnapshotCacheService
           final count = row['count'] as int? ?? 0;
           return StorageUsageSlice(
             id: 'snapshot:$snapshotType',
-            label: '${_snapshotLabel(snapshotType)}快照（$count）',
+            labelRef: StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.snapshotType,
+              code: snapshotType,
+              count: count,
+            ),
             bytes: row['total'] as int? ?? 0,
             protected: false,
           );
@@ -178,7 +182,10 @@ class LocalParsedSnapshotCacheService
     final total = slices.fold<int>(0, (sum, slice) => sum + slice.bytes);
     return StorageUsageSection(
       bucket: StorageBucket.pageCache,
-      label: StorageBucket.pageCache.label,
+      labelRef: const StorageUsageLabelRef(
+        kind: StorageUsageLabelKind.bucket,
+        code: 'page_cache',
+      ),
       bytes: total,
       clearable: total > 0,
       slices: slices,
@@ -307,14 +314,5 @@ class LocalParsedSnapshotCacheService
   String? _normalizeNullable(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
-  }
-
-  String _snapshotLabel(String snapshotType) {
-    return switch (snapshotType) {
-      'forum.home' => '论坛首页',
-      'forum.display' => '帖子列表',
-      'thread.detail' => '帖子详情',
-      _ => snapshotType.isEmpty ? '页面解析' : snapshotType,
-    };
   }
 }

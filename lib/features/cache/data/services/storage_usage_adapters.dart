@@ -29,7 +29,11 @@ class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
         .map((group) {
           return StorageUsageSlice(
             id: group.id,
-            label: _imageGroupLabel(group),
+            labelRef: StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.imageRole,
+              code: group.role,
+              qualifier: group.retentionClass,
+            ),
             bytes: group.bytes,
             protected: group.protected,
           );
@@ -40,7 +44,10 @@ class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
     final categories = _imageCategories(groups);
     return StorageUsageSection(
       bucket: bucket,
-      label: bucket.label,
+      labelRef: StorageUsageLabelRef(
+        kind: StorageUsageLabelKind.bucket,
+        code: bucket.id,
+      ),
       bytes: total,
       clearable: slices.any((slice) => !slice.protected),
       slices: slices,
@@ -71,55 +78,35 @@ class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
     return <StorageUsageCategory>[
       StorageUsageCategory(
         id: 'clearable',
-        label: '可清缓存',
+        labelRef: const StorageUsageLabelRef(
+          kind: StorageUsageLabelKind.imageCategory,
+          code: 'clearable',
+        ),
         bytes: clearable,
         clearable: true,
         protected: false,
       ),
       StorageUsageCategory(
         id: 'sticky',
-        label: '长期缓存',
+        labelRef: const StorageUsageLabelRef(
+          kind: StorageUsageLabelKind.imageCategory,
+          code: 'sticky',
+        ),
         bytes: sticky,
         clearable: false,
         protected: false,
       ),
       StorageUsageCategory(
         id: 'protected',
-        label: '受保护/下载内容',
+        labelRef: const StorageUsageLabelRef(
+          kind: StorageUsageLabelKind.imageCategory,
+          code: 'protected',
+        ),
         bytes: protectedAssets,
         clearable: false,
         protected: true,
       ),
     ].where((category) => category.bytes > 0).toList(growable: false);
-  }
-
-  String _imageGroupLabel(ImageCacheUsageGroup group) {
-    final role = switch (group.role) {
-      'cover' => '封面',
-      'custom_cover' => '自定义封面',
-      'comic_page' => '漫画页',
-      'novel_inline' => '小说正文图',
-      'thread_inline' => '帖子图片',
-      'thread_attachment' => '帖子附件图',
-      'avatar' => '头像',
-      'remote_smiley' => '表情图片',
-      'forum_head_image' => '论坛头图',
-      'forum_icon' => '论坛图标',
-      'blog_inline' => '日志图片',
-      _ => group.role.isEmpty ? '未分类图片' : group.role,
-    };
-    final retention = switch (group.retentionClass) {
-      'ephemeral' => '',
-      'recent_reader' => '（最近阅读）',
-      'sticky' => '（低淘汰）',
-      'protected' => '（受保护）',
-      'downloaded' => '（已下载）',
-      _ => group.retentionClass.isEmpty ? '' : '（${group.retentionClass}）',
-    };
-    if (retention.isNotEmpty) {
-      return '$role$retention';
-    }
-    return group.protected ? '$role（受保护）' : role;
   }
 }
 
@@ -148,7 +135,10 @@ class PageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
     final total = sections.fold<int>(0, (sum, section) => sum + section.bytes);
     return StorageUsageSection(
       bucket: bucket,
-      label: bucket.label,
+      labelRef: StorageUsageLabelRef(
+        kind: StorageUsageLabelKind.bucket,
+        code: bucket.id,
+      ),
       bytes: total,
       clearable: slices.any((slice) => !slice.protected),
       slices: slices,
@@ -180,14 +170,21 @@ class ComposerDraftStorageAccountingAdapter
     final bytes = (rows.single['payload_bytes'] as num?)?.toInt() ?? 0;
     return StorageUsageSection(
       bucket: bucket,
-      label: bucket.label,
+      labelRef: StorageUsageLabelRef(
+        kind: StorageUsageLabelKind.bucket,
+        code: bucket.id,
+      ),
       bytes: bytes,
       clearable: count > 0,
       slices: [
         if (bytes > 0)
           StorageUsageSlice(
             id: 'composer_draft:sqlite',
-            label: '发帖/回复草稿（$count）',
+            labelRef: StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.composerDraft,
+              code: 'composer_draft',
+              count: count,
+            ),
             bytes: bytes,
             protected: false,
           ),
@@ -215,28 +212,40 @@ class DownloadStorageAccountingAdapter implements StorageAccountingAdapter {
     final total = comics + novels + favorites;
     return StorageUsageSection(
       bucket: bucket,
-      label: bucket.label,
+      labelRef: StorageUsageLabelRef(
+        kind: StorageUsageLabelKind.bucket,
+        code: bucket.id,
+      ),
       bytes: total,
       clearable: false,
       slices: [
         if (comics > 0)
           StorageUsageSlice(
             id: 'download:comics',
-            label: '漫画下载',
+            labelRef: const StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.downloadKind,
+              code: 'comics',
+            ),
             bytes: comics,
             protected: true,
           ),
         if (novels > 0)
           StorageUsageSlice(
             id: 'download:novels',
-            label: '小说下载',
+            labelRef: const StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.downloadKind,
+              code: 'novels',
+            ),
             bytes: novels,
             protected: true,
           ),
         if (favorites > 0)
           StorageUsageSlice(
             id: 'download:favorites_snapshot',
-            label: '收藏快照',
+            labelRef: const StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.downloadKind,
+              code: 'favorites_snapshot',
+            ),
             bytes: favorites,
             protected: true,
           ),
@@ -265,21 +274,31 @@ class LibraryMetadataStorageAccountingAdapter
     final dbBytes = await _databaseFileBytes();
     return StorageUsageSection(
       bucket: bucket,
-      label: bucket.label,
+      labelRef: StorageUsageLabelRef(
+        kind: StorageUsageLabelKind.bucket,
+        code: bucket.id,
+      ),
       bytes: dbBytes,
       clearable: false,
       slices: [
         if (dbBytes > 0)
           StorageUsageSlice(
             id: 'library_metadata:sqlite',
-            label: '本地数据库',
+            labelRef: const StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.database,
+              code: 'library_metadata',
+            ),
             bytes: dbBytes,
             protected: true,
           ),
         ...counts.entries.where((entry) => entry.value > 0).map((entry) {
           return StorageUsageSlice(
             id: 'library_metadata:${entry.key}',
-            label: _countLabel(entry.key, entry.value),
+            labelRef: StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.libraryKind,
+              code: entry.key,
+              count: entry.value,
+            ),
             bytes: 0,
             protected: true,
           );
@@ -324,20 +343,6 @@ class LibraryMetadataStorageAccountingAdapter
     }
     return file.length();
   }
-
-  String _countLabel(String key, int count) {
-    final label = switch (key) {
-      'comics' => '漫画作品',
-      'comic_episodes' => '漫画章节',
-      'novels' => '小说作品',
-      'novel_episodes' => '小说章节',
-      'favorites' => '收藏帖子',
-      'library_work_state' => '作品状态',
-      'library_episode_state' => '章节状态',
-      _ => key,
-    };
-    return '$label：$count';
-  }
 }
 
 class HistoryStorageAccountingAdapter implements StorageAccountingAdapter {
@@ -362,20 +367,30 @@ class HistoryStorageAccountingAdapter implements StorageAccountingAdapter {
     final bytes = await _databaseFileBytes();
     return StorageUsageSection(
       bucket: bucket,
-      label: bucket.label,
+      labelRef: StorageUsageLabelRef(
+        kind: StorageUsageLabelKind.bucket,
+        code: bucket.id,
+      ),
       bytes: bytes,
       clearable: false,
       slices: <StorageUsageSlice>[
         if (bytes > 0)
           StorageUsageSlice(
             id: 'history:sqlite',
-            label: '记录数据库',
+            labelRef: const StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.database,
+              code: 'history',
+            ),
             bytes: bytes,
             protected: true,
           ),
         StorageUsageSlice(
           id: 'history:entries',
-          label: '浏览记录：$count',
+          labelRef: StorageUsageLabelRef(
+            kind: StorageUsageLabelKind.historyKind,
+            code: 'entries',
+            count: count,
+          ),
           bytes: 0,
           protected: true,
         ),

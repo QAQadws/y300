@@ -9,6 +9,24 @@ import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
+enum DataStorageNoticeCode {
+  cachePartiallyCleared,
+  cacheCleared,
+  cacheLimitUpdated,
+  directoryNotSelected,
+  storageLocationUpdated,
+  defaultStorageRestored,
+  usageReloaded,
+  diagnosticsExported,
+}
+
+class DataStorageNotice {
+  const DataStorageNotice({required this.code, this.path});
+
+  final DataStorageNoticeCode code;
+  final String? path;
+}
+
 class DataStorageViewState {
   const DataStorageViewState({
     required this.clearableCacheBytes,
@@ -18,7 +36,7 @@ class DataStorageViewState {
     required this.defaultStoragePath,
     required this.customStoragePath,
     required this.isUpdating,
-    this.hint,
+    this.notice,
   });
 
   final int clearableCacheBytes;
@@ -28,7 +46,7 @@ class DataStorageViewState {
   final String defaultStoragePath;
   final String? customStoragePath;
   final bool isUpdating;
-  final String? hint;
+  final DataStorageNotice? notice;
 
   @Deprecated('Use clearableCacheBytes instead.')
   int get imageCacheUsageBytes => clearableCacheBytes;
@@ -53,9 +71,9 @@ class DataStorageViewState {
     String? defaultStoragePath,
     String? customStoragePath,
     bool? isUpdating,
-    String? hint,
+    DataStorageNotice? notice,
     bool clearCustomStoragePath = false,
-    bool clearHint = false,
+    bool clearNotice = false,
   }) {
     return DataStorageViewState(
       clearableCacheBytes: clearableCacheBytes ?? this.clearableCacheBytes,
@@ -67,7 +85,7 @@ class DataStorageViewState {
           ? null
           : (customStoragePath ?? this.customStoragePath),
       isUpdating: isUpdating ?? this.isUpdating,
-      hint: clearHint ? null : (hint ?? this.hint),
+      notice: clearNotice ? null : (notice ?? this.notice),
     );
   }
 }
@@ -123,7 +141,7 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     if (current == null || current.isUpdating) {
       return;
     }
-    state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
+    state = AsyncData(current.copyWith(isUpdating: true, clearNotice: true));
     final result = await _cacheMaintenanceService.clear(
       const CacheClearRequest(scope: CacheClearScope.userCleanup),
     );
@@ -139,7 +157,11 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
         clearableCacheBytes: capacityReport.clearableBytes,
         usageReport: usageReport,
         isUpdating: false,
-        hint: result.isPartial ? '部分缓存清理失败，请稍后重试' : '已清理常规缓存，长期缓存、下载与用户数据已保留',
+        notice: DataStorageNotice(
+          code: result.isPartial
+              ? DataStorageNoticeCode.cachePartiallyCleared
+              : DataStorageNoticeCode.cacheCleared,
+        ),
       ),
     );
   }
@@ -152,7 +174,7 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     if (current == null || current.isUpdating) {
       return;
     }
-    state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
+    state = AsyncData(current.copyWith(isUpdating: true, clearNotice: true));
     await _repository.setCacheMaxBytes(bytes);
     final maxBytes = await _repository.getCacheMaxBytes();
     await _cacheMaintenanceService.prune(
@@ -171,7 +193,9 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
         usageReport: usageReport,
         cacheMaxBytes: maxBytes,
         isUpdating: false,
-        hint: '最大缓存已更新',
+        notice: const DataStorageNotice(
+          code: DataStorageNoticeCode.cacheLimitUpdated,
+        ),
       ),
     );
   }
@@ -186,7 +210,7 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     if (current == null || current.isUpdating) {
       return;
     }
-    state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
+    state = AsyncData(current.copyWith(isUpdating: true, clearNotice: true));
 
     final selected = await _repository.pickDirectory();
     if (!ref.mounted) {
@@ -194,7 +218,14 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     }
     final normalized = selected?.trim();
     if (normalized == null || normalized.isEmpty) {
-      state = AsyncData(current.copyWith(isUpdating: false, hint: '未选择目录'));
+      state = AsyncData(
+        current.copyWith(
+          isUpdating: false,
+          notice: const DataStorageNotice(
+            code: DataStorageNoticeCode.directoryNotSelected,
+          ),
+        ),
+      );
       return;
     }
 
@@ -209,7 +240,9 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
         defaultStoragePath: storage.defaultStoragePath,
         customStoragePath: storage.customStoragePath,
         isUpdating: false,
-        hint: '存储位置已更新',
+        notice: const DataStorageNotice(
+          code: DataStorageNoticeCode.storageLocationUpdated,
+        ),
       ),
     );
   }
@@ -224,7 +257,7 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     if (current == null || current.isUpdating) {
       return;
     }
-    state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
+    state = AsyncData(current.copyWith(isUpdating: true, clearNotice: true));
     await _repository.setCustomStoragePath(null);
     final storage = await _loadStorageState();
     if (!ref.mounted) {
@@ -237,7 +270,9 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
         clearCustomStoragePath: storage.customStoragePath == null,
         customStoragePath: storage.customStoragePath,
         isUpdating: false,
-        hint: '已恢复默认存储位置',
+        notice: const DataStorageNotice(
+          code: DataStorageNoticeCode.defaultStorageRestored,
+        ),
       ),
     );
   }
@@ -252,7 +287,7 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     if (current == null || current.isUpdating) {
       return;
     }
-    state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
+    state = AsyncData(current.copyWith(isUpdating: true, clearNotice: true));
     final usageReport = await _loadDiagnosticUsageReport();
     final capacityReport = await _cacheMaintenanceService.loadCapacityReport();
     if (!ref.mounted) {
@@ -263,7 +298,9 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
         clearableCacheBytes: capacityReport.clearableBytes,
         usageReport: usageReport,
         isUpdating: false,
-        hint: '存储统计已刷新',
+        notice: const DataStorageNotice(
+          code: DataStorageNoticeCode.usageReloaded,
+        ),
       ),
     );
   }
@@ -273,7 +310,7 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
     if (current == null || current.isUpdating) {
       return;
     }
-    state = AsyncData(current.copyWith(isUpdating: true, clearHint: true));
+    state = AsyncData(current.copyWith(isUpdating: true, clearNotice: true));
     final usageReport = await _storageAccountingService.loadUsageReport();
     final capacityReport = await _cacheMaintenanceService.loadCapacityReport();
     final result = await _cacheDiagnosticExportService.exportUsageReport(
@@ -287,7 +324,10 @@ class DataStorageController extends AsyncNotifier<DataStorageViewState> {
         clearableCacheBytes: capacityReport.clearableBytes,
         usageReport: usageReport,
         isUpdating: false,
-        hint: '缓存诊断已导出：${result.path}',
+        notice: DataStorageNotice(
+          code: DataStorageNoticeCode.diagnosticsExported,
+          path: result.path,
+        ),
       ),
     );
   }

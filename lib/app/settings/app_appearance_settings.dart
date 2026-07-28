@@ -12,14 +12,6 @@ enum AppThemePreference {
       AppThemePreference.system => ThemeMode.system,
     };
   }
-
-  String get displayLabel {
-    return switch (this) {
-      AppThemePreference.light => '浅色',
-      AppThemePreference.dark => '深色',
-      AppThemePreference.system => '跟随系统',
-    };
-  }
 }
 
 enum AppLanguage { system, simplifiedChinese, traditionalChinese }

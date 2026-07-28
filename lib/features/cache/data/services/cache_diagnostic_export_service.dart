@@ -35,32 +35,7 @@ class JsonCacheDiagnosticExportService implements CacheDiagnosticExportService {
       'totalBytes': report.totalBytes,
       'calculatedAt': report.calculatedAt.toUtc().toIso8601String(),
       'sections': [
-        for (final section in report.sections)
-          <String, Object?>{
-            'bucket': section.bucket.id,
-            'label': section.label,
-            'bytes': section.bytes,
-            'clearable': section.clearable,
-            'categories': [
-              for (final category in section.categories)
-                <String, Object?>{
-                  'id': category.id,
-                  'label': category.label,
-                  'bytes': category.bytes,
-                  'clearable': category.clearable,
-                  'protected': category.protected,
-                },
-            ],
-            'slices': [
-              for (final slice in section.slices)
-                <String, Object?>{
-                  'id': slice.id,
-                  'label': slice.label,
-                  'bytes': slice.bytes,
-                  'protected': slice.protected,
-                },
-            ],
-          },
+        for (final section in report.sections) _sectionPayload(section),
       ],
     };
     await file.writeAsString(
@@ -74,6 +49,65 @@ class JsonCacheDiagnosticExportService implements CacheDiagnosticExportService {
       sectionCount: report.sections.length,
       exportedAt: exportedAt,
     );
+  }
+
+  Map<String, Object?> _sectionPayload(StorageUsageSection section) {
+    final labelRef =
+        section.labelRef ??
+        StorageUsageLabelRef(
+          kind: StorageUsageLabelKind.bucket,
+          code: section.bucket.id,
+        );
+    return <String, Object?>{
+      'bucket': section.bucket.id,
+      'labelKind': labelRef.kind.name,
+      'labelCode': labelRef.code,
+      'labelCount': labelRef.count,
+      'labelQualifier': labelRef.qualifier,
+      'bytes': section.bytes,
+      'clearable': section.clearable,
+      'categories': [
+        for (final category in section.categories) _categoryPayload(category),
+      ],
+      'slices': [for (final slice in section.slices) _slicePayload(slice)],
+    };
+  }
+
+  Map<String, Object?> _categoryPayload(StorageUsageCategory category) {
+    final labelRef =
+        category.labelRef ??
+        StorageUsageLabelRef(
+          kind: StorageUsageLabelKind.database,
+          code: category.id,
+        );
+    return <String, Object?>{
+      'id': category.id,
+      'labelKind': labelRef.kind.name,
+      'labelCode': labelRef.code,
+      'labelCount': labelRef.count,
+      'labelQualifier': labelRef.qualifier,
+      'bytes': category.bytes,
+      'clearable': category.clearable,
+      'protected': category.protected,
+    };
+  }
+
+  Map<String, Object?> _slicePayload(StorageUsageSlice slice) {
+    final labelRef =
+        slice.labelRef ??
+        StorageUsageLabelRef(
+          kind: StorageUsageLabelKind.database,
+          code: slice.id,
+        );
+    return <String, Object?>{
+      'id': slice.id,
+      'labelKind': labelRef.kind.name,
+      'labelCode': labelRef.code,
+      'labelCount': labelRef.count,
+      'labelQualifier': labelRef.qualifier,
+      'bytes': slice.bytes,
+      'protected': slice.protected,
+    };
   }
 
   String _formatFileTimestamp(DateTime value) {

@@ -24,6 +24,520 @@ class AppLocalizationsZh extends AppLocalizations {
   String appLanguageSaveFailed(String error) {
     return '语言设置保存失败：$error';
   }
+
+  @override
+  String get commonCancel => '取消';
+
+  @override
+  String get commonConfirm => '确定';
+
+  @override
+  String get commonClose => '关闭';
+
+  @override
+  String get commonRetry => '重试';
+
+  @override
+  String get commonUnknownError => '未知错误';
+
+  @override
+  String get appNavigationForum => '论坛';
+
+  @override
+  String get appNavigationFavorites => '收藏';
+
+  @override
+  String get appNavigationComic => '漫画';
+
+  @override
+  String get appNavigationNovel => '小说';
+
+  @override
+  String get appNavigationHistory => '记录';
+
+  @override
+  String get appNavigationMore => '更多';
+
+  @override
+  String get moreTitle => '更多';
+
+  @override
+  String get moreMyProfile => '我的资料';
+
+  @override
+  String get moreMyProfileSignedOutSubtitle => '登录后查看个人资料、消息提醒';
+
+  @override
+  String moreMyProfileSubtitle(String username) {
+    return '$username 的资料与消息提醒';
+  }
+
+  @override
+  String get moreLogin => '登录';
+
+  @override
+  String get moreLoginSubtitle => '登录论坛账号并同步登录状态';
+
+  @override
+  String get moreLogout => '退出登录';
+
+  @override
+  String get moreLogoutSubtitle => '退出当前论坛账号';
+
+  @override
+  String moreLogoutSubtitleUsername(String username) {
+    return '当前账号：$username';
+  }
+
+  @override
+  String get moreLogoutConfirmTitle => '退出登录';
+
+  @override
+  String get moreLogoutConfirmBody => '退出后会清除本地论坛登录状态。';
+
+  @override
+  String get moreLogoutSuccess => '已退出登录';
+
+  @override
+  String moreLogoutFailed(String error) {
+    return '退出登录失败：$error';
+  }
+
+  @override
+  String get moreForumDisplayMode => '论坛显示模式';
+
+  @override
+  String moreForumCurrentMode(String mode) {
+    return '当前：$mode';
+  }
+
+  @override
+  String get moreForumModeWebView => 'WebView 模式';
+
+  @override
+  String get moreForumModeNative => '解析模式';
+
+  @override
+  String moreForumModeSwitchFailed(String error) {
+    return '论坛显示模式切换失败：$error';
+  }
+
+  @override
+  String get moreAppearance => '外观与文字';
+
+  @override
+  String moreCurrentTheme(String theme) {
+    return '当前：$theme';
+  }
+
+  @override
+  String get moreThemeSectionTitle => '主题';
+
+  @override
+  String get moreThemeLight => '浅色';
+
+  @override
+  String get moreThemeDark => '深色';
+
+  @override
+  String get moreThemeSystem => '跟随系统';
+
+  @override
+  String get moreThemeDescriptionLight => '保持浅色外观';
+
+  @override
+  String get moreThemeDescriptionDark => '使用深色外观';
+
+  @override
+  String get moreThemeDescriptionSystem => '跟随系统浅色或深色设置';
+
+  @override
+  String moreThemeSaveFailed(String error) {
+    return '主题设置保存失败：$error';
+  }
+
+  @override
+  String get moreNavigationManagement => '导航栏管理';
+
+  @override
+  String moreVisibleNavigationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 项',
+      zero: '0 项',
+    );
+    return '已显示 $_temp0';
+  }
+
+  @override
+  String get moreNavigationRestoreDefault => '恢复默认';
+
+  @override
+  String get moreNavigationRetry => '重试';
+
+  @override
+  String get moreNavigationDragToReorder => '拖动排序';
+
+  @override
+  String get moreNavigationMinimumOneRequired => '至少保留一个导航项';
+
+  @override
+  String get moreNavigationSaveFailed => '导航栏设置保存失败';
+
+  @override
+  String get moreDataAndStorage => '数据与存储';
+
+  @override
+  String get moreDataAndStorageSubtitle => '管理图片缓存与下载位置';
+
+  @override
+  String get moreDownloadQueue => '下载队列';
+
+  @override
+  String get moreDownloadParsingImages => '正在解析图片';
+
+  @override
+  String moreDownloadActiveProgress(
+    String comicTitle,
+    String episodeTitle,
+    String progress,
+    int waitingCount,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      waitingCount,
+      locale: localeName,
+      other: ' · 等待 $waitingCount',
+      zero: '',
+    );
+    return '正在下载《$comicTitle》 $episodeTitle · $progress$_temp0';
+  }
+
+  @override
+  String moreDownloadWaiting(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个任务',
+      zero: '0 个任务',
+    );
+    return '等待下载 · $_temp0';
+  }
+
+  @override
+  String moreDownloadFailed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个任务下载失败',
+      zero: '0 个任务下载失败',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get moreDownloadEmpty => '暂无下载任务';
+
+  @override
+  String get moreAbout => '关于';
+
+  @override
+  String get moreAboutSubtitle => '应用信息';
+
+  @override
+  String moreAboutVersion(String version) {
+    return '版本 $version';
+  }
+
+  @override
+  String moreAboutVersionWithBuild(String version, String buildNumber) {
+    return '版本 $version ($buildNumber)';
+  }
+
+  @override
+  String get moreAboutVersionLoading => '版本读取中';
+
+  @override
+  String get moreAboutVersionSection => '版本';
+
+  @override
+  String get moreAboutReleaseNotes => '更新日志';
+
+  @override
+  String get moreAboutProjectSection => '项目';
+
+  @override
+  String get moreAboutGitHub => 'GitHub 仓库';
+
+  @override
+  String get moreAboutOpenGitHubFailed => '无法打开 GitHub 仓库';
+
+  @override
+  String get moreDebugQuillComposer => 'Quill Composer 原型';
+
+  @override
+  String get moreDebugQuillComposerSubtitle => '验证所见即所得的 Discuz BBCode 转换';
+
+  @override
+  String get moreDebugHtmlRenderer => 'HTML 正文渲染原型';
+
+  @override
+  String get moreDebugHtmlRendererSubtitle => '验证复杂正文 HTML 的原生渲染';
+
+  @override
+  String get moreStorageTitle => '数据与存储';
+
+  @override
+  String moreStorageLoadFailed(String error) {
+    return '加载数据与存储设置失败：$error';
+  }
+
+  @override
+  String get moreStorageClearCache => '清理缓存';
+
+  @override
+  String get moreStorageClear => '清理';
+
+  @override
+  String get moreStorageCacheDescription =>
+      '清理 HTML、解析快照与常规图片缓存；长期缓存、封面、下载和用户数据会保留。';
+
+  @override
+  String get moreStorageLocation => '存储位置';
+
+  @override
+  String get moreStorageDefaultLocation => '默认位置';
+
+  @override
+  String get moreStorageCustomLocation => '自定义位置';
+
+  @override
+  String get moreStorageChooseDirectory => '选择自定义目录';
+
+  @override
+  String get moreStorageRestoreDefault => '恢复默认';
+
+  @override
+  String moreStorageMaximumCache(String size) {
+    return '最大缓存：$size';
+  }
+
+  @override
+  String get moreStorageNoticeCachePartiallyCleared => '部分缓存清理失败，请稍后重试';
+
+  @override
+  String get moreStorageNoticeCacheCleared => '已清理常规缓存，长期缓存、下载与用户数据已保留';
+
+  @override
+  String get moreStorageNoticeCacheLimitUpdated => '最大缓存已更新';
+
+  @override
+  String get moreStorageNoticeDirectoryNotSelected => '未选择目录';
+
+  @override
+  String get moreStorageNoticeLocationUpdated => '存储位置已更新';
+
+  @override
+  String get moreStorageNoticeDefaultRestored => '已恢复默认存储位置';
+
+  @override
+  String get moreStorageNoticeUsageReloaded => '存储统计已刷新';
+
+  @override
+  String moreStorageNoticeDiagnosticsExported(String path) {
+    return '缓存诊断已导出：$path';
+  }
+
+  @override
+  String get moreStorageUsageOverview => '缓存与数据总览';
+
+  @override
+  String moreStorageUsageTotal(String size) {
+    return '应用数据总计：$size';
+  }
+
+  @override
+  String get moreStorageReloadUsage => '重新统计';
+
+  @override
+  String get moreStorageExportDiagnostics => '缓存诊断导出';
+
+  @override
+  String get moreStorageBucketImageCache => '图片缓存';
+
+  @override
+  String get moreStorageBucketPageCache => '页面缓存';
+
+  @override
+  String get moreStorageBucketLibraryMetadata => '书架数据';
+
+  @override
+  String get moreStorageBucketHistory => '浏览记录';
+
+  @override
+  String get moreStorageBucketComposerDraft => '草稿';
+
+  @override
+  String get moreStorageBucketDownload => '下载内容';
+
+  @override
+  String get moreStorageBucketAppSettings => '应用设置';
+
+  @override
+  String get moreStorageCategoryClearable => '可清缓存';
+
+  @override
+  String get moreStorageCategorySticky => '长期缓存';
+
+  @override
+  String get moreStorageCategoryProtected => '受保护/下载内容';
+
+  @override
+  String moreStorageImageRole(String role, String qualifier) {
+    return '$role$qualifier';
+  }
+
+  @override
+  String get moreStorageImageQualifierRecentReader => '（最近阅读）';
+
+  @override
+  String get moreStorageImageQualifierSticky => '（低淘汰）';
+
+  @override
+  String get moreStorageImageQualifierProtected => '（受保护）';
+
+  @override
+  String get moreStorageImageQualifierDownloaded => '（已下载）';
+
+  @override
+  String get moreStorageImageCover => '封面';
+
+  @override
+  String get moreStorageImageCustomCover => '自定义封面';
+
+  @override
+  String get moreStorageImageComicPage => '漫画页';
+
+  @override
+  String get moreStorageImageNovelInline => '小说正文图';
+
+  @override
+  String get moreStorageImageThreadInline => '帖子图片';
+
+  @override
+  String get moreStorageImageThreadAttachment => '帖子附件图';
+
+  @override
+  String get moreStorageImageAvatar => '头像';
+
+  @override
+  String get moreStorageImageRemoteSmiley => '表情图片';
+
+  @override
+  String get moreStorageImageForumHead => '论坛头图';
+
+  @override
+  String get moreStorageImageForumIcon => '论坛图标';
+
+  @override
+  String get moreStorageImageBlogInline => '日志图片';
+
+  @override
+  String get moreStorageImageUnknown => '未分类图片';
+
+  @override
+  String get moreStorageDocumentForum => '论坛首页';
+
+  @override
+  String get moreStorageDocumentForumDisplay => '帖子列表';
+
+  @override
+  String get moreStorageDocumentThread => '帖子详情';
+
+  @override
+  String get moreStorageDocumentTag => '标签页';
+
+  @override
+  String get moreStorageDocumentProfile => '个人资料';
+
+  @override
+  String get moreStorageDocumentBlog => '日志';
+
+  @override
+  String get moreStorageDocumentUnknown => '页面';
+
+  @override
+  String moreStorageDocumentHtml(String owner, int count) {
+    return '$owner HTML（$count）';
+  }
+
+  @override
+  String moreStorageSnapshot(String snapshotType, int count) {
+    return '$snapshotType快照（$count）';
+  }
+
+  @override
+  String get moreStorageSnapshotForumHome => '论坛首页';
+
+  @override
+  String get moreStorageSnapshotForumDisplay => '帖子列表';
+
+  @override
+  String get moreStorageSnapshotThreadDetail => '帖子详情';
+
+  @override
+  String get moreStorageSnapshotUnknown => '页面解析';
+
+  @override
+  String moreStorageComposerDraft(int count) {
+    return '发帖/回复草稿（$count）';
+  }
+
+  @override
+  String get moreStorageDownloadComics => '漫画下载';
+
+  @override
+  String get moreStorageDownloadNovels => '小说下载';
+
+  @override
+  String get moreStorageDownloadFavorites => '收藏快照';
+
+  @override
+  String get moreStorageDatabase => '本地数据库';
+
+  @override
+  String moreStorageLibraryCount(String kind, int count) {
+    return '$kind：$count';
+  }
+
+  @override
+  String get moreStorageLibraryComics => '漫画作品';
+
+  @override
+  String get moreStorageLibraryComicEpisodes => '漫画章节';
+
+  @override
+  String get moreStorageLibraryNovels => '小说作品';
+
+  @override
+  String get moreStorageLibraryNovelEpisodes => '小说章节';
+
+  @override
+  String get moreStorageLibraryFavorites => '收藏帖子';
+
+  @override
+  String get moreStorageLibraryWorkState => '作品状态';
+
+  @override
+  String get moreStorageLibraryEpisodeState => '章节状态';
+
+  @override
+  String get moreStorageHistoryDatabase => '记录数据库';
+
+  @override
+  String moreStorageHistoryEntries(int count) {
+    return '浏览记录：$count';
+  }
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -45,5 +559,519 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String appLanguageSaveFailed(String error) {
     return '語言設定儲存失敗：$error';
+  }
+
+  @override
+  String get commonCancel => '取消';
+
+  @override
+  String get commonConfirm => '確定';
+
+  @override
+  String get commonClose => '關閉';
+
+  @override
+  String get commonRetry => '重試';
+
+  @override
+  String get commonUnknownError => '未知錯誤';
+
+  @override
+  String get appNavigationForum => '論壇';
+
+  @override
+  String get appNavigationFavorites => '收藏';
+
+  @override
+  String get appNavigationComic => '漫畫';
+
+  @override
+  String get appNavigationNovel => '小說';
+
+  @override
+  String get appNavigationHistory => '記錄';
+
+  @override
+  String get appNavigationMore => '更多';
+
+  @override
+  String get moreTitle => '更多';
+
+  @override
+  String get moreMyProfile => '我的資料';
+
+  @override
+  String get moreMyProfileSignedOutSubtitle => '登入後查看個人資料、訊息提醒';
+
+  @override
+  String moreMyProfileSubtitle(String username) {
+    return '$username 的資料與訊息提醒';
+  }
+
+  @override
+  String get moreLogin => '登入';
+
+  @override
+  String get moreLoginSubtitle => '登入論壇帳號並同步登入狀態';
+
+  @override
+  String get moreLogout => '登出';
+
+  @override
+  String get moreLogoutSubtitle => '登出目前論壇帳號';
+
+  @override
+  String moreLogoutSubtitleUsername(String username) {
+    return '目前帳號：$username';
+  }
+
+  @override
+  String get moreLogoutConfirmTitle => '登出';
+
+  @override
+  String get moreLogoutConfirmBody => '登出後會清除本地論壇登入狀態。';
+
+  @override
+  String get moreLogoutSuccess => '已登出';
+
+  @override
+  String moreLogoutFailed(String error) {
+    return '登出失敗：$error';
+  }
+
+  @override
+  String get moreForumDisplayMode => '論壇顯示模式';
+
+  @override
+  String moreForumCurrentMode(String mode) {
+    return '目前：$mode';
+  }
+
+  @override
+  String get moreForumModeWebView => 'WebView 模式';
+
+  @override
+  String get moreForumModeNative => '解析模式';
+
+  @override
+  String moreForumModeSwitchFailed(String error) {
+    return '論壇顯示模式切換失敗：$error';
+  }
+
+  @override
+  String get moreAppearance => '外觀與文字';
+
+  @override
+  String moreCurrentTheme(String theme) {
+    return '目前：$theme';
+  }
+
+  @override
+  String get moreThemeSectionTitle => '主題';
+
+  @override
+  String get moreThemeLight => '淺色';
+
+  @override
+  String get moreThemeDark => '深色';
+
+  @override
+  String get moreThemeSystem => '跟隨系統';
+
+  @override
+  String get moreThemeDescriptionLight => '保持淺色外觀';
+
+  @override
+  String get moreThemeDescriptionDark => '使用深色外觀';
+
+  @override
+  String get moreThemeDescriptionSystem => '跟隨系統淺色或深色設定';
+
+  @override
+  String moreThemeSaveFailed(String error) {
+    return '主題設定儲存失敗：$error';
+  }
+
+  @override
+  String get moreNavigationManagement => '導覽列管理';
+
+  @override
+  String moreVisibleNavigationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 項',
+      zero: '0 項',
+    );
+    return '已顯示 $_temp0';
+  }
+
+  @override
+  String get moreNavigationRestoreDefault => '恢復預設';
+
+  @override
+  String get moreNavigationRetry => '重試';
+
+  @override
+  String get moreNavigationDragToReorder => '拖曳排序';
+
+  @override
+  String get moreNavigationMinimumOneRequired => '至少保留一個導覽項目';
+
+  @override
+  String get moreNavigationSaveFailed => '導覽列設定儲存失敗';
+
+  @override
+  String get moreDataAndStorage => '資料與儲存空間';
+
+  @override
+  String get moreDataAndStorageSubtitle => '管理圖片快取與下載位置';
+
+  @override
+  String get moreDownloadQueue => '下載佇列';
+
+  @override
+  String get moreDownloadParsingImages => '正在解析圖片';
+
+  @override
+  String moreDownloadActiveProgress(
+    String comicTitle,
+    String episodeTitle,
+    String progress,
+    int waitingCount,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      waitingCount,
+      locale: localeName,
+      other: ' · 等待 $waitingCount',
+      zero: '',
+    );
+    return '正在下載《$comicTitle》 $episodeTitle · $progress$_temp0';
+  }
+
+  @override
+  String moreDownloadWaiting(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個工作',
+      zero: '0 個工作',
+    );
+    return '等待下載 · $_temp0';
+  }
+
+  @override
+  String moreDownloadFailed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個工作下載失敗',
+      zero: '0 個工作下載失敗',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get moreDownloadEmpty => '目前沒有下載工作';
+
+  @override
+  String get moreAbout => '關於';
+
+  @override
+  String get moreAboutSubtitle => '應用程式資訊';
+
+  @override
+  String moreAboutVersion(String version) {
+    return '版本 $version';
+  }
+
+  @override
+  String moreAboutVersionWithBuild(String version, String buildNumber) {
+    return '版本 $version ($buildNumber)';
+  }
+
+  @override
+  String get moreAboutVersionLoading => '版本讀取中';
+
+  @override
+  String get moreAboutVersionSection => '版本';
+
+  @override
+  String get moreAboutReleaseNotes => '更新日誌';
+
+  @override
+  String get moreAboutProjectSection => '專案';
+
+  @override
+  String get moreAboutGitHub => 'GitHub 儲存庫';
+
+  @override
+  String get moreAboutOpenGitHubFailed => '無法開啟 GitHub 儲存庫';
+
+  @override
+  String get moreDebugQuillComposer => 'Quill Composer 原型';
+
+  @override
+  String get moreDebugQuillComposerSubtitle => '驗證所見即所得的 Discuz BBCode 轉換';
+
+  @override
+  String get moreDebugHtmlRenderer => 'HTML 正文渲染原型';
+
+  @override
+  String get moreDebugHtmlRendererSubtitle => '驗證複雜正文 HTML 的原生渲染';
+
+  @override
+  String get moreStorageTitle => '資料與儲存空間';
+
+  @override
+  String moreStorageLoadFailed(String error) {
+    return '載入資料與儲存設定失敗：$error';
+  }
+
+  @override
+  String get moreStorageClearCache => '清理快取';
+
+  @override
+  String get moreStorageClear => '清理';
+
+  @override
+  String get moreStorageCacheDescription =>
+      '清理 HTML、解析快照與一般圖片快取；長期快取、封面、下載和使用者資料會保留。';
+
+  @override
+  String get moreStorageLocation => '儲存位置';
+
+  @override
+  String get moreStorageDefaultLocation => '預設位置';
+
+  @override
+  String get moreStorageCustomLocation => '自訂位置';
+
+  @override
+  String get moreStorageChooseDirectory => '選擇自訂目錄';
+
+  @override
+  String get moreStorageRestoreDefault => '恢復預設';
+
+  @override
+  String moreStorageMaximumCache(String size) {
+    return '最大快取：$size';
+  }
+
+  @override
+  String get moreStorageNoticeCachePartiallyCleared => '部分快取清理失敗，請稍後重試';
+
+  @override
+  String get moreStorageNoticeCacheCleared => '已清理一般快取，長期快取、下載與使用者資料已保留';
+
+  @override
+  String get moreStorageNoticeCacheLimitUpdated => '最大快取已更新';
+
+  @override
+  String get moreStorageNoticeDirectoryNotSelected => '未選擇目錄';
+
+  @override
+  String get moreStorageNoticeLocationUpdated => '儲存位置已更新';
+
+  @override
+  String get moreStorageNoticeDefaultRestored => '已恢復預設儲存位置';
+
+  @override
+  String get moreStorageNoticeUsageReloaded => '儲存統計已重新整理';
+
+  @override
+  String moreStorageNoticeDiagnosticsExported(String path) {
+    return '快取診斷已匯出：$path';
+  }
+
+  @override
+  String get moreStorageUsageOverview => '快取與資料總覽';
+
+  @override
+  String moreStorageUsageTotal(String size) {
+    return '應用程式資料總計：$size';
+  }
+
+  @override
+  String get moreStorageReloadUsage => '重新統計';
+
+  @override
+  String get moreStorageExportDiagnostics => '快取診斷匯出';
+
+  @override
+  String get moreStorageBucketImageCache => '圖片快取';
+
+  @override
+  String get moreStorageBucketPageCache => '頁面快取';
+
+  @override
+  String get moreStorageBucketLibraryMetadata => '書架資料';
+
+  @override
+  String get moreStorageBucketHistory => '瀏覽記錄';
+
+  @override
+  String get moreStorageBucketComposerDraft => '草稿';
+
+  @override
+  String get moreStorageBucketDownload => '下載內容';
+
+  @override
+  String get moreStorageBucketAppSettings => '應用程式設定';
+
+  @override
+  String get moreStorageCategoryClearable => '可清理快取';
+
+  @override
+  String get moreStorageCategorySticky => '長期快取';
+
+  @override
+  String get moreStorageCategoryProtected => '受保護/下載內容';
+
+  @override
+  String moreStorageImageRole(String role, String qualifier) {
+    return '$role$qualifier';
+  }
+
+  @override
+  String get moreStorageImageQualifierRecentReader => '（最近閱讀）';
+
+  @override
+  String get moreStorageImageQualifierSticky => '（低淘汰）';
+
+  @override
+  String get moreStorageImageQualifierProtected => '（受保護）';
+
+  @override
+  String get moreStorageImageQualifierDownloaded => '（已下載）';
+
+  @override
+  String get moreStorageImageCover => '封面';
+
+  @override
+  String get moreStorageImageCustomCover => '自訂封面';
+
+  @override
+  String get moreStorageImageComicPage => '漫畫頁';
+
+  @override
+  String get moreStorageImageNovelInline => '小說正文圖';
+
+  @override
+  String get moreStorageImageThreadInline => '帖子圖片';
+
+  @override
+  String get moreStorageImageThreadAttachment => '帖子附件圖';
+
+  @override
+  String get moreStorageImageAvatar => '頭像';
+
+  @override
+  String get moreStorageImageRemoteSmiley => '表情圖片';
+
+  @override
+  String get moreStorageImageForumHead => '論壇頭圖';
+
+  @override
+  String get moreStorageImageForumIcon => '論壇圖示';
+
+  @override
+  String get moreStorageImageBlogInline => '日誌圖片';
+
+  @override
+  String get moreStorageImageUnknown => '未分類圖片';
+
+  @override
+  String get moreStorageDocumentForum => '論壇首頁';
+
+  @override
+  String get moreStorageDocumentForumDisplay => '帖子列表';
+
+  @override
+  String get moreStorageDocumentThread => '帖子詳情';
+
+  @override
+  String get moreStorageDocumentTag => '標籤頁';
+
+  @override
+  String get moreStorageDocumentProfile => '個人資料';
+
+  @override
+  String get moreStorageDocumentBlog => '日誌';
+
+  @override
+  String get moreStorageDocumentUnknown => '頁面';
+
+  @override
+  String moreStorageDocumentHtml(String owner, int count) {
+    return '$owner HTML（$count）';
+  }
+
+  @override
+  String moreStorageSnapshot(String snapshotType, int count) {
+    return '$snapshotType快照（$count）';
+  }
+
+  @override
+  String get moreStorageSnapshotForumHome => '論壇首頁';
+
+  @override
+  String get moreStorageSnapshotForumDisplay => '帖子列表';
+
+  @override
+  String get moreStorageSnapshotThreadDetail => '帖子詳情';
+
+  @override
+  String get moreStorageSnapshotUnknown => '頁面解析';
+
+  @override
+  String moreStorageComposerDraft(int count) {
+    return '發文/回覆草稿（$count）';
+  }
+
+  @override
+  String get moreStorageDownloadComics => '漫畫下載';
+
+  @override
+  String get moreStorageDownloadNovels => '小說下載';
+
+  @override
+  String get moreStorageDownloadFavorites => '收藏快照';
+
+  @override
+  String get moreStorageDatabase => '本機資料庫';
+
+  @override
+  String moreStorageLibraryCount(String kind, int count) {
+    return '$kind：$count';
+  }
+
+  @override
+  String get moreStorageLibraryComics => '漫畫作品';
+
+  @override
+  String get moreStorageLibraryComicEpisodes => '漫畫章節';
+
+  @override
+  String get moreStorageLibraryNovels => '小說作品';
+
+  @override
+  String get moreStorageLibraryNovelEpisodes => '小說章節';
+
+  @override
+  String get moreStorageLibraryFavorites => '收藏帖子';
+
+  @override
+  String get moreStorageLibraryWorkState => '作品狀態';
+
+  @override
+  String get moreStorageLibraryEpisodeState => '章節狀態';
+
+  @override
+  String get moreStorageHistoryDatabase => '記錄資料庫';
+
+  @override
+  String moreStorageHistoryEntries(int count) {
+    return '瀏覽記錄：$count';
   }
 }

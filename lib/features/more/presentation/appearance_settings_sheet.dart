@@ -4,6 +4,7 @@ import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
+import 'package:y300/features/more/presentation/more_text_resolver.dart';
 
 class AppearanceSettingsSheet extends ConsumerWidget {
   const AppearanceSettingsSheet({super.key});
@@ -26,7 +27,7 @@ class AppearanceSettingsSheet extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  '外观与文字',
+                  l10n.moreAppearance,
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -34,7 +35,7 @@ class AppearanceSettingsSheet extends ConsumerWidget {
               ),
               IconButton(
                 key: const Key('appearance-settings-close-button'),
-                tooltip: '关闭',
+                tooltip: l10n.commonClose,
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close),
               ),
@@ -42,7 +43,7 @@ class AppearanceSettingsSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            '主题',
+            l10n.moreThemeSectionTitle,
             style: theme.textTheme.titleSmall?.copyWith(
               color: theme.colorScheme.primary,
               fontWeight: FontWeight.w700,
@@ -111,7 +112,10 @@ class AppearanceSettingsSheet extends ConsumerWidget {
       if (!context.mounted) {
         return;
       }
-      showTransientSnackBar(context, '主题设置保存失败：$error');
+      showTransientSnackBar(
+        context,
+        AppLocalizations.of(context).moreThemeSaveFailed('$error'),
+      );
     }
   }
 
@@ -148,14 +152,16 @@ class _AppearanceThemeChoice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
     final foreground = selected ? scheme.onPrimaryContainer : scheme.onSurface;
+    final label = MoreTextResolver.themeLabel(l10n, preference);
 
     return Semantics(
       button: true,
       selected: selected,
-      label: '${preference.displayLabel}主题',
+      label: '$label${l10n.moreThemeSectionTitle}',
       child: Tooltip(
-        message: _description,
+        message: MoreTextResolver.themeDescription(l10n, preference),
         child: OutlinedButton.icon(
           key: Key('appearance-theme-option-${preference.name}'),
           onPressed: onPressed,
@@ -188,7 +194,7 @@ class _AppearanceThemeChoice extends StatelessWidget {
               size: 18,
             ),
           ),
-          label: Text(preference.displayLabel),
+          label: Text(label),
         ),
       ),
     );
@@ -199,14 +205,6 @@ class _AppearanceThemeChoice extends StatelessWidget {
       AppThemePreference.light => Icons.light_mode_outlined,
       AppThemePreference.dark => Icons.dark_mode_outlined,
       AppThemePreference.system => Icons.brightness_auto_outlined,
-    };
-  }
-
-  String get _description {
-    return switch (preference) {
-      AppThemePreference.light => '保持浅色外观',
-      AppThemePreference.dark => '使用深色外观',
-      AppThemePreference.system => '跟随系统浅色或深色设置',
     };
   }
 }

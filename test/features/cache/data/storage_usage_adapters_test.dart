@@ -79,14 +79,13 @@ void main() {
       expect(section.bytes, 160);
       expect(section.clearable, isTrue);
       expect(
-        section.slices.map((slice) => slice.label),
-        containsAll(<String>['封面（受保护）', '帖子图片（最近阅读）', '表情图片（低淘汰）']),
+        section.slices.map((slice) => slice.labelRef?.code),
+        containsAll(<String>['cover', 'thread_inline', 'remote_smiley']),
       );
-      expect(section.categories.map((category) => category.label), <String>[
-        '可清缓存',
-        '长期缓存',
-        '受保护/下载内容',
-      ]);
+      expect(
+        section.categories.map((category) => category.labelRef?.code),
+        <String>['clearable', 'sticky', 'protected'],
+      );
       expect(section.categories.map((category) => category.bytes), <int>[
         40,
         20,
@@ -147,8 +146,8 @@ void main() {
       expect(section.bytes, greaterThan(3));
       expect(section.clearable, isTrue);
       expect(
-        section.slices.map((slice) => slice.label),
-        containsAll(<String>['帖子详情 HTML（1）', '帖子详情快照（1）']),
+        section.slices.map((slice) => slice.labelRef?.code),
+        containsAll(<String>['thread', 'thread.detail']),
       );
     },
   );
@@ -182,7 +181,11 @@ void main() {
       expect(section.bucket, StorageBucket.composerDraft);
       expect(section.clearable, isTrue);
       expect(section.bytes, greaterThan('百合 draft'.length));
-      expect(section.slices.single.label, '发帖/回复草稿（1）');
+      expect(
+        section.slices.single.labelRef?.kind,
+        StorageUsageLabelKind.composerDraft,
+      );
+      expect(section.slices.single.labelRef?.count, 1);
     },
   );
 
@@ -263,8 +266,14 @@ void main() {
       expect(section.bucket, StorageBucket.libraryMetadata);
       expect(section.bytes, 11);
       expect(section.clearable, isFalse);
-      expect(section.slices.map((slice) => slice.label), contains('本地数据库'));
-      expect(section.slices.map((slice) => slice.label), contains('漫画作品：1'));
+      expect(
+        section.slices.map((slice) => slice.labelRef?.kind),
+        contains(StorageUsageLabelKind.database),
+      );
+      expect(
+        section.slices.map((slice) => slice.labelRef?.code),
+        contains('comics'),
+      );
     },
   );
 
@@ -303,10 +312,11 @@ void main() {
       expect(section.bucket, StorageBucket.history);
       expect(section.bytes, 17);
       expect(section.clearable, isFalse);
-      expect(section.slices.map((slice) => slice.label), <String>[
-        '记录数据库',
-        '浏览记录：1',
+      expect(section.slices.map((slice) => slice.labelRef?.code), <String>[
+        'history',
+        'entries',
       ]);
+      expect(section.slices.last.labelRef?.count, 1);
       expect(section.slices.every((slice) => slice.protected), isTrue);
     },
   );

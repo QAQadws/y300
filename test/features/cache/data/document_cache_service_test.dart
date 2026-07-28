@@ -82,7 +82,12 @@ void main() {
     expect(section.bucket, StorageBucket.pageCache);
     expect(section.clearable, isTrue);
     expect(section.bytes, 3);
-    expect(section.slices.single.label, '帖子详情 HTML（1）');
+    expect(
+      section.slices.single.labelRef?.kind,
+      StorageUsageLabelKind.documentOwner,
+    );
+    expect(section.slices.single.labelRef?.code, 'thread');
+    expect(section.slices.single.labelRef?.count, 1);
 
     await db.close();
     await deleteDatabase(dbName);
