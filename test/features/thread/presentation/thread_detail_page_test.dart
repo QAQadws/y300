@@ -12,6 +12,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -79,6 +80,7 @@ import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -3228,6 +3230,110 @@ void main() {
       );
     });
 
+    testWidgets('copies a source floor redirect with the current uid', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 260);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final copiedTexts = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final data = Map<String, dynamic>.from(call.arguments as Map);
+            copiedTexts.add(data['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '楼层链接测试',
+            author: 'alice',
+            replies: 1,
+            views: 12,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: '41585107',
+                author: 'author',
+                authorId: '11',
+                message: '<p>正文</p>',
+                number: 2,
+                isFirst: false,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          additionalOverrides: [
+            authSessionControllerProvider.overrideWith(
+              () => _FakeAuthSessionController(
+                const AuthSessionViewState(
+                  isLoggedIn: true,
+                  uid: '597454',
+                  username: 'alice',
+                  isLoggingOut: false,
+                ),
+              ),
+            ),
+          ],
+          home: Consumer(
+            builder: (context, ref, child) {
+              ref.watch(authSessionControllerProvider);
+              return const ThreadDetailPage(tid: '100', subject: '楼层链接测试');
+            },
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      await _longPressVisibleTop(
+        tester,
+        find.byKey(const Key('thread-post-body-41585107')),
+      );
+      await tester.pumpAndSettle();
+
+      final l10n = await AppLocalizations.delegate.load(const Locale('zh'));
+      expect(find.text(l10n.threadDetailCopyFloorLink), findsOneWidget);
+      await _tapPostActionSheetItem(
+        tester,
+        const Key('thread-post-copy-floor-link-action'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(copiedTexts, <String>[
+        'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=100&pid=41585107&fromuid=597454',
+      ]);
+      expect(
+        find.text(l10n.threadDetailCopySuccess(l10n.threadDetailFloorLink)),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('uses current thread page as post image referer', (
       tester,
     ) async {
@@ -5416,6 +5522,15 @@ class _FakeReplyRepository implements ReplyRepository {
       ApiError(type: ApiErrorType.business, message: '测试不支持楼层回复准备'),
     );
   }
+}
+
+class _FakeAuthSessionController extends AuthSessionController {
+  _FakeAuthSessionController(this._session);
+
+  final AuthSessionViewState _session;
+
+  @override
+  Future<AuthSessionViewState> build() async => _session;
 }
 
 class _FakeThreadRepository implements ThreadRepository {

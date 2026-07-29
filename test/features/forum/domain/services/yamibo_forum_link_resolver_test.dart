@@ -36,6 +36,17 @@ void main() {
       expect(destination?.page, isNull);
     });
 
+    test('ignores optional fromuid when resolving a generated floor link', () {
+      final destination = resolver.resolve(
+        'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=573908&pid=41585107&fromuid=597454',
+      );
+
+      expect(destination?.kind, YamiboForumLinkKind.threadPost);
+      expect(destination?.tid, '573908');
+      expect(destination?.pid, '41585107');
+      expect(destination?.page, isNull);
+    });
+
     test('resolves tag links as normalized native tag page destinations', () {
       final destination = resolver.resolve(
         'https://bbs.yamibo.com/misc.php?mod=tag&amp;id=21920',

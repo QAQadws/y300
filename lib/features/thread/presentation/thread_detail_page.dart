@@ -10,6 +10,7 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
@@ -39,6 +40,7 @@ import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
+import 'package:y300/features/thread/domain/services/thread_floor_link_builder.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
@@ -84,6 +86,7 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
 class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   late final ScrollController _scrollController;
   late final ThreadDetailQuickScrollCoordinator _quickScrollCoordinator;
+  final ThreadFloorLinkBuilder _floorLinkBuilder = ThreadFloorLinkBuilder();
   Timer? _highlightClearTimer;
   String? _highlightPostPid;
   ImageRequestHeaderBuilder? _latestImageHeaderBuilder;
@@ -839,7 +842,29 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       case _ThreadPostAction.copyAll:
         await _copyPostPlainText(sourcePost, plan);
         return;
+      case _ThreadPostAction.copyFloorLink:
+        await _copyFloorLink(sourcePost);
+        return;
     }
+  }
+
+  Future<void> _copyFloorLink(ThreadPost sourcePost) async {
+    final authSession = ref.read(authSessionControllerProvider).asData?.value;
+    final link = _floorLinkBuilder.build(
+      tid: widget.tid,
+      pid: sourcePost.pid,
+      fromUid: authSession?.isLoggedIn == true ? authSession?.uid : null,
+    );
+    if (link == null) {
+      _showSnackBar(
+        AppLocalizations.of(context).threadDetailCopyFloorLinkFailed,
+      );
+      return;
+    }
+    await _copyUrl(
+      AppLocalizations.of(context).threadDetailFloorLink,
+      link.toString(),
+    );
   }
 
   Future<void> _copyPostPlainText(
@@ -1193,7 +1218,14 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
   }
 }
 
-enum _ThreadPostAction { reply, rate, comment, selectCopy, copyAll }
+enum _ThreadPostAction {
+  reply,
+  rate,
+  comment,
+  selectCopy,
+  copyAll,
+  copyFloorLink,
+}
 
 class _ThreadPostActionSheet extends StatelessWidget {
   const _ThreadPostActionSheet({required this.post});
@@ -1251,6 +1283,14 @@ class _ThreadPostActionSheet extends StatelessWidget {
                 title: Text(l10n.threadDetailCopyAll),
                 onTap: () =>
                     Navigator.of(context).pop(_ThreadPostAction.copyAll),
+              ),
+              ListTile(
+                key: const Key('thread-post-copy-floor-link-action'),
+                dense: true,
+                leading: const Icon(Icons.link_outlined),
+                title: Text(l10n.threadDetailCopyFloorLink),
+                onTap: () =>
+                    Navigator.of(context).pop(_ThreadPostAction.copyFloorLink),
               ),
             ],
           ),

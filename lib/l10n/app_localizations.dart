@@ -4355,6 +4355,18 @@ abstract class AppLocalizations {
   /// **'楼层链接'**
   String get threadDetailFloorLink;
 
+  /// No description provided for @threadDetailCopyFloorLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制楼层链接'**
+  String get threadDetailCopyFloorLink;
+
+  /// No description provided for @threadDetailCopyFloorLinkFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'楼层链接复制失败'**
+  String get threadDetailCopyFloorLinkFailed;
+
   /// No description provided for @threadDetailExternalLink.
   ///
   /// In zh, this message translates to:

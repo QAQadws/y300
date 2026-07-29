@@ -1119,6 +1119,8 @@
   "threadDetailCopyLink": "复制链接",
   "threadDetailPostLink": "帖子链接",
   "threadDetailFloorLink": "楼层链接",
+  "threadDetailCopyFloorLink": "复制楼层链接",
+  "threadDetailCopyFloorLinkFailed": "楼层链接复制失败",
   "threadDetailExternalLink": "外部链接",
   "threadDetailHomeLink": "首页链接",
   "threadDetailReplyLink": "楼层回复链接",

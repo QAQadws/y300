@@ -2665,6 +2665,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadDetailFloorLink => '楼层链接';
 
   @override
+  String get threadDetailCopyFloorLink => '复制楼层链接';
+
+  @override
+  String get threadDetailCopyFloorLinkFailed => '楼层链接复制失败';
+
+  @override
   String get threadDetailExternalLink => '外部链接';
 
   @override
@@ -6739,6 +6745,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadDetailFloorLink => '樓層連結';
+
+  @override
+  String get threadDetailCopyFloorLink => '複製樓層連結';
+
+  @override
+  String get threadDetailCopyFloorLinkFailed => '樓層連結複製失敗';
 
   @override
   String get threadDetailExternalLink => '外部連結';
