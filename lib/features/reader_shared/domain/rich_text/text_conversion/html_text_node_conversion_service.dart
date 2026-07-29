@@ -64,15 +64,18 @@ final class DomHtmlTextNodeConversionService
   DomHtmlTextNodeConversionService({
     PlainTextBatchConversionService? plainTextBatchConversionService,
     int maxCacheEntries = 8,
+    int maxCacheCodeUnits = 2 * 1024 * 1024,
     this.metricsListener,
   }) : _plainTextBatchConversionService =
            plainTextBatchConversionService ??
            DefaultPlainTextBatchConversionService(),
        _maxCacheEntries = maxCacheEntries,
+       _maxCacheCodeUnits = maxCacheCodeUnits,
        _cache = LinkedHashMap();
 
   final PlainTextBatchConversionService _plainTextBatchConversionService;
   final int _maxCacheEntries;
+  final int _maxCacheCodeUnits;
   final HtmlTextNodeConversionMetricsListener? metricsListener;
   final LinkedHashMap<_HtmlTextNodeConversionCacheKey, _CachedHtmlBatch> _cache;
 
@@ -370,18 +373,40 @@ final class DomHtmlTextNodeConversionService
     _HtmlTextNodeConversionCacheKey key,
     _HtmlTextNodeConversionOutcome outcome,
   ) {
-    if (_maxCacheEntries <= 0) {
+    if (_maxCacheEntries <= 0 || _maxCacheCodeUnits <= 0) {
       return;
     }
-    _cache[key] = _CachedHtmlBatch(
+    final cachedBatch = _CachedHtmlBatch(
       results: _copyResults(outcome.results),
       plainSourceCount: outcome.plainSourceCount,
       convertedTextNodeCount: outcome.convertedTextNodeCount,
+      codeUnitCost: _cacheCodeUnitCost(key, outcome),
     );
-    while (_cache.length > _maxCacheEntries) {
+    if (cachedBatch.codeUnitCost > _maxCacheCodeUnits) {
+      return;
+    }
+    _cache[key] = cachedBatch;
+    while (_cache.length > _maxCacheEntries ||
+        _cachedCodeUnits > _maxCacheCodeUnits) {
       _cache.remove(_cache.keys.first);
     }
   }
+
+  int _cacheCodeUnitCost(
+    _HtmlTextNodeConversionCacheKey key,
+    _HtmlTextNodeConversionOutcome outcome,
+  ) {
+    final resultCodeUnits = outcome.results.fold<int>(
+      0,
+      (total, result) => total + result.html.length + result.converterId.length,
+    );
+    // Count a small fixed metadata budget for each result and batch counter.
+    final metadataCodeUnits = 16 + (outcome.results.length * 8);
+    return key.codeUnitCost + resultCodeUnits + metadataCodeUnits;
+  }
+
+  int get _cachedCodeUnits =>
+      _cache.values.fold<int>(0, (total, value) => total + value.codeUnitCost);
 
   List<HtmlTextNodeConversionResult> _copyResults(
     Iterable<HtmlTextNodeConversionResult> results,
@@ -498,11 +523,13 @@ final class _CachedHtmlBatch {
     required this.results,
     required this.plainSourceCount,
     required this.convertedTextNodeCount,
+    required this.codeUnitCost,
   });
 
   final List<HtmlTextNodeConversionResult> results;
   final int plainSourceCount;
   final int convertedTextNodeCount;
+  final int codeUnitCost;
 }
 
 final class HtmlTextNodeConversionException implements Exception {
@@ -530,6 +557,11 @@ final class _HtmlTextNodeConversionCacheKey {
   final List<String> htmlFragments;
   final String converterId;
   final String optionsSignature;
+
+  int get codeUnitCost =>
+      converterId.length +
+      optionsSignature.length +
+      htmlFragments.fold<int>(0, (total, fragment) => total + fragment.length);
 
   @override
   bool operator ==(Object other) {

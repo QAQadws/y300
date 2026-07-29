@@ -3887,6 +3887,10 @@ void main() {
     testWidgets(
       'manual language mode projects server content without another request',
       (tester) async {
+        final historyRecorder = _RecordingHistoryVisitRecorder();
+        final converter = _ThreadProjectionTestConverter(
+          TextConversionMode.toTraditional,
+        );
         final repository = _FakeThreadRepository((tid, page) async {
           return ApiSuccess(
             ThreadDetailData(
@@ -3919,13 +3923,12 @@ void main() {
         await tester.pumpWidget(
           _buildTestApp(
             repository,
+            historyVisitRecorder: historyRecorder,
             additionalOverrides: <riverpod_misc.Override>[
               appServerContentConversionModeProvider.overrideWithValue(
                 TextConversionMode.toTraditional,
               ),
-              textConverterProvider.overrideWith(
-                (ref, mode) => _ThreadProjectionTestConverter(mode),
-              ),
+              textConverterProvider.overrideWith((ref, mode) => converter),
             ],
           ),
         );
@@ -3937,6 +3940,13 @@ void main() {
         expect(find.textContaining('发型用户名'), findsWidgets);
         expect(find.textContaining('髮型用戶名'), findsNothing);
         expect(repository.queryHistory, hasLength(1));
+        expect(converter.callCount, 2);
+        expect(historyRecorder.drafts, hasLength(1));
+        expect(historyRecorder.drafts.single.title, '软件主题');
+        expect(historyRecorder.drafts.single.forumName, '软件区');
+
+        await tester.pump();
+        expect(converter.callCount, 2);
       },
     );
 
@@ -5439,16 +5449,18 @@ class _FakeThreadRepository implements ThreadRepository {
 }
 
 class _ThreadProjectionTestConverter implements TextConverter {
-  const _ThreadProjectionTestConverter(this.mode);
+  _ThreadProjectionTestConverter(this.mode);
 
   @override
   final TextConversionMode mode;
+  int callCount = 0;
 
   @override
   String get id => 'thread-page-test:${mode.name}';
 
   @override
   Future<String> convertHtml(String html) async {
+    callCount += 1;
     return html
         .replaceAll('软件', '軟體')
         .replaceAll('区', '區')

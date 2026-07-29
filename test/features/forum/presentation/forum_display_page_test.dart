@@ -331,11 +331,12 @@ void main() {
     testWidgets(
       'manual content mode projects server text without reloading display',
       (tester) async {
+        final conversionService = _ProjectionPrefixBatchConversionService();
         final repository = _FakeForumDisplayRepository((_, page, query) async {
           return ApiSuccess(
             _displayData(
               page: page,
-              total: 1,
+              total: 31,
               threads: [
                 ForumThreadSummary(
                   tid: 'projection',
@@ -349,6 +350,17 @@ void main() {
                   sourceTagUrl: '/forum.php?mod=forumdisplay&fid=2&typeid=7',
                   threadUrl: '/thread-projection-1-1.html',
                 ),
+                for (var index = 1; index <= 30; index += 1)
+                  ForumThreadSummary(
+                    tid: 'projection-$index',
+                    subject: '帖子$index',
+                    author: 'user$index',
+                    replies: index,
+                    views: index + 1,
+                    dateline: '今天',
+                    excerpt: '摘要$index',
+                    threadUrl: '/thread-projection-$index-1-1.html',
+                  ),
               ],
             ),
           );
@@ -365,7 +377,7 @@ void main() {
                 (ref, mode) => _ProjectionTestConverter(mode),
               ),
               plainTextBatchConversionServiceProvider.overrideWithValue(
-                _ProjectionPrefixBatchConversionService(),
+                conversionService,
               ),
             ],
           ),
@@ -376,8 +388,20 @@ void main() {
         expect(find.text('T:帖子标题'), findsOneWidget);
         expect(find.text('T:帖子摘要'), findsOneWidget);
         expect(find.text('#T:漫画'), findsOneWidget);
-        expect(find.text('T:今天'), findsOneWidget);
+        expect(find.text('T:今天'), findsWidgets);
         expect(find.text('alice'), findsOneWidget);
+        expect(conversionService.callCount, 1);
+        expect(repository.cachePolicies, <CacheLoadPolicy>[
+          CacheLoadPolicy.cacheFirst,
+        ]);
+
+        await tester.drag(
+          find.byKey(const Key('forum-display-list')),
+          const Offset(0, -500),
+        );
+        await tester.pump();
+
+        expect(conversionService.callCount, 1);
         expect(repository.cachePolicies, <CacheLoadPolicy>[
           CacheLoadPolicy.cacheFirst,
         ]);
@@ -1570,11 +1594,14 @@ class _FakeForumDisplayRepository implements ForumDisplayRepository {
 
 class _ProjectionPrefixBatchConversionService
     implements PlainTextBatchConversionService {
+  int callCount = 0;
+
   @override
   Future<List<String>> convertAll({
     required List<String> sources,
     required TextConverter converter,
   }) async {
+    callCount += 1;
     return <String>[for (final source in sources) 'T:$source'];
   }
 }

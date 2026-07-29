@@ -95,6 +95,39 @@ void main() {
       expect(projection.sections[0].items[0].displayDescription, '站点公告');
       expect(recorder.events.single.failureType, 'StateError');
     });
+
+    test('large home surface still uses one conversion batch', () async {
+      final service = _PrefixBatchConversionService();
+      final items = <ForumHomeForumDisplayItem>[
+        for (var index = 1; index <= 120; index += 1)
+          ForumHomeForumDisplayItem(
+            fid: '$index',
+            title: '版块$index',
+            description: '描述$index',
+            todayPosts: index,
+          ),
+      ];
+      final source = ForumHomeViewData(
+        isLoggedIn: true,
+        sections: <ForumSection>[
+          ForumSection(
+            sourceIdentity: 'regular:large',
+            title: '大分区',
+            items: items,
+          ),
+        ],
+      );
+
+      final projection = await ForumHomeContentProjector(
+        plainTextBatchConversionService: service,
+        diagnosticRecorder: _RecordingDiagnosticRecorder(),
+      ).project(source, converter: const _TestConverter());
+
+      expect(service.callCount, 1);
+      expect(service.lastSources, hasLength(241));
+      expect(projection.sections.single.items, hasLength(120));
+      expect(projection.sections.single.items.last.displayTitle, 'T:版块120');
+    });
   });
 }
 

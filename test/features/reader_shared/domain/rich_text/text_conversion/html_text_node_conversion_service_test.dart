@@ -205,6 +205,75 @@ void main() {
       },
     );
 
+    test('does not cache a batch over the HTML code unit budget', () async {
+      final service = DomHtmlTextNodeConversionService(
+        plainTextBatchConversionService: DefaultPlainTextBatchConversionService(
+          maxCacheEntries: 0,
+        ),
+        maxCacheCodeUnits: 1,
+      );
+      final converter = _MapTextConverter({'正文': '正文T'});
+
+      await service.convert(html: '<p>正文</p>', converter: converter);
+      await service.convert(html: '<p>正文</p>', converter: converter);
+
+      expect(converter.callCount, 2);
+    });
+
+    test('evicts HTML batches by least-recently-used entry order', () async {
+      final service = DomHtmlTextNodeConversionService(
+        plainTextBatchConversionService: DefaultPlainTextBatchConversionService(
+          maxCacheEntries: 0,
+        ),
+        maxCacheEntries: 1,
+      );
+      final converter = _MapTextConverter({'第一': '第一T', '第二': '第二T'});
+
+      await service.convert(html: '<p>第一</p>', converter: converter);
+      await service.convert(html: '<p>第二</p>', converter: converter);
+      await service.convert(html: '<p>第一</p>', converter: converter);
+
+      expect(converter.callCount, 3);
+    });
+
+    test(
+      'evicts HTML batches when their cumulative code units exceed budget',
+      () async {
+        final service = DomHtmlTextNodeConversionService(
+          plainTextBatchConversionService:
+              DefaultPlainTextBatchConversionService(maxCacheEntries: 0),
+          maxCacheEntries: 8,
+          maxCacheCodeUnits: 350,
+        );
+        final converter = _MapTextConverter({'第一': '第一T', '第二': '第二T'});
+        final first = '<p>${List<String>.filled(20, '第一').join()}</p>';
+        final second = '<p>${List<String>.filled(20, '第二').join()}</p>';
+        const options = HtmlTextNodeConversionOptions(
+          skipTags: <String>{},
+          skipClassNames: <String>{},
+          exclusionPolicies: <HtmlTextNodeExclusionPolicy>[],
+        );
+
+        await service.convert(
+          html: first,
+          converter: converter,
+          options: options,
+        );
+        await service.convert(
+          html: second,
+          converter: converter,
+          options: options,
+        );
+        await service.convert(
+          html: first,
+          converter: converter,
+          options: options,
+        );
+
+        expect(converter.callCount, 3);
+      },
+    );
+
     test(
       'falls back to per-node conversion when batch split is invalid',
       () async {

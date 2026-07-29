@@ -210,6 +210,81 @@ void main() {
       expect(base, isNot(contains('软件正文')));
       expect(base, isNot(contains('发型用户名')));
     });
+
+    test(
+      'large comment result uses one plain and one HTML service batch',
+      () async {
+        final plain = _RecordingPlainService();
+        final html = _RecordingHtmlService();
+        final source = ComicCommentLoadResult(
+          sourceTid: '573279',
+          status: ComicCommentLoadStatus.success,
+          items: <ComicCommentItem>[
+            for (var index = 1; index <= 120; index += 1)
+              ComicCommentItem(
+                pid: 'p$index',
+                authorId: '$index',
+                authorName: '用户$index',
+                dateline: '时间$index',
+                floorNumber: index,
+                rawMessage: '<p>正文$index</p>',
+                avatarUrl: null,
+              ),
+          ],
+          loadedPages: const <int>{1, 2, 3},
+          expectedPages: 3,
+        );
+
+        final projection =
+            await ComicCommentContentProjector(
+              plainTextBatchConversionService: plain,
+              htmlTextNodeConversionService: html,
+              diagnosticRecorder: _RecordingDiagnosticRecorder(),
+            ).project(
+              sessionKey: key,
+              source: source,
+              converter: const _TestConverter(),
+            );
+
+        expect(plain.callCount, 1);
+        expect(plain.lastSources, hasLength(120));
+        expect(html.callCount, 1);
+        expect(html.lastFragments, hasLength(120));
+        expect(projection.items, hasLength(120));
+        expect(projection.items.last.sourceItem.authorName, '用户120');
+      },
+    );
+
+    test('identical comment result reuses both conversion caches', () async {
+      final plain = DefaultPlainTextBatchConversionService();
+      final html = DomHtmlTextNodeConversionService(
+        plainTextBatchConversionService: plain,
+      );
+      final converter = _CountingPassThroughConverter();
+      final projector = ComicCommentContentProjector(
+        plainTextBatchConversionService: plain,
+        htmlTextNodeConversionService: html,
+        diagnosticRecorder: _RecordingDiagnosticRecorder(),
+      );
+      final source = _source();
+
+      await projector.project(
+        sessionKey: key,
+        source: source,
+        converter: converter,
+      );
+      await projector.project(
+        sessionKey: key,
+        source: source,
+        converter: converter,
+      );
+
+      expect(
+        converter.callCount,
+        2,
+        reason: 'one plain and one HTML-node batch are cached on the repeat',
+      );
+    });
   });
 }
 
@@ -353,5 +428,21 @@ final class _ReplacingConverter implements TextConverter {
         .replaceAll('软件', '軟體')
         .replaceAll('链接', '連結')
         .replaceAll('时间', '時間');
+  }
+}
+
+final class _CountingPassThroughConverter implements TextConverter {
+  int callCount = 0;
+
+  @override
+  String get id => 'test:counting-pass-through';
+
+  @override
+  TextConversionMode get mode => TextConversionMode.toTraditional;
+
+  @override
+  Future<String> convertHtml(String html) async {
+    callCount += 1;
+    return html;
   }
 }

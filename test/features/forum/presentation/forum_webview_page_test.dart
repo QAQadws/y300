@@ -6,6 +6,7 @@ import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -35,6 +36,8 @@ import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reply/data/repositories/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/tags/data/repositories/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
@@ -87,6 +90,34 @@ void main() {
 
       expect(find.byKey(const Key('forum-webview-surface')), findsOneWidget);
       expect(driver.buildWidgetCallCount, greaterThanOrEqualTo(1));
+    },
+  );
+
+  testWidgets(
+    'manual content mode does not resolve a converter for WebView DOM',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver()..title = '软件原文标题';
+      var converterProviderReadCount = 0;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appServerContentConversionModeProvider.overrideWithValue(
+              TextConversionMode.toTraditional,
+            ),
+            textConverterProvider.overrideWith((ref, mode) {
+              converterProviderReadCount += 1;
+              throw StateError('WebView must not resolve OpenCC');
+            }),
+          ],
+          child: _buildTestApp(driver: driver),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(converterProviderReadCount, 0);
+      expect(driver.bootstrapConfig?.initialUri.host, 'bbs.yamibo.com');
+      expect(find.byKey(const Key('forum-webview-surface')), findsOneWidget);
     },
   );
 

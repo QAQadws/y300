@@ -227,6 +227,66 @@ void main() {
         );
       },
     );
+
+    test(
+      'large thread revision uses one plain and one HTML service batch',
+      () async {
+        final plain = _PrefixPlainService();
+        final html = _RecordingHtmlService();
+        final base = _source();
+        final posts = <ThreadPost>[
+          for (var index = 1; index <= 80; index += 1)
+            ThreadPost(
+              pid: '$index',
+              author: '用户$index',
+              authorId: '$index',
+              message: '<p>正文$index</p>',
+              number: index,
+              isFirst: index == 1,
+              dateline: '时间$index',
+            ),
+        ];
+        final source = base.copyWith(
+          posts: posts,
+          ratingsByPostId: const <String, ThreadPostRatingsViewState>{},
+        );
+
+        final projection = await ThreadDetailContentProjector(
+          plainTextBatchConversionService: plain,
+          htmlTextNodeConversionService: html,
+          diagnosticRecorder: _RecordingDiagnosticRecorder(),
+        ).project(source, converter: const _TestConverter());
+
+        expect(plain.callCount, 1);
+        expect(html.callCount, 1);
+        expect(html.lastFragments, hasLength(80));
+        expect(projection.posts, hasLength(80));
+        expect(projection.posts.last.sourcePost.author, '用户80');
+      },
+    );
+
+    test('identical thread revision reuses both conversion caches', () async {
+      final plain = DefaultPlainTextBatchConversionService();
+      final html = DomHtmlTextNodeConversionService(
+        plainTextBatchConversionService: plain,
+      );
+      final converter = _CountingPassThroughConverter();
+      final projector = ThreadDetailContentProjector(
+        plainTextBatchConversionService: plain,
+        htmlTextNodeConversionService: html,
+        diagnosticRecorder: _RecordingDiagnosticRecorder(),
+      );
+      final source = _source();
+
+      await projector.project(source, converter: converter);
+      await projector.project(source, converter: converter);
+
+      expect(
+        converter.callCount,
+        2,
+        reason: 'one plain and one HTML-node batch are cached on the repeat',
+      );
+    });
   });
 }
 
@@ -398,6 +458,22 @@ class _TestConverter implements TextConverter {
 
   @override
   Future<String> convertHtml(String html) async => html;
+}
+
+class _CountingPassThroughConverter implements TextConverter {
+  int callCount = 0;
+
+  @override
+  String get id => 'test:counting-pass-through';
+
+  @override
+  TextConversionMode get mode => TextConversionMode.toTraditional;
+
+  @override
+  Future<String> convertHtml(String html) async {
+    callCount += 1;
+    return html;
+  }
 }
 
 class _RecordingDiagnosticRecorder implements TextConversionDiagnosticRecorder {
