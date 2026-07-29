@@ -290,12 +290,14 @@ class _ForumHomeCarouselBody extends StatelessWidget {
 class ForumHomeSectionCard extends StatelessWidget {
   const ForumHomeSectionCard({
     super.key,
+    required this.sectionKey,
     required this.title,
     required this.children,
     required this.isCollapsed,
     required this.onToggle,
   });
 
+  final String sectionKey;
   final String title;
   final List<Widget> children;
   final bool isCollapsed;
@@ -313,14 +315,14 @@ class ForumHomeSectionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Material(
-            key: Key('forum-section-title-$title'),
+            key: Key('forum-section-title-$sectionKey'),
             color: palette.sectionHeaderBackground,
             borderRadius: BorderRadius.vertical(
               top: const Radius.circular(4),
               bottom: Radius.circular(isCollapsed ? 4 : 0),
             ),
             child: InkWell(
-              key: Key('forum-section-toggle-$title'),
+              key: Key('forum-section-toggle-$sectionKey'),
               borderRadius: BorderRadius.vertical(
                 top: const Radius.circular(4),
                 bottom: Radius.circular(isCollapsed ? 4 : 0),
@@ -345,7 +347,7 @@ class ForumHomeSectionCard extends StatelessWidget {
                         ),
                       ),
                       _ForumHomeSectionIndicator(
-                        title: title,
+                        sectionKey: sectionKey,
                         isCollapsed: isCollapsed,
                         palette: palette,
                       ),
@@ -378,7 +380,7 @@ class ForumHomeSectionCard extends StatelessWidget {
                       key: ValueKey('forum-home-section-collapsed'),
                     )
                   : DecoratedBox(
-                      key: ValueKey('forum-home-section-expanded-$title'),
+                      key: ValueKey('forum-home-section-expanded-$sectionKey'),
                       decoration: BoxDecoration(
                         color: palette.sectionBodyBackground,
                         borderRadius: const BorderRadius.vertical(
@@ -403,12 +405,12 @@ class ForumHomeSectionCard extends StatelessWidget {
 
 class _ForumHomeSectionIndicator extends StatelessWidget {
   const _ForumHomeSectionIndicator({
-    required this.title,
+    required this.sectionKey,
     required this.isCollapsed,
     required this.palette,
   });
 
-  final String title;
+  final String sectionKey;
   final bool isCollapsed;
   final ForumHomeNativePalette palette;
 
@@ -426,7 +428,7 @@ class _ForumHomeSectionIndicator extends StatelessWidget {
       },
       child: Text(
         isCollapsed ? '+' : '-',
-        key: Key('forum-section-indicator-$title'),
+        key: Key('forum-section-indicator-$sectionKey'),
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
           color: palette.sectionHeaderForeground,
           fontWeight: FontWeight.w600,

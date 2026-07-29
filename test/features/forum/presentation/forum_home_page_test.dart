@@ -5,6 +5,7 @@ import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -28,6 +29,10 @@ import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 
 void main() {
   group('ForumHomePage', () {
@@ -296,6 +301,44 @@ void main() {
     });
 
     testWidgets(
+      'manual content mode projects server text without reloading home',
+      (tester) async {
+        final repository = _FakeForumHomeRepository(
+          () async => ApiSuccess(_loggedOutPayload()),
+        );
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            extraOverrides: <riverpod_misc.Override>[
+              appServerContentConversionModeProvider.overrideWithValue(
+                TextConversionMode.toTraditional,
+              ),
+              textConverterProvider.overrideWith(
+                (ref, mode) => _ProjectionTestConverter(mode),
+              ),
+              plainTextBatchConversionServiceProvider.overrideWithValue(
+                _ProjectionPrefixBatchConversionService(),
+              ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('T:综合区'), findsOneWidget);
+        expect(find.text('T:公告区'), findsOneWidget);
+        expect(find.text('T:站点公告与维护信息'), findsOneWidget);
+        expect(
+          find.byKey(const Key('forum-section-toggle-regular:2')),
+          findsOneWidget,
+        );
+        expect(repository.cachePolicies, <CacheLoadPolicy>[
+          CacheLoadPolicy.cacheFirst,
+        ]);
+      },
+    );
+
+    testWidgets(
       'silent refresh triggers when page becomes active after threshold',
       (tester) async {
         final repository = _FakeForumHomeRepository(
@@ -392,18 +435,22 @@ void main() {
 
         expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
         var indicator = tester.widget<Text>(
-          find.byKey(const Key('forum-section-indicator-我收藏的版块')),
+          find.byKey(const Key('forum-section-indicator-favorite:2,55')),
         );
         expect(indicator.data, '-');
 
-        await tester.tap(find.byKey(const Key('forum-section-toggle-我收藏的版块')));
+        await tester.tap(
+          find.byKey(const Key('forum-section-toggle-favorite:2,55')),
+        );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 90));
 
         final rotatingIndicator = tester.widget<RotationTransition>(
           find
               .ancestor(
-                of: find.byKey(const Key('forum-section-indicator-我收藏的版块')),
+                of: find.byKey(
+                  const Key('forum-section-indicator-favorite:2,55'),
+                ),
                 matching: find.byType(RotationTransition),
               )
               .first,
@@ -416,16 +463,18 @@ void main() {
 
         expect(find.byKey(const Key('forum-favorite-card-2')), findsNothing);
         indicator = tester.widget<Text>(
-          find.byKey(const Key('forum-section-indicator-我收藏的版块')),
+          find.byKey(const Key('forum-section-indicator-favorite:2,55')),
         );
         expect(indicator.data, '+');
 
-        await tester.tap(find.byKey(const Key('forum-section-toggle-我收藏的版块')));
+        await tester.tap(
+          find.byKey(const Key('forum-section-toggle-favorite:2,55')),
+        );
         await tester.pumpAndSettle();
 
         expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
         indicator = tester.widget<Text>(
-          find.byKey(const Key('forum-section-indicator-我收藏的版块')),
+          find.byKey(const Key('forum-section-indicator-favorite:2,55')),
         );
         expect(indicator.data, '-');
       },
@@ -754,6 +803,8 @@ Widget _buildTestApp(
   DateTime Function()? nowProvider,
   ImageCacheService? imageCacheService,
   ForumImagePrecacheService? forumImagePrecacheService,
+  List<riverpod_misc.Override> extraOverrides =
+      const <riverpod_misc.Override>[],
 }) {
   return ProviderScope(
     overrides: _overrides(
@@ -762,7 +813,7 @@ Widget _buildTestApp(
       nowProvider: nowProvider,
       imageCacheService: imageCacheService,
       forumImagePrecacheService: forumImagePrecacheService,
-    ),
+    )..addAll(extraOverrides),
     child: LocalizedTestApp(
       navigatorObservers: navigatorObservers,
       home: ForumHomePage(isActive: isActive),
@@ -1263,6 +1314,30 @@ class _FakeForumWebViewExternalLauncher
     launchedUris.add(uri);
     return true;
   }
+}
+
+class _ProjectionPrefixBatchConversionService
+    implements PlainTextBatchConversionService {
+  @override
+  Future<List<String>> convertAll({
+    required List<String> sources,
+    required TextConverter converter,
+  }) async {
+    return <String>[for (final source in sources) 'T:$source'];
+  }
+}
+
+class _ProjectionTestConverter implements TextConverter {
+  const _ProjectionTestConverter(this.mode);
+
+  @override
+  String get id => 'projection-test:${mode.name}';
+
+  @override
+  final TextConversionMode mode;
+
+  @override
+  Future<String> convertHtml(String html) async => html;
 }
 
 class _CountingNavigatorObserver extends NavigatorObserver {

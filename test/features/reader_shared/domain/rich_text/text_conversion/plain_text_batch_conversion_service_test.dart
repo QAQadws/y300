@@ -135,6 +135,36 @@ void main() {
 
       expect(converter.callCount, 2);
     });
+
+    test(
+      'reports operation-scoped metrics without replacing global metrics',
+      () async {
+        final globalMetrics = <PlainTextBatchConversionMetrics>[];
+        final operationMetrics = <PlainTextBatchConversionMetrics>[];
+        final service = DefaultPlainTextBatchConversionService(
+          metricsListener: globalMetrics.add,
+        );
+        final converter = _RecordingConverter();
+
+        await service.convertAllObserved(
+          sources: const <String>['漢字'],
+          converter: converter,
+          metricsListener: operationMetrics.add,
+        );
+        await service.convertAllObserved(
+          sources: const <String>['漢字'],
+          converter: converter,
+          metricsListener: operationMetrics.add,
+        );
+
+        expect(globalMetrics, hasLength(2));
+        expect(operationMetrics, hasLength(2));
+        expect(operationMetrics.first.cacheHit, isFalse);
+        expect(operationMetrics.last.cacheHit, isTrue);
+        expect(operationMetrics.last.sourceCount, 1);
+        expect(operationMetrics.last.failureType, isNull);
+      },
+    );
   });
 }
 

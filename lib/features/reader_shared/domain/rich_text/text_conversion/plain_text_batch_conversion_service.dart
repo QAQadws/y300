@@ -13,6 +13,20 @@ abstract interface class PlainTextBatchConversionService {
   });
 }
 
+/// Optional additive instrumentation contract for presentation projectors.
+///
+/// The base conversion contract stays intentionally small so existing test
+/// doubles remain source-compatible. The default implementation also exposes
+/// this contract for callers that need operation-scoped metrics.
+abstract interface class ObservablePlainTextBatchConversionService
+    implements PlainTextBatchConversionService {
+  Future<List<String>> convertAllObserved({
+    required List<String> sources,
+    required TextConverter converter,
+    required PlainTextBatchConversionMetricsListener metricsListener,
+  });
+}
+
 /// Runtime metrics emitted by [DefaultPlainTextBatchConversionService].
 ///
 /// The metrics intentionally contain counts and flags only. They are useful
@@ -57,7 +71,7 @@ final class PlainTextBatchConversionException implements Exception {
 
 /// Default in-memory implementation of [PlainTextBatchConversionService].
 final class DefaultPlainTextBatchConversionService
-    implements PlainTextBatchConversionService {
+    implements ObservablePlainTextBatchConversionService {
   DefaultPlainTextBatchConversionService({
     this.maxCacheEntries = 32,
     this.maxCacheCodeUnits = 512 * 1024,
@@ -75,6 +89,27 @@ final class DefaultPlainTextBatchConversionService
   Future<List<String>> convertAll({
     required List<String> sources,
     required TextConverter converter,
+  }) {
+    return _convertAll(sources: sources, converter: converter);
+  }
+
+  @override
+  Future<List<String>> convertAllObserved({
+    required List<String> sources,
+    required TextConverter converter,
+    required PlainTextBatchConversionMetricsListener metricsListener,
+  }) {
+    return _convertAll(
+      sources: sources,
+      converter: converter,
+      operationMetricsListener: metricsListener,
+    );
+  }
+
+  Future<List<String>> _convertAll({
+    required List<String> sources,
+    required TextConverter converter,
+    PlainTextBatchConversionMetricsListener? operationMetricsListener,
   }) async {
     final stopwatch = Stopwatch()..start();
     final input = List<String>.unmodifiable(sources);
@@ -100,6 +135,7 @@ final class DefaultPlainTextBatchConversionService
           cacheHit: false,
           usedIndividualFallback: false,
         ),
+        operationMetricsListener: operationMetricsListener,
       );
       return List<String>.from(input);
     }
@@ -119,6 +155,7 @@ final class DefaultPlainTextBatchConversionService
           cacheHit: true,
           usedIndividualFallback: cached.usedIndividualFallback,
         ),
+        operationMetricsListener: operationMetricsListener,
       );
       return List<String>.from(cached.values);
     }
@@ -183,6 +220,7 @@ final class DefaultPlainTextBatchConversionService
           cacheHit: false,
           usedIndividualFallback: usedIndividualFallback,
         ),
+        operationMetricsListener: operationMetricsListener,
       );
       return result;
     } catch (error) {
@@ -195,6 +233,7 @@ final class DefaultPlainTextBatchConversionService
           usedIndividualFallback: usedIndividualFallback,
           failureType: error.runtimeType.toString(),
         ),
+        operationMetricsListener: operationMetricsListener,
       );
       rethrow;
     }
@@ -222,9 +261,23 @@ final class DefaultPlainTextBatchConversionService
   int get _cachedCodeUnits =>
       _cache.values.fold<int>(0, (total, value) => total + value.codeUnitCost);
 
-  void _notify(PlainTextBatchConversionMetrics metrics) {
+  void _notify(
+    PlainTextBatchConversionMetrics metrics, {
+    PlainTextBatchConversionMetricsListener? operationMetricsListener,
+  }) {
+    _notifyListener(metricsListener, metrics);
+    if (operationMetricsListener != null &&
+        !identical(operationMetricsListener, metricsListener)) {
+      _notifyListener(operationMetricsListener, metrics);
+    }
+  }
+
+  void _notifyListener(
+    PlainTextBatchConversionMetricsListener? listener,
+    PlainTextBatchConversionMetrics metrics,
+  ) {
     try {
-      metricsListener?.call(metrics);
+      listener?.call(metrics);
     } catch (_) {
       // Diagnostics must never change conversion semantics.
     }

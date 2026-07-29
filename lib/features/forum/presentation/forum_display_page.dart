@@ -7,7 +7,11 @@ import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
+import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/presentation/forum_content_projection_providers.dart';
+import 'package:y300/features/forum/presentation/forum_display_content_projection.dart';
+import 'package:y300/features/forum/presentation/forum_display_content_projector.dart';
 import 'package:y300/features/forum/presentation/forum_display_controller.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
@@ -20,6 +24,7 @@ import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ForumDisplayPage extends ConsumerStatefulWidget {
@@ -64,6 +69,15 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     final theme = Theme.of(context);
     final palette = ForumDisplayThemePalette.resolve(theme);
     final searchFid = _searchFidFor(state);
+    final mode = ref.watch(appServerContentConversionModeProvider);
+    final projection = _projectionOrRaw(
+      state,
+      mode: mode,
+      candidate: ref
+          .watch(forumDisplayContentProjectionProvider(args))
+          .asData
+          ?.value,
+    );
 
     return Scaffold(
       backgroundColor: palette.background,
@@ -73,7 +87,7 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
           padding: const EdgeInsetsDirectional.only(
             start: NavigationToolbar.kMiddleSpacing,
           ),
-          child: _ForumDisplayAppBarTitle(state: state),
+          child: _ForumDisplayAppBarTitle(projection: projection),
         ),
         actions: [
           if (searchFid != null)
@@ -103,7 +117,7 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
           : ForumPullToRefresh(
               onRefresh: () => controller.refresh(forceNetwork: true),
               child: ForumDisplayContent(
-                state: state,
+                projection: projection,
                 scrollController: _scrollController,
                 filterAnchorKey: _filterAnchorKey,
                 headImageKey: _headImageKey,
@@ -125,6 +139,20 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
               ),
             ),
     );
+  }
+
+  ForumDisplayContentProjection _projectionOrRaw(
+    ForumDisplayPageState source, {
+    required TextConversionMode mode,
+    required ForumDisplayContentProjection? candidate,
+  }) {
+    final revision = ForumDisplayContentProjector.sourceRevisionFor(source);
+    if (candidate != null &&
+        candidate.mode == mode &&
+        candidate.sourceRevision == revision) {
+      return candidate;
+    }
+    return ForumDisplayContentProjection.raw(source, mode: mode);
   }
 
   Future<void> _runAndReturnToFilter(FutureOr<void> Function() action) async {
@@ -329,9 +357,9 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
 }
 
 class _ForumDisplayAppBarTitle extends StatelessWidget {
-  const _ForumDisplayAppBarTitle({required this.state});
+  const _ForumDisplayAppBarTitle({required this.projection});
 
-  final ForumDisplayPageState state;
+  final ForumDisplayContentProjection projection;
 
   @override
   Widget build(BuildContext context) {
@@ -342,7 +370,7 @@ class _ForumDisplayAppBarTitle extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          ForumTextResolver.forumDisplayTitle(l10n, state.title),
+          ForumTextResolver.forumDisplayTitle(l10n, projection.displayTitle),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -355,17 +383,20 @@ class _ForumDisplayAppBarTitle extends StatelessWidget {
             children: [
               _AppBarStatText(
                 label: l10n.forumDisplayToday,
-                value: state.todayPosts,
+                value: projection.sourceState.todayPosts,
               ),
               const SizedBox(width: 10),
               Flexible(
                 child: _AppBarStatText(
                   label: l10n.forumDisplayThreads,
-                  value: state.totalThreads,
+                  value: projection.sourceState.totalThreads,
                 ),
               ),
               const SizedBox(width: 10),
-              _AppBarStatText(label: l10n.forumDisplayRank, value: state.rank),
+              _AppBarStatText(
+                label: l10n.forumDisplayRank,
+                value: projection.sourceState.rank,
+              ),
             ],
           ),
         ),
@@ -402,19 +433,22 @@ Widget forumDisplayPreviewShell(Widget child) {
 )
 Widget forumDisplayThreadCardPreview() {
   return ForumDisplayContent(
-    state: ForumDisplayPageState(
-      fid: '33',
-      title: '海域区',
-      currentPage: 1,
-      hasMore: false,
-      isLoadingInitial: false,
-      isLoadingMore: false,
-      threads: [_forumDisplayPreviewThread],
-      query: const ForumDisplayQuery(fid: '33'),
-      todayPosts: 42,
-      totalThreads: 120345,
-      rank: 3,
-      lastPage: 1,
+    projection: ForumDisplayContentProjection.raw(
+      ForumDisplayPageState(
+        fid: '33',
+        title: '海域区',
+        currentPage: 1,
+        hasMore: false,
+        isLoadingInitial: false,
+        isLoadingMore: false,
+        threads: [_forumDisplayPreviewThread],
+        query: const ForumDisplayQuery(fid: '33'),
+        todayPosts: 42,
+        totalThreads: 120345,
+        rank: 3,
+        lastPage: 1,
+      ),
+      mode: TextConversionMode.none,
     ),
     scrollController: ScrollController(),
     filterAnchorKey: GlobalKey(),

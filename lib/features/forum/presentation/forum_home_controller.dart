@@ -95,39 +95,56 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
     if (payload.homeSections.isEmpty) {
       return _mapLegacySections(payload);
     }
-    return [
-      for (final section in payload.homeSections)
+    final identities = <String>{};
+    final sections = <ForumSection>[];
+    for (final section in payload.homeSections) {
+      final type = section.kind == ForumHomeSectionKind.favorite
+          ? ForumSectionType.favorite
+          : ForumSectionType.regular;
+      final items = [
+        for (final item in section.items)
+          ForumHomeForumDisplayItem(
+            fid: item.fid,
+            title: item.title,
+            description: item.description,
+            todayPosts: item.todayPosts,
+          ),
+      ];
+      sections.add(
         ForumSection(
+          sourceIdentity: _uniqueSectionIdentity(
+            type: type,
+            items: items,
+            used: identities,
+          ),
           title: section.title,
-          type: section.kind == ForumHomeSectionKind.favorite
-              ? ForumSectionType.favorite
-              : ForumSectionType.regular,
-          items: [
-            for (final item in section.items)
-              ForumHomeForumDisplayItem(
-                fid: item.fid,
-                title: item.title,
-                description: item.description,
-                todayPosts: item.todayPosts,
-              ),
-          ],
+          type: type,
+          items: items,
         ),
-    ];
+      );
+    }
+    return sections;
   }
 
   List<ForumSection> _mapLegacySections(ForumHomePayload payload) {
     final sections = <ForumSection>[];
+    final identities = <String>{};
     final favoriteItems = _mapLegacyFavoriteItems(payload);
     if (favoriteItems.isNotEmpty) {
       sections.add(
         ForumSection(
+          sourceIdentity: _uniqueSectionIdentity(
+            type: ForumSectionType.favorite,
+            items: favoriteItems,
+            used: identities,
+          ),
           title: '',
           type: ForumSectionType.favorite,
           items: favoriteItems,
         ),
       );
     }
-    sections.addAll(_mapLegacyRegularSections(payload.forumIndex));
+    sections.addAll(_mapLegacyRegularSections(payload.forumIndex, identities));
     return sections;
   }
 
@@ -174,7 +191,10 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
     return forum.fid.trim().isNotEmpty && seen.add(forum.fid);
   }
 
-  List<ForumSection> _mapLegacyRegularSections(ForumIndexData data) {
+  List<ForumSection> _mapLegacyRegularSections(
+    ForumIndexData data,
+    Set<String> identities,
+  ) {
     final forumByFid = <String, ForumItem>{
       for (final item in data.forums) item.fid: item,
     };
@@ -199,6 +219,11 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
       if (items.isNotEmpty) {
         sections.add(
           ForumSection(
+            sourceIdentity: _uniqueSectionIdentity(
+              type: ForumSectionType.regular,
+              items: items,
+              used: identities,
+            ),
             title: category.name,
             items: items,
             type: ForumSectionType.regular,
@@ -217,19 +242,25 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
         .toList();
 
     if (uncategorized.isNotEmpty) {
+      final items = [
+        for (final forum in uncategorized)
+          ForumHomeForumDisplayItem(
+            fid: forum.fid,
+            title: forum.name,
+            description: forum.description,
+            todayPosts: _legacyTodayPosts(forum),
+          ),
+      ];
       sections.add(
         ForumSection(
+          sourceIdentity: _uniqueSectionIdentity(
+            type: ForumSectionType.uncategorized,
+            items: items,
+            used: identities,
+          ),
           title: '',
           type: ForumSectionType.uncategorized,
-          items: [
-            for (final forum in uncategorized)
-              ForumHomeForumDisplayItem(
-                fid: forum.fid,
-                title: forum.name,
-                description: forum.description,
-                todayPosts: _legacyTodayPosts(forum),
-              ),
-          ],
+          items: items,
         ),
       );
     }
@@ -240,6 +271,21 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
   int? _legacyTodayPosts(ForumItem? forum) {
     final todayPosts = forum?.todayPosts ?? 0;
     return todayPosts > 0 ? todayPosts : null;
+  }
+
+  String _uniqueSectionIdentity({
+    required ForumSectionType type,
+    required Iterable<ForumHomeForumDisplayItem> items,
+    required Set<String> used,
+  }) {
+    final base = '${type.name}:${items.map((item) => item.fid).join(',')}';
+    var identity = base;
+    var occurrence = 2;
+    while (!used.add(identity)) {
+      identity = '$base:$occurrence';
+      occurrence += 1;
+    }
+    return identity;
   }
 }
 

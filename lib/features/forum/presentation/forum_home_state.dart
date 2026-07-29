@@ -29,11 +29,14 @@ class ForumHomeForumDisplayItem {
 /// 论坛首页中一个可展示分组，通常对应一个分类
 class ForumSection {
   const ForumSection({
+    required this.sourceIdentity,
     required this.title,
     required this.items,
     this.type = ForumSectionType.regular,
   });
 
+  /// Stable identity for presentation state; never use a converted title.
+  final String sourceIdentity;
   final String title;
   final List<ForumHomeForumDisplayItem> items;
   final ForumSectionType type;

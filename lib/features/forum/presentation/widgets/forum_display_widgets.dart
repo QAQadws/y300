@@ -6,6 +6,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/domain/services/forum_chrome_image_adapter.dart';
+import 'package:y300/features/forum/presentation/forum_display_content_projection.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
@@ -19,7 +20,7 @@ import 'package:y300/l10n/app_localizations.dart';
 class ForumDisplayContent extends StatefulWidget {
   const ForumDisplayContent({
     super.key,
-    required this.state,
+    required this.projection,
     required this.scrollController,
     required this.filterAnchorKey,
     required this.headImageKey,
@@ -34,7 +35,7 @@ class ForumDisplayContent extends StatefulWidget {
     required this.onOpenSubForum,
   });
 
-  final ForumDisplayPageState state;
+  final ForumDisplayContentProjection projection;
   final ScrollController scrollController;
   final GlobalKey filterAnchorKey;
   final GlobalKey headImageKey;
@@ -58,8 +59,8 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
   @override
   void didUpdateWidget(covariant ForumDisplayContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_topEntrySignature(oldWidget.state.topEntries) !=
-        _topEntrySignature(widget.state.topEntries)) {
+    if (_topEntrySignature(oldWidget.projection.sourceState.topEntries) !=
+        _topEntrySignature(widget.projection.sourceState.topEntries)) {
       _topEntriesExpanded = false;
     }
   }
@@ -67,7 +68,14 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
   @override
   Widget build(BuildContext context) {
     final palette = ForumDisplayThemePalette.resolve(Theme.of(context));
-    final state = widget.state;
+    final state = widget.projection.sourceState;
+    final displayPrimaryFilters = _displayFilters(
+      widget.projection.primaryFilters,
+    );
+    final displayTypeFilters = _displayFilters(widget.projection.typeFilters);
+    final displaySubForums = _displaySubForums(widget.projection.subForums);
+    final displayTopEntries = _displayTopEntries(widget.projection.topEntries);
+    final displayThreads = _displayThreads(widget.projection.threads);
     return ColoredBox(
       color: palette.background,
       child: CustomScrollView(
@@ -81,51 +89,66 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
                 key: widget.headImageKey,
                 fid: state.fid,
                 url: state.headImageUrl!.trim(),
-                label: state.title,
+                label: widget.projection.displayTitle,
                 palette: palette,
               ),
             ),
-          if (state.primaryFilters.isNotEmpty || state.typeFilters.isNotEmpty)
+          if (displayPrimaryFilters.isNotEmpty || displayTypeFilters.isNotEmpty)
             SliverPersistentHeader(
               pinned: true,
               delegate: _ForumDisplayFilterHeaderDelegate(
                 anchorKey: widget.filterAnchorKey,
-                primaryItems: state.primaryFilters,
-                typeItems: state.typeFilters,
-                onSelected: widget.onOpenFilter,
+                primaryItems: displayPrimaryFilters,
+                typeItems: displayTypeFilters,
+                onSelected: (item) => widget.onOpenFilter(
+                  _sourceFilter(item, [
+                    ...widget.projection.primaryFilters,
+                    ...widget.projection.typeFilters,
+                  ]),
+                ),
                 palette: palette,
               ),
             ),
-          if (state.subForums.isNotEmpty)
+          if (displaySubForums.isNotEmpty)
             SliverToBoxAdapter(
               child: _SubForumList(
-                subForums: state.subForums,
-                onOpenSubForum: widget.onOpenSubForum,
+                subForums: displaySubForums,
+                onOpenSubForum: (item) => widget.onOpenSubForum(
+                  _sourceSubForum(item, widget.projection.subForums),
+                ),
                 palette: palette,
               ),
             ),
-          if (state.topEntries.isNotEmpty)
+          if (displayTopEntries.isNotEmpty)
             SliverToBoxAdapter(
               child: _TopEntrySection(
-                entries: state.topEntries,
+                entries: displayTopEntries,
                 isExpanded: _topEntriesExpanded,
                 onToggle: () {
                   setState(() => _topEntriesExpanded = !_topEntriesExpanded);
                 },
-                onOpenEntry: widget.onOpenTopEntry,
+                onOpenEntry: (item) => widget.onOpenTopEntry(
+                  _sourceTopEntry(item, widget.projection.topEntries),
+                ),
                 palette: palette,
               ),
             ),
-          if (state.threads.isEmpty)
+          if (displayThreads.isEmpty)
             SliverToBoxAdapter(child: _EmptyThreadList(palette: palette))
           else
             SliverToBoxAdapter(
               child: _ThreadListSection(
                 signature: _threadListSignature(state),
-                threads: state.threads,
-                onOpenThread: widget.onOpenThread,
-                onOpenThreadTag: widget.onOpenThreadTag,
-                onCopyThreadLink: widget.onCopyThreadLink,
+                threads: displayThreads,
+                onOpenThread: (item) => widget.onOpenThread(
+                  _sourceThread(item, widget.projection.threads),
+                ),
+                onOpenThreadTag: (item) => widget.onOpenThreadTag(
+                  _sourceThread(item, widget.projection.threads),
+                ),
+                onCopyThreadLink: (item) => widget.onCopyThreadLink(
+                  _sourceThread(item, widget.projection.threads),
+                ),
                 palette: palette,
               ),
             ),
@@ -162,6 +185,115 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
       threads.first.tid,
       threads.last.tid,
     ].join(':');
+  }
+
+  List<ForumDisplayFilterItem> _displayFilters(
+    List<ForumDisplayFilterProjection> items,
+  ) {
+    return [
+      for (final item in items)
+        ForumDisplayFilterItem(
+          label: item.displayLabel,
+          url: item.source.url,
+          isSelected: item.source.isSelected,
+          typeid: item.source.typeid,
+        ),
+    ];
+  }
+
+  List<ForumDisplaySubForum> _displaySubForums(
+    List<ForumDisplaySubForumProjection> items,
+  ) {
+    return [
+      for (final item in items)
+        ForumDisplaySubForum(
+          fid: item.source.fid,
+          title: item.displayTitle,
+          url: item.source.url,
+          iconUrl: item.source.iconUrl,
+        ),
+    ];
+  }
+
+  List<ForumDisplayTopEntry> _displayTopEntries(
+    List<ForumDisplayTopEntryProjection> items,
+  ) {
+    return [
+      for (final item in items)
+        ForumDisplayTopEntry(
+          title: item.displayTitle,
+          url: item.source.url,
+          tid: item.source.tid,
+          badgeLabel: item.displayBadgeLabel,
+          titleColorHex: item.source.titleColorHex,
+          isAnnouncement: item.source.isAnnouncement,
+        ),
+    ];
+  }
+
+  List<ForumThreadSummary> _displayThreads(
+    List<ForumDisplayThreadProjection> items,
+  ) {
+    return [
+      for (final item in items)
+        item.source.copyWith(
+          subject: item.displaySubject,
+          excerpt: item.displayExcerpt,
+          sourceTagName: item.displaySourceTagName,
+          badgeLabel: item.displayBadgeLabel,
+          dateline: item.displayDateline,
+        ),
+    ];
+  }
+
+  ForumDisplayFilterItem _sourceFilter(
+    ForumDisplayFilterItem displayed,
+    List<ForumDisplayFilterProjection> projections,
+  ) {
+    for (final projection in projections) {
+      if (projection.source.url == displayed.url &&
+          projection.source.typeid == displayed.typeid) {
+        return projection.source;
+      }
+    }
+    return displayed;
+  }
+
+  ForumDisplaySubForum _sourceSubForum(
+    ForumDisplaySubForum displayed,
+    List<ForumDisplaySubForumProjection> projections,
+  ) {
+    for (final projection in projections) {
+      if (projection.source.fid == displayed.fid) {
+        return projection.source;
+      }
+    }
+    return displayed;
+  }
+
+  ForumDisplayTopEntry _sourceTopEntry(
+    ForumDisplayTopEntry displayed,
+    List<ForumDisplayTopEntryProjection> projections,
+  ) {
+    for (final projection in projections) {
+      if (projection.source.tid == displayed.tid &&
+          projection.source.url == displayed.url) {
+        return projection.source;
+      }
+    }
+    return displayed;
+  }
+
+  ForumThreadSummary _sourceThread(
+    ForumThreadSummary displayed,
+    List<ForumDisplayThreadProjection> projections,
+  ) {
+    for (final projection in projections) {
+      if (projection.source.tid == displayed.tid) {
+        return projection.source;
+      }
+    }
+    return displayed;
   }
 }
 
@@ -524,7 +656,7 @@ class _FilterStrip extends StatelessWidget {
         itemBuilder: (context, index) {
           final item = items[index];
           return _FilterChipButton(
-            key: Key('forum-display-filter-${item.label}'),
+            key: Key('forum-display-filter-${_filterIdentity(item)}'),
             item: item,
             palette: palette,
             onSelected: onSelected,
@@ -727,7 +859,10 @@ class _TypeFilterMenuOverlay extends StatelessWidget {
                           final item = items[index];
                           final isSelected = item == selectedItem;
                           return InkWell(
-                            key: Key('forum-display-type-filter-${item.label}'),
+                            key: Key(
+                              'forum-display-type-filter-'
+                              '${_filterIdentity(item)}',
+                            ),
                             onTap: isSelected ? null : () => onSelected(item),
                             child: Center(
                               child: Text(
@@ -1095,7 +1230,7 @@ class _TopEntrySection extends StatelessWidget {
                             for (final entry in entries)
                               _TopEntryTile(
                                 key: ValueKey(
-                                  'forum-top-${entry.tid}-${entry.title}',
+                                  'forum-top-${_topEntryIdentity(entry)}',
                                 ),
                                 entry: entry,
                                 onTap: () => onOpenEntry(entry),
@@ -1115,6 +1250,18 @@ class _TopEntrySection extends StatelessWidget {
       ),
     );
   }
+}
+
+String _filterIdentity(ForumDisplayFilterItem item) {
+  final typeid = item.typeid.trim();
+  final url = item.url.trim();
+  return typeid.isEmpty ? url : '$typeid:$url';
+}
+
+String _topEntryIdentity(ForumDisplayTopEntry entry) {
+  final tid = entry.tid.trim();
+  final url = entry.url.trim();
+  return tid.isEmpty ? url : '$tid:$url';
 }
 
 class _TopEntryTile extends StatelessWidget {

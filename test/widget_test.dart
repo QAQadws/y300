@@ -6,6 +6,7 @@ void main() {
     final viewData = ForumHomeViewData(
       sections: const [
         ForumSection(
+          sourceIdentity: 'regular:2',
           title: '综合区',
           items: [
             ForumHomeForumDisplayItem(
@@ -29,6 +30,7 @@ void main() {
     final viewData = ForumHomeViewData(
       sections: const [
         ForumSection(
+          sourceIdentity: 'favorite:2',
           title: '我收藏的版块',
           items: [
             ForumHomeForumDisplayItem(
@@ -41,6 +43,7 @@ void main() {
           type: ForumSectionType.favorite,
         ),
         ForumSection(
+          sourceIdentity: 'regular:2',
           title: '综合区',
           items: [
             ForumHomeForumDisplayItem(

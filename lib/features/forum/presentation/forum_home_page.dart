@@ -9,6 +9,9 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
+import 'package:y300/features/forum/presentation/forum_content_projection_providers.dart';
+import 'package:y300/features/forum/presentation/forum_home_content_projection.dart';
+import 'package:y300/features/forum/presentation/forum_home_content_projector.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
@@ -18,6 +21,8 @@ import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 
 const Duration _forumHomeSilentRefreshThreshold = Duration(seconds: 60);
 
@@ -214,6 +219,8 @@ class _ResolvedForumHomeBody extends ConsumerWidget {
     });
 
     final state = ref.watch(forumHomeControllerProvider);
+    final mode = ref.watch(appServerContentConversionModeProvider);
+    final projectionAsync = ref.watch(forumHomeContentProjectionProvider);
     return state.when(
       loading: () => const _ForumHomeLoadingBody(),
       error: (error, _) => _ForumHomeErrorView(
@@ -224,21 +231,42 @@ class _ResolvedForumHomeBody extends ConsumerWidget {
       ),
       data: (data) => _ForumHomeContent(
         state: data,
+        projection: _projectionOrRaw(
+          data.viewData,
+          mode: mode,
+          candidate: projectionAsync.asData?.value,
+        ),
         imageHeaderBuilder: imageHeaderBuilder,
         isActive: isActive,
       ),
     );
+  }
+
+  ForumHomeContentProjection _projectionOrRaw(
+    ForumHomeViewData source, {
+    required TextConversionMode mode,
+    required ForumHomeContentProjection? candidate,
+  }) {
+    final revision = ForumHomeContentProjector.sourceRevisionFor(source);
+    if (candidate != null &&
+        candidate.mode == mode &&
+        candidate.sourceRevision == revision) {
+      return candidate;
+    }
+    return ForumHomeContentProjection.raw(source, mode: mode);
   }
 }
 
 class _ForumHomeContent extends ConsumerStatefulWidget {
   const _ForumHomeContent({
     required this.state,
+    required this.projection,
     required this.imageHeaderBuilder,
     required this.isActive,
   });
 
   final ForumHomePageState state;
+  final ForumHomeContentProjection projection;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
   final bool isActive;
 
@@ -253,8 +281,7 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
   void didUpdateWidget(covariant _ForumHomeContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     final activeKeys = {
-      for (final section in widget.state.viewData.sections)
-        _sectionKey(section),
+      for (final section in widget.projection.sections) _sectionKey(section),
     };
     _collapsedSectionKeys.removeWhere((key) => !activeKeys.contains(key));
   }
@@ -288,9 +315,12 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
                     padding: const EdgeInsets.all(32),
                     child: Center(child: Text(l10n.forumHomeEmpty)),
                   ),
-                for (final section in widget.state.viewData.sections)
+                for (final section in widget.projection.sections)
                   ForumHomeSectionCard(
-                    title: ForumTextResolver.sectionTitle(l10n, section),
+                    sectionKey: _sectionKey(section),
+                    title:
+                        section.displayTitle ??
+                        ForumTextResolver.sectionTitle(l10n, section.source),
                     isCollapsed: _collapsedSectionKeys.contains(
                       _sectionKey(section),
                     ),
@@ -317,7 +347,7 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
     );
   }
 
-  void _toggleSection(ForumSection section) {
+  void _toggleSection(ForumHomeSectionProjection section) {
     final key = _sectionKey(section);
     setState(() {
       if (!_collapsedSectionKeys.add(key)) {
@@ -326,31 +356,33 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
     });
   }
 
-  String _sectionKey(ForumSection section) {
-    return '${section.type.name}:${section.title}';
+  String _sectionKey(ForumHomeSectionProjection section) {
+    return section.source.sourceIdentity;
   }
 
   List<Widget> _buildRows(
     BuildContext context,
-    ForumSection section,
+    ForumHomeSectionProjection section,
     AppLocalizations l10n,
   ) {
     final rows = <_ForumHomeRowData>[
       for (final forum in section.items)
         _ForumHomeRowData(
           key: Key(
-            section.type == ForumSectionType.favorite
-                ? 'forum-favorite-card-${forum.fid}'
-                : 'forum-card-${forum.fid}',
+            section.source.type == ForumSectionType.favorite
+                ? 'forum-favorite-card-${forum.source.fid}'
+                : 'forum-card-${forum.source.fid}',
           ),
-          title: forum.title,
-          description: forum.description,
-          todayPosts: forum.todayPosts,
+          title: forum.displayTitle,
+          description: forum.displayDescription,
+          todayPosts: forum.source.todayPosts,
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) =>
-                    ForumDisplayPage(fid: forum.fid, title: forum.title),
+                builder: (_) => ForumDisplayPage(
+                  fid: forum.source.fid,
+                  title: forum.source.title,
+                ),
               ),
             );
           },

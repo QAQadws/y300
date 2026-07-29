@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -17,6 +19,10 @@ import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
@@ -120,7 +126,13 @@ void main() {
       final selectedFilterIndicatorSize = tester.getSize(
         find
             .descendant(
-              of: find.byKey(const Key('forum-display-filter-全部')),
+              of: find.byKey(
+                const Key(
+                  'forum-display-filter-'
+                  'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&'
+                  'mobile=2',
+                ),
+              ),
               matching: find.byType(AnimatedContainer),
             )
             .last,
@@ -131,7 +143,13 @@ void main() {
           .getBottomLeft(
             find
                 .descendant(
-                  of: find.byKey(const Key('forum-display-filter-全部')),
+                  of: find.byKey(
+                    const Key(
+                      'forum-display-filter-'
+                      'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&'
+                      'mobile=2',
+                    ),
+                  ),
                   matching: find.byType(AnimatedContainer),
                 )
                 .last,
@@ -309,6 +327,62 @@ void main() {
         findsNothing,
       );
     });
+
+    testWidgets(
+      'manual content mode projects server text without reloading display',
+      (tester) async {
+        final repository = _FakeForumDisplayRepository((_, page, query) async {
+          return ApiSuccess(
+            _displayData(
+              page: page,
+              total: 1,
+              threads: [
+                ForumThreadSummary(
+                  tid: 'projection',
+                  subject: '帖子标题',
+                  author: 'alice',
+                  replies: 0,
+                  views: 1,
+                  dateline: '今天',
+                  excerpt: '帖子摘要',
+                  sourceTagName: '漫画',
+                  sourceTagUrl: '/forum.php?mod=forumdisplay&fid=2&typeid=7',
+                  threadUrl: '/thread-projection-1-1.html',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            extraOverrides: <riverpod_misc.Override>[
+              appServerContentConversionModeProvider.overrideWithValue(
+                TextConversionMode.toTraditional,
+              ),
+              textConverterProvider.overrideWith(
+                (ref, mode) => _ProjectionTestConverter(mode),
+              ),
+              plainTextBatchConversionServiceProvider.overrideWithValue(
+                _ProjectionPrefixBatchConversionService(),
+              ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('T:公告区'), findsWidgets);
+        expect(find.text('T:帖子标题'), findsOneWidget);
+        expect(find.text('T:帖子摘要'), findsOneWidget);
+        expect(find.text('#T:漫画'), findsOneWidget);
+        expect(find.text('T:今天'), findsOneWidget);
+        expect(find.text('alice'), findsOneWidget);
+        expect(repository.cachePolicies, <CacheLoadPolicy>[
+          CacheLoadPolicy.cacheFirst,
+        ]);
+      },
+    );
 
     testWidgets('thread summary avatar uses avatar cache request', (
       tester,
@@ -550,12 +624,26 @@ void main() {
           openTypeArrowFinder.evaluate().single.widget as RotationTransition;
       expect(openTypeArrow.turns.value, 0.5);
       final menuItemCenter = tester.getCenter(
-        find.byKey(const Key('forum-display-type-filter-公告')),
+        find.byKey(
+          const Key(
+            'forum-display-type-filter-65:'
+            'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&'
+            'filter=typeid&typeid=65&mobile=2',
+          ),
+        ),
       );
       final menuTextCenter = tester.getCenter(find.text('公告').last);
       expect((menuItemCenter.dx - menuTextCenter.dx).abs(), lessThan(1));
 
-      await tester.tap(find.byKey(const Key('forum-display-type-filter-公告')));
+      await tester.tap(
+        find.byKey(
+          const Key(
+            'forum-display-type-filter-65:'
+            'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&'
+            'filter=typeid&typeid=65&mobile=2',
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(repository.lastQuery?.parameters['filter'], 'typeid');
@@ -605,7 +693,15 @@ void main() {
         await _dragWellPastFilter(tester);
         expect(_scrollOffset(tester), greaterThan(filterStartOffset + 120));
 
-        await tester.tap(find.byKey(const Key('forum-display-filter-最新')));
+        await tester.tap(
+          find.byKey(
+            const Key(
+              'forum-display-filter-'
+              'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&'
+              'filter=lastpost&mobile=2',
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
         _expectReturnedToFilterStart(tester, filterStartOffset);
         expect(repository.lastQuery?.parameters['filter'], 'lastpost');
@@ -615,7 +711,15 @@ void main() {
           find.byKey(const Key('forum-display-type-filter-menu')),
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const Key('forum-display-type-filter-公告')));
+        await tester.tap(
+          find.byKey(
+            const Key(
+              'forum-display-type-filter-65:'
+              'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&'
+              'filter=typeid&typeid=65&mobile=2',
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
         _expectReturnedToFilterStart(tester, filterStartOffset);
         expect(repository.lastQuery?.parameters['typeid'], '65');
@@ -1249,12 +1353,15 @@ void main() {
 Widget _buildTestApp(
   ForumDisplayRepository repository, {
   ThreadRepository? threadRepository,
+  List<riverpod_misc.Override> extraOverrides =
+      const <riverpod_misc.Override>[],
 }) {
   final overrides = [
     forumDisplayRepositoryProvider.overrideWithValue(repository),
     imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
     if (threadRepository != null)
       threadRepositoryProvider.overrideWithValue(threadRepository),
+    ...extraOverrides,
   ];
   return ProviderScope(
     overrides: overrides,
@@ -1459,6 +1566,30 @@ class _FakeForumDisplayRepository implements ForumDisplayRepository {
     cachePolicies.add(cachePolicy);
     return _loader(query.fid, query.page, query);
   }
+}
+
+class _ProjectionPrefixBatchConversionService
+    implements PlainTextBatchConversionService {
+  @override
+  Future<List<String>> convertAll({
+    required List<String> sources,
+    required TextConverter converter,
+  }) async {
+    return <String>[for (final source in sources) 'T:$source'];
+  }
+}
+
+class _ProjectionTestConverter implements TextConverter {
+  const _ProjectionTestConverter(this.mode);
+
+  @override
+  String get id => 'projection-test:${mode.name}';
+
+  @override
+  final TextConversionMode mode;
+
+  @override
+  Future<String> convertHtml(String html) async => html;
 }
 
 class _NoopImageCacheService implements ImageCacheService {
