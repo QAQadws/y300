@@ -45,6 +45,7 @@ class _ForumHtmlRendererPrototypePageState
     extends ConsumerState<ForumHtmlRendererPrototypePage> {
   late ForumHtmlSampleDocument _selectedSample;
   ForumHtmlBrightness _previewBrightness = ForumHtmlBrightness.light;
+  TextConversionMode _prototypeConversionMode = TextConversionMode.none;
   ForumHtmlReaderPreferences? _loadPreferences;
   Future<_ForumHtmlPrototypeLoadResult>? _loadFuture;
 
@@ -75,10 +76,16 @@ class _ForumHtmlRendererPrototypePageState
         preferencesAsync.value ?? ForumHtmlReaderPreferences.defaults();
     if (_loadPreferences == null) {
       _loadPreferences = preferences;
-      _loadFuture ??= _loadSelectedSample(preferences);
+      _loadFuture ??= _loadSelectedSample(
+        preferences,
+        conversionMode: _prototypeConversionMode,
+      );
     } else if (_loadPreferences != preferences) {
       _loadPreferences = preferences;
-      _loadFuture = _loadSelectedSample(preferences);
+      _loadFuture = _loadSelectedSample(
+        preferences,
+        conversionMode: _prototypeConversionMode,
+      );
     }
 
     return Scaffold(
@@ -103,7 +110,7 @@ class _ForumHtmlRendererPrototypePageState
               onSelected: _selectSample,
             ),
             _ConversionSelector(
-              mode: preferences.conversionMode,
+              mode: _prototypeConversionMode,
               onSelected: _selectConversionMode,
             ),
             _ThemePreviewSelector(
@@ -175,20 +182,21 @@ class _ForumHtmlRendererPrototypePageState
       _selectedSample = sample;
       _loadFuture = _loadSelectedSample(
         _loadPreferences ?? ForumHtmlReaderPreferences.defaults(),
+        conversionMode: _prototypeConversionMode,
       );
     });
   }
 
   void _selectConversionMode(TextConversionMode mode) {
-    final current =
-        ref.read(forumHtmlReaderPreferencesControllerProvider).value ??
-        ForumHtmlReaderPreferences.defaults();
-    if (mode == current.conversionMode) {
+    if (mode == _prototypeConversionMode) {
       return;
     }
-    ref
-        .read(forumHtmlReaderPreferencesControllerProvider.notifier)
-        .setConversionMode(mode);
+    final preferences =
+        _loadPreferences ?? ForumHtmlReaderPreferences.defaults();
+    setState(() {
+      _prototypeConversionMode = mode;
+      _loadFuture = _loadSelectedSample(preferences, conversionMode: mode);
+    });
   }
 
   void _selectPreviewBrightness(ForumHtmlBrightness brightness) {
@@ -220,10 +228,10 @@ class _ForumHtmlRendererPrototypePageState
   }
 
   Future<_ForumHtmlPrototypeLoadResult> _loadSelectedSample(
-    ForumHtmlReaderPreferences preferences,
-  ) async {
+    ForumHtmlReaderPreferences preferences, {
+    required TextConversionMode conversionMode,
+  }) async {
     final bundle = widget.assetBundle ?? DefaultAssetBundle.of(context);
-    final conversionMode = preferences.conversionMode;
     try {
       final rawHtml = await bundle.loadString(_selectedSample.assetPath);
       if (_selectedSample.renderMode ==

@@ -4,9 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
-import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
-import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
@@ -80,9 +77,6 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
 
 class _ThreadPostHtmlFirstBodyState
     extends ConsumerState<ThreadPostHtmlFirstBody> {
-  String? _conversionHtml;
-  TextConversionMode? _conversionMode;
-  Future<HtmlTextNodeConversionResult>? _conversionFuture;
   bool _loggedEmptyBody = false;
   String? _lastPreparedLogKey;
   String? _lastRenderFailureLogKey;
@@ -104,35 +98,10 @@ class _ThreadPostHtmlFirstBodyState
     final preferences =
         ref.watch(forumHtmlReaderPreferencesControllerProvider).value ??
         ForumHtmlReaderPreferences.defaults();
-
-    if (preferences.conversionMode == TextConversionMode.none) {
-      return _buildHtmlBody(html, preferences);
-    }
-
-    return FutureBuilder<HtmlTextNodeConversionResult>(
-      future: _conversionFutureFor(html, preferences.conversionMode),
-      builder: (context, snapshot) {
-        final renderedHtml = snapshot.hasData ? snapshot.data!.html : html;
-        return _buildHtmlBody(renderedHtml, preferences);
-      },
-    );
-  }
-
-  Future<HtmlTextNodeConversionResult> _conversionFutureFor(
-    String html,
-    TextConversionMode mode,
-  ) {
-    if (_conversionHtml != html ||
-        _conversionMode != mode ||
-        _conversionFuture == null) {
-      _conversionHtml = html;
-      _conversionMode = mode;
-      final converter = ref.read(textConverterProvider(mode));
-      _conversionFuture = ref
-          .read(htmlTextNodeConversionServiceProvider)
-          .convert(html: html, converter: converter);
-    }
-    return _conversionFuture!;
+    // B-class conversion is intentionally disabled at this per-post boundary
+    // until the thread-level display projector owns the complete surface.
+    // This keeps the legacy reader preference from producing mixed-mode pages.
+    return _buildHtmlBody(html, preferences);
   }
 
   Widget _buildHtmlBody(String html, ForumHtmlReaderPreferences preferences) {

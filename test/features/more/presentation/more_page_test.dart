@@ -444,6 +444,12 @@ void main() {
       find.byKey(const Key('appearance-language-selected-system')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const Key('appearance-language-behavior-description')),
+      findsOneWidget,
+    );
+    expect(find.text('界面语言跟随设备，服务器内容保持原文'), findsOneWidget);
+    expect(find.text('用户名和网页模式内容保持原样'), findsOneWidget);
 
     await tester.tap(
       find.byKey(const Key('appearance-language-option-traditionalChinese')),
@@ -462,6 +468,7 @@ void main() {
       find.byKey(const Key('appearance-language-selected-system')),
       findsNothing,
     );
+    expect(find.text('界面使用繁体，原生解析内容转换为繁体'), findsOneWidget);
   });
 
   testWidgets('Appearance settings drawer shows snackbar when save fails', (

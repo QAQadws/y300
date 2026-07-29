@@ -86,6 +86,22 @@ class AppearanceSettingsSheet extends ConsumerWidget {
                 ),
             ],
           ),
+          const SizedBox(height: 8),
+          Text(
+            _languageDescription(l10n, settings.languagePreference),
+            key: const Key('appearance-language-behavior-description'),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.appLanguageContentNote,
+            key: const Key('appearance-language-content-note'),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
@@ -96,6 +112,16 @@ class AppearanceSettingsSheet extends ConsumerWidget {
       AppLanguage.system => l10n.appLanguageSystem,
       AppLanguage.simplifiedChinese => l10n.appLanguageSimplifiedChinese,
       AppLanguage.traditionalChinese => l10n.appLanguageTraditionalChinese,
+    };
+  }
+
+  String _languageDescription(AppLocalizations l10n, AppLanguage language) {
+    return switch (language) {
+      AppLanguage.system => l10n.appLanguageSystemContentDescription,
+      AppLanguage.simplifiedChinese =>
+        l10n.appLanguageSimplifiedContentDescription,
+      AppLanguage.traditionalChinese =>
+        l10n.appLanguageTraditionalContentDescription,
     };
   }
 

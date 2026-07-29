@@ -706,7 +706,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         showDragHandle: true,
         builder: (context) => const ForumHtmlReaderSettingsSheet(
           key: Key('thread-detail-display-settings-sheet'),
-          showConversionControls: true,
           showAuthorStyleControls: false,
           showResetButton: false,
         ),

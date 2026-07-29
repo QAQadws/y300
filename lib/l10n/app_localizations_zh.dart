@@ -26,6 +26,18 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get appLanguageSystemContentDescription => '界面语言跟随设备，服务器内容保持原文';
+
+  @override
+  String get appLanguageSimplifiedContentDescription => '界面使用简体，原生解析内容转换为简体';
+
+  @override
+  String get appLanguageTraditionalContentDescription => '界面使用繁体，原生解析内容转换为繁体';
+
+  @override
+  String get appLanguageContentNote => '用户名和网页模式内容保持原样';
+
+  @override
   String get commonCancel => '取消';
 
   @override
@@ -4088,6 +4100,18 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String appLanguageSaveFailed(String error) {
     return '語言設定儲存失敗：$error';
   }
+
+  @override
+  String get appLanguageSystemContentDescription => '介面語言跟隨裝置，伺服器內容保持原文';
+
+  @override
+  String get appLanguageSimplifiedContentDescription => '介面使用簡體，原生解析內容轉換為簡體';
+
+  @override
+  String get appLanguageTraditionalContentDescription => '介面使用繁體，原生解析內容轉換為繁體';
+
+  @override
+  String get appLanguageContentNote => '使用者名稱和網頁模式內容保持原樣';
 
   @override
   String get commonCancel => '取消';
