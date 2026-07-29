@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
+import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
@@ -15,13 +15,13 @@ import 'package:y300/features/thread/presentation/widgets/thread_post_render_con
 class ComicCommentCard extends StatefulWidget {
   const ComicCommentCard({
     super.key,
-    required this.comment,
+    required this.projection,
     required this.sourceTid,
     this.imageHeaderBuilder,
     this.renderContext,
   });
 
-  final ComicCommentItem comment;
+  final ComicCommentItemProjection projection;
   final String sourceTid;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ThreadPostRenderContext? renderContext;
@@ -30,17 +30,18 @@ class ComicCommentCard extends StatefulWidget {
   ///
   /// Keeping this adapter public lets list surfaces prune the shared render
   /// plan cache without duplicating the post mapping rules.
-  static ThreadPost toThreadPost(ComicCommentItem comment) {
+  static ThreadPost toThreadPost(ComicCommentItemProjection projection) {
+    final comment = projection.sourceItem;
     return ThreadPost(
       pid: comment.pid,
       author: comment.authorName,
       authorId: comment.authorId,
-      message: comment.rawMessage,
+      message: projection.displayMessage,
       number: comment.floorNumber,
       // The first floor is filtered by the loader. Keeping this false also
       // prevents ThreadPostCard from adding the thread summary header.
       isFirst: false,
-      dateline: comment.dateline,
+      dateline: projection.displayDateline,
       avatarUrl: comment.avatarUrl,
     );
   }
@@ -58,7 +59,7 @@ class _ComicCommentCardState extends State<ComicCommentCard> {
     final post = _postForComment();
     final renderContext = widget.renderContext ?? _ensureRenderContext(context);
     return ThreadPostCard(
-      key: Key('comic-comment-card-${widget.comment.pid}'),
+      key: Key('comic-comment-card-${widget.projection.sourceItem.pid}'),
       post: post,
       state: null,
       imageHeaderBuilder: widget.imageHeaderBuilder,
@@ -68,7 +69,8 @@ class _ComicCommentCardState extends State<ComicCommentCard> {
     );
   }
 
-  ThreadPost _postForComment() => ComicCommentCard.toThreadPost(widget.comment);
+  ThreadPost _postForComment() =>
+      ComicCommentCard.toThreadPost(widget.projection);
 
   ThreadPostRenderContext _ensureRenderContext(BuildContext context) {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));

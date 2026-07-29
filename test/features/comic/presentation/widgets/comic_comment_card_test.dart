@@ -8,6 +8,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
+import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
@@ -18,11 +19,13 @@ void main() {
     await tester.pumpWidget(
       _host(
         ComicCommentCard(
-          comment: _comment(
-            authorName: '回复用户',
-            dateline: '2026-07-19 12:30',
-            floorNumber: 5,
-            rawMessage: '<p>评论正文</p>',
+          projection: ComicCommentItemProjection.raw(
+            _comment(
+              authorName: '回复用户',
+              dateline: '2026-07-19 12:30',
+              floorNumber: 5,
+              rawMessage: '<p>评论正文</p>',
+            ),
           ),
           sourceTid: '573279',
         ),
@@ -53,7 +56,9 @@ void main() {
     await tester.pumpWidget(
       _host(
         ComicCommentCard(
-          comment: _comment(rawMessage: html),
+          projection: ComicCommentItemProjection.raw(
+            _comment(rawMessage: html),
+          ),
           sourceTid: '573279',
         ),
         imageCacheService: _NoopImageCacheService(),
@@ -79,8 +84,8 @@ void main() {
     await tester.pumpWidget(
       _host(
         ComicCommentCard(
-          comment: _comment(
-            rawMessage: '<span style="color:black">深色主题正文</span>',
+          projection: ComicCommentItemProjection.raw(
+            _comment(rawMessage: '<span style="color:black">深色主题正文</span>'),
           ),
           sourceTid: '573279',
         ),
@@ -96,6 +101,41 @@ void main() {
     expect(renderer.preferences, preferences);
     expect(renderer.theme.brightness.name, 'dark');
   });
+
+  testWidgets(
+    'renders projected body and time while keeping author and resource identity raw',
+    (tester) async {
+      final source = _comment(
+        authorName: '发型用户名',
+        dateline: '软件时间',
+        rawMessage: '<p>软件正文</p><img src="/raw-image.jpg">',
+      );
+      await tester.pumpWidget(
+        _host(
+          ComicCommentCard(
+            projection: ComicCommentItemProjection(
+              sourceItem: source,
+              displayMessage: '<p>軟體正文</p><img src="/raw-image.jpg">',
+              displayDateline: '軟體時間',
+            ),
+            sourceTid: '573279',
+          ),
+          imageCacheService: _NoopImageCacheService(),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('发型用户名'), findsOneWidget);
+      expect(find.text('髮型用戶名'), findsNothing);
+      expect(find.text('軟體時間'), findsOneWidget);
+      final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
+        find.byType(ForumHtmlWidgetPostRenderer),
+      );
+      expect(renderer.html, contains('軟體正文'));
+      expect(renderer.html, contains('/raw-image.jpg'));
+      expect(renderer.imageCacheOwnerId, 'comic-comment-573279-p5');
+    },
+  );
 }
 
 ComicCommentItem _comment({

@@ -6,10 +6,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
+import 'package:y300/features/comic/presentation/comic_comment_content_projector.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_comment_content_projection_controller.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_diagnostics.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_tail_surface.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 
 void main() {
   testWidgets('vertical tail waits for an explicit load action', (
@@ -20,11 +29,14 @@ void main() {
       key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
       loader: loader,
     );
+    final contentProjection = _projectionController(session);
     final tail = ComicCommentTailSurface(
       session: session,
+      contentProjectionController: contentProjection,
       imageHeaderBuilder: null,
     );
     addTearDown(tail.dispose);
+    addTearDown(contentProjection.dispose);
     addTearDown(session.dispose);
 
     await tester.pumpWidget(
@@ -71,11 +83,14 @@ void main() {
       key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
       loader: loader,
     );
+    final contentProjection = _projectionController(session);
     final tail = ComicCommentTailSurface(
       session: session,
+      contentProjectionController: contentProjection,
       imageHeaderBuilder: null,
     );
     addTearDown(tail.dispose);
+    addTearDown(contentProjection.dispose);
     addTearDown(session.dispose);
 
     await session.load();
@@ -93,13 +108,16 @@ void main() {
         key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
         loader: loader,
       );
+      final contentProjection = _projectionController(session);
       final tail = ComicCommentTailSurface(
         session: session,
+        contentProjectionController: contentProjection,
         imageHeaderBuilder: null,
         hasNextEpisode: true,
         onAdvanceEpisode: () => advances++,
       );
       addTearDown(tail.dispose);
+      addTearDown(contentProjection.dispose);
       addTearDown(session.dispose);
 
       expect(tail.hasAdvance, isFalse);
@@ -117,13 +135,16 @@ void main() {
       key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
       loader: _TailFakeLoader(),
     );
+    final contentProjection = _projectionController(session);
     final tail = ComicCommentTailSurface(
       session: session,
+      contentProjectionController: contentProjection,
       imageHeaderBuilder: null,
       hasNextEpisode: true,
       onAdvanceEpisode: () {},
     );
     addTearDown(tail.dispose);
+    addTearDown(contentProjection.dispose);
     addTearDown(session.dispose);
 
     await tester.pumpWidget(
@@ -147,6 +168,96 @@ void main() {
     expect(find.byType(ComicCommentFeedbackSurface), findsNothing);
     expect(find.textContaining('继续滑动进入'), findsNothing);
   });
+
+  testWidgets('vertical tail renders projected content with raw author', (
+    tester,
+  ) async {
+    final session = ComicCommentSessionController(
+      key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
+      loader: _TailFakeLoader(),
+    );
+    final contentProjection = _projectionController(
+      session,
+      mode: TextConversionMode.toTraditional,
+      converter: const _ReplacingConverter(),
+    );
+    final tail = ComicCommentTailSurface(
+      session: session,
+      contentProjectionController: contentProjection,
+      imageHeaderBuilder: null,
+    );
+    addTearDown(tail.dispose);
+    addTearDown(contentProjection.dispose);
+    addTearDown(session.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: LocalizedTestApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: AnimatedBuilder(
+                animation: tail,
+                builder: (context, _) => tail.buildVerticalItem(
+                  context,
+                  ReaderTailActions(onRetry: () {}, onAdvance: () {}),
+                  0,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await session.load();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('回复者'), findsOneWidget);
+    expect(find.text('回覆者'), findsNothing);
+    expect(find.text('剛剛'), findsOneWidget);
+    final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
+      find.byType(ForumHtmlWidgetPostRenderer),
+    );
+    expect(renderer.html, contains('評論正文'));
+  });
+}
+
+ComicCommentContentProjectionController _projectionController(
+  ComicCommentSessionController session, {
+  TextConversionMode mode = TextConversionMode.none,
+  TextConverter converter = const IdentityTextConverter(),
+}) {
+  final plainService = DefaultPlainTextBatchConversionService();
+  return ComicCommentContentProjectionController(
+    session: session,
+    projector: ComicCommentContentProjector(
+      plainTextBatchConversionService: plainService,
+      htmlTextNodeConversionService: DomHtmlTextNodeConversionService(
+        plainTextBatchConversionService: plainService,
+      ),
+      diagnosticRecorder: const NoopTextConversionDiagnosticRecorder(),
+    ),
+    initialMode: mode,
+    initialConverter: converter,
+  );
+}
+
+final class _ReplacingConverter implements TextConverter {
+  const _ReplacingConverter();
+
+  @override
+  String get id => 'test:traditional';
+
+  @override
+  TextConversionMode get mode => TextConversionMode.toTraditional;
+
+  @override
+  Future<String> convertHtml(String html) async {
+    return html
+        .replaceAll('刚刚', '剛剛')
+        .replaceAll('评论', '評論')
+        .replaceAll('回复', '回覆');
+  }
 }
 
 class _TailFakeLoader implements ComicCommentLoader {

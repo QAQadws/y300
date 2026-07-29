@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
+import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_comment_content_projection_controller.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_list_surface.dart';
@@ -22,17 +24,22 @@ class ComicCommentTailSurface extends ChangeNotifier
     implements ReaderTailSurface {
   ComicCommentTailSurface({
     required ComicCommentSessionController session,
+    required ComicCommentContentProjectionController
+    contentProjectionController,
     required ImageRequestHeaderBuilder? imageHeaderBuilder,
     bool hasNextEpisode = false,
     FutureOr<void> Function()? onAdvanceEpisode,
   }) : _session = session,
+       _contentProjectionController = contentProjectionController,
        _imageHeaderBuilder = imageHeaderBuilder,
        _hasNextEpisode = hasNextEpisode,
        _onAdvanceEpisode = onAdvanceEpisode {
     _session.addListener(_onSessionChanged);
+    _contentProjectionController.addListener(_onProjectionChanged);
   }
 
   final ComicCommentSessionController _session;
+  final ComicCommentContentProjectionController _contentProjectionController;
   final ImageRequestHeaderBuilder? _imageHeaderBuilder;
   bool _hasNextEpisode;
   FutureOr<void> Function()? _onAdvanceEpisode;
@@ -47,7 +54,7 @@ class ComicCommentTailSurface extends ChangeNotifier
 
   ThreadPostRenderContext? _renderContext;
   Object? _renderContextIdentity;
-  Object? _prunedResult;
+  String? _prunedProjectionIdentity;
   bool _disposed = false;
 
   ComicCommentSessionState get sessionState => _session.state;
@@ -101,7 +108,7 @@ class ComicCommentTailSurface extends ChangeNotifier
     }
     final list = ComicCommentListSurface(
       sourceTid: _session.key.sourceTid,
-      result: result,
+      projection: _projectionFor(result),
       imageHeaderBuilder: _imageHeaderBuilder,
       onRetry: actions.onRetry,
       renderContext: _renderContextFor(context),
@@ -143,17 +150,22 @@ class ComicCommentTailSurface extends ChangeNotifier
     final state = sessionState;
     final result = state.result;
     final loadedResult = result;
+    final projection = loadedResult == null
+        ? null
+        : _projectionFor(loadedResult);
     if (loadedResult != null &&
+        projection != null &&
         (loadedResult.status == ComicCommentLoadStatus.success ||
             loadedResult.status == ComicCommentLoadStatus.partialFailure)) {
-      if (index < loadedResult.items.length) {
+      if (index < projection.items.length) {
+        final itemProjection = projection.items[index];
         return Padding(
           key: ValueKey<String>(
-            'comic-comment-tail-item-${loadedResult.items[index].pid}',
+            'comic-comment-tail-item-${itemProjection.sourceItem.pid}',
           ),
           padding: EdgeInsets.fromLTRB(12, index == 0 ? 12 : 0, 12, 10),
           child: ComicCommentListItem(
-            comment: loadedResult.items[index],
+            projection: itemProjection,
             sourceTid: _session.key.sourceTid,
             imageHeaderBuilder: _imageHeaderBuilder,
             renderContext: _renderContextFor(context),
@@ -168,7 +180,7 @@ class ComicCommentTailSurface extends ChangeNotifier
           compact: true,
         );
       }
-      if (!_hasNextEpisode && index == loadedResult.items.length) {
+      if (!_hasNextEpisode && index == projection.items.length) {
         return const ComicCommentFeedbackSurface(
           key: Key('comic-comment-tail-last-chapter'),
           kind: ComicCommentFeedbackKind.lastChapter,
@@ -284,14 +296,29 @@ class ComicCommentTailSurface extends ChangeNotifier
       );
     }
     final result = sessionState.result;
-    if (result != null && !identical(_prunedResult, result)) {
-      _renderContext!.prune(result.items.map(ComicCommentCard.toThreadPost));
-      _prunedResult = result;
+    if (result != null) {
+      final projection = _projectionFor(result);
+      if (_prunedProjectionIdentity != projection.displayIdentity) {
+        _renderContext!.prune(
+          projection.items.map(ComicCommentCard.toThreadPost),
+        );
+        _prunedProjectionIdentity = projection.displayIdentity;
+      }
     }
     return _renderContext!;
   }
 
+  ComicCommentContentProjection _projectionFor(ComicCommentLoadResult result) {
+    return _contentProjectionController.projectionFor(result);
+  }
+
   void _onSessionChanged() {
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
+  void _onProjectionChanged() {
     if (!_disposed) {
       notifyListeners();
     }
@@ -304,6 +331,7 @@ class ComicCommentTailSurface extends ChangeNotifier
     }
     _disposed = true;
     _session.removeListener(_onSessionChanged);
+    _contentProjectionController.removeListener(_onProjectionChanged);
     super.dispose();
   }
 }

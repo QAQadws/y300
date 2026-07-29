@@ -3,6 +3,8 @@ import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
+import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_list_surface.dart';
 
@@ -25,7 +27,7 @@ void main() {
           home: Scaffold(
             body: ComicCommentListSurface(
               sourceTid: '573279',
-              result: _result(ComicCommentLoadStatus.empty),
+              projection: _projection(_result(ComicCommentLoadStatus.empty)),
             ),
           ),
         ),
@@ -39,7 +41,7 @@ void main() {
           home: Scaffold(
             body: ComicCommentListSurface(
               sourceTid: '573279',
-              result: _result(ComicCommentLoadStatus.failure),
+              projection: _projection(_result(ComicCommentLoadStatus.failure)),
             ),
           ),
         ),
@@ -59,7 +61,9 @@ void main() {
           home: Scaffold(
             body: ComicCommentListSurface(
               sourceTid: '573279',
-              result: _result(ComicCommentLoadStatus.partialFailure),
+              projection: _projection(
+                _result(ComicCommentLoadStatus.partialFailure),
+              ),
               onRetry: () => retryCount++,
             ),
           ),
@@ -95,12 +99,14 @@ void main() {
           home: Scaffold(
             body: ComicCommentListSurface(
               sourceTid: '573279',
-              result: ComicCommentLoadResult(
-                sourceTid: '573279',
-                status: ComicCommentLoadStatus.success,
-                items: items,
-                loadedPages: const {1, 2},
-                expectedPages: 2,
+              projection: _projection(
+                ComicCommentLoadResult(
+                  sourceTid: '573279',
+                  status: ComicCommentLoadStatus.success,
+                  items: items,
+                  loadedPages: const {1, 2},
+                  expectedPages: 2,
+                ),
               ),
             ),
           ),
@@ -114,6 +120,49 @@ void main() {
     expect(find.byType(Slider), findsNothing);
     expect(find.byType(FloatingActionButton), findsNothing);
   });
+
+  testWidgets('uses projected rows while retaining raw author identity', (
+    tester,
+  ) async {
+    final source = _comment(pid: 'p8', authorName: '发型用户名');
+    final result = ComicCommentLoadResult(
+      sourceTid: '573279',
+      status: ComicCommentLoadStatus.success,
+      items: <ComicCommentItem>[source],
+      loadedPages: const <int>{1},
+      expectedPages: 1,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: LocalizedTestApp(
+          home: Scaffold(
+            body: ComicCommentListSurface(
+              sourceTid: '573279',
+              projection: ComicCommentContentProjection(
+                sourceResult: result,
+                items: <ComicCommentItemProjection>[
+                  ComicCommentItemProjection(
+                    sourceItem: source,
+                    displayMessage: '<p>評論正文</p>',
+                    displayDateline: '剛剛',
+                  ),
+                ],
+                mode: TextConversionMode.toTraditional,
+                converterId: 'test:traditional',
+                sourceRevision: 'test:converted',
+                isConverted: true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('发型用户名'), findsOneWidget);
+    expect(find.text('髮型用戶名'), findsNothing);
+    expect(find.text('剛剛'), findsOneWidget);
+  });
 }
 
 ComicCommentLoadResult _result(ComicCommentLoadStatus status) {
@@ -125,6 +174,15 @@ ComicCommentLoadResult _result(ComicCommentLoadStatus status) {
         : const <ComicCommentItem>[],
     loadedPages: const {1},
     expectedPages: 2,
+  );
+}
+
+ComicCommentContentProjection _projection(ComicCommentLoadResult result) {
+  return ComicCommentContentProjection.raw(
+    result,
+    mode: TextConversionMode.none,
+    converterId: 'conv:none',
+    sourceRevision: 'test:${result.status.name}',
   );
 }
 
