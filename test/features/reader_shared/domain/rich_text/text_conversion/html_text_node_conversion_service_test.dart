@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_exclusion_policy.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 
@@ -21,6 +23,30 @@ void main() {
       expect(converter.callCount, 1);
     });
 
+    test(
+      'converts multiple fragments in one batch and keeps their order',
+      () async {
+        final service = DomHtmlTextNodeConversionService();
+        final converter = _MapTextConverter({
+          '第一': '第一T',
+          '第二': '第二T',
+          '第三': '第三T',
+        });
+
+        final results = await service.convertAll(
+          htmlFragments: ['<p>第一</p>', '<p>第二<span>第三</span></p>'],
+          converter: converter,
+        );
+
+        expect(results.map((result) => result.html), [
+          '<p>第一T</p>',
+          '<p>第二T<span>第三T</span></p>',
+        ]);
+        expect(results.map((result) => result.convertedTextNodeCount), [1, 2]);
+        expect(converter.callCount, 1);
+      },
+    );
+
     test('does not convert href src style or class attributes', () async {
       final service = DomHtmlTextNodeConversionService();
       final converter = _MapTextConverter({'链接': '連結', '图片': '圖片'});
@@ -40,6 +66,21 @@ void main() {
       expect(result.html, contains('>連結</a>'));
       expect(result.convertedTextNodeCount, 1);
     });
+
+    test(
+      'returns an exact fragment when no convertible Han node exists',
+      () async {
+        final service = DomHtmlTextNodeConversionService();
+        final converter = _MapTextConverter({'正文': '正文T'});
+        const html = '<p class="keep" title="raw">plain text</p>';
+
+        final result = await service.convert(html: html, converter: converter);
+
+        expect(result.html, html);
+        expect(result.convertedTextNodeCount, 0);
+        expect(converter.callCount, 0);
+      },
+    );
 
     test('skips script style pre code textarea and blockcode text', () async {
       final service = DomHtmlTextNodeConversionService();
@@ -84,6 +125,47 @@ void main() {
 
       expect(result.html, '<ruby>汉字<rt>注音T</rt></ruby>');
       expect(result.convertedTextNodeCount, 2);
+    });
+
+    test('protects trusted Yamibo user profile links', () async {
+      final service = DomHtmlTextNodeConversionService();
+      final converter = _MapTextConverter({'漢字': '汉字'});
+
+      final result = await service.convert(
+        html:
+            '<a href="home.php?mod=space&amp;uid=10">漢字</a>'
+            '<a href="/space-uid-11.html"><span>漢字</span></a>'
+            '<a href="forum.php?mod=viewthread&amp;tid=12">漢字</a>'
+            '<a href="https://example.com/space-uid-13.html">漢字</a>',
+        converter: converter,
+      );
+
+      expect(result.html, contains('home.php?mod=space&amp;uid=10">漢字</a>'));
+      expect(result.html, contains('/space-uid-11.html"><span>漢字</span></a>'));
+      expect(result.html, contains('tid=12">汉字</a>'));
+      expect(result.html, contains('example.com/space-uid-13.html">汉字</a>'));
+      expect(result.convertedTextNodeCount, 2);
+      expect(converter.callCount, 1);
+    });
+
+    test('changes exclusion policy signature for cache identity', () async {
+      final converter = _MapTextConverter({'正文': '正文T'});
+      final service = DomHtmlTextNodeConversionService(
+        plainTextBatchConversionService: DefaultPlainTextBatchConversionService(
+          maxCacheEntries: 0,
+        ),
+      );
+
+      await service.convert(html: '<p>正文</p>', converter: converter);
+      await service.convert(
+        html: '<p>正文</p>',
+        converter: converter,
+        options: const HtmlTextNodeConversionOptions(
+          exclusionPolicies: <HtmlTextNodeExclusionPolicy>[],
+        ),
+      );
+
+      expect(converter.callCount, 2);
     });
 
     test(

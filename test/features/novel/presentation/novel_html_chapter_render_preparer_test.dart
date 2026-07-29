@@ -176,25 +176,28 @@ double _visibleContrast(Color foreground, Color background) {
   );
 }
 
-final class _FixedConversionService implements HtmlTextNodeConversionService {
+final class _FixedConversionService extends HtmlTextNodeConversionService {
   _FixedConversionService(this.outputHtml);
 
   final String outputHtml;
   int callCount = 0;
 
   @override
-  Future<HtmlTextNodeConversionResult> convert({
-    required String html,
+  Future<List<HtmlTextNodeConversionResult>> convertAll({
+    required List<String> htmlFragments,
     required TextConverter converter,
     HtmlTextNodeConversionOptions options =
         const HtmlTextNodeConversionOptions(),
   }) async {
     callCount++;
-    return HtmlTextNodeConversionResult(
-      html: outputHtml,
-      convertedTextNodeCount: 1,
-      converterId: converter.id,
-    );
+    return [
+      for (final _ in htmlFragments)
+        HtmlTextNodeConversionResult(
+          html: outputHtml,
+          convertedTextNodeCount: 1,
+          converterId: converter.id,
+        ),
+    ];
   }
 }
 
