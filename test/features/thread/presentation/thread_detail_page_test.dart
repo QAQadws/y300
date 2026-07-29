@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
@@ -44,6 +45,8 @@ import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reply/data/repositories/reply_repository.dart';
@@ -3881,6 +3884,62 @@ void main() {
       },
     );
 
+    testWidgets(
+      'manual language mode projects server content without another request',
+      (tester) async {
+        final repository = _FakeThreadRepository((tid, page) async {
+          return ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '33',
+              forumName: '软件区',
+              subject: '软件主题',
+              author: '发型用户名',
+              replies: 0,
+              views: 1,
+              currentPage: 1,
+              perPage: 20,
+              posts: [
+                ThreadPost(
+                  pid: 'p1',
+                  author: '发型用户名',
+                  authorId: '1',
+                  message:
+                      '<p>软件内容</p>'
+                      '<a href="/home.php?mod=space&amp;uid=1">发型用户名</a>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: '软件时间',
+                ),
+              ],
+            ),
+          );
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            additionalOverrides: <riverpod_misc.Override>[
+              appServerContentConversionModeProvider.overrideWithValue(
+                TextConversionMode.toTraditional,
+              ),
+              textConverterProvider.overrideWith(
+                (ref, mode) => _ThreadProjectionTestConverter(mode),
+              ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(_appBarTitleText('軟體區'), findsOneWidget);
+        expect(find.text('軟體主題'), findsOneWidget);
+        expect(_richTextContaining('軟體內容'), findsOneWidget);
+        expect(find.textContaining('发型用户名'), findsWidgets);
+        expect(find.textContaining('髮型用戶名'), findsNothing);
+        expect(repository.queryHistory, hasLength(1));
+      },
+    );
+
     testWidgets('opens user profile from post author name', (tester) async {
       final webViewDriver = _FakeForumWebViewDriver();
       final repository = _FakeThreadRepository((tid, page) async {
@@ -4471,30 +4530,35 @@ Widget _buildTestApp(
   ForumHtmlReaderPreferencesRepository? forumHtmlReaderPreferencesRepository,
   HistoryVisitRecorder? historyVisitRecorder,
   HistoryDiagnosticRecorder? historyDiagnosticRecorder,
+  List<riverpod_misc.Override> additionalOverrides =
+      const <riverpod_misc.Override>[],
   Widget? home,
   ThemeData? theme,
 }) {
   return ProviderScope(
-    overrides: _threadDetailOverrides(
-      repository,
-      replyRepository: replyRepository,
-      novelRepository: novelRepository,
-      favoriteActionService: favoriteActionService,
-      postRateRepository: postRateRepository,
-      postRatingsRepository: postRatingsRepository,
-      postCommentRepository: postCommentRepository,
-      pollVoteRepository: pollVoteRepository,
-      tagThreadPageRepository: tagThreadPageRepository,
-      threadPostLocator: threadPostLocator,
-      pageCacheInvalidationService: pageCacheInvalidationService,
-      imageCacheService: imageCacheService,
-      forumImagePrecacheService: forumImagePrecacheService,
-      forumWebViewDriverFactory: forumWebViewDriverFactory,
-      forumHtmlReaderPreferencesRepository:
-          forumHtmlReaderPreferencesRepository,
-      historyVisitRecorder: historyVisitRecorder,
-      historyDiagnosticRecorder: historyDiagnosticRecorder,
-    ),
+    overrides: <riverpod_misc.Override>[
+      ..._threadDetailOverrides(
+        repository,
+        replyRepository: replyRepository,
+        novelRepository: novelRepository,
+        favoriteActionService: favoriteActionService,
+        postRateRepository: postRateRepository,
+        postRatingsRepository: postRatingsRepository,
+        postCommentRepository: postCommentRepository,
+        pollVoteRepository: pollVoteRepository,
+        tagThreadPageRepository: tagThreadPageRepository,
+        threadPostLocator: threadPostLocator,
+        pageCacheInvalidationService: pageCacheInvalidationService,
+        imageCacheService: imageCacheService,
+        forumImagePrecacheService: forumImagePrecacheService,
+        forumWebViewDriverFactory: forumWebViewDriverFactory,
+        forumHtmlReaderPreferencesRepository:
+            forumHtmlReaderPreferencesRepository,
+        historyVisitRecorder: historyVisitRecorder,
+        historyDiagnosticRecorder: historyDiagnosticRecorder,
+      ),
+      ...additionalOverrides,
+    ],
     child: LocalizedTestApp(
       theme: theme,
       home: home ?? const ThreadDetailPage(tid: '100', subject: '测试主题'),
@@ -5371,6 +5435,28 @@ class _FakeThreadRepository implements ThreadRepository {
       tid,
       page,
     );
+  }
+}
+
+class _ThreadProjectionTestConverter implements TextConverter {
+  const _ThreadProjectionTestConverter(this.mode);
+
+  @override
+  final TextConversionMode mode;
+
+  @override
+  String get id => 'thread-page-test:${mode.name}';
+
+  @override
+  Future<String> convertHtml(String html) async {
+    return html
+        .replaceAll('软件', '軟體')
+        .replaceAll('区', '區')
+        .replaceAll('主题', '主題')
+        .replaceAll('内容', '內容')
+        .replaceAll('发型', '髮型')
+        .replaceAll('用户', '用戶')
+        .replaceAll('时间', '時間');
   }
 }
 

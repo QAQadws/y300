@@ -5,9 +5,9 @@ part of 'thread_detail_widgets.dart';
 // keys and logic unchanged.
 
 class ThreadPostRateSheet extends StatefulWidget {
-  const ThreadPostRateSheet({super.key, required this.form});
+  const ThreadPostRateSheet({super.key, required this.projection});
 
-  final ThreadPostRateForm form;
+  final ThreadPostRateFormProjection projection;
 
   @override
   State<ThreadPostRateSheet> createState() => _ThreadPostRateSheetState();
@@ -17,12 +17,16 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
   late int _score;
   late bool _notifyAuthor;
   late final TextEditingController _reasonController;
+  String? _selectedRawReason;
+  String? _selectedDisplayReason;
+
+  ThreadPostRateForm get _form => widget.projection.sourceForm;
 
   @override
   void initState() {
     super.initState();
-    _score = widget.form.defaultScore;
-    _notifyAuthor = widget.form.notifyAuthorDefault;
+    _score = _form.defaultScore;
+    _notifyAuthor = _form.notifyAuthorDefault;
     _reasonController = TextEditingController();
   }
 
@@ -74,7 +78,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
                 const Spacer(),
                 IconButton(
                   key: const Key('thread-post-rate-decrease-button'),
-                  onPressed: _score > widget.form.scoreMin
+                  onPressed: _score > _form.scoreMin
                       ? () => setState(() => _score -= 1)
                       : null,
                   icon: const Icon(Icons.remove_circle_outline),
@@ -92,7 +96,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
                 ),
                 IconButton(
                   key: const Key('thread-post-rate-increase-button'),
-                  onPressed: _score < widget.form.scoreMax
+                  onPressed: _score < _form.scoreMax
                       ? () => setState(() => _score += 1)
                       : null,
                   icon: const Icon(Icons.add_circle_outline),
@@ -100,18 +104,20 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
               ],
             ),
             Text(_scoreHint(l10n), style: theme.textTheme.labelSmall),
-            if (widget.form.reasonOptions.isNotEmpty) ...[
+            if (widget.projection.reasons.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final reason in widget.form.reasonOptions)
+                  for (final reason in widget.projection.reasons)
                     ActionChip(
-                      key: Key('thread-post-rate-reason-$reason'),
-                      label: Text(reason),
+                      key: Key('thread-post-rate-reason-${reason.rawValue}'),
+                      label: Text(reason.displayLabel),
                       onPressed: () {
-                        _reasonController.text = reason;
+                        _selectedRawReason = reason.rawValue;
+                        _selectedDisplayReason = reason.displayLabel;
+                        _reasonController.text = reason.displayLabel;
                         setState(() {});
                       },
                     ),
@@ -128,7 +134,13 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
                 labelText: l10n.threadRatingReasonHint,
                 border: OutlineInputBorder(),
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: (value) {
+                if (_selectedDisplayReason != value) {
+                  _selectedRawReason = null;
+                  _selectedDisplayReason = null;
+                }
+                setState(() {});
+              },
             ),
             const SizedBox(height: 8),
             SwitchListTile(
@@ -148,9 +160,10 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
                     : () {
                         Navigator.of(context).pop(
                           ThreadPostRateDraft(
-                            form: widget.form,
+                            form: _form,
                             score: _score,
-                            reason: _reasonController.text,
+                            reason:
+                                _selectedRawReason ?? _reasonController.text,
                             notifyAuthor: _notifyAuthor,
                           ),
                         );
@@ -165,11 +178,11 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
   }
 
   String _scoreHint(AppLocalizations l10n) {
-    final remaining = widget.form.todayRemaining;
+    final remaining = _form.todayRemaining;
     return ThreadTextResolver.ratingRange(
       l10n,
-      widget.form.scoreMin,
-      widget.form.scoreMax,
+      _form.scoreMin,
+      _form.scoreMax,
       remaining,
     );
   }

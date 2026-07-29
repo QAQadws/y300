@@ -42,8 +42,25 @@ abstract class HtmlTextNodeConversionService {
   }
 }
 
+/// Optional operation-scoped instrumentation contract for presentation
+/// projectors.
+///
+/// Keeping this additive avoids forcing lightweight test doubles to implement
+/// diagnostics they do not need.
+abstract interface class ObservableHtmlTextNodeConversionService
+    implements HtmlTextNodeConversionService {
+  Future<List<HtmlTextNodeConversionResult>> convertAllObserved({
+    required List<String> htmlFragments,
+    required TextConverter converter,
+    HtmlTextNodeConversionOptions options =
+        const HtmlTextNodeConversionOptions(),
+    required HtmlTextNodeConversionMetricsListener metricsListener,
+  });
+}
+
 final class DomHtmlTextNodeConversionService
-    extends HtmlTextNodeConversionService {
+    extends HtmlTextNodeConversionService
+    implements ObservableHtmlTextNodeConversionService {
   DomHtmlTextNodeConversionService({
     PlainTextBatchConversionService? plainTextBatchConversionService,
     int maxCacheEntries = 8,
@@ -65,6 +82,35 @@ final class DomHtmlTextNodeConversionService
     required TextConverter converter,
     HtmlTextNodeConversionOptions options =
         const HtmlTextNodeConversionOptions(),
+  }) {
+    return _convertAll(
+      htmlFragments: htmlFragments,
+      converter: converter,
+      options: options,
+    );
+  }
+
+  @override
+  Future<List<HtmlTextNodeConversionResult>> convertAllObserved({
+    required List<String> htmlFragments,
+    required TextConverter converter,
+    HtmlTextNodeConversionOptions options =
+        const HtmlTextNodeConversionOptions(),
+    required HtmlTextNodeConversionMetricsListener metricsListener,
+  }) {
+    return _convertAll(
+      htmlFragments: htmlFragments,
+      converter: converter,
+      options: options,
+      operationMetricsListener: metricsListener,
+    );
+  }
+
+  Future<List<HtmlTextNodeConversionResult>> _convertAll({
+    required List<String> htmlFragments,
+    required TextConverter converter,
+    required HtmlTextNodeConversionOptions options,
+    HtmlTextNodeConversionMetricsListener? operationMetricsListener,
   }) async {
     final stopwatch = Stopwatch()..start();
     final input = List<String>.unmodifiable(htmlFragments);
@@ -78,6 +124,7 @@ final class DomHtmlTextNodeConversionService
           cacheHit: false,
           usedIndividualFallback: false,
         ),
+        operationMetricsListener: operationMetricsListener,
       );
       return const [];
     }
@@ -93,6 +140,7 @@ final class DomHtmlTextNodeConversionService
           cacheHit: false,
           usedIndividualFallback: false,
         ),
+        operationMetricsListener: operationMetricsListener,
       );
       return result;
     }
@@ -114,6 +162,7 @@ final class DomHtmlTextNodeConversionService
           cacheHit: true,
           usedIndividualFallback: false,
         ),
+        operationMetricsListener: operationMetricsListener,
       );
       return _copyResults(cached.results);
     }
@@ -132,8 +181,9 @@ final class DomHtmlTextNodeConversionService
           convertedTextNodeCount: outcome.convertedTextNodeCount,
           elapsedMs: stopwatch.elapsedMilliseconds,
           cacheHit: false,
-          usedIndividualFallback: false,
+          usedIndividualFallback: outcome.usedIndividualFallback,
         ),
+        operationMetricsListener: operationMetricsListener,
       );
       return outcome.results;
     } catch (error) {
@@ -147,6 +197,7 @@ final class DomHtmlTextNodeConversionService
           usedIndividualFallback: false,
           failureType: error.runtimeType.toString(),
         ),
+        operationMetricsListener: operationMetricsListener,
       );
       rethrow;
     }
@@ -182,13 +233,23 @@ final class DomHtmlTextNodeConversionService
         results: _rawResults(htmlFragments, converter.id),
         plainSourceCount: 0,
         convertedTextNodeCount: 0,
+        usedIndividualFallback: false,
       );
     }
 
-    final convertedValues = await _plainTextBatchConversionService.convertAll(
-      sources: sourceValues,
-      converter: converter,
-    );
+    PlainTextBatchConversionMetrics? plainMetrics;
+    final convertedValues =
+        _plainTextBatchConversionService
+            is ObservablePlainTextBatchConversionService
+        ? await _plainTextBatchConversionService.convertAllObserved(
+            sources: sourceValues,
+            converter: converter,
+            metricsListener: (value) => plainMetrics = value,
+          )
+        : await _plainTextBatchConversionService.convertAll(
+            sources: sourceValues,
+            converter: converter,
+          );
     if (convertedValues.length != sourceValues.length) {
       throw HtmlTextNodeConversionException(
         expectedCount: sourceValues.length,
@@ -224,6 +285,7 @@ final class DomHtmlTextNodeConversionService
         0,
         (total, count) => total + count,
       ),
+      usedIndividualFallback: plainMetrics?.usedIndividualFallback ?? false,
     );
   }
 
@@ -334,11 +396,19 @@ final class DomHtmlTextNodeConversionService
     ];
   }
 
-  void _notify(HtmlTextNodeConversionMetrics metrics) {
+  void _notify(
+    HtmlTextNodeConversionMetrics metrics, {
+    HtmlTextNodeConversionMetricsListener? operationMetricsListener,
+  }) {
     try {
       metricsListener?.call(metrics);
     } catch (_) {
       // Diagnostics must never change conversion semantics.
+    }
+    try {
+      operationMetricsListener?.call(metrics);
+    } catch (_) {
+      // Operation diagnostics must not change conversion semantics either.
     }
   }
 }
@@ -414,11 +484,13 @@ final class _HtmlTextNodeConversionOutcome {
     required this.results,
     required this.plainSourceCount,
     required this.convertedTextNodeCount,
+    required this.usedIndividualFallback,
   });
 
   final List<HtmlTextNodeConversionResult> results;
   final int plainSourceCount;
   final int convertedTextNodeCount;
+  final bool usedIndividualFallback;
 }
 
 final class _CachedHtmlBatch {

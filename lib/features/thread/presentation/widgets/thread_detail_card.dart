@@ -8,7 +8,9 @@ part of 'thread_detail_widgets.dart';
 class _ThreadPostCardHeaderEntry extends StatelessWidget {
   const _ThreadPostCardHeaderEntry({
     super.key,
-    required this.post,
+    required this.sourcePost,
+    required this.displayPost,
+    required this.displaySubject,
     required this.state,
     required this.plan,
     required this.highlighted,
@@ -18,7 +20,9 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
     required this.onOpenPostActions,
   });
 
-  final ThreadPost post;
+  final ThreadPost sourcePost;
+  final ThreadPost displayPost;
+  final String displaySubject;
   final ThreadDetailPageState state;
   final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
@@ -30,9 +34,10 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final post = displayPost;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: () => onOpenPostActions(post, plan),
+      onLongPress: () => onOpenPostActions(sourcePost, plan),
       child: Container(
         key: Key('thread-post-card-${post.pid}'),
         padding: EdgeInsets.fromLTRB(
@@ -50,7 +55,10 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (post.isFirst) ...[
-              _FirstPostThreadSummary(state: state, palette: palette),
+              _FirstPostThreadSummary(
+                subject: displaySubject,
+                palette: palette,
+              ),
               const SizedBox(height: 11),
             ],
             Row(
@@ -65,7 +73,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
                   imageHeaderBuilder: imageHeaderBuilder,
                   onTap: post.authorId.trim().isEmpty
                       ? null
-                      : () => onOpenAuthorProfile(post),
+                      : () => onOpenAuthorProfile(sourcePost),
                 ),
                 const SizedBox(width: 9),
                 Expanded(
@@ -78,7 +86,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
                         : null,
                     onOpenAuthorProfile: post.authorId.trim().isEmpty
                         ? null
-                        : () => onOpenAuthorProfile(post),
+                        : () => onOpenAuthorProfile(sourcePost),
                   ),
                 ),
               ],
@@ -93,7 +101,8 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
 class _ThreadPostCardBodyEntry extends StatelessWidget {
   const _ThreadPostCardBodyEntry({
     super.key,
-    required this.post,
+    required this.sourcePost,
+    required this.displayPost,
     required this.threadId,
     required this.plan,
     required this.highlighted,
@@ -109,7 +118,8 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.onOpenPostActions,
   });
 
-  final ThreadPost post;
+  final ThreadPost sourcePost;
+  final ThreadPost displayPost;
   final String threadId;
   final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
@@ -140,9 +150,10 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final post = displayPost;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: () => onOpenPostActions(post, plan),
+      onLongPress: () => onOpenPostActions(sourcePost, plan),
       child: Container(
         padding: EdgeInsets.fromLTRB(
           ForumContentSpacing.postBodyHorizontal,
@@ -162,6 +173,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
           ),
           child: ThreadPostHtmlBody(
             post: post,
+            sourcePost: sourcePost,
             threadId: threadId,
             imageReferer: imageReferer,
             plan: plan,
@@ -169,7 +181,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             onOpenPostLink: onOpenPostLink,
             onOpenPostImage: onOpenPostImages == null
                 ? null
-                : (post, request) => onOpenPostImages!.call(post, request),
+                : (_, request) => onOpenPostImages!.call(sourcePost, request),
             theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
               palette: palette,
               brightness: Theme.of(context).brightness,
@@ -177,9 +189,9 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             onImageFallback: onHtmlFirstImageFallback,
             onImageLayoutShift: onHtmlFirstImageLayoutShift,
             imageFallbackAspectRatioFor: (spec, request) =>
-                onHtmlFirstImageFallbackAspectRatio(post, spec, request),
+                onHtmlFirstImageFallbackAspectRatio(sourcePost, spec, request),
             onBlockImageResolved: (spec, request, size) =>
-                onHtmlFirstBlockImageResolved(post, spec, request, size),
+                onHtmlFirstBlockImageResolved(sourcePost, spec, request, size),
           ),
         ),
       ),
@@ -190,7 +202,9 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
 class _ThreadPostCardFooterEntry extends StatelessWidget {
   const _ThreadPostCardFooterEntry({
     super.key,
-    required this.post,
+    required this.sourcePost,
+    required this.displayPost,
+    required this.displayRatingsByPostId,
     required this.state,
     required this.plan,
     required this.highlighted,
@@ -204,7 +218,9 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
     required this.palette,
   });
 
-  final ThreadPost post;
+  final ThreadPost sourcePost;
+  final ThreadPost displayPost;
+  final Map<String, ThreadPostRatingsViewState> displayRatingsByPostId;
   final ThreadDetailPageState state;
   final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
@@ -221,13 +237,14 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final post = displayPost;
     final hasFooterContent =
         post.poll != null ||
         post.comments.isNotEmpty ||
         post.ratingSummary != null;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: () => onOpenPostActions(post, plan),
+      onLongPress: () => onOpenPostActions(sourcePost, plan),
       child: Container(
         margin: const EdgeInsets.only(bottom: ForumContentSpacing.postCardGap),
         padding: EdgeInsets.fromLTRB(
@@ -251,9 +268,27 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
                 isSubmitting: state.isPollVoteSubmitting,
                 hint: state.pollVoteHint,
                 notice: state.pollVoteNotice,
-                onToggleOption: (option) =>
-                    onTogglePollOption(post.poll!, option),
-                onSubmit: () => onSubmitPollVote(post.poll!),
+                onToggleOption: (option) {
+                  final sourcePoll = sourcePost.poll;
+                  ThreadPollOption? sourceOption;
+                  if (sourcePoll != null) {
+                    for (final candidate in sourcePoll.options) {
+                      if (candidate.id == option.id) {
+                        sourceOption = candidate;
+                        break;
+                      }
+                    }
+                  }
+                  if (sourcePoll != null && sourceOption != null) {
+                    onTogglePollOption(sourcePoll, sourceOption);
+                  }
+                },
+                onSubmit: () {
+                  final sourcePoll = sourcePost.poll;
+                  if (sourcePoll != null) {
+                    onSubmitPollVote(sourcePoll);
+                  }
+                },
                 palette: palette,
               ),
             ],
@@ -263,7 +298,12 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
                 comments: post.comments,
                 imageHeaderBuilder: imageHeaderBuilder,
                 palette: palette,
-                onOpenAuthorProfile: onOpenCommentAuthorProfile,
+                onOpenAuthorProfile: (displayComment) {
+                  final index = post.comments.indexOf(displayComment);
+                  if (index >= 0 && index < sourcePost.comments.length) {
+                    onOpenCommentAuthorProfile(sourcePost.comments[index]);
+                  }
+                },
               ),
             ],
             if (post.ratingSummary != null) ...[
@@ -272,10 +312,10 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
               ThreadPostRatingSection(
                 summary: post.ratingSummary!,
                 viewState:
-                    state.ratingsByPostId[post.pid.trim()] ??
+                    displayRatingsByPostId[sourcePost.pid.trim()] ??
                     const ThreadPostRatingsViewState.idle(),
                 palette: palette,
-                onLoadAllRatings: () => onLoadAllRatings(post),
+                onLoadAllRatings: () => onLoadAllRatings(sourcePost),
               ),
             ],
           ],
@@ -288,7 +328,10 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
 class _ThreadPostCardEntry extends StatefulWidget {
   const _ThreadPostCardEntry({
     super.key,
-    required this.post,
+    required this.sourcePost,
+    required this.displayPost,
+    required this.displaySubject,
+    required this.displayRatingsByPostId,
     required this.postIndex,
     required this.state,
     required this.plan,
@@ -311,7 +354,10 @@ class _ThreadPostCardEntry extends StatefulWidget {
     required this.onPostBuilt,
   });
 
-  final ThreadPost post;
+  final ThreadPost sourcePost;
+  final ThreadPost displayPost;
+  final String displaySubject;
+  final Map<String, ThreadPostRatingsViewState> displayRatingsByPostId;
   final int postIndex;
   final ThreadDetailPageState state;
   final ThreadPostBodyRenderPlan plan;
@@ -363,7 +409,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
   @override
   void didUpdateWidget(covariant _ThreadPostCardEntry oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.post.pid != widget.post.pid ||
+    if (oldWidget.sourcePost.pid != widget.sourcePost.pid ||
         oldWidget.postIndex != widget.postIndex ||
         oldWidget.onPostBuilt != widget.onPostBuilt) {
       _scheduleNotify();
@@ -377,8 +423,10 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _ThreadPostCardHeaderEntry(
-          key: Key('thread-post-header-${widget.post.pid}'),
-          post: widget.post,
+          key: Key('thread-post-header-${widget.sourcePost.pid}'),
+          sourcePost: widget.sourcePost,
+          displayPost: widget.displayPost,
+          displaySubject: widget.displaySubject,
           state: widget.state,
           plan: widget.plan,
           highlighted: widget.highlighted,
@@ -388,8 +436,9 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           onOpenPostActions: widget.onOpenPostActions,
         ),
         _ThreadPostCardBodyEntry(
-          key: Key('thread-post-body-${widget.post.pid}'),
-          post: widget.post,
+          key: Key('thread-post-body-${widget.sourcePost.pid}'),
+          sourcePost: widget.sourcePost,
+          displayPost: widget.displayPost,
           threadId: widget.state.tid,
           plan: widget.plan,
           highlighted: widget.highlighted,
@@ -406,8 +455,10 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           onOpenPostActions: widget.onOpenPostActions,
         ),
         _ThreadPostCardFooterEntry(
-          key: Key('thread-post-footer-${widget.post.pid}'),
-          post: widget.post,
+          key: Key('thread-post-footer-${widget.sourcePost.pid}'),
+          sourcePost: widget.sourcePost,
+          displayPost: widget.displayPost,
+          displayRatingsByPostId: widget.displayRatingsByPostId,
           state: widget.state,
           plan: widget.plan,
           highlighted: widget.highlighted,
@@ -591,7 +642,7 @@ class ThreadPostCard extends StatelessWidget {
         children: [
           if (post.isFirst && detailState != null) ...[
             _FirstPostThreadSummary(
-              state: detailState,
+              subject: detailState.subject,
               palette: resolvedPalette,
             ),
             const SizedBox(height: 11),
@@ -729,9 +780,9 @@ class ThreadPostCard extends StatelessWidget {
 }
 
 class _FirstPostThreadSummary extends StatelessWidget {
-  const _FirstPostThreadSummary({required this.state, required this.palette});
+  const _FirstPostThreadSummary({required this.subject, required this.palette});
 
-  final ThreadDetailPageState state;
+  final String subject;
   final ThreadDetailNativePalette palette;
 
   @override
@@ -743,7 +794,7 @@ class _FirstPostThreadSummary extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          state.subject.isNotEmpty ? state.subject : l10n.threadDetailTitle,
+          subject.isNotEmpty ? subject : l10n.threadDetailTitle,
           style: textTheme.titleMedium?.copyWith(
             color: palette.title,
             fontWeight: FontWeight.w800,

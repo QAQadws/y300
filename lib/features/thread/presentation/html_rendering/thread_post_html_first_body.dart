@@ -29,6 +29,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   const ThreadPostHtmlFirstBody({
     super.key,
     required this.post,
+    this.sourcePost,
     required this.threadId,
     required this.imageReferer,
     required this.plan,
@@ -47,6 +48,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   });
 
   final ThreadPost post;
+  final ThreadPost? sourcePost;
   final String threadId;
   final String imageReferer;
   final ThreadPostBodyRenderPlan plan;
@@ -84,13 +86,14 @@ class _ThreadPostHtmlFirstBodyState
   @override
   Widget build(BuildContext context) {
     final html = widget.post.message.trim();
+    final sourcePost = widget.sourcePost ?? widget.post;
     if (html.isEmpty) {
       if (!_loggedEmptyBody) {
         _loggedEmptyBody = true;
         _logNative(
           'render_empty_body',
-          'tid=${widget.threadId} pid=${widget.post.pid} '
-              'postNo=${widget.post.number} authorId=${widget.post.authorId}',
+          'tid=${widget.threadId} pid=${sourcePost.pid} '
+              'postNo=${sourcePost.number} authorId=${sourcePost.authorId}',
         );
       }
       return widget.fallback ?? const SizedBox.shrink();
@@ -98,17 +101,17 @@ class _ThreadPostHtmlFirstBodyState
     final preferences =
         ref.watch(forumHtmlReaderPreferencesControllerProvider).value ??
         ForumHtmlReaderPreferences.defaults();
-    // B-class conversion is intentionally disabled at this per-post boundary
-    // until the thread-level display projector owns the complete surface.
-    // This keeps the legacy reader preference from producing mixed-mode pages.
+    // B-class conversion is owned by the page-level display projector. This
+    // boundary only prepares and renders the already projected HTML.
     return _buildHtmlBody(html, preferences);
   }
 
   Widget _buildHtmlBody(String html, ForumHtmlReaderPreferences preferences) {
+    final sourcePost = widget.sourcePost ?? widget.post;
     try {
-      final sourceId = widget.post.pid.trim().isEmpty
+      final sourceId = sourcePost.pid.trim().isEmpty
           ? 'post'
-          : widget.post.pid.trim();
+          : sourcePost.pid.trim();
       final preparedDocument = widget.renderPreparer.prepare(
         html: html,
         preferences: preferences,
@@ -123,7 +126,7 @@ class _ThreadPostHtmlFirstBodyState
         preparedDocument: preparedDocument,
       );
       return KeyedSubtree(
-        key: Key('thread-post-html-first-body-${widget.post.pid}'),
+        key: Key('thread-post-html-first-body-${sourcePost.pid}'),
         child: ForumHtmlWidgetPostRenderer(
           html: html,
           theme: widget.theme,
@@ -176,11 +179,12 @@ class _ThreadPostHtmlFirstBodyState
       return;
     }
     _lastPreparedLogKey = key;
+    final sourcePost = widget.sourcePost ?? widget.post;
     final themeStats = preparedDocument.themeAdaptationStats;
     final minimumContrast = themeStats.minimumResultContrast;
     _logNative(
       'render_prepare_success',
-      'tid=${widget.threadId} pid=${widget.post.pid} postNo=${widget.post.number} '
+      'tid=${widget.threadId} pid=${sourcePost.pid} postNo=${sourcePost.number} '
           'rawLength=$htmlLength preparedLength=${preparedDocument.preparedHtml.length} '
           'totalImages=${preparedDocument.totalImageCount} '
           'readableImages=${preparedDocument.sequence.entries.length} '
@@ -207,14 +211,15 @@ class _ThreadPostHtmlFirstBodyState
     if (!kDebugMode) {
       return;
     }
-    final key = '${widget.post.pid}:$htmlLength:$error';
+    final sourcePost = widget.sourcePost ?? widget.post;
+    final key = '${sourcePost.pid}:$htmlLength:$error';
     if (_lastRenderFailureLogKey == key) {
       return;
     }
     _lastRenderFailureLogKey = key;
     _logNative(
       'render_failure',
-      'tid=${widget.threadId} pid=${widget.post.pid} postNo=${widget.post.number} '
+      'tid=${widget.threadId} pid=${sourcePost.pid} postNo=${sourcePost.number} '
           'rawLength=$htmlLength error=${_oneLine(error.toString())} '
           'stack=${_stackHead(stackTrace)}',
     );
@@ -224,28 +229,29 @@ class _ThreadPostHtmlFirstBodyState
     ForumHtmlImageRequest request,
     ForumHtmlReadableImageSequence sequence,
   ) {
+    final sourcePost = widget.sourcePost ?? widget.post;
     final result = widget.imageReaderBridge.buildOpenRequest(
-      post: widget.post,
+      post: sourcePost,
       threadId: widget.threadId,
       imageReferer: widget.imageReferer,
       legacyPlan: widget.plan,
       sequence: sequence,
       imageRequest: request,
     );
-    widget.onImageDiagnostics?.call(widget.post, request, result);
+    widget.onImageDiagnostics?.call(sourcePost, request, result);
     final openRequest = result.request;
     if (openRequest == null) {
       if (!request.isSticker) {
-        widget.onImageFallback?.call(widget.post, request);
+        widget.onImageFallback?.call(sourcePost, request);
       }
       return;
     }
     final imageOpenHandler = widget.onOpenPostImage;
     if (imageOpenHandler == null) {
-      widget.onImageFallback?.call(widget.post, request);
+      widget.onImageFallback?.call(sourcePost, request);
       return;
     }
-    imageOpenHandler(widget.post, openRequest);
+    imageOpenHandler(sourcePost, openRequest);
   }
 
   void _logNative(String stage, String message) {
@@ -275,6 +281,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   const ThreadPostHtmlBody({
     super.key,
     required this.post,
+    this.sourcePost,
     required this.threadId,
     required this.imageReferer,
     required this.plan,
@@ -292,6 +299,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   });
 
   final ThreadPost post;
+  final ThreadPost? sourcePost;
   final String threadId;
   final String imageReferer;
   final ThreadPostBodyRenderPlan plan;
@@ -318,6 +326,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return ThreadPostHtmlFirstBody(
       post: post,
+      sourcePost: sourcePost,
       threadId: threadId,
       imageReferer: imageReferer,
       plan: plan,

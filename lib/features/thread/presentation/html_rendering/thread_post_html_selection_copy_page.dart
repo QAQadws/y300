@@ -13,6 +13,7 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
   const ThreadPostHtmlSelectionCopyPage({
     super.key,
     required this.post,
+    this.sourcePost,
     required this.threadId,
     required this.imageReferer,
     required this.plan,
@@ -23,6 +24,7 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
   });
 
   final ThreadPost post;
+  final ThreadPost? sourcePost;
   final String threadId;
   final String imageReferer;
   final ThreadPostBodyRenderPlan plan;
@@ -47,7 +49,10 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
           children: [
             Container(
-              key: Key('thread-post-html-selection-copy-body-${post.pid}'),
+              key: Key(
+                'thread-post-html-selection-copy-body-'
+                '${(sourcePost ?? post).pid}',
+              ),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: palette.card,
@@ -61,6 +66,7 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
                 ),
                 child: ThreadPostHtmlBody(
                   post: post,
+                  sourcePost: sourcePost,
                   threadId: threadId,
                   imageReferer: imageReferer,
                   plan: plan,

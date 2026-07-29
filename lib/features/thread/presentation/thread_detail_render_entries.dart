@@ -6,6 +6,7 @@ import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
+import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 
 class ThreadDetailRenderEntryPlanner {
   ThreadDetailRenderEntryPlanner({
@@ -26,14 +27,28 @@ class ThreadDetailRenderEntryPlanner {
     required List<ThreadPost> posts,
     String? targetPid,
   }) {
+    return buildProjectionEntries(
+      posts: [
+        for (final post in posts)
+          ThreadDetailPostProjection(sourcePost: post, displayPost: post),
+      ],
+      targetPid: targetPid,
+    );
+  }
+
+  List<ThreadDetailRenderEntry> buildProjectionEntries({
+    required List<ThreadDetailPostProjection> posts,
+    String? targetPid,
+  }) {
     final entries = <ThreadDetailRenderEntry>[];
     for (var index = 0; index < posts.length; index++) {
       final post = posts[index];
-      final plan = planFor(post);
+      final plan = planFor(post.displayPost);
       entries.add(
         ThreadDetailRenderEntry.postCard(
-          key: 'thread-post-card-entry-${post.pid}',
-          post: post,
+          key: 'thread-post-card-entry-${post.sourcePost.pid}',
+          sourcePost: post.sourcePost,
+          displayPost: post.displayPost,
           postIndex: index,
           resolvePlan: () => plan,
         ),
@@ -106,7 +121,8 @@ class ThreadDetailRenderEntry {
   const ThreadDetailRenderEntry._({
     required this.kind,
     required this.key,
-    this.post,
+    this.sourcePost,
+    this.displayPost,
     required this.postIndex,
     this.plan,
     this.resolvePlan,
@@ -114,49 +130,57 @@ class ThreadDetailRenderEntry {
 
   ThreadDetailRenderEntry.postCard({
     required String key,
-    required ThreadPost post,
+    required ThreadPost sourcePost,
+    required ThreadPost displayPost,
     required int postIndex,
     required ThreadPostBodyRenderPlan Function() resolvePlan,
   }) : this._(
          kind: ThreadDetailRenderEntryKind.postCard,
          key: key,
-         post: post,
+         sourcePost: sourcePost,
+         displayPost: displayPost,
          postIndex: postIndex,
          resolvePlan: resolvePlan,
        );
 
   ThreadDetailRenderEntry.postHeader({
     required String key,
-    required ThreadPost post,
+    required ThreadPost sourcePost,
+    required ThreadPost displayPost,
     required int postIndex,
   }) : this._(
          kind: ThreadDetailRenderEntryKind.postHeader,
          key: key,
-         post: post,
+         sourcePost: sourcePost,
+         displayPost: displayPost,
          postIndex: postIndex,
        );
 
   ThreadDetailRenderEntry.postBody({
     required String key,
-    required ThreadPost post,
+    required ThreadPost sourcePost,
+    required ThreadPost displayPost,
     required int postIndex,
     required ThreadPostBodyRenderPlan Function() resolvePlan,
   }) : this._(
          kind: ThreadDetailRenderEntryKind.postBody,
          key: key,
-         post: post,
+         sourcePost: sourcePost,
+         displayPost: displayPost,
          postIndex: postIndex,
          resolvePlan: resolvePlan,
        );
 
   ThreadDetailRenderEntry.postFooter({
     required String key,
-    required ThreadPost post,
+    required ThreadPost sourcePost,
+    required ThreadPost displayPost,
     required int postIndex,
   }) : this._(
          kind: ThreadDetailRenderEntryKind.postFooter,
          key: key,
-         post: post,
+         sourcePost: sourcePost,
+         displayPost: displayPost,
          postIndex: postIndex,
        );
 
@@ -176,7 +200,11 @@ class ThreadDetailRenderEntry {
 
   final ThreadDetailRenderEntryKind kind;
   final String key;
-  final ThreadPost? post;
+  final ThreadPost? sourcePost;
+  final ThreadPost? displayPost;
+
+  /// Compatibility accessor for callers that only render one post object.
+  ThreadPost? get post => displayPost;
   final int postIndex;
   final ThreadPostBodyRenderPlan? plan;
   final ThreadPostBodyRenderPlan Function()? resolvePlan;

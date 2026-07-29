@@ -7,6 +7,7 @@ import 'package:y300/features/thread/domain/services/thread_post_body_display_tr
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
+import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 
 void main() {
@@ -362,6 +363,47 @@ void main() {
         (transformedPlan.document.blocks.single as ThreadPostTextBlock)
             .plainText,
         '正文',
+      );
+    });
+
+    test('uses display HTML for planning and source pid for identity', () {
+      final source = ThreadPost(
+        pid: 'source-pid',
+        author: 'raw-author',
+        authorId: '9',
+        message: '<p>原文</p>',
+        number: 1,
+        isFirst: true,
+        dateline: 'raw-date',
+      );
+      final display = ThreadPost(
+        pid: 'source-pid',
+        author: 'raw-author',
+        authorId: '9',
+        message: '<p>显示正文</p>',
+        number: 1,
+        isFirst: true,
+        dateline: '显示日期',
+      );
+
+      final entry = ThreadDetailRenderEntryPlanner()
+          .buildProjectionEntries(
+            posts: <ThreadDetailPostProjection>[
+              ThreadDetailPostProjection(
+                sourcePost: source,
+                displayPost: display,
+              ),
+            ],
+          )
+          .first;
+
+      expect(entry.key, 'thread-post-card-entry-source-pid');
+      expect(identical(entry.sourcePost, source), isTrue);
+      expect(identical(entry.displayPost, display), isTrue);
+      expect(
+        (entry.requirePlan().document.blocks.single as ThreadPostTextBlock)
+            .plainText,
+        '显示正文',
       );
     });
   });

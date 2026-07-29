@@ -221,6 +221,22 @@ void main() {
         expect(converter.callCount, 3);
       },
     );
+
+    test('observed conversion reports nested individual fallback', () async {
+      final service = DomHtmlTextNodeConversionService();
+      final converter = _BadBatchTextConverter({'正文': '正文T', '尾巴': '尾巴T'});
+      final metrics = <HtmlTextNodeConversionMetrics>[];
+
+      final result = await service.convertAllObserved(
+        htmlFragments: const <String>['<p>正文<span>尾巴</span></p>'],
+        converter: converter,
+        metricsListener: metrics.add,
+      );
+
+      expect(result.single.html, '<p>正文T<span>尾巴T</span></p>');
+      expect(metrics, hasLength(1));
+      expect(metrics.single.usedIndividualFallback, isTrue);
+    });
   });
 }
 

@@ -13,6 +13,8 @@ import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/core/utils/parse_utils.dart';
 
+enum ThreadPostRateReasonOrigin { serverForm, applicationFallback }
+
 class ThreadPostRateForm {
   const ThreadPostRateForm({
     required this.actionUrl,
@@ -26,6 +28,7 @@ class ThreadPostRateForm {
     required this.todayRemaining,
     required this.reasonOptions,
     required this.notifyAuthorDefault,
+    this.reasonOrigin = ThreadPostRateReasonOrigin.serverForm,
   });
 
   final String actionUrl;
@@ -39,6 +42,7 @@ class ThreadPostRateForm {
   final int todayRemaining;
   final List<String> reasonOptions;
   final bool notifyAuthorDefault;
+  final ThreadPostRateReasonOrigin reasonOrigin;
 
   int get defaultScore {
     if (scoreMax > 0) {
@@ -149,6 +153,7 @@ class ThreadPostRateFormFallbackBuilder {
       todayRemaining: 0,
       reasonOptions: defaultReasonOptions,
       notifyAuthorDefault: false,
+      reasonOrigin: ThreadPostRateReasonOrigin.applicationFallback,
     );
   }
 

@@ -14,6 +14,7 @@ import 'package:y300/features/reader_shared/presentation/continuous_image/contin
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
   setUp(() {
@@ -29,7 +30,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: LocalizedTestApp(home: ThreadImageReaderPage(request: _request())),
+        child: LocalizedTestApp(
+          home: ThreadImageReaderPage(request: _request()),
+        ),
       ),
     );
     await tester.pump();
@@ -53,7 +56,9 @@ void main() {
             _RecordingImageCacheService(),
           ),
         ],
-        child: LocalizedTestApp(home: ThreadImageReaderPage(request: _request())),
+        child: LocalizedTestApp(
+          home: ThreadImageReaderPage(request: _request()),
+        ),
       ),
     );
     await tester.pump();
@@ -82,7 +87,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
-        child: LocalizedTestApp(home: ThreadImageReaderPage(request: _request())),
+        child: LocalizedTestApp(
+          home: ThreadImageReaderPage(request: _request()),
+        ),
       ),
     );
     await tester.pump();
@@ -158,7 +165,9 @@ void main() {
           imageCacheServiceProvider.overrideWithValue(cacheService),
           forumImagePrecacheServiceProvider.overrideWithValue(precacheService),
         ],
-        child: LocalizedTestApp(home: ThreadImageReaderPage(request: _request())),
+        child: LocalizedTestApp(
+          home: ThreadImageReaderPage(request: _request()),
+        ),
       ),
     );
     await tester.pump();
@@ -413,7 +422,12 @@ void main() {
         find.byKey(const Key('shared-reader-bottom-action-display')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('RTL'));
+      final l10n = AppLocalizations.of(
+        tester.element(
+          find.byKey(const Key('comic-reader-display-settings-sheet')),
+        ),
+      );
+      await tester.tap(find.text(l10n.readerModeRtl));
       await tester.pump(const Duration(milliseconds: 350));
       Navigator.of(
         tester.element(

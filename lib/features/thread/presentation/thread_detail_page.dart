@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -24,6 +25,9 @@ import 'package:y300/features/history/domain/services/history_visit_recorder.dar
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
@@ -38,6 +42,9 @@ import 'package:y300/features/thread/domain/services/thread_post_body_render_pla
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
+import 'package:y300/features/thread/presentation/thread_content_projection_providers.dart';
+import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
+import 'package:y300/features/thread/presentation/thread_detail_content_projector.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
 import 'package:y300/features/thread/presentation/mappers/thread_history_visit_mapper.dart';
 import 'package:y300/features/thread/presentation/services/thread_history_commit_guard.dart';
@@ -46,6 +53,7 @@ import 'package:y300/features/thread/presentation/services/thread_post_image_dim
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_button.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -131,6 +139,17 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final state =
         asyncState.value ??
         ThreadDetailPageState.initial(tid: widget.tid, subject: widget.subject);
+    final conversionMode = ref.watch(appServerContentConversionModeProvider);
+    final converter = ref.watch(textConverterProvider(conversionMode));
+    final projectionCandidate = ref
+        .watch(threadDetailContentProjectionProvider(args))
+        .value;
+    final projection = _resolveProjection(
+      state,
+      mode: conversionMode,
+      converterId: converter.id,
+      candidate: projectionCandidate,
+    );
     final imageHeaderBuilder = ref.watch(
       imageRequestHeaderBuilderForRefererProvider(_imageRefererFor(state)),
     );
@@ -183,7 +202,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: _ThreadDetailAppBarTitle(
-                state: state,
+                forumName: projection.displayForumName,
                 initialForumName: widget.initialForumName,
               ),
             ),
@@ -262,6 +281,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                         onRefresh: () => controller.refresh(forceNetwork: true),
                         child: ThreadDetailContent(
                           state: state,
+                          projection: projection,
                           scrollController: _scrollController,
                           highlightPostPid: _highlightPostPid,
                           targetPid: widget.targetPid,
@@ -295,11 +315,15 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                           onOpenPostLink: _openForumLink,
                           onOpenPostImages: _openPostImages,
                           onOpenPostActions: (post, plan) {
+                            final postProjection = projection.findByPid(
+                              post.pid,
+                            );
                             _openPostActions(
                               args,
                               state,
                               controller,
                               post,
+                              postProjection?.displayPost ?? post,
                               plan,
                             );
                           },
@@ -578,10 +602,20 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       return;
     }
     final form = (formResult as ApiSuccess<ThreadPostRateForm>).data;
+    final conversionMode = ref.read(appServerContentConversionModeProvider);
+    final converter = ref.read(textConverterProvider(conversionMode));
+    final formProjection = await ThreadPostRateFormProjector(
+      plainTextBatchConversionService: ref.read(
+        plainTextBatchConversionServiceProvider,
+      ),
+    ).project(form, converter: converter);
+    if (!mounted) {
+      return;
+    }
     final result = await showModalBottomSheet<ThreadPostRateDraft>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => ThreadPostRateSheet(form: form),
+      builder: (context) => ThreadPostRateSheet(projection: formProjection),
     );
     if (!mounted || result == null) {
       return;
@@ -763,32 +797,34 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     ThreadDetailArgs args,
     ThreadDetailPageState state,
     ThreadDetailController controller,
-    ThreadPost post,
+    ThreadPost sourcePost,
+    ThreadPost displayPost,
     ThreadPostBodyRenderPlan plan,
   ) async {
     final action = await showModalBottomSheet<_ThreadPostAction>(
       context: context,
       showDragHandle: true,
-      builder: (context) => _ThreadPostActionSheet(post: post),
+      builder: (context) => _ThreadPostActionSheet(post: sourcePost),
     );
     if (!mounted || action == null) {
       return;
     }
     switch (action) {
       case _ThreadPostAction.reply:
-        await _openPostReplyComposer(args, state, post);
+        await _openPostReplyComposer(args, state, sourcePost);
         return;
       case _ThreadPostAction.rate:
-        await _openPostRateSheet(args, controller, post);
+        await _openPostRateSheet(args, controller, sourcePost);
         return;
       case _ThreadPostAction.comment:
-        await _openPostCommentSheet(args, controller, post);
+        await _openPostCommentSheet(args, controller, sourcePost);
         return;
       case _ThreadPostAction.selectCopy:
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
             builder: (_) => ThreadPostHtmlSelectionCopyPage(
-              post: post,
+              post: displayPost,
+              sourcePost: sourcePost,
               threadId: widget.tid,
               imageReferer: _imageRefererFor(state),
               plan: plan,
@@ -801,7 +837,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         );
         return;
       case _ThreadPostAction.copyAll:
-        await _copyPostPlainText(post, plan);
+        await _copyPostPlainText(sourcePost, plan);
         return;
     }
   }
@@ -1027,25 +1063,51 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
+
+  ThreadDetailContentProjection _resolveProjection(
+    ThreadDetailPageState source, {
+    required TextConversionMode mode,
+    required String converterId,
+    required ThreadDetailContentProjection? candidate,
+  }) {
+    final sourceRevision = ThreadDetailContentProjector.sourceRevisionFor(
+      source,
+    );
+    if (candidate != null &&
+        candidate.mode == mode &&
+        candidate.converterId == converterId &&
+        candidate.sourceRevision == sourceRevision) {
+      return candidate.rebaseTransientState(source);
+    }
+    return ThreadDetailContentProjection.raw(
+      source,
+      mode: mode,
+      converterId: converterId,
+      sourceRevision: sourceRevision,
+    );
+  }
 }
 
 class _ThreadDetailAppBarTitle extends StatelessWidget {
-  const _ThreadDetailAppBarTitle({required this.state, this.initialForumName});
+  const _ThreadDetailAppBarTitle({
+    required this.forumName,
+    this.initialForumName,
+  });
 
-  final ThreadDetailPageState state;
+  final String? forumName;
   final String? initialForumName;
 
   @override
   Widget build(BuildContext context) {
-    final parsedForumName = state.forumName?.trim();
+    final parsedForumName = forumName?.trim();
     final fallbackForumName = initialForumName?.trim();
-    final forumName = parsedForumName?.isNotEmpty == true
+    final resolvedForumName = parsedForumName?.isNotEmpty == true
         ? parsedForumName
         : fallbackForumName;
     return Text(
-      forumName == null || forumName.isEmpty
+      resolvedForumName == null || resolvedForumName.isEmpty
           ? AppLocalizations.of(context).threadDetailTitle
-          : forumName,
+          : resolvedForumName,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );

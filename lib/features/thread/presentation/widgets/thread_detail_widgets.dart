@@ -16,10 +16,13 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
+import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/services/thread_html_image_preload_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_viewport_anchor_coordinator.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -46,6 +49,7 @@ class ThreadDetailContent extends StatefulWidget {
   const ThreadDetailContent({
     super.key,
     required this.state,
+    this.projection,
     this.scrollController,
     this.highlightPostPid,
     this.targetPid,
@@ -70,6 +74,7 @@ class ThreadDetailContent extends StatefulWidget {
   });
 
   final ThreadDetailPageState state;
+  final ThreadDetailContentProjection? projection;
   final ScrollController? scrollController;
   final String? highlightPostPid;
   final String? targetPid;
@@ -110,6 +115,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     debugLabel: 'thread-detail-target-center',
   );
   late ThreadDetailScrollStabilizer _scrollStabilizer;
+  late ThreadPostViewportAnchorCoordinator _projectionAnchorCoordinator;
   ThreadHtmlImagePreloadCoordinator? _htmlImagePreloadCoordinator;
   String? _htmlImagePreloadSignature;
   final _imageAspectRatioTracker = _ThreadDetailImageAspectRatioTracker();
@@ -123,12 +129,27 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       viewportKey: _viewportKey,
       onEvent: widget.onScrollStabilizerEvent,
     );
+    _projectionAnchorCoordinator = ThreadPostViewportAnchorCoordinator(
+      scrollController: widget.scrollController,
+      viewportKey: _viewportKey,
+    );
     widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
   }
 
   @override
   void didUpdateWidget(covariant ThreadDetailContent oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final oldProjection = oldWidget.projection;
+    final newProjection = widget.projection;
+    final shouldRestoreProjectionAnchor =
+        oldProjection != null &&
+        newProjection != null &&
+        identical(oldWidget.scrollController, widget.scrollController) &&
+        oldProjection.sourceRevision == newProjection.sourceRevision &&
+        oldProjection.displayIdentity != newProjection.displayIdentity;
+    final projectionAnchor = shouldRestoreProjectionAnchor
+        ? _projectionAnchorCoordinator.capture(_sourcePidsFor(oldWidget))
+        : null;
     if (!identical(oldWidget.imageDimensionStore, widget.imageDimensionStore)) {
       oldWidget.imageDimensionStore?.removeListener(_onImageDimensionsChanged);
       widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
@@ -147,6 +168,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         viewportKey: _viewportKey,
         onEvent: widget.onScrollStabilizerEvent,
       );
+      _projectionAnchorCoordinator.updateScrollController(
+        widget.scrollController,
+      );
     }
     if (!identical(
       oldWidget.htmlImagePrecacheService,
@@ -156,9 +180,13 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     }
     if (!identical(oldWidget.state.posts, widget.state.posts) ||
         oldWidget.state.currentPage != widget.state.currentPage) {
-      _entryPlanner.prune(widget.state.posts);
       _resetHtmlImagePreload();
     }
+    if (!identical(oldWidget.projection?.posts, widget.projection?.posts) ||
+        !identical(oldWidget.state.posts, widget.state.posts)) {
+      _entryPlanner.prune(_displayPosts);
+    }
+    _projectionAnchorCoordinator.restoreAfterFrame(projectionAnchor);
   }
 
   @override
@@ -166,6 +194,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     widget.imageDimensionStore?.removeListener(_onImageDimensionsChanged);
     _htmlImagePreloadCoordinator?.dispose();
     _scrollStabilizer.dispose();
+    _projectionAnchorCoordinator.dispose();
     super.dispose();
   }
 
@@ -195,9 +224,12 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   @override
   Widget build(BuildContext context) {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
-    final entries = _entryPlanner.buildEntries(
-      posts: widget.state.posts,
+    final entries = _entryPlanner.buildProjectionEntries(
+      posts: _postProjections,
       targetPid: widget.targetPid,
+    );
+    _projectionAnchorCoordinator.prune(
+      _postProjections.map((post) => post.sourcePost.pid),
     );
     _imageAspectRatioTracker.resetFor(_imageAspectRatioSignature());
     _scheduleHtmlImageFirstWindowPreload(context);
@@ -207,7 +239,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         : entries.indexWhere(
             (entry) =>
                 entry.kind == ThreadDetailRenderEntryKind.postCard &&
-                entry.post?.pid == targetPid,
+                entry.sourcePost?.pid == targetPid,
           );
     if (targetEntryIndex >= 0) {
       return _buildTargetAnchoredList(
@@ -237,6 +269,34 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         },
       ),
     );
+  }
+
+  List<ThreadDetailPostProjection> get _postProjections {
+    final projected = widget.projection?.posts;
+    if (projected != null) {
+      return projected;
+    }
+    return [
+      for (final post in widget.state.posts)
+        ThreadDetailPostProjection(sourcePost: post, displayPost: post),
+    ];
+  }
+
+  List<ThreadPost> get _displayPosts => [
+    for (final post in _postProjections) post.displayPost,
+  ];
+
+  Iterable<String> _sourcePidsFor(ThreadDetailContent target) sync* {
+    final projections = target.projection?.posts;
+    if (projections != null) {
+      for (final projection in projections) {
+        yield projection.sourcePost.pid;
+      }
+      return;
+    }
+    for (final post in target.state.posts) {
+      yield post.pid;
+    }
   }
 
   Widget _buildTargetAnchoredList({
@@ -398,41 +458,53 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   }) {
     switch (entry.kind) {
       case ThreadDetailRenderEntryKind.postCard:
-        return _ThreadPostCardEntry(
-          key: Key(entry.key),
-          post: entry.post!,
-          postIndex: entry.postIndex,
-          state: widget.state,
-          plan: entry.requirePlan(),
-          highlighted: entry.post!.pid == widget.highlightPostPid,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
-          imageReferer: widget.imageReferer,
-          palette: palette,
-          onOpenAuthorProfile: widget.onOpenAuthorProfile,
-          onOpenPostLink: widget.onOpenPostLink,
-          onOpenPostImages: widget.onOpenPostImages,
-          onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
-          onHtmlFirstImageLayoutShift: stabilizeImageLayout
-              ? _scrollStabilizer.handleLayoutShift
-              : _ignoreImageLayoutShift,
-          onHtmlFirstImageFallbackAspectRatio:
-              _fallbackAspectRatioForBlockImage,
-          onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
-          onOpenPostActions: widget.onOpenPostActions,
-          onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
-          onTogglePollOption: widget.onTogglePollOption,
-          onSubmitPollVote: widget.onSubmitPollVote,
-          onLoadAllRatings: widget.onLoadAllRatings ?? _ignoreRatingLoad,
-          onPostBuilt: _handlePostBuilt,
+        return KeyedSubtree(
+          key: _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
+          child: _ThreadPostCardEntry(
+            key: Key(entry.key),
+            sourcePost: entry.sourcePost!,
+            displayPost: entry.displayPost!,
+            displaySubject:
+                widget.projection?.displaySubject ?? widget.state.subject,
+            displayRatingsByPostId:
+                widget.projection?.displayRatingsByPostId ??
+                widget.state.ratingsByPostId,
+            postIndex: entry.postIndex,
+            state: widget.state,
+            plan: entry.requirePlan(),
+            highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
+            imageHeaderBuilder: widget.imageHeaderBuilder,
+            imageReferer: widget.imageReferer,
+            palette: palette,
+            onOpenAuthorProfile: widget.onOpenAuthorProfile,
+            onOpenPostLink: widget.onOpenPostLink,
+            onOpenPostImages: widget.onOpenPostImages,
+            onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
+            onHtmlFirstImageLayoutShift: stabilizeImageLayout
+                ? _scrollStabilizer.handleLayoutShift
+                : _ignoreImageLayoutShift,
+            onHtmlFirstImageFallbackAspectRatio:
+                _fallbackAspectRatioForBlockImage,
+            onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
+            onOpenPostActions: widget.onOpenPostActions,
+            onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
+            onTogglePollOption: widget.onTogglePollOption,
+            onSubmitPollVote: widget.onSubmitPollVote,
+            onLoadAllRatings: widget.onLoadAllRatings ?? _ignoreRatingLoad,
+            onPostBuilt: _handlePostBuilt,
+          ),
         );
       case ThreadDetailRenderEntryKind.postHeader:
-        final plan = _entryPlanner.planFor(entry.post!);
+        final plan = _entryPlanner.planFor(entry.displayPost!);
         final header = _ThreadPostCardHeaderEntry(
           key: Key(entry.key),
-          post: entry.post!,
+          sourcePost: entry.sourcePost!,
+          displayPost: entry.displayPost!,
+          displaySubject:
+              widget.projection?.displaySubject ?? widget.state.subject,
           state: widget.state,
           plan: plan,
-          highlighted: entry.post!.pid == widget.highlightPostPid,
+          highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
           palette: palette,
           imageHeaderBuilder: widget.imageHeaderBuilder,
           onOpenAuthorProfile: widget.onOpenAuthorProfile,
@@ -447,10 +519,11 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         final plan = entry.requirePlan();
         return _ThreadPostCardBodyEntry(
           key: Key(entry.key),
-          post: entry.post!,
+          sourcePost: entry.sourcePost!,
+          displayPost: entry.displayPost!,
           threadId: widget.state.tid,
           plan: plan,
-          highlighted: entry.post!.pid == widget.highlightPostPid,
+          highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
           imageHeaderBuilder: widget.imageHeaderBuilder,
           imageReferer: widget.imageReferer,
           palette: palette,
@@ -466,13 +539,17 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenPostActions: widget.onOpenPostActions,
         );
       case ThreadDetailRenderEntryKind.postFooter:
-        final plan = _entryPlanner.planFor(entry.post!);
+        final plan = _entryPlanner.planFor(entry.displayPost!);
         return _ThreadPostCardFooterEntry(
           key: Key(entry.key),
-          post: entry.post!,
+          sourcePost: entry.sourcePost!,
+          displayPost: entry.displayPost!,
+          displayRatingsByPostId:
+              widget.projection?.displayRatingsByPostId ??
+              widget.state.ratingsByPostId,
           state: widget.state,
           plan: plan,
-          highlighted: entry.post!.pid == widget.highlightPostPid,
+          highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
           imageHeaderBuilder: widget.imageHeaderBuilder,
           onOpenPostActions: widget.onOpenPostActions,
           onOpenPostLink: widget.onOpenPostLink,

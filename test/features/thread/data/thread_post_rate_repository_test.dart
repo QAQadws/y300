@@ -46,6 +46,7 @@ void main() {
         '精品文章',
         '原创内容',
       ]);
+      expect(form.reasonOrigin, ThreadPostRateReasonOrigin.serverForm);
       expect(form.notifyAuthorDefault, isFalse);
     });
 
@@ -101,6 +102,7 @@ void main() {
         form.reasonOptions,
         ThreadPostRateFormFallbackBuilder.defaultReasonOptions,
       );
+      expect(form.reasonOrigin, ThreadPostRateReasonOrigin.applicationFallback);
     });
 
     test('does not build fallback without formhash', () {
