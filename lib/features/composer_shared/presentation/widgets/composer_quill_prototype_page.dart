@@ -206,7 +206,6 @@ class _ComposerQuillPrototypePageState
     }
     return showModalBottomSheet<StickerItem>(
       context: context,
-      showDragHandle: true,
       builder: (_) => _SourceStickerPicker(stickers: stickers),
     );
   }

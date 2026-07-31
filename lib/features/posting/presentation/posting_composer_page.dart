@@ -413,7 +413,6 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     final provider = postingComposerControllerProvider(widget.args);
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetContext) {
         return Consumer(

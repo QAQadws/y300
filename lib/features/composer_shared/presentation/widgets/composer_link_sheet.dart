@@ -14,7 +14,6 @@ Future<ComposerLinkDraft?> showComposerLinkSheet({
 }) {
   return showModalBottomSheet<ComposerLinkDraft>(
     context: context,
-    showDragHandle: true,
     isScrollControlled: true,
     builder: (_) => _ComposerLinkSheet(keyPrefix: keyPrefix),
   );

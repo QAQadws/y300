@@ -127,30 +127,6 @@ abstract class AppLocalizations {
   /// **'语言设置保存失败：{error}'**
   String appLanguageSaveFailed(String error);
 
-  /// No description provided for @appLanguageSystemContentDescription.
-  ///
-  /// In zh, this message translates to:
-  /// **'界面语言跟随设备，服务器内容保持原文'**
-  String get appLanguageSystemContentDescription;
-
-  /// No description provided for @appLanguageSimplifiedContentDescription.
-  ///
-  /// In zh, this message translates to:
-  /// **'界面使用简体，原生解析内容转换为简体'**
-  String get appLanguageSimplifiedContentDescription;
-
-  /// No description provided for @appLanguageTraditionalContentDescription.
-  ///
-  /// In zh, this message translates to:
-  /// **'界面使用繁体，原生解析内容转换为繁体'**
-  String get appLanguageTraditionalContentDescription;
-
-  /// No description provided for @appLanguageContentNote.
-  ///
-  /// In zh, this message translates to:
-  /// **'用户名和网页模式内容保持原样'**
-  String get appLanguageContentNote;
-
   /// No description provided for @commonCancel.
   ///
   /// In zh, this message translates to:

@@ -209,7 +209,6 @@ class _ForumHtmlRendererPrototypePageState
   void _openReaderSettings() {
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: false,
       builder: (context) => const ForumHtmlReaderSettingsSheet(),
     );
   }

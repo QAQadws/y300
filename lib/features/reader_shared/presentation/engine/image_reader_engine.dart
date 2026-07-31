@@ -2125,7 +2125,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final controller = ref.read(readerPreferencesControllerProvider.notifier);
     await showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
       isScrollControlled: true,
       builder: (context) => ReaderDisplaySettingsSheet(
         preferences: preferences,
@@ -2148,7 +2147,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         ReaderPreferences.defaults().readerMode;
     final selected = await showModalBottomSheet<ReaderModePreference>(
       context: context,
-      showDragHandle: true,
       builder: (context) => ReaderModeSheet(currentMode: currentMode),
     );
     if (selected == null || !mounted) {

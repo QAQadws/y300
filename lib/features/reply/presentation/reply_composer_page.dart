@@ -347,7 +347,6 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     final provider = replyComposerControllerProvider(widget.args);
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
       builder: (sheetContext) {
         return Consumer(
           builder: (context, ref, _) {

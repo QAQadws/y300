@@ -389,6 +389,7 @@ void _expectComponentThemesMatchScheme(ThemeData theme) {
   expect(theme.popupMenuTheme.textStyle?.color, scheme.onSurface);
   expect(theme.bottomSheetTheme.backgroundColor, scheme.surfaceContainer);
   expect(theme.bottomSheetTheme.modalBackgroundColor, scheme.surfaceContainer);
+  expect(theme.bottomSheetTheme.showDragHandle, isFalse);
   expect(theme.dialogTheme.backgroundColor, scheme.surfaceContainer);
   expect(theme.snackBarTheme.backgroundColor, scheme.inverseSurface);
   expect(

@@ -361,7 +361,11 @@ void main() {
 
     expect(find.byKey(const Key('appearance-settings-sheet')), findsOneWidget);
     expect(find.text('更多'), findsOneWidget);
-    expect(find.text('外观与文字'), findsWidgets);
+    expect(find.text('外观与文字'), findsOneWidget);
+    expect(
+      find.byKey(const Key('appearance-settings-close-button')),
+      findsNothing,
+    );
     expect(
       find.byKey(const Key('appearance-theme-segmented-button')),
       findsNothing,
@@ -396,7 +400,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.tap(find.byKey(const Key('appearance-settings-close-button')));
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('appearance-settings-sheet')), findsNothing);
@@ -446,10 +450,14 @@ void main() {
     );
     expect(
       find.byKey(const Key('appearance-language-behavior-description')),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.text('界面语言跟随设备，服务器内容保持原文'), findsOneWidget);
-    expect(find.text('用户名和网页模式内容保持原样'), findsOneWidget);
+    expect(
+      find.byKey(const Key('appearance-language-content-note')),
+      findsNothing,
+    );
+    expect(find.text('界面语言跟随设备，服务器内容保持原文'), findsNothing);
+    expect(find.text('用户名和网页模式内容保持原样'), findsNothing);
 
     await tester.tap(
       find.byKey(const Key('appearance-language-option-traditionalChinese')),
@@ -468,7 +476,7 @@ void main() {
       find.byKey(const Key('appearance-language-selected-system')),
       findsNothing,
     );
-    expect(find.text('界面使用繁体，原生解析内容转换为繁体'), findsOneWidget);
+    expect(find.text('界面使用繁体，原生解析内容转换为繁体'), findsNothing);
   });
 
   testWidgets('Appearance settings drawer shows snackbar when save fails', (

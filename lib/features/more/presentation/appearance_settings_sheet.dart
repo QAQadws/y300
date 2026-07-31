@@ -21,27 +21,8 @@ class AppearanceSettingsSheet extends ConsumerWidget {
       child: ListView(
         key: const Key('appearance-settings-sheet'),
         shrinkWrap: true,
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l10n.moreAppearance,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              IconButton(
-                key: const Key('appearance-settings-close-button'),
-                tooltip: l10n.commonClose,
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
           Text(
             l10n.moreThemeSectionTitle,
             style: theme.textTheme.titleSmall?.copyWith(
@@ -86,22 +67,6 @@ class AppearanceSettingsSheet extends ConsumerWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            _languageDescription(l10n, settings.languagePreference),
-            key: const Key('appearance-language-behavior-description'),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            l10n.appLanguageContentNote,
-            key: const Key('appearance-language-content-note'),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
         ],
       ),
     );
@@ -112,16 +77,6 @@ class AppearanceSettingsSheet extends ConsumerWidget {
       AppLanguage.system => l10n.appLanguageSystem,
       AppLanguage.simplifiedChinese => l10n.appLanguageSimplifiedChinese,
       AppLanguage.traditionalChinese => l10n.appLanguageTraditionalChinese,
-    };
-  }
-
-  String _languageDescription(AppLocalizations l10n, AppLanguage language) {
-    return switch (language) {
-      AppLanguage.system => l10n.appLanguageSystemContentDescription,
-      AppLanguage.simplifiedChinese =>
-        l10n.appLanguageSimplifiedContentDescription,
-      AppLanguage.traditionalChinese =>
-        l10n.appLanguageTraditionalContentDescription,
     };
   }
 

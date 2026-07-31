@@ -294,7 +294,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     final l10n = AppLocalizations.of(context);
     final action = await showModalBottomSheet<_ComicReaderMoreAction>(
       context: context,
-      showDragHandle: true,
       builder: (context) => ReaderActionSheet<_ComicReaderMoreAction>(
         title: l10n.comicMoreActions,
         items: [
@@ -327,7 +326,6 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     final l10n = AppLocalizations.of(context);
     final selected = await showModalBottomSheet<ComicReaderChapterEntry>(
       context: context,
-      showDragHandle: true,
       builder: (context) => SafeArea(
         child: ListView(
           shrinkWrap: true,

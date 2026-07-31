@@ -157,7 +157,6 @@ class ComposerBbCodeToolbar extends StatelessWidget {
   Future<void> _showSizeSheet(BuildContext context) async {
     final size = await showModalBottomSheet<int>(
       context: context,
-      showDragHandle: true,
       builder: (_) => _SizeSheet(keyPrefix: keyPrefix),
     );
     if (size == null) {
@@ -171,7 +170,6 @@ class ComposerBbCodeToolbar extends StatelessWidget {
   Future<void> _showAlignSheet(BuildContext context) async {
     final align = await showModalBottomSheet<String>(
       context: context,
-      showDragHandle: true,
       builder: (_) => _AlignSheet(keyPrefix: keyPrefix),
     );
     if (align == null) {

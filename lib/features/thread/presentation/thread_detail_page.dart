@@ -740,7 +740,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     unawaited(
       showModalBottomSheet<void>(
         context: context,
-        showDragHandle: true,
         builder: (context) => const ForumHtmlReaderSettingsSheet(
           key: Key('thread-detail-display-settings-sheet'),
           showAuthorStyleControls: false,
@@ -806,7 +805,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   ) async {
     final action = await showModalBottomSheet<_ThreadPostAction>(
       context: context,
-      showDragHandle: true,
       builder: (context) => _ThreadPostActionSheet(post: sourcePost),
     );
     if (!mounted || action == null) {

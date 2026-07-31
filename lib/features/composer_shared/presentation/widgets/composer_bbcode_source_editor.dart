@@ -99,7 +99,6 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
   Future<void> _pickSticker(BuildContext context) async {
     final sticker = await showModalBottomSheet<StickerItem>(
       context: context,
-      showDragHandle: true,
       builder: (_) => const StickerPickerSheet(),
     );
     if (sticker != null) {

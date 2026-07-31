@@ -13,13 +13,5 @@ void main() {
     expect(traditional.appLanguageSectionTitle, '介面語言');
     expect(simplified.appLanguageTraditionalChinese, '繁体中文');
     expect(traditional.appLanguageTraditionalChinese, '繁體中文');
-    expect(
-      simplified.appLanguageSystemContentDescription,
-      '界面语言跟随设备，服务器内容保持原文',
-    );
-    expect(
-      traditional.appLanguageTraditionalContentDescription,
-      '介面使用繁體，原生解析內容轉換為繁體',
-    );
   });
 }

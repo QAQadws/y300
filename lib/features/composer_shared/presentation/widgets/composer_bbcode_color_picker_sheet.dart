@@ -97,7 +97,6 @@ Future<String?> showComposerBbCodeColorPickerSheet({
 }) {
   return showModalBottomSheet<String>(
     context: context,
-    showDragHandle: true,
     isScrollControlled: true,
     builder: (_) => ComposerBbCodeColorPickerSheet(
       keyPrefix: keyPrefix,

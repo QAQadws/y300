@@ -1163,7 +1163,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     await _runWithReaderSemanticsSuspended(() async {
       final selected = await showModalBottomSheet<NovelEpisodeItem>(
         context: context,
-        showDragHandle: true,
         builder: (context) => Consumer(
           builder: (context, ref, _) {
             final latest =
@@ -1199,7 +1198,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     await _runWithReaderSemanticsSuspended(() async {
       await showModalBottomSheet<void>(
         context: context,
-        showDragHandle: true,
         constraints: BoxConstraints(maxHeight: maxSheetHeight),
         builder: (context) => NovelReaderDisplaySettingsSheet(
           initialPreferences: viewState.preferences,

@@ -26,11 +26,6 @@
       }
     }
   },
-  "appLanguageSystemContentDescription": "界面语言跟随设备，服务器内容保持原文",
-  "appLanguageSimplifiedContentDescription": "界面使用简体，原生解析内容转换为简体",
-  "appLanguageTraditionalContentDescription": "界面使用繁体，原生解析内容转换为繁体",
-  "appLanguageContentNote": "用户名和网页模式内容保持原样",
-
   "commonCancel": "取消",
   "commonConfirm": "确定",
   "commonClose": "关闭",
