@@ -68,9 +68,6 @@ final class ShelfThemePaletteResolver {
     required Color background,
     required double alpha,
   }) {
-    return Color.alphaBlend(
-      foreground.withValues(alpha: alpha),
-      background,
-    );
+    return Color.alphaBlend(foreground.withValues(alpha: alpha), background);
   }
 }

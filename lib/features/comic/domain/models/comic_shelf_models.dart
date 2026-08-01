@@ -1,4 +1,4 @@
-﻿class ComicShelfItem {
+class ComicShelfItem {
   const ComicShelfItem({
     required this.comicId,
     this.sourceTypeId,
@@ -26,10 +26,12 @@
   final String comicId;
   final String? sourceTypeId;
   final String? sourceTagName;
+
   /// 最终展示标题。自定义标题由仓储提前合成到这里。
   final String title;
   final String? sourceTitle;
   final String? customTitle;
+
   /// 最终展示作者。自定义作者由仓储提前合成到这里。
   final String? author;
   final String? sourceAuthor;
@@ -67,9 +69,7 @@ class ComicShelfCategory {
 }
 
 class ComicShelfDisplaySettings {
-  const ComicShelfDisplaySettings({
-    required this.gridColumnCount,
-  });
+  const ComicShelfDisplaySettings({required this.gridColumnCount});
 
   final int gridColumnCount;
 
@@ -77,4 +77,3 @@ class ComicShelfDisplaySettings {
     gridColumnCount: 3,
   );
 }
-

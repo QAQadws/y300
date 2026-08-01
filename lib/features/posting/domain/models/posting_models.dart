@@ -19,10 +19,7 @@ enum NewThreadSpecial {
 }
 
 class ThreadType {
-  const ThreadType({
-    required this.id,
-    required this.name,
-  });
+  const ThreadType({required this.id, required this.name});
 
   /// `typeid`，对应 forumdisplay.threadtypes.types map 中的 key。
   final String id;
@@ -41,10 +38,7 @@ class ThreadType {
 }
 
 class ThreadSort {
-  const ThreadSort({
-    required this.id,
-    required this.name,
-  });
+  const ThreadSort({required this.id, required this.name});
 
   final String id;
   final String name;
@@ -160,13 +154,13 @@ class NewThreadPollDraft {
 
   @override
   int get hashCode => Object.hash(
-        Object.hashAll(options),
-        multiple,
-        maxChoices,
-        expirationDays,
-        overt,
-        visibilityPoll,
-      );
+    Object.hashAll(options),
+    multiple,
+    maxChoices,
+    expirationDays,
+    overt,
+    visibilityPoll,
+  );
 }
 
 /// 投票领域校验阈值。集中放在值对象上，让 state.canSubmit 与

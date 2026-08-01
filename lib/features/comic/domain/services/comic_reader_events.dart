@@ -40,7 +40,8 @@ class ComicReaderEventLogger {
         if (source != null) 'source=${source.name}',
         if (pageIndex != null) 'pageIndex=$pageIndex',
         if (totalPages != null) 'totalPages=$totalPages',
-        if (scrollOffset != null) 'scrollOffset=${scrollOffset.toStringAsFixed(1)}',
+        if (scrollOffset != null)
+          'scrollOffset=${scrollOffset.toStringAsFixed(1)}',
         if (elapsedMs != null) 'elapsedMs=$elapsedMs',
         if (sinceOpenMs != null) 'sinceOpenMs=$sinceOpenMs',
         for (final entry in extra.entries)

@@ -6,7 +6,9 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_page_indi
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 
 void main() {
-  testWidgets('page indicator renders current page and total pages', (tester) async {
+  testWidgets('page indicator renders current page and total pages', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const LocalizedTestApp(
         home: Scaffold(
@@ -19,7 +21,10 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const Key('comic-reader-page-indicator-overlay')), findsOneWidget);
+    expect(
+      find.byKey(const Key('comic-reader-page-indicator-overlay')),
+      findsOneWidget,
+    );
     expect(find.text('3 / 12'), findsOneWidget);
   });
 

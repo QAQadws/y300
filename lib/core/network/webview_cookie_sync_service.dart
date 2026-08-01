@@ -21,7 +21,7 @@ abstract class WebViewCookieJar {
 /// 会向平台通道要 manager——把实例化推迟到首次使用。
 class InAppWebViewCookieJar implements WebViewCookieJar {
   InAppWebViewCookieJar({inapp.CookieManager? cookieManager})
-      : _explicitCookieManager = cookieManager;
+    : _explicitCookieManager = cookieManager;
 
   final inapp.CookieManager? _explicitCookieManager;
   inapp.CookieManager? _cachedCookieManager;

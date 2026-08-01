@@ -23,10 +23,7 @@ void main() {
       final result = await client.postDiscuzForm(
         module: 'login',
         queryParameters: const <String, String>{'action': 'login'},
-        data: const <String, String>{
-          'formhash': 'abc',
-          'loginsubmit': '1',
-        },
+        data: const <String, String>{'formhash': 'abc', 'loginsubmit': '1'},
       );
 
       expect(result.isSuccess, isTrue);
@@ -87,13 +84,11 @@ class _PostFormTestAdapter implements HttpClientAdapter {
     );
 
     return ResponseBody.fromString(
-      jsonEncode(
-        <String, dynamic>{
-          'Version': '4',
-          'Charset': 'UTF-8',
-          'Variables': <String, dynamic>{'formhash': 'after'},
-        },
-      ),
+      jsonEncode(<String, dynamic>{
+        'Version': '4',
+        'Charset': 'UTF-8',
+        'Variables': <String, dynamic>{'formhash': 'after'},
+      }),
       200,
       headers: const <String, List<String>>{
         'set-cookie': <String>['auth=token123; Path=/; HttpOnly'],
@@ -101,4 +96,3 @@ class _PostFormTestAdapter implements HttpClientAdapter {
     );
   }
 }
-

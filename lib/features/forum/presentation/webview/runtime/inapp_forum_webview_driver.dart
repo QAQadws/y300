@@ -193,11 +193,7 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
     required Map<String, String> cookies,
     String path = '/',
   }) async {
-    final cookieUri = Uri(
-      scheme: 'https',
-      host: domain,
-      path: path,
-    );
+    final cookieUri = Uri(scheme: 'https', host: domain, path: path);
     final webUri = inapp.WebUri(cookieUri.toString());
     for (final entry in cookies.entries) {
       await _cookieManager.setCookie(
@@ -258,9 +254,7 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
     );
   }
 
-  inapp.UserScript _mapInitialUserScript(
-    ForumWebViewInitialUserScript script,
-  ) {
+  inapp.UserScript _mapInitialUserScript(ForumWebViewInitialUserScript script) {
     return inapp.UserScript(
       source: script.source,
       injectionTime: switch (script.injectionTime) {

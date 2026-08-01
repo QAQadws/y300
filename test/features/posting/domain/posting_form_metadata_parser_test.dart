@@ -12,10 +12,7 @@ void main() {
         'forum': <String, dynamic>{'name': '随便聊聊'},
         'threadtypes': <String, dynamic>{
           'required': '1',
-          'types': <String, dynamic>{
-            '101': '杂谈',
-            '102': '资源',
-          },
+          'types': <String, dynamic>{'101': '杂谈', '102': '资源'},
         },
       },
     );
@@ -72,9 +69,7 @@ void main() {
         'forum': <String, dynamic>{'name': '随便聊聊'},
         'threadsorts': <String, dynamic>{
           'required': '1',
-          'types': <String, dynamic>{
-            '301': '日常',
-          },
+          'types': <String, dynamic>{'301': '日常'},
         },
       },
     );

@@ -28,10 +28,7 @@ class ForumHomeChromeParser {
         continue;
       }
       items.add(
-        ForumHomeCarouselItem(
-          imageUrl: imageUrl,
-          targetUrl: targetUrl,
-        ),
+        ForumHomeCarouselItem(imageUrl: imageUrl, targetUrl: targetUrl),
       );
     }
     return ForumHomeChromeData(
@@ -42,7 +39,9 @@ class ForumHomeChromeParser {
     );
   }
 
-  List<ForumHomeChromeForumItem> _parseFavoriteForums(html_dom.Document document) {
+  List<ForumHomeChromeForumItem> _parseFavoriteForums(
+    html_dom.Document document,
+  ) {
     final favoriteSection = document.querySelector('#sub-forum-myfav');
     if (favoriteSection == null) {
       return const <ForumHomeChromeForumItem>[];

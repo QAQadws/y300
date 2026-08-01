@@ -65,7 +65,9 @@ void main() {
             _testStickerImageLoader(),
           ),
         ],
-        child: const LocalizedTestApp(home: Scaffold(body: StickerPickerSheet())),
+        child: const LocalizedTestApp(
+          home: Scaffold(body: StickerPickerSheet()),
+        ),
       ),
     );
     await tester.pumpAndSettle();

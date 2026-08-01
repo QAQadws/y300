@@ -178,8 +178,12 @@ final class ComicTitleNumberParser {
   }
 
   bool _containsOnlyChineseNumberChars(String input) {
-    return input.split('').every(
-      (char) => _chineseDigits.containsKey(char) || _chineseUnits.containsKey(char),
-    );
+    return input
+        .split('')
+        .every(
+          (char) =>
+              _chineseDigits.containsKey(char) ||
+              _chineseUnits.containsKey(char),
+        );
   }
 }

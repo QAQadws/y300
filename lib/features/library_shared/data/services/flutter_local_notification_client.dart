@@ -17,10 +17,10 @@ class FlutterLocalNotificationClient implements LibraryTaskNotificationClient {
     String channelName = FlutterLocalLibraryTaskNotificationService.channelName,
     String channelDescription =
         FlutterLocalLibraryTaskNotificationService.channelDescription,
-  })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
-        _channelId = channelId,
-        _channelName = channelName,
-        _channelDescription = channelDescription;
+  }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
+       _channelId = channelId,
+       _channelName = channelName,
+       _channelDescription = channelDescription;
 
   final FlutterLocalNotificationsPlugin _plugin;
   final String _channelId;
@@ -30,7 +30,9 @@ class FlutterLocalNotificationClient implements LibraryTaskNotificationClient {
 
   @override
   Future<void> initialize() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     // iOS permission is requested explicitly later via [requestPermission] so
     // initialization stays quiet on first launch.
     const darwinSettings = DarwinInitializationSettings(
@@ -53,8 +55,10 @@ class FlutterLocalNotificationClient implements LibraryTaskNotificationClient {
         defaultTargetPlatform != TargetPlatform.android) {
       return;
     }
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android == null) {
       return;
     }
@@ -85,7 +89,7 @@ class FlutterLocalNotificationClient implements LibraryTaskNotificationClient {
   }
 
   Future<LibraryTaskNotificationPermissionState>
-      _requestAndroidPermission() async {
+  _requestAndroidPermission() async {
     // POST_NOTIFICATIONS only gates Android 13+; older versions report granted.
     final status = await Permission.notification.request();
     if (status.isGranted) {
@@ -98,9 +102,11 @@ class FlutterLocalNotificationClient implements LibraryTaskNotificationClient {
   }
 
   Future<LibraryTaskNotificationPermissionState>
-      _requestDarwinPermission() async {
-    final ios = _plugin.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
+  _requestDarwinPermission() async {
+    final ios = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
     final granted = await ios?.requestPermissions(
       alert: true,
       badge: false,

@@ -6,20 +6,24 @@ import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
 void main() {
-  testWidgets('FixedSlotPagerHeader paints an opaque surface background', (tester) async {
+  testWidgets('FixedSlotPagerHeader paints an opaque surface background', (
+    tester,
+  ) async {
     final pageController = PageController();
     addTearDown(pageController.dispose);
     const surface = Color(0xFF102030);
 
     await tester.pumpWidget(
       LocalizedTestApp(
-        theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue).copyWith(surface: surface)),
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.blue,
+          ).copyWith(surface: surface),
+        ),
         home: Scaffold(
           body: FixedSlotPagerHeader(
             pageController: pageController,
-            tabs: const [
-              FixedSlotHeaderTab(id: 'a', label: 'A'),
-            ],
+            tabs: const [FixedSlotHeaderTab(id: 'a', label: 'A')],
             selectedIndex: 0,
             onTap: (_) {},
             indicatorKey: const Key('fixed-header-indicator'),
@@ -40,7 +44,9 @@ void main() {
     expect(material.color, surface);
   });
 
-  testWidgets('FixedSlotPagerHeader uses shelf palette from app theme', (tester) async {
+  testWidgets('FixedSlotPagerHeader uses shelf palette from app theme', (
+    tester,
+  ) async {
     final pageController = PageController();
     addTearDown(pageController.dispose);
     final theme = AppTheme.dark();
@@ -85,7 +91,9 @@ void main() {
     expect(decoration.color, palette.categorySelectedBackground);
   });
 
-  testWidgets('FixedSlotPagerHeader uses fixed quarter width slots', (tester) async {
+  testWidgets('FixedSlotPagerHeader uses fixed quarter width slots', (
+    tester,
+  ) async {
     final pageController = PageController();
     addTearDown(pageController.dispose);
 
@@ -112,13 +120,19 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    final aSize = tester.getSize(find.byKey(const ValueKey<String>('fixed-header-tab-a')));
-    final bSize = tester.getSize(find.byKey(const ValueKey<String>('fixed-header-tab-b')));
+    final aSize = tester.getSize(
+      find.byKey(const ValueKey<String>('fixed-header-tab-a')),
+    );
+    final bSize = tester.getSize(
+      find.byKey(const ValueKey<String>('fixed-header-tab-b')),
+    );
     expect(aSize.width, closeTo(100, 0.5));
     expect(bSize.width, closeTo(100, 0.5));
   });
 
-  testWidgets('FixedSlotPagerHeader keeps over-four tabs scrollable', (tester) async {
+  testWidgets('FixedSlotPagerHeader keeps over-four tabs scrollable', (
+    tester,
+  ) async {
     final pageController = PageController();
     addTearDown(pageController.dispose);
 

@@ -11,9 +11,10 @@ extension NovelRichBlockText on RichBlock {
     final block = this;
     if (block is RichTextBlock) {
       return block.runs
-          .map((run) => run.inlineImage != null && run.text.isEmpty
-              ? ''
-              : run.text)
+          .map(
+            (run) =>
+                run.inlineImage != null && run.text.isEmpty ? '' : run.text,
+          )
           .join();
     }
     if (block is RichQuoteBlock) {

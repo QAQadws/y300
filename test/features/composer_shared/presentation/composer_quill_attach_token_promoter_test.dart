@@ -58,9 +58,7 @@ void main() {
   });
 
   test('promotes every token in one delta', () {
-    final document = documentWithText(
-      '[attach]1[/attach]和[attach]22[/attach]',
-    );
+    final document = documentWithText('[attach]1[/attach]和[attach]22[/attach]');
 
     final promoted = applyPromotion(document);
 
@@ -80,10 +78,9 @@ void main() {
 
     final promoted = applyPromotion(document);
 
-    final embedOperation = promoted
-        .toDelta()
-        .toList()
-        .firstWhere((operation) => operation.data is Map);
+    final embedOperation = promoted.toDelta().toList().firstWhere(
+      (operation) => operation.data is Map,
+    );
     expect(embedOperation.attributes, <String, dynamic>{
       Attribute.bold.key: true,
     });

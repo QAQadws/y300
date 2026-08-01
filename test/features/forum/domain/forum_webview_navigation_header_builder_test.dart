@@ -50,20 +50,21 @@ void main() {
     expect(headers['Accept-Language'], 'zh-CN,zh;q=0.9,en;q=0.8');
   });
 
-  test('builder honors explicit accept-language when app locale preference is disabled', () {
-    final builder = DefaultForumWebViewNavigationHeaderBuilder(
-      localeReader: () => const Locale('ja', 'JP'),
-    );
-    final headers = builder.build(
-      targetUri: Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
-      policy: const ForumWebViewNetworkPolicy(
-        preferAppLocale: false,
-        extraHeaders: <String, String>{
-          'accept-language': 'en-US,en;q=0.8',
-        },
-      ),
-    );
+  test(
+    'builder honors explicit accept-language when app locale preference is disabled',
+    () {
+      final builder = DefaultForumWebViewNavigationHeaderBuilder(
+        localeReader: () => const Locale('ja', 'JP'),
+      );
+      final headers = builder.build(
+        targetUri: Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+        policy: const ForumWebViewNetworkPolicy(
+          preferAppLocale: false,
+          extraHeaders: <String, String>{'accept-language': 'en-US,en;q=0.8'},
+        ),
+      );
 
-    expect(headers['Accept-Language'], 'en-US,en;q=0.8');
-  });
+      expect(headers['Accept-Language'], 'en-US,en;q=0.8');
+    },
+  );
 }

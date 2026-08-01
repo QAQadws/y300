@@ -11,7 +11,9 @@ final libraryStateRepositoryProvider = Provider<LibraryStateRepository>((ref) {
   return LocalLibraryStateRepository(ComicLocalDb.open());
 });
 
-final readingStateBatchWriterProvider = Provider<ReadingStateBatchWriter>((ref) {
+final readingStateBatchWriterProvider = Provider<ReadingStateBatchWriter>((
+  ref,
+) {
   return DefaultReadingStateBatchWriter(
     stateRepository: ref.watch(libraryStateRepositoryProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),

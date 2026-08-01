@@ -81,5 +81,6 @@ class _PendingImageHeaderBuilder implements ImageRequestHeaderBuilder {
       Completer<Map<String, String>>();
 
   @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) => _completer.future;
+  Future<Map<String, String>> buildHeaders(String imageUrl) =>
+      _completer.future;
 }

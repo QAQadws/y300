@@ -83,11 +83,7 @@ void main() {
       expect(result.favoriteForums, hasLength(3));
       expect(
         result.favoriteForums.map((item) => item.description),
-        containsAll(<String>[
-          '风声水起。',
-          '爱的推广会。',
-          '外文作品翻译的分享与赏析。',
-        ]),
+        containsAll(<String>['风声水起。', '爱的推广会。', '外文作品翻译的分享与赏析。']),
       );
     });
 

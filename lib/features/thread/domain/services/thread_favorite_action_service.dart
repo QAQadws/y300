@@ -2,13 +2,10 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/thread/data/repositories/thread_favorite_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 
-typedef ThreadFavoriteModuleRefresh = Future<void> Function({
-  required String tid,
-});
-typedef ThreadFavoriteModuleRefreshNotifier = void Function({
-  required String reason,
-  required String tid,
-});
+typedef ThreadFavoriteModuleRefresh =
+    Future<void> Function({required String tid});
+typedef ThreadFavoriteModuleRefreshNotifier =
+    void Function({required String reason, required String tid});
 
 abstract class ThreadFavoriteActionService {
   Future<ApiResult<ThreadFavoriteActionResult>> favoriteThread({
@@ -16,14 +13,15 @@ abstract class ThreadFavoriteActionService {
   });
 }
 
-class DefaultThreadFavoriteActionService implements ThreadFavoriteActionService {
+class DefaultThreadFavoriteActionService
+    implements ThreadFavoriteActionService {
   DefaultThreadFavoriteActionService({
     required ThreadFavoriteRepository repository,
     required ThreadFavoriteModuleRefresh refreshFavoriteModule,
     required ThreadFavoriteModuleRefreshNotifier notifyFavoriteModule,
-  })  : _repository = repository,
-        _refreshFavoriteModule = refreshFavoriteModule,
-        _notifyFavoriteModule = notifyFavoriteModule;
+  }) : _repository = repository,
+       _refreshFavoriteModule = refreshFavoriteModule,
+       _notifyFavoriteModule = notifyFavoriteModule;
 
   final ThreadFavoriteRepository _repository;
   final ThreadFavoriteModuleRefresh _refreshFavoriteModule;
@@ -58,7 +56,9 @@ class DefaultThreadFavoriteActionService implements ThreadFavoriteActionService 
     // We still emit it when sync fails so the page can retry from its adapter.
     _notifyFavoriteModule(
       tid: tid,
-      reason: refreshed ? 'thread_favorite_added' : 'thread_favorite_added_sync_failed',
+      reason: refreshed
+          ? 'thread_favorite_added'
+          : 'thread_favorite_added_sync_failed',
     );
 
     return ApiSuccess<ThreadFavoriteActionResult>(

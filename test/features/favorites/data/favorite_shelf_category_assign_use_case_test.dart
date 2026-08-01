@@ -3,53 +3,54 @@ import 'package:y300/features/favorites/data/use_cases/favorite_shelf_category_a
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 
 void main() {
-  test('DefaultFavoriteShelfCategoryAssignUseCase parses favorite work ids and moves valid tids', () async {
-    final repository = _RecordingFavoriteRepository();
-    final useCase = DefaultFavoriteShelfCategoryAssignUseCase(
-      repository: repository,
-    );
+  test(
+    'DefaultFavoriteShelfCategoryAssignUseCase parses favorite work ids and moves valid tids',
+    () async {
+      final repository = _RecordingFavoriteRepository();
+      final useCase = DefaultFavoriteShelfCategoryAssignUseCase(
+        repository: repository,
+      );
 
-    final result = await useCase.assign(
-      workIds: <String>{'favorite:100', 'favorite:101'},
-      sourceCategoryId: 'default',
-      targetCategoryId: 'archive',
-    );
+      final result = await useCase.assign(
+        workIds: <String>{'favorite:100', 'favorite:101'},
+        sourceCategoryId: 'default',
+        targetCategoryId: 'archive',
+      );
 
-    expect(
-      repository.calls,
-      <_MoveThreadCall>[
+      expect(repository.calls, <_MoveThreadCall>[
         const _MoveThreadCall(tid: '100', toCategoryId: 'archive'),
         const _MoveThreadCall(tid: '101', toCategoryId: 'archive'),
-      ],
-    );
-    expect(result.assignedWorkIds, <String>['favorite:100', 'favorite:101']);
-    expect(result.failedWorkIds, isEmpty);
-    expect(result.targetCategoryId, 'archive');
-  });
+      ]);
+      expect(result.assignedWorkIds, <String>['favorite:100', 'favorite:101']);
+      expect(result.failedWorkIds, isEmpty);
+      expect(result.targetCategoryId, 'archive');
+    },
+  );
 
-  test('DefaultFavoriteShelfCategoryAssignUseCase reports invalid ids and keeps going after failures', () async {
-    final repository = _RecordingFavoriteRepository(
-      failingTids: const <String>{'101'},
-    );
-    final useCase = DefaultFavoriteShelfCategoryAssignUseCase(
-      repository: repository,
-    );
+  test(
+    'DefaultFavoriteShelfCategoryAssignUseCase reports invalid ids and keeps going after failures',
+    () async {
+      final repository = _RecordingFavoriteRepository(
+        failingTids: const <String>{'101'},
+      );
+      final useCase = DefaultFavoriteShelfCategoryAssignUseCase(
+        repository: repository,
+      );
 
-    final result = await useCase.assign(
-      workIds: <String>{'favorite:100', 'broken-id', 'favorite:101'},
-      sourceCategoryId: 'default',
-      targetCategoryId: 'archive',
-    );
+      final result = await useCase.assign(
+        workIds: <String>{'favorite:100', 'broken-id', 'favorite:101'},
+        sourceCategoryId: 'default',
+        targetCategoryId: 'archive',
+      );
 
-    expect(result.assignedWorkIds, <String>['favorite:100']);
-    expect(result.failedWorkIds, <String>['broken-id', 'favorite:101']);
-  });
+      expect(result.assignedWorkIds, <String>['favorite:100']);
+      expect(result.failedWorkIds, <String>['broken-id', 'favorite:101']);
+    },
+  );
 }
 
 class _RecordingFavoriteRepository implements LocalFavoriteRepository {
-  _RecordingFavoriteRepository({
-    this.failingTids = const <String>{},
-  });
+  _RecordingFavoriteRepository({this.failingTids = const <String>{}});
 
   final Set<String> failingTids;
   final List<_MoveThreadCall> calls = <_MoveThreadCall>[];
@@ -70,10 +71,7 @@ class _RecordingFavoriteRepository implements LocalFavoriteRepository {
 }
 
 class _MoveThreadCall {
-  const _MoveThreadCall({
-    required this.tid,
-    required this.toCategoryId,
-  });
+  const _MoveThreadCall({required this.tid, required this.toCategoryId});
 
   final String tid;
   final String toCategoryId;

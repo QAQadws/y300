@@ -31,13 +31,19 @@ class DiscuzSearchHtmlParser {
         continue;
       }
 
-      final titleNode = node.querySelector('.threadlist_tit em') ?? node.querySelector('.threadlist_tit');
-      final title = (titleNode?.text ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
+      final titleNode =
+          node.querySelector('.threadlist_tit em') ??
+          node.querySelector('.threadlist_tit');
+      final title = (titleNode?.text ?? '')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
       if (title.isEmpty) {
         continue;
       }
 
-      final fidAnchor = node.querySelector('.threadlist_foot a[href*="mod=forumdisplay"]');
+      final fidAnchor = node.querySelector(
+        '.threadlist_foot a[href*="mod=forumdisplay"]',
+      );
       final fid = _extractFid(fidAnchor?.attributes['href'] ?? '') ?? '';
       final author = node.querySelector('.muser .mmc')?.text.trim();
       final timeText = node.querySelector('.muser .mtime')?.text.trim();

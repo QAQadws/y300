@@ -11,15 +11,18 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 TextConverter resolveTextConverter(TextConversionMode mode) {
   return switch (mode) {
     TextConversionMode.none => const IdentityTextConverter(),
-    TextConversionMode.toSimplified =>
-      const OpenccTextConverter(mode: TextConversionMode.toSimplified),
-    TextConversionMode.toTraditional =>
-      const OpenccTextConverter(mode: TextConversionMode.toTraditional),
+    TextConversionMode.toSimplified => const OpenccTextConverter(
+      mode: TextConversionMode.toSimplified,
+    ),
+    TextConversionMode.toTraditional => const OpenccTextConverter(
+      mode: TextConversionMode.toTraditional,
+    ),
   };
 }
 
 /// Riverpod provider exposing the converter for the current conversion mode.
 /// Callers watch this and await [TextConverter.convertHtml] before planning.
-final textConverterProvider = Provider.family<TextConverter, TextConversionMode>(
-  (ref, mode) => resolveTextConverter(mode),
-);
+final textConverterProvider =
+    Provider.family<TextConverter, TextConversionMode>(
+      (ref, mode) => resolveTextConverter(mode),
+    );

@@ -93,11 +93,7 @@ class NovelSameThreadCatalogExtractor {
     if (title == null) {
       return null;
     }
-    return NovelCatalogEntry(
-      pid: pid,
-      title: title,
-      position: position,
-    );
+    return NovelCatalogEntry(pid: pid, title: title, position: position);
   }
 
   String? _normalizeTitle(String rawTitle) {

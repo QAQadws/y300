@@ -23,10 +23,10 @@ class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
     required ComicRepository repository,
     ComicEpisodeImageFetcher? fetchEpisodeImagesByTid,
     ForumImageSourcePipeline? imageSourcePipeline,
-  })  : _repository = repository,
-        _fetchEpisodeImagesByTid = fetchEpisodeImagesByTid,
-        _imageSourcePipeline =
-            imageSourcePipeline ?? const DefaultForumImageSourcePipeline();
+  }) : _repository = repository,
+       _fetchEpisodeImagesByTid = fetchEpisodeImagesByTid,
+       _imageSourcePipeline =
+           imageSourcePipeline ?? const DefaultForumImageSourcePipeline();
 
   final ComicRepository _repository;
   final ComicEpisodeImageFetcher? _fetchEpisodeImagesByTid;

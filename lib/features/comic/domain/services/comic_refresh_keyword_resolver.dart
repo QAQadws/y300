@@ -11,10 +11,7 @@ enum ComicRefreshKeywordSource {
 }
 
 class ComicRefreshKeyword {
-  const ComicRefreshKeyword({
-    required this.source,
-    required this.value,
-  });
+  const ComicRefreshKeyword({required this.source, required this.value});
 
   final ComicRefreshKeywordSource source;
   final String value;
@@ -83,7 +80,9 @@ class DefaultComicRefreshKeywordResolver
     if (raw == null) {
       return null;
     }
-    final normalized = _nonEmptyOrNull(_subjectParser.parse(raw).normalizedTitle);
+    final normalized = _nonEmptyOrNull(
+      _subjectParser.parse(raw).normalizedTitle,
+    );
     return normalized ?? raw;
   }
 

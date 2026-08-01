@@ -6,8 +6,8 @@ class DefaultFavoriteShelfBootstrapper implements FavoriteShelfBootstrapper {
   DefaultFavoriteShelfBootstrapper({
     required LocalFavoriteRepository repository,
     required FavoriteSyncService syncService,
-  })  : _repository = repository,
-        _syncService = syncService;
+  }) : _repository = repository,
+       _syncService = syncService;
 
   final LocalFavoriteRepository _repository;
   final FavoriteSyncService _syncService;

@@ -81,7 +81,10 @@ class DefaultUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
     final shouldNotify = changedCount > 0 || purgedWorkIds.isNotEmpty;
     if (shouldNotify) {
       _shelfRefreshBus.notify(
-        modules: _modulesForKind(kind, triggeredPurge: purgedWorkIds.isNotEmpty),
+        modules: _modulesForKind(
+          kind,
+          triggeredPurge: purgedWorkIds.isNotEmpty,
+        ),
         reason: failedTids.isEmpty
             ? 'work_unfavorite_completed'
             : 'work_unfavorite_partially_completed',
@@ -186,7 +189,8 @@ class DefaultUnfavoriteThreadUseCase implements UnfavoriteThreadUseCase {
       );
       final kind = links?.kind ?? ThreadContentKind.unknown;
       if (!hasAnyActiveThread &&
-          (kind == ThreadContentKind.comic || kind == ThreadContentKind.novel)) {
+          (kind == ThreadContentKind.comic ||
+              kind == ThreadContentKind.novel)) {
         await _workPurgeService.purge(workId: workId, kind: kind);
         purgedWorkIds.add(workId);
       }
@@ -196,7 +200,10 @@ class DefaultUnfavoriteThreadUseCase implements UnfavoriteThreadUseCase {
     final shouldNotify = changedCount > 0 || purgedWorkIds.isNotEmpty;
     if (shouldNotify) {
       _shelfRefreshBus.notify(
-        modules: _modulesForThread(kind, triggeredPurge: purgedWorkIds.isNotEmpty),
+        modules: _modulesForThread(
+          kind,
+          triggeredPurge: purgedWorkIds.isNotEmpty,
+        ),
         reason: 'thread_unfavorite_completed',
         source: LibraryMutationSource.threadFavoriteAction,
         workId: workId,

@@ -55,7 +55,8 @@ void main() {
   test('parses image file attribute as image block', () {
     final document = parser.parse(
       episodeId: 'ep1',
-      rawHtml: '<img file="//bbs.yamibo.com/data/attachment/forum/file-image.png">',
+      rawHtml:
+          '<img file="//bbs.yamibo.com/data/attachment/forum/file-image.png">',
       fallbackParagraphs: const <String>[],
     );
 

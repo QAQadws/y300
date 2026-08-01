@@ -28,39 +28,41 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  test('syncToStore writes WebView cookies into the dio cookie store', () async {
-    final uri = Uri.parse('https://bbs.yamibo.com/member.php');
-    final jar = _FakeWebViewCookieJar(<String, Map<String, String>>{
-      'bbs.yamibo.com': <String, String>{
+  test(
+    'syncToStore writes WebView cookies into the dio cookie store',
+    () async {
+      final uri = Uri.parse('https://bbs.yamibo.com/member.php');
+      final jar = _FakeWebViewCookieJar(<String, Map<String, String>>{
+        'bbs.yamibo.com': <String, String>{
+          'acw_sc__v2': 'wafpass',
+          'EeqY_2132_auth': 'authtoken',
+        },
+      });
+      final cookieStore = CookieStore();
+      final service = WebViewCookieSyncService(
+        cookieJar: jar,
+        cookieStore: cookieStore,
+      );
+
+      final synced = await service.syncToStore(uri);
+
+      expect(synced, <String, String>{
         'acw_sc__v2': 'wafpass',
         'EeqY_2132_auth': 'authtoken',
-      },
-    });
-    final cookieStore = CookieStore();
-    final service = WebViewCookieSyncService(
-      cookieJar: jar,
-      cookieStore: cookieStore,
-    );
-
-    final synced = await service.syncToStore(uri);
-
-    expect(synced, <String, String>{
-      'acw_sc__v2': 'wafpass',
-      'EeqY_2132_auth': 'authtoken',
-    });
-    expect(await cookieStore.readCookieMap(uri), <String, String>{
-      'acw_sc__v2': 'wafpass',
-      'EeqY_2132_auth': 'authtoken',
-    });
-  });
+      });
+      expect(await cookieStore.readCookieMap(uri), <String, String>{
+        'acw_sc__v2': 'wafpass',
+        'EeqY_2132_auth': 'authtoken',
+      });
+    },
+  );
 
   test('syncToStore preserves existing dio cookies while merging', () async {
     final uri = Uri.parse('https://bbs.yamibo.com/member.php');
     final cookieStore = CookieStore();
-    await cookieStore.saveFromSetCookie(
-      uri,
-      const <String>['EeqY_2132_saltkey=salt; Path=/'],
-    );
+    await cookieStore.saveFromSetCookie(uri, const <String>[
+      'EeqY_2132_saltkey=salt; Path=/',
+    ]);
     final jar = _FakeWebViewCookieJar(<String, Map<String, String>>{
       'bbs.yamibo.com': <String, String>{'acw_sc__v2': 'wafpass'},
     });
@@ -77,24 +79,28 @@ void main() {
     });
   });
 
-  test('syncToStore returns an empty snapshot without touching the store when WebView has no cookies', () async {
-    final uri = Uri.parse('https://bbs.yamibo.com/member.php');
-    final cookieStore = CookieStore();
-    await cookieStore.saveFromSetCookie(
-      uri,
-      const <String>['keep=1; Path=/'],
-    );
-    final jar = _FakeWebViewCookieJar(const <String, Map<String, String>>{});
-    final service = WebViewCookieSyncService(
-      cookieJar: jar,
-      cookieStore: cookieStore,
-    );
+  test(
+    'syncToStore returns an empty snapshot without touching the store when WebView has no cookies',
+    () async {
+      final uri = Uri.parse('https://bbs.yamibo.com/member.php');
+      final cookieStore = CookieStore();
+      await cookieStore.saveFromSetCookie(uri, const <String>[
+        'keep=1; Path=/',
+      ]);
+      final jar = _FakeWebViewCookieJar(const <String, Map<String, String>>{});
+      final service = WebViewCookieSyncService(
+        cookieJar: jar,
+        cookieStore: cookieStore,
+      );
 
-    final synced = await service.syncToStore(uri);
+      final synced = await service.syncToStore(uri);
 
-    expect(synced, isEmpty);
-    expect(await cookieStore.readCookieMap(uri), <String, String>{'keep': '1'});
-  });
+      expect(synced, isEmpty);
+      expect(await cookieStore.readCookieMap(uri), <String, String>{
+        'keep': '1',
+      });
+    },
+  );
 
   test('clearWebViewCookies delegates to the cookie jar', () async {
     final jar = _FakeWebViewCookieJar(const <String, Map<String, String>>{});

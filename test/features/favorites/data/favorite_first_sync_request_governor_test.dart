@@ -42,10 +42,12 @@ void main() {
     firstGate.complete();
     await Future.wait(<Future<void>>[first, second]);
 
-    expect(
-      events,
-      <String>['first-start', 'first-end', 'second-start', 'second-end'],
-    );
+    expect(events, <String>[
+      'first-start',
+      'first-end',
+      'second-start',
+      'second-end',
+    ]);
   });
 
   test('governor waits cooldown after each governed request', () async {

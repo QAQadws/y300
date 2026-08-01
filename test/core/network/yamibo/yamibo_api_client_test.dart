@@ -147,17 +147,16 @@ class _ApiClientTestAdapter implements HttpClientAdapter {
     Map<String, dynamic>? responseBody,
     String? responseText,
     this.contentType = 'application/json',
-  })
-    : responseText =
-          responseText ??
-          jsonEncode(
-            responseBody ??
-                <String, dynamic>{
-                  'Version': '4',
-                  'Charset': 'utf-8',
-                  'Variables': <String, dynamic>{'formhash': 'fh_after'},
-                },
-          );
+  }) : responseText =
+           responseText ??
+           jsonEncode(
+             responseBody ??
+                 <String, dynamic>{
+                   'Version': '4',
+                   'Charset': 'utf-8',
+                   'Variables': <String, dynamic>{'formhash': 'fh_after'},
+                 },
+           );
 
   final String responseText;
   final String contentType;

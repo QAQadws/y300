@@ -11,10 +11,7 @@ class ForumTagDefinition {
   final String typeid;
   final String name;
 
-  factory ForumTagDefinition.fromJson(
-    JsonMap json, {
-    required String fid,
-  }) {
+  factory ForumTagDefinition.fromJson(JsonMap json, {required String fid}) {
     return ForumTagDefinition(
       fid: fid,
       typeid: ParseUtils.asString(json['typeid']),
@@ -41,10 +38,8 @@ class ForumBoardTagSet {
       name: ParseUtils.asString(json['name']),
       tags: ParseUtils.asList(json['tags'])
           .map(
-            (item) => ForumTagDefinition.fromJson(
-              ParseUtils.asMap(item),
-              fid: fid,
-            ),
+            (item) =>
+                ForumTagDefinition.fromJson(ParseUtils.asMap(item), fid: fid),
           )
           .where((tag) => tag.typeid.trim().isNotEmpty)
           .toList(growable: false),

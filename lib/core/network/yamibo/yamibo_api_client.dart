@@ -125,9 +125,7 @@ class YamiboApiClient {
       return data;
     }
     if (data is Map) {
-      return data.map(
-        (key, dynamic value) => MapEntry(key.toString(), value),
-      );
+      return data.map((key, dynamic value) => MapEntry(key.toString(), value));
     }
     if (data is! String) {
       throw FormatException('无法解析响应类型: ${data.runtimeType}', data);

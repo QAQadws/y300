@@ -131,7 +131,8 @@ class PostingDraftExtrasCodec {
   /// 仅当 raw 至少包含一个 poll 字段时返回非空 NewThreadPollDraft；
   /// 这样普通帖草稿不会无中生有出空 poll 对象，UI 重启后还是普通帖。
   NewThreadPollDraft? _readPoll(Map<String, String> raw) {
-    final hasAnyPollField = raw.containsKey(_kPollOptions) ||
+    final hasAnyPollField =
+        raw.containsKey(_kPollOptions) ||
         raw.containsKey(_kPollMultiple) ||
         raw.containsKey(_kPollMaxChoices) ||
         raw.containsKey(_kPollExpirationDays) ||

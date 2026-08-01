@@ -4,9 +4,8 @@ import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 
 class YamiboResourceClient {
-  const YamiboResourceClient({
-    required YamiboHttpGateway gateway,
-  }) : _gateway = gateway;
+  const YamiboResourceClient({required YamiboHttpGateway gateway})
+    : _gateway = gateway;
 
   final YamiboHttpGateway _gateway;
 
@@ -19,10 +18,7 @@ class YamiboResourceClient {
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
       return const ApiFailure(
-        ApiError(
-          type: ApiErrorType.network,
-          message: '资源地址无效',
-        ),
+        ApiError(type: ApiErrorType.network, message: '资源地址无效'),
       );
     }
 

@@ -28,11 +28,15 @@ void main() {
 
   test('resolve rewrites Discuz pseudo absolute attachment urls', () {
     expect(
-      resolver.resolve('http://data/attachment/sinaimg/tid503019/pid39465469/uid365616/page.jpg'),
+      resolver.resolve(
+        'http://data/attachment/sinaimg/tid503019/pid39465469/uid365616/page.jpg',
+      ),
       'https://bbs.yamibo.com/data/attachment/sinaimg/tid503019/pid39465469/uid365616/page.jpg',
     );
     expect(
-      resolver.resolve('https://data/attachment/forum/201802/16/page.jpg?x=1&amp;y=2'),
+      resolver.resolve(
+        'https://data/attachment/forum/201802/16/page.jpg?x=1&amp;y=2',
+      ),
       'https://bbs.yamibo.com/data/attachment/forum/201802/16/page.jpg?x=1&y=2',
     );
   });

@@ -16,7 +16,9 @@ final unfavoriteWorkUseCaseProvider = Provider<UnfavoriteWorkUseCase>((ref) {
   );
 });
 
-final unfavoriteThreadUseCaseProvider = Provider<UnfavoriteThreadUseCase>((ref) {
+final unfavoriteThreadUseCaseProvider = Provider<UnfavoriteThreadUseCase>((
+  ref,
+) {
   return DefaultUnfavoriteThreadUseCase(
     threadFavoriteRepository: ref.watch(threadFavoriteRepositoryProvider),
     favoriteLinkService: ref.watch(favoriteLinkServiceProvider),

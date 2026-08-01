@@ -16,9 +16,9 @@ class DiscuzForumHomeChromeRepository implements ForumHomeChromeRepository {
     required YamiboHtmlClient htmlClient,
     required ForumHomeCarouselImageProbe imageProbe,
     ForumHomeChromeParser parser = const ForumHomeChromeParser(),
-  })  : _htmlClient = htmlClient,
-        _imageProbe = imageProbe,
-        _parser = parser;
+  }) : _htmlClient = htmlClient,
+       _imageProbe = imageProbe,
+       _parser = parser;
 
   final YamiboHtmlClient _htmlClient;
   final ForumHomeCarouselImageProbe _imageProbe;

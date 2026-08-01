@@ -69,72 +69,71 @@ void main() {
         const _PurgeCall('yamibo:1', ThreadContentKind.comic),
       ]);
       expect(bus.signal.value?.reason, 'work_unfavorite_completed');
-      expect(
-        bus.signal.value?.modules,
-        const <LibraryModuleKey>{
-          LibraryModuleKey.favorite,
-          LibraryModuleKey.comic,
-        },
-      );
+      expect(bus.signal.value?.modules, const <LibraryModuleKey>{
+        LibraryModuleKey.favorite,
+        LibraryModuleKey.comic,
+      });
       expect(bus.signal.value?.payload['requestedTidCount'], 2);
       expect(bus.signal.value?.payload['triggeredPurge'], isTrue);
     });
 
-    test('partial failure marks only successful tids and skips purge', () async {
-      final repository = _FakeThreadFavoriteRepository(
-        results: <String, ApiResult<ThreadUnfavoriteResult>>{
-          '100': const ApiSuccess<ThreadUnfavoriteResult>(
-            ThreadUnfavoriteResult(message: 'ok'),
-          ),
-          '101': const ApiFailure<ThreadUnfavoriteResult>(
-            ApiError(type: ApiErrorType.business, message: 'boom'),
-          ),
-        },
-      );
-      final favoriteLinkService = _FakeFavoriteLinkService(
-        linksByWorkId: <String, FavoriteWorkLinks>{
-          'yamibo:2': FavoriteWorkLinks(
-            workId: 'yamibo:2',
-            kind: ThreadContentKind.comic,
-            threads: const <FavoriteThreadRef>[
-              FavoriteThreadRef(tid: '100'),
-              FavoriteThreadRef(tid: '101'),
-            ],
-          ),
-        },
-        activeByWorkId: <String, bool>{'yamibo:2': true},
-      );
-      final localRepository = _FakeLocalFavoriteRepository();
-      final workPurgeService = _FakeWorkPurgeService();
-      final bus = LibraryShelfRefreshBus();
-      addTearDown(bus.dispose);
-      final useCase = DefaultUnfavoriteWorkUseCase(
-        threadFavoriteRepository: repository,
-        favoriteLinkService: favoriteLinkService,
-        localFavoriteRepository: localRepository,
-        workPurgeService: workPurgeService,
-        shelfRefreshBus: bus,
-      );
+    test(
+      'partial failure marks only successful tids and skips purge',
+      () async {
+        final repository = _FakeThreadFavoriteRepository(
+          results: <String, ApiResult<ThreadUnfavoriteResult>>{
+            '100': const ApiSuccess<ThreadUnfavoriteResult>(
+              ThreadUnfavoriteResult(message: 'ok'),
+            ),
+            '101': const ApiFailure<ThreadUnfavoriteResult>(
+              ApiError(type: ApiErrorType.business, message: 'boom'),
+            ),
+          },
+        );
+        final favoriteLinkService = _FakeFavoriteLinkService(
+          linksByWorkId: <String, FavoriteWorkLinks>{
+            'yamibo:2': FavoriteWorkLinks(
+              workId: 'yamibo:2',
+              kind: ThreadContentKind.comic,
+              threads: const <FavoriteThreadRef>[
+                FavoriteThreadRef(tid: '100'),
+                FavoriteThreadRef(tid: '101'),
+              ],
+            ),
+          },
+          activeByWorkId: <String, bool>{'yamibo:2': true},
+        );
+        final localRepository = _FakeLocalFavoriteRepository();
+        final workPurgeService = _FakeWorkPurgeService();
+        final bus = LibraryShelfRefreshBus();
+        addTearDown(bus.dispose);
+        final useCase = DefaultUnfavoriteWorkUseCase(
+          threadFavoriteRepository: repository,
+          favoriteLinkService: favoriteLinkService,
+          localFavoriteRepository: localRepository,
+          workPurgeService: workPurgeService,
+          shelfRefreshBus: bus,
+        );
 
-      final result = await useCase.call(
-        workId: 'yamibo:2',
-        kind: ThreadContentKind.comic,
-      );
+        final result = await useCase.call(
+          workId: 'yamibo:2',
+          kind: ThreadContentKind.comic,
+        );
 
-      expect(result.succeededTids, <String>['100']);
-      expect(result.failedTids, <String>['101']);
-      expect(result.purgedWorkIds, isEmpty);
-      expect(localRepository.markRemovedByTidsCalls, <Set<String>>[
-        <String>{'100'},
-      ]);
-      expect(workPurgeService.calls, isEmpty);
-      expect(bus.signal.value?.reason, 'work_unfavorite_partially_completed');
-      expect(
-        bus.signal.value?.modules,
-        const <LibraryModuleKey>{LibraryModuleKey.favorite},
-      );
-      expect(bus.signal.value?.payload['failedTidCount'], 1);
-    });
+        expect(result.succeededTids, <String>['100']);
+        expect(result.failedTids, <String>['101']);
+        expect(result.purgedWorkIds, isEmpty);
+        expect(localRepository.markRemovedByTidsCalls, <Set<String>>[
+          <String>{'100'},
+        ]);
+        expect(workPurgeService.calls, isEmpty);
+        expect(bus.signal.value?.reason, 'work_unfavorite_partially_completed');
+        expect(bus.signal.value?.modules, const <LibraryModuleKey>{
+          LibraryModuleKey.favorite,
+        });
+        expect(bus.signal.value?.payload['failedTidCount'], 1);
+      },
+    );
 
     test('already removed locally does not notify without purge', () async {
       final repository = _FakeThreadFavoriteRepository(
@@ -233,10 +232,7 @@ void main() {
             threads: const <FavoriteThreadRef>[FavoriteThreadRef(tid: '200')],
           ),
         },
-        activeByWorkId: <String, bool>{
-          'yamibo:1': true,
-          'novel:1': true,
-        },
+        activeByWorkId: <String, bool>{'yamibo:1': true, 'novel:1': true},
       );
       final useCase = DefaultUnfavoriteWorkUseCase(
         threadFavoriteRepository: repository,
@@ -261,9 +257,7 @@ void main() {
 }
 
 class _FakeThreadFavoriteRepository implements ThreadFavoriteRepository {
-  _FakeThreadFavoriteRepository({
-    required this.results,
-  });
+  _FakeThreadFavoriteRepository({required this.results});
 
   final Map<String, ApiResult<ThreadUnfavoriteResult>> results;
   final List<String> calledTids = <String>[];
@@ -336,7 +330,8 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   ) async => const <FavoriteThreadCacheRecord>[];
 
   @override
-  Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async => null;
+  Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async =>
+      null;
 
   @override
   Future<int> countActiveThreads() async => 0;
@@ -366,7 +361,8 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
       const <FavoriteThreadCacheRecord>[];
 
   @override
-  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
+  Future<List<FavoriteThreadCacheRecord>>
+  getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async => const <FavoriteThreadCacheRecord>[];
@@ -378,8 +374,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }) async => const <FavoriteThreadCacheRecord>[];
 
   @override
-  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async =>
-      null;
+  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(
+    String workId,
+  ) async => null;
 
   @override
   Future<FavoriteSyncSnapshot?> getSyncSnapshot() async => null;
@@ -478,9 +475,7 @@ class _PurgeCall {
 
   @override
   bool operator ==(Object other) {
-    return other is _PurgeCall &&
-        other.workId == workId &&
-        other.kind == kind;
+    return other is _PurgeCall && other.workId == workId && other.kind == kind;
   }
 
   @override

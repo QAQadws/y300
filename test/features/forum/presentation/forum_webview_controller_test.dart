@@ -54,22 +54,27 @@ void main() {
     expect(state.loadingProgress, 0);
   });
 
-  test('onProgress updates loading progress while keeping loading state', () async {
-    final container = _createContainer();
-    addTearDown(container.dispose);
+  test(
+    'onProgress updates loading progress while keeping loading state',
+    () async {
+      final container = _createContainer();
+      addTearDown(container.dispose);
 
-    container.read(forumWebViewControllerProvider.notifier).onProgress(42);
+      container.read(forumWebViewControllerProvider.notifier).onProgress(42);
 
-    final state = await container.read(forumWebViewControllerProvider.future);
-    expect(state.loadingProgress, 42);
-    expect(state.isLoading, isTrue);
-  });
+      final state = await container.read(forumWebViewControllerProvider.future);
+      expect(state.loadingProgress, 42);
+      expect(state.isLoading, isTrue);
+    },
+  );
 
   test('onPageFinished resolves board name and canGoBack', () async {
     final container = _createContainer();
     addTearDown(container.dispose);
 
-    await container.read(forumWebViewControllerProvider.notifier).onPageFinished(
+    await container
+        .read(forumWebViewControllerProvider.notifier)
+        .onPageFinished(
           rawUrl:
               'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
           pageTitle: '页面标题',
@@ -86,67 +91,80 @@ void main() {
     expect(state.loadingProgress, 100);
   });
 
-  test('forum display completion refreshes favorite forums and matches current forum', () async {
-    final favoriteRepository = _FakeForumFavoriteRepository(
-      favoriteForums: <FavoriteForum>[
-        _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
-        _favoriteForum(fid: '66', favid: 'fav-66', title: '讨论区'),
-      ],
-    );
-    final container = _createContainer(
-      favoriteRepository: favoriteRepository,
-    );
-    addTearDown(container.dispose);
+  test(
+    'forum display completion refreshes favorite forums and matches current forum',
+    () async {
+      final favoriteRepository = _FakeForumFavoriteRepository(
+        favoriteForums: <FavoriteForum>[
+          _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
+          _favoriteForum(fid: '66', favid: 'fav-66', title: '讨论区'),
+        ],
+      );
+      final container = _createContainer(
+        favoriteRepository: favoriteRepository,
+      );
+      addTearDown(container.dispose);
 
-    await container.read(forumWebViewControllerProvider.notifier).onPageFinished(
-          rawUrl:
-              'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-          pageTitle: '页面标题',
-          canGoBack: true,
-        );
-    await pumpEventQueue();
+      await container
+          .read(forumWebViewControllerProvider.notifier)
+          .onPageFinished(
+            rawUrl:
+                'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+            pageTitle: '页面标题',
+            canGoBack: true,
+          );
+      await pumpEventQueue();
 
-    final state = await container.read(forumWebViewControllerProvider.future);
-    expect(favoriteRepository.loadCallCount, 1);
-    expect(state.favoriteForums.length, 2);
-    expect(state.currentFavoriteForum?.fid, '55');
-  });
+      final state = await container.read(forumWebViewControllerProvider.future);
+      expect(favoriteRepository.loadCallCount, 1);
+      expect(state.favoriteForums.length, 2);
+      expect(state.currentFavoriteForum?.fid, '55');
+    },
+  );
 
-  test('curforum search keeps search scope and fid when result url drops srhfid', () async {
-    final container = _createContainer();
-    addTearDown(container.dispose);
+  test(
+    'curforum search keeps search scope and fid when result url drops srhfid',
+    () async {
+      final container = _createContainer();
+      addTearDown(container.dispose);
 
-    final controller = container.read(forumWebViewControllerProvider.notifier);
-    await controller.onPageFinished(
-      rawUrl: 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-      pageTitle: '综合区页面',
-      canGoBack: true,
-    );
+      final controller = container.read(
+        forumWebViewControllerProvider.notifier,
+      );
+      await controller.onPageFinished(
+        rawUrl:
+            'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+        pageTitle: '综合区页面',
+        canGoBack: true,
+      );
 
-    controller.onPageStarted(
-      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
-    );
-    await controller.onPageFinished(
-      rawUrl: 'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
-      pageTitle: '帖子搜索',
-      canGoBack: true,
-    );
+      controller.onPageStarted(
+        'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+      );
+      await controller.onPageFinished(
+        rawUrl:
+            'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=55&mobile=2',
+        pageTitle: '帖子搜索',
+        canGoBack: true,
+      );
 
-    controller.onPageStarted(
-      'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
-    );
-    await controller.onPageFinished(
-      rawUrl: 'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
-      pageTitle: '帖子搜索',
-      canGoBack: true,
-    );
+      controller.onPageStarted(
+        'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+      );
+      await controller.onPageFinished(
+        rawUrl:
+            'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+        pageTitle: '帖子搜索',
+        canGoBack: true,
+      );
 
-    final state = await container.read(forumWebViewControllerProvider.future);
-    expect(state.pageKind, ForumWebViewPageKind.search);
-    expect(state.searchScope, ForumWebViewSearchScope.curForum);
-    expect(state.fid, '55');
-    expect(state.boardName, '综合区');
-  });
+      final state = await container.read(forumWebViewControllerProvider.future);
+      expect(state.pageKind, ForumWebViewPageKind.search);
+      expect(state.searchScope, ForumWebViewSearchScope.curForum);
+      expect(state.fid, '55');
+      expect(state.boardName, '综合区');
+    },
+  );
 
   test('forum search stays in forum scope without fid', () async {
     final container = _createContainer();
@@ -157,7 +175,8 @@ void main() {
       'https://bbs.yamibo.com/search.php?mod=forum&mobile=2',
     );
     await controller.onPageFinished(
-      rawUrl: 'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
+      rawUrl:
+          'https://bbs.yamibo.com/search.php?mod=forum&searchid=777&mobile=2',
       pageTitle: '帖子搜索',
       canGoBack: true,
     );
@@ -178,7 +197,8 @@ void main() {
       'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
     );
     await controller.onPageFinished(
-      rawUrl: 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+      rawUrl:
+          'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
       pageTitle: '综合区页面',
       canGoBack: true,
     );
@@ -187,7 +207,8 @@ void main() {
       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
     );
     await controller.onPageFinished(
-      rawUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      rawUrl:
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
       pageTitle: '主题标题',
       canGoBack: true,
     );
@@ -203,27 +224,32 @@ void main() {
     expect(state.loadingProgress, 100);
   });
 
-  test('thread detail start derives author and order flags from current url', () async {
-    final container = _createContainer();
-    addTearDown(container.dispose);
+  test(
+    'thread detail start derives author and order flags from current url',
+    () async {
+      final container = _createContainer();
+      addTearDown(container.dispose);
 
-    container.read(forumWebViewControllerProvider.notifier).onPageStarted(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&ordertype=1&mobile=2',
-    );
+      container
+          .read(forumWebViewControllerProvider.notifier)
+          .onPageStarted(
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&ordertype=1&mobile=2',
+          );
 
-    final state = await container.read(forumWebViewControllerProvider.future);
-    expect(state.pageKind, ForumWebViewPageKind.threadDetail);
-    expect(state.threadDetailMenu?.isAuthorOnly, isTrue);
-    expect(state.threadDetailMenu?.isReverseOrder, isTrue);
-    expect(
-      state.threadDetailMenu?.normalThreadUri?.toString(),
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
-    );
-    expect(
-      state.threadDetailMenu?.normalOrderUri.toString(),
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
-    );
-  });
+      final state = await container.read(forumWebViewControllerProvider.future);
+      expect(state.pageKind, ForumWebViewPageKind.threadDetail);
+      expect(state.threadDetailMenu?.isAuthorOnly, isTrue);
+      expect(state.threadDetailMenu?.isReverseOrder, isTrue);
+      expect(
+        state.threadDetailMenu?.normalThreadUri?.toString(),
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
+      );
+      expect(
+        state.threadDetailMenu?.normalOrderUri.toString(),
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
+      );
+    },
+  );
 
   test('thread detail completion merges dom snapshot with fallback urls', () async {
     final container = _createContainer();
@@ -249,7 +275,10 @@ void main() {
 
     final state = await container.read(forumWebViewControllerProvider.future);
     expect(state.threadDetailMenu?.isAuthorOnly, isFalse);
-    expect(state.threadDetailMenu?.authorOnlyUri?.toString(), contains('authorid=9'));
+    expect(
+      state.threadDetailMenu?.authorOnlyUri?.toString(),
+      contains('authorid=9'),
+    );
     expect(
       state.threadDetailMenu?.reverseOrderUri.toString(),
       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&fid=55&ordertype=1&mobile=2',
@@ -260,48 +289,58 @@ void main() {
     );
   });
 
-  test('thread detail can fallback normalThreadUri when current url already filters author', () async {
-    final container = _createContainer();
-    addTearDown(container.dispose);
+  test(
+    'thread detail can fallback normalThreadUri when current url already filters author',
+    () async {
+      final container = _createContainer();
+      addTearDown(container.dispose);
 
-    const rawUrl =
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2';
-    final controller = container.read(forumWebViewControllerProvider.notifier);
-    controller.onPageStarted(rawUrl);
-    await controller.onPageFinished(
-      rawUrl: rawUrl,
-      pageTitle: '主题标题',
-      canGoBack: true,
-      threadMenuSnapshot: const ForumThreadMenuSnapshot(),
-    );
+      const rawUrl =
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&authorid=9&mobile=2';
+      final controller = container.read(
+        forumWebViewControllerProvider.notifier,
+      );
+      controller.onPageStarted(rawUrl);
+      await controller.onPageFinished(
+        rawUrl: rawUrl,
+        pageTitle: '主题标题',
+        canGoBack: true,
+        threadMenuSnapshot: const ForumThreadMenuSnapshot(),
+      );
 
-    final state = await container.read(forumWebViewControllerProvider.future);
-    expect(state.threadDetailMenu?.isAuthorOnly, isTrue);
-    expect(
-      state.threadDetailMenu?.normalThreadUri?.toString(),
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-    );
-  });
+      final state = await container.read(forumWebViewControllerProvider.future);
+      expect(state.threadDetailMenu?.isAuthorOnly, isTrue);
+      expect(
+        state.threadDetailMenu?.normalThreadUri?.toString(),
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
+      );
+    },
+  );
 
-  test('thread detail hides author action when no dom link is available', () async {
-    final container = _createContainer();
-    addTearDown(container.dispose);
+  test(
+    'thread detail hides author action when no dom link is available',
+    () async {
+      final container = _createContainer();
+      addTearDown(container.dispose);
 
-    const rawUrl =
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2';
-    final controller = container.read(forumWebViewControllerProvider.notifier);
-    controller.onPageStarted(rawUrl);
-    await controller.onPageFinished(
-      rawUrl: rawUrl,
-      pageTitle: '主题标题',
-      canGoBack: true,
-      threadMenuSnapshot: const ForumThreadMenuSnapshot(),
-    );
+      const rawUrl =
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2';
+      final controller = container.read(
+        forumWebViewControllerProvider.notifier,
+      );
+      controller.onPageStarted(rawUrl);
+      await controller.onPageFinished(
+        rawUrl: rawUrl,
+        pageTitle: '主题标题',
+        canGoBack: true,
+        threadMenuSnapshot: const ForumThreadMenuSnapshot(),
+      );
 
-    final state = await container.read(forumWebViewControllerProvider.future);
-    expect(state.threadDetailMenu?.isAuthorOnly, isFalse);
-    expect(state.threadDetailMenu?.authorOnlyUri, isNull);
-  });
+      final state = await container.read(forumWebViewControllerProvider.future);
+      expect(state.threadDetailMenu?.isAuthorOnly, isFalse);
+      expect(state.threadDetailMenu?.authorOnlyUri, isNull);
+    },
+  );
 
   test('non thread page clears thread detail menu', () async {
     final container = _createContainer();
@@ -320,36 +359,36 @@ void main() {
     expect(state.threadDetailMenu, isNull);
   });
 
-  test('board name falls back to page title when tag lookup misses fid', () async {
-    final container = _createContainer(
-      repository: _FakeForumTagRepository(const <ForumBoardTagSet>[]),
-    );
-    addTearDown(container.dispose);
+  test(
+    'board name falls back to page title when tag lookup misses fid',
+    () async {
+      final container = _createContainer(
+        repository: _FakeForumTagRepository(const <ForumBoardTagSet>[]),
+      );
+      addTearDown(container.dispose);
 
-    await container.read(forumWebViewControllerProvider.notifier).onPageFinished(
-          rawUrl:
-              'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=66&mobile=2',
-          pageTitle: '回退标题',
-          canGoBack: false,
-        );
+      await container
+          .read(forumWebViewControllerProvider.notifier)
+          .onPageFinished(
+            rawUrl:
+                'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=66&mobile=2',
+            pageTitle: '回退标题',
+            canGoBack: false,
+          );
 
-    final state = await container.read(forumWebViewControllerProvider.future);
-    expect(state.boardName, '回退标题');
-    expect(state.canGoBack, isFalse);
-  });
+      final state = await container.read(forumWebViewControllerProvider.future);
+      expect(state.boardName, '回退标题');
+      expect(state.canGoBack, isFalse);
+    },
+  );
 
   test('favoriteCurrentForum refreshes favorite state after success', () async {
     final favoriteRepository = _FakeForumFavoriteRepository(
       favoriteForums: const <FavoriteForum>[],
-      onFavorite: (fid) => _favoriteForum(
-        fid: fid,
-        favid: 'fav-$fid',
-        title: '版块$fid',
-      ),
+      onFavorite: (fid) =>
+          _favoriteForum(fid: fid, favid: 'fav-$fid', title: '版块$fid'),
     );
-    final container = _createContainer(
-      favoriteRepository: favoriteRepository,
-    );
+    final container = _createContainer(favoriteRepository: favoriteRepository);
     addTearDown(container.dispose);
 
     final controller = container.read(forumWebViewControllerProvider.notifier);
@@ -366,33 +405,39 @@ void main() {
     expect(state.isFavoriteMutationLoading, isFalse);
   });
 
-  test('unfavoriteCurrentForum refreshes favorite state after success', () async {
-    final favoriteRepository = _FakeForumFavoriteRepository(
-      favoriteForums: <FavoriteForum>[
-        _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
-      ],
-    );
-    final container = _createContainer(
-      favoriteRepository: favoriteRepository,
-    );
-    addTearDown(container.dispose);
+  test(
+    'unfavoriteCurrentForum refreshes favorite state after success',
+    () async {
+      final favoriteRepository = _FakeForumFavoriteRepository(
+        favoriteForums: <FavoriteForum>[
+          _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
+        ],
+      );
+      final container = _createContainer(
+        favoriteRepository: favoriteRepository,
+      );
+      addTearDown(container.dispose);
 
-    final controller = container.read(forumWebViewControllerProvider.notifier);
-    await controller.onPageFinished(
-      rawUrl: 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
-      pageTitle: '综合区页面',
-      canGoBack: true,
-    );
-    await pumpEventQueue();
+      final controller = container.read(
+        forumWebViewControllerProvider.notifier,
+      );
+      await controller.onPageFinished(
+        rawUrl:
+            'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=55&mobile=2',
+        pageTitle: '综合区页面',
+        canGoBack: true,
+      );
+      await pumpEventQueue();
 
-    final result = await controller.unfavoriteCurrentForum();
+      final result = await controller.unfavoriteCurrentForum();
 
-    expect(result.isSuccess, isTrue);
-    expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
-    final state = await container.read(forumWebViewControllerProvider.future);
-    expect(state.currentFavoriteForum, isNull);
-    expect(state.favoriteForums, isEmpty);
-  });
+      expect(result.isSuccess, isTrue);
+      expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
+      final state = await container.read(forumWebViewControllerProvider.future);
+      expect(state.currentFavoriteForum, isNull);
+      expect(state.favoriteForums, isEmpty);
+    },
+  );
 
   test('unfavoriteForumByFavid refreshes cached favorite forums', () async {
     final favoriteRepository = _FakeForumFavoriteRepository(
@@ -401,9 +446,7 @@ void main() {
         _favoriteForum(fid: '66', favid: 'fav-66', title: '讨论区'),
       ],
     );
-    final container = _createContainer(
-      favoriteRepository: favoriteRepository,
-    );
+    final container = _createContainer(favoriteRepository: favoriteRepository);
     addTearDown(container.dispose);
 
     final controller = container.read(forumWebViewControllerProvider.notifier);
@@ -433,19 +476,12 @@ ProviderContainer _createContainer({
       ),
     ],
   );
-  container.listen(
-    forumWebViewControllerProvider,
-    (previous, next) {},
-  );
+  container.listen(forumWebViewControllerProvider, (previous, next) {});
   return container;
 }
 
 const List<ForumBoardTagSet> _defaultBoards = <ForumBoardTagSet>[
-  ForumBoardTagSet(
-    fid: '55',
-    name: '综合区',
-    tags: <ForumTagDefinition>[],
-  ),
+  ForumBoardTagSet(fid: '55', name: '综合区', tags: <ForumTagDefinition>[]),
 ];
 
 class _FakeForumTagRepository implements ForumTagRepository {
@@ -479,8 +515,9 @@ class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
   _FakeForumFavoriteRepository({
     List<FavoriteForum>? favoriteForums,
     this.onFavorite,
-  }) : favoriteForums =
-           List<FavoriteForum>.from(favoriteForums ?? const <FavoriteForum>[]);
+  }) : favoriteForums = List<FavoriteForum>.from(
+         favoriteForums ?? const <FavoriteForum>[],
+       );
 
   List<FavoriteForum> favoriteForums;
   final FavoriteForum Function(String fid)? onFavorite;

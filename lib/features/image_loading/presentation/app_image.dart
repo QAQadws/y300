@@ -63,6 +63,7 @@ class AppImage extends ConsumerStatefulWidget {
 class _AppImageState extends ConsumerState<AppImage> {
   /// 本帧解码目标（宽度优先策略结果），用于网络分支的 maxWidth/maxHeight。
   ImageDecodeTarget _decodeTarget = ImageDecodeTarget.none;
+
   /// 本帧显示框尺寸与 DPR，由 build 时的 LayoutBuilder 写入，供降采样解析复用。
   Size _displaySize = Size.zero;
   double _devicePixelRatio = 1;

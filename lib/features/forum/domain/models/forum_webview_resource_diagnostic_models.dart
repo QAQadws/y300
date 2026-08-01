@@ -1,9 +1,4 @@
-enum ForumWebViewResourceKind {
-  smiley,
-  attachment,
-  staticAsset,
-  other,
-}
+enum ForumWebViewResourceKind { smiley, attachment, staticAsset, other }
 
 class ForumWebViewResourceDiagnosticEvent {
   const ForumWebViewResourceDiagnosticEvent({

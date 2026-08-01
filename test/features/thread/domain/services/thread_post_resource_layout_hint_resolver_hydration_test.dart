@@ -54,7 +54,9 @@ void main() {
       const resolver = ThreadPostResourceLayoutHintResolver(
         lockTrustedDimensions: true,
       );
-      final hints = resolver.copyWithLookup(lookup).resolve(
+      final hints = resolver
+          .copyWithLookup(lookup)
+          .resolve(
             const ThreadPostBodyDocument(
               blocks: <ThreadPostBodyBlock>[imageWithHtml],
             ),
@@ -65,19 +67,22 @@ void main() {
       expect(hint.source, ThreadPostResourceLayoutHintSource.htmlAttribute);
     });
 
-    test('without lookup keeps unlocked content default for unknown images', () {
-      const resolver = ThreadPostResourceLayoutHintResolver(
-        lockTrustedDimensions: true,
-      );
-      final hints = resolver.resolve(
-        const ThreadPostBodyDocument(
-          blocks: <ThreadPostBodyBlock>[imageNoDimension],
-        ),
-      );
-      final hint = hints.blockImage(imageNoDimension)!;
-      expect(hint.source, ThreadPostResourceLayoutHintSource.contentDefault);
-      expect(hint.lockForCurrentBuild, isFalse);
-    });
+    test(
+      'without lookup keeps unlocked content default for unknown images',
+      () {
+        const resolver = ThreadPostResourceLayoutHintResolver(
+          lockTrustedDimensions: true,
+        );
+        final hints = resolver.resolve(
+          const ThreadPostBodyDocument(
+            blocks: <ThreadPostBodyBlock>[imageNoDimension],
+          ),
+        );
+        final hint = hints.blockImage(imageNoDimension)!;
+        expect(hint.source, ThreadPostResourceLayoutHintSource.contentDefault);
+        expect(hint.lockForCurrentBuild, isFalse);
+      },
+    );
 
     test('signature reflects lookup signature so plan cache invalidates', () {
       const base = ThreadPostResourceLayoutHintResolver();
@@ -118,9 +123,7 @@ class _FakeDimensionLookup implements ThreadPostImageDimensionLookup {
   final Map<String, ThreadPostResourceDimension> blockDimensions;
 
   @override
-  ThreadPostResourceDimension? blockImageDimension(
-    ThreadPostImageBlock image,
-  ) {
+  ThreadPostResourceDimension? blockImageDimension(ThreadPostImageBlock image) {
     return blockDimensions[ThreadPostResourceLayoutHints.blockImageKey(image)];
   }
 

@@ -113,9 +113,12 @@ class ComicRecord {
       customCoverImageUrl: map['custom_cover_image_url'] as String?,
       coverLocalPath: map['cover_local_path'] as String?,
       customCoverLocalPath: map['custom_cover_local_path'] as String?,
-      customCoverSourceEpisodeId: map['custom_cover_source_episode_id'] as String?,
-      customCoverSourceImageIndex: map['custom_cover_source_image_index'] as int?,
-      customCoverSourceImageUrl: map['custom_cover_source_image_url'] as String?,
+      customCoverSourceEpisodeId:
+          map['custom_cover_source_episode_id'] as String?,
+      customCoverSourceImageIndex:
+          map['custom_cover_source_image_index'] as int?,
+      customCoverSourceImageUrl:
+          map['custom_cover_source_image_url'] as String?,
       metadataUpdatedAt: map['metadata_updated_at'] as int?,
       createdAt: map['created_at'] as int,
       updatedAt: map['updated_at'] as int,

@@ -28,10 +28,7 @@ void main() {
             'forum': <String, dynamic>{'name': '随便聊聊'},
             'threadtypes': <String, dynamic>{
               'required': '1',
-              'types': <String, dynamic>{
-                '101': '杂谈',
-                '102': '资源',
-              },
+              'types': <String, dynamic>{'101': '杂谈', '102': '资源'},
             },
           },
         },
@@ -46,7 +43,10 @@ void main() {
       expect(metadata.formHash, 'fh-meta');
       expect(metadata.forumName, '随便聊聊');
       expect(metadata.typeRequired, isTrue);
-      expect(metadata.threadTypes.map((t) => t.id), containsAll(['101', '102']));
+      expect(
+        metadata.threadTypes.map((t) => t.id),
+        containsAll(['101', '102']),
+      );
       expect(adapter.lastUri.queryParameters['module'], 'forumdisplay');
       expect(adapter.lastUri.queryParameters['fid'], '33');
     });

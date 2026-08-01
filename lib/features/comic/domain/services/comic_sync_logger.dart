@@ -14,10 +14,7 @@ class ComicSyncLogger {
     required ComicParsingDebugInfo debugInfo,
   }) {
     for (final signal in debugInfo.signals) {
-      developer.log(
-        '[tid=$tid] ${signal.toString()}',
-        name: 'ComicSyncLogger',
-      );
+      developer.log('[tid=$tid] ${signal.toString()}', name: 'ComicSyncLogger');
     }
 
     developer.log(

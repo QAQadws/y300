@@ -89,7 +89,9 @@ void main() {
               _NoopForumImagePrecacheService(),
             ),
           ],
-          child: LocalizedTestApp(home: ImageReaderEngine(capability: capability)),
+          child: LocalizedTestApp(
+            home: ImageReaderEngine(capability: capability),
+          ),
         ),
       );
       await tester.pump();
@@ -174,7 +176,9 @@ void main() {
               _NoopForumImagePrecacheService(),
             ),
           ],
-          child: LocalizedTestApp(home: ImageReaderEngine(capability: capability)),
+          child: LocalizedTestApp(
+            home: ImageReaderEngine(capability: capability),
+          ),
         ),
       );
       await tester.pump();
@@ -209,7 +213,9 @@ void main() {
             _NoopForumImagePrecacheService(),
           ),
         ],
-        child: LocalizedTestApp(home: ImageReaderEngine(capability: capability)),
+        child: LocalizedTestApp(
+          home: ImageReaderEngine(capability: capability),
+        ),
       ),
     );
     await tester.pump();

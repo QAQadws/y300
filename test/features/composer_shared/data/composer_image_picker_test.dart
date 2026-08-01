@@ -6,26 +6,32 @@ import 'package:y300/features/composer_shared/data/services/composer_image_picke
 
 void main() {
   group('ImagePickerComposerImagePicker', () {
-    test('keeps image picker order on Android and assigns originalIndex', () async {
-      final picker = ImagePickerComposerImagePicker(
-        platform: TargetPlatform.android,
-        pickMultiImage: () async {
-          return [
-            XFile('/gallery/first.jpg', mimeType: 'image/jpeg'),
-            XFile('/gallery/second.png', mimeType: 'image/png'),
-          ];
-        },
-      );
+    test(
+      'keeps image picker order on Android and assigns originalIndex',
+      () async {
+        final picker = ImagePickerComposerImagePicker(
+          platform: TargetPlatform.android,
+          pickMultiImage: () async {
+            return [
+              XFile('/gallery/first.jpg', mimeType: 'image/jpeg'),
+              XFile('/gallery/second.png', mimeType: 'image/png'),
+            ];
+          },
+        );
 
-      final images = await picker.pickImagesInOrder();
+        final images = await picker.pickImagesInOrder();
 
-      expect(images.map((image) => image.path), [
-        '/gallery/first.jpg',
-        '/gallery/second.png',
-      ]);
-      expect(images.map((image) => image.originalIndex), [0, 1]);
-      expect(images.map((image) => image.mimeType), ['image/jpeg', 'image/png']);
-    });
+        expect(images.map((image) => image.path), [
+          '/gallery/first.jpg',
+          '/gallery/second.png',
+        ]);
+        expect(images.map((image) => image.originalIndex), [0, 1]);
+        expect(images.map((image) => image.mimeType), [
+          'image/jpeg',
+          'image/png',
+        ]);
+      },
+    );
 
     test('returns empty list when picker is cancelled', () async {
       final picker = ImagePickerComposerImagePicker(
@@ -36,17 +42,20 @@ void main() {
       expect(await picker.pickImagesInOrder(), isEmpty);
     });
 
-    test('infers mime type from extension when image picker has no mime', () async {
-      final picker = ImagePickerComposerImagePicker(
-        platform: TargetPlatform.android,
-        pickMultiImage: () async => [XFile('/gallery/photo.gif')],
-      );
+    test(
+      'infers mime type from extension when image picker has no mime',
+      () async {
+        final picker = ImagePickerComposerImagePicker(
+          platform: TargetPlatform.android,
+          pickMultiImage: () async => [XFile('/gallery/photo.gif')],
+        );
 
-      final images = await picker.pickImagesInOrder();
+        final images = await picker.pickImagesInOrder();
 
-      expect(images.single.mimeType, 'image/gif');
-      expect(images.single.fileName, 'photo.gif');
-    });
+        expect(images.single.mimeType, 'image/gif');
+        expect(images.single.fileName, 'photo.gif');
+      },
+    );
 
     test('uses file picker fallback on desktop platforms', () async {
       final picker = ImagePickerComposerImagePicker(
@@ -61,7 +70,10 @@ void main() {
 
       final images = await picker.pickImagesInOrder();
 
-      expect(images.map((image) => image.fileName), ['first.jpg', 'second.png']);
+      expect(images.map((image) => image.fileName), [
+        'first.jpg',
+        'second.png',
+      ]);
       expect(images.map((image) => image.originalIndex), [0, 1]);
     });
 

@@ -57,9 +57,6 @@ class ComposerDraftAttachmentSanitizer {
     if (attachment.status == ComposerImageAttachmentStatus.expired) {
       return true;
     }
-    return expiryPolicy.isExpired(
-      uploadedAt: attachment.uploadedAt,
-      now: now,
-    );
+    return expiryPolicy.isExpired(uploadedAt: attachment.uploadedAt, now: now);
   }
 }

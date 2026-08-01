@@ -38,7 +38,8 @@ class RuleBasedComicSubjectParser implements ComicSubjectParser {
         .where((token) => token.isNotEmpty)
         .toList(growable: false);
     final translationGroup = _pickTranslationGroup(bracketTokens);
-    final inferredAuthor = _nonEmptyOrNull(analysis.authorPrefix) ??
+    final inferredAuthor =
+        _nonEmptyOrNull(analysis.authorPrefix) ??
         ComicTitleRules.extractAuthorHint(raw) ??
         _pickAuthorFromTokens(bracketTokens);
     final normalizedTitle = _nonEmptyOrNull(analysis.cleanBookName) ?? raw;

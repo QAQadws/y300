@@ -218,28 +218,33 @@ void main() {
     expect((await migrating.loadDraft(identity))?.message, 'sqlite');
   });
 
-  test('completed migration marker prevents legacy draft resurrection', () async {
-    final identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
-    const codec = ComposerDraftSnapshotJsonCodec();
-    final legacyKey =
-        '${SharedPreferencesComposerDraftLegacyStore.draftKeyPrefix}'
-        '${identity.storageKey}';
-    SharedPreferences.setMockInitialValues(<String, Object>{
-      PreferenceKeys.composerDraftMigrationVersion.name:
-          MigratingComposerDraftRepository.migrationVersion,
-      legacyKey: jsonEncode(codec.encode(_draft(identity, 'stale legacy'))),
-    });
-    final preferences = await SharedPreferences.getInstance();
-    final migrating = MigratingComposerDraftRepository(
-      target: repository,
-      legacyStore: SharedPreferencesComposerDraftLegacyStore(
-        sharedPreferences: preferences,
-      ),
-      preferencesStore: SharedPreferencesStore(loader: () async => preferences),
-    );
+  test(
+    'completed migration marker prevents legacy draft resurrection',
+    () async {
+      final identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
+      const codec = ComposerDraftSnapshotJsonCodec();
+      final legacyKey =
+          '${SharedPreferencesComposerDraftLegacyStore.draftKeyPrefix}'
+          '${identity.storageKey}';
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        PreferenceKeys.composerDraftMigrationVersion.name:
+            MigratingComposerDraftRepository.migrationVersion,
+        legacyKey: jsonEncode(codec.encode(_draft(identity, 'stale legacy'))),
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final migrating = MigratingComposerDraftRepository(
+        target: repository,
+        legacyStore: SharedPreferencesComposerDraftLegacyStore(
+          sharedPreferences: preferences,
+        ),
+        preferencesStore: SharedPreferencesStore(
+          loader: () async => preferences,
+        ),
+      );
 
-    expect(await migrating.loadDraft(identity), isNull);
-  });
+      expect(await migrating.loadDraft(identity), isNull);
+    },
+  );
 }
 
 ComposerDraftSnapshot _draft(

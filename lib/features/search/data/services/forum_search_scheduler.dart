@@ -31,10 +31,7 @@ abstract class ForumSearchQueueStateReader {
 }
 
 class _ForumSearchJob {
-  const _ForumSearchJob({
-    required this.id,
-    required this.keyword,
-  });
+  const _ForumSearchJob({required this.id, required this.keyword});
 
   final int id;
   final String keyword;
@@ -45,15 +42,16 @@ class _ForumSearchJob {
 /// `DiscuzSearchService` still owns Discuz-specific HTTP/parsing details; this
 /// scheduler owns only timing and queue observation.  Callers that need raw
 /// network access can depend on `rawDiscuzSearchServiceProvider` explicitly.
-class ForumSearchScheduler implements ForumSearchService, ForumSearchQueueStateReader {
+class ForumSearchScheduler
+    implements ForumSearchService, ForumSearchQueueStateReader {
   ForumSearchScheduler({
     required ForumSearchService rawService,
     this.interval = SearchRateLimiter.defaultCooldown,
     DateTime Function()? nowProvider,
     Future<void> Function(Duration duration)? delay,
-  })  : _rawService = rawService,
-        _nowProvider = nowProvider ?? DateTime.now,
-        _delay = delay ?? Future<void>.delayed;
+  }) : _rawService = rawService,
+       _nowProvider = nowProvider ?? DateTime.now,
+       _delay = delay ?? Future<void>.delayed;
 
   static const Duration defaultInterval = SearchRateLimiter.defaultCooldown;
 
@@ -63,8 +61,8 @@ class ForumSearchScheduler implements ForumSearchService, ForumSearchQueueStateR
   final Future<void> Function(Duration duration) _delay;
   final ValueNotifier<ForumSearchSchedulerSnapshot> _snapshot =
       ValueNotifier<ForumSearchSchedulerSnapshot>(
-    ForumSearchSchedulerSnapshot.empty,
-  );
+        ForumSearchSchedulerSnapshot.empty,
+      );
 
   Future<void> _tail = Future<void>.value();
   DateTime? _lastStartedAt;

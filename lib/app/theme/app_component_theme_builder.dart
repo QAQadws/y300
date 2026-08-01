@@ -40,9 +40,7 @@ final class AppComponentThemeBuilder {
   static MenuThemeData menuTheme(ColorScheme scheme) {
     return MenuThemeData(
       style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll<Color>(
-          scheme.surfaceContainer,
-        ),
+        backgroundColor: WidgetStatePropertyAll<Color>(scheme.surfaceContainer),
         surfaceTintColor: const WidgetStatePropertyAll<Color>(
           Colors.transparent,
         ),
@@ -57,9 +55,7 @@ final class AppComponentThemeBuilder {
     return DropdownMenuThemeData(
       textStyle: TextStyle(color: scheme.onSurface),
       menuStyle: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll<Color>(
-          scheme.surfaceContainer,
-        ),
+        backgroundColor: WidgetStatePropertyAll<Color>(scheme.surfaceContainer),
         surfaceTintColor: const WidgetStatePropertyAll<Color>(
           Colors.transparent,
         ),
@@ -207,9 +203,7 @@ final class AppComponentThemeBuilder {
       focusedBorder: border.copyWith(
         borderSide: BorderSide(color: scheme.primary, width: 2),
       ),
-      errorBorder: border.copyWith(
-        borderSide: BorderSide(color: scheme.error),
-      ),
+      errorBorder: border.copyWith(borderSide: BorderSide(color: scheme.error)),
       focusedErrorBorder: border.copyWith(
         borderSide: BorderSide(color: scheme.error, width: 2),
       ),

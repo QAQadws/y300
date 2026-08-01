@@ -45,14 +45,10 @@ void main() {
         'Current Title',
       );
 
-      expect(
-        keywords.map((keyword) => keyword.value).toList(),
-        <String>['Custom Title'],
-      );
-      expect(
-        keywords.single.source,
-        ComicRefreshKeywordSource.customTitle,
-      );
+      expect(keywords.map((keyword) => keyword.value).toList(), <String>[
+        'Custom Title',
+      ]);
+      expect(keywords.single.source, ComicRefreshKeywordSource.customTitle);
     });
 
     test('multi-keyword mode keeps priority order and removes duplicates', () {
@@ -74,10 +70,11 @@ void main() {
         '[Thread] Current Title EP 03',
       );
 
-      expect(
-        keywords.map((keyword) => keyword.value).toList(),
-        <String>['Primary Keyword', 'Display Title', 'Current Title'],
-      );
+      expect(keywords.map((keyword) => keyword.value).toList(), <String>[
+        'Primary Keyword',
+        'Display Title',
+        'Current Title',
+      ]);
       expect(
         keywords.map((keyword) => keyword.source).toList(),
         <ComicRefreshKeywordSource>[
@@ -88,27 +85,30 @@ void main() {
       );
     });
 
-    test('falls back to raw title when parser only returns the trimmed input', () {
-      final resolver = DefaultComicRefreshKeywordResolver(
-        subjectParser: const RuleBasedComicSubjectParser(),
-        featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
-          readerRefreshMultiKeywordEnabled: true,
-        ),
-      );
+    test(
+      'falls back to raw title when parser only returns the trimmed input',
+      () {
+        final resolver = DefaultComicRefreshKeywordResolver(
+          subjectParser: const RuleBasedComicSubjectParser(),
+          featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
+            readerRefreshMultiKeywordEnabled: true,
+          ),
+        );
 
-      final keywords = resolver.resolve(
-        const ComicEpisodeRefreshRequest(
-          sourceTid: '100',
-          displayTitle: 'Original Title',
-        ),
-        'Another Raw Title',
-      );
+        final keywords = resolver.resolve(
+          const ComicEpisodeRefreshRequest(
+            sourceTid: '100',
+            displayTitle: 'Original Title',
+          ),
+          'Another Raw Title',
+        );
 
-      expect(
-        keywords.map((keyword) => keyword.value).toList(),
-        <String>['Original Title', 'Another Raw Title'],
-      );
-    });
+        expect(keywords.map((keyword) => keyword.value).toList(), <String>[
+          'Original Title',
+          'Another Raw Title',
+        ]);
+      },
+    );
 
     test('uses cleaner parser output for display title keywords', () {
       final resolver = DefaultComicRefreshKeywordResolver(
@@ -124,14 +124,8 @@ void main() {
       );
 
       expect(keywords, hasLength(1));
-      expect(
-        keywords.single.value,
-        'Noisy Title',
-      );
-      expect(
-        keywords.single.source,
-        ComicRefreshKeywordSource.displayTitle,
-      );
+      expect(keywords.single.value, 'Noisy Title');
+      expect(keywords.single.source, ComicRefreshKeywordSource.displayTitle);
     });
 
     test('strips author bracket and chapter tail from raw thread title', () {

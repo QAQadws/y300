@@ -127,9 +127,7 @@ void main() {
       isTrue,
     );
     expect(
-      managed
-          .firstWhere((episode) => episode.episodeId != episodeId)
-          .isHidden,
+      managed.firstWhere((episode) => episode.episodeId != episodeId).isHidden,
       isFalse,
     );
   });

@@ -8,13 +8,18 @@ void main() {
   const aspect = 2 / 3; // 封面：宽/高。
 
   group('CoverCropGeometry.cropSizeFor', () {
-    test('wide image: crop height fills, width narrower (left/right movable)',
-        () {
-      // 原图 300x100，比封面更宽 → 裁剪框高=100，宽=100*2/3≈66.67。
-      final crop = CoverCropGeometry.cropSizeFor(const Size(300, 100), aspect);
-      expect(crop.height, 100);
-      expect(crop.width, closeTo(66.67, 0.01));
-    });
+    test(
+      'wide image: crop height fills, width narrower (left/right movable)',
+      () {
+        // 原图 300x100，比封面更宽 → 裁剪框高=100，宽=100*2/3≈66.67。
+        final crop = CoverCropGeometry.cropSizeFor(
+          const Size(300, 100),
+          aspect,
+        );
+        expect(crop.height, 100);
+        expect(crop.width, closeTo(66.67, 0.01));
+      },
+    );
 
     test('tall image: crop width fills, height shorter (up/down movable)', () {
       // 原图 100x300，比封面更高 → 裁剪框宽=100，高=100/(2/3)=150。
@@ -25,10 +30,7 @@ void main() {
 
     test('invalid inputs return zero', () {
       expect(CoverCropGeometry.cropSizeFor(Size.zero, aspect), Size.zero);
-      expect(
-        CoverCropGeometry.cropSizeFor(const Size(100, 100), 0),
-        Size.zero,
-      );
+      expect(CoverCropGeometry.cropSizeFor(const Size(100, 100), 0), Size.zero);
     });
   });
 

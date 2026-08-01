@@ -7,9 +7,7 @@ import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 
 void main() {
   Widget wrap(Widget child) {
-    return ProviderScope(
-      child: LocalizedTestApp(home: child),
-    );
+    return ProviderScope(child: LocalizedTestApp(home: child));
   }
 
   testWidgets('ShelfCoverImage delegates to AppImage', (tester) async {

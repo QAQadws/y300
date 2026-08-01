@@ -14,7 +14,10 @@ void main() {
         cachePath: '/cache/reply_uploads/local-1/original.jpg',
       );
 
-      expect(attachment.previewPath, '/cache/reply_uploads/local-1/original.jpg');
+      expect(
+        attachment.previewPath,
+        '/cache/reply_uploads/local-1/original.jpg',
+      );
     });
 
     test('previewPath falls back to localPath', () {
@@ -66,29 +69,50 @@ void main() {
 
   group('ComposerAttachRemain', () {
     test('recognizes unlimited zero and positive remain values', () {
-      expect(const ComposerAttachRemain(size: -1, count: -1).hasSizeRemain, isTrue);
-      expect(const ComposerAttachRemain(size: -1, count: -1).hasCountRemain, isTrue);
-      expect(const ComposerAttachRemain(size: 0, count: 0).hasSizeRemain, isFalse);
-      expect(const ComposerAttachRemain(size: 0, count: 0).hasCountRemain, isFalse);
-      expect(const ComposerAttachRemain(size: 1024, count: 3).hasSizeRemain, isTrue);
-      expect(const ComposerAttachRemain(size: 1024, count: 3).hasCountRemain, isTrue);
+      expect(
+        const ComposerAttachRemain(size: -1, count: -1).hasSizeRemain,
+        isTrue,
+      );
+      expect(
+        const ComposerAttachRemain(size: -1, count: -1).hasCountRemain,
+        isTrue,
+      );
+      expect(
+        const ComposerAttachRemain(size: 0, count: 0).hasSizeRemain,
+        isFalse,
+      );
+      expect(
+        const ComposerAttachRemain(size: 0, count: 0).hasCountRemain,
+        isFalse,
+      );
+      expect(
+        const ComposerAttachRemain(size: 1024, count: 3).hasSizeRemain,
+        isTrue,
+      );
+      expect(
+        const ComposerAttachRemain(size: 1024, count: 3).hasCountRemain,
+        isTrue,
+      );
     });
   });
 
   group('ComposerImageUploadPermission', () {
-    test('canUploadExtension accepts case-insensitive and dotted extensions', () {
-      const permission = ComposerImageUploadPermission(
-        uid: '597454',
-        uploadHash: 'hash',
-        allowedExtensions: {'jpg', 'jpeg', 'png', 'gif'},
-        attachRemain: ComposerAttachRemain(size: -1, count: -1),
-      );
+    test(
+      'canUploadExtension accepts case-insensitive and dotted extensions',
+      () {
+        const permission = ComposerImageUploadPermission(
+          uid: '597454',
+          uploadHash: 'hash',
+          allowedExtensions: {'jpg', 'jpeg', 'png', 'gif'},
+          attachRemain: ComposerAttachRemain(size: -1, count: -1),
+        );
 
-      expect(permission.canUploadExtension('jpg'), isTrue);
-      expect(permission.canUploadExtension('.JPG'), isTrue);
-      expect(permission.canUploadExtension('png'), isTrue);
-      expect(permission.canUploadExtension('mp3'), isFalse);
-      expect(permission.canUploadExtension(''), isFalse);
-    });
+        expect(permission.canUploadExtension('jpg'), isTrue);
+        expect(permission.canUploadExtension('.JPG'), isTrue);
+        expect(permission.canUploadExtension('png'), isTrue);
+        expect(permission.canUploadExtension('mp3'), isFalse);
+        expect(permission.canUploadExtension(''), isFalse);
+      },
+    );
   });
 }

@@ -6,18 +6,13 @@ abstract class ComicSearchRefreshQueueRepository {
     required DateTime now,
   });
 
-  Future<void> resetRunningToPending({
-    required DateTime now,
-  });
+  Future<void> resetRunningToPending({required DateTime now});
 
   Future<ComicSearchRefreshQueueEntry?> claimNextPending({
     required DateTime now,
   });
 
-  Future<void> markCompleted({
-    required int id,
-    required DateTime now,
-  });
+  Future<void> markCompleted({required int id, required DateTime now});
 
   Future<void> markRetry({
     required int id,

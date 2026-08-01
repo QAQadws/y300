@@ -6,9 +6,7 @@ import 'package:y300/features/forum/domain/models/forum_webview_resource_diagnos
 final forumWebViewResourceDiagnosticRecorderProvider =
     Provider<ForumWebViewResourceDiagnosticRecorder>((ref) {
       final logger = ref.watch(loggerProvider);
-      return DefaultForumWebViewResourceDiagnosticRecorder(
-        writeLog: logger.w,
-      );
+      return DefaultForumWebViewResourceDiagnosticRecorder(writeLog: logger.w);
     });
 
 abstract class ForumWebViewResourceDiagnosticRecorder {

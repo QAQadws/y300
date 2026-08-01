@@ -125,5 +125,4 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   }) async {
     return null;
   }
-
 }

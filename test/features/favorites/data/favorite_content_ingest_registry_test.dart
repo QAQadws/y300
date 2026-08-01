@@ -63,10 +63,9 @@ void main() {
   });
 }
 
-class _StubFavoriteContentIngestHandler implements FavoriteContentIngestHandler {
-  const _StubFavoriteContentIngestHandler({
-    required this.kind,
-  });
+class _StubFavoriteContentIngestHandler
+    implements FavoriteContentIngestHandler {
+  const _StubFavoriteContentIngestHandler({required this.kind});
 
   @override
   final ThreadContentKind kind;

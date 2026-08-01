@@ -35,8 +35,7 @@ class DefaultForumWebViewEarlyScriptBuilder
     return <ForumWebViewInitialUserScript>[
       ForumWebViewInitialUserScript(
         source: _buildEarlyScript(visualPolicy),
-        injectionTime:
-            ForumWebViewInitialUserScriptInjectionTime.documentStart,
+        injectionTime: ForumWebViewInitialUserScriptInjectionTime.documentStart,
       ),
     ];
   }

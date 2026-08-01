@@ -115,7 +115,10 @@ class NovelReaderChapterTurnPolicy {
     if (!viewportDimension.isFinite || viewportDimension <= 0) {
       return minCommitDistance;
     }
-    return math.max(minCommitDistance, viewportDimension * viewportCommitFraction);
+    return math.max(
+      minCommitDistance,
+      viewportDimension * viewportCommitFraction,
+    );
   }
 
   double hintRevealDistanceFor(double viewportDimension) {

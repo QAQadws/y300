@@ -2,12 +2,7 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 
-enum ShelfResolvedCoverStatus {
-  local,
-  stale,
-  remoteOnly,
-  missing,
-}
+enum ShelfResolvedCoverStatus { local, stale, remoteOnly, missing }
 
 class ShelfResolvedCover {
   const ShelfResolvedCover({
@@ -26,7 +21,9 @@ class ShelfResolvedCover {
 
   bool get hasUsableLocalPath {
     final value = localPath?.trim();
-    return value != null && value.isNotEmpty && status == ShelfResolvedCoverStatus.local;
+    return value != null &&
+        value.isNotEmpty &&
+        status == ShelfResolvedCoverStatus.local;
   }
 }
 
@@ -36,9 +33,8 @@ class ShelfResolvedCover {
 /// candidate and optionally asks ImageCacheService for already-known metadata.
 /// Download/write-back remains owned by ShelfCoverWarmupAdapter implementations.
 class ShelfCoverResolver {
-  const ShelfCoverResolver({
-    ImageCacheService? imageCacheService,
-  }) : _imageCacheService = imageCacheService;
+  const ShelfCoverResolver({ImageCacheService? imageCacheService})
+    : _imageCacheService = imageCacheService;
 
   final ImageCacheService? _imageCacheService;
 
@@ -69,7 +65,9 @@ class ShelfCoverResolver {
     }
 
     final cacheKey = request?.cacheKey.trim();
-    final cached = cacheKey == null || cacheKey.isEmpty ? null : await _imageCacheService?.getCached(cacheKey);
+    final cached = cacheKey == null || cacheKey.isEmpty
+        ? null
+        : await _imageCacheService?.getCached(cacheKey);
     final cachedPath = cached?.localPath?.trim();
     if (cachedPath != null && cachedPath.isNotEmpty) {
       return ShelfResolvedCover(
@@ -85,7 +83,9 @@ class ShelfCoverResolver {
     if (remote != null && remote.isNotEmpty) {
       return ShelfResolvedCover(
         workId: item.workId,
-        status: cacheKey == null ? ShelfResolvedCoverStatus.remoteOnly : ShelfResolvedCoverStatus.stale,
+        status: cacheKey == null
+            ? ShelfResolvedCoverStatus.remoteOnly
+            : ShelfResolvedCoverStatus.stale,
         remoteUrl: remote,
         cacheKey: cacheKey,
       );
@@ -95,7 +95,9 @@ class ShelfCoverResolver {
     if (itemRemote != null) {
       return ShelfResolvedCover(
         workId: item.workId,
-        status: cacheKey == null ? ShelfResolvedCoverStatus.remoteOnly : ShelfResolvedCoverStatus.stale,
+        status: cacheKey == null
+            ? ShelfResolvedCoverStatus.remoteOnly
+            : ShelfResolvedCoverStatus.stale,
         remoteUrl: itemRemote,
         cacheKey: cacheKey,
       );

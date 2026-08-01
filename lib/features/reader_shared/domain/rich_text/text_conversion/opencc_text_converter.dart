@@ -28,8 +28,7 @@ final class OpenccTextConverter implements TextConverter {
   @override
   Future<String> convertHtml(String html) async {
     if (html.isEmpty) return html;
-    final option =
-        mode == TextConversionMode.toTraditional ? S2T() : T2S();
+    final option = mode == TextConversionMode.toTraditional ? S2T() : T2S();
     return ChineseConverter.convert(html, option);
   }
 }

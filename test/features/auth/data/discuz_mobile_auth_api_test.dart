@@ -18,42 +18,45 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    test('posts mobile login form and treats success message as success', () async {
-      final adapter = _AuthApiTestAdapter(
-        responseJson: <String, dynamic>{
-          'Version': '4',
-          'Charset': 'UTF-8',
-          'Variables': <String, dynamic>{
-            'auth': 'token123',
-            'member_uid': '123',
+    test(
+      'posts mobile login form and treats success message as success',
+      () async {
+        final adapter = _AuthApiTestAdapter(
+          responseJson: <String, dynamic>{
+            'Version': '4',
+            'Charset': 'UTF-8',
+            'Variables': <String, dynamic>{
+              'auth': 'token123',
+              'member_uid': '123',
+            },
+            'Message': <String, dynamic>{
+              'messageval': 'login_succeed',
+              'messagestr': '登录成功',
+            },
           },
-          'Message': <String, dynamic>{
-            'messageval': 'login_succeed',
-            'messagestr': '登录成功',
-          },
-        },
-      );
-      final api = _buildApi(adapter);
+        );
+        final api = _buildApi(adapter);
 
-      final result = await api.login(
-        const LoginRequest(
-          username: 'tester',
-          password: 'pass123',
-          formhash: 'fh_guest',
-        ),
-      );
+        final result = await api.login(
+          const LoginRequest(
+            username: 'tester',
+            password: 'pass123',
+            formhash: 'fh_guest',
+          ),
+        );
 
-      expect(result.isSuccess, isTrue);
-      expect(adapter.lastUri?.queryParameters['module'], 'login');
-      expect(adapter.lastUri?.queryParameters['version'], '4');
-      expect(adapter.lastUri?.queryParameters['action'], 'login');
-      expect(adapter.lastBody, contains('formhash=fh_guest'));
-      expect(adapter.lastBody, contains('loginsubmit=1'));
-      expect(adapter.lastBody, contains('username=tester'));
-      expect(adapter.lastBody, contains('password=pass123'));
-      expect(adapter.lastBody, contains('loginfield=auto'));
-      expect(adapter.lastBody, contains('cookietime=1'));
-    });
+        expect(result.isSuccess, isTrue);
+        expect(adapter.lastUri?.queryParameters['module'], 'login');
+        expect(adapter.lastUri?.queryParameters['version'], '4');
+        expect(adapter.lastUri?.queryParameters['action'], 'login');
+        expect(adapter.lastBody, contains('formhash=fh_guest'));
+        expect(adapter.lastBody, contains('loginsubmit=1'));
+        expect(adapter.lastBody, contains('username=tester'));
+        expect(adapter.lastBody, contains('password=pass123'));
+        expect(adapter.lastBody, contains('loginfield=auto'));
+        expect(adapter.lastBody, contains('cookietime=1'));
+      },
+    );
 
     test('returns business failure when login formhash is empty', () async {
       final adapter = _AuthApiTestAdapter(responseJson: <String, dynamic>{});

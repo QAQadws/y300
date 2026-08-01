@@ -28,10 +28,7 @@ void main() {
     });
 
     test('equality is by value', () {
-      expect(
-        const CoverFocalPoint(0.3, 0.7),
-        const CoverFocalPoint(0.3, 0.7),
-      );
+      expect(const CoverFocalPoint(0.3, 0.7), const CoverFocalPoint(0.3, 0.7));
       expect(
         const CoverFocalPoint(0.3, 0.7),
         isNot(const CoverFocalPoint(0.7, 0.3)),
@@ -46,17 +43,11 @@ void main() {
     });
 
     test('maps stored focus to Alignment', () {
-      expect(
-        coverAlignmentFromFocus(-1.0, 1.0),
-        const Alignment(-1.0, 1.0),
-      );
+      expect(coverAlignmentFromFocus(-1.0, 1.0), const Alignment(-1.0, 1.0));
     });
 
     test('clamps stored focus before mapping', () {
-      expect(
-        coverAlignmentFromFocus(5.0, -5.0),
-        const Alignment(1.0, -1.0),
-      );
+      expect(coverAlignmentFromFocus(5.0, -5.0), const Alignment(1.0, -1.0));
     });
   });
 }

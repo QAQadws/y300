@@ -35,10 +35,8 @@ class DiscuzPostingFormMetadataRepository
     return _apiClient.getParsed<NewThreadFormMetadata>(
       module: 'forumdisplay',
       queryParameters: {'fid': fid, 'page': 1},
-      parser: (response) => _parser.parse(
-        fid: fid,
-        variables: response.variables,
-      ),
+      parser: (response) =>
+          _parser.parse(fid: fid, variables: response.variables),
     );
   }
 }

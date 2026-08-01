@@ -25,10 +25,12 @@ class ShelfFeatureFlags {
     bool? useStaleWhileRevalidate,
   }) {
     return ShelfFeatureFlags(
-      useShelfSnapshotQuery: useShelfSnapshotQuery ?? this.useShelfSnapshotQuery,
+      useShelfSnapshotQuery:
+          useShelfSnapshotQuery ?? this.useShelfSnapshotQuery,
       useShelfCoverQueue: useShelfCoverQueue ?? this.useShelfCoverQueue,
       useShelfCoverImage: useShelfCoverImage ?? this.useShelfCoverImage,
-      useStaleWhileRevalidate: useStaleWhileRevalidate ?? this.useStaleWhileRevalidate,
+      useStaleWhileRevalidate:
+          useStaleWhileRevalidate ?? this.useStaleWhileRevalidate,
     );
   }
 }

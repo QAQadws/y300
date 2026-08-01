@@ -21,12 +21,7 @@ class ParsedPostContext {
   final String messageText;
 }
 
-enum ParsedLinkKind {
-  episode,
-  catalog,
-  external,
-  unknown,
-}
+enum ParsedLinkKind { episode, catalog, external, unknown }
 
 class ParsedAnchorFeatures {
   const ParsedAnchorFeatures({
@@ -58,10 +53,7 @@ class ParsedAnchor {
   final ParsedAnchorFeatures features;
 }
 
-enum EpisodeSourceType {
-  threadHtml,
-  viewthreadQuery,
-}
+enum EpisodeSourceType { threadHtml, viewthreadQuery }
 
 class EpisodeLinkCandidate {
   const EpisodeLinkCandidate({
@@ -98,4 +90,3 @@ class EpisodeExtractionResult {
   final List<String> nextHopCandidates;
   final List<ComicParsingSignal> debugSignals;
 }
-

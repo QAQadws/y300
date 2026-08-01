@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/shared/widgets/shelf/candidate_shelf_action_row.dart';
 
 void main() {
-  testWidgets('CandidateShelfActionRow displays label and reacts to tap', (tester) async {
+  testWidgets('CandidateShelfActionRow displays label and reacts to tap', (
+    tester,
+  ) async {
     var tapped = false;
 
     await tester.pumpWidget(

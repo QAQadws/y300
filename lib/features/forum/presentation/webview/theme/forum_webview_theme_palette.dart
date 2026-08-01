@@ -51,8 +51,7 @@ final class ForumWebViewThemePalette {
   final Color scrim;
 
   String get signature {
-    final brightnessLabel =
-        brightness == Brightness.dark ? 'dark' : 'light';
+    final brightnessLabel = brightness == Brightness.dark ? 'dark' : 'light';
     return '$brightnessLabel:'
         '${_toCssHex(pageBackground)}:'
         '${_toCssHex(surface)}:'

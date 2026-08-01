@@ -7,10 +7,7 @@ import 'package:y300/features/favorites/data/services/favorite_first_sync_reques
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
-enum ComicRefreshApplyStatus {
-  applied,
-  skipped,
-}
+enum ComicRefreshApplyStatus { applied, skipped }
 
 class ComicRefreshApplyRequest {
   const ComicRefreshApplyRequest({
@@ -31,12 +28,15 @@ class ComicRefreshApplyRequest {
   final ComicEpisodeRefreshSource source;
   final LibraryMutationSource mutationSource;
   final String reason;
+
   /// 本次刷新发现或使用的 catalogUrl。非空时持久化到本地，
   /// 以便下次刷新可直接走 catalog 快速路径。
   final String? catalogUrl;
+
   /// 本次刷新内 discovery 阶段已抓取并解析过的 thread detail 缓存。
   /// 封面提升优先复用其中第一话的解析结果，避免再发一次 viewthread。
   final ComicThreadDetailCache? threadCache;
+
   /// 当封面提升必须发起新 viewthread 时使用的 governor，保证不越过 cooldown。
   final FavoriteFirstSyncRequestGovernor? governor;
 }
@@ -51,11 +51,11 @@ class ComicRefreshApplyResult {
   });
 
   const ComicRefreshApplyResult.skipped()
-      : status = ComicRefreshApplyStatus.skipped,
-        insertedCount = 0,
-        updatedCount = 0,
-        totalCount = 0,
-        coverPromoted = false;
+    : status = ComicRefreshApplyStatus.skipped,
+      insertedCount = 0,
+      updatedCount = 0,
+      totalCount = 0,
+      coverPromoted = false;
 
   final ComicRefreshApplyStatus status;
   final int insertedCount;
@@ -68,8 +68,7 @@ abstract class ComicRefreshOutcomeApplier {
   Future<ComicRefreshApplyResult> apply(ComicRefreshApplyRequest request);
 }
 
-class DefaultComicRefreshOutcomeApplier
-    implements ComicRefreshOutcomeApplier {
+class DefaultComicRefreshOutcomeApplier implements ComicRefreshOutcomeApplier {
   const DefaultComicRefreshOutcomeApplier({
     required ComicRepository repository,
     required ComicFirstEpisodeCoverPromoter firstEpisodeCoverPromoter,

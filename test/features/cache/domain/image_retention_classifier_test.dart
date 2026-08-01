@@ -15,20 +15,23 @@ void main() {
       );
     });
 
-    test('stickers, carousel/forum head and forum icon are sticky long-term', () {
-      expect(
-        ImageRetentionClassifier.defaultFor(ImageCacheRole.remoteSmiley),
-        ImageRetentionClass.sticky,
-      );
-      expect(
-        ImageRetentionClassifier.defaultFor(ImageCacheRole.forumHeadImage),
-        ImageRetentionClass.sticky,
-      );
-      expect(
-        ImageRetentionClassifier.defaultFor(ImageCacheRole.forumIcon),
-        ImageRetentionClass.sticky,
-      );
-    });
+    test(
+      'stickers, carousel/forum head and forum icon are sticky long-term',
+      () {
+        expect(
+          ImageRetentionClassifier.defaultFor(ImageCacheRole.remoteSmiley),
+          ImageRetentionClass.sticky,
+        );
+        expect(
+          ImageRetentionClassifier.defaultFor(ImageCacheRole.forumHeadImage),
+          ImageRetentionClass.sticky,
+        );
+        expect(
+          ImageRetentionClassifier.defaultFor(ImageCacheRole.forumIcon),
+          ImageRetentionClass.sticky,
+        );
+      },
+    );
 
     test('thread/avatar/blog/online comic-novel images are ephemeral', () {
       for (final role in <ImageCacheRole>[
@@ -49,11 +52,15 @@ void main() {
 
     test('isClearableByDefault is true only for ephemeral roles', () {
       expect(
-        ImageRetentionClassifier.isClearableByDefault(ImageCacheRole.threadInline),
+        ImageRetentionClassifier.isClearableByDefault(
+          ImageCacheRole.threadInline,
+        ),
         isTrue,
       );
       expect(
-        ImageRetentionClassifier.isClearableByDefault(ImageCacheRole.remoteSmiley),
+        ImageRetentionClassifier.isClearableByDefault(
+          ImageCacheRole.remoteSmiley,
+        ),
         isFalse,
       );
       expect(

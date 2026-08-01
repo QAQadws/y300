@@ -10,10 +10,7 @@ import 'package:flutter/foundation.dart';
 /// it, and [RichDocumentCodec] ferries it across isolate boundaries.
 @immutable
 sealed class RichBlock {
-  const RichBlock({
-    this.anchorId = '',
-    this.continuesPrevious = false,
-  });
+  const RichBlock({this.anchorId = '', this.continuesPrevious = false});
 
   /// Stable identity used for scroll anchoring, progress restore and search.
   /// Stability across re-parses/conversions matters: persisted anchors must
@@ -82,18 +79,12 @@ class RichImageBlock extends RichBlock {
 
 /// A horizontal rule (`<hr>`).
 class RichDividerBlock extends RichBlock {
-  const RichDividerBlock({
-    super.anchorId,
-    super.continuesPrevious,
-  });
+  const RichDividerBlock({super.anchorId, super.continuesPrevious});
 }
 
 /// An explicit vertical gap (e.g. a standalone `<br>` between blocks).
 class RichSpacerBlock extends RichBlock {
-  const RichSpacerBlock({
-    super.anchorId,
-    super.continuesPrevious,
-  });
+  const RichSpacerBlock({super.anchorId, super.continuesPrevious});
 }
 
 /// An inline span inside a [RichTextBlock].

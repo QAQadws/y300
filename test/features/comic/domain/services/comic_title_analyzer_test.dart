@@ -24,9 +24,7 @@ void main() {
     }
 
     test('search keyword is clipped to 18 runes', () {
-      final result = analyzer.analyze(
-        '这是一个非常非常非常非常非常长的漫画标题第1话',
-      );
+      final result = analyzer.analyze('这是一个非常非常非常非常非常长的漫画标题第1话');
 
       expect(result.cleanBookName, '这是一个非常非常非常非常非常长的漫画标题');
       expect(result.searchKeyword.runes.length, 18);
@@ -40,10 +38,7 @@ void main() {
         ),
         '12345',
       );
-      expect(
-        analyzer.extractTidFromUrl('thread-54321-1-1.html'),
-        '54321',
-      );
+      expect(analyzer.extractTidFromUrl('thread-54321-1-1.html'), '54321');
     });
   });
 }

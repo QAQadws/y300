@@ -16,7 +16,9 @@ void main() {
     );
     final builder = DiscuzImageRequestHeaderBuilder(cookieStore: cookieStore);
 
-    final headers = await builder.buildHeaders('https://bbs.yamibo.com/data/attachment/test.jpg');
+    final headers = await builder.buildHeaders(
+      'https://bbs.yamibo.com/data/attachment/test.jpg',
+    );
 
     expect(headers['Referer'], 'https://bbs.yamibo.com/');
     expect(headers['User-Agent'], contains('Mozilla/5.0'));
@@ -25,17 +27,22 @@ void main() {
     expect(headers['Cookie'], 'auth=token123');
   });
 
-  test('buildHeaders does not leak bbs cookie to third-party image host', () async {
-    final cookieStore = CookieStore();
-    await cookieStore.saveFromSetCookie(
-      Uri.parse('https://bbs.yamibo.com/forum.php'),
-      const <String>['auth=token123; Path=/; HttpOnly'],
-    );
-    final builder = DiscuzImageRequestHeaderBuilder(cookieStore: cookieStore);
+  test(
+    'buildHeaders does not leak bbs cookie to third-party image host',
+    () async {
+      final cookieStore = CookieStore();
+      await cookieStore.saveFromSetCookie(
+        Uri.parse('https://bbs.yamibo.com/forum.php'),
+        const <String>['auth=token123; Path=/; HttpOnly'],
+      );
+      final builder = DiscuzImageRequestHeaderBuilder(cookieStore: cookieStore);
 
-    final headers = await builder.buildHeaders('https://img.example.test/image.jpg');
+      final headers = await builder.buildHeaders(
+        'https://img.example.test/image.jpg',
+      );
 
-    expect(headers['Referer'], 'https://bbs.yamibo.com/');
-    expect(headers.containsKey('Cookie'), isFalse);
-  });
+      expect(headers['Referer'], 'https://bbs.yamibo.com/');
+      expect(headers.containsKey('Cookie'), isFalse);
+    },
+  );
 }

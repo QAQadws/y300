@@ -72,10 +72,7 @@ void main() {
   test('maps permission errors to a stable domain reason', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (_) async {
-          throw PlatformException(
-            code: 'permissionDenied',
-            message: 'denied',
-          );
+          throw PlatformException(code: 'permissionDenied', message: 'denied');
         });
     final sink = MethodChannelReaderImageExportSink(
       platform: ReaderImageExportPlatform.ios,

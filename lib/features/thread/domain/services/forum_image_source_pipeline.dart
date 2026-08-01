@@ -5,17 +5,9 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
-enum ForumImageSourceOrigin {
-  dom,
-  attachment,
-}
+enum ForumImageSourceOrigin { dom, attachment }
 
-enum ForumImageHostKind {
-  yamiboAttachment,
-  yamiboStatic,
-  thirdParty,
-  unknown,
-}
+enum ForumImageHostKind { yamiboAttachment, yamiboStatic, thirdParty, unknown }
 
 class ForumImageSource {
   const ForumImageSource({
@@ -145,10 +137,7 @@ class DefaultForumImageSourcePipeline implements ForumImageSourcePipeline {
           rawUrl: rawUrl,
           normalizedUrl: normalizedUrl,
           origin: ForumImageSourceOrigin.dom,
-          hostKind: classifyHostKind(
-            normalizedUrl,
-            siteBaseUrl: siteBaseUrl,
-          ),
+          hostKind: classifyHostKind(normalizedUrl, siteBaseUrl: siteBaseUrl),
           position: position,
         ),
       );
@@ -169,10 +158,7 @@ class DefaultForumImageSourcePipeline implements ForumImageSourcePipeline {
       if (!isImageAttachment(attachment)) {
         continue;
       }
-      final rawUrl = joinAttachmentUrl(
-        attachment.url,
-        attachment.attachment,
-      );
+      final rawUrl = joinAttachmentUrl(attachment.url, attachment.attachment);
       final normalizedUrl = normalizeImageSource(
         rawUrl,
         urlResolver: urlResolver,
@@ -187,10 +173,7 @@ class DefaultForumImageSourcePipeline implements ForumImageSourcePipeline {
           rawUrl: rawUrl,
           normalizedUrl: normalizedUrl,
           origin: ForumImageSourceOrigin.attachment,
-          hostKind: classifyHostKind(
-            normalizedUrl,
-            siteBaseUrl: siteBaseUrl,
-          ),
+          hostKind: classifyHostKind(normalizedUrl, siteBaseUrl: siteBaseUrl),
           position: position,
           aid: attachment.aid.trim().isEmpty ? null : attachment.aid.trim(),
         ),

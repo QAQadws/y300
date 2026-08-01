@@ -76,10 +76,10 @@ final class Y300ThemeExtension extends ThemeExtension<Y300ThemeExtension> {
           shelfCategoryBarBackground ?? this.shelfCategoryBarBackground,
       shelfCategorySelectedBackground:
           shelfCategorySelectedBackground ??
-              this.shelfCategorySelectedBackground,
+          this.shelfCategorySelectedBackground,
       shelfCategorySelectedForeground:
           shelfCategorySelectedForeground ??
-              this.shelfCategorySelectedForeground,
+          this.shelfCategorySelectedForeground,
       shelfCategoryDivider: shelfCategoryDivider ?? this.shelfCategoryDivider,
       readerChromeBackground:
           readerChromeBackground ?? this.readerChromeBackground,
@@ -96,10 +96,7 @@ final class Y300ThemeExtension extends ThemeExtension<Y300ThemeExtension> {
   }
 
   @override
-  Y300ThemeExtension lerp(
-    ThemeExtension<Y300ThemeExtension>? other,
-    double t,
-  ) {
+  Y300ThemeExtension lerp(ThemeExtension<Y300ThemeExtension>? other, double t) {
     if (other is! Y300ThemeExtension) {
       return this;
     }

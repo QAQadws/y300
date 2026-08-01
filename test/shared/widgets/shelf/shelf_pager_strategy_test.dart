@@ -31,18 +31,13 @@ void main() {
       ];
       final tabs = strategy.buildTabs(categories);
 
-      final index = strategy.resolveSelectedIndex(
-        tabs: tabs,
-        selectedId: '55',
-      );
+      final index = strategy.resolveSelectedIndex(tabs: tabs, selectedId: '55');
 
       expect(index, 2);
     });
 
     test('resolveSelectedIndex falls back safely for unknown id', () {
-      const categories = <_FakeCategory>[
-        _FakeCategory(id: 'all', name: '全部'),
-      ];
+      const categories = <_FakeCategory>[_FakeCategory(id: 'all', name: '全部')];
       final tabs = strategy.buildTabs(categories);
 
       final index = strategy.resolveSelectedIndex(
@@ -57,10 +52,7 @@ void main() {
 }
 
 class _FakeCategory {
-  const _FakeCategory({
-    required this.id,
-    required this.name,
-  });
+  const _FakeCategory({required this.id, required this.name});
 
   final String id;
   final String name;

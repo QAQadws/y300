@@ -7,9 +7,7 @@ import 'package:y300/core/config/app_config.dart';
 /// prevents UI widgets and download services from each inventing their own
 /// slightly different URL rules.
 class SiteUrlResolver {
-  const SiteUrlResolver({
-    this.siteOrigin = '${AppConfig.siteBaseUrl}/',
-  });
+  const SiteUrlResolver({this.siteOrigin = '${AppConfig.siteBaseUrl}/'});
 
   final String siteOrigin;
 
@@ -44,10 +42,13 @@ class SiteUrlResolver {
   }
 
   String? _pseudoAttachmentPath(Uri uri) {
-    if ((uri.scheme != 'http' && uri.scheme != 'https') || uri.host.toLowerCase() != 'data') {
+    if ((uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.toLowerCase() != 'data') {
       return null;
     }
-    final normalizedPath = uri.path.startsWith('/') ? uri.path.substring(1) : uri.path;
+    final normalizedPath = uri.path.startsWith('/')
+        ? uri.path.substring(1)
+        : uri.path;
     if (!normalizedPath.toLowerCase().startsWith('attachment/')) {
       return null;
     }

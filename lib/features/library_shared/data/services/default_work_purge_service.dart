@@ -5,15 +5,17 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 typedef ComicWorkPurger = Future<void> Function({required String comicId});
 typedef NovelWorkPurger = Future<void> Function({required String novelId});
-typedef LibraryWorkStatePurger = Future<void> Function({
-  required LibraryModuleKey moduleKey,
-  required String workId,
-});
+typedef LibraryWorkStatePurger =
+    Future<void> Function({
+      required LibraryModuleKey moduleKey,
+      required String workId,
+    });
 typedef FavoriteWorkMarker = Future<int> Function(String workId);
-typedef CacheOwnerDeleter = Future<int> Function({
-  required ImageCacheOwnerType ownerType,
-  required String ownerId,
-});
+typedef CacheOwnerDeleter =
+    Future<int> Function({
+      required ImageCacheOwnerType ownerType,
+      required String ownerId,
+    });
 typedef ComicDownloadDeleter = Future<bool> Function({required String workId});
 typedef NovelDownloadDeleter = Future<bool> Function({required String novelId});
 typedef ComicQueueDeleter = Future<void> Function(String comicId);
@@ -28,20 +30,20 @@ class DefaultWorkPurgeService implements WorkPurgeService {
     required ComicDownloadDeleter deleteComicDownloads,
     required NovelDownloadDeleter deleteNovelDownloads,
     required ComicQueueDeleter deleteComicQueueByComicId,
-  })  : _purgeLibraryWorkState = purgeLibraryWorkState,
-        _markFavoriteRemovedByWorkId = markFavoriteRemovedByWorkId,
-        _deleteCacheByOwner = deleteCacheByOwner,
-        _strategies = <ThreadContentKind, _WorkPurgeStrategy>{
-          ThreadContentKind.comic: _ComicWorkPurgeStrategy(
-            purgeComicWork: purgeComicWork,
-            deleteComicDownloads: deleteComicDownloads,
-            deleteComicQueueByComicId: deleteComicQueueByComicId,
-          ),
-          ThreadContentKind.novel: _NovelWorkPurgeStrategy(
-            purgeNovelWork: purgeNovelWork,
-            deleteNovelDownloads: deleteNovelDownloads,
-          ),
-        };
+  }) : _purgeLibraryWorkState = purgeLibraryWorkState,
+       _markFavoriteRemovedByWorkId = markFavoriteRemovedByWorkId,
+       _deleteCacheByOwner = deleteCacheByOwner,
+       _strategies = <ThreadContentKind, _WorkPurgeStrategy>{
+         ThreadContentKind.comic: _ComicWorkPurgeStrategy(
+           purgeComicWork: purgeComicWork,
+           deleteComicDownloads: deleteComicDownloads,
+           deleteComicQueueByComicId: deleteComicQueueByComicId,
+         ),
+         ThreadContentKind.novel: _NovelWorkPurgeStrategy(
+           purgeNovelWork: purgeNovelWork,
+           deleteNovelDownloads: deleteNovelDownloads,
+         ),
+       };
 
   final LibraryWorkStatePurger _purgeLibraryWorkState;
   final FavoriteWorkMarker _markFavoriteRemovedByWorkId;
@@ -117,9 +119,9 @@ class _ComicWorkPurgeStrategy implements _WorkPurgeStrategy {
     required ComicWorkPurger purgeComicWork,
     required ComicDownloadDeleter deleteComicDownloads,
     required ComicQueueDeleter deleteComicQueueByComicId,
-  })  : _purgeComicWork = purgeComicWork,
-        _deleteComicDownloads = deleteComicDownloads,
-        _deleteComicQueueByComicId = deleteComicQueueByComicId;
+  }) : _purgeComicWork = purgeComicWork,
+       _deleteComicDownloads = deleteComicDownloads,
+       _deleteComicQueueByComicId = deleteComicQueueByComicId;
 
   final ComicWorkPurger _purgeComicWork;
   final ComicDownloadDeleter _deleteComicDownloads;
@@ -154,8 +156,8 @@ class _NovelWorkPurgeStrategy implements _WorkPurgeStrategy {
   _NovelWorkPurgeStrategy({
     required NovelWorkPurger purgeNovelWork,
     required NovelDownloadDeleter deleteNovelDownloads,
-  })  : _purgeNovelWork = purgeNovelWork,
-        _deleteNovelDownloads = deleteNovelDownloads;
+  }) : _purgeNovelWork = purgeNovelWork,
+       _deleteNovelDownloads = deleteNovelDownloads;
 
   final NovelWorkPurger _purgeNovelWork;
   final NovelDownloadDeleter _deleteNovelDownloads;

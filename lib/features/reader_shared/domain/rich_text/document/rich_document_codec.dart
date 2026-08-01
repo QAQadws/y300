@@ -29,35 +29,29 @@ class RichDocumentCodec {
     };
     return switch (block) {
       RichTextBlock() => <String, Object?>{
-          ...baseFields,
-          'type': 'text',
-          'runs': block.runs.map(encodeRun).toList(growable: false),
-          'headingLevel': block.headingLevel,
-        },
+        ...baseFields,
+        'type': 'text',
+        'runs': block.runs.map(encodeRun).toList(growable: false),
+        'headingLevel': block.headingLevel,
+      },
       RichQuoteBlock() => <String, Object?>{
-          ...baseFields,
-          'type': 'quote',
-          'blocks': block.blocks.map(encodeBlock).toList(growable: false),
-        },
+        ...baseFields,
+        'type': 'quote',
+        'blocks': block.blocks.map(encodeBlock).toList(growable: false),
+      },
       RichImageBlock() => <String, Object?>{
-          ...baseFields,
-          'type': 'image',
-          'url': block.url,
-          'rawUrl': block.rawUrl,
-          'index': block.index,
-          'aid': block.aid,
-          'altText': block.altText,
-          'originalWidth': block.originalWidth,
-          'originalHeight': block.originalHeight,
-        },
-      RichDividerBlock() => <String, Object?>{
-          ...baseFields,
-          'type': 'divider',
-        },
-      RichSpacerBlock() => <String, Object?>{
-          ...baseFields,
-          'type': 'spacer',
-        },
+        ...baseFields,
+        'type': 'image',
+        'url': block.url,
+        'rawUrl': block.rawUrl,
+        'index': block.index,
+        'aid': block.aid,
+        'altText': block.altText,
+        'originalWidth': block.originalWidth,
+        'originalHeight': block.originalHeight,
+      },
+      RichDividerBlock() => <String, Object?>{...baseFields, 'type': 'divider'},
+      RichSpacerBlock() => <String, Object?>{...baseFields, 'type': 'spacer'},
     };
   }
 
@@ -68,40 +62,40 @@ class RichDocumentCodec {
 
     return switch (type) {
       'text' => RichTextBlock(
-          anchorId: anchorId,
-          continuesPrevious: continuesPrevious,
-          runs: _decodeRuns(map['runs']),
-          headingLevel: map['headingLevel'] as int? ?? 0,
-        ),
+        anchorId: anchorId,
+        continuesPrevious: continuesPrevious,
+        runs: _decodeRuns(map['runs']),
+        headingLevel: map['headingLevel'] as int? ?? 0,
+      ),
       'quote' => RichQuoteBlock(
-          anchorId: anchorId,
-          continuesPrevious: continuesPrevious,
-          blocks: _decodeBlocks(map['blocks']),
-        ),
+        anchorId: anchorId,
+        continuesPrevious: continuesPrevious,
+        blocks: _decodeBlocks(map['blocks']),
+      ),
       'image' => RichImageBlock(
-          anchorId: anchorId,
-          continuesPrevious: continuesPrevious,
-          url: map['url'] as String? ?? '',
-          rawUrl: map['rawUrl'] as String? ?? '',
-          index: map['index'] as int? ?? 0,
-          aid: map['aid'] as String?,
-          altText: map['altText'] as String?,
-          originalWidth: map['originalWidth'] as double?,
-          originalHeight: map['originalHeight'] as double?,
-        ),
+        anchorId: anchorId,
+        continuesPrevious: continuesPrevious,
+        url: map['url'] as String? ?? '',
+        rawUrl: map['rawUrl'] as String? ?? '',
+        index: map['index'] as int? ?? 0,
+        aid: map['aid'] as String?,
+        altText: map['altText'] as String?,
+        originalWidth: map['originalWidth'] as double?,
+        originalHeight: map['originalHeight'] as double?,
+      ),
       'divider' => RichDividerBlock(
-          anchorId: anchorId,
-          continuesPrevious: continuesPrevious,
-        ),
+        anchorId: anchorId,
+        continuesPrevious: continuesPrevious,
+      ),
       'spacer' => RichSpacerBlock(
-          anchorId: anchorId,
-          continuesPrevious: continuesPrevious,
-        ),
+        anchorId: anchorId,
+        continuesPrevious: continuesPrevious,
+      ),
       _ => RichTextBlock(
-          anchorId: anchorId,
-          continuesPrevious: continuesPrevious,
-          runs: const <RichRun>[],
-        ),
+        anchorId: anchorId,
+        continuesPrevious: continuesPrevious,
+        runs: const <RichRun>[],
+      ),
     };
   }
 
@@ -114,8 +108,9 @@ class RichDocumentCodec {
       'isItalic': run.isItalic,
       'isUnderline': run.isUnderline,
       'color': run.color,
-      'inlineImage':
-          run.inlineImage == null ? null : encodeInlineImage(run.inlineImage!),
+      'inlineImage': run.inlineImage == null
+          ? null
+          : encodeInlineImage(run.inlineImage!),
     };
   }
 
@@ -162,21 +157,23 @@ class RichDocumentCodec {
     if (value is! List<Object?>) {
       return const <RichBlock>[];
     }
-    return value.map((item) => decodeBlock(_castMap(item))).toList(growable: false);
+    return value
+        .map((item) => decodeBlock(_castMap(item)))
+        .toList(growable: false);
   }
 
   List<RichRun> _decodeRuns(Object? value) {
     if (value is! List<Object?>) {
       return const <RichRun>[];
     }
-    return value.map((item) => decodeRun(_castMap(item))).toList(growable: false);
+    return value
+        .map((item) => decodeRun(_castMap(item)))
+        .toList(growable: false);
   }
 
   Map<String, Object?> _castMap(Object? raw) {
     if (raw is Map<Object?, Object?>) {
-      return raw.map(
-        (key, value) => MapEntry(key.toString(), value),
-      );
+      return raw.map((key, value) => MapEntry(key.toString(), value));
     }
     return <String, Object?>{};
   }

@@ -13,94 +13,109 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
-  test('FavoriteShelfBootstrapper runs full sync when snapshot is missing', () async {
-    final repository = _FakeLocalFavoriteRepository(snapshot: null);
-    final syncService = _FakeFavoriteSyncService();
-    final bootstrapper = DefaultFavoriteShelfBootstrapper(
-      repository: repository,
-      syncService: syncService,
-    );
+  test(
+    'FavoriteShelfBootstrapper runs full sync when snapshot is missing',
+    () async {
+      final repository = _FakeLocalFavoriteRepository(snapshot: null);
+      final syncService = _FakeFavoriteSyncService();
+      final bootstrapper = DefaultFavoriteShelfBootstrapper(
+        repository: repository,
+        syncService: syncService,
+      );
 
-    await bootstrapper.startIfNeeded();
+      await bootstrapper.startIfNeeded();
 
-    expect(syncService.syncCount, 1);
-    expect(syncService.maintenanceCount, 0);
-  });
+      expect(syncService.syncCount, 1);
+      expect(syncService.maintenanceCount, 0);
+    },
+  );
 
-  test('FavoriteShelfBootstrapper runs sync when snapshot has missing details', () async {
-    final repository = _FakeLocalFavoriteRepository(
-      snapshot: _snapshot(),
-      missingDetailCount: 2,
-    );
-    final syncService = _FakeFavoriteSyncService();
-    final bootstrapper = DefaultFavoriteShelfBootstrapper(
-      repository: repository,
-      syncService: syncService,
-    );
+  test(
+    'FavoriteShelfBootstrapper runs sync when snapshot has missing details',
+    () async {
+      final repository = _FakeLocalFavoriteRepository(
+        snapshot: _snapshot(),
+        missingDetailCount: 2,
+      );
+      final syncService = _FakeFavoriteSyncService();
+      final bootstrapper = DefaultFavoriteShelfBootstrapper(
+        repository: repository,
+        syncService: syncService,
+      );
 
-    await bootstrapper.startIfNeeded();
+      await bootstrapper.startIfNeeded();
 
-    expect(syncService.syncCount, 1);
-    expect(syncService.maintenanceCount, 0);
-  });
+      expect(syncService.syncCount, 1);
+      expect(syncService.maintenanceCount, 0);
+    },
+  );
 
-  test('FavoriteShelfBootstrapper runs maintenance when snapshot is complete', () async {
-    final repository = _FakeLocalFavoriteRepository(
-      snapshot: _snapshot(),
-      missingDetailCount: 0,
-    );
-    final syncService = _FakeFavoriteSyncService();
-    final bootstrapper = DefaultFavoriteShelfBootstrapper(
-      repository: repository,
-      syncService: syncService,
-    );
+  test(
+    'FavoriteShelfBootstrapper runs maintenance when snapshot is complete',
+    () async {
+      final repository = _FakeLocalFavoriteRepository(
+        snapshot: _snapshot(),
+        missingDetailCount: 0,
+      );
+      final syncService = _FakeFavoriteSyncService();
+      final bootstrapper = DefaultFavoriteShelfBootstrapper(
+        repository: repository,
+        syncService: syncService,
+      );
 
-    await bootstrapper.startIfNeeded();
+      await bootstrapper.startIfNeeded();
 
-    expect(syncService.syncCount, 0);
-    expect(syncService.maintenanceCount, 1);
-  });
+      expect(syncService.syncCount, 0);
+      expect(syncService.maintenanceCount, 1);
+    },
+  );
 
-  test('FavoriteShelfBootstrapper only starts once while first run is in flight', () async {
-    final repository = _FakeLocalFavoriteRepository(snapshot: null);
-    final syncService = _FakeFavoriteSyncService()..pauseNextSync();
-    final bootstrapper = DefaultFavoriteShelfBootstrapper(
-      repository: repository,
-      syncService: syncService,
-    );
+  test(
+    'FavoriteShelfBootstrapper only starts once while first run is in flight',
+    () async {
+      final repository = _FakeLocalFavoriteRepository(snapshot: null);
+      final syncService = _FakeFavoriteSyncService()..pauseNextSync();
+      final bootstrapper = DefaultFavoriteShelfBootstrapper(
+        repository: repository,
+        syncService: syncService,
+      );
 
-    final first = bootstrapper.startIfNeeded();
-    final second = bootstrapper.startIfNeeded();
+      final first = bootstrapper.startIfNeeded();
+      final second = bootstrapper.startIfNeeded();
 
-    await syncService.syncStarted;
+      await syncService.syncStarted;
 
-    expect(syncService.syncCount, 1);
-    expect(identical(first, second), isTrue);
+      expect(syncService.syncCount, 1);
+      expect(identical(first, second), isTrue);
 
-    syncService.completePausedSync();
-    await Future.wait(<Future<void>>[first, second]);
-  });
+      syncService.completePausedSync();
+      await Future.wait(<Future<void>>[first, second]);
+    },
+  );
 
-  test('FavoriteShelfBootstrapper swallows repository and sync failures', () async {
-    final failingRepository = _FakeLocalFavoriteRepository(
-      throwOnGetSnapshot: true,
-    );
-    final failingSync = _FakeFavoriteSyncService(throwOnSync: true);
+  test(
+    'FavoriteShelfBootstrapper swallows repository and sync failures',
+    () async {
+      final failingRepository = _FakeLocalFavoriteRepository(
+        throwOnGetSnapshot: true,
+      );
+      final failingSync = _FakeFavoriteSyncService(throwOnSync: true);
 
-    final firstBootstrapper = DefaultFavoriteShelfBootstrapper(
-      repository: failingRepository,
-      syncService: _FakeFavoriteSyncService(),
-    );
-    final secondBootstrapper = DefaultFavoriteShelfBootstrapper(
-      repository: _FakeLocalFavoriteRepository(snapshot: null),
-      syncService: failingSync,
-    );
+      final firstBootstrapper = DefaultFavoriteShelfBootstrapper(
+        repository: failingRepository,
+        syncService: _FakeFavoriteSyncService(),
+      );
+      final secondBootstrapper = DefaultFavoriteShelfBootstrapper(
+        repository: _FakeLocalFavoriteRepository(snapshot: null),
+        syncService: failingSync,
+      );
 
-    await firstBootstrapper.startIfNeeded();
-    await secondBootstrapper.startIfNeeded();
+      await firstBootstrapper.startIfNeeded();
+      await secondBootstrapper.startIfNeeded();
 
-    expect(failingSync.syncCount, 1);
-  });
+      expect(failingSync.syncCount, 1);
+    },
+  );
 
   test('FavoriteShelfBootstrapper retries after failed run', () async {
     final repository = _FakeLocalFavoriteRepository(snapshot: null);
@@ -116,23 +131,26 @@ void main() {
     expect(syncService.syncCount, 2);
   });
 
-  test('FavoriteShelfBootstrapper does not rerun after stable baseline exists', () async {
-    final repository = _FakeLocalFavoriteRepository(
-      snapshot: _snapshot(),
-      missingDetailCount: 0,
-    );
-    final syncService = _FakeFavoriteSyncService();
-    final bootstrapper = DefaultFavoriteShelfBootstrapper(
-      repository: repository,
-      syncService: syncService,
-    );
+  test(
+    'FavoriteShelfBootstrapper does not rerun after stable baseline exists',
+    () async {
+      final repository = _FakeLocalFavoriteRepository(
+        snapshot: _snapshot(),
+        missingDetailCount: 0,
+      );
+      final syncService = _FakeFavoriteSyncService();
+      final bootstrapper = DefaultFavoriteShelfBootstrapper(
+        repository: repository,
+        syncService: syncService,
+      );
 
-    await bootstrapper.startIfNeeded();
-    await bootstrapper.startIfNeeded();
+      await bootstrapper.startIfNeeded();
+      await bootstrapper.startIfNeeded();
 
-    expect(syncService.syncCount, 0);
-    expect(syncService.maintenanceCount, 1);
-  });
+      expect(syncService.syncCount, 0);
+      expect(syncService.maintenanceCount, 1);
+    },
+  );
 }
 
 FavoriteSyncSnapshot _snapshot() {
@@ -275,7 +293,8 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }
 
   @override
-  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
+  Future<List<FavoriteThreadCacheRecord>>
+  getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async {
@@ -324,7 +343,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<int> markRemovedByTids(Set<String> tids) async => 0;
 
   @override
-  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async {
+  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(
+    String workId,
+  ) async {
     return null;
   }
 

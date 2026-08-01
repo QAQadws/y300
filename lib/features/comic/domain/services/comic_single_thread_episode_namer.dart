@@ -33,7 +33,8 @@ abstract class ComicSingleThreadEpisodeNamer {
 /// 3. 都拿不到时再退到调用方提供的原始标题，保证总有一个非空字符串。
 /// 4. 真的全空（罕见，几乎只出现在测试桩或脏数据）时落回 `首楼` 这个
 ///    历史占位符，作为最末端的安全网，避免把 NULL 推到 UI 层。
-class DefaultComicSingleThreadEpisodeNamer implements ComicSingleThreadEpisodeNamer {
+class DefaultComicSingleThreadEpisodeNamer
+    implements ComicSingleThreadEpisodeNamer {
   const DefaultComicSingleThreadEpisodeNamer();
 
   static const String _legacyFallbackTitle = '首楼';

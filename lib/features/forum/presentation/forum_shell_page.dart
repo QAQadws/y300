@@ -10,10 +10,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart
 import 'package:y300/features/forum/presentation/widgets/forum_bootstrap_placeholder.dart';
 
 class ForumShellPage extends ConsumerWidget {
-  const ForumShellPage({
-    super.key,
-    this.isActive = true,
-  });
+  const ForumShellPage({super.key, this.isActive = true});
 
   final bool isActive;
 

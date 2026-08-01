@@ -13,23 +13,17 @@ void main() {
     });
     final preferences = await SharedPreferences.getInstance();
     final migrator = LegacyCacheRootPreferenceMigrator(
-      preferencesStore: SharedPreferencesStore(
-        loader: () async => preferences,
-      ),
+      preferencesStore: SharedPreferencesStore(loader: () async => preferences),
     );
 
     await migrator.migrate();
 
     expect(
-      preferences.containsKey(
-        PreferenceKeys.legacyComicCacheDirectory.name,
-      ),
+      preferences.containsKey(PreferenceKeys.legacyComicCacheDirectory.name),
       isFalse,
     );
     expect(
-      preferences.getInt(
-        PreferenceKeys.legacyCacheRootMigrationVersion.name,
-      ),
+      preferences.getInt(PreferenceKeys.legacyCacheRootMigrationVersion.name),
       LegacyCacheRootPreferenceMigrator.migrationVersion,
     );
 
@@ -40,9 +34,7 @@ void main() {
     await migrator.migrate();
 
     expect(
-      preferences.getString(
-        PreferenceKeys.legacyComicCacheDirectory.name,
-      ),
+      preferences.getString(PreferenceKeys.legacyComicCacheDirectory.name),
       '/stale/restored/root',
     );
   });

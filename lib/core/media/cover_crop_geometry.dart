@@ -75,8 +75,10 @@ class CoverCropGeometry {
     required Offset cropTopLeft,
   }) {
     final maxX = (imageSize.width - cropSize.width).clamp(0.0, double.infinity);
-    final maxY =
-        (imageSize.height - cropSize.height).clamp(0.0, double.infinity);
+    final maxY = (imageSize.height - cropSize.height).clamp(
+      0.0,
+      double.infinity,
+    );
     return Offset(
       cropTopLeft.dx.clamp(0.0, maxX).toDouble(),
       cropTopLeft.dy.clamp(0.0, maxY).toDouble(),

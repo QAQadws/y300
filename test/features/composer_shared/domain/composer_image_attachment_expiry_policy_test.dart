@@ -21,10 +21,7 @@ void main() {
 
     test('null uploadedAt is not expired', () {
       expect(
-        policy.isExpired(
-          uploadedAt: null,
-          now: DateTime.utc(2026, 6, 8),
-        ),
+        policy.isExpired(uploadedAt: null, now: DateTime.utc(2026, 6, 8)),
         isFalse,
       );
     });

@@ -20,10 +20,7 @@ void main() {
     expect(palette.sectionHeaderBackground, scheme.surfaceContainer);
     expect(palette.text, scheme.onSurface);
     expect(palette.mutedText, scheme.onSurfaceVariant);
-    expect(
-      palette.subtleText,
-      scheme.onSurfaceVariant.withValues(alpha: 0.72),
-    );
+    expect(palette.subtleText, scheme.onSurfaceVariant.withValues(alpha: 0.72));
     expect(palette.link, scheme.primary);
     expect(palette.border, scheme.outlineVariant);
     expect(palette.inputBackground, scheme.surfaceContainerHighest);
@@ -32,10 +29,7 @@ void main() {
     expect(palette.buttonText, scheme.onSecondaryContainer);
     expect(palette.quoteBackground, scheme.surfaceContainer);
     expect(palette.codeBackground, scheme.surfaceContainerLowest);
-    expect(
-      palette.activeBackground,
-      scheme.primary.withValues(alpha: 0.10),
-    );
+    expect(palette.activeBackground, scheme.primary.withValues(alpha: 0.10));
     expect(palette.signature, startsWith('light:'));
     expect(palette.signature, contains(_hex(theme.scaffoldBackgroundColor)));
     expect(palette.signature, contains(_hex(scheme.surfaceContainer)));

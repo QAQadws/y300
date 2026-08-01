@@ -25,18 +25,15 @@ typedef ReplyDraftSnapshot = ComposerDraftSnapshot;
 
 // ── reply 专属模型 ─────────────────────────────────────────────────────────
 
-enum ReplyTargetKind {
-  thread,
-  post,
-}
+enum ReplyTargetKind { thread, post }
 
 class ReplyTarget {
   const ReplyTarget.thread({
     required this.fid,
     required this.tid,
     this.sourceUri,
-  })  : kind = ReplyTargetKind.thread,
-        pid = null;
+  }) : kind = ReplyTargetKind.thread,
+       pid = null;
 
   const ReplyTarget.post({
     required this.fid,
@@ -119,9 +116,7 @@ class ReplyPreparation {
 }
 
 class ReplySubmissionResult {
-  const ReplySubmissionResult({
-    required this.message,
-  });
+  const ReplySubmissionResult({required this.message});
 
   final String message;
 }

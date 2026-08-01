@@ -16,36 +16,36 @@ final forumWebViewPreferredEngineProvider = Provider<ForumWebViewEngine>((ref) {
   return ForumWebViewEngine.advanced;
 });
 
-final forumWebViewLegacyDriverFactoryProvider = Provider<ForumWebViewDriverFactory>((
-  ref,
-) {
-  return LegacyForumWebViewDriver.new;
-});
+final forumWebViewLegacyDriverFactoryProvider =
+    Provider<ForumWebViewDriverFactory>((ref) {
+      return LegacyForumWebViewDriver.new;
+    });
 
-final forumWebViewAdvancedDriverFactoryProvider = Provider<ForumWebViewDriverFactory>((
-  ref,
-) {
-  final platformConfigurator = ref.watch(
-    forumWebViewPlatformConfiguratorProvider,
-  );
-  final resourceClassifier = ref.watch(
-    forumWebViewResourceClassifierProvider,
-  );
-  return () => InAppForumWebViewDriver(
+final forumWebViewAdvancedDriverFactoryProvider =
+    Provider<ForumWebViewDriverFactory>((ref) {
+      final platformConfigurator = ref.watch(
+        forumWebViewPlatformConfiguratorProvider,
+      );
+      final resourceClassifier = ref.watch(
+        forumWebViewResourceClassifierProvider,
+      );
+      return () => InAppForumWebViewDriver(
         platformConfigurator: platformConfigurator,
         resourceClassifier: resourceClassifier,
       );
-});
+    });
 
 final forumWebViewDriverFactoryProvider = Provider<ForumWebViewDriverFactory>((
   ref,
 ) {
   final preferredEngine = ref.watch(forumWebViewPreferredEngineProvider);
   return switch (preferredEngine) {
-    ForumWebViewEngine.legacy =>
-      ref.watch(forumWebViewLegacyDriverFactoryProvider),
-    ForumWebViewEngine.advanced =>
-      ref.watch(forumWebViewAdvancedDriverFactoryProvider),
+    ForumWebViewEngine.legacy => ref.watch(
+      forumWebViewLegacyDriverFactoryProvider,
+    ),
+    ForumWebViewEngine.advanced => ref.watch(
+      forumWebViewAdvancedDriverFactoryProvider,
+    ),
   };
 });
 

@@ -44,9 +44,7 @@ void main() {
     });
 
     test('metadata 为 null 时也能用原始标题兜底', () {
-      final result = namer.resolve(
-        fallbackComicTitle: '只剩 raw subject',
-      );
+      final result = namer.resolve(fallbackComicTitle: '只剩 raw subject');
 
       expect(result, '只剩 raw subject');
     });

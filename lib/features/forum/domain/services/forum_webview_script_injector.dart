@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_visual_policy_models.dart';
 
-final forumWebViewScriptInjectorProvider = Provider<ForumWebViewScriptInjector>((
-  ref,
-) {
-  return const DefaultForumWebViewScriptInjector();
-});
+final forumWebViewScriptInjectorProvider = Provider<ForumWebViewScriptInjector>(
+  (ref) {
+    return const DefaultForumWebViewScriptInjector();
+  },
+);
 
 abstract class ForumWebViewScriptInjector {
   String cleanupScriptForPolicy(ForumWebViewVisualPolicy visualPolicy);

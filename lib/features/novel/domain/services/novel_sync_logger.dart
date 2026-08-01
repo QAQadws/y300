@@ -1,4 +1,4 @@
-﻿import 'dart:developer' as developer;
+import 'dart:developer' as developer;
 
 import 'package:y300/features/novel/domain/models/novel_parsing_models.dart';
 
@@ -14,10 +14,7 @@ class NovelSyncLogger {
     required NovelParsingDebugInfo debugInfo,
   }) {
     for (final signal in debugInfo.signals) {
-      developer.log(
-        '[tid=$tid] ${signal.toString()}',
-        name: 'NovelSyncLogger',
-      );
+      developer.log('[tid=$tid] ${signal.toString()}', name: 'NovelSyncLogger');
     }
 
     developer.log(

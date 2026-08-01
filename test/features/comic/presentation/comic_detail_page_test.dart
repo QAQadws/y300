@@ -64,7 +64,9 @@ void main() {
               _FakeLibraryStateRepository(),
             ),
           ],
-          child: const LocalizedTestApp(home: ComicDetailPage(comicId: 'comic:1')),
+          child: const LocalizedTestApp(
+            home: ComicDetailPage(comicId: 'comic:1'),
+          ),
         ),
       );
 
@@ -125,7 +127,9 @@ void main() {
             _FakeLibraryStateRepository(),
           ),
         ],
-        child: const LocalizedTestApp(home: ComicDetailPage(comicId: 'comic:1')),
+        child: const LocalizedTestApp(
+          home: ComicDetailPage(comicId: 'comic:1'),
+        ),
       ),
     );
 
@@ -233,7 +237,9 @@ void main() {
             ),
             libraryStateRepositoryProvider.overrideWithValue(stateRepository),
           ],
-          child: const LocalizedTestApp(home: ComicDetailPage(comicId: 'comic:1')),
+          child: const LocalizedTestApp(
+            home: ComicDetailPage(comicId: 'comic:1'),
+          ),
         ),
       );
 

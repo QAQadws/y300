@@ -7,8 +7,8 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 class LocalComicSearchRefreshQueueRepository
     implements ComicSearchRefreshQueueRepository {
   LocalComicSearchRefreshQueueRepository(Future<Database> dbFuture)
-      : _openDb = (() => dbFuture),
-        _dbFuture = dbFuture;
+    : _openDb = (() => dbFuture),
+      _dbFuture = dbFuture;
 
   LocalComicSearchRefreshQueueRepository.lazy(this._openDb);
 
@@ -19,10 +19,7 @@ class LocalComicSearchRefreshQueueRepository
     return _dbFuture ??= _openDb();
   }
 
-  static const List<String> _activeStatuses = <String>[
-    'pending',
-    'running',
-  ];
+  static const List<String> _activeStatuses = <String>['pending', 'running'];
 
   @override
   Future<ComicSearchRefreshQueueUpsertResult> enqueue(
@@ -80,9 +77,7 @@ class LocalComicSearchRefreshQueueRepository
   }
 
   @override
-  Future<void> resetRunningToPending({
-    required DateTime now,
-  }) async {
+  Future<void> resetRunningToPending({required DateTime now}) async {
     final db = await _db;
     await db.update(
       ComicLocalDb.comicSearchRefreshQueueTable,
@@ -132,10 +127,7 @@ class LocalComicSearchRefreshQueueRepository
   }
 
   @override
-  Future<void> markCompleted({
-    required int id,
-    required DateTime now,
-  }) async {
+  Future<void> markCompleted({required int id, required DateTime now}) async {
     final db = await _db;
     await db.update(
       ComicLocalDb.comicSearchRefreshQueueTable,
@@ -280,7 +272,9 @@ class LocalComicSearchRefreshQueueRepository
         customSearchTitle: row['custom_search_title'] as String?,
       ),
       origin: ComicSearchRefreshOriginX.fromDbValue(row['origin'] as String),
-      status: ComicSearchRefreshQueueStatusX.fromDbValue(row['status'] as String),
+      status: ComicSearchRefreshQueueStatusX.fromDbValue(
+        row['status'] as String,
+      ),
       attempts: row['attempts'] as int? ?? 0,
       availableAt: _date(row['available_at'] as int),
       createdAt: _date(row['created_at'] as int),
@@ -294,7 +288,9 @@ class LocalComicSearchRefreshQueueRepository
   String _requiredComicId(ComicEpisodeRefreshRequest request) {
     final comicId = request.comicId?.trim();
     if (comicId == null || comicId.isEmpty) {
-      throw ArgumentError('Comic search refresh queue requires request.comicId');
+      throw ArgumentError(
+        'Comic search refresh queue requires request.comicId',
+      );
     }
     return comicId;
   }

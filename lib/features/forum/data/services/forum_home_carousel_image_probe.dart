@@ -11,8 +11,8 @@ class ForumHomeCarouselImageProbe {
   ForumHomeCarouselImageProbe({
     required YamiboResourceClient resourceClient,
     required ImageRequestHeaderBuilder headerBuilder,
-  })  : _resourceClient = resourceClient,
-        _headerBuilder = headerBuilder;
+  }) : _resourceClient = resourceClient,
+       _headerBuilder = headerBuilder;
 
   static const double fallbackAspectRatio = 3.45;
   static const Duration probeTimeout = Duration(seconds: 2);
@@ -22,9 +22,7 @@ class ForumHomeCarouselImageProbe {
   final YamiboResourceClient _resourceClient;
   final ImageRequestHeaderBuilder _headerBuilder;
 
-  Future<double?> resolveAspectRatio(
-    String imageUrl,
-  ) async {
+  Future<double?> resolveAspectRatio(String imageUrl) async {
     final cancelToken = CancelToken();
     final timeoutTimer = Timer(probeTimeout, () {
       if (!cancelToken.isCancelled) {

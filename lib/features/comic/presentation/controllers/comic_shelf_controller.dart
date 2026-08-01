@@ -1,13 +1,14 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 
 final comicShelfControllerProvider =
-    AsyncNotifierProvider.autoDispose<ComicShelfController, ComicShelfViewState>(
-      ComicShelfController.new,
-    );
+    AsyncNotifierProvider.autoDispose<
+      ComicShelfController,
+      ComicShelfViewState
+    >(ComicShelfController.new);
 
 class ComicShelfViewState {
   const ComicShelfViewState({
@@ -23,7 +24,9 @@ class ComicShelfViewState {
   final int gridColumnCount;
 
   int get selectedIndex {
-    final index = categories.indexWhere((category) => category.categoryId == selectedCategoryId);
+    final index = categories.indexWhere(
+      (category) => category.categoryId == selectedCategoryId,
+    );
     return index < 0 ? 0 : index;
   }
 
@@ -84,7 +87,9 @@ class ComicShelfController extends AsyncNotifier<ComicShelfViewState> {
     final repository = ref.read(comicRepositoryProvider);
     final newCategoryId = await repository.createCategory(name: name);
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() => _load(selectedCategoryId: newCategoryId));
+    state = await AsyncValue.guard(
+      () => _load(selectedCategoryId: newCategoryId),
+    );
   }
 
   Future<void> renameCategory({
@@ -134,8 +139,11 @@ class ComicShelfController extends AsyncNotifier<ComicShelfViewState> {
     final categories = await repository.getCategories();
     final settings = await repository.getDisplaySettings();
 
-    final preferredCategory = selectedCategoryId ?? state.value?.selectedCategoryId ?? 'default';
-    final exists = categories.any((category) => category.categoryId == preferredCategory);
+    final preferredCategory =
+        selectedCategoryId ?? state.value?.selectedCategoryId ?? 'default';
+    final exists = categories.any(
+      (category) => category.categoryId == preferredCategory,
+    );
     final resolvedCategoryId = exists
         ? preferredCategory
         : (categories.isEmpty ? 'default' : categories.first.categoryId);
@@ -143,7 +151,9 @@ class ComicShelfController extends AsyncNotifier<ComicShelfViewState> {
     // 预先加载所有分类数据，支持 PageView 左右滑动时相邻分类即时可见。
     final entries = await Future.wait(
       categories.map((category) async {
-        final items = await repository.getShelfItems(categoryId: category.categoryId);
+        final items = await repository.getShelfItems(
+          categoryId: category.categoryId,
+        );
         return MapEntry(category.categoryId, items);
       }),
     );

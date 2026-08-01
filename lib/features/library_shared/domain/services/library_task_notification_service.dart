@@ -3,10 +3,7 @@ import 'package:flutter/foundation.dart';
 /// Stable identity for each long-running library task that can surface a
 /// system notification. The key also maps to a fixed Android notification id so
 /// repeated updates replace the same notification instead of stacking.
-enum LibraryTaskNotificationKey {
-  favoriteSync,
-  comicSearchQueue,
-}
+enum LibraryTaskNotificationKey { favoriteSync, comicSearchQueue }
 
 /// Result of requesting/checking the OS notification permission.
 ///

@@ -51,8 +51,8 @@ class DefaultComicReadingStateWriter implements ComicReadingStateWriter {
   const DefaultComicReadingStateWriter({
     required ComicRepository comicRepository,
     required LibraryStateRepository libraryStateRepository,
-  })  : _comicRepository = comicRepository,
-        _libraryStateRepository = libraryStateRepository;
+  }) : _comicRepository = comicRepository,
+       _libraryStateRepository = libraryStateRepository;
 
   final ComicRepository _comicRepository;
   final LibraryStateRepository _libraryStateRepository;

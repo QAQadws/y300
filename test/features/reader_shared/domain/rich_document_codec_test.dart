@@ -26,7 +26,10 @@ void main() {
         headingLevel: 2,
       );
       const body = RichTextBlock(
-        runs: <RichRun>[RichRun(text: 'a'), RichRun(text: 'b')],
+        runs: <RichRun>[
+          RichRun(text: 'a'),
+          RichRun(text: 'b'),
+        ],
       );
 
       expect(heading.isHeading, isTrue);

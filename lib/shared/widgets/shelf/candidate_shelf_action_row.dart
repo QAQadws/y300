@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:y300/features/comic/presentation/widgets/add_to_shelf_button.dart';
 
 /// 通用候选入架操作行。
@@ -24,10 +24,7 @@ class CandidateShelfActionRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
         ),
         AddToShelfButton(
           inShelf: inShelf,

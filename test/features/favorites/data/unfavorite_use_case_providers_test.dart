@@ -95,7 +95,8 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   }) async => const <FavoriteThreadCacheRecord>[];
 
   @override
-  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
+  Future<List<FavoriteThreadCacheRecord>>
+  getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async => const <FavoriteThreadCacheRecord>[];
@@ -137,8 +138,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<int> markRemovedByTids(Set<String> tids) async => tids.length;
 
   @override
-  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async =>
-      null;
+  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(
+    String workId,
+  ) async => null;
 
   @override
   Future<List<LibraryCategory>> loadVisibleCategories() async =>

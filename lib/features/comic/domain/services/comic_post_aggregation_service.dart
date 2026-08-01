@@ -4,10 +4,10 @@ import 'package:y300/features/thread/domain/services/forum_image_source_pipeline
 
 final comicPostAggregationServiceProvider =
     Provider<ComicPostAggregationService>((ref) {
-  return ComicPostAggregationService(
-    imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
-  );
-});
+      return ComicPostAggregationService(
+        imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
+      );
+    });
 
 /// Comic candidate aggregation rules:
 /// 1. Always include floor 1.
@@ -31,7 +31,8 @@ class ComicPostAggregationService {
     }
 
     final second = _secondFloor(posts);
-    final shouldMergeSecond = second != null &&
+    final shouldMergeSecond =
+        second != null &&
         second.authorId == first.authorId &&
         _isImageDominant(second);
 
@@ -73,8 +74,10 @@ class ComicPostAggregationService {
 
   bool _isImageDominant(ThreadPost post) {
     final imageCount = _imageSourcePipeline.collectFromPost(post).length;
-    final anchorCount =
-        RegExp(r'<a\b', caseSensitive: false).allMatches(post.message).length;
+    final anchorCount = RegExp(
+      r'<a\b',
+      caseSensitive: false,
+    ).allMatches(post.message).length;
     return imageCount >= 2 && imageCount >= anchorCount;
   }
 
@@ -83,9 +86,12 @@ class ComicPostAggregationService {
     final seen = <String>{};
     for (final post in posts) {
       final sources = _imageSourcePipeline.collectFromPost(post);
-      for (final imageUrl in sources
-          .where((source) => source.origin == ForumImageSourceOrigin.attachment)
-          .map((source) => source.normalizedUrl)) {
+      for (final imageUrl
+          in sources
+              .where(
+                (source) => source.origin == ForumImageSourceOrigin.attachment,
+              )
+              .map((source) => source.normalizedUrl)) {
         if (seen.add(imageUrl)) {
           urls.add(imageUrl);
         }

@@ -304,16 +304,16 @@ class ComicDuplicateMergeStore {
     final customTitle =
         _normalizeNullable(existing['custom_episode_title'] as String?) ??
         _normalizeNullable(incoming['custom_episode_title'] as String?);
-    if (customTitle != _normalizeNullable(
-      existing['custom_episode_title'] as String?,
-    )) {
+    if (customTitle !=
+        _normalizeNullable(existing['custom_episode_title'] as String?)) {
       update['custom_episode_title'] = customTitle;
     }
     final displayTitle = resolveEpisodeDisplayTitle(
       customEpisodeTitle: customTitle,
       sourceEpisodeTitle: sourceTitle,
     );
-    if (displayTitle != _normalizeNullable(existing['episode_title'] as String?)) {
+    if (displayTitle !=
+        _normalizeNullable(existing['episode_title'] as String?)) {
       update['episode_title'] = displayTitle;
     }
     if (incomingUrl != null && (existingUrl == null || existingUrl.isEmpty)) {

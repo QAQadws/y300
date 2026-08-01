@@ -7,8 +7,8 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver_co
 
 class LegacyForumWebViewDriver implements ForumWebViewDriver {
   LegacyForumWebViewDriver()
-      : _controller = webview.WebViewController(),
-        _cookieManager = webview.WebViewCookieManager();
+    : _controller = webview.WebViewController(),
+      _cookieManager = webview.WebViewCookieManager();
 
   final webview.WebViewController _controller;
   final webview.WebViewCookieManager _cookieManager;
@@ -26,10 +26,7 @@ class LegacyForumWebViewDriver implements ForumWebViewDriver {
 
   @override
   Widget buildWidget({Key? key}) {
-    return webview.WebViewWidget(
-      key: key,
-      controller: _controller,
-    );
+    return webview.WebViewWidget(key: key, controller: _controller);
   }
 
   @override

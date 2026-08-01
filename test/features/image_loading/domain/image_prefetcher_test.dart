@@ -51,38 +51,41 @@ void main() {
       prefetcher.dispose();
     });
 
-    test('re-submitting upgrades pending priority without cancelling', () async {
-      final started = <String>[];
-      // 用一个永不完成的运行槽占住并发，制造“待执行队列”观察重排。
-      final gate = Completer<void>();
-      final prefetcher = DefaultImagePrefetcher(
-        maxConcurrent: 1,
-        runner: (request) async {
-          started.add(request.dedupeKey);
-          if (request.dedupeKey == 'blocker') {
-            await gate.future;
-          }
-          return true;
-        },
-      );
+    test(
+      're-submitting upgrades pending priority without cancelling',
+      () async {
+        final started = <String>[];
+        // 用一个永不完成的运行槽占住并发，制造“待执行队列”观察重排。
+        final gate = Completer<void>();
+        final prefetcher = DefaultImagePrefetcher(
+          maxConcurrent: 1,
+          runner: (request) async {
+            started.add(request.dedupeKey);
+            if (request.dedupeKey == 'blocker') {
+              await gate.future;
+            }
+            return true;
+          },
+        );
 
-      prefetcher.submit(<ImagePrefetchRequest>[
-        const ImagePrefetchRequest(dedupeKey: 'blocker', priority: 0),
-        const ImagePrefetchRequest(dedupeKey: 'x', priority: 5),
-        const ImagePrefetchRequest(dedupeKey: 'y', priority: 6),
-      ]);
-      await _drain();
-      // blocker 占住唯一并发；x/y 在排队。把 y 升到最急。
-      prefetcher.submit(<ImagePrefetchRequest>[
-        const ImagePrefetchRequest(dedupeKey: 'y', priority: 1),
-      ]);
-      gate.complete();
-      await _drain();
+        prefetcher.submit(<ImagePrefetchRequest>[
+          const ImagePrefetchRequest(dedupeKey: 'blocker', priority: 0),
+          const ImagePrefetchRequest(dedupeKey: 'x', priority: 5),
+          const ImagePrefetchRequest(dedupeKey: 'y', priority: 6),
+        ]);
+        await _drain();
+        // blocker 占住唯一并发；x/y 在排队。把 y 升到最急。
+        prefetcher.submit(<ImagePrefetchRequest>[
+          const ImagePrefetchRequest(dedupeKey: 'y', priority: 1),
+        ]);
+        gate.complete();
+        await _drain();
 
-      // blocker 先跑（未被取消），随后 y（已升优先级）早于 x。
-      expect(started, <String>['blocker', 'y', 'x']);
-      prefetcher.dispose();
-    });
+        // blocker 先跑（未被取消），随后 y（已升优先级）早于 x。
+        expect(started, <String>['blocker', 'y', 'x']);
+        prefetcher.dispose();
+      },
+    );
 
     test('emits idle snapshot after all work completes', () async {
       final snapshots = <ImagePrefetcherSnapshot>[];

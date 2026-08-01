@@ -1,9 +1,4 @@
-enum YamiboRequestKind {
-  api,
-  html,
-  resource,
-  imageProbe,
-}
+enum YamiboRequestKind { api, html, resource, imageProbe }
 
 class YamiboRequestContext {
   const YamiboRequestContext({

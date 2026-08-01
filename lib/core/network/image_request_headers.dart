@@ -12,9 +12,9 @@ class DiscuzImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
     required CookieStore cookieStore,
     String referer = '${AppConfig.siteBaseUrl}/',
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
-  })  : _cookieStore = cookieStore,
-        _referer = referer,
-        _urlResolver = urlResolver;
+  }) : _cookieStore = cookieStore,
+       _referer = referer,
+       _urlResolver = urlResolver;
 
   static const String browserUserAgent = BrowserUserAgents.desktop;
   static const String mobileBrowserUserAgent = BrowserUserAgents.mobile;

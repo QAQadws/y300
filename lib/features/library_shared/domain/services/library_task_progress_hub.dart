@@ -2,11 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
-enum LibraryTaskProgressPriority {
-  low,
-  normal,
-  high,
-}
+enum LibraryTaskProgressPriority { low, normal, high }
 
 abstract class LibraryTaskProgressRegistration {
   void dispose();
@@ -26,14 +22,16 @@ abstract class LibraryTaskProgressHub {
 
 class DefaultLibraryTaskProgressHub implements LibraryTaskProgressHub {
   DefaultLibraryTaskProgressHub()
-      : _progressByModule = <LibraryModuleKey, ValueNotifier<LibraryShelfTaskProgress?>>{
-          for (final module in LibraryModuleKey.values)
-            module: ValueNotifier<LibraryShelfTaskProgress?>(null),
-        };
+    : _progressByModule =
+          <LibraryModuleKey, ValueNotifier<LibraryShelfTaskProgress?>>{
+            for (final module in LibraryModuleKey.values)
+              module: ValueNotifier<LibraryShelfTaskProgress?>(null),
+          };
 
   final Map<LibraryModuleKey, ValueNotifier<LibraryShelfTaskProgress?>>
-      _progressByModule;
-  final List<_RegisteredProgressSource> _sources = <_RegisteredProgressSource>[];
+  _progressByModule;
+  final List<_RegisteredProgressSource> _sources =
+      <_RegisteredProgressSource>[];
   var _nextSequence = 0;
 
   @override

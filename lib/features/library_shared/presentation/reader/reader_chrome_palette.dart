@@ -32,11 +32,15 @@ final class ReaderChromePaletteResolver {
   ReaderChromePalette resolve(ThemeData theme) {
     final scheme = theme.colorScheme;
     final appTheme = theme.extension<Y300ThemeExtension>();
-    final chromeBase = appTheme?.readerChromeBackground ?? scheme.surfaceContainer;
-    final chromeForeground = appTheme?.readerChromeForeground ?? scheme.onSurface;
+    final chromeBase =
+        appTheme?.readerChromeBackground ?? scheme.surfaceContainer;
+    final chromeForeground =
+        appTheme?.readerChromeForeground ?? scheme.onSurface;
     final progressTrack =
-        appTheme?.readerProgressTrackBackground ?? scheme.surfaceContainerHighest;
-    final overlayScrim = appTheme?.readerOverlayScrim ??
+        appTheme?.readerProgressTrackBackground ??
+        scheme.surfaceContainerHighest;
+    final overlayScrim =
+        appTheme?.readerOverlayScrim ??
         Colors.black.withValues(
           alpha: theme.brightness == Brightness.dark ? 0.48 : 0.24,
         );
@@ -47,11 +51,15 @@ final class ReaderChromePaletteResolver {
       progressTrackBackground: progressTrack,
       overlayScrim: overlayScrim,
       transitionCardBackground: Color.alphaBlend(
-        chromeBase.withValues(alpha: theme.brightness == Brightness.dark ? 0.92 : 0.88),
+        chromeBase.withValues(
+          alpha: theme.brightness == Brightness.dark ? 0.92 : 0.88,
+        ),
         scheme.surface,
       ),
       imageLoadingPlaceholderBackground: Color.alphaBlend(
-        progressTrack.withValues(alpha: theme.brightness == Brightness.dark ? 0.54 : 0.38),
+        progressTrack.withValues(
+          alpha: theme.brightness == Brightness.dark ? 0.54 : 0.38,
+        ),
         scheme.surface,
       ),
       onChromeVariant: scheme.onSurfaceVariant,

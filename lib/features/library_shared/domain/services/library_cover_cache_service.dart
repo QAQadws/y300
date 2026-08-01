@@ -10,11 +10,11 @@ typedef ImageCacheServiceResolver = ImageCacheService? Function();
 /// favorites, comic and novel shelves can share one small policy surface.
 class LibraryCoverCacheService {
   const LibraryCoverCacheService(ImageCacheService? imageCacheService)
-      : _imageCacheServiceResolver = null,
-        _imageCacheService = imageCacheService;
+    : _imageCacheServiceResolver = null,
+      _imageCacheService = imageCacheService;
 
   const LibraryCoverCacheService.lazy(this._imageCacheServiceResolver)
-      : _imageCacheService = null;
+    : _imageCacheService = null;
 
   final ImageCacheService? _imageCacheService;
   final ImageCacheServiceResolver? _imageCacheServiceResolver;

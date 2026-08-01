@@ -66,7 +66,9 @@ void main() {
     });
 
     test('returns failure when tid is empty', () async {
-      final adapter = _ThreadFavoriteTestAdapter(responseJson: <String, dynamic>{});
+      final adapter = _ThreadFavoriteTestAdapter(
+        responseJson: <String, dynamic>{},
+      );
       final repository = _buildRepository(adapter: adapter);
 
       final result = await repository.favoriteThread(
@@ -96,18 +98,18 @@ DiscuzThreadFavoriteApiRepository _buildRepository({
 
 class _FakeProfileRepository implements ProfileRepository {
   _FakeProfileRepository.success({required String formhash})
-      : _result = ApiSuccess<ProfileData>(
-          ProfileData(
-            uid: '1',
-            username: 'tester',
-            avatar: '',
-            groupId: '10',
-            credits: 0,
-            posts: 0,
-            threads: 0,
-            formhash: formhash,
-          ),
-        );
+    : _result = ApiSuccess<ProfileData>(
+        ProfileData(
+          uid: '1',
+          username: 'tester',
+          avatar: '',
+          groupId: '10',
+          credits: 0,
+          posts: 0,
+          threads: 0,
+          formhash: formhash,
+        ),
+      );
 
   final ApiResult<ProfileData> _result;
 
@@ -116,9 +118,7 @@ class _FakeProfileRepository implements ProfileRepository {
 }
 
 class _ThreadFavoriteTestAdapter implements HttpClientAdapter {
-  _ThreadFavoriteTestAdapter({
-    required this.responseJson,
-  });
+  _ThreadFavoriteTestAdapter({required this.responseJson});
 
   final Map<String, dynamic> responseJson;
   bool called = false;

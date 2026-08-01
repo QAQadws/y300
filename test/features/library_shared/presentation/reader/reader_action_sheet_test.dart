@@ -3,10 +3,7 @@ import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 
-enum _Action {
-  first,
-  second,
-}
+enum _Action { first, second }
 
 void main() {
   testWidgets('ReaderActionSheet renders actions in order and returns value', (

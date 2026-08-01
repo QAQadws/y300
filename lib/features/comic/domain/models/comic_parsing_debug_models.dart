@@ -1,9 +1,6 @@
 /// Debug signal captured during comic post parsing.
 class ComicParsingSignal {
-  const ComicParsingSignal({
-    required this.stage,
-    required this.message,
-  });
+  const ComicParsingSignal({required this.stage, required this.message});
 
   final String stage;
   final String message;

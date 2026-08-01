@@ -72,7 +72,10 @@ void main() {
       expect(repository.lastFallbackSourceTid, '100');
       expect(repository.lastLinks, hasLength(1));
       expect(promoter.promotedComicIds, <String>['comic:1']);
-      expect(bus.signal.value?.reason, 'comic_detail_catalog_refresh_completed');
+      expect(
+        bus.signal.value?.reason,
+        'comic_detail_catalog_refresh_completed',
+      );
       expect(bus.signal.value?.source, LibraryMutationSource.comicRefresh);
       expect(bus.signal.value?.workId, 'comic:1');
       expect(bus.signal.value?.tid, '100');
@@ -170,7 +173,10 @@ void main() {
       );
 
       expect(repository.lastCatalogUrlComicId, 'comic:1');
-      expect(repository.lastUpdatedCatalogUrl, 'https://bbs.yamibo.com/misc.php?mod=tag&id=123');
+      expect(
+        repository.lastUpdatedCatalogUrl,
+        'https://bbs.yamibo.com/misc.php?mod=tag&id=123',
+      );
     });
 
     test('does not persist catalogUrl when null', () async {
@@ -236,7 +242,10 @@ class _RecordingComicRepository implements ComicRepository {
   Future<void> purgeWork({required String comicId}) async {}
 
   @override
-  Future<void> updateCatalogUrl({required String comicId, required String catalogUrl}) async {
+  Future<void> updateCatalogUrl({
+    required String comicId,
+    required String catalogUrl,
+  }) async {
     lastCatalogUrlComicId = comicId;
     lastUpdatedCatalogUrl = catalogUrl;
   }

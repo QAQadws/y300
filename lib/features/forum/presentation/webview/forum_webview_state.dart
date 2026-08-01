@@ -60,9 +60,7 @@ class ForumWebViewState {
     return ForumWebViewState(
       currentUri: currentUri ?? this.currentUri,
       pageKind: pageKind ?? this.pageKind,
-      searchScope: clearSearchScope
-          ? null
-          : (searchScope ?? this.searchScope),
+      searchScope: clearSearchScope ? null : (searchScope ?? this.searchScope),
       fid: clearFid ? null : (fid ?? this.fid),
       tid: clearTid ? null : (tid ?? this.tid),
       boardName: clearBoardName ? null : (boardName ?? this.boardName),

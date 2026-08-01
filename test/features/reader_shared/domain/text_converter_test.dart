@@ -31,15 +31,17 @@ void main() {
 
   group('OpenccTextConverter', () {
     test('toTraditional has s2t in id', () {
-      const converter =
-          OpenccTextConverter(mode: TextConversionMode.toTraditional);
+      const converter = OpenccTextConverter(
+        mode: TextConversionMode.toTraditional,
+      );
       expect(converter.id, contains('s2t'));
       expect(converter.mode, TextConversionMode.toTraditional);
     });
 
     test('toSimplified has t2s in id', () {
-      const converter =
-          OpenccTextConverter(mode: TextConversionMode.toSimplified);
+      const converter = OpenccTextConverter(
+        mode: TextConversionMode.toSimplified,
+      );
       expect(converter.id, contains('t2s'));
       expect(converter.mode, TextConversionMode.toSimplified);
     });
@@ -58,15 +60,13 @@ void main() {
     });
 
     test('toTraditional resolves to OpenccTextConverter s2t', () {
-      final converter =
-          resolveTextConverter(TextConversionMode.toTraditional);
+      final converter = resolveTextConverter(TextConversionMode.toTraditional);
       expect(converter, isA<OpenccTextConverter>());
       expect(converter.id, contains('s2t'));
     });
 
     test('toSimplified resolves to OpenccTextConverter t2s', () {
-      final converter =
-          resolveTextConverter(TextConversionMode.toSimplified);
+      final converter = resolveTextConverter(TextConversionMode.toSimplified);
       expect(converter, isA<OpenccTextConverter>());
       expect(converter.id, contains('t2s'));
     });

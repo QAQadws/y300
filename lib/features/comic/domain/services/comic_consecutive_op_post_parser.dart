@@ -106,17 +106,21 @@ class ComicConsecutiveOpPostParser {
         .toList(growable: false);
   }
 
-  List<ComicEpisodeLink> _toEpisodeLinks(List<EpisodeLinkCandidate> candidates) {
+  List<ComicEpisodeLink> _toEpisodeLinks(
+    List<EpisodeLinkCandidate> candidates,
+  ) {
     final bestByTid = <String, EpisodeLinkCandidate>{};
     for (final candidate in candidates) {
       final current = bestByTid[candidate.tid];
       if (current == null ||
           candidate.confidence > current.confidence ||
-          (candidate.confidence == current.confidence && candidate.position < current.position)) {
+          (candidate.confidence == current.confidence &&
+              candidate.position < current.position)) {
         bestByTid[candidate.tid] = candidate;
       }
     }
-    final sorted = bestByTid.values.toList()..sort((a, b) => a.position.compareTo(b.position));
+    final sorted = bestByTid.values.toList()
+      ..sort((a, b) => a.position.compareTo(b.position));
     return sorted
         .map(
           (e) => ComicEpisodeLink(

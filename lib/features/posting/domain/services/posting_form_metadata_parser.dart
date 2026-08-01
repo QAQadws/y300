@@ -37,9 +37,7 @@ class PostingFormMetadataParser {
       // 长度上限优先取版块级 forum.* 字段，缺失则回退到 Variables 顶层；都没有时
       // 返回 0 让上层按"不限制"处理。Discuz 不同版本字段名不一致，所以做并集兜底。
       maxSubjectLength: _parseLength(
-        forum['maxsubject'] ??
-            forum['maxsubjects'] ??
-            variables['maxsubject'],
+        forum['maxsubject'] ?? forum['maxsubjects'] ?? variables['maxsubject'],
       ),
       maxMessageLength: _parseLength(
         forum['maxpostsize'] ??

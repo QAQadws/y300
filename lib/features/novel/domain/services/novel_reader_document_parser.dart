@@ -114,13 +114,16 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
       rawHtmlHash: _stableHash(rawHtml),
       body: RichDocument(blocks: List<RichBlock>.unmodifiable(blocks)),
       plainText: plainText,
-      wordCount: plainText.runes.where((rune) => !_isWhitespaceRune(rune)).length,
+      wordCount: plainText.runes
+          .where((rune) => !_isWhitespaceRune(rune))
+          .length,
     );
   }
 
   RichImageBlock? _imageBlock(html_dom.Element element, int index, String id) {
-    final raw =
-        DefaultForumImageSourcePipeline.firstDomImageSourceFromElement(element);
+    final raw = DefaultForumImageSourcePipeline.firstDomImageSourceFromElement(
+      element,
+    );
     if (raw == null || raw.isEmpty) {
       return null;
     }
@@ -149,7 +152,9 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
     if (text.isEmpty || rawHref.isEmpty) {
       return null;
     }
-    final normalized = _domExtractor.extractAnchors(element.outerHtml).firstOrNull;
+    final normalized = _domExtractor
+        .extractAnchors(element.outerHtml)
+        .firstOrNull;
     if (normalized == null) {
       return null;
     }
@@ -164,7 +169,10 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
     );
   }
 
-  _InlineStyle _styleForElement(html_dom.Element element, _InlineStyle inherited) {
+  _InlineStyle _styleForElement(
+    html_dom.Element element,
+    _InlineStyle inherited,
+  ) {
     final tag = element.localName?.toLowerCase();
     final style = element.attributes['style'] ?? '';
     final color = RegExp(
@@ -283,7 +291,9 @@ class _BlockBuilder {
 
     final nextStyle = _parser._styleForElement(node, style);
     final isQuote = tag == 'blockquote' || node.classes.contains('quote');
-    final isHeading = DiscuzNovelReaderDocumentParser._headingTags.contains(tag);
+    final isHeading = DiscuzNovelReaderDocumentParser._headingTags.contains(
+      tag,
+    );
     final isBlock = DiscuzNovelReaderDocumentParser._blockTags.contains(tag);
     if (isQuote || isHeading || isBlock) {
       _emitStructured(
@@ -292,8 +302,8 @@ class _BlockBuilder {
         kind: isQuote
             ? _StructuredKind.quote
             : isHeading
-                ? _StructuredKind.heading
-                : _StructuredKind.paragraph,
+            ? _StructuredKind.heading
+            : _StructuredKind.paragraph,
       );
       return;
     }
@@ -356,7 +366,11 @@ class _BlockBuilder {
   }
 
   void _emitImage(html_dom.Element element) {
-    final image = _parser._imageBlock(element, _imageIndex, _parser._nodeId(_nextId));
+    final image = _parser._imageBlock(
+      element,
+      _imageIndex,
+      _parser._nodeId(_nextId),
+    );
     if (image == null) {
       return;
     }
@@ -424,9 +438,7 @@ class _InlineCollector {
   }
 
   List<RichRun> takeRuns() {
-    final normalized = _normalizeText(
-      _runs.map((run) => run.text).join(),
-    );
+    final normalized = _normalizeText(_runs.map((run) => run.text).join());
     if (normalized.isEmpty && !_runs.any((run) => run.text == '\n')) {
       _runs.clear();
       return const <RichRun>[];

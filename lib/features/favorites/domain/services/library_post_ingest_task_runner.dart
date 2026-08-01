@@ -23,10 +23,7 @@ class LibraryPostIngestTaskReport {
 }
 
 class LibraryPostIngestTaskFailure {
-  const LibraryPostIngestTaskFailure({
-    required this.task,
-    required this.error,
-  });
+  const LibraryPostIngestTaskFailure({required this.task, required this.error});
 
   final LibraryPostIngestTask task;
   final Object error;
@@ -45,9 +42,7 @@ abstract class LibraryPostIngestTaskRunner {
   bool canRun(LibraryPostIngestTask task);
 
   Future<LibraryPostIngestTaskReport> runAll(
-    List<LibraryPostIngestTask> tasks,
-    {
+    List<LibraryPostIngestTask> tasks, {
     FavoriteSyncExecutionContext? executionContext,
-  }
-  );
+  });
 }

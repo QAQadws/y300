@@ -14,26 +14,23 @@ class ComposerDraftIdentity {
     this.repquote,
   });
 
-  const ComposerDraftIdentity.thread({
-    required String fid,
-    required String tid,
-  }) : this._(kind: ComposerDraftKind.threadReply, fid: fid, tid: tid);
+  const ComposerDraftIdentity.thread({required String fid, required String tid})
+    : this._(kind: ComposerDraftKind.threadReply, fid: fid, tid: tid);
 
   const ComposerDraftIdentity.post({
     required String fid,
     required String tid,
     required String repquote,
   }) : this._(
-          kind: ComposerDraftKind.postReply,
-          fid: fid,
-          tid: tid,
-          repquote: repquote,
-        );
+         kind: ComposerDraftKind.postReply,
+         fid: fid,
+         tid: tid,
+         repquote: repquote,
+       );
 
   /// 发帖草稿身份；`tid` / `repquote` 都为空。同一个 fid 上同时只保留一份发帖草稿。
-  const ComposerDraftIdentity.newThread({
-    required String fid,
-  }) : this._(kind: ComposerDraftKind.newThread, fid: fid);
+  const ComposerDraftIdentity.newThread({required String fid})
+    : this._(kind: ComposerDraftKind.newThread, fid: fid);
 
   final ComposerDraftKind kind;
   final String fid;
@@ -71,11 +68,7 @@ class ComposerDraftIdentity {
   int get hashCode => Object.hash(kind, fid, tid, repquote);
 }
 
-enum ComposerDraftKind {
-  threadReply,
-  postReply,
-  newThread,
-}
+enum ComposerDraftKind { threadReply, postReply, newThread }
 
 /// 编辑器持久化的"通用草稿快照"。
 ///

@@ -5,90 +5,96 @@ import 'package:y300/features/comic/domain/services/comic_first_episode_cover_se
 
 void main() {
   group('ComicFirstEpisodeCoverService', () {
-    test('promotes first image from lowest tid episode when images already exist', () async {
-      final repository = _FakeComicRepository(
-        episodes: const <ComicEpisodeItem>[
-          ComicEpisodeItem(
-            episodeId: 'comic:1:200',
-            comicId: 'comic:1',
-            episodeTitle: '第2话',
-            sourceTid: '200',
-            sourceUrl: 'thread-200-1-1.html',
-            orderIndex: 0,
-            publishTimeText: null,
-          ),
-          ComicEpisodeItem(
-            episodeId: 'comic:1:100',
-            comicId: 'comic:1',
-            episodeTitle: '第1话',
-            sourceTid: '100',
-            sourceUrl: 'thread-100-1-1.html',
-            orderIndex: 1,
-            publishTimeText: null,
-          ),
-        ],
-        imagesByEpisode: const <String, List<ComicEpisodeImageItem>>{
-          'comic:1:100': <ComicEpisodeImageItem>[
-            ComicEpisodeImageItem(
+    test(
+      'promotes first image from lowest tid episode when images already exist',
+      () async {
+        final repository = _FakeComicRepository(
+          episodes: const <ComicEpisodeItem>[
+            ComicEpisodeItem(
+              episodeId: 'comic:1:200',
+              comicId: 'comic:1',
+              episodeTitle: '第2话',
+              sourceTid: '200',
+              sourceUrl: 'thread-200-1-1.html',
+              orderIndex: 0,
+              publishTimeText: null,
+            ),
+            ComicEpisodeItem(
               episodeId: 'comic:1:100',
-              imageUrl: 'https://img.test/first.jpg',
-              imageIndex: 0,
-              cacheStatus: 'none',
+              comicId: 'comic:1',
+              episodeTitle: '第1话',
+              sourceTid: '100',
+              sourceUrl: 'thread-100-1-1.html',
+              orderIndex: 1,
+              publishTimeText: null,
             ),
           ],
-        },
-      );
-      final service = ComicFirstEpisodeCoverService(
-        repository: repository,
-        fetchEpisodeImagesByTid: (_) async {
-          throw StateError('existing images should not fetch again');
-        },
-      );
+          imagesByEpisode: const <String, List<ComicEpisodeImageItem>>{
+            'comic:1:100': <ComicEpisodeImageItem>[
+              ComicEpisodeImageItem(
+                episodeId: 'comic:1:100',
+                imageUrl: 'https://img.test/first.jpg',
+                imageIndex: 0,
+                cacheStatus: 'none',
+              ),
+            ],
+          },
+        );
+        final service = ComicFirstEpisodeCoverService(
+          repository: repository,
+          fetchEpisodeImagesByTid: (_) async {
+            throw StateError('existing images should not fetch again');
+          },
+        );
 
-      final promoted = await service.promoteIfPossible(comicId: 'comic:1');
+        final promoted = await service.promoteIfPossible(comicId: 'comic:1');
 
-      expect(promoted, isTrue);
-      expect(repository.promotedEpisodeId, 'comic:1:100');
-      expect(repository.promotedImageUrl, 'https://img.test/first.jpg');
-      expect(repository.savedEpisodeId, isNull);
-    });
+        expect(promoted, isTrue);
+        expect(repository.promotedEpisodeId, 'comic:1:100');
+        expect(repository.promotedImageUrl, 'https://img.test/first.jpg');
+        expect(repository.savedEpisodeId, isNull);
+      },
+    );
 
-    test('fetches first episode images and saves them when local image rows are missing', () async {
-      final repository = _FakeComicRepository(
-        episodes: const <ComicEpisodeItem>[
-          ComicEpisodeItem(
-            episodeId: 'comic:1:100',
-            comicId: 'comic:1',
-            episodeTitle: '第1话',
-            sourceTid: '100',
-            sourceUrl: 'thread-100-1-1.html',
-            orderIndex: 0,
-            publishTimeText: null,
-          ),
-        ],
-      );
-      final service = ComicFirstEpisodeCoverService(
-        repository: repository,
-        fetchEpisodeImagesByTid: (tid) async {
-          expect(tid, '100');
-          return const <String>[
-            'https://img.test/first.jpg',
-            'https://img.test/first.jpg',
-            '   ',
-            'https://img.test/second.jpg',
-          ];
-        },
-      );
+    test(
+      'fetches first episode images and saves them when local image rows are missing',
+      () async {
+        final repository = _FakeComicRepository(
+          episodes: const <ComicEpisodeItem>[
+            ComicEpisodeItem(
+              episodeId: 'comic:1:100',
+              comicId: 'comic:1',
+              episodeTitle: '第1话',
+              sourceTid: '100',
+              sourceUrl: 'thread-100-1-1.html',
+              orderIndex: 0,
+              publishTimeText: null,
+            ),
+          ],
+        );
+        final service = ComicFirstEpisodeCoverService(
+          repository: repository,
+          fetchEpisodeImagesByTid: (tid) async {
+            expect(tid, '100');
+            return const <String>[
+              'https://img.test/first.jpg',
+              'https://img.test/first.jpg',
+              '   ',
+              'https://img.test/second.jpg',
+            ];
+          },
+        );
 
-      final promoted = await service.promoteIfPossible(comicId: 'comic:1');
+        final promoted = await service.promoteIfPossible(comicId: 'comic:1');
 
-      expect(promoted, isTrue);
-      expect(repository.savedEpisodeId, 'comic:1:100');
-      expect(repository.savedImageUrls, <String>[
-        'https://img.test/first.jpg',
-        'https://img.test/second.jpg',
-      ]);
-    });
+        expect(promoted, isTrue);
+        expect(repository.savedEpisodeId, 'comic:1:100');
+        expect(repository.savedImageUrls, <String>[
+          'https://img.test/first.jpg',
+          'https://img.test/second.jpg',
+        ]);
+      },
+    );
 
     test('skips automatic cover promotion when custom cover exists', () async {
       final repository = _FakeComicRepository(

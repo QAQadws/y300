@@ -18,9 +18,7 @@ class ForumWebViewBootstrapPlaceholder extends StatelessWidget {
 Widget forumWebViewBootstrapPlaceholderPreviewShell(Widget child) {
   return MaterialApp(
     theme: AppTheme.light(),
-    home: Scaffold(
-      body: SafeArea(child: child),
-    ),
+    home: Scaffold(body: SafeArea(child: child)),
   );
 }
 
@@ -91,10 +89,7 @@ Widget forumWebViewPlaceholderBlockPreview() {
             color: colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(4),
           ),
-          child: const SizedBox(
-            width: 120,
-            height: 16,
-          ),
+          child: const SizedBox(width: 120, height: 16),
         ),
       );
     },

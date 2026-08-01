@@ -1,7 +1,5 @@
 class ThreadFavoriteRequest {
-  const ThreadFavoriteRequest({
-    required this.tid,
-  });
+  const ThreadFavoriteRequest({required this.tid});
 
   final String tid;
 }
@@ -31,9 +29,7 @@ class ThreadFavoriteActionResult {
 /// 取消收藏请求。删除以帖子 tid 为键（`op=delete&type=thread&id=<tid>`），
 /// 不依赖 favid。
 class ThreadUnfavoriteRequest {
-  const ThreadUnfavoriteRequest({
-    required this.tid,
-  });
+  const ThreadUnfavoriteRequest({required this.tid});
 
   final String tid;
 }

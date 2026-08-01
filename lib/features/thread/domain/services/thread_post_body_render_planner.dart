@@ -37,9 +37,7 @@ class ThreadPostBodyRenderPlanner {
   /// The normalizer to use; defaults to a normalizer aligned with [segmentation].
   ThreadPostBodyDocumentNormalizer get _normalizer =>
       normalizer ??
-      ThreadPostBodyDocumentNormalizer(
-        maxTextRunLength: maxSegmentTextLength,
-      );
+      ThreadPostBodyDocumentNormalizer(maxTextRunLength: maxSegmentTextLength);
 
   String get resourceHintResolverSignature =>
       resourceLayoutHintResolver.signature;
@@ -250,4 +248,3 @@ class ThreadPostBodyRenderPlanner {
     return threadPostBodyAnchorId('segment', '$index|$seed');
   }
 }
-

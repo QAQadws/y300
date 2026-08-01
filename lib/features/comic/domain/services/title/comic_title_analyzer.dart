@@ -597,7 +597,8 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
     const chineseNumberChars = '零〇一二两兩三四五六七八九十百千';
     final normalized = text.startsWith('第') ? text.substring(1) : text;
     var i = 0;
-    while (i < normalized.length && chineseNumberChars.contains(normalized[i])) {
+    while (i < normalized.length &&
+        chineseNumberChars.contains(normalized[i])) {
       i++;
     }
     if (i == 0) return null;

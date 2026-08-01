@@ -47,7 +47,8 @@ abstract class LocalFavoriteRepository {
     Set<String> excludedTids = const <String>{},
   });
 
-  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
+  Future<List<FavoriteThreadCacheRecord>>
+  getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   });
@@ -162,27 +163,23 @@ class SqfliteLocalFavoriteRepository
   @override
   Future<int> countActiveThreads() async {
     final db = await _dbFuture;
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT COUNT(*) AS count
       FROM ${ComicLocalDb.favoriteThreadsTable}
       WHERE removed_at IS NULL
-      ''',
-    );
+      ''');
     return rows.first['count'] as int? ?? 0;
   }
 
   @override
   Future<int> countMissingDetailRecords() async {
     final db = await _dbFuture;
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT COUNT(*) AS count
       FROM ${ComicLocalDb.favoriteThreadsTable}
       WHERE removed_at IS NULL
         AND detail_state = 'pending'
-      ''',
-    );
+      ''');
     return rows.first['count'] as int? ?? 0;
   }
 
@@ -340,21 +337,18 @@ class SqfliteLocalFavoriteRepository
         };
 
         if (old == null) {
-          await txn.insert(
-            ComicLocalDb.favoriteThreadsTable,
-            <String, Object?>{
-              ...values,
-              'source_fid': null,
-              'source_typeid': null,
-              'source_tag_name': null,
-              'content_kind': 'unknown',
-              'work_id': null,
-              'detail_loaded_at': null,
-              'detail_state': favoriteDetailStateToDb(
-                FavoriteDetailState.pending,
-              ),
-            },
-          );
+          await txn.insert(ComicLocalDb.favoriteThreadsTable, <String, Object?>{
+            ...values,
+            'source_fid': null,
+            'source_typeid': null,
+            'source_tag_name': null,
+            'content_kind': 'unknown',
+            'work_id': null,
+            'detail_loaded_at': null,
+            'detail_state': favoriteDetailStateToDb(
+              FavoriteDetailState.pending,
+            ),
+          });
         } else {
           await txn.update(
             ComicLocalDb.favoriteThreadsTable,
@@ -398,7 +392,8 @@ class SqfliteLocalFavoriteRepository
   }
 
   @override
-  Future<List<FavoriteThreadCacheRecord>> getComicAutoRefreshBackfillCandidates({
+  Future<List<FavoriteThreadCacheRecord>>
+  getComicAutoRefreshBackfillCandidates({
     int limit = 20,
     Set<String> excludedTids = const <String>{},
   }) async {
@@ -454,9 +449,7 @@ class SqfliteLocalFavoriteRepository
         'content_kind': favoriteContentKindToDb(contentKind),
         'work_id': _normalizeNullable(workId),
         'detail_loaded_at': DateTime.now().millisecondsSinceEpoch,
-        'detail_state': favoriteDetailStateToDb(
-          FavoriteDetailState.resolved,
-        ),
+        'detail_state': favoriteDetailStateToDb(FavoriteDetailState.resolved),
       },
       where: 'tid = ?',
       whereArgs: <Object>[tid.trim()],
@@ -487,15 +480,13 @@ class SqfliteLocalFavoriteRepository
     Set<String> activeRemoteTids,
   ) async {
     final db = await _dbFuture;
-    final activeRows = await db.rawQuery(
-      '''
+    final activeRows = await db.rawQuery('''
       SELECT ft.*, fc.category_id AS custom_category_id
       FROM ${ComicLocalDb.favoriteThreadsTable} ft
       LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
       WHERE ft.removed_at IS NULL
-      ''',
-    );
+      ''');
     final removed = activeRows
         .map(_recordFromRow)
         .where((record) => !activeRemoteTids.contains(record.tid))
@@ -618,7 +609,9 @@ class SqfliteLocalFavoriteRepository
   }
 
   @override
-  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(String workId) async {
+  Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(
+    String workId,
+  ) async {
     final tid = FavoriteShelfWorkId.parseTid(workId);
     if (tid == null) {
       return null;
@@ -683,7 +676,10 @@ class SqfliteLocalFavoriteRepository
       );
     }
 
-    final defaultCount = await _countSystemCategory(db, favoriteDefaultCategoryId);
+    final defaultCount = await _countSystemCategory(
+      db,
+      favoriteDefaultCategoryId,
+    );
     if (defaultCount > 0) {
       categories.add(
         LibraryCategory(
@@ -734,16 +730,19 @@ class SqfliteLocalFavoriteRepository
     final result = <String, List<LibraryWorkItem>>{};
     for (final category in categories) {
       var items = await loadCategoryItems(category.categoryId);
-      items = items.where((item) {
-        if (normalizedKeyword.isNotEmpty) {
-          final title = item.title.toLowerCase();
-          final secondary = (item.secondaryName ?? '').toLowerCase();
-          if (!title.contains(normalizedKeyword) && !secondary.contains(normalizedKeyword)) {
-            return false;
-          }
-        }
-        return _matchesFilters(item, filters);
-      }).toList(growable: false);
+      items = items
+          .where((item) {
+            if (normalizedKeyword.isNotEmpty) {
+              final title = item.title.toLowerCase();
+              final secondary = (item.secondaryName ?? '').toLowerCase();
+              if (!title.contains(normalizedKeyword) &&
+                  !secondary.contains(normalizedKeyword)) {
+                return false;
+              }
+            }
+            return _matchesFilters(item, filters);
+          })
+          .toList(growable: false);
       result[category.categoryId] = _sortItems(items, sortOption);
     }
     return result;
@@ -756,8 +755,7 @@ class SqfliteLocalFavoriteRepository
     required String keyword,
   }) async {
     final db = await _dbFuture;
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       WITH favorite_tag_stats AS (
         SELECT work_id, 1 AS has_tags
         FROM ${ComicLocalDb.libraryWorkTagsTable}
@@ -798,15 +796,17 @@ class SqfliteLocalFavoriteRepository
         ON tags.work_id = 'favorite:' || ft.tid
       WHERE ft.removed_at IS NULL
       ORDER BY ft.remote_order ASC, ft.dateline DESC, ft.last_seen_at DESC
-      ''',
-    );
+      ''');
 
     final sourceByCategory = <String, List<LibraryWorkItem>>{};
     final rawCountByCategory = <String, int>{};
     for (final row in rows) {
       final item = _rowToSnapshotWorkItem(row);
-      sourceByCategory.putIfAbsent(item.categoryId, () => <LibraryWorkItem>[]).add(item);
-      rawCountByCategory[item.categoryId] = (rawCountByCategory[item.categoryId] ?? 0) + 1;
+      sourceByCategory
+          .putIfAbsent(item.categoryId, () => <LibraryWorkItem>[])
+          .add(item);
+      rawCountByCategory[item.categoryId] =
+          (rawCountByCategory[item.categoryId] ?? 0) + 1;
     }
 
     final categories = await _loadSnapshotCategories(
@@ -814,7 +814,10 @@ class SqfliteLocalFavoriteRepository
       rawCountByCategory: rawCountByCategory,
     );
     for (final category in categories) {
-      sourceByCategory.putIfAbsent(category.categoryId, () => <LibraryWorkItem>[]);
+      sourceByCategory.putIfAbsent(
+        category.categoryId,
+        () => <LibraryWorkItem>[],
+      );
     }
 
     final queried = LibraryShelfQueryUtils.filterAndSortByCategory(
@@ -826,7 +829,9 @@ class SqfliteLocalFavoriteRepository
     return LibraryShelfSnapshot(
       categories: categories,
       itemsByCategory: queried,
-      visibleMatchCountByCategory: LibraryShelfQueryUtils.countByCategory(queried),
+      visibleMatchCountByCategory: LibraryShelfQueryUtils.countByCategory(
+        queried,
+      ),
     );
   }
 
@@ -843,15 +848,12 @@ class SqfliteLocalFavoriteRepository
       'SELECT COUNT(*) AS count FROM ${ComicLocalDb.favoriteCategoriesTable}',
     );
     final sortOrder = countRows.first['count'] as int? ?? 0;
-    await db.insert(
-      ComicLocalDb.favoriteCategoriesTable,
-      <String, Object?>{
-        'category_id': categoryId,
-        'name': trimmed,
-        'sort_order': sortOrder,
-        'created_at': now,
-      },
-    );
+    await db.insert(ComicLocalDb.favoriteCategoriesTable, <String, Object?>{
+      'category_id': categoryId,
+      'name': trimmed,
+      'sort_order': sortOrder,
+      'created_at': now,
+    });
     return categoryId;
   }
 
@@ -934,8 +936,7 @@ class SqfliteLocalFavoriteRepository
   }
 
   Future<int> _countSystemCategory(Database db, String categoryId) async {
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT COUNT(*) AS count
       FROM ${ComicLocalDb.favoriteThreadsTable} ft
       LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
@@ -943,8 +944,7 @@ class SqfliteLocalFavoriteRepository
       WHERE ft.removed_at IS NULL
         AND ${_systemCategoryAssignmentSqlCondition(categoryId)}
         AND ${_systemCategorySqlCondition(categoryId)}
-      ''',
-    );
+      ''');
     return rows.first['count'] as int? ?? 0;
   }
 
@@ -970,8 +970,7 @@ class SqfliteLocalFavoriteRepository
   ) async {
     final List<Map<String, Object?>> rows;
     if (_systemCategoryIds.contains(categoryId)) {
-      rows = await db.rawQuery(
-        '''
+      rows = await db.rawQuery('''
         SELECT ft.*, fc.category_id AS custom_category_id
         FROM ${ComicLocalDb.favoriteThreadsTable} ft
         LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
@@ -980,8 +979,7 @@ class SqfliteLocalFavoriteRepository
           AND ${_systemCategoryAssignmentSqlCondition(categoryId)}
           AND ${_systemCategorySqlCondition(categoryId)}
         ORDER BY ft.remote_order ASC, ft.dateline DESC, ft.last_seen_at DESC
-        ''',
-      );
+        ''');
     } else {
       rows = await db.rawQuery(
         '''
@@ -1138,7 +1136,9 @@ class SqfliteLocalFavoriteRepository
   LibraryWorkItem _rowToSnapshotWorkItem(Map<String, Object?> row) {
     final tid = row['tid'] as String;
     final dateline = _toDatelineDate(row['dateline']);
-    final firstSeenAt = _toDateTime(row['first_seen_at']) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final firstSeenAt =
+        _toDateTime(row['first_seen_at']) ??
+        DateTime.fromMillisecondsSinceEpoch(0);
     final addedAt = dateline ?? firstSeenAt;
     final totalCount = max(1, (row['replies'] as int? ?? 0) + 1);
     final workId = FavoriteShelfWorkId.fromTid(tid);
@@ -1227,7 +1227,9 @@ class SqfliteLocalFavoriteRepository
     }
   }
 
-  _FavoriteCoverSnapshot _coverSnapshotFromRows(List<Map<String, Object?>> rows) {
+  _FavoriteCoverSnapshot _coverSnapshotFromRows(
+    List<Map<String, Object?>> rows,
+  ) {
     if (rows.isEmpty) {
       return const _FavoriteCoverSnapshot.empty();
     }
@@ -1280,16 +1282,24 @@ class SqfliteLocalFavoriteRepository
           cmp = a.unreadCount.compareTo(b.unreadCount);
           break;
         case LibraryShelfSortField.workUpdatedAt:
-          cmp = _dateOrEpoch(a.workUpdatedAt).compareTo(_dateOrEpoch(b.workUpdatedAt));
+          cmp = _dateOrEpoch(
+            a.workUpdatedAt,
+          ).compareTo(_dateOrEpoch(b.workUpdatedAt));
           break;
         case LibraryShelfSortField.fetchedAt:
-          cmp = _dateOrEpoch(a.lastFetchedAt).compareTo(_dateOrEpoch(b.lastFetchedAt));
+          cmp = _dateOrEpoch(
+            a.lastFetchedAt,
+          ).compareTo(_dateOrEpoch(b.lastFetchedAt));
           break;
         case LibraryShelfSortField.lastCheckedAt:
-          cmp = _dateOrEpoch(a.lastCheckedAt).compareTo(_dateOrEpoch(b.lastCheckedAt));
+          cmp = _dateOrEpoch(
+            a.lastCheckedAt,
+          ).compareTo(_dateOrEpoch(b.lastCheckedAt));
           break;
         case LibraryShelfSortField.lastReadAt:
-          cmp = _dateOrEpoch(a.lastReadAt).compareTo(_dateOrEpoch(b.lastReadAt));
+          cmp = _dateOrEpoch(
+            a.lastReadAt,
+          ).compareTo(_dateOrEpoch(b.lastReadAt));
           break;
         case LibraryShelfSortField.favoriteAddedAt:
           cmp = a.addedAt.compareTo(b.addedAt);
@@ -1330,8 +1340,12 @@ class SqfliteLocalFavoriteRepository
       workId: row['work_id'] as String?,
       detailLoadedAt: _toDateTime(row['detail_loaded_at']),
       detailState: favoriteDetailStateFromDb(row['detail_state'] as String?),
-      firstSeenAt: _toDateTime(row['first_seen_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      lastSeenAt: _toDateTime(row['last_seen_at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      firstSeenAt:
+          _toDateTime(row['first_seen_at']) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      lastSeenAt:
+          _toDateTime(row['last_seen_at']) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
       removedAt: _toDateTime(row['removed_at']),
       customCategoryId: row['custom_category_id'] as String?,
     );
@@ -1376,10 +1390,10 @@ class _FavoriteCoverSnapshot {
   });
 
   const _FavoriteCoverSnapshot.empty()
-      : coverImageUrl = null,
-        customCoverImageUrl = null,
-        coverLocalPath = null,
-        customCoverLocalPath = null;
+    : coverImageUrl = null,
+      customCoverImageUrl = null,
+      coverLocalPath = null,
+      customCoverLocalPath = null;
 
   final String? coverImageUrl;
   final String? customCoverImageUrl;

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
 /// 通用固定槽位分页头。
@@ -42,7 +42,9 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
   void didUpdateWidget(covariant FixedSlotPagerHeader oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedIndex != widget.selectedIndex) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureSelectedVisible());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _ensureSelectedVisible(),
+      );
     }
   }
 
@@ -95,11 +97,11 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: selected
-                                          ? palette.categorySelectedBackground
-                                          : theme.colorScheme.onSurface,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                  color: selected
+                                      ? palette.categorySelectedBackground
+                                      : theme.colorScheme.onSurface,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
@@ -127,11 +129,11 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: selected
-                                        ? palette.categorySelectedBackground
-                                        : theme.colorScheme.onSurface,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                color: selected
+                                    ? palette.categorySelectedBackground
+                                    : theme.colorScheme.onSurface,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
@@ -139,12 +141,26 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
                     }),
                   ),
                 AnimatedBuilder(
-                  animation: Listenable.merge(<Listenable>[widget.pageController, _scrollController]),
+                  animation: Listenable.merge(<Listenable>[
+                    widget.pageController,
+                    _scrollController,
+                  ]),
                   builder: (context, child) {
-                    final page = widget.pageController.hasClients ? (widget.pageController.page ?? 0) : 0;
-                    final clampedPage = page.clamp(0, (widget.tabs.length - 1).toDouble());
-                    final scrollOffset = useScrollable && _scrollController.hasClients ? _scrollController.offset : 0;
-                    final left = clampedPage * slotWidth - scrollOffset + slotWidth * 0.2;
+                    final page = widget.pageController.hasClients
+                        ? (widget.pageController.page ?? 0)
+                        : 0;
+                    final clampedPage = page.clamp(
+                      0,
+                      (widget.tabs.length - 1).toDouble(),
+                    );
+                    final scrollOffset =
+                        useScrollable && _scrollController.hasClients
+                        ? _scrollController.offset
+                        : 0;
+                    final left =
+                        clampedPage * slotWidth -
+                        scrollOffset +
+                        slotWidth * 0.2;
 
                     return Positioned(
                       key: widget.indicatorKey,
@@ -188,8 +204,13 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
 
     final slotWidth = viewportWidth / 4;
     final maxOffset = _scrollController.position.maxScrollExtent;
-    final targetStartIndex = (widget.selectedIndex - 1).clamp(0, widget.tabs.length - 4);
-    final targetOffset = (targetStartIndex * slotWidth).clamp(0.0, maxOffset).toDouble();
+    final targetStartIndex = (widget.selectedIndex - 1).clamp(
+      0,
+      widget.tabs.length - 4,
+    );
+    final targetOffset = (targetStartIndex * slotWidth)
+        .clamp(0.0, maxOffset)
+        .toDouble();
 
     _scrollController.animateTo(
       targetOffset,
@@ -200,10 +221,7 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
 }
 
 class FixedSlotHeaderTab {
-  const FixedSlotHeaderTab({
-    required this.id,
-    required this.label,
-  });
+  const FixedSlotHeaderTab({required this.id, required this.label});
 
   final String id;
   final String label;

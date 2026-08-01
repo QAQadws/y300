@@ -3,20 +3,14 @@ import 'package:petitparser/petitparser.dart';
 import 'comic_title_rules.dart';
 
 class ComicLeadingBracketToken {
-  const ComicLeadingBracketToken({
-    required this.raw,
-    required this.value,
-  });
+  const ComicLeadingBracketToken({required this.raw, required this.value});
 
   final String raw;
   final String value;
 }
 
 class ComicLeadingMetadata {
-  const ComicLeadingMetadata({
-    required this.tokens,
-    required this.remainder,
-  });
+  const ComicLeadingMetadata({required this.tokens, required this.remainder});
 
   final List<ComicLeadingBracketToken> tokens;
   final String remainder;
@@ -25,10 +19,12 @@ class ComicLeadingMetadata {
 class ComicTitleGrammar {
   const ComicTitleGrammar();
 
-  static final Parser<String> _openBracketParser =
-      anyOf(ComicTitleRules.leadingBracketOpenCharacters).flatten();
-  static final Parser<String> _closeBracketParser =
-      anyOf(ComicTitleRules.leadingBracketCloseCharacters).flatten();
+  static final Parser<String> _openBracketParser = anyOf(
+    ComicTitleRules.leadingBracketOpenCharacters,
+  ).flatten();
+  static final Parser<String> _closeBracketParser = anyOf(
+    ComicTitleRules.leadingBracketCloseCharacters,
+  ).flatten();
   static final Parser<ComicLeadingBracketToken> _leadingBracketTokenParser =
       (whitespace().star().flatten() &
               _openBracketParser &
@@ -58,9 +54,6 @@ class ComicTitleGrammar {
       }
       cursor = cursor.substring(result.position);
     }
-    return ComicLeadingMetadata(
-      tokens: tokens,
-      remainder: cursor.trimLeft(),
-    );
+    return ComicLeadingMetadata(tokens: tokens, remainder: cursor.trimLeft());
   }
 }

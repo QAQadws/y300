@@ -7,11 +7,7 @@ export 'package:y300/features/reader_shared/domain/rich_text/document/rich_docum
 /// Derived from a [RichRun] at tap time; kept as its own type so the page-level
 /// link handler does not depend on render internals.
 class NovelReaderLink {
-  const NovelReaderLink({
-    required this.url,
-    required this.text,
-    this.tid,
-  });
+  const NovelReaderLink({required this.url, required this.text, this.tid});
 
   final String url;
   final String text;

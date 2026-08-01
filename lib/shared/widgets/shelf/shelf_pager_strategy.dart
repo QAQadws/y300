@@ -4,22 +4,14 @@ import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 ///
 /// 这样 comic/novel 只需提供最小分类模型，不需要在各自页面重复维护映射逻辑。
 class ShelfPagerStrategy<T> {
-  const ShelfPagerStrategy({
-    required this.idOf,
-    required this.labelOf,
-  });
+  const ShelfPagerStrategy({required this.idOf, required this.labelOf});
 
   final String Function(T item) idOf;
   final String Function(T item) labelOf;
 
   List<FixedSlotHeaderTab> buildTabs(List<T> items) {
     return items
-        .map(
-          (item) => FixedSlotHeaderTab(
-            id: idOf(item),
-            label: labelOf(item),
-          ),
-        )
+        .map((item) => FixedSlotHeaderTab(id: idOf(item), label: labelOf(item)))
         .toList(growable: false);
   }
 

@@ -42,10 +42,9 @@ void main() {
       wordCount: 8,
     );
 
-    final roundTripped = NovelReaderDocumentDto.fromDocument(document)
-        .toMap()
-        .let(NovelReaderDocumentDto.fromMap)
-        .toDocument();
+    final roundTripped = NovelReaderDocumentDto.fromDocument(
+      document,
+    ).toMap().let(NovelReaderDocumentDto.fromMap).toDocument();
 
     expect(roundTripped.episodeId, document.episodeId);
     expect(roundTripped.rawHtmlHash, document.rawHtmlHash);

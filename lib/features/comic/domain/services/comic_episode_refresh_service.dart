@@ -21,8 +21,7 @@ abstract class ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  );
+  });
 
   /// Runs strategy 2 and strategy 3 for callers that already decided catalog
   /// refresh should not run immediately, such as the future search queue.
@@ -31,8 +30,7 @@ abstract class ComicEpisodeRefreshService {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
     ComicThreadDetailCache? threadCache,
-  }
-  );
+  });
 
   /// Catalog 快速路径：直接解析持久化的 catalogUrl HTML。
   ///
@@ -41,18 +39,12 @@ abstract class ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogDirect(
     String catalogUrl, {
     FavoriteSyncExecutionContext? executionContext,
-  }
-  );
+  });
 
   Future<List<ComicEpisodeLink>> fetchEpisodeLinksFromTid(String tid);
 }
 
-enum ComicEpisodeRefreshSource {
-  catalog,
-  search,
-  currentOnly,
-  empty,
-}
+enum ComicEpisodeRefreshSource { catalog, search, currentOnly, empty }
 
 class ComicEpisodeRefreshOutcome {
   const ComicEpisodeRefreshOutcome({
@@ -68,9 +60,11 @@ class ComicEpisodeRefreshOutcome {
   final List<ComicEpisodeLink> links;
   final bool usedSearch;
   final bool catalogMatched;
+
   /// 本次刷新过程中发现或使用的 catalogUrl。
   /// 调用方可据此持久化，以便下次走 catalog 快速路径。
   final String? catalogUrl;
+
   /// 本次刷新内 discovery 过程已抓取并解析过的 thread detail 缓存。
   /// 调用方（如封面提升）可优先复用，避免对已访问 tid 再发起 viewthread。
   final ComicThreadDetailCache? threadCache;
@@ -95,6 +89,7 @@ class ComicEpisodeRefreshRequest {
   final String? sourceTitle;
   final String? customTitle;
   final String? customSearchTitle;
+
   /// 已持久化的 catalogUrl，调用方从 ComicDetail 获取并传入。
   final String? catalogUrl;
 }

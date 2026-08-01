@@ -1,11 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-enum ThreadContentKind {
-  unknown,
-  comic,
-  novel,
-  forum,
-}
+enum ThreadContentKind { unknown, comic, novel, forum }
 
 class ThreadContentClassifier {
   const ThreadContentClassifier();
@@ -27,7 +22,8 @@ class ThreadContentClassifier {
     if (normalizedFid.isEmpty) {
       return ThreadContentKind.unknown;
     }
-    final isAnnouncement = normalizedTag == '公告' ||
+    final isAnnouncement =
+        normalizedTag == '公告' ||
         announcementTypeIds[normalizedFid] == normalizedTypeid;
 
     if (normalizedFid == '30' && !isAnnouncement) {
@@ -40,6 +36,8 @@ class ThreadContentClassifier {
   }
 }
 
-final threadContentClassifierProvider = Provider<ThreadContentClassifier>((ref) {
+final threadContentClassifierProvider = Provider<ThreadContentClassifier>((
+  ref,
+) {
   return const ThreadContentClassifier();
 });

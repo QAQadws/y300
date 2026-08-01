@@ -1,9 +1,6 @@
-﻿/// Phase 0 parsing signal for novel chapter discovery.
+/// Phase 0 parsing signal for novel chapter discovery.
 class NovelParsingSignal {
-  const NovelParsingSignal({
-    required this.stage,
-    required this.message,
-  });
+  const NovelParsingSignal({required this.stage, required this.message});
 
   final String stage;
   final String message;

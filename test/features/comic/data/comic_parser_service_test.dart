@@ -58,13 +58,10 @@ void main() {
       );
 
       expect(result.catalogUrl, isNull);
-      expect(
-        result.episodeLinks.map((link) => link.url).toList(),
-        <String>[
-          'https://bbs.yamibo.com/thread-100-1-1.html',
-          'https://bbs.yamibo.com/thread-101-1-1.html',
-        ],
-      );
+      expect(result.episodeLinks.map((link) => link.url).toList(), <String>[
+        'https://bbs.yamibo.com/thread-100-1-1.html',
+        'https://bbs.yamibo.com/thread-101-1-1.html',
+      ]);
     });
 
     test('extracts forum.php viewthread links including escaped ampersands', () {

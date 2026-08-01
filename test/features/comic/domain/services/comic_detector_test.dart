@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 
 void main() {
@@ -8,7 +8,8 @@ void main() {
       final result = detector.detect(
         fid: '30',
         subject: '【某某汉化组】第12话',
-        message: '<img src="a.jpg"/><img src="b.jpg"/><a href="thread-100-1-1.html">1</a><a href="thread-101-1-1.html">2</a>',
+        message:
+            '<img src="a.jpg"/><img src="b.jpg"/><a href="thread-100-1-1.html">1</a><a href="thread-101-1-1.html">2</a>',
       );
 
       expect(result.isCandidate, isTrue);

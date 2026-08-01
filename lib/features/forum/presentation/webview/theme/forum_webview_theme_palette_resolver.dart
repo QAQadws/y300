@@ -16,8 +16,9 @@ final class ForumWebViewThemePaletteResolver {
       pageBackground: theme.scaffoldBackgroundColor,
       surface: scheme.surfaceContainer,
       surfaceElevated: scheme.surfaceContainerHighest,
-      sectionHeaderBackground:
-          isDark ? scheme.surfaceContainerHighest : scheme.surfaceContainer,
+      sectionHeaderBackground: isDark
+          ? scheme.surfaceContainerHighest
+          : scheme.surfaceContainer,
       text: scheme.onSurface,
       mutedText: scheme.onSurfaceVariant,
       subtleText: scheme.onSurfaceVariant.withValues(alpha: 0.72),

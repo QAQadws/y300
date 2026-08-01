@@ -23,7 +23,8 @@ class NovelEpisodeDiscoveryService {
   }) : _rules = rules ?? NovelParsingRules.defaults,
        _domExtractor = domExtractor ?? const ForumPostDomExtractor(),
        _imageSourcePipeline = imageSourcePipeline,
-       _catalogExtractor = catalogExtractor ?? const NovelSameThreadCatalogExtractor();
+       _catalogExtractor =
+           catalogExtractor ?? const NovelSameThreadCatalogExtractor();
 
   final List<NovelParsingRule> _rules;
   final ForumPostDomExtractor _domExtractor;
@@ -40,7 +41,9 @@ class NovelEpisodeDiscoveryService {
     }
 
     final firstPage = pages.first;
-    final opAuthorId = firstPage.posts.isEmpty ? '' : firstPage.posts.first.authorId;
+    final opAuthorId = firstPage.posts.isEmpty
+        ? ''
+        : firstPage.posts.first.authorId;
     final builder = _NovelRefreshPlanBuilder(
       firstPage: firstPage,
       pageCount: pages.length,
@@ -71,7 +74,9 @@ class NovelEpisodeDiscoveryService {
         final source = postsByPid[entry.pid];
         final sourcePost = source?.post;
         final sourcePage = source?.page;
-        final plainText = sourcePost == null ? '' : _domExtractor.extractPlainText(sourcePost.message);
+        final plainText = sourcePost == null
+            ? ''
+            : _domExtractor.extractPlainText(sourcePost.message);
         final paragraphs = sourcePost == null
             ? const <String>[]
             : _domExtractor.extractParagraphTexts(sourcePost.message);
@@ -97,7 +102,10 @@ class NovelEpisodeDiscoveryService {
         );
       }
       builder.addSignal(
-        NovelParsingSignal(stage: 'catalog', message: 'same-thread pid catalog entries=${catalogEntries.length}'),
+        NovelParsingSignal(
+          stage: 'catalog',
+          message: 'same-thread pid catalog entries=${catalogEntries.length}',
+        ),
       );
       return builder.build();
     }
@@ -128,7 +136,9 @@ class NovelEpisodeDiscoveryService {
           continue;
         }
 
-        final pageNumber = page.currentPage > 0 ? page.currentPage : (pageIndex + 1);
+        final pageNumber = page.currentPage > 0
+            ? page.currentPage
+            : (pageIndex + 1);
         builder.addEpisode(
           NovelEpisodeDraft(
             episodeId: '$novelId:${post.pid}',
@@ -136,7 +146,9 @@ class NovelEpisodeDiscoveryService {
             sourceTid: page.tid,
             sourcePid: post.pid,
             sourcePage: pageNumber,
-            episodeTitle: result.titleCandidate ?? '第${builder.episodeCount + 1}节（PID:${post.pid}）',
+            episodeTitle:
+                result.titleCandidate ??
+                '第${builder.episodeCount + 1}节（PID:${post.pid}）',
             orderIndex: builder.episodeCount,
             datelineText: post.dateline,
             rawHtml: _resolveAttachTags(post),
@@ -156,12 +168,12 @@ class NovelEpisodeDiscoveryService {
       for (final page in pages)
         for (final post in page.posts) _PostOnPage(page: page, post: post),
     ]..sort((a, b) {
-        final pageCompare = a.page.currentPage.compareTo(b.page.currentPage);
-        if (pageCompare != 0) {
-          return pageCompare;
-        }
-        return a.post.number.compareTo(b.post.number);
-      });
+      final pageCompare = a.page.currentPage.compareTo(b.page.currentPage);
+      if (pageCompare != 0) {
+        return pageCompare;
+      }
+      return a.post.number.compareTo(b.post.number);
+    });
   }
 
   void _collectCatalogMeta({
@@ -269,10 +281,7 @@ class _NovelRefreshPlanBuilder {
 
   int get episodeCount => _episodes.length + orderIndexOffset;
 
-  void addPostStats({
-    required int totalAnchors,
-    required bool isOpPost,
-  }) {
+  void addPostStats({required int totalAnchors, required bool isOpPost}) {
     _totalAnchors += totalAnchors;
     if (isOpPost) {
       _totalOpPosts += 1;
@@ -323,7 +332,10 @@ class _NovelRefreshPlanBuilder {
         fallbackPagesVisited: pageCount,
         signals: <NovelParsingSignal>[
           ..._signals,
-          NovelParsingSignal(stage: 'summary', message: 'fallbackTitles=$_fallbackTitleCount'),
+          NovelParsingSignal(
+            stage: 'summary',
+            message: 'fallbackTitles=$_fallbackTitleCount',
+          ),
         ],
       ),
     );
@@ -336,10 +348,7 @@ class _NovelRefreshPlanBuilder {
 }
 
 class _PostOnPage {
-  const _PostOnPage({
-    required this.page,
-    required this.post,
-  });
+  const _PostOnPage({required this.page, required this.post});
 
   final ThreadDetailData page;
   final ThreadPost post;

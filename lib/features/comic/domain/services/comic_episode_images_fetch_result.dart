@@ -27,9 +27,9 @@ sealed class ComicEpisodeImagesFetchResult {
   /// 兼容旧 `fetchEpisodeImagesByTid` 行为：失败时降级为空列表。
   /// 仅供尚未迁移到 sealed 模式的调用方使用。
   List<String> get imageUrlsOrEmpty => switch (this) {
-        ComicEpisodeImagesFetched(:final imageUrls) => imageUrls,
-        ComicEpisodeImagesFetchFailed() => const <String>[],
-      };
+    ComicEpisodeImagesFetched(:final imageUrls) => imageUrls,
+    ComicEpisodeImagesFetchFailed() => const <String>[],
+  };
 }
 
 class ComicEpisodeImagesFetched extends ComicEpisodeImagesFetchResult {

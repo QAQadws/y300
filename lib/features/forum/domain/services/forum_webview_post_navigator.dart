@@ -1,8 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 
-final forumWebViewPostNavigatorProvider =
-    Provider<ForumWebViewPostNavigator>((ref) {
+final forumWebViewPostNavigatorProvider = Provider<ForumWebViewPostNavigator>((
+  ref,
+) {
   return ForumWebViewPostNavigator(
     webViewNavigator: ref.read(forumWebViewNavigatorProvider),
   );
@@ -53,10 +54,7 @@ class ForumWebViewPostNavigator {
 ///
 /// `sourceUri` 仅作埋点 / 排错；提交载荷的 `fid` 才是 controller 用到的字段。
 class ForumWebViewPostRequest {
-  const ForumWebViewPostRequest({
-    required this.fid,
-    required this.sourceUri,
-  });
+  const ForumWebViewPostRequest({required this.fid, required this.sourceUri});
 
   final String fid;
   final Uri sourceUri;

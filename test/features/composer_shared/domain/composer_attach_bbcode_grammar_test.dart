@@ -44,16 +44,16 @@ void main() {
 
       expect(matches, hasLength(2));
       expect(matches.first.aid, '12');
-      expect(source.substring(matches.first.start, matches.first.end),
-          '[attach]12[/attach]');
+      expect(
+        source.substring(matches.first.start, matches.first.end),
+        '[attach]12[/attach]',
+      );
       expect(matches.last.aid, '345');
       expect(matches.last.length, '[ATTACH]345[/attach]'.length);
     });
 
     test('skips illegal tokens', () {
-      final matches = grammar.scan(
-        '[attach]abc[/attach][attach]7[/attach]',
-      );
+      final matches = grammar.scan('[attach]abc[/attach][attach]7[/attach]');
 
       expect(matches, hasLength(1));
       expect(matches.single.aid, '7');

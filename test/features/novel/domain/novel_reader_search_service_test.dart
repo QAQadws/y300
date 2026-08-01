@@ -47,9 +47,7 @@ void main() {
   });
 }
 
-NovelReaderDocument _document({
-  required List<RichBlock> blocks,
-}) {
+NovelReaderDocument _document({required List<RichBlock> blocks}) {
   return NovelReaderDocument(
     episodeId: 'episode-1',
     rawHtmlHash: 'hash',

@@ -3,51 +3,51 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart';
 
 void main() {
-  test('buildSeedCookies keeps raw encoded cookie values for webview seeding', () async {
-    final bootstrapper = DefaultForumWebViewCookieBootstrapper(
-      cookieStore: _FakeCookieStore(
-        cookies: <String, String>{
-          'auth': 'token%2Bvalue',
-          'lastcheckfeed': '597454%7C1717530000',
-          'lip': '127.0.0.1%2C1717530000',
-        },
-      ),
-    );
+  test(
+    'buildSeedCookies keeps raw encoded cookie values for webview seeding',
+    () async {
+      final bootstrapper = DefaultForumWebViewCookieBootstrapper(
+        cookieStore: _FakeCookieStore(
+          cookies: <String, String>{
+            'auth': 'token%2Bvalue',
+            'lastcheckfeed': '597454%7C1717530000',
+            'lip': '127.0.0.1%2C1717530000',
+          },
+        ),
+      );
 
-    final result = await bootstrapper.buildSeedCookies(
-      uri: Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
-    );
+      final result = await bootstrapper.buildSeedCookies(
+        uri: Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+      );
 
-    expect(
-      result,
-      <String, String>{
+      expect(result, <String, String>{
         'auth': 'token%2Bvalue',
         'lastcheckfeed': '597454%7C1717530000',
         'lip': '127.0.0.1%2C1717530000',
-      },
-    );
-  });
+      });
+    },
+  );
 
-  test('buildSeedCookies skips deleted or empty cookies without rewriting raw values', () async {
-    final bootstrapper = DefaultForumWebViewCookieBootstrapper(
-      cookieStore: _FakeCookieStore(
-        cookies: <String, String>{
-          'auth': 'abc%ZZ',
-          'deletedCookie': 'deleted',
-          'emptyCookie': '',
-        },
-      ),
-    );
+  test(
+    'buildSeedCookies skips deleted or empty cookies without rewriting raw values',
+    () async {
+      final bootstrapper = DefaultForumWebViewCookieBootstrapper(
+        cookieStore: _FakeCookieStore(
+          cookies: <String, String>{
+            'auth': 'abc%ZZ',
+            'deletedCookie': 'deleted',
+            'emptyCookie': '',
+          },
+        ),
+      );
 
-    final result = await bootstrapper.buildSeedCookies(
-      uri: Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
-    );
+      final result = await bootstrapper.buildSeedCookies(
+        uri: Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+      );
 
-    expect(
-      result,
-      <String, String>{'auth': 'abc%ZZ'},
-    );
-  });
+      expect(result, <String, String>{'auth': 'abc%ZZ'});
+    },
+  );
 }
 
 class _FakeCookieStore extends CookieStore {

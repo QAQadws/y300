@@ -22,6 +22,9 @@ void main() {
     expect(result.items.first.tid, '570616');
     expect(result.items.first.fid, '30');
     expect(result.items.first.title, '标题A');
-    expect(result.nextPageUrl, contains('search.php?mod=forum&searchid=15063&page=3&mobile=2'));
+    expect(
+      result.nextPageUrl,
+      contains('search.php?mod=forum&searchid=15063&page=3&mobile=2'),
+    );
   });
 }

@@ -27,8 +27,14 @@ void main() {
         ],
       );
 
-      expect(entries.map((entry) => entry.pid), <String>['40213902', '40213904']);
-      expect(entries.map((entry) => entry.title), <String>['Episode 1', 'Episode 2']);
+      expect(entries.map((entry) => entry.pid), <String>[
+        '40213902',
+        '40213904',
+      ]);
+      expect(entries.map((entry) => entry.title), <String>[
+        'Episode 1',
+        'Episode 2',
+      ]);
     });
 
     test('ignores cross-thread, non-op and late-floor links', () {

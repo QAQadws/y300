@@ -17,9 +17,9 @@ class FlutterLocalLibraryTaskNotificationService
     LibraryTaskNotificationClient? client,
     Duration timeout = defaultTimeout,
     Duration heartbeatInterval = defaultHeartbeatInterval,
-  })  : _client = client ?? FlutterLocalNotificationClient(),
-        _timeout = timeout,
-        _heartbeatInterval = heartbeatInterval;
+  }) : _client = client ?? FlutterLocalNotificationClient(),
+       _timeout = timeout,
+       _heartbeatInterval = heartbeatInterval;
 
   final LibraryTaskNotificationClient _client;
 
@@ -47,7 +47,7 @@ class FlutterLocalLibraryTaskNotificationService
 
   bool _initialized = false;
   final ValueNotifier<LibraryTaskNotificationPermissionState?>
-      _permissionStateNotifier =
+  _permissionStateNotifier =
       ValueNotifier<LibraryTaskNotificationPermissionState?>(null);
 
   // Last notification posted per key, kept so the heartbeat can re-post the
@@ -65,8 +65,8 @@ class FlutterLocalLibraryTaskNotificationService
   }
 
   @override
-  ValueListenable<LibraryTaskNotificationPermissionState?> get permissionState =>
-      _permissionStateNotifier;
+  ValueListenable<LibraryTaskNotificationPermissionState?>
+  get permissionState => _permissionStateNotifier;
 
   @override
   Future<void> initialize() async {

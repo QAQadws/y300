@@ -16,12 +16,15 @@ void main() {
       );
     });
 
-    test('appends without extra newline when message already ends with newline', () {
-      expect(
-        service.appendAttachCodes('正文\n', ['123']),
-        '正文\n[attach]123[/attach]',
-      );
-    });
+    test(
+      'appends without extra newline when message already ends with newline',
+      () {
+        expect(
+          service.appendAttachCodes('正文\n', ['123']),
+          '正文\n[attach]123[/attach]',
+        );
+      },
+    );
 
     test('filters blank aids', () {
       expect(
@@ -31,7 +34,8 @@ void main() {
     });
 
     test('removes matching exclusive attach lines only', () {
-      const message = '开头\n'
+      const message =
+          '开头\n'
           '[attach]123[/attach]\n'
           '正文 [attach]123[/attach]\n'
           '[attach]456[/attach]\n'
@@ -74,10 +78,7 @@ void main() {
     });
 
     test('does not treat ordinary text or sticker code as attach aid', () {
-      expect(
-        service.extractAttachAids('正文{:9_656:}[b]粗体[/b]'),
-        isEmpty,
-      );
+      expect(service.extractAttachAids('正文{:9_656:}[b]粗体[/b]'), isEmpty);
     });
   });
 }

@@ -28,9 +28,7 @@ class LegacyCacheRootPreferenceMigrator {
     if (await _preferencesStore.contains(
       PreferenceKeys.legacyComicCacheDirectory,
     )) {
-      await _preferencesStore.remove(
-        PreferenceKeys.legacyComicCacheDirectory,
-      );
+      await _preferencesStore.remove(PreferenceKeys.legacyComicCacheDirectory);
     }
     await _preferencesStore.write(
       PreferenceKeys.legacyCacheRootMigrationVersion,

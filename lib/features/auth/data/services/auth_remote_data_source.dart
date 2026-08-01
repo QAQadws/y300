@@ -37,10 +37,7 @@ class LoginRequest {
   }
 }
 
-enum LogoutMode {
-  standard,
-  mobileHash,
-}
+enum LogoutMode { standard, mobileHash }
 
 abstract class AuthRemoteDataSource {
   Future<ApiResult<DiscuzResponse>> login(LoginRequest request);
@@ -94,13 +91,13 @@ class DiscuzMobileAuthApi implements AuthRemoteDataSource {
 
     final query = switch (mode) {
       LogoutMode.standard => <String, String>{
-          'action': 'logout',
-          'formhash': normalizedFormhash,
-        },
+        'action': 'logout',
+        'formhash': normalizedFormhash,
+      },
       LogoutMode.mobileHash => <String, String>{
-          'mlogout': '1',
-          'hash': normalizedFormhash,
-        },
+        'mlogout': '1',
+        'hash': normalizedFormhash,
+      },
     };
 
     final result = await _apiClient.getDiscuz(
@@ -116,10 +113,7 @@ class DiscuzMobileAuthApi implements AuthRemoteDataSource {
 
   ApiError? _validateLoginRequest(LoginRequest request) {
     if (request.username.trim().isEmpty || request.password.isEmpty) {
-      return const ApiError(
-        type: ApiErrorType.business,
-        message: '用户名和密码不能为空',
-      );
+      return const ApiError(type: ApiErrorType.business, message: '用户名和密码不能为空');
     }
     if (request.formhash.trim().isEmpty) {
       return const ApiError(
@@ -130,9 +124,7 @@ class DiscuzMobileAuthApi implements AuthRemoteDataSource {
     return null;
   }
 
-  ApiResult<DiscuzResponse> _normalizeLoginResponse(
-    DiscuzResponse response,
-  ) {
+  ApiResult<DiscuzResponse> _normalizeLoginResponse(DiscuzResponse response) {
     return _normalizeAuthResponse(
       response,
       successWhenMessageMatches: _isLoginSuccess,
@@ -140,9 +132,7 @@ class DiscuzMobileAuthApi implements AuthRemoteDataSource {
     );
   }
 
-  ApiResult<DiscuzResponse> _normalizeLogoutResponse(
-    DiscuzResponse response,
-  ) {
+  ApiResult<DiscuzResponse> _normalizeLogoutResponse(DiscuzResponse response) {
     return _normalizeAuthResponse(
       response,
       successWhenMessageMatches: _isLogoutSuccess,
@@ -153,7 +143,7 @@ class DiscuzMobileAuthApi implements AuthRemoteDataSource {
   ApiResult<DiscuzResponse> _normalizeAuthResponse(
     DiscuzResponse response, {
     required bool Function(String code, String message)
-        successWhenMessageMatches,
+    successWhenMessageMatches,
     required String fallbackMessage,
   }) {
     final message = response.message;

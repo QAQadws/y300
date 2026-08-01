@@ -37,10 +37,7 @@ void main() {
       const policy = NovelReaderChapterTurnPolicy();
 
       expect(policy.commitDistanceFor(0), policy.minCommitDistance);
-      expect(
-        policy.commitDistanceFor(double.nan),
-        policy.minCommitDistance,
-      );
+      expect(policy.commitDistanceFor(double.nan), policy.minCommitDistance);
     });
 
     test('the hint reveals strictly before the commit threshold', () {
@@ -91,24 +88,25 @@ void main() {
       expect(edges, <NovelReaderChapterEdge>[NovelReaderChapterEdge.end]);
     });
 
-    testWidgets('dragging before the first page turns to the previous chapter', (
-      tester,
-    ) async {
-      final edges = <NovelReaderChapterEdge>[];
-      await tester.pumpWidget(
-        _buildSurface(
-          coordinator: _FixedPlanPaginationCoordinator(pageCount: 2),
-          previousChapterTitle: '第零章',
-          onTurnToAdjacentChapter: _accepting(edges),
-        ),
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'dragging before the first page turns to the previous chapter',
+      (tester) async {
+        final edges = <NovelReaderChapterEdge>[];
+        await tester.pumpWidget(
+          _buildSurface(
+            coordinator: _FixedPlanPaginationCoordinator(pageCount: 2),
+            previousChapterTitle: '第零章',
+            onTurnToAdjacentChapter: _accepting(edges),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      await tester.drag(_pageView, const Offset(160, 0));
-      await tester.pumpAndSettle();
+        await tester.drag(_pageView, const Offset(160, 0));
+        await tester.pumpAndSettle();
 
-      expect(edges, <NovelReaderChapterEdge>[NovelReaderChapterEdge.start]);
-    });
+        expect(edges, <NovelReaderChapterEdge>[NovelReaderChapterEdge.start]);
+      },
+    );
 
     testWidgets('a short pull past the edge does not switch chapters', (
       tester,
@@ -152,25 +150,26 @@ void main() {
       expect(edges, isEmpty);
     });
 
-    testWidgets('a single-page chapter can still be turned in both directions', (
-      tester,
-    ) async {
-      final edges = <NovelReaderChapterEdge>[];
-      await tester.pumpWidget(
-        _buildSurface(
-          coordinator: _FixedPlanPaginationCoordinator(pageCount: 1),
-          previousChapterTitle: '第零章',
-          nextChapterTitle: '第二章',
-          onTurnToAdjacentChapter: _accepting(edges),
-        ),
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'a single-page chapter can still be turned in both directions',
+      (tester) async {
+        final edges = <NovelReaderChapterEdge>[];
+        await tester.pumpWidget(
+          _buildSurface(
+            coordinator: _FixedPlanPaginationCoordinator(pageCount: 1),
+            previousChapterTitle: '第零章',
+            nextChapterTitle: '第二章',
+            onTurnToAdjacentChapter: _accepting(edges),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      await tester.drag(_pageView, const Offset(-160, 0));
-      await tester.pumpAndSettle();
+        await tester.drag(_pageView, const Offset(-160, 0));
+        await tester.pumpAndSettle();
 
-      expect(edges, <NovelReaderChapterEdge>[NovelReaderChapterEdge.end]);
-    });
+        expect(edges, <NovelReaderChapterEdge>[NovelReaderChapterEdge.end]);
+      },
+    );
 
     testWidgets('the boundary hint appears mid-drag and names the target', (
       tester,
@@ -184,9 +183,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final gesture = await tester.startGesture(
-        tester.getCenter(_pageView),
-      );
+      final gesture = await tester.startGesture(tester.getCenter(_pageView));
       await gesture.moveBy(const Offset(160, 0));
       await tester.pump();
 
@@ -449,9 +446,7 @@ void main() {
   });
 }
 
-final Finder _pageView = find.byKey(
-  const Key('novel-reader-paged-page-view'),
-);
+final Finder _pageView = find.byKey(const Key('novel-reader-paged-page-view'));
 
 /// Records the turns a surface asks for and reports them as accepted, which is
 /// what the real page does whenever it actually starts a chapter switch.

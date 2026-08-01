@@ -14,9 +14,7 @@ class ComicCoverStore {
   }) async {
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
-    final values = <String, Object?>{
-      'updated_at': now,
-    };
+    final values = <String, Object?>{'updated_at': now};
     if (coverImageUrl != null) {
       values['cover_image_url'] = _normalizeNullable(coverImageUrl);
     }
@@ -24,8 +22,9 @@ class ComicCoverStore {
       values['cover_local_path'] = _normalizeNullable(coverLocalPath);
     }
     if (customCoverLocalPath != null) {
-      values['custom_cover_local_path'] =
-          _normalizeNullable(customCoverLocalPath);
+      values['custom_cover_local_path'] = _normalizeNullable(
+        customCoverLocalPath,
+      );
       values['metadata_updated_at'] = now;
     }
     await db.update(
@@ -94,8 +93,9 @@ class ComicCoverStore {
     if (comics.isEmpty) {
       return false;
     }
-    final customCover =
-        _normalizeNullable(comics.first['custom_cover_image_url'] as String?);
+    final customCover = _normalizeNullable(
+      comics.first['custom_cover_image_url'] as String?,
+    );
     final customCoverLocalPath = _normalizeNullable(
       comics.first['custom_cover_local_path'] as String?,
     );
@@ -118,10 +118,12 @@ class ComicCoverStore {
       return false;
     }
 
-    final currentCover =
-        _normalizeNullable(comics.first['cover_image_url'] as String?);
-    final currentLocalPath =
-        _normalizeNullable(comics.first['cover_local_path'] as String?);
+    final currentCover = _normalizeNullable(
+      comics.first['cover_image_url'] as String?,
+    );
+    final currentLocalPath = _normalizeNullable(
+      comics.first['cover_local_path'] as String?,
+    );
     if (currentCover == normalizedImageUrl && currentLocalPath == null) {
       return false;
     }

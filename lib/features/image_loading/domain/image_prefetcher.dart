@@ -26,7 +26,8 @@ class ImagePrefetchRequest {
 }
 
 /// 执行单个预取任务的业务回调（下载、可选写回）。返回是否成功仅用于统计。
-typedef ImagePrefetchRunner = Future<bool> Function(ImagePrefetchRequest request);
+typedef ImagePrefetchRunner =
+    Future<bool> Function(ImagePrefetchRequest request);
 
 /// 预取器进度快照，供调用方驱动“正在预热”一类的提示。
 class ImagePrefetcherSnapshot {
@@ -41,9 +42,8 @@ class ImagePrefetcherSnapshot {
   bool get isIdle => pendingCount == 0 && runningCount == 0;
 }
 
-typedef ImagePrefetcherSnapshotHandler = void Function(
-  ImagePrefetcherSnapshot snapshot,
-);
+typedef ImagePrefetcherSnapshotHandler =
+    void Function(ImagePrefetcherSnapshot snapshot);
 
 /// 统一图片预取器——只负责“提前量”优化的调度。
 ///
@@ -75,9 +75,9 @@ class DefaultImagePrefetcher implements ImagePrefetcher {
     required ImagePrefetchRunner runner,
     ImagePrefetcherSnapshotHandler? onSnapshot,
     int maxConcurrent = 3,
-  })  : _runner = runner,
-        _onSnapshot = onSnapshot,
-        _maxConcurrent = maxConcurrent.clamp(1, 6).toInt();
+  }) : _runner = runner,
+       _onSnapshot = onSnapshot,
+       _maxConcurrent = maxConcurrent.clamp(1, 6).toInt();
 
   final ImagePrefetchRunner _runner;
   final ImagePrefetcherSnapshotHandler? _onSnapshot;

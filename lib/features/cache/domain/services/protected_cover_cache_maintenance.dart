@@ -32,8 +32,8 @@ class ProtectedCoverCacheMaintenance {
   const ProtectedCoverCacheMaintenance({
     required ProtectedCoverCacheStore repository,
     required ProtectedCoverFileStore fileStore,
-  })  : _repository = repository,
-        _fileStore = fileStore;
+  }) : _repository = repository,
+       _fileStore = fileStore;
 
   final ProtectedCoverCacheStore _repository;
   final ProtectedCoverFileStore _fileStore;
@@ -46,7 +46,10 @@ class ProtectedCoverCacheMaintenance {
     var stale = 0;
     for (final record in records) {
       final localPath = record.localPath?.trim();
-      final missingFile = localPath == null || localPath.isEmpty || !await _fileStore.exists(localPath);
+      final missingFile =
+          localPath == null ||
+          localPath.isEmpty ||
+          !await _fileStore.exists(localPath);
       if (!ownerExists(record) || missingFile) {
         await _deleteLocalFile(localPath);
         await _repository.deleteByKey(record.cacheKey);

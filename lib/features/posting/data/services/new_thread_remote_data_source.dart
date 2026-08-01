@@ -117,9 +117,8 @@ abstract class NewThreadRemoteDataSource {
 }
 
 class DiscuzNewThreadDioRemoteDataSource implements NewThreadRemoteDataSource {
-  DiscuzNewThreadDioRemoteDataSource({
-    required YamiboHttpGateway gateway,
-  }) : _gateway = gateway;
+  DiscuzNewThreadDioRemoteDataSource({required YamiboHttpGateway gateway})
+    : _gateway = gateway;
 
   final YamiboHttpGateway _gateway;
 

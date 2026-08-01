@@ -10,12 +10,13 @@ class StickerBbCodeTokenizer {
     if (source.isEmpty || stickers.isEmpty) {
       return source;
     }
-    final codes = stickers
-        .map((sticker) => sticker.code)
-        .where((code) => code.trim().isNotEmpty)
-        .toSet()
-        .toList(growable: false)
-      ..sort((a, b) => b.length.compareTo(a.length));
+    final codes =
+        stickers
+            .map((sticker) => sticker.code)
+            .where((code) => code.trim().isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort((a, b) => b.length.compareTo(a.length));
     if (codes.isEmpty) {
       return source;
     }

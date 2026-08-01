@@ -11,11 +11,7 @@ import 'package:flutter/painting.dart';
 /// `ResizeImageKey` 同理）；外部不应自行构造，仅由 [CoverAwareResizeImage] 使用。
 @immutable
 class CoverResizeKey {
-  const CoverResizeKey(
-    this.providerKey,
-    this.boxWidth,
-    this.boxHeight,
-  );
+  const CoverResizeKey(this.providerKey, this.boxWidth, this.boxHeight);
 
   final Object providerKey;
   final int boxWidth;
@@ -65,10 +61,12 @@ class CoverAwareResizeImage extends ImageProvider<CoverResizeKey> {
     required double devicePixelRatio,
   }) {
     final dpr = devicePixelRatio <= 0 ? 1.0 : devicePixelRatio;
-    final w = (logicalWidth != null && logicalWidth.isFinite && logicalWidth > 0)
+    final w =
+        (logicalWidth != null && logicalWidth.isFinite && logicalWidth > 0)
         ? (logicalWidth * dpr).round()
         : null;
-    final h = (logicalHeight != null && logicalHeight.isFinite && logicalHeight > 0)
+    final h =
+        (logicalHeight != null && logicalHeight.isFinite && logicalHeight > 0)
         ? (logicalHeight * dpr).round()
         : null;
     // 两边都未知时无法计算 cover 目标，退回原 provider（不降采样，保清晰）。
@@ -83,7 +81,10 @@ class CoverAwareResizeImage extends ImageProvider<CoverResizeKey> {
   /// 提取为纯函数以便单测：解码图需在宽、高两个方向都 ≥ 显示框（cover 缩放因子
   /// 取两方向较大者）；原图比所需还小时按原尺寸（`scale` 封顶 1）。
   @visibleForTesting
-  ui.TargetImageSize computeTargetSize(int intrinsicWidth, int intrinsicHeight) {
+  ui.TargetImageSize computeTargetSize(
+    int intrinsicWidth,
+    int intrinsicHeight,
+  ) {
     if (intrinsicWidth <= 0 || intrinsicHeight <= 0) {
       return const ui.TargetImageSize();
     }
@@ -98,7 +99,10 @@ class CoverAwareResizeImage extends ImageProvider<CoverResizeKey> {
   }
 
   @override
-  ImageStreamCompleter loadImage(CoverResizeKey key, ImageDecoderCallback decode) {
+  ImageStreamCompleter loadImage(
+    CoverResizeKey key,
+    ImageDecoderCallback decode,
+  ) {
     Future<ui.Codec> decodeCover(
       ui.ImmutableBuffer buffer, {
       ui.TargetImageSizeCallback? getTargetSize,

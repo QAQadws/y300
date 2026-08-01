@@ -69,7 +69,8 @@ class NovelRuleResult {
       imageUrls: imageUrls.isEmpty ? other.imageUrls : imageUrls,
       intro: _firstNonBlank(intro, other.intro),
       coverImageUrl: _firstNonBlank(coverImageUrl, other.coverImageUrl),
-      usedFallbackTitle: usedFallbackTitle || (!hasExistingTitle && other.usedFallbackTitle),
+      usedFallbackTitle:
+          usedFallbackTitle || (!hasExistingTitle && other.usedFallbackTitle),
       signals: <NovelParsingSignal>[...signals, ...other.signals],
     );
   }
@@ -80,7 +81,9 @@ class NovelRuleResult {
       return normalizedFirst;
     }
     final normalizedSecond = second?.trim();
-    return normalizedSecond == null || normalizedSecond.isEmpty ? null : normalizedSecond;
+    return normalizedSecond == null || normalizedSecond.isEmpty
+        ? null
+        : normalizedSecond;
   }
 }
 
@@ -103,22 +106,24 @@ class OpAuthorOnlyRule extends NovelParsingRule {
 
   @override
   NovelRuleResult apply(NovelParsingContext context) {
-    if (context.opAuthorId.isEmpty || context.post.authorId == context.opAuthorId) {
+    if (context.opAuthorId.isEmpty ||
+        context.post.authorId == context.opAuthorId) {
       return NovelRuleResult.empty;
     }
     return NovelRuleResult(
       rejectPost: true,
       signals: <NovelParsingSignal>[
-        NovelParsingSignal(stage: 'author', message: 'skip non-op pid=${context.post.pid}'),
+        NovelParsingSignal(
+          stage: 'author',
+          message: 'skip non-op pid=${context.post.pid}',
+        ),
       ],
     );
   }
 }
 
 class MeaningfulTextRule extends NovelParsingRule {
-  const MeaningfulTextRule({
-    this.minTextLength = 1,
-  });
+  const MeaningfulTextRule({this.minTextLength = 1});
 
   final int minTextLength;
 
@@ -130,7 +135,10 @@ class MeaningfulTextRule extends NovelParsingRule {
       return NovelRuleResult(
         rejectPost: true,
         signals: <NovelParsingSignal>[
-          NovelParsingSignal(stage: 'content', message: 'skip empty pid=${context.post.pid}'),
+          NovelParsingSignal(
+            stage: 'content',
+            message: 'skip empty pid=${context.post.pid}',
+          ),
         ],
       );
     }
@@ -149,7 +157,9 @@ class ChapterTitleRegexRule extends NovelParsingRule {
     r'(第\s*[0-9一二三四五六七八九十百千零〇两\.]+\s*[章节话回卷]|卷\s*[0-9一二三四五六七八九十百千零〇两\.]+|番外|特典)',
   );
   static final RegExp _asciiChapterPattern = RegExp(r'(第\s*\d+\s*[章节话回卷])');
-  static final RegExp _numberedTitleLinePattern = RegExp(r'(^|\n)\s*(\d{1,4}\s+[^\n]{1,80})');
+  static final RegExp _numberedTitleLinePattern = RegExp(
+    r'(^|\n)\s*(\d{1,4}\s+[^\n]{1,80})',
+  );
 
   @override
   NovelRuleResult apply(NovelParsingContext context) {
@@ -160,18 +170,25 @@ class ChapterTitleRegexRule extends NovelParsingRule {
     return NovelRuleResult(
       titleCandidate: title,
       signals: <NovelParsingSignal>[
-        NovelParsingSignal(stage: 'title', message: 'regex title="$title" pid=${context.post.pid}'),
+        NovelParsingSignal(
+          stage: 'title',
+          message: 'regex title="$title" pid=${context.post.pid}',
+        ),
       ],
     );
   }
 
   static String? extractTitle(String text) {
-    final titleMatch = _titlePattern.firstMatch(text) ?? _asciiChapterPattern.firstMatch(text);
+    final titleMatch =
+        _titlePattern.firstMatch(text) ?? _asciiChapterPattern.firstMatch(text);
     final title = titleMatch?.group(1)?.replaceAll(RegExp(r'\s+'), '');
     if (title != null && title.isNotEmpty) {
       return title;
     }
-    final numbered = _numberedTitleLinePattern.firstMatch(text)?.group(2)?.trim();
+    final numbered = _numberedTitleLinePattern
+        .firstMatch(text)
+        ?.group(2)
+        ?.trim();
     if (numbered != null && numbered.isNotEmpty) {
       return numbered;
     }
@@ -200,7 +217,10 @@ class HeadingTitleRule extends NovelParsingRule {
         return NovelRuleResult(
           titleCandidate: title,
           signals: <NovelParsingSignal>[
-            NovelParsingSignal(stage: 'title', message: 'heading title="$title" pid=${context.post.pid}'),
+            NovelParsingSignal(
+              stage: 'title',
+              message: 'heading title="$title" pid=${context.post.pid}',
+            ),
           ],
         );
       }
@@ -220,16 +240,17 @@ class CoverImageRule extends NovelParsingRule {
     return NovelRuleResult(
       coverImageUrl: context.imageUrls.first,
       signals: <NovelParsingSignal>[
-        NovelParsingSignal(stage: 'cover', message: 'cover candidate pid=${context.post.pid}'),
+        NovelParsingSignal(
+          stage: 'cover',
+          message: 'cover candidate pid=${context.post.pid}',
+        ),
       ],
     );
   }
 }
 
 class IntroBeforeFirstChapterRule extends NovelParsingRule {
-  const IntroBeforeFirstChapterRule({
-    this.maxIntroLength = 600,
-  });
+  const IntroBeforeFirstChapterRule({this.maxIntroLength = 600});
 
   final int maxIntroLength;
 
@@ -246,11 +267,16 @@ class IntroBeforeFirstChapterRule extends NovelParsingRule {
     if (intro.isEmpty) {
       return NovelRuleResult.empty;
     }
-    final clipped = intro.length > maxIntroLength ? intro.substring(0, maxIntroLength).trim() : intro;
+    final clipped = intro.length > maxIntroLength
+        ? intro.substring(0, maxIntroLength).trim()
+        : intro;
     return NovelRuleResult(
       intro: clipped,
       signals: <NovelParsingSignal>[
-        NovelParsingSignal(stage: 'intro', message: 'intro candidate pid=${context.post.pid}'),
+        NovelParsingSignal(
+          stage: 'intro',
+          message: 'intro candidate pid=${context.post.pid}',
+        ),
       ],
     );
   }
@@ -268,7 +294,10 @@ class FallbackTitleRule extends NovelParsingRule {
       titleCandidate: title,
       usedFallbackTitle: true,
       signals: <NovelParsingSignal>[
-        NovelParsingSignal(stage: 'title', message: 'fallback title="$title" pid=${context.post.pid}'),
+        NovelParsingSignal(
+          stage: 'title',
+          message: 'fallback title="$title" pid=${context.post.pid}',
+        ),
       ],
     );
   }

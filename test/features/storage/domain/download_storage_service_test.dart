@@ -7,36 +7,28 @@ import 'package:y300/features/storage/data/storage_location_repository.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
 void main() {
-  test(
-    'prepareRoot creates active download storage files only',
-    () async {
-      final temp = await io.Directory.systemTemp.createTemp(
-        'y300-storage-test-',
-      );
-      addTearDown(() async {
-        if (await temp.exists()) {
-          await temp.delete(recursive: true);
-        }
-      });
-      final service = DefaultDownloadStorageService(
-        locationRepository: _FakeStorageLocationRepository(temp.path),
-      );
+  test('prepareRoot creates active download storage files only', () async {
+    final temp = await io.Directory.systemTemp.createTemp('y300-storage-test-');
+    addTearDown(() async {
+      if (await temp.exists()) {
+        await temp.delete(recursive: true);
+      }
+    });
+    final service = DefaultDownloadStorageService(
+      locationRepository: _FakeStorageLocationRepository(temp.path),
+    );
 
-      final root = await service.prepareRoot();
+    final root = await service.prepareRoot();
 
-      expect(await io.File(p.join(root.path, '.nomedia')).exists(), isTrue);
-      expect(
-        await io.File(p.join(root.comicsPath, '.nomedia')).exists(),
-        isTrue,
-      );
-      expect(await io.Directory(root.novelsPath).exists(), isFalse);
-      expect(await io.File(root.favoritesJsonPath).exists(), isTrue);
-      final favorites = jsonDecode(
-        await io.File(root.favoritesJsonPath).readAsString(),
-      );
-      expect(favorites['schemaVersion'], 1);
-    },
-  );
+    expect(await io.File(p.join(root.path, '.nomedia')).exists(), isTrue);
+    expect(await io.File(p.join(root.comicsPath, '.nomedia')).exists(), isTrue);
+    expect(await io.Directory(root.novelsPath).exists(), isFalse);
+    expect(await io.File(root.favoritesJsonPath).exists(), isTrue);
+    final favorites = jsonDecode(
+      await io.File(root.favoritesJsonPath).readAsString(),
+    );
+    expect(favorites['schemaVersion'], 1);
+  });
 
   test(
     'safeFileName removes unsafe characters and appends hash for long names',

@@ -5,9 +5,7 @@ import 'package:flutter/foundation.dart';
 /// This keeps Milestone A observable without introducing a logging dependency
 /// into adapters or widgets. Release builds skip all work behind [kReleaseMode].
 class ShelfPerfTrace {
-  ShelfPerfTrace({
-    required this.name,
-  }) : _total = Stopwatch() {
+  ShelfPerfTrace({required this.name}) : _total = Stopwatch() {
     if (!kReleaseMode) {
       _total.start();
     }

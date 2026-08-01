@@ -9,10 +9,7 @@ class ComposerImageAttachmentExpiryPolicy {
 
   final Duration maxAge;
 
-  bool isExpired({
-    required DateTime? uploadedAt,
-    required DateTime now,
-  }) {
+  bool isExpired({required DateTime? uploadedAt, required DateTime now}) {
     if (uploadedAt == null) {
       return false;
     }

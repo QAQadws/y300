@@ -1,12 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 
-final forumWebViewReplyNavigatorProvider =
-    Provider<ForumWebViewReplyNavigator>((ref) {
-  return ForumWebViewReplyNavigator(
-    webViewNavigator: ref.read(forumWebViewNavigatorProvider),
-  );
-});
+final forumWebViewReplyNavigatorProvider = Provider<ForumWebViewReplyNavigator>(
+  (ref) {
+    return ForumWebViewReplyNavigator(
+      webViewNavigator: ref.read(forumWebViewNavigatorProvider),
+    );
+  },
+);
 
 class ForumWebViewReplyNavigator {
   const ForumWebViewReplyNavigator({

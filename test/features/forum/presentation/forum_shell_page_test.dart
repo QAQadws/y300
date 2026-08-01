@@ -115,7 +115,10 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byKey(const Key('forum-shell-bootstrap-placeholder-list')), findsOneWidget);
+    expect(
+      find.byKey(const Key('forum-shell-bootstrap-placeholder-list')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('forum-webview-page')), findsNothing);
     expect(find.byKey(const Key('forum-home-list')), findsNothing);
 

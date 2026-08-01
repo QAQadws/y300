@@ -1,16 +1,9 @@
 import 'package:y300/features/forum/domain/models/forum_webview_network_policy_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_visual_policy_models.dart';
 
-enum ForumWebViewEngine {
-  legacy,
-  advanced,
-}
+enum ForumWebViewEngine { legacy, advanced }
 
-enum ForumWebViewDocumentStartMode {
-  reliable,
-  bestEffort,
-  unavailable,
-}
+enum ForumWebViewDocumentStartMode { reliable, bestEffort, unavailable }
 
 class ForumWebViewCapabilityProfile {
   const ForumWebViewCapabilityProfile({
@@ -32,10 +25,7 @@ class ForumWebViewCapabilityProfile {
   final bool supportsPageCommitVisible;
 }
 
-enum ForumWebViewInitialUserScriptInjectionTime {
-  documentStart,
-  documentEnd,
-}
+enum ForumWebViewInitialUserScriptInjectionTime { documentStart, documentEnd }
 
 class ForumWebViewInitialUserScript {
   const ForumWebViewInitialUserScript({

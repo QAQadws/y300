@@ -23,11 +23,8 @@ abstract class ComicSearchCandidateRanker {
   });
 }
 
-class DefaultComicSearchCandidateRanker
-    implements ComicSearchCandidateRanker {
-  const DefaultComicSearchCandidateRanker({
-    this.discoveryTopK = 3,
-  });
+class DefaultComicSearchCandidateRanker implements ComicSearchCandidateRanker {
+  const DefaultComicSearchCandidateRanker({this.discoveryTopK = 3});
 
   @override
   final int discoveryTopK;
@@ -64,14 +61,20 @@ class DefaultComicSearchCandidateRanker
 
   double _scoreTitleSimilarity(String title, String keyword) {
     final normalizedTitle = title.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-    final normalizedKeyword = keyword.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+    final normalizedKeyword = keyword.toLowerCase().replaceAll(
+      RegExp(r'\s+'),
+      '',
+    );
     if (normalizedTitle.isEmpty || normalizedKeyword.isEmpty) {
       return 0;
     }
     if (normalizedTitle.contains(normalizedKeyword)) {
       return 1;
     }
-    final overlap = normalizedKeyword.split('').where(normalizedTitle.contains).length;
+    final overlap = normalizedKeyword
+        .split('')
+        .where(normalizedTitle.contains)
+        .length;
     return overlap / normalizedKeyword.length;
   }
 }

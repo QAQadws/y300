@@ -140,10 +140,7 @@ class _ForumPlaceholderSectionHeader extends StatelessWidget {
 }
 
 class _ForumPlaceholderRow extends StatelessWidget {
-  const _ForumPlaceholderRow({
-    super.key,
-    required this.showDivider,
-  });
+  const _ForumPlaceholderRow({super.key, required this.showDivider});
 
   final bool showDivider;
 
@@ -205,10 +202,7 @@ class _PlaceholderBlock extends StatelessWidget {
       width: width,
       height: height,
       child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: borderRadius,
-        ),
+        decoration: BoxDecoration(color: color, borderRadius: borderRadius),
       ),
     );
   }

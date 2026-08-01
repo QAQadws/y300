@@ -22,8 +22,8 @@ class LocalComposerUploadCacheStorage implements ComposerUploadCacheStorage {
   LocalComposerUploadCacheStorage({
     FileSystem fileSystem = const LocalFileSystem(),
     Future<String> Function()? cacheRootPath,
-  })  : _fileSystem = fileSystem,
-        _cacheRootPath = cacheRootPath ?? _defaultCacheRootPath;
+  }) : _fileSystem = fileSystem,
+       _cacheRootPath = cacheRootPath ?? _defaultCacheRootPath;
 
   final FileSystem _fileSystem;
   final Future<String> Function() _cacheRootPath;
@@ -51,7 +51,9 @@ class LocalComposerUploadCacheStorage implements ComposerUploadCacheStorage {
   bool _isOwnedByRoot(String rootPath, String candidatePath) {
     final pathContext = _fileSystem.path;
     final root = pathContext.normalize(pathContext.absolute(rootPath));
-    final candidate = pathContext.normalize(pathContext.absolute(candidatePath));
+    final candidate = pathContext.normalize(
+      pathContext.absolute(candidatePath),
+    );
     if (candidate == root) {
       return false;
     }

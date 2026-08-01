@@ -55,10 +55,7 @@ class DefaultReadingStateBatchWriter implements ReadingStateBatchWriter {
     final onlyWorkId = isSingle ? normalizedWorkIds.first : null;
     _shelfRefreshBus.notify(
       modules: <LibraryModuleKey>{module},
-      reason: _reasonFor(
-        isSingle: isSingle,
-        isRead: isRead,
-      ),
+      reason: _reasonFor(isSingle: isSingle, isRead: isRead),
       source: LibraryMutationSource.readingStateBatch,
       workId: onlyWorkId,
       payload: <String, Object?>{
@@ -68,10 +65,7 @@ class DefaultReadingStateBatchWriter implements ReadingStateBatchWriter {
     );
   }
 
-  String _reasonFor({
-    required bool isSingle,
-    required bool isRead,
-  }) {
+  String _reasonFor({required bool isSingle, required bool isRead}) {
     if (isSingle) {
       return isRead
           ? 'work_mark_all_read_completed'

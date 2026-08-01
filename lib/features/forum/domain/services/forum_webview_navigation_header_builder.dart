@@ -19,9 +19,9 @@ abstract class ForumWebViewNavigationHeaderBuilder {
 
 class DefaultForumWebViewNavigationHeaderBuilder
     implements ForumWebViewNavigationHeaderBuilder {
-  DefaultForumWebViewNavigationHeaderBuilder({
-    Locale? Function()? localeReader,
-  }) : _localeReader = localeReader ?? (() => PlatformDispatcher.instance.locale);
+  DefaultForumWebViewNavigationHeaderBuilder({Locale? Function()? localeReader})
+    : _localeReader =
+          localeReader ?? (() => PlatformDispatcher.instance.locale);
 
   static const String _fallbackAcceptLanguage = 'zh-CN,zh;q=0.9,en;q=0.8';
   static final Uri _siteRootUri = Uri.parse('${AppConfig.siteBaseUrl}/');
@@ -53,14 +53,14 @@ class DefaultForumWebViewNavigationHeaderBuilder
       headers['Accept-Language'] = explicitAcceptLanguage;
     }
 
-    headers['Referer'] = _buildReferer(targetUri: targetUri, referrerUri: referrerUri);
+    headers['Referer'] = _buildReferer(
+      targetUri: targetUri,
+      referrerUri: referrerUri,
+    );
     return headers;
   }
 
-  String _buildReferer({
-    required Uri targetUri,
-    Uri? referrerUri,
-  }) {
+  String _buildReferer({required Uri targetUri, Uri? referrerUri}) {
     if (referrerUri != null &&
         referrerUri.hasScheme &&
         referrerUri.host == targetUri.host) {

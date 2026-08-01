@@ -21,10 +21,7 @@ void main() {
     test('posts newthread with expected query, body and referer', () async {
       final adapter = _Adapter(
         responseJson: <String, dynamic>{
-          'Variables': <String, dynamic>{
-            'tid': '999001',
-            'pid': '888001',
-          },
+          'Variables': <String, dynamic>{'tid': '999001', 'pid': '888001'},
           'Message': <String, dynamic>{
             'messageval': 'post_newthread_succeed',
             'messagestr': '主题已发布',
@@ -147,44 +144,48 @@ void main() {
       expect(adapter.lastBody, contains('visibilitypoll=1'));
     });
 
-    test('single-choice poll caps maxchoices at 1 regardless of stored value',
-        () async {
-      final adapter = _Adapter(
-        responseJson: <String, dynamic>{
-          'Variables': <String, dynamic>{'tid': '1', 'pid': '2'},
-          'Message': <String, dynamic>{'messageval': 'post_newthread_succeed'},
-        },
-      );
-      final dataSource = _build(adapter);
+    test(
+      'single-choice poll caps maxchoices at 1 regardless of stored value',
+      () async {
+        final adapter = _Adapter(
+          responseJson: <String, dynamic>{
+            'Variables': <String, dynamic>{'tid': '1', 'pid': '2'},
+            'Message': <String, dynamic>{
+              'messageval': 'post_newthread_succeed',
+            },
+          },
+        );
+        final dataSource = _build(adapter);
 
-      await dataSource.submit(
-        const NewThreadSubmitForm(
-          payload: NewThreadDraftPayload(
-            fid: '33',
-            formHash: 'fh',
-            subject: '投票',
-            message: '说明',
-            typeid: '0',
-            useSignature: false,
-            allowNoticeAuthor: false,
-            bbCodeOff: false,
-            smileyOff: false,
-            parseUrlOff: false,
-            special: NewThreadSpecial.poll,
-            poll: NewThreadPollDraft(
-              options: ['A', 'B'],
-              multiple: false,
-              maxChoices: 5,
-              expirationDays: 0,
+        await dataSource.submit(
+          const NewThreadSubmitForm(
+            payload: NewThreadDraftPayload(
+              fid: '33',
+              formHash: 'fh',
+              subject: '投票',
+              message: '说明',
+              typeid: '0',
+              useSignature: false,
+              allowNoticeAuthor: false,
+              bbCodeOff: false,
+              smileyOff: false,
+              parseUrlOff: false,
+              special: NewThreadSpecial.poll,
+              poll: NewThreadPollDraft(
+                options: ['A', 'B'],
+                multiple: false,
+                maxChoices: 5,
+                expirationDays: 0,
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(adapter.lastBody, contains('maxchoices=1'));
-      expect(adapter.lastBody, contains('expiration=0'));
-      expect(adapter.lastBody, isNot(contains('visibilitypoll=')));
-    });
+        expect(adapter.lastBody, contains('maxchoices=1'));
+        expect(adapter.lastBody, contains('expiration=0'));
+        expect(adapter.lastBody, isNot(contains('visibilitypoll=')));
+      },
+    );
   });
 }
 

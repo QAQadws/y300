@@ -1249,36 +1249,37 @@ void main() {
     expect(repository.readingProgress?.episodeId, 'novel:49:100:5003');
   });
 
-  testWidgets('NovelReaderPage paged overscroll returns to the previous chapter', (
-    tester,
-  ) async {
-    final repository = _FakeNovelRepository.threeEpisodes(
-      preferences: NovelReaderPreferences.defaults().copyWith(
-        flowMode: NovelReaderFlowMode.pagedLtr,
-      ),
-    );
-    await tester.pumpWidget(
-      _buildReaderApp(
-        repository: repository,
-        initialEpisodeId: 'novel:49:100:5002',
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'NovelReaderPage paged overscroll returns to the previous chapter',
+    (tester) async {
+      final repository = _FakeNovelRepository.threeEpisodes(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        ),
+      );
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: repository,
+          initialEpisodeId: 'novel:49:100:5002',
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(_readerText('第三段。'), findsOneWidget);
+      expect(_readerText('第三段。'), findsOneWidget);
 
-    final pageView = find.byKey(const Key('novel-reader-paged-page-view'));
-    await tester.drag(pageView, const Offset(200, 0));
-    await tester.pumpAndSettle();
+      final pageView = find.byKey(const Key('novel-reader-paged-page-view'));
+      await tester.drag(pageView, const Offset(200, 0));
+      await tester.pumpAndSettle();
 
-    expect(_readerText('第一段。'), findsOneWidget);
+      expect(_readerText('第一段。'), findsOneWidget);
 
-    // And forward again from there, proving neither direction latches.
-    await tester.drag(pageView, const Offset(-200, 0));
-    await tester.pumpAndSettle();
+      // And forward again from there, proving neither direction latches.
+      await tester.drag(pageView, const Offset(-200, 0));
+      await tester.pumpAndSettle();
 
-    expect(_readerText('第三段。'), findsOneWidget);
-  });
+      expect(_readerText('第三段。'), findsOneWidget);
+    },
+  );
 
   testWidgets('NovelReaderPage hides next chapter transition on last episode', (
     tester,

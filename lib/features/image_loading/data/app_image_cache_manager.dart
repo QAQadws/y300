@@ -52,7 +52,9 @@ class CacheManagerAppImageCacheManager implements AppImageCacheManager {
 
   @override
   Future<File> downloadToCache(NetworkAppImageSource source) async {
-    final headers = await source.headerBuilder?.buildHeaders(source.resolvedUrl);
+    final headers = await source.headerBuilder?.buildHeaders(
+      source.resolvedUrl,
+    );
     final info = await _cacheManager.downloadFile(
       source.resolvedUrl,
       key: source.cacheKey,

@@ -71,67 +71,78 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  test('returns pending and skips API verification when no auth cookie', () async {
-    final authRepository = _FakeAuthRepository(
-      ApiSuccess<SessionInfo>(
-        SessionInfo(uid: '1', username: 'u', formhash: 'h', isLoggedIn: true),
-      ),
-    );
-    final resolver = _buildResolver(
-      webViewCookies: const <String, String>{'acw_sc__v2': 'wafpass'},
-      refreshResult: const ApiFailure<SessionInfo>(
-        ApiError(type: ApiErrorType.unknown, message: 'unused'),
-      ),
-      authRepository: authRepository,
-    );
+  test(
+    'returns pending and skips API verification when no auth cookie',
+    () async {
+      final authRepository = _FakeAuthRepository(
+        ApiSuccess<SessionInfo>(
+          SessionInfo(uid: '1', username: 'u', formhash: 'h', isLoggedIn: true),
+        ),
+      );
+      final resolver = _buildResolver(
+        webViewCookies: const <String, String>{'acw_sc__v2': 'wafpass'},
+        refreshResult: const ApiFailure<SessionInfo>(
+          ApiError(type: ApiErrorType.unknown, message: 'unused'),
+        ),
+        authRepository: authRepository,
+      );
 
-    final progress = await resolver.evaluate();
+      final progress = await resolver.evaluate();
 
-    expect(progress, isA<WebViewLoginPending>());
-    expect(authRepository.refreshCallCount, 0);
-  });
+      expect(progress, isA<WebViewLoginPending>());
+      expect(authRepository.refreshCallCount, 0);
+    },
+  );
 
-  test('returns succeeded when auth cookie present and profile verifies', () async {
-    final session = SessionInfo(
-      uid: '42',
-      username: 'reader',
-      formhash: 'abcd',
-      isLoggedIn: true,
-    );
-    final authRepository = _FakeAuthRepository(ApiSuccess<SessionInfo>(session));
-    final resolver = _buildResolver(
-      webViewCookies: const <String, String>{
-        'acw_sc__v2': 'wafpass',
-        'EeqY_2132_auth': 'token',
-      },
-      refreshResult: ApiSuccess<SessionInfo>(session),
-      authRepository: authRepository,
-    );
+  test(
+    'returns succeeded when auth cookie present and profile verifies',
+    () async {
+      final session = SessionInfo(
+        uid: '42',
+        username: 'reader',
+        formhash: 'abcd',
+        isLoggedIn: true,
+      );
+      final authRepository = _FakeAuthRepository(
+        ApiSuccess<SessionInfo>(session),
+      );
+      final resolver = _buildResolver(
+        webViewCookies: const <String, String>{
+          'acw_sc__v2': 'wafpass',
+          'EeqY_2132_auth': 'token',
+        },
+        refreshResult: ApiSuccess<SessionInfo>(session),
+        authRepository: authRepository,
+      );
 
-    final progress = await resolver.evaluate();
+      final progress = await resolver.evaluate();
 
-    expect(progress, isA<WebViewLoginSucceeded>());
-    expect((progress as WebViewLoginSucceeded).session.username, 'reader');
-    expect(authRepository.refreshCallCount, 1);
-  });
+      expect(progress, isA<WebViewLoginSucceeded>());
+      expect((progress as WebViewLoginSucceeded).session.username, 'reader');
+      expect(authRepository.refreshCallCount, 1);
+    },
+  );
 
-  test('returns failed when auth cookie present but profile verification fails', () async {
-    final authRepository = _FakeAuthRepository(
-      const ApiFailure<SessionInfo>(
-        ApiError(type: ApiErrorType.network, message: '网络异常'),
-      ),
-    );
-    final resolver = _buildResolver(
-      webViewCookies: const <String, String>{'EeqY_2132_auth': 'token'},
-      refreshResult: const ApiFailure<SessionInfo>(
-        ApiError(type: ApiErrorType.network, message: '网络异常'),
-      ),
-      authRepository: authRepository,
-    );
+  test(
+    'returns failed when auth cookie present but profile verification fails',
+    () async {
+      final authRepository = _FakeAuthRepository(
+        const ApiFailure<SessionInfo>(
+          ApiError(type: ApiErrorType.network, message: '网络异常'),
+        ),
+      );
+      final resolver = _buildResolver(
+        webViewCookies: const <String, String>{'EeqY_2132_auth': 'token'},
+        refreshResult: const ApiFailure<SessionInfo>(
+          ApiError(type: ApiErrorType.network, message: '网络异常'),
+        ),
+        authRepository: authRepository,
+      );
 
-    final progress = await resolver.evaluate();
+      final progress = await resolver.evaluate();
 
-    expect(progress, isA<WebViewLoginFailed>());
-    expect((progress as WebViewLoginFailed).message, '网络异常');
-  });
+      expect(progress, isA<WebViewLoginFailed>());
+      expect((progress as WebViewLoginFailed).message, '网络异常');
+    },
+  );
 }

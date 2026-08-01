@@ -23,8 +23,9 @@ class NewThreadPollNormalizer {
       if (cleanedOptions.length >= NewThreadPollValidation.maxOptions) break;
     }
 
-    final expirationDays =
-        source.expirationDays < 0 ? 0 : source.expirationDays;
+    final expirationDays = source.expirationDays < 0
+        ? 0
+        : source.expirationDays;
 
     if (!source.multiple) {
       // 单选模式下 maxChoices 始终为 1，避免草稿恢复的旧值串上去。

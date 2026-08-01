@@ -9,7 +9,7 @@ import 'package:y300/features/library_shared/domain/services/library_task_notifi
 /// provider only exposes the capability and its lifecycle.
 final libraryTaskNotificationServiceProvider =
     Provider<LibraryTaskNotificationService>((ref) {
-  final service = FlutterLocalLibraryTaskNotificationService();
-  ref.onDispose(service.disposeIfNeeded);
-  return service;
-});
+      final service = FlutterLocalLibraryTaskNotificationService();
+      ref.onDispose(service.disposeIfNeeded);
+      return service;
+    });
