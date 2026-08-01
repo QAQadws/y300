@@ -19,6 +19,7 @@ import 'package:y300/features/composer_shared/presentation/quill/composer_quill_
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_selection_adapter.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_sticker_image_cache_loader.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_attachment_preview.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
@@ -962,6 +963,107 @@ void main() {
     );
   });
 
+  testWidgets(
+    'attachment preview follows the Quill body width without stretching small images',
+    (tester) async {
+      const narrowSurfaceWidth = 420.0;
+      const wideSurfaceWidth = 620.0;
+      final controller = QuillController.basic();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        _buildEditor(
+          controller: controller,
+          surfaceWidth: narrowSurfaceWidth,
+          imageAttachments: [_uploadedAttachment()],
+          attachImageBuilder: _buildTestAttachPreviewImage,
+          attachFileExists: _testAttachFileExists,
+        ),
+      );
+      controller.replaceText(
+        0,
+        0,
+        '[attach]123456[/attach]',
+        const TextSelection.collapsed(offset: 23),
+      );
+      await tester.pumpAndSettle();
+
+      var preview = tester.widget<ComposerAttachmentPreviewImage>(
+        find.byKey(const Key('composer-quill-attach-preview-123456')),
+      );
+      expect(
+        preview.maxWidth,
+        closeTo(_expectedAttachmentMaxWidth(narrowSurfaceWidth), 0.001),
+      );
+      expect(preview.maxWidth, isNot(320));
+      expect(
+        tester.getSize(
+          find.byKey(const Key('composer-quill-attach-image-123456')),
+        ),
+        const Size(32, 32),
+      );
+
+      await tester.pumpWidget(
+        _buildEditor(
+          controller: controller,
+          surfaceWidth: wideSurfaceWidth,
+          imageAttachments: [_uploadedAttachment()],
+          attachImageBuilder: _buildTestAttachPreviewImage,
+          attachFileExists: _testAttachFileExists,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      preview = tester.widget<ComposerAttachmentPreviewImage>(
+        find.byKey(const Key('composer-quill-attach-preview-123456')),
+      );
+      expect(
+        preview.maxWidth,
+        closeTo(_expectedAttachmentMaxWidth(wideSurfaceWidth), 0.001),
+      );
+      expect(
+        tester.getSize(
+          find.byKey(const Key('composer-quill-attach-image-123456')),
+        ),
+        const Size(32, 32),
+      );
+    },
+  );
+
+  testWidgets('oversized attachment is constrained to the Quill body width', (
+    tester,
+  ) async {
+    const surfaceWidth = 420.0;
+    final controller = QuillController.basic();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _buildEditor(
+        controller: controller,
+        surfaceWidth: surfaceWidth,
+        imageAttachments: [_uploadedAttachment()],
+        attachImageBuilder: _buildWideTestAttachPreviewImage,
+        attachFileExists: _testAttachFileExists,
+      ),
+    );
+    controller.replaceText(
+      0,
+      0,
+      '[attach]123456[/attach]',
+      const TextSelection.collapsed(offset: 23),
+    );
+    await tester.pumpAndSettle();
+
+    final imageSize = tester.getSize(
+      find.byKey(const Key('composer-quill-attach-image-123456')),
+    );
+    expect(
+      imageSize.width,
+      closeTo(_expectedAttachmentMaxWidth(surfaceWidth), 0.001),
+    );
+    expect(imageSize.height, closeTo(imageSize.width / 2, 0.001));
+  });
+
   testWidgets('a hand written legal attach code renders its image', (
     tester,
   ) async {
@@ -1337,7 +1439,21 @@ Widget _buildEditor({
   String? initialStickerGroupId,
   ValueChanged<String>? onStickerGroupChanged,
   EdgeInsets viewInsets = EdgeInsets.zero,
+  double? surfaceWidth,
 }) {
+  final editor = ComposerQuillPrototypeEditor(
+    keyPrefix: 'test-quill',
+    controller: controller,
+    onBbCodeChanged: onBbCodeChanged,
+    onImagePressed: onImagePressed,
+    imageAttachments: imageAttachments,
+    attachImageBuilder: attachImageBuilder,
+    attachFileExists: attachFileExists,
+    stickers: stickers,
+    stickerGroups: stickerGroups,
+    initialStickerGroupId: initialStickerGroupId,
+    onStickerGroupChanged: onStickerGroupChanged,
+  );
   return ProviderScope(
     overrides: [
       imageCacheServiceProvider.overrideWithValue(_FailingImageCacheService()),
@@ -1357,19 +1473,16 @@ Widget _buildEditor({
             size: const Size(800, 600),
             viewInsets: viewInsets,
           ),
-          child: ComposerQuillPrototypeEditor(
-            keyPrefix: 'test-quill',
-            controller: controller,
-            onBbCodeChanged: onBbCodeChanged,
-            onImagePressed: onImagePressed,
-            imageAttachments: imageAttachments,
-            attachImageBuilder: attachImageBuilder,
-            attachFileExists: attachFileExists,
-            stickers: stickers,
-            stickerGroups: stickerGroups,
-            initialStickerGroupId: initialStickerGroupId,
-            onStickerGroupChanged: onStickerGroupChanged,
-          ),
+          child: surfaceWidth == null
+              ? editor
+              : Align(
+                  alignment: Alignment.topLeft,
+                  child: SizedBox(
+                    width: surfaceWidth,
+                    height: 600,
+                    child: editor,
+                  ),
+                ),
         ),
       ),
     ),
@@ -1466,6 +1579,17 @@ StickerItem _stickerWith({
 
 Widget _buildTestAttachPreviewImage(File file, Key key) {
   return _TestAttachPreviewImage(file: file, key: key);
+}
+
+Widget _buildWideTestAttachPreviewImage(File file, Key key) {
+  return AspectRatio(key: key, aspectRatio: 2);
+}
+
+double _expectedAttachmentMaxWidth(double surfaceWidth) {
+  return surfaceWidth -
+      (ForumContentSpacing.composerQuillSurfaceHorizontal * 2) -
+      (ForumContentSpacing.quillInnerHorizontal * 2) -
+      4;
 }
 
 bool _testAttachFileExists(File file) {

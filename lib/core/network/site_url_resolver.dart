@@ -25,20 +25,39 @@ class SiteUrlResolver {
     }
     final pseudoAttachmentPath = _pseudoAttachmentPath(uri);
     if (pseudoAttachmentPath != null) {
-      return _originUri().resolve(pseudoAttachmentPath).toString();
+      return _normalizeAttachmentPath(
+        _originUri().resolve(pseudoAttachmentPath),
+      ).toString();
     }
     if (uri.hasScheme) {
-      return uri.toString();
+      return _normalizeAttachmentPath(uri).toString();
     }
 
     final origin = _originUri();
     if (decoded.startsWith('//')) {
-      return Uri(scheme: origin.scheme)
-          .resolve(decoded)
-          .replace(query: uri.hasQuery ? uri.query : null)
-          .toString();
+      return _normalizeAttachmentPath(
+        Uri(
+          scheme: origin.scheme,
+        ).resolve(decoded).replace(query: uri.hasQuery ? uri.query : null),
+      ).toString();
     }
-    return origin.resolveUri(uri).toString();
+    return _normalizeAttachmentPath(origin.resolveUri(uri)).toString();
+  }
+
+  Uri _normalizeAttachmentPath(Uri uri) {
+    final path = uri.path;
+    final prefix = path.startsWith('/')
+        ? '/data/attachment/'
+        : 'data/attachment/';
+    if (!path.toLowerCase().startsWith(prefix)) {
+      return uri;
+    }
+    final remainder = path
+        .substring(prefix.length)
+        .replaceAll(RegExp(r'/+'), '/')
+        .replaceFirst(RegExp(r'^/+'), '');
+    final normalizedPath = '$prefix$remainder';
+    return uri.replace(path: normalizedPath);
   }
 
   String? _pseudoAttachmentPath(Uri uri) {

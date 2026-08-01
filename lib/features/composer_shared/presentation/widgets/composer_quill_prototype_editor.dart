@@ -25,6 +25,15 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_stic
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
+const _quillEditorPadding = EdgeInsets.all(
+  ForumContentSpacing.quillInnerHorizontal,
+);
+const _quillAttachmentImagePadding = EdgeInsets.symmetric(
+  horizontal: 2,
+  vertical: 4,
+);
+const _unboundedQuillAttachmentMaxWidth = 320.0;
+
 Widget _defaultQuillAttachImageBuilder(File file, Key key) {
   return Image.file(
     file,
@@ -263,33 +272,6 @@ class _ComposerQuillEditorSurfaceState
     final resolvedContentPadding = widget.contentPadding.resolve(
       Directionality.of(context),
     );
-    final editor = ConstrainedBox(
-      constraints: BoxConstraints(minHeight: widget.minHeight),
-      child: QuillEditor.basic(
-        key: Key('${widget.keyPrefix}-editor'),
-        controller: _controller,
-        focusNode: _focusNode,
-        scrollController: _scrollController,
-        config: QuillEditorConfig(
-          placeholder:
-              widget.hintText ??
-              AppLocalizations.of(context).composerStartTypingHint,
-          padding: const EdgeInsets.all(12),
-          onTapDown: _handleEditorTapDown,
-          onTapUp: _handleEditorTapUp,
-          embedBuilders: [
-            _StickerEmbedBuilder(stickers: _stickerLookupItems()),
-            _AttachEmbedBuilder(
-              attachmentResolver: _attachmentResolver(),
-              attachImageBuilder:
-                  widget.attachImageBuilder ?? _defaultQuillAttachImageBuilder,
-              attachFileExists:
-                  widget.attachFileExists ?? _defaultQuillAttachFileExists,
-            ),
-          ],
-        ),
-      ),
-    );
     return SizedBox(
       height: widget.expand ? double.infinity : null,
       child: Stack(
@@ -302,9 +284,17 @@ class _ComposerQuillEditorSurfaceState
                 resolvedContentPadding.right,
                 resolvedContentPadding.bottom + bottomSpacer,
               ),
-              child: widget.expand
-                  ? editor
-                  : SingleChildScrollView(child: editor),
+              child: LayoutBuilder(
+                builder: (context, editorConstraints) {
+                  final editor = _buildEditor(
+                    context,
+                    attachmentMaxWidth: _attachmentMaxWidth(editorConstraints),
+                  );
+                  return widget.expand
+                      ? editor
+                      : SingleChildScrollView(child: editor);
+                },
+              ),
             ),
           ),
           if (visiblePanel != null)
@@ -342,6 +332,51 @@ class _ComposerQuillEditorSurfaceState
         ],
       ),
     );
+  }
+
+  Widget _buildEditor(
+    BuildContext context, {
+    required double attachmentMaxWidth,
+  }) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: widget.minHeight),
+      child: QuillEditor.basic(
+        key: Key('${widget.keyPrefix}-editor'),
+        controller: _controller,
+        focusNode: _focusNode,
+        scrollController: _scrollController,
+        config: QuillEditorConfig(
+          placeholder:
+              widget.hintText ??
+              AppLocalizations.of(context).composerStartTypingHint,
+          padding: _quillEditorPadding,
+          onTapDown: _handleEditorTapDown,
+          onTapUp: _handleEditorTapUp,
+          embedBuilders: [
+            _StickerEmbedBuilder(stickers: _stickerLookupItems()),
+            _AttachEmbedBuilder(
+              attachmentResolver: _attachmentResolver(),
+              attachImageBuilder:
+                  widget.attachImageBuilder ?? _defaultQuillAttachImageBuilder,
+              attachFileExists:
+                  widget.attachFileExists ?? _defaultQuillAttachFileExists,
+              maxImageWidth: attachmentMaxWidth,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  double _attachmentMaxWidth(BoxConstraints editorConstraints) {
+    if (!editorConstraints.maxWidth.isFinite) {
+      return _unboundedQuillAttachmentMaxWidth;
+    }
+    final availableWidth =
+        editorConstraints.maxWidth -
+        _quillEditorPadding.horizontal -
+        _quillAttachmentImagePadding.horizontal;
+    return availableWidth > 0 ? availableWidth : 0;
   }
 
   Widget _buildToolPanel(BuildContext context) {
@@ -1610,6 +1645,7 @@ class _AttachEmbedBuilder extends EmbedBuilder {
     required this.attachmentResolver,
     required this.attachImageBuilder,
     required this.attachFileExists,
+    required this.maxImageWidth,
   });
 
   static const _grammar = ComposerAttachBbCodeGrammar();
@@ -1617,6 +1653,7 @@ class _AttachEmbedBuilder extends EmbedBuilder {
   final ComposerAttachmentPreviewResolver attachmentResolver;
   final ForumAttachPreviewImageBuilder attachImageBuilder;
   final ForumAttachPreviewFileExists attachFileExists;
+  final double maxImageWidth;
 
   @override
   String get key => composerQuillAttachEmbedType;
@@ -1648,12 +1685,12 @@ class _AttachEmbedBuilder extends EmbedBuilder {
           attachFileExists(File(preview.path))) {
         return Padding(
           key: Key('composer-quill-attach-$aid'),
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          padding: _quillAttachmentImagePadding,
           child: ComposerAttachmentPreviewImage(
             key: Key('composer-quill-attach-preview-$aid'),
             imageKey: Key('composer-quill-attach-image-$aid'),
             resolution: resolution,
-            maxWidth: 320,
+            maxWidth: maxImageWidth,
             localImageBuilder: attachImageBuilder,
             localFileExists: attachFileExists,
           ),

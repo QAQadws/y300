@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attachment_preview_resolvers.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_attachment_preview.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_message_editor_surface.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
+import 'package:y300/features/image_loading/presentation/app_image.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import '../../../test_support/localized_test_app.dart';
 
 void main() {
@@ -76,6 +84,76 @@ void main() {
     await tester.tap(find.byKey(const Key('disabled-extra-action')));
     expect(pressed, isFalse);
   });
+
+  testWidgets(
+    'shared Quill surface applies its body width to remote attachments',
+    (tester) async {
+      const surfaceWidth = 420.0;
+      const referer = 'https://bbs.yamibo.com/forum.php?mod=post';
+      final sourceController = TextEditingController();
+      addTearDown(sourceController.dispose);
+      final headerBuilder = _FakeImageRequestHeaderBuilder();
+      final resolver = MapComposerAttachmentPreviewResolver(
+        resolutions: const {
+          '1624572': ComposerAttachmentResolution(
+            aid: '1624572',
+            availability: ComposerAttachmentAvailability.available,
+            preview: ComposerRemoteImagePreview(
+              url:
+                  'https://bbs.yamibo.com/data/attachment/forum/202607/23/example.jpg',
+              referer: referer,
+            ),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageRequestHeaderBuilderForRefererProvider(
+              referer,
+            ).overrideWithValue(headerBuilder),
+          ],
+          child: LocalizedTestApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: surfaceWidth,
+                height: 360,
+                child: ComposerMessageEditorSurface(
+                  surface: ComposerSurfacePreference.quill,
+                  message: '[attachimg]1624572[/attachimg]',
+                  sourceController: sourceController,
+                  enabled: true,
+                  bbCodeRenderer: const FlutterBbCodeForumRenderer(),
+                  stickerGroups: const [],
+                  initialStickerGroupId: null,
+                  onStickerGroupChanged: (_) {},
+                  onMessageChanged: (_) {},
+                  attachmentResolver: resolver,
+                  keyPrefix: 'remote-surface-test',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final preview = tester.widget<ComposerAttachmentPreviewImage>(
+        find.byKey(const Key('composer-quill-attach-preview-1624572')),
+      );
+      expect(
+        preview.maxWidth,
+        closeTo(_expectedAttachmentMaxWidth(surfaceWidth), 0.001),
+      );
+      final image = tester.widget<AppImage>(find.byType(AppImage));
+      expect(
+        image.networkSource?.resolvedUrl,
+        'https://bbs.yamibo.com/data/attachment/forum/202607/23/example.jpg',
+      );
+      expect(image.networkSource?.headerBuilder, same(headerBuilder));
+    },
+  );
 }
 
 Widget _buildSurface({
@@ -105,4 +183,19 @@ Widget _buildSurface({
       ),
     ),
   );
+}
+
+double _expectedAttachmentMaxWidth(double surfaceWidth) {
+  return surfaceWidth -
+      (ForumContentSpacing.composerQuillSurfaceHorizontal * 2) -
+      (ForumContentSpacing.quillInnerHorizontal * 2) -
+      4;
+}
+
+final class _FakeImageRequestHeaderBuilder
+    implements ImageRequestHeaderBuilder {
+  @override
+  Future<Map<String, String>> buildHeaders(String imageUrl) async {
+    return const <String, String>{'Referer': 'test-referer'};
+  }
 }

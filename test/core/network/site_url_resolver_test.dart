@@ -26,6 +26,27 @@ void main() {
     );
   });
 
+  test('normalizes repeated slashes only in Discuz attachment paths', () {
+    expect(
+      resolver.resolve('data/attachment//forum/a.jpg'),
+      'https://bbs.yamibo.com/data/attachment/forum/a.jpg',
+    );
+    expect(
+      resolver.resolve('/data/attachment///forum/a.jpg'),
+      'https://bbs.yamibo.com/data/attachment/forum/a.jpg',
+    );
+    expect(
+      resolver.resolve(
+        'https://bbs.yamibo.com/data/attachment//forum/a.jpg?x=1#preview',
+      ),
+      'https://bbs.yamibo.com/data/attachment/forum/a.jpg?x=1#preview',
+    );
+    expect(
+      resolver.resolve('https://bbs.yamibo.com/data//other/a.jpg'),
+      'https://bbs.yamibo.com/data//other/a.jpg',
+    );
+  });
+
   test('resolve rewrites Discuz pseudo absolute attachment urls', () {
     expect(
       resolver.resolve(

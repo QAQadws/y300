@@ -1,5 +1,6 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/thread/data/services/discuz_successful_control_extractor.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/services/post_edit_baseline_fingerprint_service.dart';
@@ -8,10 +9,12 @@ class PostEditFormParser {
   const PostEditFormParser({
     this.controlsExtractor = const DiscuzSuccessfulControlExtractor(),
     this.fingerprintService = const PostEditBaselineFingerprintService(),
+    this.urlResolver = const SiteUrlResolver(),
   });
 
   final DiscuzSuccessfulControlExtractor controlsExtractor;
   final PostEditBaselineFingerprintService fingerprintService;
+  final SiteUrlResolver urlResolver;
 
   PostEditFormParseResult parse(
     String html, {
@@ -234,8 +237,15 @@ class PostEditFormParser {
       if (src.isEmpty) {
         return null;
       }
-      final imageUri = source.resolve(src);
-      if (imageUri.scheme != 'http' && imageUri.scheme != 'https') {
+      final resolvedImageUri = source.resolve(src);
+      final normalizedImageUrl = urlResolver.resolve(
+        resolvedImageUri.toString(),
+      );
+      final imageUri = normalizedImageUrl == null
+          ? null
+          : Uri.tryParse(normalizedImageUrl);
+      if (imageUri == null ||
+          (imageUri.scheme != 'http' && imageUri.scheme != 'https')) {
         return null;
       }
       final description = item

@@ -7,7 +7,7 @@ class ImageCacheManagerFactory {
   static const String cacheKey = 'y300_images';
 
   BaseCacheManager create({required String cacheDirectoryPath}) {
-    return CacheManager(
+    return _Y300ImageCacheManager(
       Config(
         cacheKey,
         fileSystem: CustomPathFileSystem(
@@ -17,4 +17,11 @@ class ImageCacheManagerFactory {
       ),
     );
   }
+}
+
+/// Keeps the shared cache directory while enabling cached_network_image's
+/// bounded resize path. The mixin only creates a resized copy when the source
+/// pixels exceed the requested target, so smaller images are never upscaled.
+final class _Y300ImageCacheManager extends CacheManager with ImageCacheManager {
+  _Y300ImageCacheManager(super.config);
 }

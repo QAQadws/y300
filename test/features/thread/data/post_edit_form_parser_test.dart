@@ -162,6 +162,22 @@ void main() {
     );
   });
 
+  test('canonicalizes repeated slashes in a real attachment image path', () {
+    final html = _readFixture().replaceFirst(
+      'data/attachment/forum/fixture/existing-image.jpg',
+      'data/attachment//forum/202607/23/145701yziurruujso97oud.jpg',
+    );
+    final result = const PostEditFormParser().parse(html, target: target);
+
+    expect(result.isSuccess, isTrue);
+    expect(
+      result.snapshot!.existingImages.single.imageUri,
+      Uri.parse(
+        'https://bbs.yamibo.com/data/attachment/forum/202607/23/145701yziurruujso97oud.jpg',
+      ),
+    );
+  });
+
   test('fails closed for duplicate or unsafe image metadata', () {
     final duplicate = _readFixture().replaceFirst(
       RegExp(r'</ul>\s*<ul id="attlist"'),

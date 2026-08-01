@@ -56,6 +56,33 @@ void main() {
     );
     expect(headers, <String, String>{'Referer': 'test-referer'});
   });
+
+  testWidgets('canonicalizes Discuz attachment URL before AppImage requests it', (
+    tester,
+  ) async {
+    final headerBuilder = _FakeImageRequestHeaderBuilder();
+    await tester.pumpWidget(
+      _build(
+        const ComposerAttachmentResolution(
+          aid: '1624572',
+          availability: ComposerAttachmentAvailability.available,
+          preview: ComposerRemoteImagePreview(
+            url:
+                'https://bbs.yamibo.com/data/attachment//forum/202607/23/145701yziurruujso97oud.jpg',
+            referer: 'https://bbs.yamibo.com/forum.php?mod=post',
+          ),
+        ),
+        headerBuilder: headerBuilder,
+      ),
+    );
+
+    final image = tester.widget<AppImage>(find.byType(AppImage));
+    expect(
+      image.networkSource?.resolvedUrl,
+      'https://bbs.yamibo.com/data/attachment/forum/202607/23/145701yziurruujso97oud.jpg',
+    );
+    expect(image.networkSource?.headerBuilder, same(headerBuilder));
+  });
 }
 
 Widget _build(
