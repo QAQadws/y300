@@ -16,10 +16,8 @@ import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dar
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
-import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_diagnostic_recorder.dart';
@@ -37,6 +35,7 @@ import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
@@ -45,6 +44,7 @@ import 'package:y300/features/thread/domain/services/thread_floor_link_builder.d
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
+import 'package:y300/features/thread/domain/services/post_edit_target_parser.dart';
 import 'package:y300/features/thread/presentation/thread_content_projection_providers.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projector.dart';
@@ -85,8 +85,6 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
 }
 
 class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
-  static final RegExp _positiveIntegerPattern = RegExp(r'^[1-9]\d*$');
-
   late final ScrollController _scrollController;
   late final ThreadDetailQuickScrollCoordinator _quickScrollCoordinator;
   final ThreadFloorLinkBuilder _floorLinkBuilder = ThreadFloorLinkBuilder();
@@ -806,19 +804,21 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     ThreadPost displayPost,
     ThreadPostBodyRenderPlan plan,
   ) async {
-    final editUri = _resolvePostEditUri(sourcePost);
+    final editTarget = _resolvePostEditTarget(sourcePost, state);
     final action = await showModalBottomSheet<_ThreadPostAction>(
       context: context,
-      builder: (context) =>
-          _ThreadPostActionSheet(post: sourcePost, editUri: editUri),
+      builder: (context) => _ThreadPostActionSheet(
+        post: sourcePost,
+        editUri: editTarget?.editUri,
+      ),
     );
     if (!mounted || action == null) {
       return;
     }
     switch (action) {
       case _ThreadPostAction.edit:
-        if (editUri != null) {
-          _openManagedWebView(editUri);
+        if (editTarget != null) {
+          _openManagedWebView(editTarget.editUri);
         }
         return;
       case _ThreadPostAction.reply:
@@ -856,61 +856,21 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     }
   }
 
-  Uri? _resolvePostEditUri(ThreadPost post) {
-    final rawUrl = post.editUrl?.trim();
-    if (rawUrl == null || rawUrl.isEmpty) {
-      return null;
-    }
-
-    final navigator = ref.read(forumWebViewNavigatorProvider);
-    final uri = navigator.resolve(rawUrl.replaceAll('&amp;', '&'));
-    final siteUri = Uri.parse(AppConfig.siteBaseUrl);
-    if (!navigator.isManagedSite(uri) ||
-        uri.userInfo.isNotEmpty ||
-        uri.scheme.toLowerCase() != siteUri.scheme.toLowerCase() ||
-        uri.port != siteUri.port ||
-        uri.path.toLowerCase() !=
-            siteUri.resolve('forum.php').path.toLowerCase()) {
-      return null;
-    }
-
-    late final Map<String, List<String>> query;
-    try {
-      query = uri.queryParametersAll;
-    } on FormatException {
-      return null;
-    }
-    final mod = _singlePostEditQueryValue(query, 'mod')?.toLowerCase();
-    final action = _singlePostEditQueryValue(query, 'action')?.toLowerCase();
-    final fid = _singlePostEditQueryValue(query, 'fid');
-    final tid = _singlePostEditQueryValue(query, 'tid');
-    final pid = _singlePostEditQueryValue(query, 'pid');
-    if (mod != 'post' ||
-        action != 'edit' ||
-        !_isPositiveInteger(fid) ||
-        !_isPositiveInteger(tid) ||
-        !_isPositiveInteger(pid) ||
-        tid != widget.tid.trim() ||
-        pid != post.pid.trim()) {
-      return null;
-    }
-    return uri;
-  }
-
-  String? _singlePostEditQueryValue(
-    Map<String, List<String>> query,
-    String name,
+  PostEditTarget? _resolvePostEditTarget(
+    ThreadPost post,
+    ThreadDetailPageState state,
   ) {
-    final values = query[name];
-    if (values == null || values.length != 1) {
-      return null;
-    }
-    final value = values.single.trim();
-    return value.isEmpty ? null : value;
-  }
-
-  bool _isPositiveInteger(String? value) {
-    return value != null && _positiveIntegerPattern.hasMatch(value);
+    final result = ref
+        .read(postEditTargetParserProvider)
+        .parse(
+          rawUrl: post.editUrl ?? '',
+          currentTid: state.tid.isNotEmpty ? state.tid : widget.tid,
+          currentPid: post.pid,
+          currentFid: state.fid,
+          currentPage: state.currentPage,
+          isFirstPost: post.isFirst,
+        );
+    return result.target;
   }
 
   Future<void> _copyFloorLink(ThreadPost sourcePost) async {
@@ -1102,22 +1062,10 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   }
 
   void _openManagedWebView(Uri uri) {
+    final routeFactory = ref.read(forumWebViewRouteFactoryProvider);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ProviderScope(
-          overrides: [
-            forumWebViewInitialUriProvider.overrideWithValue(uri),
-            forumWebViewPopOnRootBackProvider.overrideWithValue(true),
-            forumWebViewDriverProvider.overrideWith((ref) {
-              final factory = ref.watch(forumWebViewDriverFactoryProvider);
-              return factory();
-            }),
-            forumWebViewControllerProvider.overrideWith(
-              ForumWebViewController.new,
-            ),
-          ],
-          child: const ForumWebViewPage(),
-        ),
+      routeFactory(
+        ForumWebViewLaunchConfig(initialUri: uri, popOnRootBack: true),
       ),
     );
   }

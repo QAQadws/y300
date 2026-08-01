@@ -10,6 +10,7 @@ export 'package:y300/features/forum/domain/models/forum_webview_network_policy_m
 export 'package:y300/features/forum/domain/models/forum_webview_resource_diagnostic_models.dart';
 export 'package:y300/features/forum/domain/models/forum_webview_runtime_models.dart';
 export 'package:y300/features/forum/domain/models/forum_webview_visual_policy_models.dart';
+export 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 export 'package:y300/features/forum/presentation/webview/forum_webview_driver_contract.dart';
 
 final forumWebViewPreferredEngineProvider = Provider<ForumWebViewEngine>((ref) {
