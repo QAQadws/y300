@@ -7,6 +7,7 @@ import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcod
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_context_menu.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_toolbar.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/sticker_picker_sheet.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -18,6 +19,7 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
     required this.onChanged,
     this.messageRevision = 0,
     this.onImagePressed,
+    this.extraToolbarActions = const <ComposerToolbarAction>[],
     this.keyPrefix = 'composer-source',
     this.viewKey,
     this.inputKey,
@@ -48,6 +50,7 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final int messageRevision;
   final ComposerImageInsertCallback? onImagePressed;
+  final List<ComposerToolbarAction> extraToolbarActions;
   final String keyPrefix;
   final Key? viewKey;
   final Key? inputKey;
@@ -75,6 +78,7 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
                 : () {
                     unawaited(_pickImage());
                   },
+            extraToolbarActions: extraToolbarActions,
           ),
           const SizedBox(height: 12),
           TextField(

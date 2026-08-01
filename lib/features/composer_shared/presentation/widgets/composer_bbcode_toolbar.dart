@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/composer_bbcode_command.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_color_picker_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_link_sheet.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ComposerBbCodeToolbar extends StatelessWidget {
@@ -10,6 +11,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
     required this.onStickerPressed,
     required this.onCommandSelected,
     this.onImagePressed,
+    this.extraToolbarActions = const <ComposerToolbarAction>[],
     this.enabled = true,
     this.keyPrefix = 'reply-composer',
   });
@@ -17,6 +19,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
   final VoidCallback onStickerPressed;
   final ValueChanged<ComposerBbCodeCommand> onCommandSelected;
   final VoidCallback? onImagePressed;
+  final List<ComposerToolbarAction> extraToolbarActions;
   final bool enabled;
   final String keyPrefix;
 
@@ -95,6 +98,14 @@ class ComposerBbCodeToolbar extends StatelessWidget {
               enabled: enabled,
               icon: Icons.image_outlined,
               onPressed: onImagePressed!,
+            ),
+          for (final action in extraToolbarActions)
+            _ToolbarIconButton(
+              buttonKey: action.key,
+              tooltip: action.tooltip,
+              enabled: enabled,
+              icon: action.icon,
+              onPressed: action.onPressed,
             ),
         ],
       ),
@@ -196,7 +207,7 @@ class _ToolbarIconButton extends StatelessWidget {
   final Key buttonKey;
   final String tooltip;
   final IconData icon;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool enabled;
 
   @override

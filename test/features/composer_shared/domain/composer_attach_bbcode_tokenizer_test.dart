@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_tokenizer.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attachment_preview_resolvers.dart';
 
 void main() {
   group('ComposerAttachBbCodeTokenizer', () {
@@ -31,6 +33,38 @@ void main() {
           [_uploadedAttachment(aid: '456'), _uploadedAttachment(aid: '123')],
         ),
         '[y300attach]123[/y300attach]\n文字\n[y300attach]456[/y300attach]',
+      );
+    });
+
+    test('preserves attachimg as a distinct preview tag', () {
+      expect(
+        tokenizer.encodeForPreview('[attachimg]123[/attachimg]', [
+          _uploadedAttachment(aid: '123'),
+        ]),
+        '[y300attachimg]123[/y300attachimg]',
+      );
+    });
+
+    test('resolves a remote image without using upload attachments', () {
+      final resolver = MapComposerAttachmentPreviewResolver(
+        resolutions: {
+          '123': const ComposerAttachmentResolution(
+            aid: '123',
+            availability: ComposerAttachmentAvailability.available,
+            preview: ComposerRemoteImagePreview(
+              url: 'https://bbs.yamibo.com/data/attachment/123.jpg',
+              referer: 'https://bbs.yamibo.com/forum.php?mod=post',
+            ),
+          ),
+        },
+      );
+
+      expect(
+        tokenizer.encodeForPreviewWithResolver(
+          '[attachimg]123[/attachimg]',
+          resolver,
+        ),
+        '[y300attachimg]123[/y300attachimg]',
       );
     });
 

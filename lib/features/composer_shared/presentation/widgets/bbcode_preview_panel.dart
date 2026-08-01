@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 
@@ -11,6 +12,7 @@ class BbCodePreviewPanel extends StatelessWidget {
     required this.renderer,
     this.stickers = const [],
     this.imageAttachments = const <ComposerImageAttachment>[],
+    this.attachmentResolver,
     this.panelKey = const Key('reply-composer-bbcode-preview-panel'),
     this.emptyKey = const Key('reply-composer-bbcode-preview-empty'),
   });
@@ -19,6 +21,7 @@ class BbCodePreviewPanel extends StatelessWidget {
   final ForumBbCodeRenderer renderer;
   final List<StickerItem> stickers;
   final List<ComposerImageAttachment> imageAttachments;
+  final ComposerAttachmentPreviewResolver? attachmentResolver;
   final Key panelKey;
   final Key emptyKey;
 
@@ -35,6 +38,7 @@ class BbCodePreviewPanel extends StatelessWidget {
               source,
               stickers: stickers,
               imageAttachments: imageAttachments,
+              attachmentResolver: attachmentResolver,
             ),
     );
   }

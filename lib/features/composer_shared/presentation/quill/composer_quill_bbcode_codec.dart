@@ -219,9 +219,12 @@ class ComposerQuillBbCodeCodec {
     if (stickerCode != null && stickerCode.trim().isNotEmpty) {
       return stickerCode.trim();
     }
-    final aid = composerQuillEmbedData(data, composerQuillAttachEmbedType);
-    if (aid != null && aid.trim().isNotEmpty) {
-      return _attachGrammar.codeFor(aid);
+    final attachAid = composerQuillAttachEmbedAid(data);
+    if (attachAid != null && attachAid.trim().isNotEmpty) {
+      return _attachGrammar.codeFor(
+        attachAid,
+        composerQuillAttachEmbedTagKind(data),
+      );
     }
     return '';
   }
@@ -235,8 +238,14 @@ class _DeltaBbCodeBuilder {
 
   void appendToken(String token) {
     final lower = token.toLowerCase();
-    if (_attachGrammar.aidOf(token) case final aid?) {
-      _delta.insert(composerQuillAttachEmbedData(aid), _inlineAttributes());
+    final attachmentTokens = _attachGrammar.scan(token);
+    if (attachmentTokens.length == 1 &&
+        attachmentTokens.single.rawCode.length == token.length) {
+      final attachment = attachmentTokens.single;
+      _delta.insert(
+        composerQuillAttachEmbedData(attachment.aid, attachment.kind),
+        _inlineAttributes(),
+      );
       _lineHasContent = true;
       return;
     }

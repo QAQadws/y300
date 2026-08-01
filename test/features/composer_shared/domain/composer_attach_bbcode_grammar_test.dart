@@ -8,6 +8,8 @@ void main() {
     test('accepts a numeric aid regardless of tag case', () {
       expect(grammar.isLegalCode('[attach]1626084[/attach]'), isTrue);
       expect(grammar.isLegalCode('[ATTACH]12[/Attach]'), isTrue);
+      expect(grammar.isLegalCode('[attachimg]1626084[/attachimg]'), isTrue);
+      expect(grammar.isLegalCode('[ATTACHIMG]12[/ATTACHIMG]'), isTrue);
     });
 
     test('rejects non-numeric, empty and padded aids', () {
@@ -16,11 +18,14 @@ void main() {
       expect(grammar.isLegalCode('[attach] 12 [/attach]'), isFalse);
       expect(grammar.isLegalCode('[attach]12'), isFalse);
       expect(grammar.isLegalCode('前缀[attach]12[/attach]'), isFalse);
+      expect(grammar.isLegalCode('[attach]0[/attach]'), isFalse);
+      expect(grammar.isLegalCode('[attach]12[/attachimg]'), isFalse);
     });
   });
 
   test('isLegalAid only accepts digits', () {
     expect(grammar.isLegalAid('1626084'), isTrue);
+    expect(grammar.isLegalAid('0'), isFalse);
     expect(grammar.isLegalAid(''), isFalse);
     expect(grammar.isLegalAid('12a'), isFalse);
     expect(grammar.isLegalAid(' 12'), isFalse);
@@ -30,6 +35,10 @@ void main() {
     expect(grammar.codeFor('1626084'), '[attach]1626084[/attach]');
     expect(grammar.codeFor('  1626084  '), '[attach]1626084[/attach]');
     expect(grammar.aidOf(grammar.codeFor('1626084')), '1626084');
+    expect(
+      grammar.codeFor('1626084', ComposerAttachTagKind.attachImg),
+      '[attachimg]1626084[/attachimg]',
+    );
   });
 
   test('aidOf returns null for illegal codes', () {
@@ -44,12 +53,23 @@ void main() {
 
       expect(matches, hasLength(2));
       expect(matches.first.aid, '12');
+      expect(matches.first.kind, ComposerAttachTagKind.attach);
+      expect(matches.first.rawCode, '[attach]12[/attach]');
       expect(
         source.substring(matches.first.start, matches.first.end),
         '[attach]12[/attach]',
       );
       expect(matches.last.aid, '345');
+      expect(matches.last.kind, ComposerAttachTagKind.attach);
       expect(matches.last.length, '[ATTACH]345[/attach]'.length);
+    });
+
+    test('reports attachimg kind and raw source', () {
+      final matches = grammar.scan('x[attachimg]12[/attachimg]y');
+
+      expect(matches.single.kind, ComposerAttachTagKind.attachImg);
+      expect(matches.single.rawCode, '[attachimg]12[/attachimg]');
+      expect(matches.single.start, 1);
     });
 
     test('skips illegal tokens', () {

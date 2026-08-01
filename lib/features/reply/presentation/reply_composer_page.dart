@@ -7,12 +7,11 @@ import 'package:y300/features/composer_shared/domain/models/composer_preferences
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_message_editor_surface.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_transient_feedback.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_error_summary.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -460,16 +459,23 @@ class _ReplyComposerBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final editor = _ReplyMessageEditor(
+    final editor = ComposerMessageEditorSurface(
       surface: editorSurface,
-      state: state,
+      message: state.message,
+      sourceController: messageController,
+      enabled: !state.isSubmitting && !state.isPreparing,
       bbCodeRenderer: bbCodeRenderer,
       stickerGroups: stickerGroups,
-      messageController: messageController,
+      stickers: [for (final group in stickerGroups) ...group.stickers],
       initialStickerGroupId: initialStickerGroupId,
       onStickerGroupChanged: onStickerGroupChanged,
       onMessageChanged: onMessageChanged,
       onImagePressed: onImagePressed,
+      imageAttachments: state.imageAttachments,
+      keyPrefix: 'reply-composer',
+      hintText: AppLocalizations.of(context).replyMessageHint,
+      messageRevision: state.messageRevision,
+      lastMessageMutation: state.lastMessageMutation,
     );
     final topFeedback = _buildFeedbackWidgets(context);
     if (editorSurface == ComposerSurfacePreference.quill) {
@@ -549,73 +555,6 @@ class _ReplyComposerBody extends StatelessWidget {
         ),
       ],
     ];
-  }
-}
-
-class _ReplyMessageEditor extends StatelessWidget {
-  const _ReplyMessageEditor({
-    required this.surface,
-    required this.state,
-    required this.bbCodeRenderer,
-    required this.stickerGroups,
-    required this.messageController,
-    required this.initialStickerGroupId,
-    required this.onStickerGroupChanged,
-    required this.onMessageChanged,
-    required this.onImagePressed,
-  });
-
-  final ComposerSurfacePreference surface;
-  final ReplyComposerState state;
-  final ForumBbCodeRenderer bbCodeRenderer;
-  final List<StickerGroup> stickerGroups;
-  final TextEditingController messageController;
-  final String? initialStickerGroupId;
-  final ValueChanged<String> onStickerGroupChanged;
-  final ValueChanged<String> onMessageChanged;
-  final ComposerImageInsertCallback onImagePressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = !state.isSubmitting && !state.isPreparing;
-    final stickers = [for (final group in stickerGroups) ...group.stickers];
-    final renderer = bbCodeRenderer;
-    return switch (surface) {
-      ComposerSurfacePreference.quill => ComposerQuillEditorSurface(
-        key: const Key('reply-composer-quill-editor'),
-        keyPrefix: 'reply-composer',
-        bbCode: state.message,
-        enabled: enabled,
-        stickers: stickers,
-        stickerGroups: stickerGroups,
-        initialStickerGroupId: initialStickerGroupId,
-        onStickerGroupChanged: onStickerGroupChanged,
-        imageAttachments: state.imageAttachments,
-        attachImageBuilder: renderer is FlutterBbCodeForumRenderer
-            ? renderer.attachImageBuilder
-            : null,
-        attachFileExists: renderer is FlutterBbCodeForumRenderer
-            ? renderer.attachFileExists
-            : null,
-        hintText: AppLocalizations.of(context).replyMessageHint,
-        expand: true,
-        onBbCodeChanged: onMessageChanged,
-        messageRevision: state.messageRevision,
-        lastMessageMutation: state.lastMessageMutation,
-        onImagePressed: onImagePressed,
-      ),
-      ComposerSurfacePreference.source => ComposerBbCodeSourceEditor(
-        keyPrefix: 'reply-composer',
-        viewKey: const Key('reply-composer-source-view'),
-        inputKey: const Key('reply-composer-message-input'),
-        controller: messageController,
-        enabled: enabled,
-        messageRevision: state.messageRevision,
-        onImagePressed: onImagePressed,
-        hintText: AppLocalizations.of(context).replyMessageHint,
-        onChanged: onMessageChanged,
-      ),
-    };
   }
 }
 

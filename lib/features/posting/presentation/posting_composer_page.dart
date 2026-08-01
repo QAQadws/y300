@@ -8,9 +8,8 @@ import 'package:y300/features/composer_shared/domain/models/composer_insertion_m
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_message_editor_surface.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_error_summary.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -614,17 +613,23 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
 
   @override
   Widget build(BuildContext context) {
-    final editor = _PostingMessageEditor(
+    final editor = ComposerMessageEditorSurface(
       surface: widget.editorSurface,
-      state: widget.state,
+      message: widget.state.message,
+      sourceController: widget.messageController,
+      enabled: !widget.state.isSubmitting,
       bbCodeRenderer: widget.bbCodeRenderer,
       stickerGroups: widget.stickerGroups,
       stickers: widget.stickers,
-      messageController: widget.messageController,
       initialStickerGroupId: widget.initialStickerGroupId,
       onStickerGroupChanged: widget.onStickerGroupChanged,
       onMessageChanged: widget.onMessageChanged,
       onImagePressed: widget.onImagePressed,
+      imageAttachments: widget.state.imageAttachments,
+      keyPrefix: 'posting-composer',
+      hintText: AppLocalizations.of(context).composerImageRetentionHint,
+      messageRevision: widget.state.messageRevision,
+      lastMessageMutation: widget.state.lastMessageMutation,
     );
     if (widget.editorSurface == ComposerSurfacePreference.quill) {
       return SafeArea(
@@ -854,74 +859,6 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
       return const SizedBox(height: 12);
     }
     return const SizedBox.shrink();
-  }
-}
-
-class _PostingMessageEditor extends StatelessWidget {
-  const _PostingMessageEditor({
-    required this.surface,
-    required this.state,
-    required this.bbCodeRenderer,
-    required this.stickerGroups,
-    required this.stickers,
-    required this.messageController,
-    required this.initialStickerGroupId,
-    required this.onStickerGroupChanged,
-    required this.onMessageChanged,
-    required this.onImagePressed,
-  });
-
-  final ComposerSurfacePreference surface;
-  final PostingComposerState state;
-  final ForumBbCodeRenderer bbCodeRenderer;
-  final List<StickerGroup> stickerGroups;
-  final List<StickerItem> stickers;
-  final TextEditingController messageController;
-  final String? initialStickerGroupId;
-  final ValueChanged<String> onStickerGroupChanged;
-  final ValueChanged<String> onMessageChanged;
-  final ComposerImageInsertCallback onImagePressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = !state.isSubmitting;
-    final renderer = bbCodeRenderer;
-    return switch (surface) {
-      ComposerSurfacePreference.quill => ComposerQuillEditorSurface(
-        key: const Key('posting-composer-quill-editor'),
-        keyPrefix: 'posting-composer',
-        bbCode: state.message,
-        enabled: enabled,
-        stickers: stickers,
-        stickerGroups: stickerGroups,
-        initialStickerGroupId: initialStickerGroupId,
-        onStickerGroupChanged: onStickerGroupChanged,
-        imageAttachments: state.imageAttachments,
-        attachImageBuilder: renderer is FlutterBbCodeForumRenderer
-            ? renderer.attachImageBuilder
-            : null,
-        attachFileExists: renderer is FlutterBbCodeForumRenderer
-            ? renderer.attachFileExists
-            : null,
-        hintText: AppLocalizations.of(context).composerImageRetentionHint,
-        expand: true,
-        onBbCodeChanged: onMessageChanged,
-        messageRevision: state.messageRevision,
-        lastMessageMutation: state.lastMessageMutation,
-        onImagePressed: onImagePressed,
-      ),
-      ComposerSurfacePreference.source => ComposerBbCodeSourceEditor(
-        keyPrefix: 'posting-composer',
-        viewKey: const Key('posting-composer-source-view'),
-        inputKey: const Key('posting-composer-message-input'),
-        controller: messageController,
-        enabled: enabled,
-        messageRevision: state.messageRevision,
-        onImagePressed: onImagePressed,
-        hintText: AppLocalizations.of(context).composerImageRetentionHint,
-        onChanged: onMessageChanged,
-      ),
-    };
   }
 }
 

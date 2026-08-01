@@ -45,7 +45,7 @@ class ComposerQuillAttachTokenPromoter {
       // 继承 token 起点的行内样式，让 `[b][attach]1[/attach][/b]` 提升后
       // 编码回去仍然带着加粗。
       delta.insert(
-        composerQuillAttachEmbedData(match.aid),
+        composerQuillAttachEmbedData(match.aid, match.kind),
         _attributesAt(runs, match.start),
       );
       offset = match.end;

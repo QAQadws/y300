@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/bbcode_preview_panel.dart';
@@ -18,6 +19,7 @@ class ComposerEditorPreview extends StatelessWidget {
     required this.renderer,
     this.stickers = const <StickerItem>[],
     this.imageAttachments = const <ComposerImageAttachment>[],
+    this.attachmentResolver,
     this.previewPanelKey = const Key('reply-composer-bbcode-preview-panel'),
     this.previewEmptyKey = const Key('reply-composer-bbcode-preview-empty'),
     this.previewLabelKey,
@@ -32,6 +34,7 @@ class ComposerEditorPreview extends StatelessWidget {
   final ForumBbCodeRenderer renderer;
   final List<StickerItem> stickers;
   final List<ComposerImageAttachment> imageAttachments;
+  final ComposerAttachmentPreviewResolver? attachmentResolver;
   final Key previewPanelKey;
   final Key previewEmptyKey;
   final Key? previewLabelKey;
@@ -73,6 +76,7 @@ class ComposerEditorPreview extends StatelessWidget {
           renderer: renderer,
           stickers: stickers,
           imageAttachments: imageAttachments,
+          attachmentResolver: attachmentResolver,
           panelKey: previewPanelKey,
           emptyKey: previewEmptyKey,
         ),

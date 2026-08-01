@@ -77,6 +77,23 @@ void main() {
       expect(service.extractAttachAids('[ATTACH]123[/Attach]'), ['123']);
     });
 
+    test('extracts and removes attachimg aids', () {
+      const message = '[attachimg]123[/attachimg]\n[attach]456[/attach]';
+
+      expect(service.extractAttachAids(message), ['123', '456']);
+      expect(
+        service.removeAttachCodes(message, ['123']),
+        '[attach]456[/attach]',
+      );
+    });
+
+    test('does not extract or remove illegal attachment tokens', () {
+      const message = '[attach] 123 [/attach]\n[attachimg]0[/attachimg]';
+
+      expect(service.extractAttachAids(message), isEmpty);
+      expect(service.removeAttachCodes(message, ['123', '0']), message);
+    });
+
     test('does not treat ordinary text or sticker code as attach aid', () {
       expect(service.extractAttachAids('正文{:9_656:}[b]粗体[/b]'), isEmpty);
     });

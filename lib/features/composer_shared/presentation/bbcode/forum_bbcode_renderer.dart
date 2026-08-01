@@ -3,28 +3,27 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bbcode/flutter_bbcode.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attachment_preview_resolvers.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_tokenizer.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
 import 'package:y300/features/composer_shared/domain/services/sticker_bbcode_tokenizer.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_attachment_preview.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
 
-typedef ForumAttachPreviewImageBuilder = Widget Function(File file, Key key);
-typedef ForumAttachPreviewFileExists = bool Function(File file);
+typedef ForumAttachPreviewImageBuilder = ComposerLocalImageBuilder;
+typedef ForumAttachPreviewFileExists = ComposerLocalFileExists;
 typedef ForumStickerPreviewImageBuilder =
     Widget Function(StickerItem sticker, Key key);
 
 Widget _defaultAttachPreviewImageBuilder(File file, Key key) {
-  return Image.file(
-    file,
-    key: key,
-    fit: BoxFit.contain,
-    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-  );
+  return defaultComposerLocalImageBuilder(file, key);
 }
 
 bool _defaultAttachPreviewFileExists(File file) {
-  return file.existsSync();
+  return defaultComposerLocalFileExists(file);
 }
 
 Widget _defaultStickerPreviewImageBuilder(StickerItem sticker, Key key) {
@@ -48,6 +47,7 @@ abstract class ForumBbCodeRenderer {
     List<StickerItem> stickers = const [],
     List<ComposerImageAttachment> imageAttachments =
         const <ComposerImageAttachment>[],
+    ComposerAttachmentPreviewResolver? attachmentResolver,
   });
 }
 
@@ -73,6 +73,7 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
     List<StickerItem> stickers = const [],
     List<ComposerImageAttachment> imageAttachments =
         const <ComposerImageAttachment>[],
+    ComposerAttachmentPreviewResolver? attachmentResolver,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     final textStyle =
@@ -81,9 +82,14 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
         ).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface) ??
         TextStyle(color: colorScheme.onSurface);
     final stickerEncoded = stickerTokenizer.encodeForPreview(source, stickers);
-    final previewSource = attachTokenizer.encodeForPreview(
+    final resolver =
+        attachmentResolver ??
+        UploadedComposerAttachmentPreviewResolver(
+          imageAttachments: imageAttachments,
+        );
+    final previewSource = attachTokenizer.encodeForPreviewWithResolver(
       stickerEncoded,
-      imageAttachments,
+      resolver,
     );
 
     return LayoutBuilder(
@@ -98,13 +104,30 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
         stylesheet.addTag(_DiscuzCodeTag(colorScheme, textStyle));
         stylesheet.addTag(_DiscuzAlignTag());
         stylesheet.addTag(_StickerPreviewTag(stickers, stickerImageBuilder));
-        stylesheet.addTag(_AttachSourceFallbackTag());
+        stylesheet.addTag(
+          _AttachSourceFallbackTag(ComposerAttachTagKind.attach),
+        );
+        stylesheet.addTag(
+          _AttachSourceFallbackTag(ComposerAttachTagKind.attachImg),
+        );
         stylesheet.addTag(
           _AttachPreviewTag(
-            imageAttachments,
+            resolver,
             maxImageWidth,
             attachImageBuilder,
             attachFileExists,
+            ComposerAttachBbCodeTokenizer.previewTag,
+            ComposerAttachTagKind.attach,
+          ),
+        );
+        stylesheet.addTag(
+          _AttachPreviewTag(
+            resolver,
+            maxImageWidth,
+            attachImageBuilder,
+            attachFileExists,
+            ComposerAttachBbCodeTokenizer.previewAttachImgTag,
+            ComposerAttachTagKind.attachImg,
           ),
         );
 
@@ -272,21 +295,19 @@ class _DiscuzAlignTag extends WrappedStyleTag {
 
 class _AttachPreviewTag extends WrappedStyleTag {
   _AttachPreviewTag(
-    List<ComposerImageAttachment> imageAttachments,
+    this.resolver,
     this.maxImageWidth,
     this.attachImageBuilder,
     this.attachFileExists,
-  ) : _attachmentsByAid = {
-        for (final attachment in imageAttachments)
-          if (attachment.canEnterSubmitPayload)
-            attachment.aid!.trim(): attachment,
-      },
-      super(ComposerAttachBbCodeTokenizer.previewTag);
+    String tagName,
+    this.tagKind,
+  ) : super(tagName);
 
-  final Map<String, ComposerImageAttachment> _attachmentsByAid;
+  final ComposerAttachmentPreviewResolver resolver;
   final double maxImageWidth;
   final ForumAttachPreviewImageBuilder attachImageBuilder;
   final ForumAttachPreviewFileExists attachFileExists;
+  final ComposerAttachTagKind tagKind;
 
   @override
   List<InlineSpan> wrap(
@@ -299,12 +320,13 @@ class _AttachPreviewTag extends WrappedStyleTag {
         .map((child) => child.textContent as String)
         .join()
         .trim();
-    final attachment = _attachmentsByAid[aid];
-    if (attachment == null) {
-      return _attachTextFallback(renderer, aid);
+    final resolution = resolver.resolve(aid);
+    if (!resolution.isAvailable) {
+      return _attachTextFallback(renderer, aid, tagKind);
     }
-    final file = File(attachment.previewPath);
-    if (!attachFileExists(file)) {
+    final preview = resolution.preview;
+    if (preview is ComposerLocalImagePreview &&
+        !attachFileExists(File(preview.path))) {
       return const <InlineSpan>[];
     }
 
@@ -313,9 +335,13 @@ class _AttachPreviewTag extends WrappedStyleTag {
         alignment: PlaceholderAlignment.bottom,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxImageWidth),
-          child: attachImageBuilder(
-            file,
-            Key('reply-bbcode-preview-attach-$aid'),
+          child: ComposerAttachmentPreviewImage(
+            key: Key('reply-bbcode-preview-attach-preview-$aid'),
+            resolution: resolution,
+            maxWidth: maxImageWidth,
+            imageKey: Key('reply-bbcode-preview-attach-$aid'),
+            localImageBuilder: attachImageBuilder,
+            localFileExists: attachFileExists,
           ),
         ),
       ),
@@ -360,7 +386,9 @@ Color? _parseBbCodeColor(String? rawColor) {
 }
 
 class _AttachSourceFallbackTag extends WrappedStyleTag {
-  _AttachSourceFallbackTag() : super('attach');
+  _AttachSourceFallbackTag(this.kind) : super(kind.wireName);
+
+  final ComposerAttachTagKind kind;
 
   @override
   List<InlineSpan> wrap(
@@ -373,13 +401,20 @@ class _AttachSourceFallbackTag extends WrappedStyleTag {
         .map((child) => child.textContent as String)
         .join()
         .trim();
-    return _attachTextFallback(renderer, aid);
+    return _attachTextFallback(renderer, aid, kind);
   }
 }
 
-List<InlineSpan> _attachTextFallback(FlutterRenderer renderer, String aid) {
+List<InlineSpan> _attachTextFallback(
+  FlutterRenderer renderer,
+  String aid,
+  ComposerAttachTagKind kind,
+) {
   return [
-    TextSpan(text: '[attach]$aid[/attach]', style: renderer.getCurrentStyle()),
+    TextSpan(
+      text: '[${kind.wireName}]$aid[/${kind.wireName}]',
+      style: renderer.getCurrentStyle(),
+    ),
   ];
 }
 

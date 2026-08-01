@@ -1,34 +1,34 @@
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
 
-/// 维护回复/发帖 message 中 `[attach]aid[/attach]` 片段的小型工具。
+/// Maintains `[attach]aid[/attach]` and `[attachimg]aid[/attachimg]`
+/// fragments in composer messages.
 ///
 /// 仅依赖纯字符串处理，不感知附件状态——所以同样适用于
 /// 草稿持久化中"附件过期 → 把对应的 attach 片段从 message 中删除"。
 ///
-/// 这里的匹配刻意比 [ComposerAttachBbCodeGrammar] 宽松：提取与清理要兜住
-/// 历史草稿和服务端回传的非规范写法，严格文法只用于编辑器的结构判定。
+/// 提取与清理同样只接受 [ComposerAttachBbCodeGrammar] 的合法 token，避免
+/// 把未知/非法 aid 猜成可提交的附件引用；非法原文仍由编辑器保留。
 class ComposerAttachBbCodeService {
   const ComposerAttachBbCodeService();
 
   static const _grammar = ComposerAttachBbCodeGrammar();
-  static final RegExp _attachPattern = RegExp(
-    r'\[attach\]([^\[]*)\[/attach\]',
-    caseSensitive: false,
-  );
 
   String attachCode(String aid) {
-    return _grammar.codeFor(aid);
+    return attachCodeFor(aid);
+  }
+
+  String attachCodeFor(
+    String aid, [
+    ComposerAttachTagKind kind = ComposerAttachTagKind.attach,
+  ]) {
+    return _grammar.codeFor(aid, kind);
   }
 
   List<String> extractAttachAids(String message) {
     if (message.isEmpty) {
       return const <String>[];
     }
-    return [
-      for (final match in _attachPattern.allMatches(message))
-        if ((match.group(1) ?? '').trim().isNotEmpty)
-          (match.group(1) ?? '').trim(),
-    ];
+    return [for (final token in _grammar.scan(message)) token.aid];
   }
 
   String appendAttachCodes(String message, List<String> aids) {
@@ -72,10 +72,11 @@ class ComposerAttachBbCodeService {
   }
 
   String? _exclusiveAttachAid(String line) {
-    final match = RegExp(
-      r'^\s*\[attach\]([^\[]+)\[/attach\]\s*$',
-      caseSensitive: false,
-    ).firstMatch(line);
-    return match?.group(1)?.trim();
+    final source = line.trim();
+    final tokens = _grammar.scan(source);
+    if (tokens.length != 1 || tokens.single.rawCode.length != source.length) {
+      return null;
+    }
+    return tokens.single.aid;
   }
 }

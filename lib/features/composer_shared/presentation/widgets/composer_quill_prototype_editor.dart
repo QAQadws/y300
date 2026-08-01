@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attachment_preview_resolvers.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_attach_token_promoter.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
@@ -16,6 +18,8 @@ import 'package:y300/features/composer_shared/presentation/quill/composer_quill_
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_color_picker_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_link_sheet.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_attachment_preview.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_group_panel.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
@@ -50,6 +54,8 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
     this.initialStickerGroupId,
     this.onStickerGroupChanged,
     this.imageAttachments = const <ComposerImageAttachment>[],
+    this.attachmentResolver,
+    this.extraToolbarActions = const <ComposerToolbarAction>[],
     this.attachImageBuilder = _defaultQuillAttachImageBuilder,
     this.attachFileExists = _defaultQuillAttachFileExists,
     this.keyPrefix = 'composer-quill-prototype',
@@ -74,6 +80,8 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
   final String? initialStickerGroupId;
   final ValueChanged<String>? onStickerGroupChanged;
   final List<ComposerImageAttachment> imageAttachments;
+  final ComposerAttachmentPreviewResolver? attachmentResolver;
+  final List<ComposerToolbarAction> extraToolbarActions;
   final ForumAttachPreviewImageBuilder? attachImageBuilder;
   final ForumAttachPreviewFileExists? attachFileExists;
   final String keyPrefix;
@@ -95,6 +103,8 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
       initialStickerGroupId: initialStickerGroupId,
       onStickerGroupChanged: onStickerGroupChanged,
       imageAttachments: imageAttachments,
+      attachmentResolver: attachmentResolver,
+      extraToolbarActions: extraToolbarActions,
       attachImageBuilder: attachImageBuilder,
       attachFileExists: attachFileExists,
       keyPrefix: keyPrefix,
@@ -120,6 +130,8 @@ class ComposerQuillEditorSurface extends StatefulWidget {
     this.initialStickerGroupId,
     this.onStickerGroupChanged,
     this.imageAttachments = const <ComposerImageAttachment>[],
+    this.attachmentResolver,
+    this.extraToolbarActions = const <ComposerToolbarAction>[],
     this.attachImageBuilder = _defaultQuillAttachImageBuilder,
     this.attachFileExists = _defaultQuillAttachFileExists,
     this.keyPrefix = 'composer-quill',
@@ -147,6 +159,8 @@ class ComposerQuillEditorSurface extends StatefulWidget {
   final String? initialStickerGroupId;
   final ValueChanged<String>? onStickerGroupChanged;
   final List<ComposerImageAttachment> imageAttachments;
+  final ComposerAttachmentPreviewResolver? attachmentResolver;
+  final List<ComposerToolbarAction> extraToolbarActions;
   final ForumAttachPreviewImageBuilder? attachImageBuilder;
   final ForumAttachPreviewFileExists? attachFileExists;
   final String keyPrefix;
@@ -266,7 +280,7 @@ class _ComposerQuillEditorSurfaceState
           embedBuilders: [
             _StickerEmbedBuilder(stickers: _stickerLookupItems()),
             _AttachEmbedBuilder(
-              imageAttachments: _mergedImageAttachments(),
+              attachmentResolver: _attachmentResolver(),
               attachImageBuilder:
                   widget.attachImageBuilder ?? _defaultQuillAttachImageBuilder,
               attachFileExists:
@@ -322,6 +336,7 @@ class _ComposerQuillEditorSurfaceState
               onStickerPressed: () =>
                   _toggleToolPanel(ComposerQuillToolPanel.sticker),
               onImagePressed: () => _handleImagePressed(context),
+              extraToolbarActions: widget.extraToolbarActions,
             ),
           ),
         ],
@@ -375,8 +390,11 @@ class _ComposerQuillEditorSurfaceState
     ];
   }
 
-  List<ComposerImageAttachment> _mergedImageAttachments() {
-    return widget.imageAttachments;
+  ComposerAttachmentPreviewResolver _attachmentResolver() {
+    return widget.attachmentResolver ??
+        UploadedComposerAttachmentPreviewResolver(
+          imageAttachments: widget.imageAttachments,
+        );
   }
 
   double _toolPanelHeight(BuildContext context) {
@@ -882,6 +900,7 @@ class _PrototypeToolbar extends StatelessWidget {
     required this.onLinkPressed,
     required this.onStickerPressed,
     required this.onImagePressed,
+    this.extraToolbarActions = const <ComposerToolbarAction>[],
   });
 
   final String keyPrefix;
@@ -892,6 +911,7 @@ class _PrototypeToolbar extends StatelessWidget {
   final VoidCallback onLinkPressed;
   final VoidCallback onStickerPressed;
   final VoidCallback onImagePressed;
+  final List<ComposerToolbarAction> extraToolbarActions;
 
   @override
   Widget build(BuildContext context) {
@@ -940,6 +960,13 @@ class _PrototypeToolbar extends StatelessWidget {
                 icon: Icons.image_outlined,
                 onPressed: enabled ? onImagePressed : null,
               ),
+              for (final action in extraToolbarActions)
+                _ToolbarButton(
+                  key: action.key,
+                  tooltip: action.tooltip,
+                  icon: action.icon,
+                  onPressed: enabled ? action.onPressed : null,
+                ),
             ],
           ),
         ),
@@ -1580,14 +1607,14 @@ class _StickerEmbedBuilder extends EmbedBuilder {
 
 class _AttachEmbedBuilder extends EmbedBuilder {
   const _AttachEmbedBuilder({
-    required this.imageAttachments,
+    required this.attachmentResolver,
     required this.attachImageBuilder,
     required this.attachFileExists,
   });
 
   static const _grammar = ComposerAttachBbCodeGrammar();
 
-  final List<ComposerImageAttachment> imageAttachments;
+  final ComposerAttachmentPreviewResolver attachmentResolver;
   final ForumAttachPreviewImageBuilder attachImageBuilder;
   final ForumAttachPreviewFileExists attachFileExists;
 
@@ -1599,42 +1626,43 @@ class _AttachEmbedBuilder extends EmbedBuilder {
 
   @override
   String toPlainText(Embed node) {
-    return _grammar.codeFor(node.value.data.toString());
+    final aid = composerQuillAttachEmbedAid(node.value.data);
+    if (aid == null || aid.trim().isEmpty) {
+      return node.value.data.toString();
+    }
+    return _grammar.codeFor(
+      aid,
+      composerQuillAttachEmbedTagKind(node.value.data),
+    );
   }
 
   @override
   Widget build(BuildContext context, EmbedContext embedContext) {
-    final aid = embedContext.node.value.data.toString();
-    // 与 BBCode 预览侧 `_AttachPreviewTag` 同一口径：只有可进入提交载荷的
-    // 附件才渲染图片，其余（含未知 aid）退化成芯片。过期由草稿 sanitizer 统一处理。
-    final attachment = imageAttachments
-        .cast<ComposerImageAttachment?>()
-        .firstWhere(
-          (item) =>
-              item != null &&
-              item.canEnterSubmitPayload &&
-              item.aid!.trim() == aid,
-          orElse: () => null,
-        );
-    if (attachment != null) {
-      final file = File(attachment.previewPath);
-      if (attachFileExists(file)) {
+    final aid =
+        composerQuillAttachEmbedAid(embedContext.node.value.data) ??
+        embedContext.node.value.data.toString();
+    final resolution = attachmentResolver.resolve(aid);
+    if (resolution.isAvailable) {
+      final preview = resolution.preview;
+      if (preview is! ComposerLocalImagePreview ||
+          attachFileExists(File(preview.path))) {
         return Padding(
           key: Key('composer-quill-attach-$aid'),
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320, maxHeight: 240),
-            child: attachImageBuilder(
-              file,
-              Key('composer-quill-attach-image-$aid'),
-            ),
+          child: ComposerAttachmentPreviewImage(
+            key: Key('composer-quill-attach-preview-$aid'),
+            imageKey: Key('composer-quill-attach-image-$aid'),
+            resolution: resolution,
+            maxWidth: 320,
+            localImageBuilder: attachImageBuilder,
+            localFileExists: attachFileExists,
           ),
         );
       }
     }
-    final label = attachment == null
-        ? AppLocalizations.of(context).composerAttachmentFallback(aid)
-        : attachment.fileName;
+    final label =
+        resolution.label ??
+        AppLocalizations.of(context).composerAttachmentFallback(aid);
     return Container(
       key: Key('composer-quill-attach-$aid'),
       margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),

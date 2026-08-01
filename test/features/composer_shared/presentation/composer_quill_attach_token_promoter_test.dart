@@ -2,6 +2,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_attach_token_promoter.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 
@@ -43,6 +44,18 @@ void main() {
       composerQuillAttachEmbedData('1626084'),
       '\n',
     ]);
+  });
+
+  test('promotes attachimg while retaining its tag kind', () {
+    final document = documentWithText('[attachimg]1624572[/attachimg]');
+
+    final promoted = applyPromotion(document);
+
+    expect(insertedData(promoted), [
+      composerQuillAttachEmbedData('1624572', ComposerAttachTagKind.attachImg),
+      '\n',
+    ]);
+    expect(codec.encodeDocument(promoted), '[attachimg]1624572[/attachimg]');
   });
 
   test('keeps the surrounding text intact', () {

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 
@@ -116,6 +117,19 @@ void main() {
     expect(codec.encodeDelta(delta), 'A{:9_656:}[attach]123456[/attach]');
   });
 
+  test('encodes attachimg embeds with their original tag kind', () {
+    final delta = Delta()
+      ..insert(
+        composerQuillAttachEmbedData(
+          '1624572',
+          ComposerAttachTagKind.attachImg,
+        ),
+      )
+      ..insert('\n');
+
+    expect(codec.encodeDelta(delta), '[attachimg]1624572[/attachimg]');
+  });
+
   test('decodes prototype-generated BBCode subset back to Delta', () {
     const source =
         '[align=center][quote][b][color=#ff0000]文字[/color][/b][/quote][/align]\n'
@@ -147,7 +161,10 @@ void main() {
     expect(
       json.any((operation) {
         final insert = operation['insert'];
-        return insert is Map && insert['attach'] == '123456';
+        return insert is Map &&
+            insert['attach'] is Map &&
+            insert['attach']['aid'] == '123456' &&
+            insert['attach']['tag'] == 'attach';
       }),
       isTrue,
     );
@@ -160,11 +177,52 @@ void main() {
     expect(
       json.any((operation) {
         final insert = operation['insert'];
-        return insert is Map && insert['attach'] == '1626084';
+        return insert is Map &&
+            insert['attach'] is Map &&
+            insert['attach']['aid'] == '1626084' &&
+            insert['attach']['tag'] == 'attach';
       }),
       isTrue,
     );
     expect(codec.encodeDocument(document), '[attach]1626084[/attach]');
+  });
+
+  test('decodes attachimg and preserves its tag kind', () {
+    final document = codec.decodeDocument('[attachimg]1624572[/attachimg]');
+    final json = document.toDelta().toJson();
+    final operation = json.firstWhere(
+      (operation) => operation['insert'] is Map,
+    );
+
+    expect(
+      operation['insert'],
+      containsPair('attach', containsPair('aid', '1624572')),
+    );
+    expect(codec.encodeDocument(document), '[attachimg]1624572[/attachimg]');
+  });
+
+  test('encodes legacy string attachment embeds as attach', () {
+    final delta = Delta()
+      ..insert(<String, String>{'attach': '7'})
+      ..insert('\n');
+
+    expect(codec.encodeDelta(delta), '[attach]7[/attach]');
+  });
+
+  test('new attachment embeds persist aid and tag kind', () {
+    final embed = composerQuillAttachEmbed('7');
+
+    expect(embed.data, <String, String>{'aid': '7', 'tag': 'attach'});
+    expect(
+      composerQuillAttachEmbedTagKind(embed),
+      ComposerAttachTagKind.attach,
+    );
+    expect(
+      composerQuillAttachEmbedTagKind(
+        Embeddable(composerQuillAttachEmbedType, '7'),
+      ),
+      ComposerAttachTagKind.attach,
+    );
   });
 
   test('keeps illegal attach codes as editable text', () {
