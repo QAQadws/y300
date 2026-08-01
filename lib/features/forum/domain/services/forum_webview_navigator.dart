@@ -83,6 +83,16 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
       return ForumWebViewPageKind.threadDetail;
     }
 
+    // Discuz edit forms carry tid/pid query parameters, so the generic
+    // thread URL fallback below would otherwise misclassify them as a thread
+    // detail page. Keep them on the generic WebView policy so the edit form
+    // reuses the shared chrome cleanup without thread-specific actions.
+    if (path.endsWith('/forum.php') &&
+        mod == 'post' &&
+        _queryValue(uri, 'action') == 'edit') {
+      return ForumWebViewPageKind.other;
+    }
+
     if (_threadUrlParser.extractTid(uri.toString()) != null) {
       return ForumWebViewPageKind.threadDetail;
     }

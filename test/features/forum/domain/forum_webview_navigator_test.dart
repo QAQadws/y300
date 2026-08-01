@@ -105,6 +105,15 @@ void main() {
     expect(navigator.classify(uri), ForumWebViewPageKind.other);
   });
 
+  test('classify keeps managed post edit page under other policy', () {
+    final uri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=5&tid=557857&pid=41587383&mobile=2',
+    );
+
+    expect(navigator.isManagedSite(uri), isTrue);
+    expect(navigator.classify(uri), ForumWebViewPageKind.other);
+  });
+
   test('resolve maps relative url to managed site', () {
     final resolved = navigator.resolve(
       'forum.php?mod=forumdisplay&fid=30&mobile=2',

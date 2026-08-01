@@ -3230,6 +3230,195 @@ void main() {
       );
     });
 
+    testWidgets('opens a valid floor edit link in the existing WebView', (
+      tester,
+    ) async {
+      final webViewDriver = _FakeForumWebViewDriver();
+      const editUri =
+          'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=33&tid=100&pid=101&page=1&mobile=2';
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '编辑测试',
+            author: 'alice',
+            replies: 1,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: '101',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                editUrl: editUri,
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          forumWebViewDriverFactory: () => webViewDriver,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _longPressVisibleTop(
+        tester,
+        find.byKey(const Key('thread-post-body-101')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('thread-post-edit-action')), findsOneWidget);
+      await _tapPostActionSheetItem(
+        tester,
+        const Key('thread-post-edit-action'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(webViewDriver.bootstrapConfig?.initialUri, Uri.parse(editUri));
+      expect(webViewDriver.loadedUris, contains(Uri.parse(editUri)));
+      expect(
+        webViewDriver.bootstrapConfig?.visualPolicy.earlyHiddenSelectors,
+        containsAll(<String>['#header-padding', '.header.cl']),
+      );
+      expect(
+        webViewDriver.bootstrapConfig?.visualPolicy.lateRemovedSelectors,
+        containsAll(<String>['.footer.mt10.cl', '.foot.flex-box']),
+      );
+    });
+
+    testWidgets('hides the floor edit action for missing or invalid links', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository((tid, page) async {
+        return ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: '编辑测试',
+            author: 'alice',
+            replies: 2,
+            views: 1,
+            currentPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: '101',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>错误目标</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                editUrl:
+                    'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=33&tid=100&pid=999',
+              ),
+              ThreadPost(
+                pid: '102',
+                author: 'bob',
+                authorId: '2',
+                message: '<p>没有编辑链接</p>',
+                number: 2,
+                isFirst: false,
+                dateline: 'today',
+              ),
+              ThreadPost(
+                pid: '103',
+                author: 'carol',
+                authorId: '3',
+                message: '<p>错误帖子</p>',
+                number: 3,
+                isFirst: false,
+                dateline: 'today',
+                editUrl:
+                    'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=33&tid=999&pid=103',
+              ),
+              ThreadPost(
+                pid: '104',
+                author: 'dave',
+                authorId: '4',
+                message: '<p>外站链接</p>',
+                number: 4,
+                isFirst: false,
+                dateline: 'today',
+                editUrl:
+                    'https://example.com/forum.php?mod=post&action=edit&fid=33&tid=100&pid=104',
+              ),
+              ThreadPost(
+                pid: '105',
+                author: 'erin',
+                authorId: '5',
+                message: '<p>错误动作</p>',
+                number: 5,
+                isFirst: false,
+                dateline: 'today',
+                editUrl:
+                    'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=33&tid=100&pid=105',
+              ),
+              ThreadPost(
+                pid: '106',
+                author: 'frank',
+                authorId: '6',
+                message: '<p>非法 fid</p>',
+                number: 6,
+                isFirst: false,
+                dateline: 'today',
+                editUrl:
+                    'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=abc&tid=100&pid=106',
+              ),
+              ThreadPost(
+                pid: '107',
+                author: 'grace',
+                authorId: '7',
+                message: '<p>非 HTTPS</p>',
+                number: 7,
+                isFirst: false,
+                dateline: 'today',
+                editUrl:
+                    'http://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=33&tid=100&pid=107',
+              ),
+            ],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      for (final pid in <String>[
+        '101',
+        '102',
+        '103',
+        '104',
+        '105',
+        '106',
+        '107',
+      ]) {
+        await _longPressVisibleTop(
+          tester,
+          find.byKey(Key('thread-post-body-$pid')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('thread-post-edit-action')),
+          findsNothing,
+          reason: 'Invalid edit target must stay hidden for pid=$pid.',
+        );
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+      }
+    });
+
     testWidgets('copies a source floor redirect with the current uid', (
       tester,
     ) async {

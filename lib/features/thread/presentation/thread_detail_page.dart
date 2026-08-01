@@ -16,6 +16,7 @@ import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dar
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
+import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
@@ -84,6 +85,8 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
 }
 
 class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
+  static final RegExp _positiveIntegerPattern = RegExp(r'^[1-9]\d*$');
+
   late final ScrollController _scrollController;
   late final ThreadDetailQuickScrollCoordinator _quickScrollCoordinator;
   final ThreadFloorLinkBuilder _floorLinkBuilder = ThreadFloorLinkBuilder();
@@ -803,14 +806,21 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     ThreadPost displayPost,
     ThreadPostBodyRenderPlan plan,
   ) async {
+    final editUri = _resolvePostEditUri(sourcePost);
     final action = await showModalBottomSheet<_ThreadPostAction>(
       context: context,
-      builder: (context) => _ThreadPostActionSheet(post: sourcePost),
+      builder: (context) =>
+          _ThreadPostActionSheet(post: sourcePost, editUri: editUri),
     );
     if (!mounted || action == null) {
       return;
     }
     switch (action) {
+      case _ThreadPostAction.edit:
+        if (editUri != null) {
+          _openManagedWebView(editUri);
+        }
+        return;
       case _ThreadPostAction.reply:
         await _openPostReplyComposer(args, state, sourcePost);
         return;
@@ -844,6 +854,63 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         await _copyFloorLink(sourcePost);
         return;
     }
+  }
+
+  Uri? _resolvePostEditUri(ThreadPost post) {
+    final rawUrl = post.editUrl?.trim();
+    if (rawUrl == null || rawUrl.isEmpty) {
+      return null;
+    }
+
+    final navigator = ref.read(forumWebViewNavigatorProvider);
+    final uri = navigator.resolve(rawUrl.replaceAll('&amp;', '&'));
+    final siteUri = Uri.parse(AppConfig.siteBaseUrl);
+    if (!navigator.isManagedSite(uri) ||
+        uri.userInfo.isNotEmpty ||
+        uri.scheme.toLowerCase() != siteUri.scheme.toLowerCase() ||
+        uri.port != siteUri.port ||
+        uri.path.toLowerCase() !=
+            siteUri.resolve('forum.php').path.toLowerCase()) {
+      return null;
+    }
+
+    late final Map<String, List<String>> query;
+    try {
+      query = uri.queryParametersAll;
+    } on FormatException {
+      return null;
+    }
+    final mod = _singlePostEditQueryValue(query, 'mod')?.toLowerCase();
+    final action = _singlePostEditQueryValue(query, 'action')?.toLowerCase();
+    final fid = _singlePostEditQueryValue(query, 'fid');
+    final tid = _singlePostEditQueryValue(query, 'tid');
+    final pid = _singlePostEditQueryValue(query, 'pid');
+    if (mod != 'post' ||
+        action != 'edit' ||
+        !_isPositiveInteger(fid) ||
+        !_isPositiveInteger(tid) ||
+        !_isPositiveInteger(pid) ||
+        tid != widget.tid.trim() ||
+        pid != post.pid.trim()) {
+      return null;
+    }
+    return uri;
+  }
+
+  String? _singlePostEditQueryValue(
+    Map<String, List<String>> query,
+    String name,
+  ) {
+    final values = query[name];
+    if (values == null || values.length != 1) {
+      return null;
+    }
+    final value = values.single.trim();
+    return value.isEmpty ? null : value;
+  }
+
+  bool _isPositiveInteger(String? value) {
+    return value != null && _positiveIntegerPattern.hasMatch(value);
   }
 
   Future<void> _copyFloorLink(ThreadPost sourcePost) async {
@@ -1217,6 +1284,7 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
 }
 
 enum _ThreadPostAction {
+  edit,
   reply,
   rate,
   comment,
@@ -1226,9 +1294,10 @@ enum _ThreadPostAction {
 }
 
 class _ThreadPostActionSheet extends StatelessWidget {
-  const _ThreadPostActionSheet({required this.post});
+  const _ThreadPostActionSheet({required this.post, required this.editUri});
 
   final ThreadPost post;
+  final Uri? editUri;
 
   @override
   Widget build(BuildContext context) {
@@ -1241,6 +1310,15 @@ class _ThreadPostActionSheet extends StatelessWidget {
             key: const Key('thread-post-action-sheet'),
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (editUri != null)
+                ListTile(
+                  key: const Key('thread-post-edit-action'),
+                  dense: true,
+                  leading: const Icon(Icons.edit_outlined),
+                  title: Text(l10n.threadDetailEdit),
+                  onTap: () =>
+                      Navigator.of(context).pop(_ThreadPostAction.edit),
+                ),
               ListTile(
                 key: const Key('thread-post-reply-action'),
                 dense: true,

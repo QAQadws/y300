@@ -123,6 +123,8 @@ void main() {
             dateline: '2026-6-20 10:00',
             avatarUrl: 'avatar',
             replyUrl: 'reply',
+            editUrl:
+                'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=33&tid=572529&pid=41562047',
             rateUrl: 'rate',
             commentUrl: 'comment',
             rateSummary: '+2',
@@ -192,6 +194,7 @@ void main() {
 
       expect(decoded.subject, source.subject);
       expect(decoded.posts.single.pid, '41562047');
+      expect(decoded.posts.single.editUrl, source.posts.single.editUrl);
       expect(decoded.posts.single.poll!.options.single.colorHex, '#E92725');
       expect(decoded.posts.single.ratingSummary!.ratings.single.reason, '好');
       expect(
@@ -201,6 +204,29 @@ void main() {
       expect(decoded.posts.single.comments.single.message, '点评');
       expect(decoded.posts.single.tagLinks.single.tagId, '20674');
       expect(decoded.posts.single.attachmentImages.single.attachment, 'a.jpg');
+    });
+
+    test('decodes snapshots written before editUrl existed', () {
+      const codec = ThreadDetailSnapshotCodec();
+      final decoded = codec.decode(<String, Object?>{
+        'tid': '572529',
+        'fid': '33',
+        'subject': '旧缓存',
+        'author': 'alice',
+        'posts': <Object?>[
+          <String, Object?>{
+            'pid': '41562047',
+            'author': 'alice',
+            'authorId': '10',
+            'message': '正文',
+            'number': 1,
+            'isFirst': true,
+            'dateline': '2026-6-20 10:00',
+          },
+        ],
+      });
+
+      expect(decoded.posts.single.editUrl, isNull);
     });
   });
 }

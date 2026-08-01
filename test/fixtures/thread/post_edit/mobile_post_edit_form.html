@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>脱敏移动编辑表单 fixture</title>
+</head>
+<body id="forum" class="pg_post">
+  <div id="header-padding"></div>
+  <div id="append_parent"></div>
+
+  <form method="post" id="postform"
+        action="forum.php?mod=post&amp;action=edit&amp;extra=&amp;editsubmit=yes&amp;mobile=2"
+        enctype="multipart/form-data">
+    <input type="hidden" name="formhash" id="formhash" value="fixture-formhash">
+    <input type="hidden" name="posttime" id="posttime" value="1700000000">
+    <input type="hidden" name="fid" id="fid" value="5">
+    <input type="hidden" name="tid" value="557857">
+    <input type="hidden" name="pid" value="41587383">
+    <input type="hidden" name="page" value="215">
+
+    <div class="header cl">
+      <div class="mz"><a href="javascript:history.back();">返回</a></div>
+      <h2>编辑</h2>
+    </div>
+
+    <div class="post_from post_box">
+      <input type="text" id="needsubject" value="" name="subject">
+      <textarea id="needmessage" name="message">fixture 第一行
+[b]fixture 加粗[/b]
+[attachimg]1624572[/attachimg]</textarea>
+
+      <div class="mimg cl">
+        <input type="file" name="Filedata" id="filedata" multiple accept="image/jpeg,image/png">
+        <input type="file" name="Filedata" id="attfiledata" multiple>
+      </div>
+
+      <ul id="imglist" class="post_imglist cl">
+        <li>
+          <span aid="1624572" class="del" up="1"><a href="javascript:;">删除</a></span>
+          <span class="p_img"><img id="aimg_1624572" src="data/attachment/forum/fixture/existing-image.jpg" alt="fixture-image.jpg"></span>
+          <input type="hidden" name="attachnew[1624572]['description']" value="">
+        </li>
+      </ul>
+      <ul id="attlist" class="post_attlist setbox cl"></ul>
+
+      <div id="extra_additional_c">
+        <label><input type="checkbox" name="usesig" value="1" checked>使用个人签名</label>
+        <label><input type="checkbox" name="htmlon" value="0" disabled>HTML 代码</label>
+        <label><input type="checkbox" name="parseurloff" value="1">禁用链接识别</label>
+        <label><input type="checkbox" name="smileyoff" value="1">禁用表情</label>
+        <label><input type="checkbox" name="bbcodeoff" value="1">禁用编辑器代码</label>
+        <label><input type="checkbox" name="imgcontent" value="0" disabled>内容生成图片</label>
+      </div>
+    </div>
+
+    <div class="post_btn">
+      <button id="postsubmit" class="btn_pn btn_pn_blue" type="button">保存</button>
+    </div>
+    <input type="hidden" name="editsubmit" value="yes">
+  </form>
+
+  <div class="footer mt10 cl">fixture footer</div>
+  <div class="foot flex-box">fixture bottom chrome</div>
+</body>
+</html>

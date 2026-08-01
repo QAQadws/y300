@@ -158,6 +158,7 @@ final class ThreadDetailContentProjector {
     yield post.authorId;
     yield _textHash(post.avatarUrl);
     yield _textHash(post.replyUrl);
+    yield _textHash(post.editUrl);
     yield _textHash(post.rateUrl);
     yield _textHash(post.commentUrl);
     yield _textHash(post.message);
@@ -334,6 +335,7 @@ final class _PostSlots {
       dateline: dateline.value(values),
       avatarUrl: source.avatarUrl,
       replyUrl: source.replyUrl,
+      editUrl: source.editUrl,
       rateUrl: source.rateUrl,
       commentUrl: source.commentUrl,
       rateSummary: rateSummary?.value(values),

@@ -138,6 +138,7 @@ class ThreadPost {
     required this.dateline,
     this.avatarUrl,
     this.replyUrl,
+    this.editUrl,
     this.rateUrl,
     this.commentUrl,
     this.rateSummary,
@@ -157,6 +158,7 @@ class ThreadPost {
   final String dateline;
   final String? avatarUrl;
   final String? replyUrl;
+  final String? editUrl;
   final String? rateUrl;
   final String? commentUrl;
   final String? rateSummary;
@@ -177,8 +179,14 @@ class ThreadPost {
       number: ParseUtils.asInt(json['number']),
       isFirst: ParseUtils.asString(json['first']) == '1',
       dateline: ParseUtils.asString(json['dateline']),
+      editUrl: _nullableString(json['editUrl']),
       attachmentImages: _parseAttachmentImages(json['attachments']),
     );
+  }
+
+  static String? _nullableString(dynamic value) {
+    final text = ParseUtils.asString(value).trim();
+    return text.isEmpty ? null : text;
   }
 
   static List<ForumPostAttachmentImage> _parseAttachmentImages(dynamic value) {

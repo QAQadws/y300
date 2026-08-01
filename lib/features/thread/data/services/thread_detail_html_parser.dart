@@ -8,6 +8,8 @@ class ThreadDetailHtmlParser {
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
   }) : _urlResolver = urlResolver;
 
+  static final RegExp _positiveIntegerPattern = RegExp(r'^[1-9]\d*$');
+
   final SiteUrlResolver _urlResolver;
 
   ThreadDetailData parse(
@@ -45,7 +47,7 @@ class ThreadDetailHtmlParser {
     required String fallbackSubject,
   }) {
     final threadHeader = _parseMobileThreadHeader(document);
-    final posts = _parseMobilePosts(document);
+    final posts = _parseMobilePosts(document, expectedTid: fallbackTid);
     final tid = _extractTid(document) ?? fallbackTid;
     final page = _parseCurrentPage(document, fallback: fallbackPage);
     final lastPage = _parseLastPage(document);
@@ -97,7 +99,7 @@ class ThreadDetailHtmlParser {
     required String fallbackSubject,
   }) {
     final threadHeader = _parseDesktopThreadHeader(document);
-    final posts = _parseDesktopPosts(document);
+    final posts = _parseDesktopPosts(document, expectedTid: fallbackTid);
     final tid = _extractTid(document) ?? fallbackTid;
     final page = _parseCurrentPage(document, fallback: fallbackPage);
     final lastPage = _parseLastPage(document);
@@ -212,12 +214,20 @@ class ThreadDetailHtmlParser {
     return null;
   }
 
-  List<ThreadPost> _parseMobilePosts(html_dom.Document document) {
+  List<ThreadPost> _parseMobilePosts(
+    html_dom.Document document, {
+    required String expectedTid,
+  }) {
     final output = <ThreadPost>[];
     for (final container in document.querySelectorAll(
       '.viewthread .plc[id^="pid"]',
     )) {
-      final post = _parseMobilePost(container, output.length, document);
+      final post = _parseMobilePost(
+        container,
+        output.length,
+        document,
+        expectedTid: expectedTid,
+      );
       if (post != null) {
         output.add(post);
       }
@@ -228,8 +238,9 @@ class ThreadDetailHtmlParser {
   ThreadPost? _parseMobilePost(
     html_dom.Element container,
     int index,
-    html_dom.Document document,
-  ) {
+    html_dom.Document document, {
+    required String expectedTid,
+  }) {
     final pid = _extractPid(container);
     if (pid.isEmpty) {
       return null;
@@ -264,6 +275,11 @@ class ThreadDetailHtmlParser {
         document: document,
         pid: pid,
         isFirst: isFirst,
+      ),
+      editUrl: _parseEditUrl(
+        container,
+        expectedTid: expectedTid,
+        expectedPid: pid,
       ),
       rateUrl: _resolve(
         footer
@@ -326,6 +342,81 @@ class ThreadDetailHtmlParser {
     );
   }
 
+  String? _parseEditUrl(
+    html_dom.Element container, {
+    required String expectedTid,
+    required String expectedPid,
+  }) {
+    // Do not depend on Discuz's query-parameter order or the exact markup
+    // around the timestamp. The container boundary is the important part:
+    // links from another floor must never become this post's edit target.
+    final candidates = container.querySelectorAll('a[href]');
+    final siteOrigin = Uri.tryParse(_urlResolver.siteOrigin);
+    if (siteOrigin == null ||
+        !siteOrigin.hasScheme ||
+        siteOrigin.host.isEmpty) {
+      return null;
+    }
+    final forumPath = siteOrigin.resolve('forum.php').path.toLowerCase();
+    for (final anchor in candidates) {
+      final resolved = _resolve(anchor.attributes['href']);
+      final uri = resolved == null ? null : Uri.tryParse(resolved);
+      if (uri == null ||
+          !_hasSameOrigin(uri, siteOrigin) ||
+          uri.userInfo.isNotEmpty ||
+          uri.path.toLowerCase() != forumPath) {
+        continue;
+      }
+      final query = _tryQueryParametersAll(uri);
+      if (query == null) {
+        continue;
+      }
+      final mod = _singleQueryValue(query, 'mod')?.toLowerCase();
+      final action = _singleQueryValue(query, 'action')?.toLowerCase();
+      final fid = _singleQueryValue(query, 'fid');
+      final tid = _singleQueryValue(query, 'tid');
+      final pid = _singleQueryValue(query, 'pid');
+      if (mod != 'post' ||
+          action != 'edit' ||
+          !_isPositiveInteger(fid) ||
+          !_isPositiveInteger(tid) ||
+          !_isPositiveInteger(pid) ||
+          tid != expectedTid.trim() ||
+          pid != expectedPid.trim()) {
+        continue;
+      }
+      return resolved;
+    }
+    return null;
+  }
+
+  bool _hasSameOrigin(Uri candidate, Uri siteOrigin) {
+    return candidate.scheme.toLowerCase() == siteOrigin.scheme.toLowerCase() &&
+        candidate.host.toLowerCase() == siteOrigin.host.toLowerCase() &&
+        candidate.port == siteOrigin.port;
+  }
+
+  Map<String, List<String>>? _tryQueryParametersAll(Uri uri) {
+    try {
+      return uri.queryParametersAll;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  String? _singleQueryValue(Map<String, List<String>> query, String name) {
+    final values = query[name];
+    if (values == null || values.length != 1) {
+      return null;
+    }
+    final value = values.single.trim();
+    return value.isEmpty ? null : value;
+  }
+
+  bool _isPositiveInteger(String? value) {
+    return value != null && _positiveIntegerPattern.hasMatch(value);
+  }
+
   String _cleanMobilePostMessageHtml(
     html_dom.Element? messageNode, {
     required html_dom.Element postContainer,
@@ -352,6 +443,7 @@ class ThreadDetailHtmlParser {
     }
     final clone = mtimeNode.clone(true);
     clone.querySelectorAll('.y').forEach((node) => node.remove());
+    clone.querySelectorAll('.mgl').forEach((node) => node.remove());
     return _cleanText(clone.text).replaceFirst(RegExp(r'^发表于\s*'), '').trim();
   }
 
@@ -556,12 +648,19 @@ class ThreadDetailHtmlParser {
     ).firstMatch(value)?.group(1);
   }
 
-  List<ThreadPost> _parseDesktopPosts(html_dom.Document document) {
+  List<ThreadPost> _parseDesktopPosts(
+    html_dom.Document document, {
+    required String expectedTid,
+  }) {
     final output = <ThreadPost>[];
     for (final container in document.querySelectorAll(
       '#postlist > div[id^="post_"]',
     )) {
-      final post = _parseDesktopPost(container, output.length);
+      final post = _parseDesktopPost(
+        container,
+        output.length,
+        expectedTid: expectedTid,
+      );
       if (post != null) {
         output.add(post);
       }
@@ -569,7 +668,11 @@ class ThreadDetailHtmlParser {
     return output;
   }
 
-  ThreadPost? _parseDesktopPost(html_dom.Element container, int index) {
+  ThreadPost? _parseDesktopPost(
+    html_dom.Element container,
+    int index, {
+    required String expectedTid,
+  }) {
     final pid = _extractPid(container);
     if (pid.isEmpty) {
       return null;
@@ -605,6 +708,11 @@ class ThreadDetailHtmlParser {
               'a[href*="mod=post"][href*="action=reply"][href*="repquote"], a[href*="mod=post"][href*="action=reply"][href*="reppost"]',
             )
             ?.attributes['href'],
+      ),
+      editUrl: _parseEditUrl(
+        container,
+        expectedTid: expectedTid,
+        expectedPid: pid,
       ),
       rateUrl: _parseActionUrl(container, 'rate'),
       commentUrl: _resolve(

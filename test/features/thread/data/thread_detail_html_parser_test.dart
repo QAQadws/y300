@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -6,9 +7,67 @@ import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
+const _mobilePostEditFixturePath =
+    'test/fixtures/thread/post_edit/mobile_thread_with_edit_links.html';
+const _desktopPostEditFixturePath =
+    'test/fixtures/thread/post_edit/desktop_thread_with_edit_links.html';
+
+String _readUtf8Fixture(String path) {
+  return File(path).readAsStringSync(encoding: utf8);
+}
+
 void main() {
   group('ThreadDetailHtmlParser', () {
     const parser = ThreadDetailHtmlParser();
+
+    test('parses only target-matched mobile edit links per floor', () {
+      final result = parser.parse(
+        _readUtf8Fixture(_mobilePostEditFixturePath),
+        fallbackTid: '557857',
+        fallbackPage: 215,
+      );
+
+      expect(result.posts, hasLength(9));
+      expect(
+        result.posts
+            .where((post) => post.editUrl != null)
+            .map((post) => post.pid),
+        <String>['41587383', '41588620'],
+      );
+      expect(
+        result.posts.first.editUrl,
+        'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=5&tid=557857&pid=41587383&page=215&mobile=2',
+      );
+      expect(result.posts.first.dateline, '2026-7-23 14:57');
+      expect(result.posts[1].editUrl, contains('pid=41588620'));
+      expect(
+        result.posts.skip(2).map((post) => post.editUrl),
+        everyElement(isNull),
+        reason:
+            'Wrong actions, external hosts, mismatched targets, missing fields, and duplicate critical fields must fail closed.',
+      );
+    });
+
+    test('parses only the valid same-floor desktop edit link', () {
+      final result = parser.parse(
+        _readUtf8Fixture(_desktopPostEditFixturePath),
+        fallbackTid: '557857',
+        fallbackPage: 215,
+      );
+
+      expect(result.posts, hasLength(6));
+      expect(
+        result.posts
+            .where((post) => post.editUrl != null)
+            .map((post) => post.pid),
+        <String>['41587383'],
+      );
+      expect(result.posts.first.editUrl, contains('pid=41587383'));
+      expect(
+        result.posts.skip(1).map((post) => post.editUrl),
+        everyElement(isNull),
+      );
+    });
 
     test(
       'parses desktop single-choice poll thread into mobile detail data',

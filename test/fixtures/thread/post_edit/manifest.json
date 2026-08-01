@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "fixtures": {
+    "mobileThread": {
+      "path": "mobile_thread_with_edit_links.html",
+      "source": "docs/编辑/帖子页(有编辑按钮).html",
+      "sourceSha256": "40F531E85629E12BB611A502670C64E4CD7FCF0F0977DA35870E718289389045",
+      "target": {
+        "fid": "5",
+        "tid": "557857",
+        "pairedPid": "41587383",
+        "additionalObservedEditablePids": [
+          "41588620"
+        ]
+      },
+      "sanitized": true
+    },
+    "mobileEditForm": {
+      "path": "mobile_post_edit_form.html",
+      "source": "docs/编辑/编辑页.html",
+      "sourceSha256": "8A43CCA8685523217B7B5923E559CE83516D3FC7CD43C0A19FD1328CBC2A064A",
+      "target": {
+        "fid": "5",
+        "tid": "557857",
+        "pid": "41587383",
+        "page": "215"
+      },
+      "sanitized": true
+    },
+    "desktopThread": {
+      "path": "desktop_thread_with_edit_links.html",
+      "source": "synthetic-contract-fixture",
+      "target": {
+        "tid": "557857"
+      },
+      "sanitized": true
+    }
+  },
+  "nativeSubmitEvidenceComplete": false
+}

@@ -85,6 +85,7 @@ void main() {
         expect(display.author, '服务器用户名');
         expect(display.authorId, '9');
         expect(display.replyUrl, '/reply?pid=1');
+        expect(display.editUrl, '/edit?pid=1');
         expect(display.rateUrl, '/rate?pid=1');
         expect(display.commentUrl, '/comment?pid=1');
 
@@ -305,6 +306,7 @@ ThreadDetailPageState _source({String? message}) {
     dateline: '昨天',
     avatarUrl: '/avatar/9',
     replyUrl: '/reply?pid=1',
+    editUrl: '/edit?pid=1',
     rateUrl: '/rate?pid=1',
     commentUrl: '/comment?pid=1',
     rateSummary: '已有评分',

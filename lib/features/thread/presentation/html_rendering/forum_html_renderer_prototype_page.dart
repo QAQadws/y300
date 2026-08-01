@@ -311,6 +311,7 @@ class _ForumHtmlRendererPrototypePageState
       dateline: post.dateline,
       avatarUrl: post.avatarUrl,
       replyUrl: post.replyUrl,
+      editUrl: post.editUrl,
       rateUrl: post.rateUrl,
       commentUrl: post.commentUrl,
       rateSummary: post.rateSummary,
