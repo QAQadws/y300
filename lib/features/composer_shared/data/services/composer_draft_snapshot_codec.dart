@@ -92,6 +92,15 @@ class ComposerDraftSnapshotJsonCodec {
     if (kind == ComposerDraftKind.newThread) {
       return ComposerDraftIdentity.newThread(fid: fid);
     }
+    if (kind == ComposerDraftKind.postEdit) {
+      if (tid == null ||
+          tid.trim().isEmpty ||
+          repquote == null ||
+          repquote.trim().isEmpty) {
+        return null;
+      }
+      return ComposerDraftIdentity.postEdit(fid: fid, tid: tid, pid: repquote);
+    }
     if (tid == null || tid.trim().isEmpty) {
       // 显式 `kind` 缺失且 tid 为空，只能解释为发帖草稿；reply 草稿一定有 tid。
       return ComposerDraftIdentity.newThread(fid: fid);

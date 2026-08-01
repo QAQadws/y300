@@ -18,6 +18,7 @@ import 'package:y300/features/composer_shared/presentation/services/composer_tex
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
+import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_diagnostic_recorder.dart';
@@ -36,6 +37,8 @@ import 'package:y300/features/thread/data/repositories/thread_post_rate_reposito
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
+import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
+import 'package:y300/features/thread/data/providers/post_edit_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
@@ -56,6 +59,9 @@ import 'package:y300/features/thread/presentation/services/thread_post_image_dim
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/post_edit_composer_page.dart';
+import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
+import 'package:y300/features/thread/presentation/post_edit_native_entry_gate.dart';
 import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_button.dart';
@@ -818,7 +824,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     switch (action) {
       case _ThreadPostAction.edit:
         if (editTarget != null) {
-          _openManagedWebView(editTarget.editUri);
+          await _openPostEdit(controller, editTarget);
         }
         return;
       case _ThreadPostAction.reply:
@@ -871,6 +877,71 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
           isFirstPost: post.isFirst,
         );
     return result.target;
+  }
+
+  Future<void> _openPostEdit(
+    ThreadDetailController controller,
+    PostEditTarget target,
+  ) async {
+    final nativeEnabled = ref.read(postEditNativeEntryGateProvider);
+    if (!nativeEnabled) {
+      final routeResult = await _openPostEditFallback(target);
+      if (routeResult?.serverMutationPossible == true && mounted) {
+        await controller.refreshAfterMutation();
+      }
+      return;
+    }
+
+    PostEditPreparation? preparation;
+    try {
+      preparation = await ref.read(postEditPreparationProvider(target).future);
+    } catch (_) {
+      // A failed preparation remains safely recoverable through WebView.
+    }
+    if (!mounted) {
+      return;
+    }
+    if (preparation == null || preparation.isWebViewOnly) {
+      final routeResult = await _openPostEditFallback(target);
+      if (routeResult?.serverMutationPossible == true && mounted) {
+        await controller.refreshAfterMutation();
+      }
+      return;
+    }
+
+    final result = await Navigator.of(context).push<Object?>(
+      MaterialPageRoute<Object?>(
+        builder: (_) => PostEditComposerPage(
+          args: PostEditComposerArgs(preparation: preparation!),
+        ),
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (result is PostEditRouteResult && result.serverMutationPossible) {
+      await controller.refreshAfterMutation();
+    }
+  }
+
+  Future<ForumWebViewRouteResult?> _openPostEditFallback(
+    PostEditTarget target,
+  ) async {
+    final routeFactory = ref.read(forumWebViewRouteFactoryProvider);
+    final result = await Navigator.of(context).push<Object?>(
+      routeFactory(
+        ForumWebViewLaunchConfig(
+          initialUri: target.editUri,
+          popOnRootBack: true,
+          purpose: ForumWebViewHostPurpose.postEditFallback,
+          completionTarget: ForumWebViewCompletionTarget(
+            tid: target.tid,
+            pid: target.pid,
+          ),
+        ),
+      ),
+    );
+    return result is ForumWebViewRouteResult ? result : null;
   }
 
   Future<void> _copyFloorLink(ThreadPost sourcePost) async {

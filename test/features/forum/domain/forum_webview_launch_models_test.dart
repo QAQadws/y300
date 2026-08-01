@@ -18,11 +18,28 @@ void main() {
     final config = ForumWebViewLaunchConfig(
       initialUri: uri,
       popOnRootBack: true,
+      purpose: ForumWebViewHostPurpose.postEditFallback,
+      completionTarget: const ForumWebViewCompletionTarget(
+        tid: '10',
+        pid: '11',
+      ),
     );
 
     expect(defaultConfig.popOnRootBack, isFalse);
     expect(config.initialUri, uri);
     expect(config.popOnRootBack, isTrue);
+    expect(config.purpose, ForumWebViewHostPurpose.postEditFallback);
+    expect(config.completionTarget?.pid, '11');
+  });
+
+  test('post edit route results distinguish target redirects from returns', () {
+    const result = ForumWebViewRouteResult(
+      outcome: ForumWebViewRouteOutcome.observedTargetRedirect,
+      serverMutationPossible: true,
+    );
+
+    expect(result.outcome, ForumWebViewRouteOutcome.observedTargetRedirect);
+    expect(result.serverMutationPossible, isTrue);
   });
 
   test('edit URL stays other and keeps the baseline cleanup contract', () {

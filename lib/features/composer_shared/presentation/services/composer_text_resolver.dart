@@ -183,6 +183,7 @@ abstract final class ComposerTextResolver {
       (ComposerKind.reply, final String value) =>
         l10n.replySubmitSuccessWithDetail(value),
       (ComposerKind.reply, null) => l10n.replySubmitSuccess,
+      (ComposerKind.postEdit, _) => l10n.postEditNativeSubmitUnavailable,
     };
   }
 

@@ -79,6 +79,27 @@ void main() {
       expect(decoded.extras['allowNoticeAuthor'], '1');
     });
 
+    test('round-trips a post edit draft with a baseline fingerprint', () {
+      final snapshot = ComposerDraftSnapshot(
+        identity: const ComposerDraftIdentity.postEdit(
+          fid: '5',
+          tid: '557857',
+          pid: '41587383',
+        ),
+        message: '本地编辑',
+        useSignature: true,
+        updatedAt: DateTime.utc(2026, 8, 1),
+        extras: const <String, String>{'baselineFingerprint': 'baseline-1'},
+      );
+
+      final decoded = codec.decode(jsonEncode(codec.encode(snapshot)));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.identity.kind, ComposerDraftKind.postEdit);
+      expect(decoded.identity.storageKey, 'edit:5:557857:41587383');
+      expect(decoded.extras['baselineFingerprint'], 'baseline-1');
+    });
+
     test(
       'decodes legacy thread reply payload missing kind / subject / extras',
       () {

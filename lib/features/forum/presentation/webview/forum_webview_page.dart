@@ -112,6 +112,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final asyncState = ref.watch(forumWebViewControllerProvider);
     final initialUri = ref.watch(forumWebViewInitialUriProvider);
     final popOnRootBack = ref.watch(forumWebViewPopOnRootBackProvider);
+    final hostPurpose = ref.watch(forumWebViewHostPurposeProvider);
     final overlayStyle = _resolveSystemUiOverlayStyle(context);
     final homeUri = initialUri ?? navigator.homeUri;
     final state =
@@ -164,6 +165,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             driver,
             overlayStyle: overlayStyle,
             popOnRootBack: popOnRootBack,
+            hostPurpose: hostPurpose,
           ),
           body: _buildWebViewSurface(context: context, driver: driver),
         ),
@@ -300,6 +302,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final driver = ref.read(forumWebViewDriverProvider);
     final uri = navigator.resolve(url);
     final pageKind = navigator.classify(uri);
+    if (_isPostEditTargetRedirect(uri)) {
+      _completePostEditWebView(ForumWebViewRouteOutcome.observedTargetRedirect);
+      return;
+    }
     final visualPolicy = visualPolicyResolver.resolve(pageKind);
     final generation = _navigationGeneration;
 
@@ -398,6 +404,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final navigator = ref.read(forumWebViewNavigatorProvider);
     final uri = navigator.resolve(url);
     if (uri.scheme.toLowerCase() == 'javascript') {
+      return ForumWebViewNavigationDecision.prevent;
+    }
+    if (_isPostEditTargetRedirect(uri)) {
+      _completePostEditWebView(ForumWebViewRouteOutcome.observedTargetRedirect);
       return ForumWebViewNavigationDecision.prevent;
     }
     final postReplyRequest = ref
@@ -590,6 +600,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     ForumWebViewDriver driver, {
     required SystemUiOverlayStyle overlayStyle,
     required bool popOnRootBack,
+    required ForumWebViewHostPurpose hostPurpose,
   }) {
     final l10n = AppLocalizations.of(context);
     final title = ForumTextResolver.webViewTitle(l10n, state);
@@ -613,6 +624,14 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             ),
       title: Text(title),
       actions: [
+        if (hostPurpose == ForumWebViewHostPurpose.postEditFallback)
+          IconButton(
+            key: const Key('forum-webview-post-edit-native-button'),
+            tooltip: l10n.postEditSwitchToNative,
+            onPressed: () =>
+                _completePostEditWebView(ForumWebViewRouteOutcome.returned),
+            icon: const Icon(Icons.swap_horiz),
+          ),
         if (_canShowSearchButton(state))
           IconButton(
             key: const Key('forum-webview-search-button'),
@@ -684,14 +703,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           ),
         ];
       case ForumWebViewPageKind.other:
-        return <PopupMenuEntry<String>>[
-          refreshItem,
-          PopupMenuItem<String>(
-            enabled: false,
-            value: 'placeholder',
-            child: Text(l10n.forumWebViewFeatureInProgress),
-          ),
-        ];
+        return <PopupMenuEntry<String>>[refreshItem];
     }
   }
 
@@ -958,7 +970,12 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
     if (popOnRootBack) {
-      Navigator.of(context).maybePop();
+      if (ref.read(forumWebViewHostPurposeProvider) ==
+          ForumWebViewHostPurpose.postEditFallback) {
+        _completePostEditWebView(ForumWebViewRouteOutcome.returned);
+      } else {
+        Navigator.of(context).maybePop();
+      }
       return;
     }
     if (state.pageKind == ForumWebViewPageKind.home) {
@@ -969,6 +986,39 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       driver,
       navigator.homeUri,
       referrerUri: state.currentUri,
+    );
+  }
+
+  bool _isPostEditTargetRedirect(Uri uri) {
+    final target = ref.read(forumWebViewCompletionTargetProvider);
+    if (ref.read(forumWebViewHostPurposeProvider) !=
+            ForumWebViewHostPurpose.postEditFallback ||
+        target == null ||
+        !ref.read(forumWebViewNavigatorProvider).isManagedSite(uri) ||
+        !uri.path.endsWith('/forum.php')) {
+      return false;
+    }
+    final query = uri.queryParameters;
+    final fragment = uri.fragment.trim();
+    final queryPid = query['pid']?.trim();
+    final isViewThreadTarget =
+        query['mod'] == 'viewthread' &&
+        query['tid'] == target.tid &&
+        (fragment == 'pid${target.pid}' || queryPid == target.pid);
+    final isFindPostRedirect =
+        query['mod'] == 'redirect' &&
+        query['goto'] == 'findpost' &&
+        query['ptid'] == target.tid &&
+        queryPid == target.pid;
+    return isViewThreadTarget || isFindPostRedirect;
+  }
+
+  void _completePostEditWebView(ForumWebViewRouteOutcome outcome) {
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).pop(
+      ForumWebViewRouteResult(outcome: outcome, serverMutationPossible: true),
     );
   }
 

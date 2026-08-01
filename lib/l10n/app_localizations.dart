@@ -6563,6 +6563,90 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'最低可见对比度：{value}'**
   String threadPrototypeMinimumContrast(String value);
+
+  /// No description provided for @postEditTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑帖子'**
+  String get postEditTitle;
+
+  /// No description provided for @postEditMessageHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子内容'**
+  String get postEditMessageHint;
+
+  /// No description provided for @postEditSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存'**
+  String get postEditSave;
+
+  /// No description provided for @postEditSwitchToWebView.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换到网页编辑'**
+  String get postEditSwitchToWebView;
+
+  /// No description provided for @postEditSwitchToNative.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回原生编辑'**
+  String get postEditSwitchToNative;
+
+  /// No description provided for @postEditConflictTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器内容已变化'**
+  String get postEditConflictTitle;
+
+  /// No description provided for @postEditConflictBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'网页编辑或其他设备已经修改了这条帖子，请选择要保留的版本。'**
+  String get postEditConflictBody;
+
+  /// No description provided for @postEditUseServer.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用服务器版本'**
+  String get postEditUseServer;
+
+  /// No description provided for @postEditKeepLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留本地版本'**
+  String get postEditKeepLocal;
+
+  /// No description provided for @postEditRestoreServer.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复服务器正文'**
+  String get postEditRestoreServer;
+
+  /// No description provided for @postEditVerificationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法确认网页编辑后的服务器状态，原生保存暂不可用。'**
+  String get postEditVerificationFailed;
+
+  /// No description provided for @postEditNativeSubmitUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'原生保存将在后续版本开放'**
+  String get postEditNativeSubmitUnavailable;
+
+  /// No description provided for @postEditLeaveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开编辑页面？'**
+  String get postEditLeaveTitle;
+
+  /// No description provided for @postEditLeaveBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地修改会保存为草稿，之后可以继续编辑。'**
+  String get postEditLeaveBody;
 }
 
 class _AppLocalizationsDelegate

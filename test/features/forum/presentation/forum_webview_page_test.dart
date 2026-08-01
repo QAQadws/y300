@@ -23,6 +23,7 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
@@ -687,6 +688,60 @@ void main() {
         driver.loadedUris.last.toString(),
         'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573279&mobile=2',
       );
+    },
+  );
+
+  testWidgets(
+    'post edit fallback exposes native switch and completes on target redirect',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+      final editUri = Uri.parse(
+        'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=5&tid=557857&pid=41587383',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumWebViewInitialUriProvider.overrideWithValue(editUri),
+            forumWebViewHostPurposeProvider.overrideWithValue(
+              ForumWebViewHostPurpose.postEditFallback,
+            ),
+            forumWebViewCompletionTargetProvider.overrideWithValue(
+              const ForumWebViewCompletionTarget(
+                tid: '557857',
+                pid: '41587383',
+              ),
+            ),
+          ],
+          child: _buildRoutedTestApp(driver: driver),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('open-forum-webview-page')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('forum-webview-post-edit-native-button')),
+        findsOneWidget,
+      );
+      final visualPolicy = driver.bootstrapConfig!.visualPolicy;
+      for (final selector in <String>[
+        '#postform',
+        '#needmessage',
+        '#imglist',
+        '.post_btn',
+        '#postsubmit',
+      ]) {
+        expect(visualPolicy.earlyHiddenSelectors, isNot(contains(selector)));
+        expect(visualPolicy.lateRemovedSelectors, isNot(contains(selector)));
+      }
+
+      final decision = await driver.dispatchNavigationRequest(
+        'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=557857&pid=41587383',
+      );
+      await tester.pumpAndSettle();
+
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(find.byKey(const Key('forum-webview-page')), findsNothing);
     },
   );
 

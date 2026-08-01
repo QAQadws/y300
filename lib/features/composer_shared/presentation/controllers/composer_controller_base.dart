@@ -40,6 +40,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
   Duration get saveDebounce => defaultSaveDebounce;
 
+  /// The business context used for structured submission failures.
+  ComposerKind get composerKind => ComposerKind.reply;
+
   // ── 子类必须实现 ─────────────────────────────────────────────
   ComposerDraftIdentity get draftIdentity;
   String get uploadFid;
@@ -49,6 +52,12 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     required ComposerDraftSnapshot? restoredDraft,
     required ComposerPreferences preferences,
   });
+
+  /// Allows a business controller to reject a persisted draft before it is
+  /// projected into its initial state. The default preserves legacy behavior.
+  ComposerDraftSnapshot? restoreDraft(ComposerDraftSnapshot? restoredDraft) {
+    return restoredDraft;
+  }
 
   /// 把基类生成的 patch 合并进具体 state。
   TState applyPatch(TState current, ComposerStatePatch patch);
@@ -120,7 +129,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       composerPreferencesControllerProvider.future,
     );
     final initial = await buildInitialState(
-      restoredDraft: snapshot != null && !snapshot.isEmpty ? snapshot : null,
+      restoredDraft: restoreDraft(
+        snapshot != null && !snapshot.isEmpty ? snapshot : null,
+      ),
       preferences: preferences,
     );
     _latestState = initial;
@@ -145,12 +156,38 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   /// reply 一直是空 map；posting 把 typeid / 选项等放进去。
   Map<String, String> draftExtrasFor(TState value) => const <String, String>{};
 
+  /// Whether the current state represents a meaningful draft for this
+  /// composer. Edit controllers override this against their server baseline;
+  /// reply/posting keep the historical non-empty behavior.
+  bool shouldPersistDraft(TState value) => value.hasDraftContent;
+
+  /// Builds the persisted draft payload. Edit controllers can retain a
+  /// pending conflict draft without replacing it with the server projection.
+  ComposerDraftSnapshot draftSnapshotFor(TState value) {
+    return ComposerDraftSnapshot(
+      identity: draftIdentity,
+      message: value.message,
+      subject: draftSubjectFor(value),
+      extras: draftExtrasFor(value),
+      useSignature: value.useSignature,
+      updatedAt: DateTime.now(),
+      imageAttachments: value.imageAttachments,
+    );
+  }
+
   /// 子类钩子：提交成功后基类已经清空 message / 附件，子类可以在此把
   /// 业务专属字段（如发帖标题、所选分类）也重置到"空白"。默认 no-op。
   TState resetAfterSuccess(TState value) => value;
 
   /// 用户主动重置草稿时，子类清空自己的业务字段。默认只清空通用字段。
   TState resetDraftContent(TState value) => value;
+
+  /// Reset hook for editors whose empty state is a server baseline rather than
+  /// an empty composer. The default keeps the legacy reset behavior.
+  TState resetToBaseline(TState value) => resetDraftContent(value);
+
+  /// Source text that the revision tracker should use after a reset.
+  String messageForRevisionReset(TState value) => value.message;
 
   // ── 通用 mutators ─────────────────────────────────────────────
   void updateMessage(String value) {
@@ -238,7 +275,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     _imageUploadSubscription = null;
     await subscription?.cancel();
 
-    final reset = resetDraftContent(
+    final reset = resetToBaseline(
       applyPatch(
         current,
         ComposerStatePatch(
@@ -259,7 +296,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     );
     _setDataState(reset);
     _messageRevisionTracker.reset(
-      source: '',
+      source: messageForRevisionReset(reset),
       revision: current.messageRevision + 1,
     );
     final repository = _draftRepository;
@@ -297,15 +334,15 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     if (repository == null) {
       return;
     }
-    final snapshot = ComposerDraftSnapshot(
-      identity: draftIdentity,
-      message: value.message,
-      subject: draftSubjectFor(value),
-      extras: draftExtrasFor(value),
-      useSignature: value.useSignature,
-      updatedAt: DateTime.now(),
-      imageAttachments: value.imageAttachments,
-    );
+    if (!shouldPersistDraft(value)) {
+      try {
+        await _enqueueDraftWrite(() => repository.deleteDraft(draftIdentity));
+      } catch (_) {
+        // Draft cleanup is best effort and must not block leaving the editor.
+      }
+      return;
+    }
+    final snapshot = draftSnapshotFor(value);
     try {
       await _enqueueDraftWrite(() => repository.saveDraft(snapshot));
     } catch (_) {
@@ -776,9 +813,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
     final failure =
         outcome.failure ??
-        const ComposerSubmissionFailure(
+        ComposerSubmissionFailure(
           code: ComposerSubmissionFailureCode.unknown,
-          kind: ComposerKind.reply,
+          kind: composerKind,
         );
     final failed = applyPatch(
       afterSubmit,

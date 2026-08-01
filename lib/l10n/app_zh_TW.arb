@@ -1259,5 +1259,19 @@
   "threadPrototypeAdaptationFallbacks": "語意回退：{semanticFallback} · 不支援：{unsupported} · 隱藏：{concealed}",
   "@threadPrototypeAdaptationFallbacks": {"placeholders": {"semanticFallback": {"type": "int"}, "unsupported": {"type": "int"}, "concealed": {"type": "int"}}},
   "threadPrototypeMinimumContrast": "最低可見對比度：{value}",
-  "@threadPrototypeMinimumContrast": {"placeholders": {"value": {"type": "String"}}}
+  "@threadPrototypeMinimumContrast": {"placeholders": {"value": {"type": "String"}}},
+  "postEditTitle": "編輯帖子",
+  "postEditMessageHint": "帖子內容",
+  "postEditSave": "儲存",
+  "postEditSwitchToWebView": "切換到網頁編輯",
+  "postEditSwitchToNative": "返回原生編輯",
+  "postEditConflictTitle": "伺服器內容已變更",
+  "postEditConflictBody": "網頁編輯或其他裝置已修改這則帖子，請選擇要保留的版本。",
+  "postEditUseServer": "使用伺服器版本",
+  "postEditKeepLocal": "保留本地版本",
+  "postEditRestoreServer": "恢復伺服器正文",
+  "postEditVerificationFailed": "無法確認網頁編輯後的伺服器狀態，原生儲存暫不可用。",
+  "postEditNativeSubmitUnavailable": "原生儲存將在後續版本開放",
+  "postEditLeaveTitle": "離開編輯頁面？",
+  "postEditLeaveBody": "本地修改會儲存為草稿，之後可以繼續編輯。"
 }

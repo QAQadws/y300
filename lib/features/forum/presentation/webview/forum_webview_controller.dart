@@ -6,6 +6,7 @@ import 'package:y300/features/forum/data/repositories/forum_favorite_repository.
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
+import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
@@ -19,6 +20,13 @@ final forumWebViewControllerProvider =
 final forumWebViewInitialUriProvider = Provider<Uri?>((ref) => null);
 
 final forumWebViewPopOnRootBackProvider = Provider<bool>((ref) => false);
+
+final forumWebViewHostPurposeProvider = Provider<ForumWebViewHostPurpose>(
+  (ref) => ForumWebViewHostPurpose.browse,
+);
+
+final forumWebViewCompletionTargetProvider =
+    Provider<ForumWebViewCompletionTarget?>((ref) => null);
 
 class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
   late ForumWebViewNavigator _navigator;

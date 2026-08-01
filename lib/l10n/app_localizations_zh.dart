@@ -4072,6 +4072,48 @@ class AppLocalizationsZh extends AppLocalizations {
   String threadPrototypeMinimumContrast(String value) {
     return '最低可见对比度：$value';
   }
+
+  @override
+  String get postEditTitle => '编辑帖子';
+
+  @override
+  String get postEditMessageHint => '帖子内容';
+
+  @override
+  String get postEditSave => '保存';
+
+  @override
+  String get postEditSwitchToWebView => '切换到网页编辑';
+
+  @override
+  String get postEditSwitchToNative => '返回原生编辑';
+
+  @override
+  String get postEditConflictTitle => '服务器内容已变化';
+
+  @override
+  String get postEditConflictBody => '网页编辑或其他设备已经修改了这条帖子，请选择要保留的版本。';
+
+  @override
+  String get postEditUseServer => '使用服务器版本';
+
+  @override
+  String get postEditKeepLocal => '保留本地版本';
+
+  @override
+  String get postEditRestoreServer => '恢复服务器正文';
+
+  @override
+  String get postEditVerificationFailed => '无法确认网页编辑后的服务器状态，原生保存暂不可用。';
+
+  @override
+  String get postEditNativeSubmitUnavailable => '原生保存将在后续版本开放';
+
+  @override
+  String get postEditLeaveTitle => '离开编辑页面？';
+
+  @override
+  String get postEditLeaveBody => '本地修改会保存为草稿，之后可以继续编辑。';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -8143,4 +8185,46 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String threadPrototypeMinimumContrast(String value) {
     return '最低可見對比度：$value';
   }
+
+  @override
+  String get postEditTitle => '編輯帖子';
+
+  @override
+  String get postEditMessageHint => '帖子內容';
+
+  @override
+  String get postEditSave => '儲存';
+
+  @override
+  String get postEditSwitchToWebView => '切換到網頁編輯';
+
+  @override
+  String get postEditSwitchToNative => '返回原生編輯';
+
+  @override
+  String get postEditConflictTitle => '伺服器內容已變更';
+
+  @override
+  String get postEditConflictBody => '網頁編輯或其他裝置已修改這則帖子，請選擇要保留的版本。';
+
+  @override
+  String get postEditUseServer => '使用伺服器版本';
+
+  @override
+  String get postEditKeepLocal => '保留本地版本';
+
+  @override
+  String get postEditRestoreServer => '恢復伺服器正文';
+
+  @override
+  String get postEditVerificationFailed => '無法確認網頁編輯後的伺服器狀態，原生儲存暫不可用。';
+
+  @override
+  String get postEditNativeSubmitUnavailable => '原生儲存將在後續版本開放';
+
+  @override
+  String get postEditLeaveTitle => '離開編輯頁面？';
+
+  @override
+  String get postEditLeaveBody => '本地修改會儲存為草稿，之後可以繼續編輯。';
 }

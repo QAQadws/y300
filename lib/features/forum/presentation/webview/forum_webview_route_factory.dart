@@ -5,17 +5,21 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 
 typedef ForumWebViewRouteFactory =
-    Route<void> Function(ForumWebViewLaunchConfig config);
+    Route<Object?> Function(ForumWebViewLaunchConfig config);
 
 final forumWebViewRouteFactoryProvider = Provider<ForumWebViewRouteFactory>((
   ref,
 ) {
-  return (config) => MaterialPageRoute<void>(
+  return (config) => MaterialPageRoute<Object?>(
     builder: (_) => ProviderScope(
       overrides: [
         forumWebViewInitialUriProvider.overrideWithValue(config.initialUri),
         forumWebViewPopOnRootBackProvider.overrideWithValue(
           config.popOnRootBack,
+        ),
+        forumWebViewHostPurposeProvider.overrideWithValue(config.purpose),
+        forumWebViewCompletionTargetProvider.overrideWithValue(
+          config.completionTarget,
         ),
         forumWebViewDriverProvider.overrideWith((ref) {
           final factory = ref.watch(forumWebViewDriverFactoryProvider);

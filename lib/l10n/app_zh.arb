@@ -1618,5 +1618,19 @@
   "threadPrototypeAdaptationFallbacks": "语义回退：{semanticFallback} · 不支持：{unsupported} · 隐藏：{concealed}",
   "@threadPrototypeAdaptationFallbacks": {"placeholders": {"semanticFallback": {"type": "int"}, "unsupported": {"type": "int"}, "concealed": {"type": "int"}}},
   "threadPrototypeMinimumContrast": "最低可见对比度：{value}",
-  "@threadPrototypeMinimumContrast": {"placeholders": {"value": {"type": "String"}}}
+  "@threadPrototypeMinimumContrast": {"placeholders": {"value": {"type": "String"}}},
+  "postEditTitle": "编辑帖子",
+  "postEditMessageHint": "帖子内容",
+  "postEditSave": "保存",
+  "postEditSwitchToWebView": "切换到网页编辑",
+  "postEditSwitchToNative": "返回原生编辑",
+  "postEditConflictTitle": "服务器内容已变化",
+  "postEditConflictBody": "网页编辑或其他设备已经修改了这条帖子，请选择要保留的版本。",
+  "postEditUseServer": "使用服务器版本",
+  "postEditKeepLocal": "保留本地版本",
+  "postEditRestoreServer": "恢复服务器正文",
+  "postEditVerificationFailed": "无法确认网页编辑后的服务器状态，原生保存暂不可用。",
+  "postEditNativeSubmitUnavailable": "原生保存将在后续版本开放",
+  "postEditLeaveTitle": "离开编辑页面？",
+  "postEditLeaveBody": "本地修改会保存为草稿，之后可以继续编辑。"
 }
