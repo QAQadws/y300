@@ -37,7 +37,31 @@ void main() {
     );
 
     expect(find.byKey(const Key('post-edit-delete-image-12')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('post-edit-delete-image-12')));
+    final panelContent = tester.widget<Container>(
+      find.byKey(const Key('post-edit-attachment-panel-content')),
+    );
+    expect(panelContent.color, isNull);
+    expect(
+      find.descendant(
+        of: find.byType(PostEditAttachmentPanel),
+        matching: find.byWidgetPredicate((widget) {
+          final decoration = widget is DecoratedBox ? widget.decoration : null;
+          return decoration is BoxDecoration && decoration.border != null;
+        }),
+      ),
+      findsNothing,
+    );
+    final deleteButton = find.byKey(const Key('post-edit-delete-image-12'));
+    expect(tester.getSize(deleteButton), const Size.square(40));
+    final deleteVisual = find.byKey(
+      const Key('post-edit-delete-image-visual-12'),
+    );
+    expect(tester.getSize(deleteVisual), const Size.square(24));
+    final closeIcon = tester.widget<Icon>(
+      find.descendant(of: deleteVisual, matching: find.byIcon(Icons.close)),
+    );
+    expect(closeIcon.size, 14);
+    await tester.tap(deleteButton);
     await tester.pumpAndSettle();
     final l10n = AppLocalizations.of(
       tester.element(find.byType(PostEditAttachmentPanel)),
@@ -73,6 +97,47 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('keeps a large image collection scrollable in a bounded panel', (
+    tester,
+  ) async {
+    final state = PostEditComposerState.initial(
+      target: _target,
+      snapshot: _snapshot(
+        images: [
+          for (var index = 1; index <= 20; index += 1)
+            PostEditExistingImage(
+              aid: '$index',
+              imageUri: Uri.parse('https://bbs.yamibo.com/$index.jpg'),
+              isAssociated: true,
+            ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 240,
+            child: PostEditAttachmentPanel(
+              state: state,
+              resolver: const _MissingResolver(),
+              onDeleteImage: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.drag(
+      find.byType(SingleChildScrollView),
+      const Offset(0, -180),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
   });
 }
 

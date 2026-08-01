@@ -6618,12 +6618,6 @@ abstract class AppLocalizations {
   /// **'保留本地版本'**
   String get postEditKeepLocal;
 
-  /// No description provided for @postEditRestoreServer.
-  ///
-  /// In zh, this message translates to:
-  /// **'恢复服务器正文'**
-  String get postEditRestoreServer;
-
   /// No description provided for @postEditVerificationFailed.
   ///
   /// In zh, this message translates to:
@@ -6635,18 +6629,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'原生保存将在后续版本开放'**
   String get postEditNativeSubmitUnavailable;
-
-  /// No description provided for @postEditLeaveTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'离开编辑页面？'**
-  String get postEditLeaveTitle;
-
-  /// No description provided for @postEditLeaveBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'本地修改会保存为草稿，之后可以继续编辑。'**
-  String get postEditLeaveBody;
 
   /// No description provided for @postEditManageImages.
   ///
@@ -6713,12 +6695,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'正在保存帖子内容…'**
   String get postEditSubmitInProgress;
-
-  /// No description provided for @postEditDiscardAndLeave.
-  ///
-  /// In zh, this message translates to:
-  /// **'离开并丢弃修改'**
-  String get postEditDiscardAndLeave;
 
   /// No description provided for @postEditDanglingAttachmentTitle.
   ///

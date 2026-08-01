@@ -79,6 +79,9 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
                     unawaited(_pickImage());
                   },
             extraToolbarActions: extraToolbarActions,
+            onExtraActionPressed: (action) {
+              unawaited(_handleExtraToolbarAction(context, action));
+            },
           ),
           const SizedBox(height: 12),
           TextField(
@@ -97,6 +100,34 @@ class ComposerBbCodeSourceEditor extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _handleExtraToolbarAction(
+    BuildContext context,
+    ComposerToolbarAction action,
+  ) async {
+    final panelBuilder = action.panelBuilder;
+    if (panelBuilder == null) {
+      action.onPressed?.call();
+      return;
+    }
+    final mediaQuery = MediaQuery.of(context);
+    final screenHeight = mediaQuery.size.height;
+    final keyboardHeight = mediaQuery.viewInsets.bottom;
+    final preferredHeight = keyboardHeight > 0
+        ? keyboardHeight
+        : screenHeight * 0.32;
+    final panelHeight = preferredHeight
+        .clamp(240.0, screenHeight * 0.55)
+        .toDouble();
+    FocusScope.of(context).unfocus();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) =>
+          SizedBox(height: panelHeight, child: panelBuilder(sheetContext)),
     );
   }
 

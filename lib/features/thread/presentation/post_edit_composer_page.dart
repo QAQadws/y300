@@ -12,7 +12,6 @@ import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_r
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_message_editor_surface.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
@@ -37,11 +36,8 @@ class PostEditComposerPage extends ConsumerStatefulWidget {
 
 class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
   late final TextEditingController _messageController;
-  ComposerSurfacePreference _editorSurface = ComposerSurfacePreference.quill;
-  bool _didApplySurfacePreference = false;
   bool _didApplyMessage = false;
-  bool _allowPopWithoutConfirm = false;
-  bool _showAttachmentPanel = false;
+  bool _allowRoutePop = false;
   String? _lastAppliedMessage;
 
   @override
@@ -72,20 +68,17 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
     final lastStickerGroupId = ref
         .watch(stickerPickerLastGroupIdControllerProvider)
         .value;
-    final preferences = ref.watch(composerPreferencesControllerProvider);
-    if (!_didApplySurfacePreference && preferences.hasValue) {
-      _didApplySurfacePreference = true;
-      _editorSurface = preferences.value!.defaultSurface;
-    }
     if (state != null) {
       _syncMessageController(state);
     }
 
+    final needsStructuredDismissResult =
+        state?.mayHaveServerMutationOnExit ?? false;
     return PopScope(
-      canPop: _allowPopWithoutConfirm || !_shouldConfirmPop(state),
+      canPop: _allowRoutePop || !needsStructuredDismissResult,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
-          unawaited(_confirmAndPop(controller));
+          _popDismissed(state);
         }
       },
       child: Scaffold(
@@ -99,13 +92,6 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
               onPressed: state == null ? null : () => _openWebView(controller),
               style: composerAppBarActionStyle(context),
               icon: const Icon(Icons.swap_horiz),
-            ),
-            IconButton(
-              key: const Key('post-edit-more-button'),
-              tooltip: l10n.composerMore,
-              onPressed: state == null ? null : _showSettingsSheet,
-              style: composerAppBarActionStyle(context),
-              icon: const Icon(Icons.more_vert),
             ),
             IconButton(
               key: const Key('post-edit-save-button'),
@@ -126,7 +112,6 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
           ),
           data: (value) => _PostEditComposerBody(
             state: value,
-            editorSurface: _editorSurface,
             messageController: _messageController,
             bbCodeRenderer: ref.watch(forumBbCodeRendererProvider),
             stickerGroups: stickerGroups,
@@ -140,16 +125,23 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
             },
             onMessageChanged: controller.updateMessage,
             attachmentResolver: controller.attachmentResolver(value),
-            showAttachmentPanel: _showAttachmentPanel,
-            onToggleAttachmentPanel: () {
-              setState(() {
-                _showAttachmentPanel = !_showAttachmentPanel;
-              });
+            attachmentPanelBuilder: (_) {
+              return Consumer(
+                builder: (context, panelRef, _) {
+                  final panelState = panelRef.watch(provider).value ?? value;
+                  final panelController = panelRef.read(provider.notifier);
+                  return PostEditAttachmentPanel(
+                    key: const Key('post-edit-attachment-panel'),
+                    state: panelState,
+                    resolver: panelController.attachmentResolver(panelState),
+                    onDeleteImage: panelController.deleteImage,
+                  );
+                },
+              );
             },
             onImagePressed: (anchor) {
               return controller.pickImages(insertionAnchor: anchor);
             },
-            onDeleteImage: controller.deleteImage,
             onUseServerVersion: controller.useServerVersion,
             onKeepLocalVersion: controller.keepLocalVersion,
             onRetryVerification: () {
@@ -200,7 +192,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
     if (!mounted || !result.sent) {
       return;
     }
-    _allowPopWithoutConfirm = true;
+    _allowRoutePop = true;
     Navigator.of(context).pop(
       PostEditRouteResult(
         target: widget.args.target,
@@ -208,10 +200,6 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
         serverMutationPossible: true,
       ),
     );
-  }
-
-  bool _shouldConfirmPop(PostEditComposerState? state) {
-    return state?.isDirtyAgainstBaseline ?? false;
   }
 
   void _syncMessageController(PostEditComposerState state) {
@@ -227,25 +215,6 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
       selection: TextSelection.collapsed(offset: state.message.length),
     );
     _lastAppliedMessage = state.message;
-  }
-
-  void _toggleEditorSurface(PostEditComposerState state) {
-    final previous = _editorSurface;
-    final next = previous == ComposerSurfacePreference.quill
-        ? ComposerSurfacePreference.source
-        : ComposerSurfacePreference.quill;
-    setState(() {
-      if (previous == ComposerSurfacePreference.quill) {
-        _messageController.text = state.message;
-        _lastAppliedMessage = state.message;
-      }
-      _editorSurface = next;
-    });
-    unawaited(
-      ref
-          .read(composerPreferencesControllerProvider.notifier)
-          .setDefaultSurface(next),
-    );
   }
 
   Future<void> _openWebView(PostEditComposerController controller) async {
@@ -275,7 +244,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
         .value;
     if (state?.webReturnVerificationState ==
         PostEditWebReturnVerificationState.changedClean) {
-      _allowPopWithoutConfirm = true;
+      _allowRoutePop = true;
       Navigator.of(context).pop(
         PostEditRouteResult(
           target: widget.args.target,
@@ -289,92 +258,17 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
     assert(result == null || result is ForumWebViewRouteResult);
   }
 
-  Future<void> _confirmAndPop(PostEditComposerController controller) async {
-    final shouldLeave = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        final l10n = AppLocalizations.of(dialogContext);
-        return AlertDialog(
-          title: Text(l10n.postEditLeaveTitle),
-          content: Text(l10n.postEditLeaveBody),
-          actions: [
-            TextButton(
-              key: const Key('post-edit-continue-button'),
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text(l10n.composerContinueEditing),
-            ),
-            FilledButton(
-              key: const Key('post-edit-discard-leave-button'),
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(l10n.postEditDiscardAndLeave),
-            ),
-          ],
-        );
-      },
-    );
-    if (!mounted || shouldLeave != true) {
-      return;
-    }
+  void _popDismissed(PostEditComposerState? state) {
     if (!mounted) {
       return;
     }
-    _allowPopWithoutConfirm = true;
+    _allowRoutePop = true;
     Navigator.of(context).pop(
       PostEditRouteResult(
         target: widget.args.target,
         outcome: PostEditRouteOutcome.dismissed,
+        serverMutationPossible: state?.mayHaveServerMutationOnExit ?? false,
       ),
-    );
-  }
-
-  void _showSettingsSheet() {
-    final provider = postEditComposerControllerProvider(widget.args);
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) {
-        return Consumer(
-          builder: (context, ref, _) {
-            final l10n = AppLocalizations.of(context);
-            final state = ref.watch(provider).value;
-            final canReset = state != null && state.isDirtyAgainstBaseline;
-            final nextLabel = _editorSurface == ComposerSurfacePreference.quill
-                ? l10n.composerSourceMode
-                : l10n.composerVisualMode;
-            return ComposerSettingsSheet(
-              key: const Key('post-edit-settings-sheet'),
-              title: l10n.composerMoreSettings,
-              children: [
-                ComposerSettingsActionTile(
-                  tileKey: const Key('post-edit-surface-toggle'),
-                  icon: _editorSurface == ComposerSurfacePreference.quill
-                      ? Icons.code
-                      : Icons.edit_outlined,
-                  title: nextLabel,
-                  onPressed: state == null
-                      ? null
-                      : () {
-                          Navigator.of(sheetContext).pop();
-                          _toggleEditorSurface(state);
-                        },
-                ),
-                const Divider(),
-                ComposerSettingsActionTile(
-                  tileKey: const Key('post-edit-reset-baseline'),
-                  icon: Icons.restart_alt,
-                  title: l10n.postEditRestoreServer,
-                  destructive: true,
-                  onPressed: canReset
-                      ? () {
-                          Navigator.of(sheetContext).pop();
-                          unawaited(ref.read(provider.notifier).resetDraft());
-                        }
-                      : null,
-                ),
-              ],
-            );
-          },
-        );
-      },
     );
   }
 }
@@ -382,7 +276,6 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
 class _PostEditComposerBody extends StatelessWidget {
   const _PostEditComposerBody({
     required this.state,
-    required this.editorSurface,
     required this.messageController,
     required this.bbCodeRenderer,
     required this.stickerGroups,
@@ -390,17 +283,14 @@ class _PostEditComposerBody extends StatelessWidget {
     required this.onStickerGroupChanged,
     required this.onMessageChanged,
     required this.attachmentResolver,
-    required this.showAttachmentPanel,
-    required this.onToggleAttachmentPanel,
+    required this.attachmentPanelBuilder,
     required this.onImagePressed,
-    required this.onDeleteImage,
     required this.onUseServerVersion,
     required this.onKeepLocalVersion,
     required this.onRetryVerification,
   });
 
   final PostEditComposerState state;
-  final ComposerSurfacePreference editorSurface;
   final TextEditingController messageController;
   final ForumBbCodeRenderer bbCodeRenderer;
   final List<StickerGroup> stickerGroups;
@@ -408,10 +298,8 @@ class _PostEditComposerBody extends StatelessWidget {
   final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onMessageChanged;
   final ComposerAttachmentPreviewResolver attachmentResolver;
-  final bool showAttachmentPanel;
-  final VoidCallback onToggleAttachmentPanel;
+  final WidgetBuilder attachmentPanelBuilder;
   final ComposerImageInsertCallback onImagePressed;
-  final ValueChanged<String> onDeleteImage;
   final Future<void> Function() onUseServerVersion;
   final Future<void> Function() onKeepLocalVersion;
   final Future<void> Function() onRetryVerification;
@@ -426,7 +314,7 @@ class _PostEditComposerBody extends StatelessWidget {
         )
         .isNotEmpty;
     final editor = ComposerMessageEditorSurface(
-      surface: editorSurface,
+      surface: ComposerSurfacePreference.quill,
       message: state.message,
       sourceController: messageController,
       enabled: !state.isSubmitting,
@@ -444,11 +332,11 @@ class _PostEditComposerBody extends StatelessWidget {
       attachmentResolver: attachmentResolver,
       onImagePressed: onImagePressed,
       extraToolbarActions: [
-        ComposerToolbarAction(
+        ComposerToolbarAction.panel(
           key: const Key('post-edit-manage-images-button'),
           icon: Icons.photo_library_outlined,
           tooltip: l10n.postEditManageImages,
-          onPressed: onToggleAttachmentPanel,
+          panelBuilder: attachmentPanelBuilder,
         ),
       ],
     );
@@ -526,13 +414,6 @@ class _PostEditComposerBody extends StatelessWidget {
             ComposerStatusBanner.info(
               key: const Key('post-edit-deleted-image-reference-banner'),
               text: l10n.postEditDeletedImageReferenceWarning,
-            ),
-          if (showAttachmentPanel)
-            PostEditAttachmentPanel(
-              key: const Key('post-edit-attachment-panel'),
-              state: state,
-              resolver: attachmentResolver,
-              onDeleteImage: onDeleteImage,
             ),
           Expanded(child: editor),
         ],

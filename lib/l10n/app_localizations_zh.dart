@@ -4101,19 +4101,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get postEditKeepLocal => '保留本地版本';
 
   @override
-  String get postEditRestoreServer => '恢复服务器正文';
-
-  @override
   String get postEditVerificationFailed => '无法确认网页编辑后的服务器状态，原生保存暂不可用。';
 
   @override
   String get postEditNativeSubmitUnavailable => '原生保存将在后续版本开放';
-
-  @override
-  String get postEditLeaveTitle => '离开编辑页面？';
-
-  @override
-  String get postEditLeaveBody => '本地修改会保存为草稿，之后可以继续编辑。';
 
   @override
   String get postEditManageImages => '管理图片';
@@ -4147,9 +4138,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get postEditSubmitInProgress => '正在保存帖子内容…';
-
-  @override
-  String get postEditDiscardAndLeave => '离开并丢弃修改';
 
   @override
   String get postEditDanglingAttachmentTitle => '正文包含无法确认的图片引用';
@@ -8292,19 +8280,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get postEditKeepLocal => '保留本地版本';
 
   @override
-  String get postEditRestoreServer => '恢復伺服器正文';
-
-  @override
   String get postEditVerificationFailed => '無法確認網頁編輯後的伺服器狀態，原生儲存暫不可用。';
 
   @override
   String get postEditNativeSubmitUnavailable => '原生儲存將在後續版本開放';
-
-  @override
-  String get postEditLeaveTitle => '離開編輯頁面？';
-
-  @override
-  String get postEditLeaveBody => '本地修改會儲存為草稿，之後可以繼續編輯。';
 
   @override
   String get postEditManageImages => '管理圖片';
@@ -8338,9 +8317,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get postEditSubmitInProgress => '正在儲存帖子內容…';
-
-  @override
-  String get postEditDiscardAndLeave => '離開並捨棄修改';
 
   @override
   String get postEditDanglingAttachmentTitle => '正文包含無法確認的圖片引用';

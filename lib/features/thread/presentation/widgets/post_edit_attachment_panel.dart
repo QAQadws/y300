@@ -24,21 +24,30 @@ class PostEditAttachmentPanel extends StatelessWidget {
     final cards = _cards();
     return Container(
       key: const Key('post-edit-attachment-panel-content'),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: cards.isEmpty
-          ? Text(l10n.postEditNoImages)
-          : Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final card in cards)
-                  _PostEditAttachmentCard(
-                    card: card,
-                    resolver: resolver,
-                    onDelete: onDeleteImage,
-                  ),
-              ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(l10n.postEditNoImages),
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: Align(
+                alignment: AlignmentDirectional.topStart,
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final card in cards)
+                      _PostEditAttachmentCard(
+                        card: card,
+                        resolver: resolver,
+                        onDelete: onDeleteImage,
+                      ),
+                  ],
+                ),
+              ),
             ),
     );
   }
@@ -105,21 +114,12 @@ class _PostEditAttachmentCard extends StatelessWidget {
             child: Stack(
               children: [
                 Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outlineVariant,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                  child: Center(
                     child: resolution.isAvailable
-                        ? Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: ComposerAttachmentPreviewImage(
-                              resolution: resolution,
-                              maxWidth: 96,
-                              imageKey: Key('post-edit-image-$aid'),
-                            ),
+                        ? ComposerAttachmentPreviewImage(
+                            resolution: resolution,
+                            maxWidth: 96,
+                            imageKey: Key('post-edit-image-$aid'),
                           )
                         : Semantics(
                             label:
@@ -138,23 +138,13 @@ class _PostEditAttachmentCard extends StatelessWidget {
                 ),
                 if (canDelete)
                   Positioned(
-                    top: -4,
-                    right: -4,
-                    child: Semantics(
-                      button: true,
-                      label: l10n.postEditDeleteImage,
-                      child: IconButton(
-                        key: Key('post-edit-delete-image-$aid'),
-                        tooltip: l10n.postEditDeleteImage,
-                        visualDensity: VisualDensity.compact,
-                        style: IconButton.styleFrom(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.surface,
-                        ),
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => _confirmDelete(context, aid),
-                      ),
+                    top: 0,
+                    right: 0,
+                    child: _PostEditDeleteImageButton(
+                      buttonKey: Key('post-edit-delete-image-$aid'),
+                      visualKey: Key('post-edit-delete-image-visual-$aid'),
+                      tooltip: l10n.postEditDeleteImage,
+                      onPressed: () => _confirmDelete(context, aid),
                     ),
                   ),
               ],
@@ -215,5 +205,56 @@ class _PostEditAttachmentCard extends StatelessWidget {
     if (confirmed == true) {
       onDelete(aid);
     }
+  }
+}
+
+class _PostEditDeleteImageButton extends StatelessWidget {
+  const _PostEditDeleteImageButton({
+    required this.buttonKey,
+    required this.visualKey,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final Key buttonKey;
+  final Key visualKey;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        child: SizedBox.square(
+          dimension: 40,
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              key: buttonKey,
+              onTap: onPressed,
+              customBorder: const CircleBorder(),
+              child: Center(
+                child: DecoratedBox(
+                  key: visualKey,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const SizedBox.square(
+                    dimension: 24,
+                    child: Icon(Icons.close, size: 14),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

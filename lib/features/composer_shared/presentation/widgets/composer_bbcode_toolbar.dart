@@ -12,6 +12,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
     required this.onCommandSelected,
     this.onImagePressed,
     this.extraToolbarActions = const <ComposerToolbarAction>[],
+    this.onExtraActionPressed,
     this.enabled = true,
     this.keyPrefix = 'reply-composer',
   });
@@ -20,6 +21,7 @@ class ComposerBbCodeToolbar extends StatelessWidget {
   final ValueChanged<ComposerBbCodeCommand> onCommandSelected;
   final VoidCallback? onImagePressed;
   final List<ComposerToolbarAction> extraToolbarActions;
+  final ValueChanged<ComposerToolbarAction>? onExtraActionPressed;
   final bool enabled;
   final String keyPrefix;
 
@@ -103,13 +105,22 @@ class ComposerBbCodeToolbar extends StatelessWidget {
             _ToolbarIconButton(
               buttonKey: action.key,
               tooltip: action.tooltip,
-              enabled: enabled,
+              enabled: enabled && action.isAvailable,
               icon: action.icon,
-              onPressed: action.onPressed,
+              onPressed: () => _handleExtraAction(action),
             ),
         ],
       ),
     );
+  }
+
+  void _handleExtraAction(ComposerToolbarAction action) {
+    final callback = onExtraActionPressed;
+    if (callback != null) {
+      callback(action);
+      return;
+    }
+    action.onPressed?.call();
   }
 
   Future<void> _showColorSheet(BuildContext context) async {

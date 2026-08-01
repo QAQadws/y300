@@ -201,6 +201,7 @@ class _ComposerQuillEditorSurfaceState
   bool _hasScheduledAttachTokenPromotion = false;
   String? _ignoredExternalDocumentEncoding;
   ComposerQuillToolPanel? _activePanel;
+  Key? _activeExtraPanelKey;
   double _lastKeyboardHeight = 0;
   double? _pendingKeyboardToolbarOffset;
   ComposerQuillTypingStyleSnapshot? _pendingTypingStyleSnapshot;
@@ -257,12 +258,11 @@ class _ComposerQuillEditorSurfaceState
         _pendingKeyboardToolbarOffset = null;
       }
     }
-    final visiblePanel =
-        _isWaitingForKeyboardDismissForPanel && keyboardHeight > 0
-        ? null
-        : _activePanel;
-    final panelHeight = visiblePanel == null ? 0.0 : _toolPanelHeight(context);
-    final toolbarOffset = visiblePanel == null
+    final hasVisiblePanel =
+        !(_isWaitingForKeyboardDismissForPanel && keyboardHeight > 0) &&
+        _hasActiveToolPanel;
+    final panelHeight = hasVisiblePanel ? _toolPanelHeight(context) : 0.0;
+    final toolbarOffset = !hasVisiblePanel
         ? keyboardHeight > 0
               ? keyboardHeight
               : _pendingKeyboardToolbarOffset ?? 0.0
@@ -297,7 +297,7 @@ class _ComposerQuillEditorSurfaceState
               ),
             ),
           ),
-          if (visiblePanel != null)
+          if (hasVisiblePanel)
             Positioned(
               left: 0,
               right: 0,
@@ -327,6 +327,7 @@ class _ComposerQuillEditorSurfaceState
                   _toggleToolPanel(ComposerQuillToolPanel.sticker),
               onImagePressed: () => _handleImagePressed(context),
               extraToolbarActions: widget.extraToolbarActions,
+              onExtraActionPressed: _handleExtraToolbarAction,
             ),
           ),
         ],
@@ -380,6 +381,11 @@ class _ComposerQuillEditorSurfaceState
   }
 
   Widget _buildToolPanel(BuildContext context) {
+    final extraPanelKey = _activeExtraPanelKey;
+    if (extraPanelKey != null) {
+      final action = _extraPanelAction(extraPanelKey);
+      return action?.panelBuilder?.call(context) ?? const SizedBox.shrink();
+    }
     return switch (_activePanel) {
       ComposerQuillToolPanel.format => _FormatSheet(
         keyPrefix: widget.keyPrefix,
@@ -400,6 +406,18 @@ class _ComposerQuillEditorSurfaceState
       ),
       null => const SizedBox.shrink(),
     };
+  }
+
+  bool get _hasActiveToolPanel =>
+      _activePanel != null || _activeExtraPanelKey != null;
+
+  ComposerToolbarAction? _extraPanelAction(Key key) {
+    for (final action in widget.extraToolbarActions) {
+      if (action.key == key && action.panelBuilder != null) {
+        return action;
+      }
+    }
+    return null;
   }
 
   List<StickerGroup> _visibleStickerGroups() {
@@ -481,7 +499,7 @@ class _ComposerQuillEditorSurfaceState
   }
 
   void _handleEditorFocusChanged() {
-    if (!_focusNode.hasFocus || _activePanel == null) {
+    if (!_focusNode.hasFocus || !_hasActiveToolPanel) {
       return;
     }
     _closeToolPanelForEditorInput();
@@ -503,10 +521,11 @@ class _ComposerQuillEditorSurfaceState
     if (!widget.enabled) {
       return;
     }
-    if (_activePanel == panel) {
+    if (_activePanel == panel && _activeExtraPanelKey == null) {
       final panelHeight = _toolPanelHeight(context);
       setState(() {
         _activePanel = null;
+        _activeExtraPanelKey = null;
         _isWaitingForKeyboardDismissForPanel = false;
         _pendingKeyboardToolbarOffset = panelHeight;
       });
@@ -520,16 +539,49 @@ class _ComposerQuillEditorSurfaceState
     FocusScope.of(context).unfocus();
     setState(() {
       _activePanel = panel;
+      _activeExtraPanelKey = null;
+    });
+  }
+
+  void _handleExtraToolbarAction(ComposerToolbarAction action) {
+    final panelBuilder = action.panelBuilder;
+    if (panelBuilder == null) {
+      action.onPressed?.call();
+      return;
+    }
+    if (!widget.enabled) {
+      return;
+    }
+    if (_activeExtraPanelKey == action.key && _activePanel == null) {
+      final panelHeight = _toolPanelHeight(context);
+      setState(() {
+        _activePanel = null;
+        _activeExtraPanelKey = null;
+        _isWaitingForKeyboardDismissForPanel = false;
+        _pendingKeyboardToolbarOffset = panelHeight;
+      });
+      _restoreTypingStyleSnapshot();
+      _focusNode.requestFocus();
+      return;
+    }
+    _pendingKeyboardToolbarOffset = null;
+    _isWaitingForKeyboardDismissForPanel =
+        MediaQuery.viewInsetsOf(context).bottom > 0;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _activePanel = null;
+      _activeExtraPanelKey = action.key;
     });
   }
 
   void _closeToolPanelForEditorInput() {
-    if (_activePanel == null) {
+    if (!_hasActiveToolPanel) {
       return;
     }
     final panelHeight = _toolPanelHeight(context);
     setState(() {
       _activePanel = null;
+      _activeExtraPanelKey = null;
       _isWaitingForKeyboardDismissForPanel = false;
       _pendingKeyboardToolbarOffset = panelHeight;
     });
@@ -540,8 +592,11 @@ class _ComposerQuillEditorSurfaceState
     _pendingTypingStyleSnapshot = null;
     _pendingKeyboardToolbarOffset = null;
     _isWaitingForKeyboardDismissForPanel = false;
-    if (_activePanel != null) {
-      setState(() => _activePanel = null);
+    if (_hasActiveToolPanel) {
+      setState(() {
+        _activePanel = null;
+        _activeExtraPanelKey = null;
+      });
     }
   }
 
@@ -653,8 +708,9 @@ class _ComposerQuillEditorSurfaceState
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
     if (keyboardHeight > 0) {
       _lastKeyboardHeight = keyboardHeight;
-      if (_activePanel != null && !_isWaitingForKeyboardDismissForPanel) {
+      if (_hasActiveToolPanel && !_isWaitingForKeyboardDismissForPanel) {
         _activePanel = null;
+        _activeExtraPanelKey = null;
         _pendingKeyboardToolbarOffset = null;
       }
     } else {
@@ -666,6 +722,12 @@ class _ComposerQuillEditorSurfaceState
   void didUpdateWidget(covariant ComposerQuillEditorSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
+      _resetTransientInteractionState();
+    }
+    final activeExtraPanelKey = _activeExtraPanelKey;
+    if ((!widget.enabled && oldWidget.enabled) ||
+        (activeExtraPanelKey != null &&
+            _extraPanelAction(activeExtraPanelKey) == null)) {
       _resetTransientInteractionState();
     }
     if (oldWidget.bbCode != widget.bbCode ||
@@ -935,6 +997,7 @@ class _PrototypeToolbar extends StatelessWidget {
     required this.onLinkPressed,
     required this.onStickerPressed,
     required this.onImagePressed,
+    required this.onExtraActionPressed,
     this.extraToolbarActions = const <ComposerToolbarAction>[],
   });
 
@@ -946,6 +1009,7 @@ class _PrototypeToolbar extends StatelessWidget {
   final VoidCallback onLinkPressed;
   final VoidCallback onStickerPressed;
   final VoidCallback onImagePressed;
+  final ValueChanged<ComposerToolbarAction> onExtraActionPressed;
   final List<ComposerToolbarAction> extraToolbarActions;
 
   @override
@@ -1000,7 +1064,9 @@ class _PrototypeToolbar extends StatelessWidget {
                   key: action.key,
                   tooltip: action.tooltip,
                   icon: action.icon,
-                  onPressed: enabled ? action.onPressed : null,
+                  onPressed: enabled && action.isAvailable
+                      ? () => onExtraActionPressed(action)
+                      : null,
                 ),
             ],
           ),

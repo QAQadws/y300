@@ -39,6 +39,41 @@ void main() {
     expect(pressed, isTrue);
   });
 
+  testWidgets('source surface presents a reactive custom bottom panel', (
+    tester,
+  ) async {
+    final content = ValueNotifier<String>('first');
+    addTearDown(content.dispose);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _buildSurface(
+        surface: ComposerSurfacePreference.source,
+        sourceController: controller,
+        action: ComposerToolbarAction.panel(
+          key: const Key('source-panel-action'),
+          icon: Icons.collections,
+          tooltip: 'panel',
+          panelBuilder: (_) => ValueListenableBuilder<String>(
+            valueListenable: content,
+            builder: (_, value, _) =>
+                Text(value, key: const Key('source-panel-content')),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('source-panel-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('first'), findsOneWidget);
+    content.value = 'second';
+    await tester.pump();
+    expect(find.text('second'), findsOneWidget);
+  });
+
   testWidgets('injects extra toolbar action into Quill surface', (
     tester,
   ) async {
@@ -83,6 +118,35 @@ void main() {
 
     await tester.tap(find.byKey(const Key('disabled-extra-action')));
     expect(pressed, isFalse);
+  });
+
+  testWidgets('disables custom panel actions with the editor surface', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _buildSurface(
+        surface: ComposerSurfacePreference.source,
+        sourceController: controller,
+        enabled: false,
+        action: ComposerToolbarAction.panel(
+          key: const Key('disabled-panel-action'),
+          icon: Icons.collections,
+          tooltip: 'disabled panel',
+          panelBuilder: (_) =>
+              const SizedBox(key: Key('disabled-panel-content')),
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const Key('disabled-panel-action')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('disabled-panel-content')), findsNothing);
   });
 
   testWidgets(

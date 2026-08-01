@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
+import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_controller.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
@@ -42,6 +43,44 @@ void main() {
     expect(
       () => controller.draftSnapshotFor(state),
       throwsA(isA<StateError>()),
+    );
+  });
+
+  test('only remote-capable work requires a defensive refresh on exit', () {
+    final initial = PostEditComposerState.initial(
+      target: snapshot.target,
+      snapshot: snapshot,
+    );
+
+    expect(initial.mayHaveServerMutationOnExit, isFalse);
+    expect(
+      initial.copyWith(message: '仅本地修改').mayHaveServerMutationOnExit,
+      isFalse,
+    );
+    expect(
+      initial.copyWith(isUploadingImages: true).mayHaveServerMutationOnExit,
+      isTrue,
+    );
+    expect(
+      initial
+          .copyWith(submitState: PostEditSubmitState.unconfirmed)
+          .mayHaveServerMutationOnExit,
+      isTrue,
+    );
+    expect(
+      initial
+          .copyWith(serverMutationPossible: true)
+          .mayHaveServerMutationOnExit,
+      isTrue,
+    );
+    expect(
+      initial
+          .copyWith(
+            webReturnVerificationState:
+                PostEditWebReturnVerificationState.conflict,
+          )
+          .mayHaveServerMutationOnExit,
+      isTrue,
     );
   });
 }

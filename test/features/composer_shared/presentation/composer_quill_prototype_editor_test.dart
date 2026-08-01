@@ -23,6 +23,7 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_atta
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_source_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
 void main() {
@@ -162,6 +163,64 @@ void main() {
     await tester.tap(find.byKey(const Key('test-quill-format-button')));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('test-quill-tool-panel')), findsNothing);
+  });
+
+  testWidgets('custom actions share the embedded Quill tool panel', (
+    tester,
+  ) async {
+    final action = ComposerToolbarAction.panel(
+      key: const Key('test-quill-custom-panel-button'),
+      icon: Icons.collections_outlined,
+      tooltip: 'custom panel',
+      panelBuilder: (_) =>
+          const SizedBox.expand(key: Key('test-quill-custom-panel-content')),
+    );
+    await tester.pumpWidget(_buildEditor(extraToolbarActions: [action]));
+
+    await tester.tap(find.byKey(const Key('test-quill-custom-panel-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('test-quill-tool-panel')), findsOneWidget);
+    expect(
+      find.byKey(const Key('test-quill-custom-panel-content')),
+      findsOneWidget,
+    );
+    expect(_toolbarBottomGap(tester), greaterThan(200));
+
+    final updatedAction = ComposerToolbarAction.panel(
+      key: const Key('test-quill-custom-panel-button'),
+      icon: Icons.collections_outlined,
+      tooltip: 'custom panel',
+      panelBuilder: (_) =>
+          const SizedBox.expand(key: Key('test-quill-updated-panel-content')),
+    );
+    await tester.pumpWidget(_buildEditor(extraToolbarActions: [updatedAction]));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('test-quill-updated-panel-content')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('test-quill-format-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('test-quill-updated-panel-content')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('test-quill-format-sheet')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('test-quill-custom-panel-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('test-quill-format-sheet')), findsNothing);
+    expect(
+      find.byKey(const Key('test-quill-updated-panel-content')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('test-quill-custom-panel-button')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('test-quill-tool-panel')), findsNothing);
   });
 
@@ -1436,6 +1495,8 @@ Widget _buildEditor({
   ForumAttachPreviewFileExists? attachFileExists,
   List<StickerItem> stickers = const <StickerItem>[],
   List<StickerGroup> stickerGroups = const <StickerGroup>[],
+  List<ComposerToolbarAction> extraToolbarActions =
+      const <ComposerToolbarAction>[],
   String? initialStickerGroupId,
   ValueChanged<String>? onStickerGroupChanged,
   EdgeInsets viewInsets = EdgeInsets.zero,
@@ -1451,6 +1512,7 @@ Widget _buildEditor({
     attachFileExists: attachFileExists,
     stickers: stickers,
     stickerGroups: stickerGroups,
+    extraToolbarActions: extraToolbarActions,
     initialStickerGroupId: initialStickerGroupId,
     onStickerGroupChanged: onStickerGroupChanged,
   );

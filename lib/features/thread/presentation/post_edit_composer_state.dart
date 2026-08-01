@@ -108,6 +108,28 @@ final class PostEditComposerState extends ComposerStateBase {
         attachmentSession.deletedAidTombstones.isNotEmpty;
   }
 
+  /// Whether leaving should tell the thread page to refresh defensively.
+  ///
+  /// In-flight requests are included because cancelling the local listener
+  /// cannot prove that the server did not finish the operation.
+  bool get mayHaveServerMutationOnExit {
+    return serverMutationPossible ||
+        isUploadingImages ||
+        isSubmitting ||
+        pendingAttachmentAids.isNotEmpty ||
+        attachmentSession.deletingAids.isNotEmpty ||
+        submitState != PostEditSubmitState.idle ||
+        pendingConflict != null ||
+        webReturnVerificationState ==
+            PostEditWebReturnVerificationState.verifying ||
+        webReturnVerificationState ==
+            PostEditWebReturnVerificationState.changedClean ||
+        webReturnVerificationState ==
+            PostEditWebReturnVerificationState.conflict ||
+        webReturnVerificationState ==
+            PostEditWebReturnVerificationState.unconfirmed;
+  }
+
   bool get canSubmit {
     if (!nativeSupported ||
         !hasValidSubmitContract ||

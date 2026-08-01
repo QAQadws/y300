@@ -894,6 +894,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
 
     PostEditPreparation? preparation;
     try {
+      // Opening an editor is an explicit freshness boundary. Do not rely on
+      // auto-dispose timing when the same post is reopened quickly.
+      ref.invalidate(postEditPreparationProvider(target));
       preparation = await ref.read(postEditPreparationProvider(target).future);
     } catch (_) {
       // A failed preparation remains safely recoverable through WebView.
