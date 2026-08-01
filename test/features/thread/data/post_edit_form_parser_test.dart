@@ -73,6 +73,12 @@ void main() {
       );
       expect(
         parser
+            .parse('<html><body>该帖子不存在或已删除</body></html>', target: target)
+            .failure,
+        PostEditFormParseFailureReason.postDeleted,
+      );
+      expect(
+        parser
             .parse(
               _readFixture().replaceFirst(
                 'action="forum.php?mod=post&amp;action=edit',

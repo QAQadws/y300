@@ -94,6 +94,17 @@ void main() {
     );
   });
 
+  test('deleted posts remain a business failure with a stable reason', () {
+    final result = parser.parse(
+      responseUri: target.editUri,
+      body: '<div class="error">该帖子不存在或已删除</div>',
+      target: target,
+    );
+
+    expect(result.kind, PostEditSubmitResponseKind.businessFailure);
+    expect(result.detail, 'post_deleted');
+  });
+
   test('does not accept a redirect to another post', () {
     final result = parser.parse(
       responseUri: Uri.parse(

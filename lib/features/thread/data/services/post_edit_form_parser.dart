@@ -29,6 +29,11 @@ class PostEditFormParser {
         PostEditFormParseFailureReason.permissionDenied,
       );
     }
+    if (_looksLikePostDeletedPage(document)) {
+      return const PostEditFormParseResult.failure(
+        PostEditFormParseFailureReason.postDeleted,
+      );
+    }
 
     final forms = document.querySelectorAll('form#postform');
     if (forms.isEmpty) {
@@ -336,6 +341,18 @@ class PostEditFormParser {
     return body.contains('没有权限') ||
         body.contains('无权访问') ||
         body.contains('permission denied');
+  }
+
+  bool _looksLikePostDeletedPage(html_dom.Document document) {
+    final body = document.body?.text.toLowerCase() ?? '';
+    return body.contains('帖子不存在') ||
+        body.contains('主题不存在') ||
+        body.contains('帖子已删除') ||
+        body.contains('主题已删除') ||
+        body.contains('post does not exist') ||
+        body.contains('thread does not exist') ||
+        body.contains('post not found') ||
+        body.contains('thread not found');
   }
 
   html_dom.Element? _nearestAncestor(

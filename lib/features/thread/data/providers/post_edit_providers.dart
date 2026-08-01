@@ -1,12 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/thread/data/repositories/discuz_post_edit_repository.dart';
+import 'package:y300/features/thread/data/services/post_edit_contract_diagnostic_recorder.dart';
 import 'package:y300/features/thread/data/services/post_edit_form_parser.dart';
 import 'package:y300/features/thread/data/services/post_edit_remote_data_source.dart';
+import 'package:y300/features/thread/domain/models/post_edit_diagnostic_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/repositories/post_edit_repository.dart';
 import 'package:y300/features/thread/domain/services/post_edit_baseline_fingerprint_service.dart';
 import 'package:y300/features/thread/domain/services/post_edit_native_capability_classifier.dart';
+
+final postEditContractDiagnosticRecorderProvider =
+    Provider<PostEditContractDiagnosticRecorder>((ref) {
+      return DefaultPostEditContractDiagnosticRecorder(
+        writeLog: (message) => ref.watch(loggerProvider).i(message),
+      );
+    });
 
 final postEditRemoteDataSourceProvider = Provider<PostEditRemoteDataSource>((
   ref,
@@ -27,6 +36,7 @@ final postEditRepositoryProvider = Provider<PostEditRepository>((ref) {
     remoteDataSource: ref.watch(postEditRemoteDataSourceProvider),
     formParser: ref.watch(postEditFormParserProvider),
     capabilityClassifier: ref.watch(postEditNativeCapabilityClassifierProvider),
+    diagnosticRecorder: ref.watch(postEditContractDiagnosticRecorderProvider),
   );
 });
 

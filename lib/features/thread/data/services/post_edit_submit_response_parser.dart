@@ -44,6 +44,12 @@ final class PostEditSubmitResponseParser {
         kind: PostEditSubmitResponseKind.permissionFailure,
       );
     }
+    if (_containsPostDeleted(body)) {
+      return const PostEditSubmitResponse(
+        kind: PostEditSubmitResponseKind.businessFailure,
+        detail: 'post_deleted',
+      );
+    }
 
     final normalized = body.toLowerCase();
     final hasStableSuccessKey = _successKeys.any(normalized.contains);
@@ -181,6 +187,18 @@ final class PostEditSubmitResponseParser {
         normalized.contains('无权') ||
         normalized.contains('没有权限') ||
         normalized.contains('permission denied');
+  }
+
+  bool _containsPostDeleted(String body) {
+    final normalized = body.toLowerCase();
+    return normalized.contains('帖子不存在') ||
+        normalized.contains('主题不存在') ||
+        normalized.contains('帖子已删除') ||
+        normalized.contains('主题已删除') ||
+        normalized.contains('post does not exist') ||
+        normalized.contains('thread does not exist') ||
+        normalized.contains('post not found') ||
+        normalized.contains('thread not found');
   }
 
   bool _looksLikeBusinessError(String body) {

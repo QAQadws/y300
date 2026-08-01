@@ -1,14 +1,20 @@
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
+import 'package:y300/core/network/yamibo/yamibo_uri_redactor.dart';
 
 class YamiboRequestLogger {
-  const YamiboRequestLogger({required Logger logger, bool enableLog = true})
-    : _logger = logger,
-      _enableLog = enableLog;
+  const YamiboRequestLogger({
+    required Logger logger,
+    bool enableLog = true,
+    YamiboUriRedactor uriRedactor = const YamiboUriRedactor(),
+  }) : _logger = logger,
+       _enableLog = enableLog,
+       _uriRedactor = uriRedactor;
 
   final Logger _logger;
   final bool _enableLog;
+  final YamiboUriRedactor _uriRedactor;
 
   void logSuccess({
     required YamiboRequestContext context,
@@ -24,7 +30,8 @@ class YamiboRequestLogger {
     }
     _logger.i(
       '[YamiboHTTP][${_kindName(context.kind)}][${context.operation}] '
-      '$method $uri -> ${statusCode ?? 'unknown'} ${elapsedMs}ms '
+      '$method ${_uriRedactor.redact(uri)} -> '
+      '${statusCode ?? 'unknown'} ${elapsedMs}ms '
       'requestId=$requestId '
       'body=${describeBody(body)}',
     );
@@ -44,7 +51,8 @@ class YamiboRequestLogger {
     }
     _logger.w(
       '[YamiboHTTP][${_kindName(context.kind)}][${context.operation}] '
-      '$method $uri -> failed ${statusCode ?? 'unknown'} ${elapsedMs}ms '
+      '$method ${_uriRedactor.redact(uri)} -> failed '
+      '${statusCode ?? 'unknown'} ${elapsedMs}ms '
       'requestId=$requestId '
       'error=${error.type.name}',
     );

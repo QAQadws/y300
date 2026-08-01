@@ -12,6 +12,7 @@ import 'package:y300/features/composer_shared/presentation/controllers/composer_
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/thread/data/providers/post_edit_providers.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
+import 'package:y300/features/thread/domain/models/post_edit_diagnostic_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
 import 'package:y300/features/thread/domain/services/post_edit_attachment_session_resolver.dart';
@@ -38,8 +39,10 @@ final class PostEditComposerController
       const PostEditSubmitVerificationService();
   final PostEditMessageCanonicalizer _messageCanonicalizer =
       const PostEditMessageCanonicalizer();
-  int _attachmentOperationGeneration = 0;
+  int _prepareGeneration = 0;
+  int _webReconcileGeneration = 0;
   int _submitGeneration = 0;
+  final Map<String, int> _deleteGenerationByAid = <String, int>{};
   String? _lastUncertainSubmitMessage;
   List<String> _lastUncertainSubmitAttachNewAids = const <String>[];
 
@@ -61,10 +64,18 @@ final class PostEditComposerController
   @override
   void onAfterBuild(PostEditComposerState initial) {
     ref.onDispose(() {
-      _attachmentOperationGeneration += 1;
+      _prepareGeneration += 1;
+      _webReconcileGeneration += 1;
       _submitGeneration += 1;
+      for (final aid in _deleteGenerationByAid.keys.toList()) {
+        _deleteGenerationByAid[aid] = _nextGeneration(
+          _deleteGenerationByAid[aid],
+        );
+      }
     });
   }
+
+  int _nextGeneration(int? current) => (current ?? 0) + 1;
 
   @override
   Future<PostEditComposerState> buildInitialState({
@@ -85,6 +96,15 @@ final class PostEditComposerController
     PostEditComposerState current,
     ComposerStatePatch patch,
   ) {
+    if (patch.message != null || patch.imageAttachments != null) {
+      // A local edit invalidates a pending server read. A response based on
+      // the previous message must never replace the current editor state.
+      _webReconcileGeneration += 1;
+      if (current.isSubmitting ||
+          current.submitState != PostEditSubmitState.idle) {
+        _submitGeneration += 1;
+      }
+    }
     if (patch.message != null) {
       _lastUncertainSubmitMessage = null;
       _lastUncertainSubmitAttachNewAids = const <String>[];
@@ -185,6 +205,10 @@ final class PostEditComposerController
   }) async {
     final generation = ++_submitGeneration;
     if (!_isCurrentSubmitGeneration(generation)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'submit',
+      );
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
     setStateValue(
@@ -229,12 +253,20 @@ final class PostEditComposerController
     }
 
     if (!_isCurrentSubmitGeneration(generation)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'submit',
+      );
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
     final result = await ref
         .read(postEditRepositoryProvider)
         .submit(payload, target: current.target);
     if (!_isCurrentSubmitGeneration(generation)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'submit',
+      );
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
     if (result case ApiFailure<PostEditSubmitResponse>(:final error)) {
@@ -309,13 +341,23 @@ final class PostEditComposerController
     PostEditComposerState current, {
     required int generation,
   }) async {
+    final prepareGeneration = ++_prepareGeneration;
     final preparation = await ref
         .read(postEditRepositoryProvider)
         .loadForm(current.target);
-    if (!_isCurrentSubmitGeneration(generation)) {
+    if (!_isCurrentSubmitGeneration(generation) ||
+        !_isCurrentPrepareGeneration(prepareGeneration, current.target)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'formhash_refresh',
+      );
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
     if (preparation case ApiFailure<PostEditPreparation>()) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.readbackFailure,
+        operation: 'formhash_refresh',
+      );
       return _markUnconfirmed(
         current,
         generation: generation,
@@ -325,6 +367,10 @@ final class PostEditComposerController
     final next = (preparation as ApiSuccess<PostEditPreparation>).data;
     final snapshot = next.snapshot;
     if (snapshot == null || !next.isNativeSupported) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.contractChanged,
+        operation: 'formhash_refresh',
+      );
       return _markUnconfirmed(
         current,
         generation: generation,
@@ -384,17 +430,32 @@ final class PostEditComposerController
     required int generation,
     String? submittedMessage,
   }) async {
-    if (!_isCurrentSubmitGeneration(generation)) {
+    final prepareGeneration = ++_prepareGeneration;
+    if (!_isCurrentSubmitGeneration(generation) ||
+        !_isCurrentPrepareGeneration(prepareGeneration, current.target)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'submit_verification',
+      );
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
     setStateValue(current.copyWith(submitState: PostEditSubmitState.verifying));
     final readback = await ref
         .read(postEditRepositoryProvider)
         .loadForm(current.target);
-    if (!_isCurrentSubmitGeneration(generation)) {
+    if (!_isCurrentSubmitGeneration(generation) ||
+        !_isCurrentPrepareGeneration(prepareGeneration, current.target)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'submit_verification',
+      );
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
     if (readback case ApiFailure<PostEditPreparation>()) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.readbackFailure,
+        operation: 'submit_verification',
+      );
       return _markUnconfirmed(
         current,
         generation: generation,
@@ -404,6 +465,10 @@ final class PostEditComposerController
     final preparation = (readback as ApiSuccess<PostEditPreparation>).data;
     final snapshot = preparation.snapshot;
     if (snapshot == null || !preparation.isNativeSupported) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.contractChanged,
+        operation: 'submit_verification',
+      );
       return _markUnconfirmed(
         current,
         generation: generation,
@@ -463,6 +528,10 @@ final class PostEditComposerController
     PostEditFormSnapshot? snapshot,
   }) {
     if (!_isCurrentSubmitGeneration(generation)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'submit_success',
+      );
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
     final next = snapshot == null
@@ -487,6 +556,10 @@ final class PostEditComposerController
     required PostEditFormSnapshot? snapshot,
   }) async {
     if (!_isCurrentSubmitGeneration(generation)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'submit_partial',
+      );
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
     final next = snapshot == null
@@ -512,8 +585,16 @@ final class PostEditComposerController
     required int generation,
   }) async {
     if (!_isCurrentSubmitGeneration(generation)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'submit_conflict',
+      );
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
+    _recordDiagnostic(
+      PostEditContractReasonCode.ambiguousResult,
+      operation: 'submit_conflict',
+    );
     setStateValue(
       _replaceSnapshotKeepingLocal(current, snapshot).copyWith(
         pendingConflict: _captureConflict(current, snapshot),
@@ -536,8 +617,16 @@ final class PostEditComposerController
     bool? nativeSupported,
   }) async {
     if (!_isCurrentSubmitGeneration(generation)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'submit_unconfirmed',
+      );
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
+    _recordDiagnostic(
+      _reasonForUnconfirmedDetail(detail),
+      operation: 'submit_unconfirmed',
+    );
     setStateValue(
       current.copyWith(
         submitState: PostEditSubmitState.unconfirmed,
@@ -590,6 +679,68 @@ final class PostEditComposerController
     return generation == _submitGeneration;
   }
 
+  bool _isCurrentPrepareGeneration(int generation, PostEditTarget target) {
+    return generation == _prepareGeneration && _ownsTarget(target);
+  }
+
+  bool _ownsTarget(PostEditTarget target) {
+    return target == _args.target;
+  }
+
+  bool _isCurrentWebReconcileGeneration(
+    int generation,
+    int prepareGeneration,
+    PostEditTarget target,
+  ) {
+    return generation == _webReconcileGeneration &&
+        _isCurrentPrepareGeneration(prepareGeneration, target);
+  }
+
+  bool _isCurrentDeleteGeneration(
+    String aid,
+    int generation,
+    PostEditTarget target,
+  ) {
+    return _deleteGenerationByAid[aid] == generation && _ownsTarget(target);
+  }
+
+  PostEditContractReasonCode _reasonForUnconfirmedDetail(String? detail) {
+    final normalized = detail?.trim().toLowerCase() ?? '';
+    if (normalized.contains('formhash')) {
+      return PostEditContractReasonCode.formExpired;
+    }
+    if (normalized.contains('verification') ||
+        normalized.contains('readback')) {
+      return PostEditContractReasonCode.readbackFailure;
+    }
+    if (normalized.contains('not_supported')) {
+      return PostEditContractReasonCode.contractChanged;
+    }
+    if (normalized.contains('conflict')) {
+      return PostEditContractReasonCode.ambiguousResult;
+    }
+    return PostEditContractReasonCode.unconfirmed;
+  }
+
+  void _recordDiagnostic(
+    PostEditContractReasonCode reasonCode, {
+    required String operation,
+  }) {
+    try {
+      ref
+          .read(postEditContractDiagnosticRecorderProvider)
+          .record(
+            PostEditContractDiagnosticEvent(
+              operation: operation,
+              reasonCode: reasonCode,
+              target: _args.target,
+            ),
+          );
+    } catch (_) {
+      // Diagnostics are best effort and must never affect editor state.
+    }
+  }
+
   bool _usesSignatureFromSnapshot() {
     for (final field in _args.snapshot.successfulControls) {
       if (field.name.trim().toLowerCase() == 'usesig') {
@@ -635,6 +786,8 @@ final class PostEditComposerController
     if (current == null) {
       return;
     }
+    final webGeneration = ++_webReconcileGeneration;
+    final prepareGeneration = ++_prepareGeneration;
     setStateValue(
       current.copyWith(
         webReturnVerificationState:
@@ -645,7 +798,16 @@ final class PostEditComposerController
         .read(postEditRepositoryProvider)
         .loadForm(current.target);
     final latest = state.value ?? latestState;
-    if (latest == null) {
+    if (latest == null ||
+        !_isCurrentWebReconcileGeneration(
+          webGeneration,
+          prepareGeneration,
+          current.target,
+        )) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'web_reconcile',
+      );
       return;
     }
     if (result case ApiFailure<PostEditPreparation>()) {
@@ -719,6 +881,8 @@ final class PostEditComposerController
     if (current == null || conflict == null) {
       return;
     }
+    _webReconcileGeneration += 1;
+    _prepareGeneration += 1;
     setStateValue(
       current.copyWith(
         snapshot: conflict.latestSnapshot,
@@ -745,6 +909,8 @@ final class PostEditComposerController
     if (current == null || conflict == null) {
       return;
     }
+    _webReconcileGeneration += 1;
+    _prepareGeneration += 1;
     final localSession = conflict.localAttachmentSession.copyWith(
       existingImagesByAid: {
         for (final image in conflict.latestSnapshot.existingImages)
@@ -795,7 +961,8 @@ final class PostEditComposerController
       return;
     }
 
-    final operation = ++_attachmentOperationGeneration;
+    final operation = _nextGeneration(_deleteGenerationByAid[normalizedAid]);
+    _deleteGenerationByAid[normalizedAid] = operation;
     setStateValue(
       current.copyWith(
         attachmentSession: current.attachmentSession.copyWith(
@@ -819,7 +986,11 @@ final class PostEditComposerController
             expectedBaselineFingerprint: current.baselineFingerprint,
           ),
         );
-    if (operation != _attachmentOperationGeneration) {
+    if (!_isCurrentDeleteGeneration(normalizedAid, operation, current.target)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'delete_attachment',
+      );
       return;
     }
     final latest = state.value ?? latestState;
@@ -864,7 +1035,11 @@ final class PostEditComposerController
     final readback = await ref
         .read(postEditRepositoryProvider)
         .loadForm(current.target);
-    if (operation != _attachmentOperationGeneration) {
+    if (!_isCurrentDeleteGeneration(aid, operation, current.target)) {
+      _recordDiagnostic(
+        PostEditContractReasonCode.staleGeneration,
+        operation: 'delete_reconcile',
+      );
       return;
     }
     final latest = state.value ?? latestState;
@@ -899,13 +1074,19 @@ final class PostEditComposerController
         ...latest.attachmentSession.deletedAidTombstones,
         if (!aidStillExists || confirmedByResponse) aid,
       };
+      final remoteImages = snapshot.existingImages.where(
+        (image) => !tombstones.contains(image.aid),
+      );
       setStateValue(
         latest.copyWith(
           snapshot: snapshot,
           baselineMessage: snapshot.rawMessage,
           baselineFingerprint: snapshot.baselineFingerprint,
           attachmentSession: PostEditAttachmentSession.fromImages(
-            snapshot.existingImages,
+            remoteImages,
+            deletingAids: latest.attachmentSession.deletingAids.difference(
+              <String>{aid},
+            ),
             deletedAidTombstones: tombstones,
           ),
           lastAttachmentDeleteOutcome: confirmedByResponse || !aidStillExists
@@ -935,6 +1116,10 @@ final class PostEditComposerController
         attachmentVerificationUnconfirmed: true,
         serverMutationPossible: true,
       ),
+    );
+    _recordDiagnostic(
+      PostEditContractReasonCode.readbackFailure,
+      operation: 'delete_reconcile',
     );
   }
 }

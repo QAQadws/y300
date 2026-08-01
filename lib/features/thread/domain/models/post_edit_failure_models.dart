@@ -13,6 +13,7 @@ enum PostEditFallbackReason {
   unknownSuccessfulControl,
   authenticationRequired,
   permissionDenied,
+  postDeleted,
   contractChanged,
 }
 
@@ -33,6 +34,7 @@ enum PostEditFormParseFailureReason {
   missingForm,
   authenticationRequired,
   permissionDenied,
+  postDeleted,
   duplicateForm,
   invalidMethod,
   invalidEnctype,
