@@ -4144,6 +4144,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get postEditDeletedImageReferenceWarning => '正文仍包含已删除图片代码。';
+
+  @override
+  String get postEditSubmitInProgress => '正在保存帖子内容…';
+
+  @override
+  String get postEditDiscardAndLeave => '离开并丢弃修改';
+
+  @override
+  String get postEditDanglingAttachmentTitle => '正文包含无法确认的图片引用';
+
+  @override
+  String get postEditDanglingAttachmentBody =>
+      '部分图片引用无法关联到当前可用附件，仍要继续保存吗？正文不会被自动修改。';
+
+  @override
+  String get postEditDanglingAttachmentConfirm => '继续保存';
+
+  @override
+  String get postEditPartialSuccess => '正文已保存，但部分新图片未能确认关联，请检查后再试。';
+
+  @override
+  String get postEditSubmitUnconfirmed => '保存结果未确认，已暂时停用原生保存。请重新验证服务器版本。';
+
+  @override
+  String get postEditRetryVerification => '重新验证';
+
+  @override
+  String get postEditFormExpired => '编辑表单已过期，正在重新获取后重试一次。';
+
+  @override
+  String get postEditPermissionDenied => '没有权限保存此帖子。';
+
+  @override
+  String get postEditAuthenticationRequired => '登录状态已失效，请重新登录后再试。';
+
+  @override
+  String get postEditSubmitFailed => '帖子保存失败，当前内容已保留。';
+
+  @override
+  String postEditLoadFailed(String error) {
+    return '读取帖子编辑表单失败：$error';
+  }
+
+  @override
+  String get postEditServerVersion => '服务器版本';
+
+  @override
+  String get postEditLocalVersion => '本地版本';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -8287,4 +8335,52 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get postEditDeletedImageReferenceWarning => '正文仍包含已刪除圖片代碼。';
+
+  @override
+  String get postEditSubmitInProgress => '正在儲存帖子內容…';
+
+  @override
+  String get postEditDiscardAndLeave => '離開並捨棄修改';
+
+  @override
+  String get postEditDanglingAttachmentTitle => '正文包含無法確認的圖片引用';
+
+  @override
+  String get postEditDanglingAttachmentBody =>
+      '部分圖片引用無法關聯到目前可用附件，仍要繼續儲存嗎？正文不會被自動修改。';
+
+  @override
+  String get postEditDanglingAttachmentConfirm => '繼續儲存';
+
+  @override
+  String get postEditPartialSuccess => '正文已儲存，但部分新圖片未能確認關聯，請檢查後再試。';
+
+  @override
+  String get postEditSubmitUnconfirmed => '儲存結果未確認，已暫時停用原生儲存。請重新驗證伺服器版本。';
+
+  @override
+  String get postEditRetryVerification => '重新驗證';
+
+  @override
+  String get postEditFormExpired => '編輯表單已過期，正在重新取得後重試一次。';
+
+  @override
+  String get postEditPermissionDenied => '沒有權限儲存此帖子。';
+
+  @override
+  String get postEditAuthenticationRequired => '登入狀態已失效，請重新登入後再試。';
+
+  @override
+  String get postEditSubmitFailed => '帖子儲存失敗，目前內容已保留。';
+
+  @override
+  String postEditLoadFailed(String error) {
+    return '讀取帖子編輯表單失敗：$error';
+  }
+
+  @override
+  String get postEditServerVersion => '伺服器版本';
+
+  @override
+  String get postEditLocalVersion => '本地版本';
 }

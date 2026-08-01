@@ -4,6 +4,7 @@ import 'package:y300/features/composer_shared/domain/models/composer_insertion_m
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
+import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
 
 final class PostEditComposerArgs {
   PostEditComposerArgs({required this.preparation})
@@ -21,6 +22,7 @@ final class PostEditComposerState extends ComposerStateBase {
     required this.snapshot,
     required this.baselineMessage,
     required this.baselineFingerprint,
+    this.nativeSupported = true,
     required super.message,
     required super.useSignature,
     required super.isSubmitting,
@@ -35,6 +37,10 @@ final class PostEditComposerState extends ComposerStateBase {
     this.serverMutationPossible = false,
     this.lastAttachmentDeleteOutcome,
     this.attachmentVerificationUnconfirmed = false,
+    this.submitState = PostEditSubmitState.idle,
+    this.lastSubmitOutcome,
+    this.submitBlocked = false,
+    this.confirmedOverwriteIntent = false,
     super.messageRevision,
     super.lastMessageMutation,
     super.pendingAttachmentAids,
@@ -48,8 +54,9 @@ final class PostEditComposerState extends ComposerStateBase {
     required PostEditFormSnapshot snapshot,
     String? message,
     bool useSignature = true,
+    bool nativeSupported = true,
     bool restoredDraft = false,
-    PostEditDraftConflict? pendingConflict,
+    PostEditConflictState? pendingConflict,
     List<ComposerImageAttachment> imageAttachments =
         const <ComposerImageAttachment>[],
     Set<String> deletedAidTombstones = const <String>{},
@@ -59,6 +66,7 @@ final class PostEditComposerState extends ComposerStateBase {
       snapshot: snapshot,
       baselineMessage: snapshot.rawMessage,
       baselineFingerprint: snapshot.baselineFingerprint,
+      nativeSupported: nativeSupported,
       message: message ?? snapshot.rawMessage,
       useSignature: useSignature,
       isSubmitting: false,
@@ -79,12 +87,17 @@ final class PostEditComposerState extends ComposerStateBase {
   final PostEditFormSnapshot snapshot;
   final String baselineMessage;
   final String baselineFingerprint;
+  final bool nativeSupported;
   final PostEditAttachmentSession attachmentSession;
   final PostEditWebReturnVerificationState webReturnVerificationState;
-  final PostEditDraftConflict? pendingConflict;
+  final PostEditConflictState? pendingConflict;
   final bool serverMutationPossible;
   final PostEditAttachmentDeleteOutcome? lastAttachmentDeleteOutcome;
   final bool attachmentVerificationUnconfirmed;
+  final PostEditSubmitState submitState;
+  final PostEditSubmitResponseKind? lastSubmitOutcome;
+  final bool submitBlocked;
+  final bool confirmedOverwriteIntent;
 
   bool get isDirtyAgainstBaseline {
     return message != baselineMessage ||
@@ -95,7 +108,42 @@ final class PostEditComposerState extends ComposerStateBase {
         attachmentSession.deletedAidTombstones.isNotEmpty;
   }
 
-  bool get canSubmit => false;
+  bool get canSubmit {
+    if (!nativeSupported ||
+        !hasValidSubmitContract ||
+        !isDirtyAgainstBaseline ||
+        isSubmitting ||
+        isUploadingImages ||
+        pendingAttachmentAids.isNotEmpty ||
+        attachmentSession.deletingAids.isNotEmpty ||
+        attachmentVerificationUnconfirmed ||
+        submitBlocked ||
+        submitState == PostEditSubmitState.submitting ||
+        submitState == PostEditSubmitState.verifying ||
+        submitState == PostEditSubmitState.unconfirmed ||
+        pendingConflict != null) {
+      return false;
+    }
+    return true;
+  }
+
+  bool get hasValidSubmitContract {
+    if (snapshot.target != target) {
+      return false;
+    }
+    final values = snapshot.submitUri.queryParametersAll;
+    return _singleQueryValue(values, 'mod')?.toLowerCase() == 'post' &&
+        _singleQueryValue(values, 'action')?.toLowerCase() == 'edit' &&
+        _singleQueryValue(values, 'editsubmit')?.toLowerCase() == 'yes';
+  }
+
+  String? _singleQueryValue(Map<String, List<String>> values, String name) {
+    final entries = values[name];
+    if (entries == null || entries.length != 1) {
+      return null;
+    }
+    return entries.single;
+  }
 
   PostEditComposerState copyWith({
     String? message,
@@ -116,17 +164,23 @@ final class PostEditComposerState extends ComposerStateBase {
     PostEditFormSnapshot? snapshot,
     String? baselineMessage,
     String? baselineFingerprint,
+    bool? nativeSupported,
     PostEditWebReturnVerificationState? webReturnVerificationState,
-    PostEditDraftConflict? pendingConflict,
+    PostEditConflictState? pendingConflict,
     bool? serverMutationPossible,
     PostEditAttachmentDeleteOutcome? lastAttachmentDeleteOutcome,
     bool? attachmentVerificationUnconfirmed,
+    PostEditSubmitState? submitState,
+    PostEditSubmitResponseKind? lastSubmitOutcome,
+    bool? submitBlocked,
+    bool? confirmedOverwriteIntent,
     bool clearPendingConflict = false,
     bool clearFailure = false,
     bool clearImageUploadFailure = false,
     bool clearLastMessageMutation = false,
     bool clearPendingAttachmentNotice = false,
     bool clearLastAttachmentDeleteOutcome = false,
+    bool clearLastSubmitOutcome = false,
   }) {
     final nextSnapshot = snapshot ?? this.snapshot;
     return PostEditComposerState(
@@ -134,6 +188,7 @@ final class PostEditComposerState extends ComposerStateBase {
       snapshot: nextSnapshot,
       baselineMessage: baselineMessage ?? this.baselineMessage,
       baselineFingerprint: baselineFingerprint ?? this.baselineFingerprint,
+      nativeSupported: nativeSupported ?? this.nativeSupported,
       message: message ?? this.message,
       useSignature: useSignature ?? this.useSignature,
       isSubmitting: isSubmitting ?? this.isSubmitting,
@@ -169,6 +224,13 @@ final class PostEditComposerState extends ComposerStateBase {
       attachmentVerificationUnconfirmed:
           attachmentVerificationUnconfirmed ??
           this.attachmentVerificationUnconfirmed,
+      submitState: submitState ?? this.submitState,
+      lastSubmitOutcome: clearLastSubmitOutcome
+          ? null
+          : lastSubmitOutcome ?? this.lastSubmitOutcome,
+      submitBlocked: submitBlocked ?? this.submitBlocked,
+      confirmedOverwriteIntent:
+          confirmedOverwriteIntent ?? this.confirmedOverwriteIntent,
     );
   }
 }

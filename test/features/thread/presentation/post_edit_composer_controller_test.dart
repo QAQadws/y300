@@ -1,9 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
-import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_controller.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 
@@ -15,88 +13,37 @@ void main() {
     snapshot: snapshot,
   );
 
-  test(
-    'uses the edit identity and keeps a clean baseline out of drafts',
-    () async {
-      final controller = PostEditComposerController(
-        PostEditComposerArgs(preparation: preparation),
-      );
-      final state = await controller.buildInitialState(
-        restoredDraft: null,
-        preferences: ComposerPreferences.defaults(),
-      );
-
-      expect(controller.composerKind, ComposerKind.postEdit);
-      expect(controller.draftIdentity.storageKey, 'edit:5:557857:41587383');
-      expect(state.message, snapshot.rawMessage);
-      expect(state.isDirtyAgainstBaseline, isFalse);
-      expect(controller.shouldPersistDraft(state), isFalse);
-    },
-  );
-
-  test('restores a draft only when its baseline fingerprint matches', () async {
+  test('starts every edit session from the current server message', () async {
     final controller = PostEditComposerController(
       PostEditComposerArgs(preparation: preparation),
     );
-    final draft = ComposerDraftSnapshot(
-      identity: controller.draftIdentity,
-      message: '本地修改',
-      useSignature: false,
-      updatedAt: DateTime.utc(2026, 8, 1),
-      extras: const <String, String>{'baselineFingerprint': 'fp-1'},
-    );
-
-    final restored = await controller.buildInitialState(
-      restoredDraft: draft,
+    final state = await controller.buildInitialState(
+      restoredDraft: null,
       preferences: ComposerPreferences.defaults(),
     );
-    expect(restored.message, '本地修改');
-    expect(restored.restoredDraft, isTrue);
-    expect(restored.pendingConflict, isNull);
 
-    final conflict = await controller.buildInitialState(
-      restoredDraft: draft.copyWithForTest(
-        extras: const <String, String>{'baselineFingerprint': 'old-fp'},
-      ),
-      preferences: ComposerPreferences.defaults(),
-    );
-    expect(conflict.message, snapshot.rawMessage);
-    expect(conflict.restoredDraft, isFalse);
-    expect(conflict.pendingConflict, isNotNull);
-    expect(controller.shouldPersistDraft(conflict), isTrue);
-    expect(controller.draftSnapshotFor(conflict).message, '本地修改');
+    expect(controller.composerKind, ComposerKind.postEdit);
+    expect(controller.draftsEnabled, isFalse);
+    expect(controller.draftIdentity, isNull);
+    expect(state.message, snapshot.rawMessage);
+    expect(state.isDirtyAgainstBaseline, isFalse);
+    expect(controller.shouldPersistDraft(state), isFalse);
   });
 
-  test(
-    'restores attachment tombstones without moving remote images into uploads',
-    () async {
-      final controller = PostEditComposerController(
-        PostEditComposerArgs(preparation: preparation),
-      );
-      final draft = ComposerDraftSnapshot(
-        identity: controller.draftIdentity,
-        message: snapshot.rawMessage,
-        useSignature: true,
-        updatedAt: DateTime.utc(2026, 8, 1),
-        extras: const <String, String>{
-          'baselineFingerprint': 'fp-1',
-          'deletedAidTombstones': '["123"]',
-        },
-      );
+  test('does not expose an edit draft snapshot', () async {
+    final controller = PostEditComposerController(
+      PostEditComposerArgs(preparation: preparation),
+    );
+    final state = await controller.buildInitialState(
+      restoredDraft: null,
+      preferences: ComposerPreferences.defaults(),
+    );
 
-      final restored = await controller.buildInitialState(
-        restoredDraft: draft,
-        preferences: ComposerPreferences.defaults(),
-      );
-      expect(restored.attachmentSession.deletedAidTombstones, {'123'});
-      expect(restored.imageAttachments, isEmpty);
-      expect(controller.uploadFid, '5');
-      expect(
-        controller.attachmentResolver(restored).resolve('123').availability,
-        ComposerAttachmentAvailability.deleted,
-      );
-    },
-  );
+    expect(
+      () => controller.draftSnapshotFor(state),
+      throwsA(isA<StateError>()),
+    );
+  });
 }
 
 PostEditFormSnapshot _snapshot() {
@@ -118,25 +65,17 @@ PostEditFormSnapshot _snapshot() {
     postTime: '1700000000',
     rawMessage: '服务器正文',
     originalSubject: '标题',
-    successfulControls: const <PostEditFormField>[],
+    successfulControls: const <PostEditFormField>[
+      PostEditFormField(
+        name: 'message',
+        value: '服务器正文',
+        controlKind: PostEditFormControlKind.textarea,
+      ),
+    ],
     existingImages: const <PostEditExistingImage>[],
     structureEvidence: PostEditFormStructureEvidence(
-      allNamedControlNamesInDomOrder: const <String>[],
+      allNamedControlNamesInDomOrder: const <String>['message'],
     ),
     baselineFingerprint: 'fp-1',
   );
-}
-
-extension on ComposerDraftSnapshot {
-  ComposerDraftSnapshot copyWithForTest({Map<String, String>? extras}) {
-    return ComposerDraftSnapshot(
-      identity: identity,
-      message: message,
-      useSignature: useSignature,
-      updatedAt: updatedAt,
-      subject: subject,
-      extras: extras ?? this.extras,
-      imageAttachments: imageAttachments,
-    );
-  }
 }

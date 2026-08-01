@@ -13,8 +13,11 @@ import 'package:y300/features/composer_shared/presentation/controllers/composer_
 import 'package:y300/features/thread/data/providers/post_edit_providers.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
-import 'package:y300/features/thread/domain/services/post_edit_draft_extras_codec.dart';
+import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
 import 'package:y300/features/thread/domain/services/post_edit_attachment_session_resolver.dart';
+import 'package:y300/features/thread/domain/services/post_edit_message_canonicalizer.dart';
+import 'package:y300/features/thread/domain/services/post_edit_submit_payload_builder.dart';
+import 'package:y300/features/thread/domain/services/post_edit_submit_verification_service.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 
 final postEditComposerControllerProvider = AsyncNotifierProvider.autoDispose
@@ -29,62 +32,51 @@ final class PostEditComposerController
   PostEditComposerController(this._args);
 
   final PostEditComposerArgs _args;
-  final PostEditDraftExtrasCodec _extrasCodec =
-      const PostEditDraftExtrasCodec();
+  final PostEditSubmitPayloadBuilder _payloadBuilder =
+      const PostEditSubmitPayloadBuilder();
+  final PostEditSubmitVerificationService _verificationService =
+      const PostEditSubmitVerificationService();
+  final PostEditMessageCanonicalizer _messageCanonicalizer =
+      const PostEditMessageCanonicalizer();
+  int _attachmentOperationGeneration = 0;
+  int _submitGeneration = 0;
+  String? _lastUncertainSubmitMessage;
+  List<String> _lastUncertainSubmitAttachNewAids = const <String>[];
 
   @override
-  void onAfterBuild(PostEditComposerState initial) {
-    ref.onDispose(() {
-      _attachmentOperationGeneration += 1;
-    });
-  }
+  bool get draftsEnabled => false;
 
   @override
   ComposerKind get composerKind => ComposerKind.postEdit;
 
   @override
-  ComposerDraftIdentity get draftIdentity => ComposerDraftIdentity.postEdit(
-    fid: _args.target.fid,
-    tid: _args.target.tid,
-    pid: _args.target.pid,
-  );
+  bool get sanitizeAttachmentsBeforeSubmit => false;
+
+  @override
+  bool shouldPersistDraft(PostEditComposerState value) => false;
 
   @override
   String get uploadFid => _args.target.fid;
+
+  @override
+  void onAfterBuild(PostEditComposerState initial) {
+    ref.onDispose(() {
+      _attachmentOperationGeneration += 1;
+      _submitGeneration += 1;
+    });
+  }
 
   @override
   Future<PostEditComposerState> buildInitialState({
     required ComposerDraftSnapshot? restoredDraft,
     required ComposerPreferences preferences,
   }) async {
-    final draftFingerprint = restoredDraft == null
-        ? null
-        : _extrasCodec.baselineFingerprint(restoredDraft.extras);
-    final hasMatchingDraft =
-        restoredDraft != null &&
-        draftFingerprint == _args.snapshot.baselineFingerprint;
-    final deletedAidTombstones = hasMatchingDraft
-        ? _extrasCodec.deletedAidTombstones(restoredDraft.extras)
-        : const <String>{};
-    final conflict = restoredDraft != null && !hasMatchingDraft
-        ? PostEditDraftConflict(
-            localDraft: restoredDraft,
-            latestSnapshot: _args.snapshot,
-          )
-        : null;
     return PostEditComposerState.initial(
       target: _args.target,
       snapshot: _args.snapshot,
-      message: hasMatchingDraft ? restoredDraft.message : null,
-      useSignature: hasMatchingDraft
-          ? restoredDraft.useSignature
-          : preferences.newDraftUseSignature,
-      restoredDraft: hasMatchingDraft,
-      pendingConflict: conflict,
-      imageAttachments: hasMatchingDraft
-          ? restoredDraft.imageAttachments
-          : const <ComposerImageAttachment>[],
-      deletedAidTombstones: deletedAidTombstones,
+      message: _args.snapshot.rawMessage,
+      useSignature: _usesSignatureFromSnapshot(),
+      nativeSupported: _args.preparation.isNativeSupported,
     );
   }
 
@@ -93,11 +85,24 @@ final class PostEditComposerController
     PostEditComposerState current,
     ComposerStatePatch patch,
   ) {
+    if (patch.message != null) {
+      _lastUncertainSubmitMessage = null;
+      _lastUncertainSubmitAttachNewAids = const <String>[];
+    }
+    final uploaded =
+        patch.imageAttachments?.any(
+          (attachment) => attachment.canEnterSubmitPayload,
+        ) ??
+        false;
+    final serverMutationPossible =
+        current.serverMutationPossible ||
+        uploaded ||
+        (patch.pendingAttachmentAids?.isNotEmpty ?? false);
     return current.copyWith(
       message: patch.message,
       useSignature: patch.useSignature,
       isSubmitting: patch.isSubmitting,
-      restoredDraft: patch.restoredDraft,
+      restoredDraft: false,
       imageAttachments: patch.imageAttachments,
       isUploadingImages: patch.isUploadingImages,
       imageUploadCurrent: patch.imageUploadCurrent,
@@ -112,37 +117,31 @@ final class PostEditComposerController
       clearImageUploadFailure: patch.clearImageUploadFailure,
       clearLastMessageMutation: patch.clearLastMessageMutation,
       clearPendingAttachmentNotice: patch.clearPendingAttachmentNotice,
+      clearLastSubmitOutcome: patch.message != null,
+      serverMutationPossible: serverMutationPossible,
     );
   }
 
-  @override
-  ComposerDraftSnapshot? restoreDraft(ComposerDraftSnapshot? restoredDraft) {
-    if (restoredDraft == null || restoredDraft.identity != draftIdentity) {
-      return null;
+  /// Returns only warnings; the builder remains the single source of truth
+  /// for whether an attachment can be sent. The page uses this to ask for an
+  /// explicit confirmation without rewriting the user's BBCode.
+  List<String> danglingAttachmentAids(PostEditComposerState value) {
+    try {
+      return _payloadBuilder
+          .build(
+            PostEditSubmitCommand(
+              target: value.target,
+              snapshot: value.snapshot,
+              message: value.message,
+              imageAttachments: value.imageAttachments,
+              attachmentSession: value.attachmentSession,
+              now: DateTime.now(),
+            ),
+          )
+          .danglingAids;
+    } on PostEditSubmitPayloadBuildException {
+      return const <String>[];
     }
-    return restoredDraft;
-  }
-
-  @override
-  bool shouldPersistDraft(PostEditComposerState value) {
-    return value.isDirtyAgainstBaseline;
-  }
-
-  @override
-  Map<String, String> draftExtrasFor(PostEditComposerState value) {
-    return _extrasCodec.encode(
-      baselineFingerprint: value.baselineFingerprint,
-      deletedAidTombstones: value.attachmentSession.deletedAidTombstones,
-    );
-  }
-
-  @override
-  ComposerDraftSnapshot draftSnapshotFor(PostEditComposerState value) {
-    final conflict = value.pendingConflict;
-    if (conflict != null) {
-      return conflict.localDraft;
-    }
-    return super.draftSnapshotFor(value);
   }
 
   @override
@@ -161,6 +160,11 @@ final class PostEditComposerController
       clearFailure: true,
       clearImageUploadFailure: true,
       clearLastMessageMutation: true,
+      submitState: PostEditSubmitState.idle,
+      clearLastSubmitOutcome: true,
+      submitBlocked: false,
+      confirmedOverwriteIntent: false,
+      attachmentVerificationUnconfirmed: false,
     );
   }
 
@@ -179,12 +183,450 @@ final class PostEditComposerController
     required PostEditComposerState state,
     required List<String> uploadedAids,
   }) async {
-    return const ComposerSubmissionOutcome.failure(
-      failure: ComposerSubmissionFailure(
-        code: ComposerSubmissionFailureCode.unknown,
-        kind: ComposerKind.postEdit,
-        detail: 'native submit is disabled until post edit phase five',
+    final generation = ++_submitGeneration;
+    if (!_isCurrentSubmitGeneration(generation)) {
+      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    }
+    setStateValue(
+      state.copyWith(
+        submitState: PostEditSubmitState.submitting,
+        submitBlocked: false,
+        clearFailure: true,
       ),
+    );
+    return _submitWithRetry(
+      this.state.value ?? latestState ?? state,
+      generation: generation,
+      formHashRetried: false,
+    );
+  }
+
+  Future<ComposerSubmissionOutcome> _submitWithRetry(
+    PostEditComposerState current, {
+    required int generation,
+    required bool formHashRetried,
+  }) async {
+    late final PostEditSubmitPayload payload;
+    try {
+      payload = _payloadBuilder.build(
+        PostEditSubmitCommand(
+          target: current.target,
+          snapshot: current.snapshot,
+          message: current.message,
+          imageAttachments: current.imageAttachments,
+          attachmentSession: current.attachmentSession,
+          now: DateTime.now(),
+        ),
+      );
+    } on PostEditSubmitPayloadBuildException catch (error) {
+      return _failAndKeepState(
+        current,
+        generation: generation,
+        kind: PostEditSubmitResponseKind.businessFailure,
+        code: ComposerSubmissionFailureCode.unknown,
+        detail: error.failure.name,
+      );
+    }
+
+    if (!_isCurrentSubmitGeneration(generation)) {
+      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    }
+    final result = await ref
+        .read(postEditRepositoryProvider)
+        .submit(payload, target: current.target);
+    if (!_isCurrentSubmitGeneration(generation)) {
+      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    }
+    if (result case ApiFailure<PostEditSubmitResponse>(:final error)) {
+      if (error.type == ApiErrorType.unauthorized) {
+        return _failAndKeepState(
+          current,
+          generation: generation,
+          kind: PostEditSubmitResponseKind.authenticationFailure,
+          code: ComposerSubmissionFailureCode.authenticationRequired,
+        );
+      }
+      return _verifyAfterUncertainSubmit(
+        current,
+        payload: payload,
+        generation: generation,
+      );
+    }
+
+    final response = (result as ApiSuccess<PostEditSubmitResponse>).data;
+    switch (response.kind) {
+      case PostEditSubmitResponseKind.confirmedSuccess:
+        return _confirmSuccess(current, generation: generation);
+      case PostEditSubmitResponseKind.formExpired:
+        if (formHashRetried) {
+          return _markUnconfirmed(
+            current,
+            generation: generation,
+            detail: 'formhash_retry_exhausted',
+          );
+        }
+        return _refreshFormHashAndRetry(current, generation: generation);
+      case PostEditSubmitResponseKind.ambiguous:
+        return _verifyAfterUncertainSubmit(
+          current,
+          payload: payload,
+          generation: generation,
+        );
+      case PostEditSubmitResponseKind.partialSuccess:
+        return _markPartialSuccess(
+          current,
+          generation: generation,
+          snapshot: null,
+        );
+      case PostEditSubmitResponseKind.businessFailure:
+        return _failAndKeepState(
+          current,
+          generation: generation,
+          kind: response.kind,
+          code: ComposerSubmissionFailureCode.server,
+          detail: response.detail,
+        );
+      case PostEditSubmitResponseKind.authenticationFailure:
+        return _failAndKeepState(
+          current,
+          generation: generation,
+          kind: response.kind,
+          code: ComposerSubmissionFailureCode.authenticationRequired,
+          blockSubmit: true,
+        );
+      case PostEditSubmitResponseKind.permissionFailure:
+        return _failAndKeepState(
+          current,
+          generation: generation,
+          kind: response.kind,
+          code: ComposerSubmissionFailureCode.permissionDenied,
+          blockSubmit: true,
+        );
+    }
+  }
+
+  Future<ComposerSubmissionOutcome> _refreshFormHashAndRetry(
+    PostEditComposerState current, {
+    required int generation,
+  }) async {
+    final preparation = await ref
+        .read(postEditRepositoryProvider)
+        .loadForm(current.target);
+    if (!_isCurrentSubmitGeneration(generation)) {
+      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    }
+    if (preparation case ApiFailure<PostEditPreparation>()) {
+      return _markUnconfirmed(
+        current,
+        generation: generation,
+        detail: 'formhash_refresh_failed',
+      );
+    }
+    final next = (preparation as ApiSuccess<PostEditPreparation>).data;
+    final snapshot = next.snapshot;
+    if (snapshot == null || !next.isNativeSupported) {
+      return _markUnconfirmed(
+        current,
+        generation: generation,
+        detail: 'formhash_refresh_not_supported',
+        nativeSupported: false,
+      );
+    }
+    if (snapshot.baselineFingerprint != current.baselineFingerprint) {
+      return _markConflict(current, snapshot: snapshot, generation: generation);
+    }
+    final refreshed = _replaceSnapshotKeepingLocal(current, snapshot);
+    setStateValue(refreshed);
+    return _submitWithRetry(
+      refreshed,
+      generation: generation,
+      formHashRetried: true,
+    );
+  }
+
+  Future<ComposerSubmissionOutcome> _verifyAfterUncertainSubmit(
+    PostEditComposerState current, {
+    required PostEditSubmitPayload payload,
+    required int generation,
+  }) async {
+    _lastUncertainSubmitMessage = current.message;
+    _lastUncertainSubmitAttachNewAids = payload.attachNewAids;
+    return _verifyReadback(current, payload: payload, generation: generation);
+  }
+
+  /// Retries only the verification GET for an uncertain result. It never
+  /// resubmits the multipart payload.
+  Future<void> retrySubmitVerification() async {
+    final current = state.value ?? latestState;
+    final message = _lastUncertainSubmitMessage;
+    if (current == null || message == null) {
+      await reconcileWebViewReturn();
+      return;
+    }
+    final generation = ++_submitGeneration;
+    final payload = PostEditSubmitPayload(
+      submitUri: current.snapshot.submitUri,
+      fields: const <MapEntry<String, String>>[],
+      danglingAids: const <String>[],
+      attachNewAids: _lastUncertainSubmitAttachNewAids,
+    );
+    await _verifyReadback(
+      current,
+      payload: payload,
+      generation: generation,
+      submittedMessage: message,
+    );
+  }
+
+  Future<ComposerSubmissionOutcome> _verifyReadback(
+    PostEditComposerState current, {
+    required PostEditSubmitPayload payload,
+    required int generation,
+    String? submittedMessage,
+  }) async {
+    if (!_isCurrentSubmitGeneration(generation)) {
+      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    }
+    setStateValue(current.copyWith(submitState: PostEditSubmitState.verifying));
+    final readback = await ref
+        .read(postEditRepositoryProvider)
+        .loadForm(current.target);
+    if (!_isCurrentSubmitGeneration(generation)) {
+      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    }
+    if (readback case ApiFailure<PostEditPreparation>()) {
+      return _markUnconfirmed(
+        current,
+        generation: generation,
+        detail: 'submit_verification_failed',
+      );
+    }
+    final preparation = (readback as ApiSuccess<PostEditPreparation>).data;
+    final snapshot = preparation.snapshot;
+    if (snapshot == null || !preparation.isNativeSupported) {
+      return _markUnconfirmed(
+        current,
+        generation: generation,
+        detail: 'submit_verification_not_supported',
+        nativeSupported: false,
+      );
+    }
+    final verification = _verificationService.verify(
+      before: current.snapshot,
+      after: snapshot,
+      submittedMessage: submittedMessage ?? current.message,
+      attachNewAids: payload.attachNewAids,
+    );
+    switch (verification.kind) {
+      case PostEditSubmitResponseKind.confirmedSuccess:
+        return _confirmSuccess(
+          current,
+          generation: generation,
+          snapshot: snapshot,
+        );
+      case PostEditSubmitResponseKind.partialSuccess:
+        return _markPartialSuccess(
+          current,
+          generation: generation,
+          snapshot: snapshot,
+        );
+      case PostEditSubmitResponseKind.ambiguous:
+        if (snapshot.baselineFingerprint != current.baselineFingerprint &&
+            _messageCanonicalizer.canonicalize(snapshot.rawMessage) !=
+                _messageCanonicalizer.canonicalize(current.message)) {
+          return _markConflict(
+            current,
+            snapshot: snapshot,
+            generation: generation,
+          );
+        }
+        return _markUnconfirmed(
+          current,
+          generation: generation,
+          detail: verification.detail,
+        );
+      case PostEditSubmitResponseKind.businessFailure:
+      case PostEditSubmitResponseKind.authenticationFailure:
+      case PostEditSubmitResponseKind.permissionFailure:
+      case PostEditSubmitResponseKind.formExpired:
+        return _markUnconfirmed(
+          current,
+          generation: generation,
+          detail: verification.detail,
+        );
+    }
+  }
+
+  ComposerSubmissionOutcome _confirmSuccess(
+    PostEditComposerState current, {
+    required int generation,
+    PostEditFormSnapshot? snapshot,
+  }) {
+    if (!_isCurrentSubmitGeneration(generation)) {
+      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    }
+    final next = snapshot == null
+        ? current
+        : _replaceSnapshotKeepingLocal(current, snapshot);
+    setStateValue(
+      next.copyWith(
+        submitState: PostEditSubmitState.idle,
+        lastSubmitOutcome: PostEditSubmitResponseKind.confirmedSuccess,
+        submitBlocked: false,
+        serverMutationPossible: true,
+      ),
+    );
+    _lastUncertainSubmitMessage = null;
+    _lastUncertainSubmitAttachNewAids = const <String>[];
+    return const ComposerSubmissionOutcome.success();
+  }
+
+  Future<ComposerSubmissionOutcome> _markPartialSuccess(
+    PostEditComposerState current, {
+    required int generation,
+    required PostEditFormSnapshot? snapshot,
+  }) async {
+    if (!_isCurrentSubmitGeneration(generation)) {
+      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    }
+    final next = snapshot == null
+        ? current
+        : _replaceSnapshotKeepingLocal(current, snapshot);
+    setStateValue(
+      next.copyWith(
+        submitState: PostEditSubmitState.partialSuccess,
+        lastSubmitOutcome: PostEditSubmitResponseKind.partialSuccess,
+        serverMutationPossible: true,
+        submitBlocked: false,
+      ),
+    );
+    return _failureOutcome(
+      ComposerSubmissionFailureCode.server,
+      detail: 'attachment_association_unconfirmed',
+    );
+  }
+
+  Future<ComposerSubmissionOutcome> _markConflict(
+    PostEditComposerState current, {
+    required PostEditFormSnapshot snapshot,
+    required int generation,
+  }) async {
+    if (!_isCurrentSubmitGeneration(generation)) {
+      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    }
+    setStateValue(
+      _replaceSnapshotKeepingLocal(current, snapshot).copyWith(
+        pendingConflict: _captureConflict(current, snapshot),
+        submitState: PostEditSubmitState.unconfirmed,
+        lastSubmitOutcome: PostEditSubmitResponseKind.ambiguous,
+        submitBlocked: true,
+        serverMutationPossible: true,
+      ),
+    );
+    return _failureOutcome(
+      ComposerSubmissionFailureCode.unknown,
+      detail: 'submit_conflict',
+    );
+  }
+
+  Future<ComposerSubmissionOutcome> _markUnconfirmed(
+    PostEditComposerState current, {
+    required int generation,
+    String? detail,
+    bool? nativeSupported,
+  }) async {
+    if (!_isCurrentSubmitGeneration(generation)) {
+      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    }
+    setStateValue(
+      current.copyWith(
+        submitState: PostEditSubmitState.unconfirmed,
+        lastSubmitOutcome: PostEditSubmitResponseKind.ambiguous,
+        submitBlocked: true,
+        serverMutationPossible: true,
+        nativeSupported: nativeSupported,
+      ),
+    );
+    return _failureOutcome(
+      ComposerSubmissionFailureCode.unknown,
+      detail: detail,
+    );
+  }
+
+  ComposerSubmissionOutcome _failAndKeepState(
+    PostEditComposerState current, {
+    required int generation,
+    required PostEditSubmitResponseKind kind,
+    required ComposerSubmissionFailureCode code,
+    String? detail,
+    bool blockSubmit = false,
+  }) {
+    if (_isCurrentSubmitGeneration(generation)) {
+      setStateValue(
+        current.copyWith(
+          submitState: PostEditSubmitState.idle,
+          lastSubmitOutcome: kind,
+          submitBlocked: blockSubmit,
+        ),
+      );
+    }
+    return _failureOutcome(code, detail: detail);
+  }
+
+  ComposerSubmissionOutcome _failureOutcome(
+    ComposerSubmissionFailureCode code, {
+    String? detail,
+  }) {
+    return ComposerSubmissionOutcome.failure(
+      failure: ComposerSubmissionFailure(
+        code: code,
+        kind: composerKind,
+        detail: detail,
+      ),
+    );
+  }
+
+  bool _isCurrentSubmitGeneration(int generation) {
+    return generation == _submitGeneration;
+  }
+
+  bool _usesSignatureFromSnapshot() {
+    for (final field in _args.snapshot.successfulControls) {
+      if (field.name.trim().toLowerCase() == 'usesig') {
+        return field.value.trim() == '1';
+      }
+    }
+    return true;
+  }
+
+  PostEditComposerState _replaceSnapshotKeepingLocal(
+    PostEditComposerState current,
+    PostEditFormSnapshot snapshot,
+  ) {
+    final session = current.attachmentSession.copyWith(
+      existingImagesByAid: {
+        for (final image in snapshot.existingImages) image.aid: image,
+      },
+      deletingAids: const <String>{},
+    );
+    return current.copyWith(
+      snapshot: snapshot,
+      baselineMessage: snapshot.rawMessage,
+      baselineFingerprint: snapshot.baselineFingerprint,
+      attachmentSession: session,
+    );
+  }
+
+  PostEditConflictState _captureConflict(
+    PostEditComposerState current,
+    PostEditFormSnapshot snapshot,
+  ) {
+    return PostEditConflictState(
+      localMessage: current.message,
+      localUseSignature: current.useSignature,
+      localImageAttachments: current.imageAttachments,
+      localAttachmentSession: current.attachmentSession,
+      latestSnapshot: snapshot,
     );
   }
 
@@ -211,7 +653,10 @@ final class PostEditComposerController
         latest.copyWith(
           webReturnVerificationState:
               PostEditWebReturnVerificationState.unconfirmed,
+          submitBlocked: true,
+          submitState: PostEditSubmitState.unconfirmed,
           serverMutationPossible: true,
+          nativeSupported: false,
         ),
       );
       return;
@@ -223,7 +668,10 @@ final class PostEditComposerController
         latest.copyWith(
           webReturnVerificationState:
               PostEditWebReturnVerificationState.unconfirmed,
+          submitBlocked: true,
+          submitState: PostEditSubmitState.unconfirmed,
           serverMutationPossible: true,
+          nativeSupported: false,
         ),
       );
       return;
@@ -233,17 +681,10 @@ final class PostEditComposerController
         latest.copyWith(
           webReturnVerificationState:
               PostEditWebReturnVerificationState.unchanged,
-          serverMutationPossible: true,
         ),
       );
       return;
     }
-    final refreshedSession = latest.attachmentSession.copyWith(
-      existingImagesByAid: {
-        for (final image in latestSnapshot.existingImages) image.aid: image,
-      },
-      deletingAids: const <String>{},
-    );
     if (!latest.isDirtyAgainstBaseline) {
       setStateValue(
         latest.copyWith(
@@ -251,29 +692,23 @@ final class PostEditComposerController
           baselineMessage: latestSnapshot.rawMessage,
           baselineFingerprint: latestSnapshot.baselineFingerprint,
           message: latestSnapshot.rawMessage,
-          attachmentSession: refreshedSession,
+          imageAttachments: const <ComposerImageAttachment>[],
+          attachmentSession: PostEditAttachmentSession.fromImages(
+            latestSnapshot.existingImages,
+          ),
           restoredDraft: false,
           webReturnVerificationState:
               PostEditWebReturnVerificationState.changedClean,
           serverMutationPossible: true,
         ),
       );
-      await discardDraft();
       return;
     }
-    final localDraft = draftSnapshotFor(latest);
     setStateValue(
-      latest.copyWith(
-        snapshot: latestSnapshot,
-        baselineMessage: latestSnapshot.rawMessage,
-        baselineFingerprint: latestSnapshot.baselineFingerprint,
-        attachmentSession: refreshedSession,
-        pendingConflict: PostEditDraftConflict(
-          localDraft: localDraft,
-          latestSnapshot: latestSnapshot,
-        ),
+      _replaceSnapshotKeepingLocal(latest, latestSnapshot).copyWith(
+        pendingConflict: _captureConflict(latest, latestSnapshot),
         webReturnVerificationState: PostEditWebReturnVerificationState.conflict,
-        serverMutationPossible: true,
+        submitBlocked: true,
       ),
     );
   }
@@ -296,10 +731,12 @@ final class PostEditComposerController
           conflict.latestSnapshot.existingImages,
         ),
         webReturnVerificationState: PostEditWebReturnVerificationState.idle,
+        submitState: PostEditSubmitState.idle,
+        submitBlocked: false,
+        confirmedOverwriteIntent: false,
         clearPendingConflict: true,
       ),
     );
-    await discardDraft();
   }
 
   Future<void> keepLocalVersion() async {
@@ -308,26 +745,29 @@ final class PostEditComposerController
     if (current == null || conflict == null) {
       return;
     }
+    final localSession = conflict.localAttachmentSession.copyWith(
+      existingImagesByAid: {
+        for (final image in conflict.latestSnapshot.existingImages)
+          image.aid: image,
+      },
+      deletingAids: const <String>{},
+    );
     setStateValue(
       current.copyWith(
         snapshot: conflict.latestSnapshot,
         baselineMessage: conflict.latestSnapshot.rawMessage,
         baselineFingerprint: conflict.latestSnapshot.baselineFingerprint,
-        message: conflict.localDraft.message,
-        useSignature: conflict.localDraft.useSignature,
-        imageAttachments: conflict.localDraft.imageAttachments,
-        attachmentSession: PostEditAttachmentSession.fromImages(
-          conflict.latestSnapshot.existingImages,
-          deletedAidTombstones: _extrasCodec.deletedAidTombstones(
-            conflict.localDraft.extras,
-          ),
-        ),
-        restoredDraft: true,
+        message: conflict.localMessage,
+        useSignature: conflict.localUseSignature,
+        imageAttachments: conflict.localImageAttachments,
+        attachmentSession: localSession,
         webReturnVerificationState: PostEditWebReturnVerificationState.idle,
+        submitState: PostEditSubmitState.idle,
+        submitBlocked: false,
+        confirmedOverwriteIntent: true,
         clearPendingConflict: true,
       ),
     );
-    await flushDraft();
   }
 
   PostEditAttachmentSessionResolver attachmentResolver(
@@ -366,6 +806,7 @@ final class PostEditComposerController
         ),
         clearLastAttachmentDeleteOutcome: true,
         attachmentVerificationUnconfirmed: false,
+        serverMutationPossible: true,
       ),
     );
     final result = await ref
@@ -406,8 +847,6 @@ final class PostEditComposerController
       responseOutcome: deleteResult.outcome,
     );
   }
-
-  int _attachmentOperationGeneration = 0;
 
   bool _hasLocalAid(PostEditComposerState state, String aid) {
     return state.imageAttachments.any(
@@ -451,9 +890,7 @@ final class PostEditComposerController
                 responseOutcome ?? PostEditAttachmentDeleteOutcome.notDeleted,
             attachmentVerificationUnconfirmed:
                 responseOutcome == PostEditAttachmentDeleteOutcome.unconfirmed,
-            serverMutationPossible:
-                latest.serverMutationPossible ||
-                responseOutcome == PostEditAttachmentDeleteOutcome.unconfirmed,
+            serverMutationPossible: true,
           ),
         );
         return;
@@ -469,7 +906,6 @@ final class PostEditComposerController
           baselineFingerprint: snapshot.baselineFingerprint,
           attachmentSession: PostEditAttachmentSession.fromImages(
             snapshot.existingImages,
-            deletingAids: const <String>{},
             deletedAidTombstones: tombstones,
           ),
           lastAttachmentDeleteOutcome: confirmedByResponse || !aidStillExists
@@ -480,18 +916,16 @@ final class PostEditComposerController
           serverMutationPossible: true,
         ),
       );
-      await flushDraft();
       return;
     }
 
-    final keepTombstone = confirmedByResponse;
     setStateValue(
       latest.copyWith(
         attachmentSession: latest.attachmentSession.copyWith(
           deletingAids: latest.attachmentSession.deletingAids.difference(
             <String>{aid},
           ),
-          deletedAidTombstones: keepTombstone
+          deletedAidTombstones: confirmedByResponse
               ? {...latest.attachmentSession.deletedAidTombstones, aid}
               : latest.attachmentSession.deletedAidTombstones,
         ),
@@ -502,6 +936,5 @@ final class PostEditComposerController
         serverMutationPossible: true,
       ),
     );
-    await flushDraft();
   }
 }

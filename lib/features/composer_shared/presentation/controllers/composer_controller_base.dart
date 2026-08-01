@@ -43,8 +43,18 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   /// The business context used for structured submission failures.
   ComposerKind get composerKind => ComposerKind.reply;
 
+  /// Reply/posting keep the historical expiry sanitation. Editors whose
+  /// server text must remain byte-for-byte user-owned can opt out and surface
+  /// dangling references for explicit confirmation instead.
+  bool get sanitizeAttachmentsBeforeSubmit => true;
+
   // ── 子类必须实现 ─────────────────────────────────────────────
-  ComposerDraftIdentity get draftIdentity;
+  /// Whether this composer participates in the shared draft lifecycle.
+  /// Post-edit intentionally disables it because every session starts from a
+  /// fresh server form and must never restore stale local message content.
+  bool get draftsEnabled => true;
+
+  ComposerDraftIdentity? get draftIdentity => null;
   String get uploadFid;
 
   /// 由子类根据恢复出的草稿（可能为 null）构造初始 state。
@@ -106,7 +116,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
   @override
   FutureOr<TState> build() async {
-    _draftRepository = ref.read(composerDraftRepositoryProvider);
+    _draftRepository = draftsEnabled
+        ? ref.read(composerDraftRepositoryProvider)
+        : null;
     _imagePicker = ref.read(composerImagePickerProvider);
     _imageUploadCoordinator = ref.read(composerImageUploadCoordinatorProvider);
     _attachBbCodeService = ref.read(composerAttachBbCodeServiceProvider);
@@ -118,13 +130,16 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       unawaited(_imageUploadSubscription?.cancel());
       _imageUploadSubscription = null;
       final current = _latestState;
-      if (current != null) {
+      if (current != null && draftsEnabled) {
         unawaited(_saveSnapshot(current));
       }
     });
 
     await _pruneDraftsIfNeeded();
-    final snapshot = await _draftRepository!.loadDraft(draftIdentity);
+    final identity = draftIdentity;
+    final snapshot = draftsEnabled && identity != null
+        ? await _draftRepository!.loadDraft(identity)
+        : null;
     final preferences = await ref.read(
       composerPreferencesControllerProvider.future,
     );
@@ -164,8 +179,12 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   /// Builds the persisted draft payload. Edit controllers can retain a
   /// pending conflict draft without replacing it with the server projection.
   ComposerDraftSnapshot draftSnapshotFor(TState value) {
+    final identity = draftIdentity;
+    if (!draftsEnabled || identity == null) {
+      throw StateError('Draft snapshot requested for a draftless composer');
+    }
     return ComposerDraftSnapshot(
-      identity: draftIdentity,
+      identity: identity,
       message: value.message,
       subject: draftSubjectFor(value),
       extras: draftExtrasFor(value),
@@ -254,10 +273,11 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     _saveTimer?.cancel();
     _saveTimer = null;
     final repository = _draftRepository;
-    if (repository == null) {
+    final identity = draftIdentity;
+    if (repository == null || !draftsEnabled || identity == null) {
       return;
     }
-    await _enqueueDraftWrite(() => repository.deleteDraft(draftIdentity));
+    await _enqueueDraftWrite(() => repository.deleteDraft(identity));
   }
 
   Future<void> resetDraft() async {
@@ -300,9 +320,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       revision: current.messageRevision + 1,
     );
     final repository = _draftRepository;
-    if (repository != null) {
+    final identity = draftIdentity;
+    if (repository != null && draftsEnabled && identity != null) {
       try {
-        await _enqueueDraftWrite(() => repository.deleteDraft(draftIdentity));
+        await _enqueueDraftWrite(() => repository.deleteDraft(identity));
       } catch (_) {
         // 保持 UI 已清空，并通过空快照再次尝试移除持久化草稿。
         _scheduleDraftSave();
@@ -311,6 +332,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   }
 
   void _scheduleDraftSave() {
+    if (!draftsEnabled) {
+      return;
+    }
     _saveTimer?.cancel();
     _saveTimer = Timer(saveDebounce, () {
       unawaited(flushDraft());
@@ -322,6 +346,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   }
 
   Future<void> _pruneDraftsIfNeeded() async {
+    if (!draftsEnabled) {
+      return;
+    }
     try {
       await _draftRepository?.pruneDrafts();
     } catch (_) {
@@ -331,12 +358,13 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
   Future<void> _saveSnapshot(TState value) async {
     final repository = _draftRepository;
-    if (repository == null) {
+    final identity = draftIdentity;
+    if (repository == null || !draftsEnabled || identity == null) {
       return;
     }
     if (!shouldPersistDraft(value)) {
       try {
-        await _enqueueDraftWrite(() => repository.deleteDraft(draftIdentity));
+        await _enqueueDraftWrite(() => repository.deleteDraft(identity));
       } catch (_) {
         // Draft cleanup is best effort and must not block leaving the editor.
       }
@@ -827,6 +855,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   }
 
   Future<TState> _sanitizeBeforeSubmit(TState current) async {
+    if (!sanitizeAttachmentsBeforeSubmit) {
+      return current;
+    }
     final result = _draftAttachmentSanitizer.sanitize(
       message: current.message,
       imageAttachments: current.imageAttachments,

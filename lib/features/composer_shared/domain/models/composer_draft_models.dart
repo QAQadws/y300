@@ -2,8 +2,7 @@ import 'package:y300/features/composer_shared/domain/models/composer_attachment_
 
 /// 草稿身份。
 ///
-/// reply/posting/edit 草稿共用同一份持久化层，
-/// 避免后续再做"发帖与回复草稿存储分裂"的迁移工作。
+/// reply/posting 草稿共用同一份持久化层。
 class ComposerDraftIdentity {
   const ComposerDraftIdentity._({
     required this.kind,
@@ -30,17 +29,6 @@ class ComposerDraftIdentity {
   const ComposerDraftIdentity.newThread({required String fid})
     : this._(kind: ComposerDraftKind.newThread, fid: fid);
 
-  const ComposerDraftIdentity.postEdit({
-    required String fid,
-    required String tid,
-    required String pid,
-  }) : this._(
-         kind: ComposerDraftKind.postEdit,
-         fid: fid,
-         tid: tid,
-         repquote: pid,
-       );
-
   final ComposerDraftKind kind;
   final String fid;
   final String? tid;
@@ -49,8 +37,6 @@ class ComposerDraftIdentity {
   bool get isThreadReply => kind == ComposerDraftKind.threadReply;
   bool get isPostReply => kind == ComposerDraftKind.postReply;
   bool get isNewThread => kind == ComposerDraftKind.newThread;
-  bool get isPostEdit => kind == ComposerDraftKind.postEdit;
-
   String get storageKey {
     switch (kind) {
       case ComposerDraftKind.threadReply:
@@ -59,8 +45,6 @@ class ComposerDraftIdentity {
         return 'post:$fid:$tid:$repquote';
       case ComposerDraftKind.newThread:
         return 'newthread:$fid';
-      case ComposerDraftKind.postEdit:
-        return 'edit:$fid:$tid:$repquote';
     }
   }
 
@@ -80,7 +64,7 @@ class ComposerDraftIdentity {
   int get hashCode => Object.hash(kind, fid, tid, repquote);
 }
 
-enum ComposerDraftKind { threadReply, postReply, newThread, postEdit }
+enum ComposerDraftKind { threadReply, postReply, newThread }
 
 /// 编辑器持久化的"通用草稿快照"。
 ///
@@ -109,7 +93,7 @@ class ComposerDraftSnapshot {
   final List<ComposerImageAttachment> imageAttachments;
 
   /// 草稿是否"实质为空"：标题、正文、附件和业务 extras 都为空，
-  /// 才可以被存储层删除。编辑草稿的附件 tombstone 保存在 extras 中。
+  /// 才可以被存储层删除。
   bool get isEmpty {
     return subject.trim().isEmpty &&
         message.trim().isEmpty &&

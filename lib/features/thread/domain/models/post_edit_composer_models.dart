@@ -1,4 +1,4 @@
-import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 
 enum PostEditWebReturnVerificationState {
@@ -10,18 +10,34 @@ enum PostEditWebReturnVerificationState {
   unconfirmed,
 }
 
-final class PostEditDraftConflict {
-  const PostEditDraftConflict({
-    required this.localDraft,
+final class PostEditConflictState {
+  const PostEditConflictState({
+    required this.localMessage,
+    required this.localUseSignature,
+    required this.localImageAttachments,
+    required this.localAttachmentSession,
     required this.latestSnapshot,
   });
 
-  final ComposerDraftSnapshot localDraft;
+  final String localMessage;
+  final bool localUseSignature;
+  final List<ComposerImageAttachment> localImageAttachments;
+  final PostEditAttachmentSession localAttachmentSession;
   final PostEditFormSnapshot latestSnapshot;
+}
+
+enum PostEditSubmitState {
+  idle,
+  submitting,
+  verifying,
+  partialSuccess,
+  unconfirmed,
 }
 
 enum PostEditRouteOutcome {
   dismissed,
+  saved,
+  partialSuccess,
   webViewReturned,
   serverChanged,
   unconfirmed,

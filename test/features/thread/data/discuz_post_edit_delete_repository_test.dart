@@ -62,4 +62,18 @@ final class _FakeDeleteDataSource implements PostEditRemoteDataSource {
       PostEditRemoteDeleteDocument(sourceUri: deleteUri, body: body),
     );
   }
+
+  @override
+  Future<ApiResult<PostEditRemoteSubmitDocument>> submit({
+    required Uri submitUri,
+    required List<MapEntry<String, String>> fields,
+  }) async {
+    return ApiSuccess(
+      PostEditRemoteSubmitDocument(
+        sourceUri: submitUri,
+        statusCode: 200,
+        body: '',
+      ),
+    );
+  }
 }

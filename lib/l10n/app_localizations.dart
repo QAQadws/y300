@@ -6707,6 +6707,96 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'正文仍包含已删除图片代码。'**
   String get postEditDeletedImageReferenceWarning;
+
+  /// No description provided for @postEditSubmitInProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存帖子内容…'**
+  String get postEditSubmitInProgress;
+
+  /// No description provided for @postEditDiscardAndLeave.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开并丢弃修改'**
+  String get postEditDiscardAndLeave;
+
+  /// No description provided for @postEditDanglingAttachmentTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文包含无法确认的图片引用'**
+  String get postEditDanglingAttachmentTitle;
+
+  /// No description provided for @postEditDanglingAttachmentBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分图片引用无法关联到当前可用附件，仍要继续保存吗？正文不会被自动修改。'**
+  String get postEditDanglingAttachmentBody;
+
+  /// No description provided for @postEditDanglingAttachmentConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续保存'**
+  String get postEditDanglingAttachmentConfirm;
+
+  /// No description provided for @postEditPartialSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文已保存，但部分新图片未能确认关联，请检查后再试。'**
+  String get postEditPartialSuccess;
+
+  /// No description provided for @postEditSubmitUnconfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存结果未确认，已暂时停用原生保存。请重新验证服务器版本。'**
+  String get postEditSubmitUnconfirmed;
+
+  /// No description provided for @postEditRetryVerification.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新验证'**
+  String get postEditRetryVerification;
+
+  /// No description provided for @postEditFormExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑表单已过期，正在重新获取后重试一次。'**
+  String get postEditFormExpired;
+
+  /// No description provided for @postEditPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有权限保存此帖子。'**
+  String get postEditPermissionDenied;
+
+  /// No description provided for @postEditAuthenticationRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录状态已失效，请重新登录后再试。'**
+  String get postEditAuthenticationRequired;
+
+  /// No description provided for @postEditSubmitFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子保存失败，当前内容已保留。'**
+  String get postEditSubmitFailed;
+
+  /// No description provided for @postEditLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取帖子编辑表单失败：{error}'**
+  String postEditLoadFailed(String error);
+
+  /// No description provided for @postEditServerVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器版本'**
+  String get postEditServerVersion;
+
+  /// No description provided for @postEditLocalVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地版本'**
+  String get postEditLocalVersion;
 }
 
 class _AppLocalizationsDelegate

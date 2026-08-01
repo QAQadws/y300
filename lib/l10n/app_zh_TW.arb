@@ -1283,5 +1283,21 @@
   "postEditDeleteImageFailed": "圖片刪除未成功，圖片仍保留。",
   "postEditDeleteImageUnconfirmed": "無法確認圖片刪除狀態，請稍後重試。",
   "postEditAttachmentDeleting": "正在刪除圖片",
-  "postEditDeletedImageReferenceWarning": "正文仍包含已刪除圖片代碼。"
+  "postEditDeletedImageReferenceWarning": "正文仍包含已刪除圖片代碼。",
+  "postEditSubmitInProgress": "正在儲存帖子內容…",
+  "postEditDiscardAndLeave": "離開並捨棄修改",
+  "postEditDanglingAttachmentTitle": "正文包含無法確認的圖片引用",
+  "postEditDanglingAttachmentBody": "部分圖片引用無法關聯到目前可用附件，仍要繼續儲存嗎？正文不會被自動修改。",
+  "postEditDanglingAttachmentConfirm": "繼續儲存",
+  "postEditPartialSuccess": "正文已儲存，但部分新圖片未能確認關聯，請檢查後再試。",
+  "postEditSubmitUnconfirmed": "儲存結果未確認，已暫時停用原生儲存。請重新驗證伺服器版本。",
+  "postEditRetryVerification": "重新驗證",
+  "postEditFormExpired": "編輯表單已過期，正在重新取得後重試一次。",
+  "postEditPermissionDenied": "沒有權限儲存此帖子。",
+  "postEditAuthenticationRequired": "登入狀態已失效，請重新登入後再試。",
+  "postEditSubmitFailed": "帖子儲存失敗，目前內容已保留。",
+  "postEditLoadFailed": "讀取帖子編輯表單失敗：{error}",
+  "@postEditLoadFailed": {"placeholders": {"error": {"type": "String"}}},
+  "postEditServerVersion": "伺服器版本",
+  "postEditLocalVersion": "本地版本"
 }

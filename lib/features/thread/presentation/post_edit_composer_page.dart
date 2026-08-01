@@ -19,6 +19,7 @@ import 'package:y300/features/forum/domain/models/forum_webview_launch_models.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
+import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_controller.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 import 'package:y300/features/thread/presentation/widgets/post_edit_attachment_panel.dart';
@@ -51,8 +52,6 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
 
   @override
   void dispose() {
-    final provider = postEditComposerControllerProvider(widget.args);
-    unawaited(ref.read(provider.notifier).flushDraft());
     _messageController.dispose();
     super.dispose();
   }
@@ -111,7 +110,9 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
             IconButton(
               key: const Key('post-edit-save-button'),
               tooltip: l10n.postEditSave,
-              onPressed: null,
+              onPressed: state?.canSubmit == true
+                  ? () => unawaited(_submit(controller))
+                  : null,
               style: composerAppBarActionStyle(context),
               icon: const Icon(Icons.save_outlined),
             ),
@@ -120,7 +121,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
         body: asyncState.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => ComposerLoadErrorView(
-            message: l10n.composerLoadDraftFailed(error.toString()),
+            message: l10n.postEditLoadFailed(error.toString()),
             textKey: const Key('post-edit-load-error'),
           ),
           data: (value) => _PostEditComposerBody(
@@ -151,9 +152,60 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
             onDeleteImage: controller.deleteImage,
             onUseServerVersion: controller.useServerVersion,
             onKeepLocalVersion: controller.keepLocalVersion,
-            onRetryVerification: controller.reconcileWebViewReturn,
+            onRetryVerification: () {
+              return state?.submitState == PostEditSubmitState.unconfirmed
+                  ? controller.retrySubmitVerification()
+                  : controller.reconcileWebViewReturn();
+            },
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _submit(PostEditComposerController controller) async {
+    final current = ref
+        .read(postEditComposerControllerProvider(widget.args))
+        .value;
+    if (current == null || !current.canSubmit) {
+      return;
+    }
+    final danglingAids = controller.danglingAttachmentAids(current);
+    if (danglingAids.isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          final l10n = AppLocalizations.of(dialogContext);
+          return AlertDialog(
+            title: Text(l10n.postEditDanglingAttachmentTitle),
+            content: Text(l10n.postEditDanglingAttachmentBody),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(l10n.commonCancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(l10n.postEditDanglingAttachmentConfirm),
+              ),
+            ],
+          );
+        },
+      );
+      if (!mounted || confirmed != true) {
+        return;
+      }
+    }
+    final result = await controller.submit();
+    if (!mounted || !result.sent) {
+      return;
+    }
+    _allowPopWithoutConfirm = true;
+    Navigator.of(context).pop(
+      PostEditRouteResult(
+        target: widget.args.target,
+        outcome: PostEditRouteOutcome.saved,
+        serverMutationPossible: true,
       ),
     );
   }
@@ -252,9 +304,9 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
               child: Text(l10n.composerContinueEditing),
             ),
             FilledButton(
-              key: const Key('post-edit-save-draft-leave-button'),
+              key: const Key('post-edit-discard-leave-button'),
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(l10n.composerSaveDraftAndLeave),
+              child: Text(l10n.postEditDiscardAndLeave),
             ),
           ],
         );
@@ -263,7 +315,6 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
     if (!mounted || shouldLeave != true) {
       return;
     }
-    await controller.flushDraft();
     if (!mounted) {
       return;
     }
@@ -416,7 +467,49 @@ class _PostEditComposerBody extends StatelessWidget {
               key: const Key('post-edit-unconfirmed-banner'),
               text: l10n.postEditVerificationFailed,
               retryButtonKey: const Key('post-edit-retry-verification'),
+              retryLabel: l10n.postEditRetryVerification,
               onRetry: onRetryVerification,
+            ),
+          if (state.submitState == PostEditSubmitState.submitting)
+            ComposerStatusBanner.info(
+              key: const Key('post-edit-submit-progress-banner'),
+              text: l10n.postEditSubmitInProgress,
+            ),
+          if (state.submitState == PostEditSubmitState.partialSuccess)
+            ComposerStatusBanner.info(
+              key: const Key('post-edit-partial-success-banner'),
+              text: l10n.postEditPartialSuccess,
+            ),
+          if (state.submitState == PostEditSubmitState.unconfirmed)
+            ComposerStatusBanner.error(
+              key: const Key('post-edit-submit-unconfirmed-banner'),
+              text: l10n.postEditSubmitUnconfirmed,
+              retryButtonKey: const Key('post-edit-submit-retry-button'),
+              retryLabel: l10n.postEditRetryVerification,
+              onRetry: onRetryVerification,
+            ),
+          if (state.lastSubmitOutcome ==
+              PostEditSubmitResponseKind.authenticationFailure)
+            ComposerStatusBanner.error(
+              key: const Key('post-edit-authentication-failure-banner'),
+              text: l10n.postEditAuthenticationRequired,
+              retryButtonKey: const Key(
+                'post-edit-authentication-retry-button',
+              ),
+              retryLabel: l10n.postEditRetryVerification,
+              onRetry: onRetryVerification,
+            ),
+          if (state.lastSubmitOutcome ==
+              PostEditSubmitResponseKind.permissionFailure)
+            ComposerStatusBanner.info(
+              key: const Key('post-edit-permission-failure-banner'),
+              text: l10n.postEditPermissionDenied,
+            ),
+          if (state.lastSubmitOutcome ==
+              PostEditSubmitResponseKind.businessFailure)
+            ComposerStatusBanner.info(
+              key: const Key('post-edit-submit-failure-banner'),
+              text: l10n.postEditSubmitFailed,
             ),
           if (state.lastAttachmentDeleteOutcome ==
               PostEditAttachmentDeleteOutcome.notDeleted)
