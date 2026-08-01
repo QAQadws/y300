@@ -6647,6 +6647,66 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'本地修改会保存为草稿，之后可以继续编辑。'**
   String get postEditLeaveBody;
+
+  /// No description provided for @postEditManageImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理图片'**
+  String get postEditManageImages;
+
+  /// No description provided for @postEditNoImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前编辑没有图片'**
+  String get postEditNoImages;
+
+  /// No description provided for @postEditDeleteImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除图片'**
+  String get postEditDeleteImage;
+
+  /// No description provided for @postEditDeleteImageTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除这张图片？'**
+  String get postEditDeleteImageTitle;
+
+  /// No description provided for @postEditDeleteImageBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'这会删除服务器上的图片，但不会删除正文中的图片代码。'**
+  String get postEditDeleteImageBody;
+
+  /// No description provided for @postEditDeleteImageConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认删除'**
+  String get postEditDeleteImageConfirm;
+
+  /// No description provided for @postEditDeleteImageFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片删除未成功，图片仍保留。'**
+  String get postEditDeleteImageFailed;
+
+  /// No description provided for @postEditDeleteImageUnconfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法确认图片删除状态，请稍后重试。'**
+  String get postEditDeleteImageUnconfirmed;
+
+  /// No description provided for @postEditAttachmentDeleting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在删除图片'**
+  String get postEditAttachmentDeleting;
+
+  /// No description provided for @postEditDeletedImageReferenceWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文仍包含已删除图片代码。'**
+  String get postEditDeletedImageReferenceWarning;
 }
 
 class _AppLocalizationsDelegate

@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
@@ -11,11 +14,14 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_load
 import 'package:y300/features/composer_shared/presentation/widgets/composer_message_editor_surface.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
+import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_controller.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
+import 'package:y300/features/thread/presentation/widgets/post_edit_attachment_panel.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class PostEditComposerPage extends ConsumerStatefulWidget {
@@ -34,6 +40,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
   bool _didApplySurfacePreference = false;
   bool _didApplyMessage = false;
   bool _allowPopWithoutConfirm = false;
+  bool _showAttachmentPanel = false;
   String? _lastAppliedMessage;
 
   @override
@@ -131,6 +138,17 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
               );
             },
             onMessageChanged: controller.updateMessage,
+            attachmentResolver: controller.attachmentResolver(value),
+            showAttachmentPanel: _showAttachmentPanel,
+            onToggleAttachmentPanel: () {
+              setState(() {
+                _showAttachmentPanel = !_showAttachmentPanel;
+              });
+            },
+            onImagePressed: (anchor) {
+              return controller.pickImages(insertionAnchor: anchor);
+            },
+            onDeleteImage: controller.deleteImage,
             onUseServerVersion: controller.useServerVersion,
             onKeepLocalVersion: controller.keepLocalVersion,
             onRetryVerification: controller.reconcileWebViewReturn,
@@ -320,6 +338,11 @@ class _PostEditComposerBody extends StatelessWidget {
     required this.initialStickerGroupId,
     required this.onStickerGroupChanged,
     required this.onMessageChanged,
+    required this.attachmentResolver,
+    required this.showAttachmentPanel,
+    required this.onToggleAttachmentPanel,
+    required this.onImagePressed,
+    required this.onDeleteImage,
     required this.onUseServerVersion,
     required this.onKeepLocalVersion,
     required this.onRetryVerification,
@@ -333,6 +356,11 @@ class _PostEditComposerBody extends StatelessWidget {
   final String? initialStickerGroupId;
   final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onMessageChanged;
+  final ComposerAttachmentPreviewResolver attachmentResolver;
+  final bool showAttachmentPanel;
+  final VoidCallback onToggleAttachmentPanel;
+  final ComposerImageInsertCallback onImagePressed;
+  final ValueChanged<String> onDeleteImage;
   final Future<void> Function() onUseServerVersion;
   final Future<void> Function() onKeepLocalVersion;
   final Future<void> Function() onRetryVerification;
@@ -340,6 +368,12 @@ class _PostEditComposerBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final deletedReferences = const ComposerAttachBbCodeService()
+        .extractAttachAids(state.message)
+        .where(
+          (aid) => state.attachmentSession.deletedAidTombstones.contains(aid),
+        )
+        .isNotEmpty;
     final editor = ComposerMessageEditorSurface(
       surface: editorSurface,
       message: state.message,
@@ -356,6 +390,16 @@ class _PostEditComposerBody extends StatelessWidget {
       hintText: l10n.postEditMessageHint,
       messageRevision: state.messageRevision,
       lastMessageMutation: state.lastMessageMutation,
+      attachmentResolver: attachmentResolver,
+      onImagePressed: onImagePressed,
+      extraToolbarActions: [
+        ComposerToolbarAction(
+          key: const Key('post-edit-manage-images-button'),
+          icon: Icons.photo_library_outlined,
+          tooltip: l10n.postEditManageImages,
+          onPressed: onToggleAttachmentPanel,
+        ),
+      ],
     );
     return SafeArea(
       child: Column(
@@ -373,6 +417,29 @@ class _PostEditComposerBody extends StatelessWidget {
               text: l10n.postEditVerificationFailed,
               retryButtonKey: const Key('post-edit-retry-verification'),
               onRetry: onRetryVerification,
+            ),
+          if (state.lastAttachmentDeleteOutcome ==
+              PostEditAttachmentDeleteOutcome.notDeleted)
+            ComposerStatusBanner.info(
+              key: const Key('post-edit-delete-image-failed-banner'),
+              text: l10n.postEditDeleteImageFailed,
+            ),
+          if (state.attachmentVerificationUnconfirmed)
+            ComposerStatusBanner.info(
+              key: const Key('post-edit-delete-image-unconfirmed-banner'),
+              text: l10n.postEditDeleteImageUnconfirmed,
+            ),
+          if (deletedReferences)
+            ComposerStatusBanner.info(
+              key: const Key('post-edit-deleted-image-reference-banner'),
+              text: l10n.postEditDeletedImageReferenceWarning,
+            ),
+          if (showAttachmentPanel)
+            PostEditAttachmentPanel(
+              key: const Key('post-edit-attachment-panel'),
+              state: state,
+              resolver: attachmentResolver,
+              onDeleteImage: onDeleteImage,
             ),
           Expanded(child: editor),
         ],

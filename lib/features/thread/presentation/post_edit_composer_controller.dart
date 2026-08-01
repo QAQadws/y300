@@ -14,6 +14,7 @@ import 'package:y300/features/thread/data/providers/post_edit_providers.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/services/post_edit_draft_extras_codec.dart';
+import 'package:y300/features/thread/domain/services/post_edit_attachment_session_resolver.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 
 final postEditComposerControllerProvider = AsyncNotifierProvider.autoDispose
@@ -30,6 +31,13 @@ final class PostEditComposerController
   final PostEditComposerArgs _args;
   final PostEditDraftExtrasCodec _extrasCodec =
       const PostEditDraftExtrasCodec();
+
+  @override
+  void onAfterBuild(PostEditComposerState initial) {
+    ref.onDispose(() {
+      _attachmentOperationGeneration += 1;
+    });
+  }
 
   @override
   ComposerKind get composerKind => ComposerKind.postEdit;
@@ -55,6 +63,9 @@ final class PostEditComposerController
     final hasMatchingDraft =
         restoredDraft != null &&
         draftFingerprint == _args.snapshot.baselineFingerprint;
+    final deletedAidTombstones = hasMatchingDraft
+        ? _extrasCodec.deletedAidTombstones(restoredDraft.extras)
+        : const <String>{};
     final conflict = restoredDraft != null && !hasMatchingDraft
         ? PostEditDraftConflict(
             localDraft: restoredDraft,
@@ -73,6 +84,7 @@ final class PostEditComposerController
       imageAttachments: hasMatchingDraft
           ? restoredDraft.imageAttachments
           : const <ComposerImageAttachment>[],
+      deletedAidTombstones: deletedAidTombstones,
     );
   }
 
@@ -118,7 +130,10 @@ final class PostEditComposerController
 
   @override
   Map<String, String> draftExtrasFor(PostEditComposerState value) {
-    return _extrasCodec.encode(baselineFingerprint: value.baselineFingerprint);
+    return _extrasCodec.encode(
+      baselineFingerprint: value.baselineFingerprint,
+      deletedAidTombstones: value.attachmentSession.deletedAidTombstones,
+    );
   }
 
   @override
@@ -137,6 +152,9 @@ final class PostEditComposerController
       messageRevision: value.messageRevision + 1,
       restoredDraft: false,
       imageAttachments: const [],
+      attachmentSession: PostEditAttachmentSession.fromImages(
+        value.snapshot.existingImages,
+      ),
       pendingAttachmentAids: const [],
       clearPendingAttachmentNotice: true,
       clearPendingConflict: true,
@@ -220,6 +238,12 @@ final class PostEditComposerController
       );
       return;
     }
+    final refreshedSession = latest.attachmentSession.copyWith(
+      existingImagesByAid: {
+        for (final image in latestSnapshot.existingImages) image.aid: image,
+      },
+      deletingAids: const <String>{},
+    );
     if (!latest.isDirtyAgainstBaseline) {
       setStateValue(
         latest.copyWith(
@@ -227,6 +251,7 @@ final class PostEditComposerController
           baselineMessage: latestSnapshot.rawMessage,
           baselineFingerprint: latestSnapshot.baselineFingerprint,
           message: latestSnapshot.rawMessage,
+          attachmentSession: refreshedSession,
           restoredDraft: false,
           webReturnVerificationState:
               PostEditWebReturnVerificationState.changedClean,
@@ -242,6 +267,7 @@ final class PostEditComposerController
         snapshot: latestSnapshot,
         baselineMessage: latestSnapshot.rawMessage,
         baselineFingerprint: latestSnapshot.baselineFingerprint,
+        attachmentSession: refreshedSession,
         pendingConflict: PostEditDraftConflict(
           localDraft: localDraft,
           latestSnapshot: latestSnapshot,
@@ -265,6 +291,10 @@ final class PostEditComposerController
         baselineFingerprint: conflict.latestSnapshot.baselineFingerprint,
         message: conflict.latestSnapshot.rawMessage,
         restoredDraft: false,
+        imageAttachments: const <ComposerImageAttachment>[],
+        attachmentSession: PostEditAttachmentSession.fromImages(
+          conflict.latestSnapshot.existingImages,
+        ),
         webReturnVerificationState: PostEditWebReturnVerificationState.idle,
         clearPendingConflict: true,
       ),
@@ -286,9 +316,190 @@ final class PostEditComposerController
         message: conflict.localDraft.message,
         useSignature: conflict.localDraft.useSignature,
         imageAttachments: conflict.localDraft.imageAttachments,
+        attachmentSession: PostEditAttachmentSession.fromImages(
+          conflict.latestSnapshot.existingImages,
+          deletedAidTombstones: _extrasCodec.deletedAidTombstones(
+            conflict.localDraft.extras,
+          ),
+        ),
         restoredDraft: true,
         webReturnVerificationState: PostEditWebReturnVerificationState.idle,
         clearPendingConflict: true,
+      ),
+    );
+    await flushDraft();
+  }
+
+  PostEditAttachmentSessionResolver attachmentResolver(
+    PostEditComposerState value,
+  ) {
+    return PostEditAttachmentSessionResolver(
+      session: value.attachmentSession,
+      localAttachments: value.imageAttachments,
+      referer: value.snapshot.sourceUri.toString(),
+    );
+  }
+
+  Future<void> deleteImage(String aid) async {
+    final current = state.value ?? latestState;
+    if (current == null || current.isSubmitting) {
+      return;
+    }
+    final normalizedAid = aid.trim();
+    if (normalizedAid.isEmpty ||
+        current.attachmentSession.deletingAids.contains(normalizedAid) ||
+        (!_hasLocalAid(current, normalizedAid) &&
+            !current.attachmentSession.existingImagesByAid.containsKey(
+              normalizedAid,
+            ))) {
+      return;
+    }
+
+    final operation = ++_attachmentOperationGeneration;
+    setStateValue(
+      current.copyWith(
+        attachmentSession: current.attachmentSession.copyWith(
+          deletingAids: {
+            ...current.attachmentSession.deletingAids,
+            normalizedAid,
+          },
+        ),
+        clearLastAttachmentDeleteOutcome: true,
+        attachmentVerificationUnconfirmed: false,
+      ),
+    );
+    final result = await ref
+        .read(postEditRepositoryProvider)
+        .deleteImage(
+          PostEditAttachmentDeleteCommand(
+            target: current.target,
+            aid: normalizedAid,
+            formHash: current.snapshot.formHash,
+            expectedBaselineFingerprint: current.baselineFingerprint,
+          ),
+        );
+    if (operation != _attachmentOperationGeneration) {
+      return;
+    }
+    final latest = state.value ?? latestState;
+    if (latest == null) {
+      return;
+    }
+    if (result case ApiFailure<PostEditAttachmentDeleteResult>()) {
+      await _reconcileDelete(
+        latest,
+        normalizedAid,
+        operation: operation,
+        confirmedByResponse: false,
+        responseOutcome: PostEditAttachmentDeleteOutcome.unconfirmed,
+      );
+      return;
+    }
+    final deleteResult =
+        (result as ApiSuccess<PostEditAttachmentDeleteResult>).data;
+    await _reconcileDelete(
+      latest,
+      normalizedAid,
+      operation: operation,
+      confirmedByResponse:
+          deleteResult.outcome == PostEditAttachmentDeleteOutcome.deleted,
+      responseOutcome: deleteResult.outcome,
+    );
+  }
+
+  int _attachmentOperationGeneration = 0;
+
+  bool _hasLocalAid(PostEditComposerState state, String aid) {
+    return state.imageAttachments.any(
+      (attachment) => attachment.aid?.trim() == aid,
+    );
+  }
+
+  Future<void> _reconcileDelete(
+    PostEditComposerState current,
+    String aid, {
+    required int operation,
+    required bool confirmedByResponse,
+    PostEditAttachmentDeleteOutcome? responseOutcome,
+  }) async {
+    final readback = await ref
+        .read(postEditRepositoryProvider)
+        .loadForm(current.target);
+    if (operation != _attachmentOperationGeneration) {
+      return;
+    }
+    final latest = state.value ?? latestState;
+    if (latest == null) {
+      return;
+    }
+    if (readback case ApiSuccess<PostEditPreparation>(
+      :final data,
+    ) when data.snapshot != null && data.isNativeSupported) {
+      final snapshot = data.snapshot!;
+      final aidStillExists = snapshot.existingImages.any(
+        (image) => image.aid == aid,
+      );
+      if (aidStillExists && !confirmedByResponse) {
+        setStateValue(
+          latest.copyWith(
+            attachmentSession: latest.attachmentSession.copyWith(
+              deletingAids: latest.attachmentSession.deletingAids.difference(
+                <String>{aid},
+              ),
+            ),
+            lastAttachmentDeleteOutcome:
+                responseOutcome ?? PostEditAttachmentDeleteOutcome.notDeleted,
+            attachmentVerificationUnconfirmed:
+                responseOutcome == PostEditAttachmentDeleteOutcome.unconfirmed,
+            serverMutationPossible:
+                latest.serverMutationPossible ||
+                responseOutcome == PostEditAttachmentDeleteOutcome.unconfirmed,
+          ),
+        );
+        return;
+      }
+      final tombstones = {
+        ...latest.attachmentSession.deletedAidTombstones,
+        if (!aidStillExists || confirmedByResponse) aid,
+      };
+      setStateValue(
+        latest.copyWith(
+          snapshot: snapshot,
+          baselineMessage: snapshot.rawMessage,
+          baselineFingerprint: snapshot.baselineFingerprint,
+          attachmentSession: PostEditAttachmentSession.fromImages(
+            snapshot.existingImages,
+            deletingAids: const <String>{},
+            deletedAidTombstones: tombstones,
+          ),
+          lastAttachmentDeleteOutcome: confirmedByResponse || !aidStillExists
+              ? PostEditAttachmentDeleteOutcome.deleted
+              : PostEditAttachmentDeleteOutcome.unconfirmed,
+          attachmentVerificationUnconfirmed:
+              confirmedByResponse && aidStillExists,
+          serverMutationPossible: true,
+        ),
+      );
+      await flushDraft();
+      return;
+    }
+
+    final keepTombstone = confirmedByResponse;
+    setStateValue(
+      latest.copyWith(
+        attachmentSession: latest.attachmentSession.copyWith(
+          deletingAids: latest.attachmentSession.deletingAids.difference(
+            <String>{aid},
+          ),
+          deletedAidTombstones: keepTombstone
+              ? {...latest.attachmentSession.deletedAidTombstones, aid}
+              : latest.attachmentSession.deletedAidTombstones,
+        ),
+        lastAttachmentDeleteOutcome: confirmedByResponse
+            ? PostEditAttachmentDeleteOutcome.deleted
+            : PostEditAttachmentDeleteOutcome.unconfirmed,
+        attachmentVerificationUnconfirmed: true,
+        serverMutationPossible: true,
       ),
     );
     await flushDraft();

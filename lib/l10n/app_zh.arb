@@ -1632,5 +1632,15 @@
   "postEditVerificationFailed": "无法确认网页编辑后的服务器状态，原生保存暂不可用。",
   "postEditNativeSubmitUnavailable": "原生保存将在后续版本开放",
   "postEditLeaveTitle": "离开编辑页面？",
-  "postEditLeaveBody": "本地修改会保存为草稿，之后可以继续编辑。"
+  "postEditLeaveBody": "本地修改会保存为草稿，之后可以继续编辑。",
+  "postEditManageImages": "管理图片",
+  "postEditNoImages": "当前编辑没有图片",
+  "postEditDeleteImage": "删除图片",
+  "postEditDeleteImageTitle": "删除这张图片？",
+  "postEditDeleteImageBody": "这会删除服务器上的图片，但不会删除正文中的图片代码。",
+  "postEditDeleteImageConfirm": "确认删除",
+  "postEditDeleteImageFailed": "图片删除未成功，图片仍保留。",
+  "postEditDeleteImageUnconfirmed": "无法确认图片删除状态，请稍后重试。",
+  "postEditAttachmentDeleting": "正在删除图片",
+  "postEditDeletedImageReferenceWarning": "正文仍包含已删除图片代码。"
 }

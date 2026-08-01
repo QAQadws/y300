@@ -1273,5 +1273,15 @@
   "postEditVerificationFailed": "無法確認網頁編輯後的伺服器狀態，原生儲存暫不可用。",
   "postEditNativeSubmitUnavailable": "原生儲存將在後續版本開放",
   "postEditLeaveTitle": "離開編輯頁面？",
-  "postEditLeaveBody": "本地修改會儲存為草稿，之後可以繼續編輯。"
+  "postEditLeaveBody": "本地修改會儲存為草稿，之後可以繼續編輯。",
+  "postEditManageImages": "管理圖片",
+  "postEditNoImages": "目前編輯沒有圖片",
+  "postEditDeleteImage": "刪除圖片",
+  "postEditDeleteImageTitle": "刪除這張圖片？",
+  "postEditDeleteImageBody": "這會刪除伺服器上的圖片，但不會刪除正文中的圖片代碼。",
+  "postEditDeleteImageConfirm": "確認刪除",
+  "postEditDeleteImageFailed": "圖片刪除未成功，圖片仍保留。",
+  "postEditDeleteImageUnconfirmed": "無法確認圖片刪除狀態，請稍後重試。",
+  "postEditAttachmentDeleting": "正在刪除圖片",
+  "postEditDeletedImageReferenceWarning": "正文仍包含已刪除圖片代碼。"
 }

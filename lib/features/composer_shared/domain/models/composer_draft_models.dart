@@ -108,10 +108,12 @@ class ComposerDraftSnapshot {
   final Map<String, String> extras;
   final List<ComposerImageAttachment> imageAttachments;
 
-  /// 草稿是否"实质为空"：标题、正文、附件都为空，可以被存储层删除。
+  /// 草稿是否"实质为空"：标题、正文、附件和业务 extras 都为空，
+  /// 才可以被存储层删除。编辑草稿的附件 tombstone 保存在 extras 中。
   bool get isEmpty {
     return subject.trim().isEmpty &&
         message.trim().isEmpty &&
-        imageAttachments.isEmpty;
+        imageAttachments.isEmpty &&
+        extras.isEmpty;
   }
 }

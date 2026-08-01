@@ -217,15 +217,20 @@ class PostEditFormParser {
     Uri source,
   ) {
     final images = <PostEditExistingImage>[];
+    final seenAids = <String>{};
     for (final marker in document.querySelectorAll('#imglist [aid]')) {
       final aid = marker.attributes['aid']?.trim() ?? '';
-      if (!_positiveInteger(aid)) {
+      if (!_positiveInteger(aid) || !seenAids.add(aid)) {
         return null;
       }
       final item = _nearestAncestor(marker, 'li') ?? marker;
       final image = item.querySelector('img[src]');
       final src = image?.attributes['src']?.trim() ?? '';
       if (src.isEmpty) {
+        return null;
+      }
+      final imageUri = source.resolve(src);
+      if (imageUri.scheme != 'http' && imageUri.scheme != 'https') {
         return null;
       }
       final description = item
@@ -240,7 +245,7 @@ class PostEditFormParser {
       images.add(
         PostEditExistingImage(
           aid: aid,
-          imageUri: source.resolve(src),
+          imageUri: imageUri,
           isAssociated: marker.attributes['up'] == '1',
           description: description.attributes['value'] ?? '',
           fileName: image?.attributes['alt'],

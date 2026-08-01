@@ -130,6 +130,51 @@ void main() {
     );
     expect(result.snapshot!.regularAttachments.single.aid, '99');
   });
+
+  test('keeps image DOM order, descriptions and association state', () {
+    final html = _readFixture().replaceFirst(
+      RegExp(r'</ul>\s*<ul id="attlist"'),
+      '''<li>
+          <span aid="1624573" class="del"><a href="javascript:;">删除</a></span>
+          <span class="p_img"><img src="/data/attachment/forum/second.png" alt="second.png"></span>
+          <input type="hidden" name="attachnew[1624573][description]" value="second description">
+        </li>
+      </ul>
+      <ul id="attlist"''',
+    );
+    final result = const PostEditFormParser().parse(html, target: target);
+
+    expect(result.isSuccess, isTrue);
+    final images = result.snapshot!.existingImages;
+    expect(images.map((image) => image.aid), ['1624572', '1624573']);
+    expect(images[0].isAssociated, isTrue);
+    expect(images[1].isAssociated, isFalse);
+    expect(images[1].description, 'second description');
+    expect(
+      images[1].imageUri,
+      Uri.parse('https://bbs.yamibo.com/data/attachment/forum/second.png'),
+    );
+  });
+
+  test('fails closed for duplicate or unsafe image metadata', () {
+    final duplicate = _readFixture().replaceFirst(
+      RegExp(r'</ul>\s*<ul id="attlist"'),
+      '<li><span aid="1624572"><img src="/duplicate.jpg"></span></li></ul><ul id="attlist"',
+    );
+    expect(
+      const PostEditFormParser().parse(duplicate, target: target).failure,
+      PostEditFormParseFailureReason.malformedAttachment,
+    );
+
+    final unsafe = _readFixture().replaceFirst(
+      'src="data/attachment/forum/fixture/existing-image.jpg"',
+      'src="javascript:alert(1)"',
+    );
+    expect(
+      const PostEditFormParser().parse(unsafe, target: target).failure,
+      PostEditFormParseFailureReason.malformedAttachment,
+    );
+  });
 }
 
 String _readFixture() {

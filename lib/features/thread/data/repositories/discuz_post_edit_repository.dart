@@ -1,8 +1,10 @@
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/thread/data/services/discuz_post_edit_delete_response_parser.dart';
 import 'package:y300/features/thread/data/services/post_edit_form_parser.dart';
 import 'package:y300/features/thread/data/services/post_edit_remote_data_source.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/repositories/post_edit_repository.dart';
+import 'package:y300/features/thread/domain/services/post_edit_attachment_delete_uri_builder.dart';
 import 'package:y300/features/thread/domain/services/post_edit_native_capability_classifier.dart';
 
 class DiscuzPostEditRepository implements PostEditRepository {
@@ -10,11 +12,15 @@ class DiscuzPostEditRepository implements PostEditRepository {
     required PostEditRemoteDataSource remoteDataSource,
     this.formParser = const PostEditFormParser(),
     this.capabilityClassifier = const PostEditNativeCapabilityClassifier(),
+    this.deleteUriBuilder = const PostEditAttachmentDeleteUriBuilder(),
+    this.deleteResponseParser = const DiscuzPostEditDeleteResponseParser(),
   }) : _remoteDataSource = remoteDataSource;
 
   final PostEditRemoteDataSource _remoteDataSource;
   final PostEditFormParser formParser;
   final PostEditNativeCapabilityClassifier capabilityClassifier;
+  final PostEditAttachmentDeleteUriBuilder deleteUriBuilder;
+  final DiscuzPostEditDeleteResponseParser deleteResponseParser;
 
   @override
   Future<ApiResult<PostEditPreparation>> loadForm(PostEditTarget target) async {
@@ -45,6 +51,24 @@ class DiscuzPostEditRepository implements PostEditRepository {
         snapshot: snapshot,
         decision: capabilityClassifier.classify(snapshot),
       ),
+    );
+  }
+
+  @override
+  Future<ApiResult<PostEditAttachmentDeleteResult>> deleteImage(
+    PostEditAttachmentDeleteCommand command,
+  ) async {
+    final remoteResult = await _remoteDataSource.deleteImage(
+      deleteUriBuilder.build(command),
+    );
+    if (remoteResult case ApiFailure<PostEditRemoteDeleteDocument>(
+      :final error,
+    )) {
+      return ApiFailure(error);
+    }
+    final remote = remoteResult.dataOrNull!;
+    return ApiSuccess(
+      deleteResponseParser.parse(body: remote.body, aid: command.aid),
     );
   }
 

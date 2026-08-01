@@ -9,8 +9,20 @@ final class PostEditRemoteDocument {
   final String html;
 }
 
+final class PostEditRemoteDeleteDocument {
+  const PostEditRemoteDeleteDocument({
+    required this.sourceUri,
+    required this.body,
+  });
+
+  final Uri sourceUri;
+  final String body;
+}
+
 abstract interface class PostEditRemoteDataSource {
   Future<ApiResult<PostEditRemoteDocument>> get(Uri editUri);
+
+  Future<ApiResult<PostEditRemoteDeleteDocument>> deleteImage(Uri deleteUri);
 }
 
 class DiscuzPostEditRemoteDataSource implements PostEditRemoteDataSource {
@@ -32,6 +44,29 @@ class DiscuzPostEditRemoteDataSource implements PostEditRemoteDataSource {
     return result.when(
       success: (response) => ApiSuccess(
         PostEditRemoteDocument(sourceUri: response.uri, html: response.body),
+      ),
+      failure: ApiFailure.new,
+    );
+  }
+
+  @override
+  Future<ApiResult<PostEditRemoteDeleteDocument>> deleteImage(
+    Uri deleteUri,
+  ) async {
+    final result = await _gateway.getText(
+      deleteUri,
+      context: const YamiboRequestContext(
+        kind: YamiboRequestKind.html,
+        operation: 'thread.post_edit.delete_attachment',
+        pageKind: 'thread.post_edit',
+      ),
+    );
+    return result.when(
+      success: (response) => ApiSuccess(
+        PostEditRemoteDeleteDocument(
+          sourceUri: response.uri,
+          body: response.body,
+        ),
       ),
       failure: ApiFailure.new,
     );

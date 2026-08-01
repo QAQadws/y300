@@ -4114,6 +4114,36 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get postEditLeaveBody => '本地修改会保存为草稿，之后可以继续编辑。';
+
+  @override
+  String get postEditManageImages => '管理图片';
+
+  @override
+  String get postEditNoImages => '当前编辑没有图片';
+
+  @override
+  String get postEditDeleteImage => '删除图片';
+
+  @override
+  String get postEditDeleteImageTitle => '删除这张图片？';
+
+  @override
+  String get postEditDeleteImageBody => '这会删除服务器上的图片，但不会删除正文中的图片代码。';
+
+  @override
+  String get postEditDeleteImageConfirm => '确认删除';
+
+  @override
+  String get postEditDeleteImageFailed => '图片删除未成功，图片仍保留。';
+
+  @override
+  String get postEditDeleteImageUnconfirmed => '无法确认图片删除状态，请稍后重试。';
+
+  @override
+  String get postEditAttachmentDeleting => '正在删除图片';
+
+  @override
+  String get postEditDeletedImageReferenceWarning => '正文仍包含已删除图片代码。';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -8227,4 +8257,34 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get postEditLeaveBody => '本地修改會儲存為草稿，之後可以繼續編輯。';
+
+  @override
+  String get postEditManageImages => '管理圖片';
+
+  @override
+  String get postEditNoImages => '目前編輯沒有圖片';
+
+  @override
+  String get postEditDeleteImage => '刪除圖片';
+
+  @override
+  String get postEditDeleteImageTitle => '刪除這張圖片？';
+
+  @override
+  String get postEditDeleteImageBody => '這會刪除伺服器上的圖片，但不會刪除正文中的圖片代碼。';
+
+  @override
+  String get postEditDeleteImageConfirm => '確認刪除';
+
+  @override
+  String get postEditDeleteImageFailed => '圖片刪除未成功，圖片仍保留。';
+
+  @override
+  String get postEditDeleteImageUnconfirmed => '無法確認圖片刪除狀態，請稍後重試。';
+
+  @override
+  String get postEditAttachmentDeleting => '正在刪除圖片';
+
+  @override
+  String get postEditDeletedImageReferenceWarning => '正文仍包含已刪除圖片代碼。';
 }

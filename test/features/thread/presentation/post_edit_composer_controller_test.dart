@@ -3,6 +3,7 @@ import 'package:y300/features/composer_shared/domain/models/composer_draft_model
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_controller.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 
@@ -65,6 +66,37 @@ void main() {
     expect(controller.shouldPersistDraft(conflict), isTrue);
     expect(controller.draftSnapshotFor(conflict).message, '本地修改');
   });
+
+  test(
+    'restores attachment tombstones without moving remote images into uploads',
+    () async {
+      final controller = PostEditComposerController(
+        PostEditComposerArgs(preparation: preparation),
+      );
+      final draft = ComposerDraftSnapshot(
+        identity: controller.draftIdentity,
+        message: snapshot.rawMessage,
+        useSignature: true,
+        updatedAt: DateTime.utc(2026, 8, 1),
+        extras: const <String, String>{
+          'baselineFingerprint': 'fp-1',
+          'deletedAidTombstones': '["123"]',
+        },
+      );
+
+      final restored = await controller.buildInitialState(
+        restoredDraft: draft,
+        preferences: ComposerPreferences.defaults(),
+      );
+      expect(restored.attachmentSession.deletedAidTombstones, {'123'});
+      expect(restored.imageAttachments, isEmpty);
+      expect(controller.uploadFid, '5');
+      expect(
+        controller.attachmentResolver(restored).resolve('123').availability,
+        ComposerAttachmentAvailability.deleted,
+      );
+    },
+  );
 }
 
 PostEditFormSnapshot _snapshot() {

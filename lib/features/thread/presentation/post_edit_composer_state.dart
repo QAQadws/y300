@@ -29,9 +29,12 @@ final class PostEditComposerState extends ComposerStateBase {
     required super.isUploadingImages,
     required super.imageUploadCurrent,
     required super.imageUploadTotal,
+    required this.attachmentSession,
     this.webReturnVerificationState = PostEditWebReturnVerificationState.idle,
     this.pendingConflict,
     this.serverMutationPossible = false,
+    this.lastAttachmentDeleteOutcome,
+    this.attachmentVerificationUnconfirmed = false,
     super.messageRevision,
     super.lastMessageMutation,
     super.pendingAttachmentAids,
@@ -49,6 +52,7 @@ final class PostEditComposerState extends ComposerStateBase {
     PostEditDraftConflict? pendingConflict,
     List<ComposerImageAttachment> imageAttachments =
         const <ComposerImageAttachment>[],
+    Set<String> deletedAidTombstones = const <String>{},
   }) {
     return PostEditComposerState(
       target: target,
@@ -63,6 +67,10 @@ final class PostEditComposerState extends ComposerStateBase {
       isUploadingImages: false,
       imageUploadCurrent: 0,
       imageUploadTotal: 0,
+      attachmentSession: PostEditAttachmentSession.fromImages(
+        snapshot.existingImages,
+        deletedAidTombstones: deletedAidTombstones,
+      ),
       pendingConflict: pendingConflict,
     );
   }
@@ -71,16 +79,20 @@ final class PostEditComposerState extends ComposerStateBase {
   final PostEditFormSnapshot snapshot;
   final String baselineMessage;
   final String baselineFingerprint;
+  final PostEditAttachmentSession attachmentSession;
   final PostEditWebReturnVerificationState webReturnVerificationState;
   final PostEditDraftConflict? pendingConflict;
   final bool serverMutationPossible;
+  final PostEditAttachmentDeleteOutcome? lastAttachmentDeleteOutcome;
+  final bool attachmentVerificationUnconfirmed;
 
   bool get isDirtyAgainstBaseline {
     return message != baselineMessage ||
         imageAttachments.isNotEmpty ||
         isUploadingImages ||
         pendingAttachmentAids.isNotEmpty ||
-        pendingConflict != null;
+        pendingConflict != null ||
+        attachmentSession.deletedAidTombstones.isNotEmpty;
   }
 
   bool get canSubmit => false;
@@ -94,6 +106,7 @@ final class PostEditComposerState extends ComposerStateBase {
     bool? isUploadingImages,
     int? imageUploadCurrent,
     int? imageUploadTotal,
+    PostEditAttachmentSession? attachmentSession,
     int? messageRevision,
     ComposerTextMutation? lastMessageMutation,
     List<String>? pendingAttachmentAids,
@@ -106,11 +119,14 @@ final class PostEditComposerState extends ComposerStateBase {
     PostEditWebReturnVerificationState? webReturnVerificationState,
     PostEditDraftConflict? pendingConflict,
     bool? serverMutationPossible,
+    PostEditAttachmentDeleteOutcome? lastAttachmentDeleteOutcome,
+    bool? attachmentVerificationUnconfirmed,
     bool clearPendingConflict = false,
     bool clearFailure = false,
     bool clearImageUploadFailure = false,
     bool clearLastMessageMutation = false,
     bool clearPendingAttachmentNotice = false,
+    bool clearLastAttachmentDeleteOutcome = false,
   }) {
     final nextSnapshot = snapshot ?? this.snapshot;
     return PostEditComposerState(
@@ -126,6 +142,7 @@ final class PostEditComposerState extends ComposerStateBase {
       isUploadingImages: isUploadingImages ?? this.isUploadingImages,
       imageUploadCurrent: imageUploadCurrent ?? this.imageUploadCurrent,
       imageUploadTotal: imageUploadTotal ?? this.imageUploadTotal,
+      attachmentSession: attachmentSession ?? this.attachmentSession,
       messageRevision: messageRevision ?? this.messageRevision,
       lastMessageMutation: clearLastMessageMutation
           ? null
@@ -146,6 +163,12 @@ final class PostEditComposerState extends ComposerStateBase {
           : pendingConflict ?? this.pendingConflict,
       serverMutationPossible:
           serverMutationPossible ?? this.serverMutationPossible,
+      lastAttachmentDeleteOutcome: clearLastAttachmentDeleteOutcome
+          ? null
+          : lastAttachmentDeleteOutcome ?? this.lastAttachmentDeleteOutcome,
+      attachmentVerificationUnconfirmed:
+          attachmentVerificationUnconfirmed ??
+          this.attachmentVerificationUnconfirmed,
     );
   }
 }

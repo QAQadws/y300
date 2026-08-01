@@ -79,6 +79,77 @@ final class PostEditExistingImage {
   final String? fileName;
 }
 
+/// The attachment registry owned by one native edit session.
+///
+/// Existing images are deliberately kept separate from
+/// [ComposerImageAttachment], which represents local uploads and their
+/// existing 24-hour maintenance lifecycle.
+final class PostEditAttachmentSession {
+  PostEditAttachmentSession({
+    required Map<String, PostEditExistingImage> existingImagesByAid,
+    Set<String> deletingAids = const <String>{},
+    Set<String> deletedAidTombstones = const <String>{},
+  }) : existingImagesByAid = Map.unmodifiable(existingImagesByAid),
+       deletingAids = Set.unmodifiable(deletingAids),
+       deletedAidTombstones = Set.unmodifiable(deletedAidTombstones);
+
+  factory PostEditAttachmentSession.fromImages(
+    Iterable<PostEditExistingImage> images, {
+    Set<String> deletingAids = const <String>{},
+    Set<String> deletedAidTombstones = const <String>{},
+  }) {
+    return PostEditAttachmentSession(
+      existingImagesByAid: {for (final image in images) image.aid: image},
+      deletingAids: deletingAids,
+      deletedAidTombstones: deletedAidTombstones,
+    );
+  }
+
+  final Map<String, PostEditExistingImage> existingImagesByAid;
+  final Set<String> deletingAids;
+  final Set<String> deletedAidTombstones;
+
+  PostEditAttachmentSession copyWith({
+    Map<String, PostEditExistingImage>? existingImagesByAid,
+    Set<String>? deletingAids,
+    Set<String>? deletedAidTombstones,
+  }) {
+    return PostEditAttachmentSession(
+      existingImagesByAid: existingImagesByAid ?? this.existingImagesByAid,
+      deletingAids: deletingAids ?? this.deletingAids,
+      deletedAidTombstones: deletedAidTombstones ?? this.deletedAidTombstones,
+    );
+  }
+}
+
+final class PostEditAttachmentDeleteCommand {
+  const PostEditAttachmentDeleteCommand({
+    required this.target,
+    required this.aid,
+    required this.formHash,
+    required this.expectedBaselineFingerprint,
+  });
+
+  final PostEditTarget target;
+  final String aid;
+  final String formHash;
+  final String expectedBaselineFingerprint;
+}
+
+enum PostEditAttachmentDeleteOutcome { deleted, notDeleted, unconfirmed }
+
+final class PostEditAttachmentDeleteResult {
+  const PostEditAttachmentDeleteResult({
+    required this.aid,
+    required this.outcome,
+    this.deletedCount,
+  });
+
+  final String aid;
+  final PostEditAttachmentDeleteOutcome outcome;
+  final int? deletedCount;
+}
+
 final class PostEditRegularAttachment {
   const PostEditRegularAttachment({required this.aid, this.fileName});
 
