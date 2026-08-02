@@ -15,6 +15,7 @@ enum PostEditSubmitPayloadBuildFailure {
   targetMismatch,
   invalidSubmitUri,
   duplicateMessage,
+  duplicateSubject,
   unsupportedControl,
   uploadInProgress,
   deletionInProgress,
@@ -24,6 +25,7 @@ final class PostEditSubmitCommand {
   const PostEditSubmitCommand({
     required this.target,
     required this.snapshot,
+    required this.subject,
     required this.message,
     required this.imageAttachments,
     required this.attachmentSession,
@@ -32,6 +34,7 @@ final class PostEditSubmitCommand {
 
   final PostEditTarget target;
   final PostEditFormSnapshot snapshot;
+  final String subject;
   final String message;
   final List<ComposerImageAttachment> imageAttachments;
   final PostEditAttachmentSession attachmentSession;

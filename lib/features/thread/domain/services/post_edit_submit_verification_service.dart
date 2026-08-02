@@ -12,6 +12,7 @@ final class PostEditSubmitVerificationService {
   PostEditSubmitVerification verify({
     required PostEditFormSnapshot before,
     required PostEditFormSnapshot after,
+    required String submittedSubject,
     required String submittedMessage,
     required Iterable<String> attachNewAids,
   }) {
@@ -27,6 +28,13 @@ final class PostEditSubmitVerificationService {
         kind: PostEditSubmitResponseKind.ambiguous,
         snapshot: after,
         detail: 'message_mismatch',
+      );
+    }
+    if (after.originalSubject.trim() != submittedSubject.trim()) {
+      return PostEditSubmitVerification(
+        kind: PostEditSubmitResponseKind.ambiguous,
+        snapshot: after,
+        detail: 'subject_mismatch',
       );
     }
 

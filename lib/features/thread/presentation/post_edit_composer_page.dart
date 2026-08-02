@@ -22,7 +22,9 @@ import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart'
 import 'package:y300/features/thread/presentation/post_edit_composer_controller.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 import 'package:y300/features/thread/presentation/widgets/post_edit_attachment_panel.dart';
+import 'package:y300/features/posting/presentation/widgets/thread_subject_field.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
 class PostEditComposerPage extends ConsumerStatefulWidget {
   const PostEditComposerPage({super.key, required this.args});
@@ -35,19 +37,24 @@ class PostEditComposerPage extends ConsumerStatefulWidget {
 }
 
 class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
+  late final TextEditingController _subjectController;
   late final TextEditingController _messageController;
+  bool _didApplySubject = false;
   bool _didApplyMessage = false;
   bool _allowRoutePop = false;
+  String? _lastAppliedSubject;
   String? _lastAppliedMessage;
 
   @override
   void initState() {
     super.initState();
+    _subjectController = TextEditingController();
     _messageController = TextEditingController();
   }
 
   @override
   void dispose() {
+    _subjectController.dispose();
     _messageController.dispose();
     super.dispose();
   }
@@ -69,6 +76,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
         .watch(stickerPickerLastGroupIdControllerProvider)
         .value;
     if (state != null) {
+      _syncSubjectController(state);
       _syncMessageController(state);
     }
 
@@ -112,6 +120,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
           ),
           data: (value) => _PostEditComposerBody(
             state: value,
+            subjectController: _subjectController,
             messageController: _messageController,
             bbCodeRenderer: ref.watch(forumBbCodeRendererProvider),
             stickerGroups: stickerGroups,
@@ -124,6 +133,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
               );
             },
             onMessageChanged: controller.updateMessage,
+            onSubjectChanged: controller.updateSubject,
             attachmentResolver: controller.attachmentResolver(value),
             attachmentPanelBuilder: (_) {
               return Consumer(
@@ -217,6 +227,21 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
     _lastAppliedMessage = state.message;
   }
 
+  void _syncSubjectController(PostEditComposerState state) {
+    if (_didApplySubject &&
+        (_lastAppliedSubject == state.subject ||
+            _subjectController.text == state.subject)) {
+      _lastAppliedSubject = state.subject;
+      return;
+    }
+    _didApplySubject = true;
+    _subjectController.value = TextEditingValue(
+      text: state.subject,
+      selection: TextSelection.collapsed(offset: state.subject.length),
+    );
+    _lastAppliedSubject = state.subject;
+  }
+
   Future<void> _openWebView(PostEditComposerController controller) async {
     final routeFactory = ref.read(forumWebViewRouteFactoryProvider);
     final result = await Navigator.of(context).push<Object?>(
@@ -276,12 +301,14 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
 class _PostEditComposerBody extends StatelessWidget {
   const _PostEditComposerBody({
     required this.state,
+    required this.subjectController,
     required this.messageController,
     required this.bbCodeRenderer,
     required this.stickerGroups,
     required this.initialStickerGroupId,
     required this.onStickerGroupChanged,
     required this.onMessageChanged,
+    required this.onSubjectChanged,
     required this.attachmentResolver,
     required this.attachmentPanelBuilder,
     required this.onImagePressed,
@@ -291,12 +318,14 @@ class _PostEditComposerBody extends StatelessWidget {
   });
 
   final PostEditComposerState state;
+  final TextEditingController subjectController;
   final TextEditingController messageController;
   final ForumBbCodeRenderer bbCodeRenderer;
   final List<StickerGroup> stickerGroups;
   final String? initialStickerGroupId;
   final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onMessageChanged;
+  final ValueChanged<String> onSubjectChanged;
   final ComposerAttachmentPreviewResolver attachmentResolver;
   final WidgetBuilder attachmentPanelBuilder;
   final ComposerImageInsertCallback onImagePressed;
@@ -415,6 +444,23 @@ class _PostEditComposerBody extends StatelessWidget {
               key: const Key('post-edit-deleted-image-reference-banner'),
               text: l10n.postEditDeletedImageReferenceWarning,
             ),
+          if (state.target.isFirstPost) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                ForumContentSpacing.composerPageHorizontal,
+                ForumContentSpacing.composerPageVertical,
+                ForumContentSpacing.composerPageHorizontal,
+                0,
+              ),
+              child: ThreadSubjectField(
+                fieldKey: const Key('post-edit-subject-input'),
+                controller: subjectController,
+                enabled: !state.isSubmitting,
+                onChanged: onSubjectChanged,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Expanded(child: editor),
         ],
       ),

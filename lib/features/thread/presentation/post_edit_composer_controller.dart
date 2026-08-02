@@ -43,6 +43,7 @@ final class PostEditComposerController
   int _webReconcileGeneration = 0;
   int _submitGeneration = 0;
   final Map<String, int> _deleteGenerationByAid = <String, int>{};
+  String? _lastUncertainSubmitSubject;
   String? _lastUncertainSubmitMessage;
   List<String> _lastUncertainSubmitAttachNewAids = const <String>[];
 
@@ -85,6 +86,7 @@ final class PostEditComposerController
     return PostEditComposerState.initial(
       target: _args.target,
       snapshot: _args.snapshot,
+      subject: _args.snapshot.originalSubject,
       message: _args.snapshot.rawMessage,
       useSignature: _usesSignatureFromSnapshot(),
       nativeSupported: _args.preparation.isNativeSupported,
@@ -142,6 +144,29 @@ final class PostEditComposerController
     );
   }
 
+  void updateSubject(String value) {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    _webReconcileGeneration += 1;
+    if (current.isSubmitting ||
+        current.submitState != PostEditSubmitState.idle) {
+      _submitGeneration += 1;
+    }
+    _lastUncertainSubmitSubject = null;
+    _lastUncertainSubmitMessage = null;
+    _lastUncertainSubmitAttachNewAids = const <String>[];
+    setStateValue(
+      current.copyWith(
+        subject: value,
+        restoredDraft: false,
+        clearFailure: true,
+        clearLastSubmitOutcome: true,
+      ),
+    );
+  }
+
   /// Returns only warnings; the builder remains the single source of truth
   /// for whether an attachment can be sent. The page uses this to ask for an
   /// explicit confirmation without rewriting the user's BBCode.
@@ -152,6 +177,7 @@ final class PostEditComposerController
             PostEditSubmitCommand(
               target: value.target,
               snapshot: value.snapshot,
+              subject: value.subject,
               message: value.message,
               imageAttachments: value.imageAttachments,
               attachmentSession: value.attachmentSession,
@@ -168,6 +194,7 @@ final class PostEditComposerController
   PostEditComposerState resetToBaseline(PostEditComposerState value) {
     return value.copyWith(
       message: value.snapshot.rawMessage,
+      subject: value.snapshot.originalSubject,
       messageRevision: value.messageRevision + 1,
       restoredDraft: false,
       imageAttachments: const [],
@@ -190,6 +217,11 @@ final class PostEditComposerController
 
   @override
   ComposerValidationFailure? preflightValidate(PostEditComposerState state) {
+    if (state.target.isFirstPost && state.subject.trim().isEmpty) {
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.contentRequired,
+      );
+    }
     if (state.message.trim().isEmpty) {
       return const ComposerValidationFailure(
         code: ComposerValidationFailureCode.contentRequired,
@@ -236,6 +268,7 @@ final class PostEditComposerController
         PostEditSubmitCommand(
           target: current.target,
           snapshot: current.snapshot,
+          subject: current.subject,
           message: current.message,
           imageAttachments: current.imageAttachments,
           attachmentSession: current.attachmentSession,
@@ -396,6 +429,7 @@ final class PostEditComposerController
     required int generation,
   }) async {
     _lastUncertainSubmitMessage = current.message;
+    _lastUncertainSubmitSubject = current.subject;
     _lastUncertainSubmitAttachNewAids = payload.attachNewAids;
     return _verifyReadback(current, payload: payload, generation: generation);
   }
@@ -404,8 +438,9 @@ final class PostEditComposerController
   /// resubmits the multipart payload.
   Future<void> retrySubmitVerification() async {
     final current = state.value ?? latestState;
+    final subject = _lastUncertainSubmitSubject;
     final message = _lastUncertainSubmitMessage;
-    if (current == null || message == null) {
+    if (current == null || subject == null || message == null) {
       await reconcileWebViewReturn();
       return;
     }
@@ -420,6 +455,7 @@ final class PostEditComposerController
       current,
       payload: payload,
       generation: generation,
+      submittedSubject: subject,
       submittedMessage: message,
     );
   }
@@ -428,6 +464,7 @@ final class PostEditComposerController
     PostEditComposerState current, {
     required PostEditSubmitPayload payload,
     required int generation,
+    String? submittedSubject,
     String? submittedMessage,
   }) async {
     final prepareGeneration = ++_prepareGeneration;
@@ -479,6 +516,7 @@ final class PostEditComposerController
     final verification = _verificationService.verify(
       before: current.snapshot,
       after: snapshot,
+      submittedSubject: submittedSubject ?? current.subject,
       submittedMessage: submittedMessage ?? current.message,
       attachNewAids: payload.attachNewAids,
     );
@@ -497,8 +535,9 @@ final class PostEditComposerController
         );
       case PostEditSubmitResponseKind.ambiguous:
         if (snapshot.baselineFingerprint != current.baselineFingerprint &&
-            _messageCanonicalizer.canonicalize(snapshot.rawMessage) !=
-                _messageCanonicalizer.canonicalize(current.message)) {
+            (_messageCanonicalizer.canonicalize(snapshot.rawMessage) !=
+                    _messageCanonicalizer.canonicalize(current.message) ||
+                snapshot.originalSubject.trim() != current.subject.trim())) {
           return _markConflict(
             current,
             snapshot: snapshot,
@@ -546,6 +585,7 @@ final class PostEditComposerController
       ),
     );
     _lastUncertainSubmitMessage = null;
+    _lastUncertainSubmitSubject = null;
     _lastUncertainSubmitAttachNewAids = const <String>[];
     return const ComposerSubmissionOutcome.success();
   }
@@ -762,6 +802,7 @@ final class PostEditComposerController
     );
     return current.copyWith(
       snapshot: snapshot,
+      baselineSubject: snapshot.originalSubject,
       baselineMessage: snapshot.rawMessage,
       baselineFingerprint: snapshot.baselineFingerprint,
       attachmentSession: session,
@@ -773,6 +814,7 @@ final class PostEditComposerController
     PostEditFormSnapshot snapshot,
   ) {
     return PostEditConflictState(
+      localSubject: current.subject,
       localMessage: current.message,
       localUseSignature: current.useSignature,
       localImageAttachments: current.imageAttachments,
@@ -851,8 +893,10 @@ final class PostEditComposerController
       setStateValue(
         latest.copyWith(
           snapshot: latestSnapshot,
+          baselineSubject: latestSnapshot.originalSubject,
           baselineMessage: latestSnapshot.rawMessage,
           baselineFingerprint: latestSnapshot.baselineFingerprint,
+          subject: latestSnapshot.originalSubject,
           message: latestSnapshot.rawMessage,
           imageAttachments: const <ComposerImageAttachment>[],
           attachmentSession: PostEditAttachmentSession.fromImages(
@@ -886,8 +930,10 @@ final class PostEditComposerController
     setStateValue(
       current.copyWith(
         snapshot: conflict.latestSnapshot,
+        baselineSubject: conflict.latestSnapshot.originalSubject,
         baselineMessage: conflict.latestSnapshot.rawMessage,
         baselineFingerprint: conflict.latestSnapshot.baselineFingerprint,
+        subject: conflict.latestSnapshot.originalSubject,
         message: conflict.latestSnapshot.rawMessage,
         restoredDraft: false,
         imageAttachments: const <ComposerImageAttachment>[],
@@ -921,8 +967,10 @@ final class PostEditComposerController
     setStateValue(
       current.copyWith(
         snapshot: conflict.latestSnapshot,
+        baselineSubject: conflict.latestSnapshot.originalSubject,
         baselineMessage: conflict.latestSnapshot.rawMessage,
         baselineFingerprint: conflict.latestSnapshot.baselineFingerprint,
+        subject: conflict.localSubject,
         message: conflict.localMessage,
         useSignature: conflict.localUseSignature,
         imageAttachments: conflict.localImageAttachments,
@@ -1080,6 +1128,7 @@ final class PostEditComposerController
       setStateValue(
         latest.copyWith(
           snapshot: snapshot,
+          baselineSubject: snapshot.originalSubject,
           baselineMessage: snapshot.rawMessage,
           baselineFingerprint: snapshot.baselineFingerprint,
           attachmentSession: PostEditAttachmentSession.fromImages(

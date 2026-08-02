@@ -88,6 +88,37 @@ void main() {
     );
   });
 
+  testWidgets('first-post edit shows the server subject', (tester) async {
+    final results = <Object?>[];
+    final args = _args(
+      _snapshot(message: '服务器正文', isFirstPost: true, subject: '论坛近期考虑升级吗'),
+    );
+    await tester.pumpWidget(_buildApp(args: args, results: results));
+    await _openEditor(tester);
+
+    final subject = find.byKey(const Key('post-edit-subject-input'));
+    expect(subject, findsOneWidget);
+    expect(tester.widget<TextField>(subject).controller!.text, '论坛近期考虑升级吗');
+
+    await tester.enterText(subject, '新的标题');
+    await tester.pump();
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('post-edit-save-button')))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('floor edit does not show a subject field', (tester) async {
+    final results = <Object?>[];
+    final args = _args(_snapshot(message: '服务器正文'));
+    await tester.pumpWidget(_buildApp(args: args, results: results));
+    await _openEditor(tester);
+
+    expect(find.byKey(const Key('post-edit-subject-input')), findsNothing);
+  });
+
   testWidgets('possible server mutation returns a structured refresh result', (
     tester,
   ) async {
@@ -195,6 +226,8 @@ PostEditComposerArgs _args(PostEditFormSnapshot snapshot) {
 PostEditFormSnapshot _snapshot({
   required String message,
   List<PostEditExistingImage> images = const <PostEditExistingImage>[],
+  bool isFirstPost = false,
+  String subject = 'subject',
 }) {
   final target = PostEditTarget(
     editUri: Uri.parse(
@@ -204,7 +237,7 @@ PostEditFormSnapshot _snapshot({
     tid: '20',
     pid: '30',
     page: 1,
-    isFirstPost: false,
+    isFirstPost: isFirstPost,
   );
   return PostEditFormSnapshot(
     target: target,
@@ -215,8 +248,13 @@ PostEditFormSnapshot _snapshot({
     formHash: 'test-formhash',
     postTime: '1700000000',
     rawMessage: message,
-    originalSubject: 'subject',
+    originalSubject: subject,
     successfulControls: [
+      PostEditFormField(
+        name: 'subject',
+        value: subject,
+        controlKind: PostEditFormControlKind.text,
+      ),
       PostEditFormField(
         name: 'message',
         value: message,
@@ -225,7 +263,7 @@ PostEditFormSnapshot _snapshot({
     ],
     existingImages: images,
     structureEvidence: PostEditFormStructureEvidence(
-      allNamedControlNamesInDomOrder: const <String>['message'],
+      allNamedControlNamesInDomOrder: const <String>['subject', 'message'],
     ),
     baselineFingerprint: 'baseline',
   );

@@ -27,6 +27,7 @@ void main() {
     expect(controller.draftsEnabled, isFalse);
     expect(controller.draftIdentity, isNull);
     expect(state.message, snapshot.rawMessage);
+    expect(state.subject, snapshot.originalSubject);
     expect(state.isDirtyAgainstBaseline, isFalse);
     expect(controller.shouldPersistDraft(state), isFalse);
   });
@@ -83,9 +84,31 @@ void main() {
       isTrue,
     );
   });
+
+  test('tracks a first-post subject against the server baseline', () async {
+    final firstPostSnapshot = _snapshot(isFirstPost: true);
+    final firstPostPreparation = PostEditPreparation(
+      target: firstPostSnapshot.target,
+      decision: const PostEditNativeSupported(profileVersion: 1),
+      snapshot: firstPostSnapshot,
+    );
+    final controller = PostEditComposerController(
+      PostEditComposerArgs(preparation: firstPostPreparation),
+    );
+    final state = await controller.buildInitialState(
+      restoredDraft: null,
+      preferences: ComposerPreferences.defaults(),
+    );
+
+    expect(state.subject, firstPostSnapshot.originalSubject);
+    expect(state.isDirtyAgainstBaseline, isFalse);
+    final changed = state.copyWith(subject: '新的标题');
+    expect(changed.isDirtyAgainstBaseline, isTrue);
+    expect(changed.canSubmit, isTrue);
+  });
 }
 
-PostEditFormSnapshot _snapshot() {
+PostEditFormSnapshot _snapshot({bool isFirstPost = false}) {
   final target = PostEditTarget(
     editUri: Uri.parse(
       'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=5&tid=557857&pid=41587383',
@@ -94,17 +117,24 @@ PostEditFormSnapshot _snapshot() {
     tid: '557857',
     pid: '41587383',
     page: 1,
-    isFirstPost: false,
+    isFirstPost: isFirstPost,
   );
   return PostEditFormSnapshot(
     target: target,
     sourceUri: target.editUri,
-    submitUri: target.editUri,
+    submitUri: Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=post&action=edit&editsubmit=yes',
+    ),
     formHash: 'not-persisted',
     postTime: '1700000000',
     rawMessage: '服务器正文',
     originalSubject: '标题',
     successfulControls: const <PostEditFormField>[
+      PostEditFormField(
+        name: 'subject',
+        value: '标题',
+        controlKind: PostEditFormControlKind.text,
+      ),
       PostEditFormField(
         name: 'message',
         value: '服务器正文',
@@ -113,7 +143,7 @@ PostEditFormSnapshot _snapshot() {
     ],
     existingImages: const <PostEditExistingImage>[],
     structureEvidence: PostEditFormStructureEvidence(
-      allNamedControlNamesInDomOrder: const <String>['message'],
+      allNamedControlNamesInDomOrder: const <String>['subject', 'message'],
     ),
     baselineFingerprint: 'fp-1',
   );

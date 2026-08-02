@@ -62,6 +62,14 @@ final class PostEditSubmitPayloadBuilder {
         PostEditSubmitPayloadBuildFailure.duplicateMessage,
       );
     }
+    final subjectFields = command.snapshot.successfulControls
+        .where((field) => field.name.trim().toLowerCase() == 'subject')
+        .length;
+    if (subjectFields != 1) {
+      throw const PostEditSubmitPayloadBuildException(
+        PostEditSubmitPayloadBuildFailure.duplicateSubject,
+      );
+    }
 
     final referencedAids = <String>[];
     final seenReferencedAids = <String>{};
@@ -99,6 +107,7 @@ final class PostEditSubmitPayloadBuilder {
     final existingAttachmentAids = <String>{};
     final fields = <MapEntry<String, String>>[];
     var messageWritten = false;
+    var subjectWritten = false;
     var editsubmitWritten = false;
     for (final field in command.snapshot.successfulControls) {
       final name = field.name.trim();
@@ -124,6 +133,16 @@ final class PostEditSubmitPayloadBuilder {
         fields.add(MapEntry(name, command.message));
         continue;
       }
+      if (lowerName == 'subject') {
+        if (subjectWritten) {
+          throw const PostEditSubmitPayloadBuildException(
+            PostEditSubmitPayloadBuildFailure.duplicateSubject,
+          );
+        }
+        subjectWritten = true;
+        fields.add(MapEntry(name, command.subject.trim()));
+        continue;
+      }
       if (lowerName == 'editsubmit') {
         if (!editsubmitWritten) {
           editsubmitWritten = true;
@@ -141,6 +160,11 @@ final class PostEditSubmitPayloadBuilder {
     if (!messageWritten) {
       throw const PostEditSubmitPayloadBuildException(
         PostEditSubmitPayloadBuildFailure.duplicateMessage,
+      );
+    }
+    if (!subjectWritten) {
+      throw const PostEditSubmitPayloadBuildException(
+        PostEditSubmitPayloadBuildFailure.duplicateSubject,
       );
     }
     if (!editsubmitWritten) {

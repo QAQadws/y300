@@ -59,6 +59,7 @@ void main() {
       PostEditSubmitCommand(
         target: snapshot.target,
         snapshot: snapshot,
+        subject: '  新标题  ',
         message:
             '[attachimg]123[/attachimg] [attach]123[/attach] [attach]9[/attach] [attach]777[/attach]',
         imageAttachments: [
@@ -86,7 +87,7 @@ void main() {
 
     expect(payload.fields.map((entry) => '${entry.key}=${entry.value}'), [
       'formhash=hash',
-      'subject=标题',
+      'subject=新标题',
       'fid=5',
       'tid=20',
       'pid=30',
@@ -106,6 +107,11 @@ void main() {
   test('filters destructive and tombstoned attachment fields', () {
     final snapshot = _snapshot(
       controls: const [
+        PostEditFormField(
+          name: 'subject',
+          value: '旧标题',
+          controlKind: PostEditFormControlKind.text,
+        ),
         PostEditFormField(
           name: 'message',
           value: 'old',
@@ -137,6 +143,7 @@ void main() {
       PostEditSubmitCommand(
         target: snapshot.target,
         snapshot: snapshot,
+        subject: '标题',
         message: 'new',
         imageAttachments: const [],
         attachmentSession: PostEditAttachmentSession.fromImages(
@@ -148,6 +155,7 @@ void main() {
     );
 
     expect(payload.fields.map((entry) => '${entry.key}=${entry.value}'), [
+      'subject=标题',
       'message=new',
       'fid=5',
       'tid=20',
@@ -166,6 +174,21 @@ void main() {
           value: 'old',
           controlKind: PostEditFormControlKind.textarea,
         ),
+        PostEditFormField(
+          name: 'fid',
+          value: '5',
+          controlKind: PostEditFormControlKind.hidden,
+        ),
+        PostEditFormField(
+          name: 'tid',
+          value: '20',
+          controlKind: PostEditFormControlKind.hidden,
+        ),
+        PostEditFormField(
+          name: 'pid',
+          value: '30',
+          controlKind: PostEditFormControlKind.hidden,
+        ),
       ],
     );
 
@@ -174,6 +197,7 @@ void main() {
         PostEditSubmitCommand(
           target: snapshot.target,
           snapshot: snapshot,
+          subject: '标题',
           message: 'new',
           imageAttachments: const [],
           attachmentSession: PostEditAttachmentSession.fromImages(const []),
@@ -185,6 +209,110 @@ void main() {
           (error) => error.failure,
           'failure',
           PostEditSubmitPayloadBuildFailure.invalidSubmitUri,
+        ),
+      ),
+    );
+  });
+
+  test('keeps the original subject for a non-first-post edit', () {
+    final snapshot = _snapshot(
+      controls: const [
+        PostEditFormField(
+          name: 'subject',
+          value: '标题',
+          controlKind: PostEditFormControlKind.text,
+        ),
+        PostEditFormField(
+          name: 'message',
+          value: 'old',
+          controlKind: PostEditFormControlKind.textarea,
+        ),
+        PostEditFormField(
+          name: 'fid',
+          value: '5',
+          controlKind: PostEditFormControlKind.hidden,
+        ),
+        PostEditFormField(
+          name: 'tid',
+          value: '20',
+          controlKind: PostEditFormControlKind.hidden,
+        ),
+        PostEditFormField(
+          name: 'pid',
+          value: '30',
+          controlKind: PostEditFormControlKind.hidden,
+        ),
+      ],
+    );
+    final payload = const PostEditSubmitPayloadBuilder().build(
+      PostEditSubmitCommand(
+        target: snapshot.target,
+        snapshot: snapshot,
+        subject: snapshot.originalSubject,
+        message: 'new',
+        imageAttachments: const [],
+        attachmentSession: PostEditAttachmentSession.fromImages(const []),
+        now: DateTime(2026, 8, 1),
+      ),
+    );
+
+    expect(payload.fields.first.key, 'subject');
+    expect(payload.fields.first.value, '标题');
+  });
+
+  test('rejects duplicate subject controls', () {
+    final snapshot = _snapshot(
+      controls: const [
+        PostEditFormField(
+          name: 'subject',
+          value: 'one',
+          controlKind: PostEditFormControlKind.text,
+        ),
+        PostEditFormField(
+          name: 'subject',
+          value: 'two',
+          controlKind: PostEditFormControlKind.text,
+        ),
+        PostEditFormField(
+          name: 'message',
+          value: 'old',
+          controlKind: PostEditFormControlKind.textarea,
+        ),
+        PostEditFormField(
+          name: 'fid',
+          value: '5',
+          controlKind: PostEditFormControlKind.hidden,
+        ),
+        PostEditFormField(
+          name: 'tid',
+          value: '20',
+          controlKind: PostEditFormControlKind.hidden,
+        ),
+        PostEditFormField(
+          name: 'pid',
+          value: '30',
+          controlKind: PostEditFormControlKind.hidden,
+        ),
+      ],
+    );
+
+    expect(
+      () => const PostEditSubmitPayloadBuilder().build(
+        PostEditSubmitCommand(
+          target: snapshot.target,
+          snapshot: snapshot,
+          subject: 'new',
+          message: 'new',
+          imageAttachments: const [],
+          attachmentSession: PostEditAttachmentSession.fromImages(const []),
+          now: DateTime(2026, 8, 1),
+        ),
+      ),
+      throwsA(
+        isA<PostEditSubmitPayloadBuildException>().having(
+          (error) => error.failure,
+          'failure',
+          PostEditSubmitPayloadBuildFailure.duplicateSubject,
         ),
       ),
     );

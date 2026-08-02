@@ -20,6 +20,7 @@ final class PostEditComposerState extends ComposerStateBase {
   const PostEditComposerState({
     required this.target,
     required this.snapshot,
+    required this.baselineSubject,
     required this.baselineMessage,
     required this.baselineFingerprint,
     this.nativeSupported = true,
@@ -27,6 +28,7 @@ final class PostEditComposerState extends ComposerStateBase {
     required super.useSignature,
     required super.isSubmitting,
     required super.restoredDraft,
+    required this.subject,
     required super.imageAttachments,
     required super.isUploadingImages,
     required super.imageUploadCurrent,
@@ -52,6 +54,7 @@ final class PostEditComposerState extends ComposerStateBase {
   factory PostEditComposerState.initial({
     required PostEditTarget target,
     required PostEditFormSnapshot snapshot,
+    String? subject,
     String? message,
     bool useSignature = true,
     bool nativeSupported = true,
@@ -64,9 +67,11 @@ final class PostEditComposerState extends ComposerStateBase {
     return PostEditComposerState(
       target: target,
       snapshot: snapshot,
+      baselineSubject: snapshot.originalSubject,
       baselineMessage: snapshot.rawMessage,
       baselineFingerprint: snapshot.baselineFingerprint,
       nativeSupported: nativeSupported,
+      subject: subject ?? snapshot.originalSubject,
       message: message ?? snapshot.rawMessage,
       useSignature: useSignature,
       isSubmitting: false,
@@ -85,7 +90,9 @@ final class PostEditComposerState extends ComposerStateBase {
 
   final PostEditTarget target;
   final PostEditFormSnapshot snapshot;
+  final String baselineSubject;
   final String baselineMessage;
+  final String subject;
   final String baselineFingerprint;
   final bool nativeSupported;
   final PostEditAttachmentSession attachmentSession;
@@ -100,7 +107,8 @@ final class PostEditComposerState extends ComposerStateBase {
   final bool confirmedOverwriteIntent;
 
   bool get isDirtyAgainstBaseline {
-    return message != baselineMessage ||
+    return subject != baselineSubject ||
+        message != baselineMessage ||
         imageAttachments.isNotEmpty ||
         isUploadingImages ||
         pendingAttachmentAids.isNotEmpty ||
@@ -146,6 +154,9 @@ final class PostEditComposerState extends ComposerStateBase {
         pendingConflict != null) {
       return false;
     }
+    if (target.isFirstPost && subject.trim().isEmpty) {
+      return false;
+    }
     return true;
   }
 
@@ -168,6 +179,7 @@ final class PostEditComposerState extends ComposerStateBase {
   }
 
   PostEditComposerState copyWith({
+    String? subject,
     String? message,
     bool? useSignature,
     bool? isSubmitting,
@@ -184,6 +196,7 @@ final class PostEditComposerState extends ComposerStateBase {
     ComposerFailure? failure,
     ComposerImageUploadFailure? imageUploadFailure,
     PostEditFormSnapshot? snapshot,
+    String? baselineSubject,
     String? baselineMessage,
     String? baselineFingerprint,
     bool? nativeSupported,
@@ -208,9 +221,11 @@ final class PostEditComposerState extends ComposerStateBase {
     return PostEditComposerState(
       target: target,
       snapshot: nextSnapshot,
+      baselineSubject: baselineSubject ?? this.baselineSubject,
       baselineMessage: baselineMessage ?? this.baselineMessage,
       baselineFingerprint: baselineFingerprint ?? this.baselineFingerprint,
       nativeSupported: nativeSupported ?? this.nativeSupported,
+      subject: subject ?? this.subject,
       message: message ?? this.message,
       useSignature: useSignature ?? this.useSignature,
       isSubmitting: isSubmitting ?? this.isSubmitting,

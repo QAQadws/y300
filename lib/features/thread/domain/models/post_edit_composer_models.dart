@@ -12,6 +12,7 @@ enum PostEditWebReturnVerificationState {
 
 final class PostEditConflictState {
   const PostEditConflictState({
+    required this.localSubject,
     required this.localMessage,
     required this.localUseSignature,
     required this.localImageAttachments,
@@ -19,6 +20,7 @@ final class PostEditConflictState {
     required this.latestSnapshot,
   });
 
+  final String localSubject;
   final String localMessage;
   final bool localUseSignature;
   final List<ComposerImageAttachment> localImageAttachments;
