@@ -211,6 +211,123 @@ void main() {
       expect(saved?.imageAttachments.single.aid, '789');
     });
 
+    test('local attachment delegate applies without mutating root message', () async {
+      final args = _TestArgs(fid: '33', tid: '572063');
+      final container = _buildContainer(
+        imagePicker: _FakeImagePicker(
+          images: const [
+            ComposerPickedImage(
+              path: '/gallery/local.jpg',
+              fileName: 'local.jpg',
+              mimeType: 'image/jpeg',
+              originalIndex: 0,
+            ),
+          ],
+        ),
+        imageUploadCoordinator: _FakeUploadCoordinator(
+          events: [
+            const ComposerImageUploadEvent.started(
+              localId: '',
+              current: 1,
+              total: 1,
+            ),
+            ComposerImageUploadEvent.uploaded(
+              localId: '',
+              current: 1,
+              total: 1,
+              uploadedImage: ComposerUploadedImage(
+                localId: '',
+                aid: '792',
+                uploadedAt: DateTime.utc(2026, 8, 2),
+              ),
+            ),
+            const ComposerImageUploadEvent.completed(total: 1),
+          ],
+        ),
+      );
+      addTearDown(container.dispose);
+      _keepAlive(container, args);
+      await container.read(_testControllerProvider(args).future);
+      final controller = container.read(_testControllerProvider(args).notifier);
+      controller.updateMessage('根正文');
+      List<String>? insertedCodes;
+
+      await controller.pickImages(
+        insertionAnchor: ComposerInsertionAnchor(
+          // Local revisions are intentionally unrelated to the root tracker.
+          baseRevision: 100,
+          selection: const ComposerSelection(start: 1, end: 1),
+          mode: ComposerEditorMode.quill,
+          localAttachmentInsertion: (codes) {
+            insertedCodes = codes;
+            return ComposerLocalAttachmentInsertionResult.applied;
+          },
+        ),
+      );
+      await _drain();
+
+      final state = container.read(_testControllerProvider(args)).value!;
+      expect(insertedCodes, ['[attach]792[/attach]']);
+      expect(state.message, '根正文');
+      expect(state.pendingAttachmentAids, isEmpty);
+      expect(state.lastMessageMutation, isNull);
+    });
+
+    test('stale local attachment delegate moves uploaded aid to pending', () async {
+      final args = _TestArgs(fid: '33', tid: '572063');
+      final container = _buildContainer(
+        imagePicker: _FakeImagePicker(
+          images: const [
+            ComposerPickedImage(
+              path: '/gallery/stale.jpg',
+              fileName: 'stale.jpg',
+              mimeType: 'image/jpeg',
+              originalIndex: 0,
+            ),
+          ],
+        ),
+        imageUploadCoordinator: _FakeUploadCoordinator(
+          events: [
+            const ComposerImageUploadEvent.started(
+              localId: '',
+              current: 1,
+              total: 1,
+            ),
+            ComposerImageUploadEvent.uploaded(
+              localId: '',
+              current: 1,
+              total: 1,
+              uploadedImage: ComposerUploadedImage(
+                localId: '',
+                aid: '793',
+                uploadedAt: DateTime.utc(2026, 8, 2),
+              ),
+            ),
+            const ComposerImageUploadEvent.completed(total: 1),
+          ],
+        ),
+      );
+      addTearDown(container.dispose);
+      _keepAlive(container, args);
+      await container.read(_testControllerProvider(args).future);
+      final controller = container.read(_testControllerProvider(args).notifier);
+
+      await controller.pickImages(
+        insertionAnchor: ComposerInsertionAnchor(
+          baseRevision: 0,
+          selection: const ComposerSelection(start: 0, end: 0),
+          mode: ComposerEditorMode.quill,
+          localAttachmentInsertion: (_) =>
+              ComposerLocalAttachmentInsertionResult.stale,
+        ),
+      );
+      await _drain();
+
+      final state = container.read(_testControllerProvider(args)).value!;
+      expect(state.message, isEmpty);
+      expect(state.pendingAttachmentAids, ['793']);
+    });
+
     test(
       'upload without an anchor stays pending until a new position is chosen',
       () async {

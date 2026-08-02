@@ -9,8 +9,11 @@ import 'package:y300/features/composer_shared/domain/models/composer_insertion_m
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attachment_preview_resolvers.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_collapse_serializer.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_attach_token_promoter.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_collapse_editor_models.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_collapse_insertion_service.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_size_mapping.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_selection_adapter.dart';
@@ -19,11 +22,13 @@ import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_r
 import 'package:y300/features/composer_shared/presentation/widgets/composer_bbcode_color_picker_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_link_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_attachment_preview.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_collapse_editor_page.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_group_panel.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
+import 'package:y300/shared/widgets/forum_collapse_chrome.dart';
 
 const _quillEditorPadding = EdgeInsets.all(
   ForumContentSpacing.quillInnerHorizontal,
@@ -33,6 +38,7 @@ const _quillAttachmentImagePadding = EdgeInsets.symmetric(
   vertical: 4,
 );
 const _unboundedQuillAttachmentMaxWidth = 320.0;
+const _collapseSerializer = ComposerCollapseSerializer();
 
 Widget _defaultQuillAttachImageBuilder(File file, Key key) {
   return Image.file(
@@ -49,6 +55,18 @@ bool _defaultQuillAttachFileExists(File file) {
 
 enum ComposerQuillToolPanel { format, align, sticker }
 
+final class _ComposerQuillCommandTarget {
+  const _ComposerQuillCommandTarget({
+    required this.controller,
+    required this.focusNode,
+    required this.selection,
+  });
+
+  final QuillController controller;
+  final FocusNode focusNode;
+  final TextSelection selection;
+}
+
 class ComposerQuillPrototypeEditor extends StatelessWidget {
   const ComposerQuillPrototypeEditor({
     super.key,
@@ -56,6 +74,7 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
     this.initialBbCode,
     this.onBbCodeChanged,
     this.onImagePressed,
+    this.localAttachmentInsertionBuilder,
     this.messageRevision = 0,
     this.lastMessageMutation,
     this.stickers = const <StickerItem>[],
@@ -64,6 +83,11 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
     this.onStickerGroupChanged,
     this.imageAttachments = const <ComposerImageAttachment>[],
     this.attachmentResolver,
+    this.collapseRenderer,
+    this.capabilities = ComposerQuillCapabilities.message,
+    this.isUploadingImages = false,
+    this.imageUploadCurrent = 0,
+    this.imageUploadTotal = 0,
     this.extraToolbarActions = const <ComposerToolbarAction>[],
     this.attachImageBuilder = _defaultQuillAttachImageBuilder,
     this.attachFileExists = _defaultQuillAttachFileExists,
@@ -82,6 +106,8 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
   final String? initialBbCode;
   final ValueChanged<String>? onBbCodeChanged;
   final ComposerImageInsertCallback? onImagePressed;
+  final ComposerLocalAttachmentInsertionBuilder?
+  localAttachmentInsertionBuilder;
   final int messageRevision;
   final ComposerTextMutation? lastMessageMutation;
   final List<StickerItem> stickers;
@@ -90,6 +116,11 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
   final ValueChanged<String>? onStickerGroupChanged;
   final List<ComposerImageAttachment> imageAttachments;
   final ComposerAttachmentPreviewResolver? attachmentResolver;
+  final ForumBbCodeRenderer? collapseRenderer;
+  final ComposerQuillCapabilities capabilities;
+  final bool isUploadingImages;
+  final int imageUploadCurrent;
+  final int imageUploadTotal;
   final List<ComposerToolbarAction> extraToolbarActions;
   final ForumAttachPreviewImageBuilder? attachImageBuilder;
   final ForumAttachPreviewFileExists? attachFileExists;
@@ -105,6 +136,7 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
       initialBbCode: initialBbCode,
       onBbCodeChanged: onBbCodeChanged,
       onImagePressed: onImagePressed,
+      localAttachmentInsertionBuilder: localAttachmentInsertionBuilder,
       messageRevision: messageRevision,
       lastMessageMutation: lastMessageMutation,
       stickers: stickers,
@@ -113,6 +145,11 @@ class ComposerQuillPrototypeEditor extends StatelessWidget {
       onStickerGroupChanged: onStickerGroupChanged,
       imageAttachments: imageAttachments,
       attachmentResolver: attachmentResolver,
+      collapseRenderer: collapseRenderer,
+      capabilities: capabilities,
+      isUploadingImages: isUploadingImages,
+      imageUploadCurrent: imageUploadCurrent,
+      imageUploadTotal: imageUploadTotal,
       extraToolbarActions: extraToolbarActions,
       attachImageBuilder: attachImageBuilder,
       attachFileExists: attachFileExists,
@@ -132,6 +169,7 @@ class ComposerQuillEditorSurface extends StatefulWidget {
     this.initialBbCode,
     this.onBbCodeChanged,
     this.onImagePressed,
+    this.localAttachmentInsertionBuilder,
     this.messageRevision = 0,
     this.lastMessageMutation,
     this.stickers = const <StickerItem>[],
@@ -140,6 +178,11 @@ class ComposerQuillEditorSurface extends StatefulWidget {
     this.onStickerGroupChanged,
     this.imageAttachments = const <ComposerImageAttachment>[],
     this.attachmentResolver,
+    this.collapseRenderer,
+    this.capabilities = ComposerQuillCapabilities.message,
+    this.isUploadingImages = false,
+    this.imageUploadCurrent = 0,
+    this.imageUploadTotal = 0,
     this.extraToolbarActions = const <ComposerToolbarAction>[],
     this.attachImageBuilder = _defaultQuillAttachImageBuilder,
     this.attachFileExists = _defaultQuillAttachFileExists,
@@ -161,6 +204,8 @@ class ComposerQuillEditorSurface extends StatefulWidget {
   final String? initialBbCode;
   final ValueChanged<String>? onBbCodeChanged;
   final ComposerImageInsertCallback? onImagePressed;
+  final ComposerLocalAttachmentInsertionBuilder?
+  localAttachmentInsertionBuilder;
   final int messageRevision;
   final ComposerTextMutation? lastMessageMutation;
   final List<StickerItem> stickers;
@@ -169,6 +214,11 @@ class ComposerQuillEditorSurface extends StatefulWidget {
   final ValueChanged<String>? onStickerGroupChanged;
   final List<ComposerImageAttachment> imageAttachments;
   final ComposerAttachmentPreviewResolver? attachmentResolver;
+  final ForumBbCodeRenderer? collapseRenderer;
+  final ComposerQuillCapabilities capabilities;
+  final bool isUploadingImages;
+  final int imageUploadCurrent;
+  final int imageUploadTotal;
   final List<ComposerToolbarAction> extraToolbarActions;
   final ForumAttachPreviewImageBuilder? attachImageBuilder;
   final ForumAttachPreviewFileExists? attachFileExists;
@@ -190,6 +240,8 @@ class _ComposerQuillEditorSurfaceState
   static const _codec = ComposerQuillBbCodeCodec();
   static const _selectionAdapter = ComposerQuillSelectionAdapter();
   static const _attachTokenPromoter = ComposerQuillAttachTokenPromoter();
+  static const _collapseInsertionService =
+      ComposerQuillCollapseInsertionService();
 
   late final QuillController _controller;
   late final bool _ownsController;
@@ -199,12 +251,18 @@ class _ComposerQuillEditorSurfaceState
   bool _isApplyingExternalBbCode = false;
   bool _isPromotingAttachTokens = false;
   bool _hasScheduledAttachTokenPromotion = false;
+  int _documentGeneration = 0;
+  int _nextCollapseId = 0;
   String? _ignoredExternalDocumentEncoding;
   ComposerQuillToolPanel? _activePanel;
   Key? _activeExtraPanelKey;
   double _lastKeyboardHeight = 0;
   double? _pendingKeyboardToolbarOffset;
   ComposerQuillTypingStyleSnapshot? _pendingTypingStyleSnapshot;
+  QuillController? _pendingTypingStyleController;
+  _ComposerQuillCommandTarget? _toolbarCommandTarget;
+  ComposerCollapseEditorHostController? _activeCollapseHost;
+  bool _isCollapseHostSyncScheduled = false;
   int _editorTapGeneration = 0;
   bool _isWaitingForKeyboardDismissForPanel = false;
 
@@ -239,6 +297,7 @@ class _ComposerQuillEditorSurfaceState
 
   @override
   void dispose() {
+    _activeCollapseHost?.invalidate();
     _controller.removeListener(_handleDocumentChanged);
     if (_ownsController) {
       _controller.dispose();
@@ -325,8 +384,8 @@ class _ComposerQuillEditorSurfaceState
               onLinkPressed: () => _openLinkSheet(context),
               onStickerPressed: () =>
                   _toggleToolPanel(ComposerQuillToolPanel.sticker),
-              onImagePressed: () => _handleImagePressed(context),
-              extraToolbarActions: widget.extraToolbarActions,
+              onImagePressed: _handleImagePressed,
+              extraToolbarActions: _toolbarActions(context),
               onExtraActionPressed: _handleExtraToolbarAction,
             ),
           ),
@@ -341,29 +400,46 @@ class _ComposerQuillEditorSurfaceState
   }) {
     return ConstrainedBox(
       constraints: BoxConstraints(minHeight: widget.minHeight),
-      child: QuillEditor.basic(
-        key: Key('${widget.keyPrefix}-editor'),
-        controller: _controller,
-        focusNode: _focusNode,
-        scrollController: _scrollController,
-        config: QuillEditorConfig(
-          placeholder:
-              widget.hintText ??
-              AppLocalizations.of(context).composerStartTypingHint,
-          padding: _quillEditorPadding,
-          onTapDown: _handleEditorTapDown,
-          onTapUp: _handleEditorTapUp,
-          embedBuilders: [
-            _StickerEmbedBuilder(stickers: _stickerLookupItems()),
-            _AttachEmbedBuilder(
-              attachmentResolver: _attachmentResolver(),
-              attachImageBuilder:
-                  widget.attachImageBuilder ?? _defaultQuillAttachImageBuilder,
-              attachFileExists:
-                  widget.attachFileExists ?? _defaultQuillAttachFileExists,
-              maxImageWidth: attachmentMaxWidth,
-            ),
-          ],
+      child: IgnorePointer(
+        ignoring: !widget.enabled,
+        child: QuillEditor.basic(
+          key: Key('${widget.keyPrefix}-editor'),
+          controller: _controller,
+          focusNode: _focusNode,
+          scrollController: _scrollController,
+          config: QuillEditorConfig(
+            placeholder:
+                widget.hintText ??
+                AppLocalizations.of(context).composerStartTypingHint,
+            padding: _quillEditorPadding,
+            showCursor: true,
+            enableInteractiveSelection: true,
+            onTapDown: (_, _) => _handleEditorTapDown(),
+            onTapUp: (_, _) => _handleEditorTapUp(controller: _controller),
+            embedBuilders: [
+              _StickerEmbedBuilder(stickers: _stickerLookupItems()),
+              _AttachEmbedBuilder(
+                attachmentResolver: _attachmentResolver(),
+                attachImageBuilder:
+                    widget.attachImageBuilder ??
+                    _defaultQuillAttachImageBuilder,
+                attachFileExists:
+                    widget.attachFileExists ?? _defaultQuillAttachFileExists,
+                maxImageWidth: attachmentMaxWidth,
+              ),
+              _CollapseEmbedBuilder(
+                renderer:
+                    widget.collapseRenderer ??
+                    const FlutterBbCodeForumRenderer(),
+                stickers: _stickerLookupItems(),
+                imageAttachments: widget.imageAttachments,
+                attachmentResolver: _attachmentResolver(),
+                showEditAction: widget.capabilities.canEditCollapse,
+                editEnabled: widget.enabled,
+                onEdit: _openCollapseEditor,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -389,7 +465,7 @@ class _ComposerQuillEditorSurfaceState
     return switch (_activePanel) {
       ComposerQuillToolPanel.format => _FormatSheet(
         keyPrefix: widget.keyPrefix,
-        controller: _controller,
+        controller: _currentToolbarCommandTarget().controller,
         embedded: true,
         onTypingStyleChanged: _captureTypingStyleSnapshot,
       ),
@@ -443,6 +519,23 @@ class _ComposerQuillEditorSurfaceState
     ];
   }
 
+  List<ComposerToolbarAction> _toolbarActions(BuildContext context) {
+    return [
+      if (widget.capabilities.canCreateCollapse)
+        ComposerToolbarAction.command(
+          key: ValueKey<String>('${widget.keyPrefix}-collapse-button'),
+          icon: Icons.unfold_more,
+          tooltip: AppLocalizations.of(context).composerCollapse,
+          command: ComposerToolbarCommand.createCollapse,
+        ),
+      ...widget.extraToolbarActions.where(
+        (action) =>
+            widget.capabilities.canCreateCollapse ||
+            action.command != ComposerToolbarCommand.createCollapse,
+      ),
+    ];
+  }
+
   ComposerAttachmentPreviewResolver _attachmentResolver() {
     return widget.attachmentResolver ??
         UploadedComposerAttachmentPreviewResolver(
@@ -463,19 +556,13 @@ class _ComposerQuillEditorSurfaceState
     return 56 + MediaQuery.paddingOf(context).bottom;
   }
 
-  bool _handleEditorTapDown(
-    TapDownDetails details,
-    TextPosition Function(Offset offset) getPositionForOffset,
-  ) {
+  bool _handleEditorTapDown() {
     _editorTapGeneration += 1;
     _closeToolPanelForEditorInput();
     return false;
   }
 
-  bool _handleEditorTapUp(
-    TapUpDetails details,
-    TextPosition Function(Offset offset) getPositionForOffset,
-  ) {
+  bool _handleEditorTapUp({required QuillController controller}) {
     final generation = _editorTapGeneration;
     final snapshot = _pendingTypingStyleSnapshot;
     if (snapshot == null) {
@@ -485,36 +572,66 @@ class _ComposerQuillEditorSurfaceState
       if (!mounted || generation != _editorTapGeneration) {
         return;
       }
-      final selection = _controller.selection;
-      final documentEnd = (_controller.document.length - 1).clamp(
+      final selection = controller.selection;
+      final documentEnd = (controller.document.length - 1).clamp(
         0,
-        _controller.document.length,
+        controller.document.length,
       );
       if (selection.isCollapsed && selection.extentOffset == documentEnd) {
-        snapshot.restore(_controller);
+        snapshot.restore(controller);
       }
       _pendingTypingStyleSnapshot = null;
+      _pendingTypingStyleController = null;
     });
     return false;
   }
 
   void _handleEditorFocusChanged() {
-    if (!_focusNode.hasFocus || !_hasActiveToolPanel) {
-      return;
+    if (_focusNode.hasFocus && _hasActiveToolPanel) {
+      _closeToolPanelForEditorInput();
     }
-    _closeToolPanelForEditorInput();
+  }
+
+  _ComposerQuillCommandTarget _captureCommandTarget() {
+    return _ComposerQuillCommandTarget(
+      controller: _controller,
+      focusNode: _focusNode,
+      selection: _controller.selection,
+    );
+  }
+
+  _ComposerQuillCommandTarget _currentToolbarCommandTarget() {
+    final captured = _toolbarCommandTarget;
+    if (captured != null && identical(captured.controller, _controller)) {
+      return captured;
+    }
+    return _captureCommandTarget();
+  }
+
+  void _requestCommandFocus(_ComposerQuillCommandTarget target) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(target.controller, _controller)) {
+        target.focusNode.requestFocus();
+      }
+    });
   }
 
   void _captureTypingStyleSnapshot() {
-    _pendingTypingStyleSnapshot = _controller.selection.isCollapsed
-        ? ComposerQuillTypingStyleSnapshot.capture(_controller)
+    final controller = _currentToolbarCommandTarget().controller;
+    _pendingTypingStyleController = controller;
+    _pendingTypingStyleSnapshot = controller.selection.isCollapsed
+        ? ComposerQuillTypingStyleSnapshot.capture(controller)
         : null;
   }
 
   void _restoreTypingStyleSnapshot() {
     final snapshot = _pendingTypingStyleSnapshot;
     _pendingTypingStyleSnapshot = null;
-    snapshot?.restore(_controller);
+    final controller =
+        _pendingTypingStyleController ??
+        _currentToolbarCommandTarget().controller;
+    _pendingTypingStyleController = null;
+    snapshot?.restore(controller);
   }
 
   void _toggleToolPanel(ComposerQuillToolPanel panel) {
@@ -522,6 +639,7 @@ class _ComposerQuillEditorSurfaceState
       return;
     }
     if (_activePanel == panel && _activeExtraPanelKey == null) {
+      final target = _currentToolbarCommandTarget();
       final panelHeight = _toolPanelHeight(context);
       setState(() {
         _activePanel = null;
@@ -530,9 +648,11 @@ class _ComposerQuillEditorSurfaceState
         _pendingKeyboardToolbarOffset = panelHeight;
       });
       _restoreTypingStyleSnapshot();
-      _focusNode.requestFocus();
+      _toolbarCommandTarget = null;
+      _requestCommandFocus(target);
       return;
     }
+    _toolbarCommandTarget = _captureCommandTarget();
     _pendingKeyboardToolbarOffset = null;
     _isWaitingForKeyboardDismissForPanel =
         MediaQuery.viewInsetsOf(context).bottom > 0;
@@ -544,6 +664,10 @@ class _ComposerQuillEditorSurfaceState
   }
 
   void _handleExtraToolbarAction(ComposerToolbarAction action) {
+    if (action.command == ComposerToolbarCommand.createCollapse) {
+      _openNewCollapseEditor();
+      return;
+    }
     final panelBuilder = action.panelBuilder;
     if (panelBuilder == null) {
       action.onPressed?.call();
@@ -553,6 +677,7 @@ class _ComposerQuillEditorSurfaceState
       return;
     }
     if (_activeExtraPanelKey == action.key && _activePanel == null) {
+      final target = _currentToolbarCommandTarget();
       final panelHeight = _toolPanelHeight(context);
       setState(() {
         _activePanel = null;
@@ -561,9 +686,11 @@ class _ComposerQuillEditorSurfaceState
         _pendingKeyboardToolbarOffset = panelHeight;
       });
       _restoreTypingStyleSnapshot();
-      _focusNode.requestFocus();
+      _toolbarCommandTarget = null;
+      _requestCommandFocus(target);
       return;
     }
+    _toolbarCommandTarget = _captureCommandTarget();
     _pendingKeyboardToolbarOffset = null;
     _isWaitingForKeyboardDismissForPanel =
         MediaQuery.viewInsetsOf(context).bottom > 0;
@@ -572,6 +699,192 @@ class _ComposerQuillEditorSurfaceState
       _activePanel = null;
       _activeExtraPanelKey = action.key;
     });
+  }
+
+  Future<void> _openNewCollapseEditor() async {
+    if (!widget.enabled || !widget.capabilities.canCreateCollapse) {
+      return;
+    }
+    final target = _captureCommandTarget();
+    final controller = target.controller;
+    final selection = target.selection;
+    final canReplaceSelection = _selectionContainsOnlyPlainText(
+      controller,
+      selection,
+    );
+    final selectedBody = selection.isCollapsed || !canReplaceSelection
+        ? ''
+        : _codec.encodeDelta(
+            controller.document.toDelta().slice(selection.start, selection.end),
+          );
+    final generation = _documentGeneration;
+    final source = _bbCodeText;
+    final id = _newCollapseId();
+    await _showCollapseEditor(
+      isNew: true,
+      initialDraft: ComposerCollapseDraft(title: '', bodyBbCode: selectedBody),
+      onSave: (draft) async {
+        if (!mounted ||
+            generation != _documentGeneration ||
+            source != _bbCodeText) {
+          return ComposerCollapseCommitStatus.conflict;
+        }
+        _runQuillMutationWithoutKeyboard(target, () {
+          _collapseInsertionService.insert(
+            controller: controller,
+            selection: selection,
+            embed: composerQuillCollapseEmbed(
+              id: id,
+              title: draft.title,
+              body: draft.bodyBbCode,
+            ),
+            replaceSelection: selection.isCollapsed || canReplaceSelection,
+          );
+        });
+        return ComposerCollapseCommitStatus.applied;
+      },
+    );
+  }
+
+  Future<void> _openCollapseEditor(Map<String, Object?> payload) async {
+    if (!widget.enabled || !widget.capabilities.canEditCollapse) {
+      return;
+    }
+    final handle = ComposerQuillCollapseHandle.fromPayload(payload);
+    final generation = _documentGeneration;
+    final target = _captureCommandTarget();
+    await _showCollapseEditor(
+      isNew: false,
+      initialDraft: ComposerCollapseDraft(
+        title: handle.title,
+        bodyBbCode: handle.body,
+      ),
+      onSave: (draft) async {
+        if (!mounted || generation != _documentGeneration) {
+          return ComposerCollapseCommitStatus.conflict;
+        }
+        var applied = false;
+        _runQuillMutationWithoutKeyboard(target, () {
+          applied = _collapseInsertionService.replace(
+            controller: _controller,
+            expected: handle,
+            replacement: composerQuillCollapseEmbed(
+              id: handle.id,
+              title: draft.title,
+              body: draft.bodyBbCode,
+              rawOpeningLine: handle.rawOpeningLine,
+              rawClosing: handle.rawClosing,
+            ),
+          );
+        });
+        return applied
+            ? ComposerCollapseCommitStatus.applied
+            : ComposerCollapseCommitStatus.conflict;
+      },
+      onDelete: () async {
+        if (!mounted || generation != _documentGeneration) {
+          return ComposerCollapseCommitStatus.conflict;
+        }
+        var applied = false;
+        _runQuillMutationWithoutKeyboard(target, () {
+          applied = _collapseInsertionService.delete(
+            controller: _controller,
+            expected: handle,
+          );
+        });
+        return applied
+            ? ComposerCollapseCommitStatus.applied
+            : ComposerCollapseCommitStatus.conflict;
+      },
+    );
+  }
+
+  Future<void> _showCollapseEditor({
+    required bool isNew,
+    required ComposerCollapseDraft initialDraft,
+    required Future<ComposerCollapseCommitStatus> Function(
+      ComposerCollapseDraft draft,
+    )
+    onSave,
+    Future<ComposerCollapseCommitStatus> Function()? onDelete,
+  }) async {
+    if (!mounted || _activeCollapseHost != null) {
+      return;
+    }
+    _closeToolPanelForEditorInput();
+    FocusScope.of(context).unfocus();
+    final host = ComposerCollapseEditorHostController(_collapseHostSnapshot());
+    _activeCollapseHost = host;
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ComposerCollapseEditorPage(
+            isNew: isNew,
+            initialDraft: initialDraft,
+            hostController: host,
+            bodyCapabilities: widget.capabilities.nestedBody,
+            onSave: onSave,
+            onDelete: onDelete,
+            onImagePressed: widget.onImagePressed,
+            stickers: widget.stickers,
+            stickerGroups: widget.stickerGroups,
+            initialStickerGroupId: widget.initialStickerGroupId,
+            onStickerGroupChanged: widget.onStickerGroupChanged,
+            collapseRenderer:
+                widget.collapseRenderer ?? const FlutterBbCodeForumRenderer(),
+            extraToolbarActions: widget.extraToolbarActions,
+            attachImageBuilder: widget.attachImageBuilder,
+            attachFileExists: widget.attachFileExists,
+            keyPrefix: '${widget.keyPrefix}-collapse-editor',
+          ),
+        ),
+      );
+    } finally {
+      host.invalidate();
+      if (identical(_activeCollapseHost, host)) {
+        _activeCollapseHost = null;
+      }
+      host.dispose();
+    }
+  }
+
+  ComposerCollapseEditorHostSnapshot _collapseHostSnapshot() {
+    return ComposerCollapseEditorHostSnapshot(
+      enabled: widget.enabled,
+      documentGeneration: _documentGeneration,
+      isUploadingImages: widget.isUploadingImages,
+      imageUploadCurrent: widget.imageUploadCurrent,
+      imageUploadTotal: widget.imageUploadTotal,
+      imageAttachments: List<ComposerImageAttachment>.unmodifiable(
+        widget.imageAttachments,
+      ),
+      attachmentResolver: _attachmentResolver(),
+    );
+  }
+
+  String _newCollapseId() {
+    return 'collapse-editor-$_documentGeneration-${_nextCollapseId++}';
+  }
+
+  bool _selectionContainsOnlyPlainText(
+    QuillController controller,
+    TextSelection selection,
+  ) {
+    if (selection.isCollapsed) {
+      return true;
+    }
+    var offset = 0;
+    for (final operation in controller.document.toDelta().toList()) {
+      final data = operation.data;
+      final length = data is String ? data.length : 1;
+      final overlaps =
+          offset < selection.end && offset + length > selection.start;
+      if (overlaps && operation.data is! String) {
+        return false;
+      }
+      offset += length;
+    }
+    return true;
   }
 
   void _closeToolPanelForEditorInput() {
@@ -585,11 +898,14 @@ class _ComposerQuillEditorSurfaceState
       _isWaitingForKeyboardDismissForPanel = false;
       _pendingKeyboardToolbarOffset = panelHeight;
     });
+    _toolbarCommandTarget = null;
   }
 
   void _resetTransientInteractionState() {
     _editorTapGeneration += 1;
     _pendingTypingStyleSnapshot = null;
+    _pendingTypingStyleController = null;
+    _toolbarCommandTarget = null;
     _pendingKeyboardToolbarOffset = null;
     _isWaitingForKeyboardDismissForPanel = false;
     if (_hasActiveToolPanel) {
@@ -611,8 +927,9 @@ class _ComposerQuillEditorSurfaceState
       _ => null,
     };
     if (attribute != null) {
-      _runQuillMutationWithoutKeyboard(() {
-        _controller.formatSelection(attribute);
+      final target = _currentToolbarCommandTarget();
+      _runQuillMutationWithoutKeyboard(target, () {
+        target.controller.formatSelection(attribute);
       });
     }
   }
@@ -621,6 +938,7 @@ class _ComposerQuillEditorSurfaceState
     if (!widget.enabled) {
       return;
     }
+    final target = _captureCommandTarget();
     _closeToolPanelForEditorInput();
     FocusScope.of(context).unfocus();
     final link = await showComposerLinkSheet(
@@ -630,30 +948,27 @@ class _ComposerQuillEditorSurfaceState
     if (!mounted) {
       return;
     }
-    if (link != null) {
-      _applyLink(link);
+    if (link != null && identical(target.controller, _controller)) {
+      _applyLink(link, target);
     }
     _restoreTypingStyleSnapshot();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _focusNode.requestFocus();
-      }
-    });
+    _requestCommandFocus(target);
   }
 
-  void _applyLink(ComposerLinkDraft link) {
-    if (!widget.enabled) {
+  void _applyLink(ComposerLinkDraft link, _ComposerQuillCommandTarget target) {
+    if (!widget.enabled || !identical(target.controller, _controller)) {
       return;
     }
-    _runQuillMutationWithoutKeyboard(() {
-      final selection = _controller.selection;
+    _runQuillMutationWithoutKeyboard(target, () {
+      final controller = target.controller;
+      final selection = controller.selection;
       if (selection.isCollapsed) {
         final offset = selection.start;
-        final restoredStyle = _controller.toggledStyle.removeAll({
+        final restoredStyle = controller.toggledStyle.removeAll({
           Attribute.link,
         });
-        _controller.toggledStyle = const Style();
-        _controller.replaceText(
+        controller.toggledStyle = const Style();
+        controller.replaceText(
           offset,
           0,
           link.label,
@@ -662,14 +977,14 @@ class _ComposerQuillEditorSurfaceState
             extentOffset: offset + link.label.length,
           ),
         );
-        _controller.formatSelection(Attribute.clone(Attribute.link, link.url));
-        _controller.updateSelection(
+        controller.formatSelection(Attribute.clone(Attribute.link, link.url));
+        controller.updateSelection(
           TextSelection.collapsed(offset: offset + link.label.length),
           ChangeSource.local,
         );
-        _controller.toggledStyle = restoredStyle;
+        controller.toggledStyle = restoredStyle;
       } else {
-        _controller.formatSelection(Attribute.clone(Attribute.link, link.url));
+        controller.formatSelection(Attribute.clone(Attribute.link, link.url));
       }
     });
   }
@@ -678,16 +993,25 @@ class _ComposerQuillEditorSurfaceState
     if (!widget.enabled) {
       return;
     }
-    _runQuillMutationWithoutKeyboard(() {
+    final target = _currentToolbarCommandTarget();
+    _runQuillMutationWithoutKeyboard(target, () {
       _insertEmbed(
+        target,
         composerQuillStickerEmbed(sticker.code),
         requestFocus: false,
       );
     });
   }
 
-  void _runQuillMutationWithoutKeyboard(VoidCallback mutation) {
-    _controller.skipRequestKeyboard = true;
+  void _runQuillMutationWithoutKeyboard(
+    _ComposerQuillCommandTarget target,
+    VoidCallback mutation,
+  ) {
+    if (!identical(target.controller, _controller)) {
+      return;
+    }
+    final controller = target.controller;
+    controller.skipRequestKeyboard = true;
     try {
       mutation();
     } finally {
@@ -695,8 +1019,8 @@ class _ComposerQuillEditorSurfaceState
         if (!mounted) {
           return;
         }
-        if (_controller.skipRequestKeyboard) {
-          _controller.skipRequestKeyboard = false;
+        if (controller.skipRequestKeyboard) {
+          controller.skipRequestKeyboard = false;
         }
       });
     }
@@ -711,6 +1035,7 @@ class _ComposerQuillEditorSurfaceState
       if (_hasActiveToolPanel && !_isWaitingForKeyboardDismissForPanel) {
         _activePanel = null;
         _activeExtraPanelKey = null;
+        _toolbarCommandTarget = null;
         _pendingKeyboardToolbarOffset = null;
       }
     } else {
@@ -731,12 +1056,25 @@ class _ComposerQuillEditorSurfaceState
       _resetTransientInteractionState();
     }
     if (oldWidget.bbCode != widget.bbCode ||
+        oldWidget.messageRevision != widget.messageRevision ||
         oldWidget.lastMessageMutation != widget.lastMessageMutation) {
-      if (widget.bbCode != null && widget.bbCode != _bbCodeText) {
-        _resetTransientInteractionState();
-      }
       _syncExternalBbCode();
     }
+    _scheduleCollapseHostSnapshotSync();
+  }
+
+  void _scheduleCollapseHostSnapshotSync() {
+    if (_activeCollapseHost == null || _isCollapseHostSyncScheduled) {
+      return;
+    }
+    _isCollapseHostSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _isCollapseHostSyncScheduled = false;
+      if (!mounted) {
+        return;
+      }
+      _activeCollapseHost?.updateSnapshot(_collapseHostSnapshot());
+    });
   }
 
   void _handleDocumentChanged() {
@@ -804,6 +1142,7 @@ class _ComposerQuillEditorSurfaceState
     if (external == null || external == _bbCodeText) {
       return;
     }
+    _resetTransientInteractionState();
     final document = _codec.decodeDocument(external);
     TextSelection? selection;
     final mutation = widget.lastMessageMutation;
@@ -835,57 +1174,73 @@ class _ComposerQuillEditorSurfaceState
     } finally {
       _isApplyingExternalBbCode = false;
     }
+    _documentGeneration += 1;
     setState(() {});
   }
 
-  Future<void> _insertImage() async {
-    if (!widget.enabled) {
+  Future<void> _insertImage(_ComposerQuillCommandTarget target) async {
+    if (!widget.enabled || !identical(target.controller, _controller)) {
       return;
     }
     final callback = widget.onImagePressed;
     if (callback == null) {
       return;
     }
+    final controller = target.controller;
     final sourceSelection = _selectionAdapter.toSourceSelection(
       source: _bbCodeText,
-      document: _controller.document,
-      selection: _controller.selection,
+      document: controller.document,
+      selection: target.selection,
     );
+    final localInsertion = sourceSelection == null
+        ? null
+        : widget.localAttachmentInsertionBuilder?.call(
+            selection: sourceSelection,
+            baseRevision: widget.messageRevision,
+          );
     final anchor = sourceSelection == null
         ? null
         : ComposerInsertionAnchor(
             baseRevision: widget.messageRevision,
             selection: sourceSelection,
             mode: ComposerEditorMode.quill,
+            localAttachmentInsertion: localInsertion,
           );
     await callback(anchor);
   }
 
-  Future<void> _handleImagePressed(BuildContext context) async {
+  Future<void> _handleImagePressed() async {
+    final target = _captureCommandTarget();
     _closeToolPanelForEditorInput();
-    await _insertImage();
+    await _insertImage(target);
     if (!mounted) {
       return;
     }
     _restoreTypingStyleSnapshot();
-    _focusNode.requestFocus();
+    _requestCommandFocus(target);
   }
 
-  void _insertEmbed(Embeddable embed, {bool requestFocus = true}) {
-    if (!widget.enabled) {
+  void _insertEmbed(
+    _ComposerQuillCommandTarget target,
+    Embeddable embed, {
+    bool requestFocus = true,
+    bool replaceSelection = true,
+  }) {
+    if (!widget.enabled || !identical(target.controller, _controller)) {
       return;
     }
-    final selection = _controller.selection;
-    final index = selection.start.clamp(0, _controller.document.length).toInt();
-    final length = selection.end - selection.start;
-    _controller.replaceText(
+    final controller = target.controller;
+    final selection = controller.selection;
+    final index = selection.start.clamp(0, controller.document.length).toInt();
+    final length = replaceSelection ? selection.end - selection.start : 0;
+    controller.replaceText(
       index,
       length < 0 ? 0 : length,
       embed,
       TextSelection.collapsed(offset: index + 1),
     );
     if (requestFocus) {
-      _focusNode.requestFocus();
+      _requestCommandFocus(target);
     }
   }
 
@@ -893,36 +1248,38 @@ class _ComposerQuillEditorSurfaceState
     if (!widget.enabled) {
       return;
     }
+    final target = _captureCommandTarget();
     _closeToolPanelForEditorInput();
-    final line = _currentLine();
-    if (line == null) {
-      return;
-    }
-    final isQuoted = _isLineQuoted(line);
-    if (!isQuoted && _isEmptyUnquotedBoundaryAfterQuote(line)) {
-      _startQuoteAfterBoundaryLine(line);
-      _restoreTypingStyleSnapshot();
-      _focusNode.requestFocus();
-      return;
-    }
-    if (_controller.selection.isCollapsed) {
-      _formatCurrentLineQuote(line, enable: !isQuoted);
-    } else {
-      _controller.formatSelection(
-        isQuoted
-            ? Attribute.clone(Attribute.blockQuote, null)
-            : Attribute.blockQuote,
-      );
-    }
+    _runQuillMutationWithoutKeyboard(target, () {
+      final controller = target.controller;
+      final line = _currentLine(controller);
+      if (line == null) {
+        return;
+      }
+      final isQuoted = _isLineQuoted(line);
+      if (!isQuoted && _isEmptyUnquotedBoundaryAfterQuote(controller, line)) {
+        _startQuoteAfterBoundaryLine(controller, line);
+        return;
+      }
+      if (controller.selection.isCollapsed) {
+        _formatCurrentLineQuote(controller, line, enable: !isQuoted);
+      } else {
+        controller.formatSelection(
+          isQuoted
+              ? Attribute.clone(Attribute.blockQuote, null)
+              : Attribute.blockQuote,
+        );
+      }
+    });
     _restoreTypingStyleSnapshot();
-    _focusNode.requestFocus();
+    _requestCommandFocus(target);
   }
 
-  Line? _currentLine() {
-    final length = _controller.document.length;
-    final selectionStart = _controller.selection.start;
+  Line? _currentLine(QuillController controller) {
+    final length = controller.document.length;
+    final selectionStart = controller.selection.start;
     final index = selectionStart.clamp(0, length).toInt();
-    final query = _controller.document.queryChild(index);
+    final query = controller.document.queryChild(index);
     return query.node is Line ? query.node as Line : null;
   }
 
@@ -936,42 +1293,52 @@ class _ComposerQuillEditorSurfaceState
                 true;
   }
 
-  bool _isEmptyUnquotedBoundaryAfterQuote(Line line) {
+  bool _isEmptyUnquotedBoundaryAfterQuote(
+    QuillController controller,
+    Line line,
+  ) {
     if (_isLineQuoted(line) || line.isNotEmpty) {
       return false;
     }
-    final previousLine = _previousLine(line);
+    final previousLine = _previousLine(controller, line);
     return previousLine != null && _isLineQuoted(previousLine);
   }
 
-  Line? _previousLine(Line line) {
+  Line? _previousLine(QuillController controller, Line line) {
     final offset = line.documentOffset;
     if (offset <= 0) {
       return null;
     }
-    final query = _controller.document.queryChild(offset - 1);
+    final query = controller.document.queryChild(offset - 1);
     return query.node is Line ? query.node as Line : null;
   }
 
-  void _startQuoteAfterBoundaryLine(Line boundaryLine) {
+  void _startQuoteAfterBoundaryLine(
+    QuillController controller,
+    Line boundaryLine,
+  ) {
     final insertOffset = boundaryLine.documentOffset;
-    _controller.replaceText(
+    controller.replaceText(
       insertOffset,
       0,
       '\n',
       TextSelection.collapsed(offset: insertOffset + 1),
     );
     final quoteLineBreakOffset = insertOffset + 1;
-    _controller.formatText(quoteLineBreakOffset, 1, Attribute.blockQuote);
-    _controller.updateSelection(
+    controller.formatText(quoteLineBreakOffset, 1, Attribute.blockQuote);
+    controller.updateSelection(
       TextSelection.collapsed(offset: quoteLineBreakOffset),
       ChangeSource.local,
     );
   }
 
-  void _formatCurrentLineQuote(Line line, {required bool enable}) {
+  void _formatCurrentLineQuote(
+    QuillController controller,
+    Line line, {
+    required bool enable,
+  }) {
     final lineBreakOffset = line.documentOffset + line.length - 1;
-    _controller.formatText(
+    controller.formatText(
       lineBreakOffset,
       1,
       enable
@@ -979,7 +1346,7 @@ class _ComposerQuillEditorSurfaceState
           : Attribute.clone(Attribute.blockQuote, null),
     );
     if (line.isEmpty) {
-      _controller.updateSelection(
+      controller.updateSelection(
         TextSelection.collapsed(offset: line.documentOffset),
         ChangeSource.local,
       );
@@ -1702,6 +2069,97 @@ class _StickerEmbedBuilder extends EmbedBuilder {
           errorPlaceholder: const Icon(Icons.broken_image_outlined, size: 20),
         ),
       ),
+    );
+  }
+}
+
+class _CollapseEmbedBuilder extends EmbedBuilder {
+  const _CollapseEmbedBuilder({
+    required this.renderer,
+    required this.stickers,
+    required this.imageAttachments,
+    required this.attachmentResolver,
+    required this.showEditAction,
+    required this.editEnabled,
+    required this.onEdit,
+  });
+
+  final ForumBbCodeRenderer renderer;
+  final List<StickerItem> stickers;
+  final List<ComposerImageAttachment> imageAttachments;
+  final ComposerAttachmentPreviewResolver attachmentResolver;
+  final bool showEditAction;
+  final bool editEnabled;
+  final ValueChanged<Map<String, Object?>> onEdit;
+
+  @override
+  String get key => composerQuillCollapseEmbedType;
+
+  @override
+  bool get expanded => true;
+
+  @override
+  String toPlainText(Embed node) {
+    final title = composerQuillCollapseEmbedTitle(node.value.data);
+    final body = composerQuillCollapseEmbedBody(node.value.data);
+    if (title == null || body == null) {
+      return node.value.data.toString();
+    }
+    final payload = composerQuillCollapseEmbedPayload(node.value.data);
+    return _collapseSerializer.serializeBlock(
+      title: title,
+      bodyBbCode: body,
+      rawOpeningLine: payload?['rawOpeningLine'] as String?,
+      rawClosing: payload?['rawClosing'] as String?,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, EmbedContext embedContext) {
+    final payload = composerQuillCollapseEmbedPayload(
+      embedContext.node.value.data,
+    );
+    if (payload == null) {
+      return Text(embedContext.node.value.data.toString());
+    }
+    final id = payload['id']!.toString();
+    final title = payload['title']!.toString();
+    final body = payload['body']!.toString();
+    final localizations = AppLocalizations.of(context);
+    return ForumCollapseChrome(
+      key: Key('composer-quill-collapse-$id'),
+      sourceId: id,
+      keyPrefix: 'composer-quill-collapse',
+      initiallyExpanded: false,
+      title: Text(
+        title.isEmpty ? localizations.composerCollapseTitleHint : title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: title.isEmpty
+            ? Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Theme.of(context).hintColor,
+              )
+            : Theme.of(context).textTheme.bodyLarge,
+      ),
+      headerTrailing: showEditAction
+          ? IconButton(
+              key: Key('composer-quill-collapse-edit-$id'),
+              tooltip: localizations.composerCollapseEditTitle,
+              onPressed: editEnabled
+                  ? () => onEdit(Map.unmodifiable(payload))
+                  : null,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+            )
+          : null,
+      contentBuilder: (_) => renderer.buildPreview(
+        context,
+        body,
+        stickers: stickers,
+        imageAttachments: imageAttachments,
+        attachmentResolver: attachmentResolver,
+      ),
+      expandedSemanticsLabel: localizations.threadHtmlCollapseExpanded,
+      collapsedSemanticsLabel: localizations.threadHtmlCollapseCollapsed,
     );
   }
 }

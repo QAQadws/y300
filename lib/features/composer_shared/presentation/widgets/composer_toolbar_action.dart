@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+enum ComposerToolbarCommand { createCollapse }
+
 /// Presentation-only extension point for feature-specific composer actions.
 ///
 /// The shared toolbars render the action but never interpret its business
@@ -10,7 +12,9 @@ final class ComposerToolbarAction {
     required this.icon,
     required this.tooltip,
     required this.onPressed,
-  }) : panelBuilder = null;
+  }) : panelBuilder = null,
+       command = null,
+       quillOnly = false;
 
   /// Creates an action whose content is hosted by the active editor surface.
   ///
@@ -22,13 +26,27 @@ final class ComposerToolbarAction {
     required this.icon,
     required this.tooltip,
     required this.panelBuilder,
-  }) : onPressed = null;
+  }) : onPressed = null,
+       command = null,
+       quillOnly = false;
+
+  const ComposerToolbarAction.command({
+    required this.key,
+    required this.icon,
+    required this.tooltip,
+    required this.command,
+  }) : onPressed = null,
+       panelBuilder = null,
+       quillOnly = true;
 
   final Key key;
   final IconData icon;
   final String tooltip;
   final VoidCallback? onPressed;
   final WidgetBuilder? panelBuilder;
+  final ComposerToolbarCommand? command;
+  final bool quillOnly;
 
-  bool get isAvailable => onPressed != null || panelBuilder != null;
+  bool get isAvailable =>
+      onPressed != null || panelBuilder != null || command != null;
 }

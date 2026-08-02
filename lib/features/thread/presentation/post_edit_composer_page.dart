@@ -91,6 +91,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
       },
       child: Scaffold(
         key: const Key('post-edit-composer-page'),
+        resizeToAvoidBottomInset: false,
         appBar: AppBar(
           title: Text(l10n.postEditTitle),
           actions: [
@@ -358,6 +359,9 @@ class _PostEditComposerBody extends StatelessWidget {
       hintText: l10n.postEditMessageHint,
       messageRevision: state.messageRevision,
       lastMessageMutation: state.lastMessageMutation,
+      isUploadingImages: state.isUploadingImages,
+      imageUploadCurrent: state.imageUploadCurrent,
+      imageUploadTotal: state.imageUploadTotal,
       attachmentResolver: attachmentResolver,
       onImagePressed: onImagePressed,
       extraToolbarActions: [
@@ -370,6 +374,8 @@ class _PostEditComposerBody extends StatelessWidget {
       ],
     );
     return SafeArea(
+      key: const Key('post-edit-composer-safe-area'),
+      bottom: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

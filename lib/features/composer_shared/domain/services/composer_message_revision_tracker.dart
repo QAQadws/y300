@@ -42,6 +42,12 @@ class ComposerMessageRevisionTracker {
   /// Returns the anchor remapped to the current revision, or null when any
   /// edit intersects the captured selection.
   ComposerInsertionAnchor? resolve(ComposerInsertionAnchor anchor) {
+    // A local editor owns both the revision and the offsets. The captured
+    // closure performs its own remap; root-message edits must not reinterpret
+    // either value.
+    if (anchor.localAttachmentInsertion != null) {
+      return anchor;
+    }
     if (anchor.baseRevision < 0 || anchor.baseRevision > _revision) {
       return null;
     }
@@ -60,6 +66,7 @@ class ComposerMessageRevisionTracker {
       baseRevision: _revision,
       selection: selection,
       mode: anchor.mode,
+      localAttachmentInsertion: anchor.localAttachmentInsertion,
     );
   }
 }

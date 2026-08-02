@@ -4,6 +4,19 @@ enum ComposerEditorMode { source, quill }
 typedef ComposerImageInsertCallback =
     Future<void> Function(ComposerInsertionAnchor? anchor);
 
+enum ComposerLocalAttachmentInsertionResult { applied, stale }
+
+typedef ComposerLocalAttachmentInsertion =
+    ComposerLocalAttachmentInsertionResult Function(List<String> codes);
+
+/// Creates an insertion delegate bound to the local selection/revision that
+/// was active when an asynchronous image flow started.
+typedef ComposerLocalAttachmentInsertionBuilder =
+    ComposerLocalAttachmentInsertion Function({
+      required ComposerSelection selection,
+      required int baseRevision,
+    });
+
 /// A text selection expressed in Dart/Flutter UTF-16 code-unit offsets.
 class ComposerSelection {
   const ComposerSelection({required this.start, required this.end});
@@ -41,11 +54,13 @@ class ComposerInsertionAnchor {
     required this.baseRevision,
     required this.selection,
     required this.mode,
+    this.localAttachmentInsertion,
   });
 
   final int baseRevision;
   final ComposerSelection selection;
   final ComposerEditorMode mode;
+  final ComposerLocalAttachmentInsertion? localAttachmentInsertion;
 }
 
 /// The result of inserting one or more attachment blocks into raw BBCode.

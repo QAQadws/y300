@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_collapse_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_collapse_document_parser.dart';
 
 const _attachGrammar = ComposerAttachBbCodeGrammar();
+const _collapseParser = ComposerCollapseDocumentParser();
 
 /// Maps Quill's logical document offsets to raw BBCode offsets.
 ///
@@ -61,29 +64,12 @@ class _SourceIndex {
   int get _logicalLength => _units.length;
 
   void _build() {
-    final tokenPattern = RegExp(
-      '${ComposerAttachBbCodeGrammar.tokenPatternSource}|'
-      r'\{:[^}]+:\}'
-      r'|\[/?(?:b|i|u|s|quote)\]'
-      r'|\[/?(?:color|backcolor|size|url|align)(?:=[^\]]+)?\]',
-      caseSensitive: false,
-    );
-    var rawOffset = 0;
-    for (final match in tokenPattern.allMatches(source)) {
-      _appendText(source.substring(rawOffset, match.start), rawOffset);
-      final token = match.group(0)!;
-      if (_attachGrammar.isLegalCode(token) || token.startsWith('{:')) {
-        _units.add(
-          _LogicalUnit(
-            logicalStart: _logicalLength,
-            rawStart: match.start,
-            rawEnd: match.end,
-          ),
-        );
-      }
-      rawOffset = match.end;
+    final collapseDocument = _collapseParser.parse(source);
+    if (collapseDocument.hasCollapse && collapseDocument.isLossless) {
+      _appendCollapseDocument(collapseDocument, 0);
+    } else {
+      _appendTokenizedText(source, 0);
     }
-    _appendText(source.substring(rawOffset), rawOffset);
 
     // Codec documents always contain a terminal newline. It is synthetic
     // when the raw source does not end with one and has no raw span.
@@ -96,6 +82,62 @@ class _SourceIndex {
         ),
       );
     }
+  }
+
+  void _appendCollapseDocument(
+    ComposerCollapseDocument document,
+    int rawStart,
+  ) {
+    var cursor = rawStart;
+    for (final part in document.parts) {
+      switch (part) {
+        case ComposerCollapseText(:final value):
+          _appendTokenizedText(value, cursor);
+          cursor += value.length;
+        case ComposerCollapseBlock block:
+          final rawLength =
+              (block.rawOpeningLine?.length ?? 0) +
+              block.body.source.length +
+              (block.rawClosing?.length ?? 0);
+          _units.add(
+            _LogicalUnit(
+              logicalStart: _logicalLength,
+              rawStart: cursor,
+              rawEnd: cursor + rawLength,
+            ),
+          );
+          cursor += rawLength;
+      }
+    }
+  }
+
+  void _appendTokenizedText(String text, int segmentRawStart) {
+    final tokenPattern = RegExp(
+      '${ComposerAttachBbCodeGrammar.tokenPatternSource}|'
+      r'\{:[^}]+:\}'
+      r'|\[/?(?:b|i|u|s|quote)\]'
+      r'|\[/?(?:color|backcolor|size|url|align)(?:=[^\]]+)?\]',
+      caseSensitive: false,
+    );
+    var rawOffset = 0;
+    for (final match in tokenPattern.allMatches(text)) {
+      _appendText(
+        text.substring(rawOffset, match.start),
+        segmentRawStart + rawOffset,
+      );
+      final token = match.group(0)!;
+      if (_attachGrammar.isLegalCode(token) || token.startsWith('{:')) {
+        _units.add(
+          _LogicalUnit(
+            logicalStart: _logicalLength,
+            rawStart: segmentRawStart + match.start,
+            rawEnd: segmentRawStart + match.end,
+          ),
+        );
+      }
+      rawOffset = match.end;
+    }
+    _appendText(text.substring(rawOffset), segmentRawStart + rawOffset);
   }
 
   void _appendText(String text, int rawStart) {

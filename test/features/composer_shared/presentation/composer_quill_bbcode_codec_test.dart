@@ -1,9 +1,12 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_selection_adapter.dart';
 
 void main() {
   const codec = ComposerQuillBbCodeCodec();
@@ -281,5 +284,218 @@ void main() {
       ..insert('\n');
 
     expect(codec.encodeDelta(delta), '[backcolor=#aabbcc]文字[/backcolor]');
+  });
+  test('decodes nested collapse embeds and preserves attachment tag kind', () {
+    const source =
+        '[collapse=0,外层]\n'
+        '正文\n'
+        '[collapse=0,内层]\n'
+        '[attachimg]1629685[/attachimg][/collapse]\n'
+        '[/collapse]';
+    final document = codec.decodeDocument(source);
+    final collapse = document.toDelta().toList().firstWhere(
+      (operation) =>
+          operation.data is Map &&
+          (operation.data as Map).containsKey('collapse'),
+    );
+    final payload = composerQuillCollapseEmbedPayload(collapse.data);
+
+    expect(payload, isNotNull);
+    expect(payload!['title'], '外层');
+    expect(payload['body'], contains('[attachimg]1629685[/attachimg]'));
+    expect(codec.encodeDocument(document), source);
+  });
+
+  test('round-trips supported recursive collapse layouts through Quill', () {
+    for (final source in const [
+      '[collapse=0,外层标题]\n'
+          '外层内容。\n'
+          '[collapse=0,内层标题]\n'
+          '内层隐藏内容。\n'
+          '[/collapse]\n'
+          '外层继续。\n'
+          '[/collapse]',
+      '[collapse=0,第一层]\n'
+          '第一层开头。\n'
+          '[collapse=0,第二层]\n'
+          '第二层内容。\n'
+          '[collapse=0,第三层]\n'
+          '第三层深层数据。\n'
+          '[/collapse]\n'
+          '第二层结尾。\n'
+          '[/collapse]\n'
+          '第一层结尾。\n'
+          '[/collapse]',
+      '[collapse=0,主题A]\n'
+          'A的概述。\n'
+          '[collapse=0,子项A1]\n'
+          'A1详情。\n'
+          '[/collapse]\n'
+          '[collapse=0,子项A2]\n'
+          'A2详情。\n'
+          '[/collapse]\n'
+          '[/collapse]\n'
+          '\n'
+          '[collapse=0,主题B]\n'
+          'B的概述。\n'
+          '[collapse=0,子项B1]\n'
+          'B1详情。\n'
+          '[/collapse]\n'
+          '[/collapse]',
+    ]) {
+      final document = codec.decodeDocument(source);
+
+      expect(codec.encodeDocument(document), source, reason: source);
+    }
+  });
+
+  test('nested bodies reuse formatting, sticker and attachment codecs', () {
+    const source =
+        '[collapse=0,标题,带逗号]\n'
+        '[b]粗体[/b]{:9_656:}\n'
+        '[attach]123456[/attach]\n'
+        '[attachimg]1629685[/attachimg]\n'
+        '[collapse=0,内层]\n'
+        '[url=https://example.com]链接[/url]\n'
+        '[/collapse]\n'
+        '[/collapse]';
+
+    final document = codec.decodeDocument(source);
+
+    expect(codec.encodeDocument(document), source);
+  });
+
+  test('keeps the opening line break outside the editable collapse body', () {
+    const source =
+        '[collapse=0,标题1]\n'
+        '嵌套1\n'
+        '[collapse=0,标2]\n'
+        '嵌套2\n'
+        '[font=宋体]宋体[/font]\n'
+        '默认字体\n'
+        '[attachimg]1629685[/attachimg][/collapse][/collapse]';
+
+    final root = codec.decodeDocument(source);
+    final outerOperation = root.toDelta().toList().firstWhere(
+      (operation) =>
+          operation.data is Map &&
+          (operation.data as Map).containsKey('collapse'),
+    );
+    final outer = composerQuillCollapseEmbedPayload(outerOperation.data)!;
+    final outerBody = codec.decodeDocument(outer['body']! as String);
+
+    expect(outer['body'], startsWith('嵌套1'));
+    expect(outerBody.toPlainText(), startsWith('嵌套1'));
+    expect(codec.encodeDocument(root), source);
+  });
+
+  test('preserves a valid CRLF opening until the title changes', () {
+    const source = '[COLLAPSE = 0,标题]\r\n正文[/COLLAPSE ]';
+    final document = codec.decodeDocument(source);
+    final operation = document.toDelta().toList().firstWhere(
+      (operation) =>
+          operation.data is Map &&
+          (operation.data as Map).containsKey('collapse'),
+    );
+    final payload = composerQuillCollapseEmbedPayload(operation.data)!;
+
+    expect(payload['rawOpeningLine'], '[COLLAPSE = 0,标题]\r\n');
+    expect(payload['rawClosing'], '[/COLLAPSE ]');
+    expect(codec.encodeDocument(document), source);
+
+    final changedPayload = <String, Object?>{...payload, 'title': '新标题'};
+    final changedDocument = Document.fromDelta(
+      Delta()
+        ..insert(<String, Object?>{'collapse': changedPayload})
+        ..insert('\n'),
+    );
+
+    expect(
+      codec.encodeDocument(changedDocument),
+      '[collapse=0,新标题]\n正文[/COLLAPSE ]',
+    );
+  });
+
+  test('keeps collapse mode one and malformed collapse as editable text', () {
+    for (final source in const [
+      '[collapse=1,展开]正文[/collapse]',
+      '[collapse=0,未完成]\n正文',
+      '[collapse=0,行内]正文[/collapse]',
+    ]) {
+      final document = codec.decodeDocument(source);
+      expect(
+        document.toDelta().toList().every(
+          (operation) => operation.data is String,
+        ),
+        isTrue,
+        reason: source,
+      );
+      expect(codec.encodeDocument(document), source);
+    }
+  });
+
+  test('encodes a versioned collapse payload and rejects unknown versions', () {
+    final embed = composerQuillCollapseEmbed(
+      id: 'session-1',
+      title: '标题',
+      body: '内容',
+    );
+    expect(
+      composerQuillCollapseEmbedPayload(embed),
+      containsPair('id', 'session-1'),
+    );
+    expect(
+      composerQuillCollapseEmbedPayload({
+        'collapse': {
+          'version': 2,
+          'id': 'session-1',
+          'mode': 0,
+          'title': '标题',
+          'body': '内容',
+        },
+      }),
+      isNull,
+    );
+  });
+
+  test('maps a collapse source block to one atomic Quill selection unit', () {
+    const source =
+        'A\n'
+        '[collapse=0,内层]\nB[/collapse]\n'
+        'C';
+    final document = codec.decodeDocument(source);
+    const adapter = ComposerQuillSelectionAdapter();
+    const beforeEmbed = TextSelection.collapsed(offset: 2);
+    const afterEmbed = TextSelection.collapsed(offset: 3);
+
+    expect(
+      adapter.toSourceSelection(
+        source: source,
+        document: document,
+        selection: beforeEmbed,
+      ),
+      ComposerSelection(
+        start: source.indexOf('[collapse'),
+        end: source.indexOf('[collapse'),
+      ),
+    );
+    final rawAfterEmbed = source.indexOf('\nC');
+    final mappedAfter = adapter.toSourceSelection(
+      source: source,
+      document: document,
+      selection: afterEmbed,
+    );
+    expect(
+      mappedAfter,
+      ComposerSelection(start: rawAfterEmbed, end: rawAfterEmbed),
+    );
+    expect(
+      adapter.toQuillSelection(
+        source: source,
+        document: document,
+        selection: mappedAfter!,
+      ),
+      afterEmbed,
+    );
   });
 }

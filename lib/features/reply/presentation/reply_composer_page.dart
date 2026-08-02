@@ -476,6 +476,9 @@ class _ReplyComposerBody extends StatelessWidget {
       hintText: AppLocalizations.of(context).replyMessageHint,
       messageRevision: state.messageRevision,
       lastMessageMutation: state.lastMessageMutation,
+      isUploadingImages: state.isUploadingImages,
+      imageUploadCurrent: state.imageUploadCurrent,
+      imageUploadTotal: state.imageUploadTotal,
     );
     final topFeedback = _buildFeedbackWidgets(context);
     if (editorSurface == ComposerSurfacePreference.quill) {

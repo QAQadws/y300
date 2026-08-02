@@ -1,10 +1,15 @@
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_collapse_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_collapse_document_parser.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_collapse_serializer.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_size_mapping.dart';
 
 const _attachGrammar = ComposerAttachBbCodeGrammar();
+const _collapseParser = ComposerCollapseDocumentParser();
+const _collapseSerializer = ComposerCollapseSerializer();
 
 class ComposerQuillBbCodeCodec {
   const ComposerQuillBbCodeCodec();
@@ -54,28 +59,61 @@ class ComposerQuillBbCodeCodec {
   }
 
   Delta decodeDelta(String bbCode) {
-    final builder = _DeltaBbCodeBuilder();
+    final parsed = _collapseParser.parse(bbCode);
+    final placeholders = <String, ComposerCollapseBlock>{};
+    final source = parsed.hasCollapse
+        ? _replaceCollapseBlocks(parsed, placeholders)
+        : bbCode;
+    final placeholderPattern = placeholders.isEmpty
+        ? ''
+        : '|${placeholders.keys.map(RegExp.escape).join('|')}';
+    final builder = _DeltaBbCodeBuilder(collapseBlocks: placeholders);
     final tagPattern = RegExp(
       // 只有合法（纯数字 aid）的 attach 代码才是原子节点，
       // 非法写法保持为可编辑文本，用户还能改回来。
       '${ComposerAttachBbCodeGrammar.tokenPatternSource}|'
       r'\{:[^}]+:\}'
       r'|\[/?(?:b|i|u|s|quote)\]'
-      r'|\[/?(?:color|backcolor|size|url|align)(?:=[^\]]+)?\]',
+      r'|\[/?(?:color|backcolor|size|url|align)(?:=[^\]]+)?\]'
+      '$placeholderPattern',
       caseSensitive: false,
     );
     var offset = 0;
-    for (final match in tagPattern.allMatches(bbCode)) {
+    for (final match in tagPattern.allMatches(source)) {
       if (match.start > offset) {
-        builder.appendText(bbCode.substring(offset, match.start));
+        builder.appendText(source.substring(offset, match.start));
       }
       builder.appendToken(match.group(0)!);
       offset = match.end;
     }
-    if (offset < bbCode.length) {
-      builder.appendText(bbCode.substring(offset));
+    if (offset < source.length) {
+      builder.appendText(source.substring(offset));
     }
     return builder.finish();
+  }
+
+  String _replaceCollapseBlocks(
+    ComposerCollapseDocument document,
+    Map<String, ComposerCollapseBlock> placeholders,
+  ) {
+    final buffer = StringBuffer();
+    var placeholderIndex = 0;
+    for (final part in document.parts) {
+      switch (part) {
+        case ComposerCollapseText(:final value):
+          buffer.write(value);
+        case ComposerCollapseBlock block:
+          String placeholder;
+          do {
+            placeholder = '\uE000collapse-$placeholderIndex\uE001';
+            placeholderIndex += 1;
+          } while (document.source.contains(placeholder) ||
+              placeholders.containsKey(placeholder));
+          placeholders[placeholder] = block;
+          buffer.write(placeholder);
+      }
+    }
+    return buffer.toString();
   }
 
   void _appendText({
@@ -212,6 +250,17 @@ class ComposerQuillBbCodeCodec {
   }
 
   String _encodeEmbed(Object? data) {
+    final collapse = composerQuillCollapseEmbedPayload(data);
+    if (collapse != null) {
+      final title = collapse['title']?.toString() ?? '';
+      final body = collapse['body']?.toString() ?? '';
+      return _collapseSerializer.serializeBlock(
+        title: title,
+        bodyBbCode: body,
+        rawOpeningLine: collapse['rawOpeningLine'] as String?,
+        rawClosing: collapse['rawClosing'] as String?,
+      );
+    }
     final stickerCode = composerQuillEmbedData(
       data,
       composerQuillStickerEmbedType,
@@ -231,12 +280,32 @@ class ComposerQuillBbCodeCodec {
 }
 
 class _DeltaBbCodeBuilder {
+  _DeltaBbCodeBuilder({Map<String, ComposerCollapseBlock>? collapseBlocks})
+    : _collapseBlocks =
+          collapseBlocks ?? const <String, ComposerCollapseBlock>{};
+
   final Delta _delta = Delta();
+  final Map<String, ComposerCollapseBlock> _collapseBlocks;
   final List<_ActiveBbCodeTag> _activeTags = <_ActiveBbCodeTag>[];
   bool _lineHasContent = false;
   bool _skipNextLeadingNewline = false;
 
   void appendToken(String token) {
+    final collapse = _collapseBlocks[token];
+    if (collapse != null) {
+      _delta.insert(
+        composerQuillCollapseEmbedData(
+          id: collapse.id,
+          title: collapse.title,
+          body: _collapseSerializer.serialize(collapse.body),
+          rawOpeningLine: collapse.rawOpeningLine,
+          rawClosing: collapse.rawClosing,
+        ),
+        _inlineAttributes(),
+      );
+      _lineHasContent = true;
+      return;
+    }
     final lower = token.toLowerCase();
     final attachmentTokens = _attachGrammar.scan(token);
     if (attachmentTokens.length == 1 &&

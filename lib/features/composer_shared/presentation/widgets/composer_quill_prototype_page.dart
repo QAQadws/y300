@@ -212,6 +212,7 @@ class _ComposerQuillPrototypePageState
 
   Future<void> _insertFakeUploadedImage(ComposerInsertionAnchor? anchor) async {
     final aid = (_nextAid++).toString();
+    final attachmentCode = '[attach]$aid[/attach]';
     final attachment = ComposerImageAttachment(
       localId: 'quill-prototype-$aid',
       localPath: '',
@@ -222,13 +223,19 @@ class _ComposerQuillPrototypePageState
       aid: aid,
       uploadedAt: DateTime.now(),
     );
+    final localInsertion = anchor?.localAttachmentInsertion;
+    if (localInsertion != null &&
+        localInsertion([attachmentCode]) ==
+            ComposerLocalAttachmentInsertionResult.stale) {
+      return;
+    }
     setState(() {
       _imageAttachments.add(attachment);
-      if (anchor != null) {
+      if (anchor != null && localInsertion == null) {
         final mutation = _messageInsertionService.insertAttachmentBlock(
           source: _bbCodeText,
           selection: anchor.selection,
-          attachmentCodes: ['[attach]$aid[/attach]'],
+          attachmentCodes: [attachmentCode],
           revision: 0,
         );
         _bbCodeText = mutation.nextSource;

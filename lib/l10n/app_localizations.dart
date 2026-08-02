@@ -4787,6 +4787,18 @@ abstract class AppLocalizations {
   /// **'折叠内容'**
   String get threadHtmlCollapseContent;
 
+  /// No description provided for @threadHtmlCollapseExpanded.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起折叠内容'**
+  String get threadHtmlCollapseExpanded;
+
+  /// No description provided for @threadHtmlCollapseCollapsed.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开折叠内容'**
+  String get threadHtmlCollapseCollapsed;
+
   /// No description provided for @threadHtmlRenderFailed.
   ///
   /// In zh, this message translates to:
@@ -4894,6 +4906,72 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'表情'**
   String get composerSticker;
+
+  /// No description provided for @composerCollapse.
+  ///
+  /// In zh, this message translates to:
+  /// **'折叠'**
+  String get composerCollapse;
+
+  /// No description provided for @composerCollapseTitleHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入折叠标题'**
+  String get composerCollapseTitleHint;
+
+  /// No description provided for @composerCollapseCreateTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建折叠'**
+  String get composerCollapseCreateTitle;
+
+  /// No description provided for @composerCollapseEditTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑折叠'**
+  String get composerCollapseEditTitle;
+
+  /// No description provided for @composerCollapseBodyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入折叠正文'**
+  String get composerCollapseBodyHint;
+
+  /// No description provided for @composerCollapseDiscardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃折叠修改？'**
+  String get composerCollapseDiscardTitle;
+
+  /// No description provided for @composerCollapseDiscardBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'标题和正文的修改将不会保存。'**
+  String get composerCollapseDiscardBody;
+
+  /// No description provided for @composerCollapseDiscardConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃修改'**
+  String get composerCollapseDiscardConfirm;
+
+  /// No description provided for @composerCollapseDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除这个折叠？'**
+  String get composerCollapseDeleteTitle;
+
+  /// No description provided for @composerCollapseDeleteBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'折叠标题和正文将从帖子内容中删除。'**
+  String get composerCollapseDeleteBody;
+
+  /// No description provided for @composerCollapseConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'帖子正文已更新，无法应用本次折叠修改。请复制内容后重新打开。'**
+  String get composerCollapseConflict;
 
   /// No description provided for @composerFormat.
   ///

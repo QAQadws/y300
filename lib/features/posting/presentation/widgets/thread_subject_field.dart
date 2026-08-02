@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_title_field_decoration.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 /// 发帖标题输入框。
@@ -33,16 +34,6 @@ class ThreadSubjectField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasLimit = maxLength > 0;
-    final colorScheme = Theme.of(context).colorScheme;
-    final underlineBorder = UnderlineInputBorder(
-      borderSide: BorderSide(color: colorScheme.outlineVariant),
-    );
-    final focusedUnderlineBorder = UnderlineInputBorder(
-      borderSide: BorderSide(color: colorScheme.primary, width: 2),
-    );
-    final errorUnderlineBorder = UnderlineInputBorder(
-      borderSide: BorderSide(color: colorScheme.error, width: 2),
-    );
     return TextField(
       key: fieldKey,
       controller: controller,
@@ -53,15 +44,9 @@ class ThreadSubjectField extends StatelessWidget {
       buildCounter: hasLimit ? _buildCounter : _hideDefaultCounter,
       // 仅用 buildCounter 接管计数显示——不传 maxLength，避免 Flutter 把超限
       // 的字符截断。preflight + state.canSubmit 已经在网络/按钮层兜住超限。
-      decoration: InputDecoration(
+      decoration: composerTitleFieldDecoration(
+        context,
         hintText: hintText ?? AppLocalizations.of(context).postingSubjectHint,
-        filled: false,
-        border: underlineBorder,
-        enabledBorder: underlineBorder,
-        focusedBorder: focusedUnderlineBorder,
-        errorBorder: errorUnderlineBorder,
-        focusedErrorBorder: errorUnderlineBorder,
-        disabledBorder: underlineBorder,
       ),
     );
   }

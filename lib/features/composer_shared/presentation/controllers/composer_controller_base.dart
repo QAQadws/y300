@@ -713,6 +713,35 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     ComposerInsertionAnchor anchor,
     List<String> aids,
   ) {
+    final localInsertion = anchor.localAttachmentInsertion;
+    if (localInsertion != null) {
+      late final ComposerLocalAttachmentInsertionResult result;
+      try {
+        result = localInsertion([
+          for (final aid in aids) attachBbCodeService.attachCode(aid),
+        ]);
+      } on StateError {
+        _setPendingAttachments(current, aids);
+        return;
+      }
+      if (result == ComposerLocalAttachmentInsertionResult.stale) {
+        _setPendingAttachments(current, aids);
+        return;
+      }
+      _setDataState(
+        applyPatch(
+          current,
+          ComposerStatePatch(
+            clearLastMessageMutation: true,
+            pendingAttachmentAids: const <String>[],
+            clearPendingAttachmentNotice: true,
+            clearFailure: true,
+          ),
+        ),
+      );
+      _scheduleDraftSave();
+      return;
+    }
     final mutation = _messageInsertionService.insertAttachmentBlock(
       source: current.message,
       selection: anchor.selection,

@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bbcode/flutter_bbcode.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_collapse_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attachment_preview_resolvers.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_collapse_document_parser.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_tokenizer.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
@@ -12,6 +14,8 @@ import 'package:y300/features/composer_shared/domain/services/sticker_bbcode_tok
 import 'package:y300/features/composer_shared/presentation/widgets/composer_attachment_preview.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
+import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/forum_collapse_chrome.dart';
 
 typedef ForumAttachPreviewImageBuilder = ComposerLocalImageBuilder;
 typedef ForumAttachPreviewFileExists = ComposerLocalFileExists;
@@ -65,9 +69,38 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
   final ForumAttachPreviewImageBuilder attachImageBuilder;
   final ForumAttachPreviewFileExists attachFileExists;
   final ForumStickerPreviewImageBuilder stickerImageBuilder;
+  static const _collapseParser = ComposerCollapseDocumentParser();
 
   @override
   Widget buildPreview(
+    BuildContext context,
+    String source, {
+    List<StickerItem> stickers = const [],
+    List<ComposerImageAttachment> imageAttachments =
+        const <ComposerImageAttachment>[],
+    ComposerAttachmentPreviewResolver? attachmentResolver,
+  }) {
+    final collapseDocument = _collapseParser.parse(source);
+    if (collapseDocument.hasCollapse) {
+      return _CollapsePreviewDocument(
+        document: collapseDocument,
+        renderer: this,
+        stickers: stickers,
+        imageAttachments: imageAttachments,
+        attachmentResolver: attachmentResolver,
+        sourceId: 'composer-collapse-${_stableHash(source)}',
+      );
+    }
+    return _buildBasePreview(
+      context,
+      source,
+      stickers: stickers,
+      imageAttachments: imageAttachments,
+      attachmentResolver: attachmentResolver,
+    );
+  }
+
+  Widget _buildBasePreview(
     BuildContext context,
     String source, {
     List<StickerItem> stickers = const [],
@@ -139,6 +172,87 @@ class FlutterBbCodeForumRenderer extends ForumBbCodeRenderer {
       },
     );
   }
+}
+
+class _CollapsePreviewDocument extends StatelessWidget {
+  const _CollapsePreviewDocument({
+    required this.document,
+    required this.renderer,
+    required this.stickers,
+    required this.imageAttachments,
+    required this.attachmentResolver,
+    required this.sourceId,
+  });
+
+  final ComposerCollapseDocument document;
+  final FlutterBbCodeForumRenderer renderer;
+  final List<StickerItem> stickers;
+  final List<ComposerImageAttachment> imageAttachments;
+  final ComposerAttachmentPreviewResolver? attachmentResolver;
+  final String sourceId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: Key(sourceId),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var index = 0; index < document.parts.length; index += 1)
+          _buildPart(context, document.parts[index], index),
+      ],
+    );
+  }
+
+  Widget _buildPart(
+    BuildContext context,
+    ComposerCollapsePart part,
+    int index,
+  ) {
+    final localizations = AppLocalizations.of(context);
+    switch (part) {
+      case ComposerCollapseText(:final value):
+        if (value.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return renderer._buildBasePreview(
+          context,
+          value,
+          stickers: stickers,
+          imageAttachments: imageAttachments,
+          attachmentResolver: attachmentResolver,
+        );
+      case ComposerCollapseBlock(:final id, :final title, :final body):
+        return ForumCollapseChrome(
+          sourceId: '$sourceId-$index-$id',
+          initiallyExpanded: false,
+          title: renderer._buildBasePreview(
+            context,
+            title,
+            stickers: stickers,
+            imageAttachments: imageAttachments,
+            attachmentResolver: attachmentResolver,
+          ),
+          contentBuilder: (_) => renderer.buildPreview(
+            context,
+            body.source,
+            stickers: stickers,
+            imageAttachments: imageAttachments,
+            attachmentResolver: attachmentResolver,
+          ),
+          expandedSemanticsLabel: localizations.threadHtmlCollapseExpanded,
+          collapsedSemanticsLabel: localizations.threadHtmlCollapseCollapsed,
+        );
+    }
+  }
+}
+
+String _stableHash(String value) {
+  var hash = 0x811c9dc5;
+  for (final unit in value.codeUnits) {
+    hash ^= unit;
+    hash = (hash * 0x01000193) & 0xffffffff;
+  }
+  return hash.toRadixString(16).padLeft(8, '0');
 }
 
 class _BackColorTag extends StyleTag {

@@ -101,7 +101,9 @@ class ComposerBbCodeToolbar extends StatelessWidget {
               icon: Icons.image_outlined,
               onPressed: onImagePressed!,
             ),
-          for (final action in extraToolbarActions)
+          for (final action in extraToolbarActions.where(
+            (action) => !action.quillOnly,
+          ))
             _ToolbarIconButton(
               buttonKey: action.key,
               tooltip: action.tooltip,

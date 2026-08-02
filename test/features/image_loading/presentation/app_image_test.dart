@@ -73,14 +73,149 @@ void main() {
 
     expect(find.byKey(const Key('error')), findsOneWidget);
   });
+
+  testWidgets('reuses resolved headers across equivalent parent rebuilds', (
+    tester,
+  ) async {
+    final headers = _CountingImageHeaderBuilder();
+
+    Widget buildImage() {
+      return wrap(
+        AppImage(
+          key: const Key('stable-network-image'),
+          networkSource: NetworkAppImageSource(
+            url: 'https://bbs.yamibo.com/data/attachment/stable.jpg',
+            headerBuilder: headers,
+          ),
+          fit: BoxFit.contain,
+          placeholder: const SizedBox(key: Key('placeholder')),
+          errorPlaceholder: const SizedBox(key: Key('error')),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(buildImage());
+    await tester.pump();
+
+    expect(headers.callCount, 1);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('stable-network-image')),
+        matching: find.byType(Image),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(buildImage());
+
+    expect(headers.callCount, 1);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('stable-network-image')),
+        matching: find.byType(Image),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('invalidates headers only when request identity changes', (
+    tester,
+  ) async {
+    final firstBuilder = _PendingImageHeaderBuilder();
+    final secondBuilder = _PendingImageHeaderBuilder();
+
+    Widget buildImage(String url, ImageRequestHeaderBuilder builder) {
+      return wrap(
+        AppImage(
+          key: const Key('changing-network-image'),
+          networkSource: NetworkAppImageSource(
+            url: url,
+            headerBuilder: builder,
+          ),
+          fit: BoxFit.contain,
+          placeholder: const SizedBox(key: Key('placeholder')),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(
+      buildImage('https://bbs.yamibo.com/data/attachment/a.jpg', firstBuilder),
+    );
+    expect(firstBuilder.callCount, 1);
+
+    await tester.pumpWidget(
+      buildImage('https://bbs.yamibo.com/data/attachment/a.jpg', firstBuilder),
+    );
+    expect(firstBuilder.callCount, 1);
+
+    await tester.pumpWidget(
+      buildImage('https://bbs.yamibo.com/data/attachment/b.jpg', firstBuilder),
+    );
+    expect(firstBuilder.callCount, 2);
+
+    await tester.pumpWidget(
+      buildImage('https://bbs.yamibo.com/data/attachment/b.jpg', secondBuilder),
+    );
+    expect(secondBuilder.callCount, 1);
+  });
+
+  testWidgets(
+    'header failure does not issue an unauthenticated image request',
+    (tester) async {
+      final headers = _FailingImageHeaderBuilder();
+      await tester.pumpWidget(
+        wrap(
+          AppImage(
+            networkSource: NetworkAppImageSource(
+              url: 'https://bbs.yamibo.com/data/attachment/protected.jpg',
+              headerBuilder: headers,
+            ),
+            fit: BoxFit.contain,
+            placeholder: const SizedBox(key: Key('placeholder')),
+            errorPlaceholder: const SizedBox(key: Key('error')),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(headers.callCount, 1);
+      expect(find.byKey(const Key('error')), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+    },
+  );
 }
 
 /// 永不完成的 header builder，用于确定性验证网络分支的“等待头部”态。
 class _PendingImageHeaderBuilder implements ImageRequestHeaderBuilder {
   final Completer<Map<String, String>> _completer =
       Completer<Map<String, String>>();
+  int callCount = 0;
 
   @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) =>
-      _completer.future;
+  Future<Map<String, String>> buildHeaders(String imageUrl) {
+    callCount += 1;
+    return _completer.future;
+  }
+}
+
+class _CountingImageHeaderBuilder implements ImageRequestHeaderBuilder {
+  int callCount = 0;
+
+  @override
+  Future<Map<String, String>> buildHeaders(String imageUrl) async {
+    callCount += 1;
+    return const <String, String>{'Referer': 'https://bbs.yamibo.com/'};
+  }
+}
+
+class _FailingImageHeaderBuilder implements ImageRequestHeaderBuilder {
+  int callCount = 0;
+
+  @override
+  Future<Map<String, String>> buildHeaders(String imageUrl) {
+    callCount += 1;
+    return Future<Map<String, String>>.error(
+      StateError('synthetic header failure'),
+    );
+  }
 }

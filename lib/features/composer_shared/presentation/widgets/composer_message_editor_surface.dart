@@ -30,6 +30,9 @@ class ComposerMessageEditorSurface extends StatelessWidget {
     this.attachmentResolver,
     this.messageRevision = 0,
     this.lastMessageMutation,
+    this.isUploadingImages = false,
+    this.imageUploadCurrent = 0,
+    this.imageUploadTotal = 0,
     this.onImagePressed,
     this.stickers = const <StickerItem>[],
     this.keyPrefix = 'composer',
@@ -52,6 +55,9 @@ class ComposerMessageEditorSurface extends StatelessWidget {
   final ComposerAttachmentPreviewResolver? attachmentResolver;
   final int messageRevision;
   final ComposerTextMutation? lastMessageMutation;
+  final bool isUploadingImages;
+  final int imageUploadCurrent;
+  final int imageUploadTotal;
   final ComposerImageInsertCallback? onImagePressed;
   final String keyPrefix;
   final String? hintText;
@@ -79,6 +85,7 @@ class ComposerMessageEditorSurface extends StatelessWidget {
         onStickerGroupChanged: onStickerGroupChanged,
         imageAttachments: imageAttachments,
         attachmentResolver: attachmentResolver,
+        collapseRenderer: renderer,
         attachImageBuilder: localImageBuilder,
         attachFileExists: localFileExists,
         hintText: hintText,
@@ -86,6 +93,9 @@ class ComposerMessageEditorSurface extends StatelessWidget {
         onBbCodeChanged: onMessageChanged,
         messageRevision: messageRevision,
         lastMessageMutation: lastMessageMutation,
+        isUploadingImages: isUploadingImages,
+        imageUploadCurrent: imageUploadCurrent,
+        imageUploadTotal: imageUploadTotal,
         onImagePressed: onImagePressed,
         extraToolbarActions: extraToolbarActions,
       ),

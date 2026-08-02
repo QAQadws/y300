@@ -630,6 +630,9 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
       hintText: AppLocalizations.of(context).composerImageRetentionHint,
       messageRevision: widget.state.messageRevision,
       lastMessageMutation: widget.state.lastMessageMutation,
+      isUploadingImages: widget.state.isUploadingImages,
+      imageUploadCurrent: widget.state.imageUploadCurrent,
+      imageUploadTotal: widget.state.imageUploadTotal,
     );
     if (widget.editorSurface == ComposerSurfacePreference.quill) {
       return SafeArea(

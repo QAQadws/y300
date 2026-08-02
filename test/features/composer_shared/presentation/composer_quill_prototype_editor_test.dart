@@ -16,6 +16,7 @@ import 'package:y300/features/composer_shared/domain/models/composer_insertion_m
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_message_insertion_service.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_selection_adapter.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_sticker_image_cache_loader.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
@@ -24,6 +25,8 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_bbco
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
+import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/forum_collapse_chrome.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
 void main() {
@@ -84,6 +87,665 @@ void main() {
       resolvedSourcePadding.left + ForumContentSpacing.composerPageHorizontal,
       ForumContentSpacing.readableBodyHorizontal,
     );
+  });
+
+  testWidgets('collapse header toggles while only trailing icon edits', (
+    tester,
+  ) async {
+    const source =
+        '[collapse=0,外层]\n'
+        '外层正文\n'
+        '[collapse=0,内层]\n内层正文[/collapse]\n'
+        '外层结尾[/collapse]';
+    await tester.pumpWidget(_buildEditor(initialBbCode: source));
+
+    expect(find.byType(QuillEditor), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.byIcon(Icons.chevron_right).first);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('composer-quill-collapse-collapse-1-content')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('test-quill-collapse-editor-page')),
+      findsNothing,
+    );
+    await tester.tap(find.text('外层'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('composer-quill-collapse-collapse-1-content')),
+      findsNothing,
+    );
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-collapse-1-toggle')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(QuillEditor), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(ForumCollapseChrome), findsNWidgets(2));
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('test-quill-collapse-editor-page')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('composer-quill-collapse-collapse-1-content')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('collapse title and save action match composer chrome', (
+    tester,
+  ) async {
+    const initial = '[collapse=0,标题]\n正文[/collapse]';
+    final theme = AppTheme.light();
+    await tester.pumpWidget(_buildEditor(initialBbCode: initial));
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-0')),
+    );
+    await tester.pumpAndSettle();
+
+    final titleFinder = find.byKey(
+      const Key('test-quill-collapse-editor-title-field'),
+    );
+    final titleField = tester.widget<TextField>(titleFinder);
+    final decoration = titleField.decoration!;
+    final localizations = AppLocalizations.of(tester.element(titleFinder));
+    expect(decoration.hintText, localizations.composerCollapseTitleHint);
+    expect(decoration.labelText, isNull);
+    expect(decoration.filled, isFalse);
+    expect(decoration.border, isA<UnderlineInputBorder>());
+    expect(decoration.enabledBorder, isA<UnderlineInputBorder>());
+    expect(decoration.focusedBorder, isA<UnderlineInputBorder>());
+    expect(decoration.border, isNot(isA<OutlineInputBorder>()));
+    final contentColumn = tester.widget<Column>(
+      find.byKey(const Key('test-quill-collapse-editor-content-column')),
+    );
+    expect(contentColumn.children.whereType<Divider>(), isEmpty);
+
+    final titlePadding = tester.widget<Padding>(
+      find.byKey(const Key('test-quill-collapse-editor-title-padding')),
+    );
+    final resolvedPadding = titlePadding.padding.resolve(TextDirection.ltr);
+    expect(
+      resolvedPadding,
+      const EdgeInsets.fromLTRB(
+        ForumContentSpacing.composerPageHorizontal,
+        ForumContentSpacing.composerPageVertical,
+        ForumContentSpacing.composerPageHorizontal,
+        12,
+      ),
+    );
+
+    final saveFinder = find.byKey(
+      const Key('test-quill-collapse-editor-save-button'),
+    );
+    var saveButton = tester.widget<IconButton>(saveFinder);
+    final appBarForeground = theme.appBarTheme.foregroundColor!;
+    expect(saveButton.tooltip, localizations.commonSave);
+    expect(saveButton.onPressed, isNull);
+    expect(
+      saveButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+      appBarForeground,
+    );
+    expect(
+      saveButton.style?.foregroundColor?.resolve(<WidgetState>{
+        WidgetState.disabled,
+      }),
+      appBarForeground.withValues(alpha: 0.38),
+    );
+    expect(
+      find.descendant(
+        of: saveFinder,
+        matching: find.byIcon(Icons.save_outlined),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.enterText(titleFinder, '新]题\n\uFFFC');
+    await tester.pump();
+    expect(tester.widget<TextField>(titleFinder).controller!.text, '新题');
+    saveButton = tester.widget<IconButton>(saveFinder);
+    expect(saveButton.onPressed, isNotNull);
+
+    await tester.enterText(titleFinder, '标题');
+    await tester.pump();
+    saveButton = tester.widget<IconButton>(saveFinder);
+    expect(saveButton.onPressed, isNull);
+  });
+
+  testWidgets('creating then discarding a collapse leaves parent unchanged', (
+    tester,
+  ) async {
+    String? latest;
+    await tester.pumpWidget(
+      _buildEditor(
+        initialBbCode: '父正文',
+        onBbCodeChanged: (value) => latest = value,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('test-quill-collapse-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('test-quill-collapse-editor-page')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('test-quill-collapse-editor-save-button')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await tester.enterText(
+      find.byKey(const Key('test-quill-collapse-editor-title-field')),
+      '未保存标题',
+    );
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const Key('test-quill-collapse-editor-discard-confirm-button'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(
+        const Key('test-quill-collapse-editor-discard-confirm-button'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('test-quill-collapse-editor-page')),
+      findsNothing,
+    );
+    expect(latest, isNull);
+  });
+
+  testWidgets('safe text selection is prefilled and saved as one collapse', (
+    tester,
+  ) async {
+    final controller = QuillController.basic();
+    addTearDown(controller.dispose);
+    controller.replaceText(
+      0,
+      0,
+      '选中的正文',
+      const TextSelection(baseOffset: 0, extentOffset: 5),
+    );
+    String? latest;
+    await tester.pumpWidget(
+      _buildEditor(
+        controller: controller,
+        onBbCodeChanged: (value) => latest = value,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('test-quill-collapse-button')));
+    await tester.pumpAndSettle();
+    final bodyEditor = tester.widget<QuillEditor>(
+      find.byKey(const Key('test-quill-collapse-editor-body-editor')),
+    );
+    expect(
+      const ComposerQuillBbCodeCodec().encodeDocument(
+        bodyEditor.controller.document,
+      ),
+      '选中的正文',
+    );
+    await tester.enterText(
+      find.byKey(const Key('test-quill-collapse-editor-title-field')),
+      '标题',
+    );
+    await tester.tap(
+      find.byKey(const Key('test-quill-collapse-editor-save-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(latest, '[collapse=0,标题]\n选中的正文[/collapse]');
+    expect(find.byType(QuillEditor), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('selection containing an embed is preserved when creating', (
+    tester,
+  ) async {
+    final controller = QuillController.basic();
+    addTearDown(controller.dispose);
+    controller.replaceText(0, 0, 'A', const TextSelection.collapsed(offset: 1));
+    controller.replaceText(
+      1,
+      0,
+      composerQuillStickerEmbed('{:9_656:}'),
+      const TextSelection.collapsed(offset: 2),
+    );
+    controller.replaceText(
+      2,
+      0,
+      'B',
+      const TextSelection(baseOffset: 0, extentOffset: 3),
+    );
+    String? latest;
+    await tester.pumpWidget(
+      _buildEditor(
+        controller: controller,
+        onBbCodeChanged: (value) => latest = value,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('test-quill-collapse-button')));
+    await tester.pumpAndSettle();
+    final bodyEditor = tester.widget<QuillEditor>(
+      find.byKey(const Key('test-quill-collapse-editor-body-editor')),
+    );
+    expect(
+      const ComposerQuillBbCodeCodec().encodeDocument(
+        bodyEditor.controller.document,
+      ),
+      isEmpty,
+    );
+    await tester.enterText(
+      find.byKey(const Key('test-quill-collapse-editor-title-field')),
+      '空正文',
+    );
+    await tester.tap(
+      find.byKey(const Key('test-quill-collapse-editor-save-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(latest, '[collapse=0,空正文]\n[/collapse]\nA{:9_656:}B');
+  });
+
+  testWidgets(
+    'editing deletes title and body text but preserves nested BBCode',
+    (tester) async {
+      const initial =
+          '[collapse=0,外层]\n'
+          '嵌套1\n'
+          '[collapse=0,内层]\n内层正文[/collapse][/collapse]';
+      var latest = initial;
+      await tester.pumpWidget(
+        _buildEditor(
+          initialBbCode: initial,
+          onBbCodeChanged: (value) => latest = value,
+        ),
+      );
+
+      await tester.tap(
+        find.byKey(const Key('composer-quill-collapse-edit-collapse-1')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(
+          const Key('test-quill-collapse-editor-body-collapse-button'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(QuillEditor), findsOneWidget);
+      final titleField = tester.widget<TextField>(
+        find.byKey(const Key('test-quill-collapse-editor-title-field')),
+      );
+      expect(titleField.enableInteractiveSelection, isTrue);
+      await tester.enterText(
+        find.byKey(const Key('test-quill-collapse-editor-title-field')),
+        '',
+      );
+      final bodyEditor = tester.widget<QuillEditor>(
+        find.byKey(const Key('test-quill-collapse-editor-body-editor')),
+      );
+      expect(bodyEditor.config.enableInteractiveSelection, isTrue);
+      bodyEditor.controller.replaceText(
+        2,
+        1,
+        '',
+        const TextSelection.collapsed(offset: 2),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const Key('test-quill-collapse-editor-save-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        latest,
+        '[collapse=0,]\n'
+        '嵌套\n'
+        '[collapse=0,内层]\n内层正文[/collapse][/collapse]',
+      );
+    },
+  );
+
+  testWidgets('second-level collapse save stays local until outer save', (
+    tester,
+  ) async {
+    const initial = '[collapse=0,外层]\n外层正文[/collapse]';
+    var latest = initial;
+    await tester.pumpWidget(
+      _buildEditor(
+        initialBbCode: initial,
+        onBbCodeChanged: (value) => latest = value,
+      ),
+    );
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-0')),
+    );
+    await tester.pumpAndSettle();
+
+    await _createSecondLevelCollapse(tester);
+
+    expect(latest, initial);
+    expect(
+      find.byKey(const Key('test-quill-collapse-editor-page')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('test-quill-collapse-editor-save-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      latest,
+      '[collapse=0,外层]\n'
+      '外层正文\n'
+      '[collapse=0,内层]\n内层正文[/collapse][/collapse]',
+    );
+  });
+
+  testWidgets('discarding outer editor drops saved nested draft', (
+    tester,
+  ) async {
+    const initial = '[collapse=0,外层]\n外层正文[/collapse]';
+    var latest = initial;
+    await tester.pumpWidget(
+      _buildEditor(
+        initialBbCode: initial,
+        onBbCodeChanged: (value) => latest = value,
+      ),
+    );
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-0')),
+    );
+    await tester.pumpAndSettle();
+
+    await _createSecondLevelCollapse(tester);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(
+        const Key('test-quill-collapse-editor-discard-confirm-button'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(latest, initial);
+    expect(
+      find.byKey(const Key('test-quill-collapse-editor-page')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('second-level editor keeps deeper history preview-only', (
+    tester,
+  ) async {
+    const initial =
+        '[collapse=0,第一层]\n'
+        '第一层正文\n'
+        '[collapse=0,第二层]\n'
+        '第二层正文\n'
+        '[collapse=0,第三层]\n第三层正文[/collapse]\n'
+        '[/collapse]\n'
+        '[/collapse]';
+    await tester.pumpWidget(_buildEditor(initialBbCode: initial));
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-2')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('test-quill-collapse-editor-body-collapse-button')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(
+        const Key(
+          'test-quill-collapse-editor-body-collapse-editor-body-collapse-button',
+        ),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-0')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('composer-quill-collapse-collapse-0-toggle')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-collapse-0-toggle')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('composer-quill-collapse-collapse-0-content')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('第三层正文', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('collapse title and body can both be deleted to empty', (
+    tester,
+  ) async {
+    var latest = '[collapse=0,标题]\n正文[/collapse]';
+    await tester.pumpWidget(
+      _buildEditor(
+        initialBbCode: latest,
+        onBbCodeChanged: (value) => latest = value,
+      ),
+    );
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-0')),
+    );
+    await tester.pumpAndSettle();
+
+    final titleFinder = find.byKey(
+      const Key('test-quill-collapse-editor-title-field'),
+    );
+    final titleController = tester.widget<TextField>(titleFinder).controller!;
+    await tester.enterText(titleFinder, '');
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(titleFinder).controller,
+      same(titleController),
+    );
+    final bodyFinder = find.byKey(
+      const Key('test-quill-collapse-editor-body-editor'),
+    );
+    final bodyController = tester.widget<QuillEditor>(bodyFinder).controller;
+    bodyController.replaceText(
+      0,
+      2,
+      '',
+      const TextSelection.collapsed(offset: 0),
+    );
+    await tester.pump();
+    expect(
+      tester.widget<QuillEditor>(bodyFinder).controller,
+      same(bodyController),
+    );
+    expect(bodyController.document.toPlainText(), '\n');
+
+    await tester.tap(
+      find.byKey(const Key('test-quill-collapse-editor-save-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(latest, '[collapse=0,]\n[/collapse]');
+  });
+
+  testWidgets('delete confirmation removes one atomic collapse', (
+    tester,
+  ) async {
+    var latest = '[collapse=0,标题]\n正文[/collapse]';
+    await tester.pumpWidget(
+      _buildEditor(
+        initialBbCode: latest,
+        onBbCodeChanged: (value) => latest = value,
+      ),
+    );
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-0')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('test-quill-collapse-editor-delete-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('test-quill-collapse-editor-delete-confirm-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(latest, isEmpty);
+    expect(
+      find.byKey(const Key('test-quill-collapse-editor-page')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('upload bridge blocks collapse save delete and route exit', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildEditor(
+        initialBbCode: '[collapse=0,标题]\n正文[/collapse]',
+        isUploadingImages: true,
+        imageUploadCurrent: 1,
+        imageUploadTotal: 2,
+      ),
+    );
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-0')),
+    );
+    await tester.pumpAndSettle();
+
+    final saveButton = tester.widget<IconButton>(
+      find.byKey(const Key('test-quill-collapse-editor-save-button')),
+    );
+    final deleteButton = tester.widget<IconButton>(
+      find.byKey(const Key('test-quill-collapse-editor-delete-button')),
+    );
+    expect(saveButton.onPressed, isNull);
+    expect(deleteButton.onPressed, isNull);
+    await tester.tap(find.byType(BackButton));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('test-quill-collapse-editor-page')),
+      findsOneWidget,
+    );
+    expect(find.byType(SnackBar), findsOneWidget);
+  });
+
+  testWidgets('collapse image insertion stays local until save', (
+    tester,
+  ) async {
+    const initial = '[collapse=0,标题]\n正文[/collapse]';
+    const codec = ComposerQuillBbCodeCodec();
+    final document = codec.decodeDocument(initial);
+    final rootController = QuillController(
+      document: document,
+      selection: TextSelection.collapsed(offset: document.length - 1),
+    );
+    addTearDown(rootController.dispose);
+    var latest = initial;
+    await tester.pumpWidget(
+      _buildEditor(
+        controller: rootController,
+        onBbCodeChanged: (value) => latest = value,
+        onImagePressed: (anchor) async {
+          _insertTestAttachment(rootController, anchor);
+        },
+        imageAttachments: [_uploadedAttachment()],
+        attachImageBuilder: _buildTestAttachPreviewImage,
+        attachFileExists: _testAttachFileExists,
+      ),
+    );
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-0')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const Key('test-quill-collapse-editor-body-image-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(latest, initial);
+    final bodyEditor = tester.widget<QuillEditor>(
+      find.byKey(const Key('test-quill-collapse-editor-body-editor')),
+    );
+    expect(
+      codec.encodeDocument(bodyEditor.controller.document),
+      '正文\n[attach]123456[/attach]',
+    );
+
+    await tester.tap(
+      find.byKey(const Key('test-quill-collapse-editor-save-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(latest, '[collapse=0,标题]\n正文\n[attach]123456[/attach]\n[/collapse]');
+  });
+
+  testWidgets('external parent replacement keeps conflicting editor open', (
+    tester,
+  ) async {
+    final key = GlobalKey<_ControlledCollapseHarnessState>();
+    await tester.pumpWidget(
+      _buildControlledCollapseEditor(
+        key: key,
+        initialBbCode: '[collapse=0,标题]\n正文[/collapse]',
+      ),
+    );
+    await tester.tap(
+      find.byKey(const Key('composer-quill-collapse-edit-collapse-0')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('conflict-quill-collapse-editor-title-field')),
+      '本地标题',
+    );
+
+    key.currentState!.replaceExternally('外部替换');
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const Key('conflict-quill-collapse-editor-save-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(key.currentState!.source, '外部替换');
+    expect(
+      find.byKey(const Key('conflict-quill-collapse-editor-page')),
+      findsOneWidget,
+    );
+    expect(find.byType(SnackBar), findsOneWidget);
   });
 
   testWidgets('ComposerQuillPrototypeEditor exposes WYSIWYG toolbar', (
@@ -1485,8 +2147,44 @@ void _expectClearStateOnFormatRow(WidgetTester tester) {
   expect(clearCenter.dy, closeTo(strikeCenter.dy, 2));
 }
 
+Future<void> _createSecondLevelCollapse(WidgetTester tester) async {
+  const firstBodyCollapseButton = Key(
+    'test-quill-collapse-editor-body-collapse-button',
+  );
+  const secondPagePrefix = 'test-quill-collapse-editor-body-collapse-editor';
+  expect(find.byKey(firstBodyCollapseButton), findsOneWidget);
+  await tester.tap(find.byKey(firstBodyCollapseButton));
+  await tester.pumpAndSettle();
+
+  expect(find.byKey(const Key('$secondPagePrefix-page')), findsOneWidget);
+  expect(
+    find.byKey(const Key('$secondPagePrefix-body-collapse-button')),
+    findsNothing,
+  );
+  await tester.enterText(
+    find.byKey(const Key('$secondPagePrefix-title-field')),
+    '内层',
+  );
+  const nestedBody = '内层正文';
+  final bodyEditor = tester.widget<QuillEditor>(
+    find.byKey(const Key('$secondPagePrefix-body-editor')),
+  );
+  bodyEditor.controller.replaceText(
+    0,
+    0,
+    nestedBody,
+    const TextSelection.collapsed(offset: nestedBody.length),
+  );
+  await tester.pump();
+  await tester.tap(find.byKey(const Key('$secondPagePrefix-save-button')));
+  await tester.pumpAndSettle();
+
+  expect(find.byKey(const Key('$secondPagePrefix-page')), findsNothing);
+}
+
 Widget _buildEditor({
   QuillController? controller,
+  String? initialBbCode,
   ValueChanged<String>? onBbCodeChanged,
   ComposerImageInsertCallback? onImagePressed,
   List<ComposerImageAttachment> imageAttachments =
@@ -1499,12 +2197,16 @@ Widget _buildEditor({
       const <ComposerToolbarAction>[],
   String? initialStickerGroupId,
   ValueChanged<String>? onStickerGroupChanged,
+  bool isUploadingImages = false,
+  int imageUploadCurrent = 0,
+  int imageUploadTotal = 0,
   EdgeInsets viewInsets = EdgeInsets.zero,
   double? surfaceWidth,
 }) {
   final editor = ComposerQuillPrototypeEditor(
     keyPrefix: 'test-quill',
     controller: controller,
+    initialBbCode: initialBbCode,
     onBbCodeChanged: onBbCodeChanged,
     onImagePressed: onImagePressed,
     imageAttachments: imageAttachments,
@@ -1515,6 +2217,9 @@ Widget _buildEditor({
     extraToolbarActions: extraToolbarActions,
     initialStickerGroupId: initialStickerGroupId,
     onStickerGroupChanged: onStickerGroupChanged,
+    isUploadingImages: isUploadingImages,
+    imageUploadCurrent: imageUploadCurrent,
+    imageUploadTotal: imageUploadTotal,
   );
   return ProviderScope(
     overrides: [
@@ -1551,6 +2256,69 @@ Widget _buildEditor({
   );
 }
 
+Widget _buildControlledCollapseEditor({
+  required GlobalKey<_ControlledCollapseHarnessState> key,
+  required String initialBbCode,
+}) {
+  return LocalizedTestApp(
+    theme: AppTheme.light(),
+    home: Scaffold(
+      body: SizedBox(
+        width: 800,
+        height: 600,
+        child: _ControlledCollapseHarness(
+          key: key,
+          initialBbCode: initialBbCode,
+        ),
+      ),
+    ),
+  );
+}
+
+class _ControlledCollapseHarness extends StatefulWidget {
+  const _ControlledCollapseHarness({super.key, required this.initialBbCode});
+
+  final String initialBbCode;
+
+  @override
+  State<_ControlledCollapseHarness> createState() =>
+      _ControlledCollapseHarnessState();
+}
+
+class _ControlledCollapseHarnessState
+    extends State<_ControlledCollapseHarness> {
+  late String source;
+  int revision = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    source = widget.initialBbCode;
+  }
+
+  void replaceExternally(String value) {
+    setState(() {
+      source = value;
+      revision += 1;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ComposerQuillEditorSurface(
+      keyPrefix: 'conflict-quill',
+      bbCode: source,
+      messageRevision: revision,
+      onBbCodeChanged: (value) {
+        setState(() {
+          source = value;
+          revision += 1;
+        });
+      },
+    );
+  }
+}
+
 ComposerImageAttachment _uploadedAttachment() {
   return ComposerImageAttachment(
     localId: 'local-123456',
@@ -1569,6 +2337,11 @@ void _insertTestAttachment(
   ComposerInsertionAnchor? anchor,
 ) {
   if (anchor == null) {
+    return;
+  }
+  final localInsertion = anchor.localAttachmentInsertion;
+  if (localInsertion != null) {
+    localInsertion(const ['[attach]123456[/attach]']);
     return;
   }
   const codec = ComposerQuillBbCodeCodec();

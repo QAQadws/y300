@@ -2929,6 +2929,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadHtmlCollapseContent => '折叠内容';
 
   @override
+  String get threadHtmlCollapseExpanded => '收起折叠内容';
+
+  @override
+  String get threadHtmlCollapseCollapsed => '展开折叠内容';
+
+  @override
   String get threadHtmlRenderFailed => '正文渲染失败，可长按楼层复制正文或打开原帖查看。';
 
   @override
@@ -2981,6 +2987,39 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get composerSticker => '表情';
+
+  @override
+  String get composerCollapse => '折叠';
+
+  @override
+  String get composerCollapseTitleHint => '输入折叠标题';
+
+  @override
+  String get composerCollapseCreateTitle => '新建折叠';
+
+  @override
+  String get composerCollapseEditTitle => '编辑折叠';
+
+  @override
+  String get composerCollapseBodyHint => '输入折叠正文';
+
+  @override
+  String get composerCollapseDiscardTitle => '放弃折叠修改？';
+
+  @override
+  String get composerCollapseDiscardBody => '标题和正文的修改将不会保存。';
+
+  @override
+  String get composerCollapseDiscardConfirm => '放弃修改';
+
+  @override
+  String get composerCollapseDeleteTitle => '删除这个折叠？';
+
+  @override
+  String get composerCollapseDeleteBody => '折叠标题和正文将从帖子内容中删除。';
+
+  @override
+  String get composerCollapseConflict => '帖子正文已更新，无法应用本次折叠修改。请复制内容后重新打开。';
 
   @override
   String get composerFormat => '格式';
@@ -7107,6 +7146,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get threadHtmlCollapseContent => '摺疊內容';
 
   @override
+  String get threadHtmlCollapseExpanded => '收起摺疊內容';
+
+  @override
+  String get threadHtmlCollapseCollapsed => '展開摺疊內容';
+
+  @override
   String get threadHtmlRenderFailed => '正文渲染失敗，可長按樓層複製正文或開啟原帖查看。';
 
   @override
@@ -7159,6 +7204,39 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get composerSticker => '表情';
+
+  @override
+  String get composerCollapse => '摺疊';
+
+  @override
+  String get composerCollapseTitleHint => '輸入摺疊標題';
+
+  @override
+  String get composerCollapseCreateTitle => '新增摺疊';
+
+  @override
+  String get composerCollapseEditTitle => '編輯摺疊';
+
+  @override
+  String get composerCollapseBodyHint => '輸入摺疊正文';
+
+  @override
+  String get composerCollapseDiscardTitle => '放棄摺疊修改？';
+
+  @override
+  String get composerCollapseDiscardBody => '標題和正文的修改將不會儲存。';
+
+  @override
+  String get composerCollapseDiscardConfirm => '放棄修改';
+
+  @override
+  String get composerCollapseDeleteTitle => '刪除這個摺疊？';
+
+  @override
+  String get composerCollapseDeleteBody => '摺疊標題和正文將從帖子內容中刪除。';
+
+  @override
+  String get composerCollapseConflict => '帖子正文已更新，無法套用本次摺疊修改。請複製內容後重新開啟。';
 
   @override
   String get composerFormat => '格式';

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
@@ -17,6 +19,7 @@ import 'package:y300/features/thread/presentation/post_edit_composer_controller.
 import 'package:y300/features/thread/presentation/post_edit_composer_page.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 import 'package:y300/features/thread/presentation/widgets/post_edit_attachment_panel.dart';
+import 'package:y300/features/image_loading/presentation/app_image.dart';
 
 import '../../../test_support/localized_test_app.dart';
 
@@ -86,6 +89,68 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('post edit delegates keyboard insets to the shared Quill host', (
+    tester,
+  ) async {
+    final results = <Object?>[];
+    final args = _args(_snapshot(message: '服务器正文'));
+    await tester.pumpWidget(_buildApp(args: args, results: results));
+    await _openEditor(tester);
+
+    final scaffold = tester.widget<Scaffold>(
+      find.byKey(const Key('post-edit-composer-page')),
+    );
+    final bodySafeArea = tester.widget<SafeArea>(
+      find.byKey(const Key('post-edit-composer-safe-area')),
+    );
+
+    expect(scaffold.resizeToAvoidBottomInset, isFalse);
+    expect(bodySafeArea.bottom, isFalse);
+    expect(
+      find.byKey(const Key('post-edit-composer-format-button')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('message updates keep remote attachment header resolution', (
+    tester,
+  ) async {
+    final results = <Object?>[];
+    final headers = _CountingImageHeaderBuilder();
+    final args = _args(
+      _snapshot(
+        message: '[attachimg]12[/attachimg]',
+        images: [
+          PostEditExistingImage(
+            aid: '12',
+            imageUri: Uri.parse('https://bbs.yamibo.com/12.jpg'),
+            isAssociated: true,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      _buildApp(args: args, results: results, imageHeaderBuilder: headers),
+    );
+    await _openEditor(tester);
+    await tester.pump();
+
+    expect(find.byType(AppImage), findsOneWidget);
+    expect(headers.callCount, 1);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(PostEditComposerPage)),
+    );
+    container
+        .read(postEditComposerControllerProvider(args).notifier)
+        .updateMessage('前缀[attachimg]12[/attachimg]');
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(AppImage), findsOneWidget);
+    expect(headers.callCount, 1);
   });
 
   testWidgets('first-post edit shows the server subject', (tester) async {
@@ -159,6 +224,7 @@ void main() {
 Widget _buildApp({
   required PostEditComposerArgs args,
   required List<Object?> results,
+  ImageRequestHeaderBuilder? imageHeaderBuilder,
 }) {
   return ProviderScope(
     overrides: [
@@ -172,12 +238,26 @@ Widget _buildApp({
       composerImageUploadCoordinatorProvider.overrideWithValue(
         const _NoopUploadCoordinator(),
       ),
+      if (imageHeaderBuilder != null)
+        imageRequestHeaderBuilderForRefererProvider.overrideWith(
+          (ref, referer) => imageHeaderBuilder,
+        ),
       stickerGroupsProvider.overrideWith((_) async => const []),
     ],
     child: LocalizedTestApp(
       home: _PostEditLauncher(args: args, results: results),
     ),
   );
+}
+
+class _CountingImageHeaderBuilder implements ImageRequestHeaderBuilder {
+  int callCount = 0;
+
+  @override
+  Future<Map<String, String>> buildHeaders(String imageUrl) async {
+    callCount += 1;
+    return const <String, String>{'Referer': 'https://bbs.yamibo.com/'};
+  }
 }
 
 Future<void> _openEditor(WidgetTester tester) async {

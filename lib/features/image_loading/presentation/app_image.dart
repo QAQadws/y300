@@ -3,8 +3,10 @@ import 'dart:io' as io;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:y300/core/media/image_display_provider.dart';
 import 'package:y300/core/media/image_downscale_policy.dart';
+import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/features/image_loading/domain/app_image_source.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
@@ -70,15 +72,28 @@ class _AppImageState extends ConsumerState<AppImage> {
   bool _networkResolved = false;
   String? _reportedImageIdentity;
   String? _reportedFailureIdentity;
+  Future<Map<String, String>>? _networkHeadersFuture;
+  String? _networkHeadersUrl;
+  String? _networkHeadersCacheKey;
+  ImageRequestHeaderBuilder? _networkHeadersBuilder;
 
   @override
   void didUpdateWidget(covariant AppImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.localPath != widget.localPath ||
-        oldWidget.networkSource?.cacheKey != widget.networkSource?.cacheKey) {
+        !_hasSameNetworkRequestIdentity(
+          oldWidget.networkSource,
+          widget.networkSource,
+        )) {
       _networkResolved = false;
       _reportedImageIdentity = null;
       _reportedFailureIdentity = null;
+    }
+    if (!_hasSameNetworkRequestIdentity(
+      oldWidget.networkSource,
+      widget.networkSource,
+    )) {
+      _clearNetworkHeadersFuture();
     }
   }
 
@@ -157,60 +172,111 @@ class _AppImageState extends ConsumerState<AppImage> {
       orElse: () => null,
     );
 
+    if (source.headerBuilder == null) {
+      return _buildResolvedNetworkImage(
+        source,
+        headers: const <String, String>{},
+        cacheManager: cacheManager,
+      );
+    }
+
     return FutureBuilder<Map<String, String>>(
-      future: _headersFor(source),
+      future: _headersFutureFor(source),
       builder: (context, snapshot) {
-        if (source.headerBuilder != null &&
-            snapshot.connectionState != ConnectionState.done) {
+        if (snapshot.connectionState != ConnectionState.done) {
           // 头部未就绪前先占位，避免不带 Cookie 的请求拿到 403。
           return widget.placeholder;
         }
-        final headers = snapshot.data;
-        final provider = CachedNetworkImageProvider(
-          source.resolvedUrl,
-          cacheKey: source.cacheKey,
+        if (snapshot.hasError || !snapshot.hasData) {
+          _markImageFailed('headers:${source.cacheKey}');
+          return _effectiveErrorPlaceholder;
+        }
+        return _buildResolvedNetworkImage(
+          source,
+          headers: snapshot.requireData,
           cacheManager: cacheManager,
-          headers: headers == null || headers.isEmpty ? null : headers,
-          maxWidth: _decodeTarget.cacheWidth,
-          maxHeight: _decodeTarget.cacheHeight,
-        );
-        return Stack(
-          fit: StackFit.passthrough,
-          children: <Widget>[
-            if (!_networkResolved) widget.placeholder,
-            Image(
-              image: provider,
-              fit: widget.fit,
-              width: widget.width,
-              height: widget.height,
-              alignment: widget.alignment,
-              gaplessPlayback: true,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) {
-                  _markNetworkResolved();
-                  _reportImageResolved(provider, 'net:${source.cacheKey}');
-                  return child;
-                }
-                return const SizedBox.shrink();
-              },
-              errorBuilder: (context, error, stackTrace) {
-                _markNetworkResolved();
-                _markImageFailed('net:${source.cacheKey}');
-                return _effectiveErrorPlaceholder;
-              },
-            ),
-          ],
         );
       },
     );
   }
 
-  Future<Map<String, String>> _headersFor(NetworkAppImageSource source) async {
-    final builder = source.headerBuilder;
-    if (builder == null) {
-      return const <String, String>{};
+  Widget _buildResolvedNetworkImage(
+    NetworkAppImageSource source, {
+    required Map<String, String> headers,
+    required BaseCacheManager? cacheManager,
+  }) {
+    final provider = CachedNetworkImageProvider(
+      source.resolvedUrl,
+      cacheKey: source.cacheKey,
+      cacheManager: cacheManager,
+      headers: headers.isEmpty ? null : headers,
+      maxWidth: _decodeTarget.cacheWidth,
+      maxHeight: _decodeTarget.cacheHeight,
+    );
+    return Stack(
+      fit: StackFit.passthrough,
+      children: <Widget>[
+        if (!_networkResolved) widget.placeholder,
+        Image(
+          image: provider,
+          fit: widget.fit,
+          width: widget.width,
+          height: widget.height,
+          alignment: widget.alignment,
+          gaplessPlayback: true,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) {
+              _markNetworkResolved();
+              _reportImageResolved(provider, 'net:${source.cacheKey}');
+              return child;
+            }
+            return const SizedBox.shrink();
+          },
+          errorBuilder: (context, error, stackTrace) {
+            _markNetworkResolved();
+            _markImageFailed('net:${source.cacheKey}');
+            return _effectiveErrorPlaceholder;
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<Map<String, String>> _headersFutureFor(NetworkAppImageSource source) {
+    final builder = source.headerBuilder!;
+    final canReuse =
+        _networkHeadersFuture != null &&
+        _networkHeadersUrl == source.resolvedUrl &&
+        _networkHeadersCacheKey == source.cacheKey &&
+        identical(_networkHeadersBuilder, builder);
+    if (!canReuse) {
+      _networkHeadersUrl = source.resolvedUrl;
+      _networkHeadersCacheKey = source.cacheKey;
+      _networkHeadersBuilder = builder;
+      _networkHeadersFuture = Future<Map<String, String>>.sync(
+        () => builder.buildHeaders(source.resolvedUrl),
+      );
     }
-    return builder.buildHeaders(source.resolvedUrl);
+    return _networkHeadersFuture!;
+  }
+
+  bool _hasSameNetworkRequestIdentity(
+    NetworkAppImageSource? previous,
+    NetworkAppImageSource? next,
+  ) {
+    if (previous == null || next == null) {
+      return previous == next;
+    }
+    return previous.resolvedUrl == next.resolvedUrl &&
+        previous.cacheKey == next.cacheKey &&
+        identical(previous.headerBuilder, next.headerBuilder);
+  }
+
+  void _clearNetworkHeadersFuture() {
+    _networkHeadersFuture = null;
+    _networkHeadersUrl = null;
+    _networkHeadersCacheKey = null;
+    _networkHeadersBuilder = null;
   }
 
   double _finiteOr(double? preferred, double fallback) {
