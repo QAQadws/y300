@@ -596,6 +596,60 @@ void main() {
     expect(cacheService.requests.single.cacheKey, image.request?.cacheKey);
   });
 
+  testWidgets('clips attachment and smiley media at the HTML surface', (
+    tester,
+  ) async {
+    final cacheService = _RecordingImageCacheService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: const LocalizedTestApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
+              sourceId: 'html-media-radius',
+              threadId: '573279',
+              html:
+                  '<img src="data/attachment/forum/page-1.jpg" '
+                  'width="640" height="480">'
+                  '<img src="static/image/smiley/gexing/008.gif" '
+                  'width="24" height="24">',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final images = find.byType(CachedLibraryImage);
+    expect(images, findsNWidgets(2));
+    for (var index = 0; index < 2; index += 1) {
+      final clip = tester.widget<ClipRRect>(
+        find
+            .ancestor(of: images.at(index), matching: find.byType(ClipRRect))
+            .first,
+      );
+      expect(clip.borderRadius, const BorderRadius.all(Radius.circular(4)));
+    }
+
+    // The same clip must remain present after the cache miss reaches the
+    // remote/error stage; it is owned by the HTML surface, not the cache
+    // state.
+    await tester.pumpAndSettle();
+    expect(
+      find.ancestor(
+        of: images.first,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is ClipRRect &&
+              widget.borderRadius == const BorderRadius.all(Radius.circular(4)),
+        ),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('failed thread image offers a retry that reruns the cache flow', (
     tester,
   ) async {
@@ -1250,6 +1304,12 @@ void main() {
 
     expect(find.byType(CachedLibraryImage), findsNothing);
     expect(find.byType(Image), findsOneWidget);
+    final clip = tester.widget<ClipRRect>(
+      find
+          .ancestor(of: find.byType(Image), matching: find.byType(ClipRRect))
+          .first,
+    );
+    expect(clip.borderRadius, const BorderRadius.all(Radius.circular(4)));
   });
 
   testWidgets(

@@ -16,6 +16,16 @@ import 'package:y300/features/thread/domain/services/forum_image_source_pipeline
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 
+const _forumHtmlInlineMediaBorderRadius = BorderRadius.all(Radius.circular(4));
+
+Widget _clipForumHtmlInlineMedia(Widget child) {
+  return ClipRRect(
+    borderRadius: _forumHtmlInlineMediaBorderRadius,
+    clipBehavior: Clip.antiAlias,
+    child: child,
+  );
+}
+
 class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
   ForumHtmlCachedImageWidgetFactory({
     required this.threadId,
@@ -63,7 +73,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     if (url.startsWith('asset:') ||
         url.startsWith('data:image/') ||
         url.startsWith('file:')) {
-      return super.buildImageWidget(tree, src);
+      return _buildFallbackImageWidget(tree, src);
     }
 
     final resolved = urlFull(url);
@@ -71,7 +81,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     if (resolved == null ||
         uri == null ||
         (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return super.buildImageWidget(tree, src);
+      return _buildFallbackImageWidget(tree, src);
     }
 
     final isSticker = _isForumStickerImage(resolved);
@@ -88,7 +98,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     );
     final request = imageRequestResolver.resolveCacheRequest(spec);
     if (request == null) {
-      return super.buildImageWidget(tree, src);
+      return _buildFallbackImageWidget(tree, src);
     }
     if (isSticker) {
       return _wrapTap(
@@ -129,6 +139,11 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
       readableIndex: readableIndex,
       isSticker: false,
     );
+  }
+
+  Widget? _buildFallbackImageWidget(BuildTree tree, ImageSource src) {
+    final fallback = super.buildImageWidget(tree, src);
+    return fallback == null ? null : _clipForumHtmlInlineMedia(fallback);
   }
 
   ForumImageLayoutHint _resolveInitialBlockHint(
@@ -338,7 +353,9 @@ class _ForumHtmlCachedBlockImageViewState
       onImageResolved: _handleImageResolved,
       retryToken: _retryToken,
     );
-    return AspectRatio(aspectRatio: hint.aspectRatio ?? 0.7, child: image);
+    return _clipForumHtmlInlineMedia(
+      AspectRatio(aspectRatio: hint.aspectRatio ?? 0.7, child: image),
+    );
   }
 
   void _retryImage() {
@@ -523,10 +540,10 @@ class _ForumHtmlCachedStickerImageViewState
       headerBuilder: widget.imageHeaderBuilder,
       onImageResolved: widget.onImageResolved,
     );
-    if (size == null) {
-      return child;
-    }
-    return SizedBox(width: size.width, height: size.height, child: child);
+    final media = size == null
+        ? child
+        : SizedBox(width: size.width, height: size.height, child: child);
+    return _clipForumHtmlInlineMedia(media);
   }
 
   Future<void> _loadCachedSize() async {

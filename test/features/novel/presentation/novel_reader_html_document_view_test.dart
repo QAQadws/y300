@@ -5,6 +5,10 @@ import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
@@ -141,6 +145,35 @@ void main() {
       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101',
     );
   });
+
+  testWidgets('clips inline media on the first HTML reader frame', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        theme: _lightTheme,
+        preparer: const NovelHtmlChapterRenderPreparer(),
+        rawHtml:
+            '<img src="data/attachment/forum/chapter-image.jpg" '
+            'width="640" height="480">'
+            '<img src="static/image/smiley/gexing/008.gif" '
+            'width="24" height="24">',
+        imageCacheService: _NoopImageCacheService(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final images = find.byType(CachedLibraryImage);
+    expect(images, findsNWidgets(2));
+    for (var index = 0; index < 2; index += 1) {
+      final clip = tester.widget<ClipRRect>(
+        find
+            .ancestor(of: images.at(index), matching: find.byType(ClipRRect))
+            .first,
+      );
+      expect(clip.borderRadius, const BorderRadius.all(Radius.circular(4)));
+    }
+  });
 }
 
 Widget _host({
@@ -149,8 +182,13 @@ Widget _host({
   NovelReaderPreferences? preferences,
   String rawHtml = '<p>待准备正文</p>',
   ValueChanged<NovelReaderLink>? onLinkTap,
+  ImageCacheService? imageCacheService,
 }) {
   return ProviderScope(
+    overrides: [
+      if (imageCacheService != null)
+        imageCacheServiceProvider.overrideWithValue(imageCacheService),
+    ],
     child: LocalizedTestApp(
       home: NovelReaderHtmlDocumentView(
         rawHtml: rawHtml,
@@ -256,4 +294,45 @@ final class _DeferredPrepareCall {
   final String themeSignature;
   final Completer<NovelHtmlPreparedChapter> completer =
       Completer<NovelHtmlPreparedChapter>();
+}
+
+class _NoopImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult(success: true, cacheKey: request.cacheKey);
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: request.sourcePath,
+    );
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async => 0;
+
+  @override
+  Future<void> clearUnprotected() async {}
 }

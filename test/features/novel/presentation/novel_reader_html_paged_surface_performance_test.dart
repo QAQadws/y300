@@ -2,8 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
@@ -102,6 +107,86 @@ void main() {
     expect(normalKey!.topChromeInsetPx, 0);
     expect(normalKey.bottomChromeInsetPx, 0);
     expect(safeKey.viewportHeightPx, lessThan(normalKey.viewportHeightPx));
+  });
+
+  testWidgets('paged surface clips inline media on the first page frame', (
+    tester,
+  ) async {
+    final preferences = NovelReaderPreferences.defaults().copyWith(
+      flowMode: NovelReaderFlowMode.pagedLtr,
+    );
+    final theme = ThemeData.light();
+    final palette = const NovelReaderThemeResolver().resolve(
+      preferences: preferences,
+      theme: theme,
+      platformBrightness: Brightness.light,
+    );
+    final htmlTheme = const NovelForumHtmlRenderThemeFactory().fromPalette(
+      palette,
+    );
+    final typography = const NovelReaderTypographyResolver().resolve(
+      preferences: preferences,
+      theme: theme,
+      palette: palette,
+    );
+    final coordinator = _CompleteRecordingPaginationCoordinator(
+      pageHtml:
+          '<p><img src="data/attachment/forum/chapter-image.jpg" '
+          'width="640" height="480"></p>'
+          '<img src="static/image/smiley/gexing/008.gif" '
+          'width="24" height="24">',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+        ],
+        child: LocalizedTestApp(
+          theme: theme,
+          home: Scaffold(
+            body: NovelReaderHtmlPagedSurface(
+              rawHtml: coordinator.pageHtml,
+              episode: _episode,
+              preferences: preferences,
+              typography: typography,
+              theme: htmlTheme,
+              imageReferer: 'https://bbs.yamibo.com/',
+              progressSnapshot: const NovelReaderProgressSnapshot(
+                novelId: 'performance-novel',
+                episodeId: 'performance-episode',
+                flowMode: NovelReaderFlowMode.pagedLtr,
+                scrollOffset: 0,
+                pageIndex: 0,
+                progressPercent: 0,
+              ),
+              coordinatorBuilder:
+                  ({
+                    required BuildContext context,
+                    required ForumHtmlThemeContext theme,
+                    required ForumHtmlReaderPreferences preferences,
+                    required String sourceId,
+                    required String? threadId,
+                    required String? imageCacheOwnerId,
+                    required ImageRequestHeaderBuilder? imageHeaderBuilder,
+                  }) => coordinator,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final images = find.byType(CachedLibraryImage);
+    expect(images, findsNWidgets(2));
+    for (var index = 0; index < 2; index += 1) {
+      final clip = tester.widget<ClipRRect>(
+        find
+            .ancestor(of: images.at(index), matching: find.byType(ClipRRect))
+            .first,
+      );
+      expect(clip.borderRadius, const BorderRadius.all(Radius.circular(4)));
+    }
   });
 
   testWidgets('performance policy falls back through the surface callback', (
@@ -632,6 +717,9 @@ final class _ControlledRestorePaginationCoordinator
 
 final class _CompleteRecordingPaginationCoordinator
     implements NovelReaderPaginationCoordinator {
+  _CompleteRecordingPaginationCoordinator({this.pageHtml = '<p>安全区分页几何</p>'});
+
+  final String pageHtml;
   NovelReaderPaginationKey? lastKey;
 
   @override
@@ -672,7 +760,7 @@ final class _CompleteRecordingPaginationCoordinator
       pages: <NovelReaderPageFragment>[
         NovelReaderPageFragment(
           index: 0,
-          html: '<p>安全区分页几何</p>',
+          html: pageHtml,
           startAnchor: anchor,
           endAnchor: anchor,
           imageIndices: const <int>[],
@@ -695,4 +783,45 @@ final class _CompleteRecordingPaginationCoordinator
 
   @override
   void clearEpisode(String episodeId) {}
+}
+
+class _NoopImageCacheService implements ImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    return CachedImageResult(success: true, cacheKey: request.cacheKey);
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async {
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: request.sourcePath,
+    );
+  }
+
+  @override
+  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+
+  @override
+  Future<int> deleteByOwner({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+  }) async => 0;
+
+  @override
+  Future<void> pruneToLimit({required int maxBytes}) async {}
+
+  @override
+  Future<int> clearUnprotectedByRoles({
+    required List<ImageCacheRole> roles,
+  }) async => 0;
+
+  @override
+  Future<void> clearUnprotected() async {}
 }
