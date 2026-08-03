@@ -232,13 +232,13 @@ abstract class ComicEpisodeManagementRepository {
     String? episodeTitle,
   });
 
-  /// 移除手动章节；解析章节不可移除，返回 false。
-  Future<bool> removeManualEpisode({
+  /// 手动章节移除结果。最后一章可见章节不能被移除。
+  Future<ComicEpisodeRemovalResult> removeManualEpisode({
     required String comicId,
     required String episodeId,
   });
 
-  Future<void> setEpisodeHidden({
+  Future<ComicEpisodeVisibilityUpdateResult> setEpisodeHidden({
     required String comicId,
     required String episodeId,
     required bool isHidden,
@@ -250,12 +250,6 @@ abstract class ComicEpisodeManagementRepository {
     required String comicId,
     required String episodeId,
     required String? customTitle,
-  });
-
-  /// 批量切换全部章节的显示状态，返回实际改动行数。
-  Future<int> setAllEpisodesHidden({
-    required String comicId,
-    required bool isHidden,
   });
 }
 

@@ -143,6 +143,22 @@ class ComicEpisodeItem {
   final bool isHidden;
 }
 
+enum ComicEpisodeVisibilityUpdateCode { updated, rejectedLastVisible, notFound }
+
+class ComicEpisodeVisibilityUpdateResult {
+  const ComicEpisodeVisibilityUpdateResult({required this.code});
+
+  final ComicEpisodeVisibilityUpdateCode code;
+}
+
+enum ComicEpisodeRemovalCode { removed, notFound, notManual, lastVisible }
+
+class ComicEpisodeRemovalResult {
+  const ComicEpisodeRemovalResult({required this.code});
+
+  final ComicEpisodeRemovalCode code;
+}
+
 class ComicEpisodeRefreshResult {
   const ComicEpisodeRefreshResult({
     required this.insertedCount,

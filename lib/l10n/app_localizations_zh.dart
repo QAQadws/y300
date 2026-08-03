@@ -950,9 +950,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryDetailDeleteChapterDownload => '删除该章节下载';
 
   @override
-  String get libraryDetailManageChaptersDescription => '显示或隐藏章节，手动添加或移除章节';
-
-  @override
   String get libraryDetailResetReadingTitle => '重置本作品阅读？';
 
   @override
@@ -1222,12 +1219,6 @@ class AppLocalizationsZh extends AppLocalizations {
       '支持 forum.php、thread-xxx.html、api/mobile 等链接形式';
 
   @override
-  String get libraryChapterShowAll => '全部显示';
-
-  @override
-  String get libraryChapterHideAll => '全部隐藏';
-
-  @override
   String get libraryChapterManagementEmpty => '暂无章节，可在上方粘贴帖子链接手动添加';
 
   @override
@@ -1241,6 +1232,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get libraryChapterHidden => '已隐藏';
+
+  @override
+  String get libraryChapterKeepOneVisible => '至少保留一个可见章节';
 
   @override
   String get libraryChapterRename => '重命名该章节';
@@ -1293,17 +1287,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String libraryChapterRenameFailed(String error) {
     return '重命名失败：$error';
-  }
-
-  @override
-  String get libraryChapterAllHidden => '已隐藏全部章节';
-
-  @override
-  String get libraryChapterAllShown => '已显示全部章节';
-
-  @override
-  String libraryChapterBulkUpdateFailed(String error) {
-    return '批量更新失败：$error';
   }
 
   @override
@@ -5167,9 +5150,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get libraryDetailDeleteChapterDownload => '刪除此章節下載';
 
   @override
-  String get libraryDetailManageChaptersDescription => '顯示或隱藏章節，手動新增或移除章節';
-
-  @override
   String get libraryDetailResetReadingTitle => '重設本作品閱讀狀態？';
 
   @override
@@ -5439,12 +5419,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       '支援 forum.php、thread-xxx.html、api/mobile 等連結形式';
 
   @override
-  String get libraryChapterShowAll => '全部顯示';
-
-  @override
-  String get libraryChapterHideAll => '全部隱藏';
-
-  @override
   String get libraryChapterManagementEmpty => '目前沒有章節，可在上方貼上帖子連結手動新增';
 
   @override
@@ -5458,6 +5432,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get libraryChapterHidden => '已隱藏';
+
+  @override
+  String get libraryChapterKeepOneVisible => '至少保留一個可見章節';
 
   @override
   String get libraryChapterRename => '重新命名此章節';
@@ -5510,17 +5487,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String libraryChapterRenameFailed(String error) {
     return '重新命名失敗：$error';
-  }
-
-  @override
-  String get libraryChapterAllHidden => '已隱藏全部章節';
-
-  @override
-  String get libraryChapterAllShown => '已顯示全部章節';
-
-  @override
-  String libraryChapterBulkUpdateFailed(String error) {
-    return '批次更新失敗：$error';
   }
 
   @override

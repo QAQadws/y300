@@ -37,7 +37,6 @@ class _UnifiedDetailChapterManagementSheetState
   List<DetailManagedChapter> _chapters = const <DetailManagedChapter>[];
   bool _loading = true;
   bool _adding = false;
-  bool _bulkBusy = false;
   String? _inputError;
   String? _loadError;
   String _searchQuery = '';
@@ -114,8 +113,6 @@ class _UnifiedDetailChapterManagementSheetState
                   const SizedBox(height: 8),
                   _buildSearchField(),
                   const SizedBox(height: 12),
-                  _buildBulkActions(),
-                  const Divider(height: 20),
                   Expanded(child: _buildBody(theme, scrollController)),
                 ],
               ),
@@ -130,37 +127,26 @@ class _UnifiedDetailChapterManagementSheetState
     final l10n = AppLocalizations.of(context);
     final manualCount = _chapters.where((item) => item.isManual).length;
     final hiddenCount = _chapters.where((item) => item.isHidden).length;
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.libraryDetailManageChapters,
-                style: theme.textTheme.titleMedium,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _loading
-                    ? l10n.libraryChapterManagementLoading
-                    : l10n.libraryChapterManagementSummary(
-                        _chapters.length,
-                        _chapters.length - manualCount,
-                        manualCount,
-                        hiddenCount,
-                      ),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+        Text(
+          l10n.libraryDetailManageChapters,
+          style: theme.textTheme.titleMedium,
         ),
-        IconButton(
-          tooltip: l10n.commonClose,
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(),
+        const SizedBox(height: 2),
+        Text(
+          _loading
+              ? l10n.libraryChapterManagementLoading
+              : l10n.libraryChapterManagementSummary(
+                  _chapters.length,
+                  _chapters.length - manualCount,
+                  manualCount,
+                  hiddenCount,
+                ),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -234,32 +220,6 @@ class _UnifiedDetailChapterManagementSheetState
     );
   }
 
-  Widget _buildBulkActions() {
-    final l10n = AppLocalizations.of(context);
-    final canBulk = !_loading && _chapters.isNotEmpty && !_bulkBusy;
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            key: const Key('unified-detail-chapter-management-show-all'),
-            onPressed: canBulk ? () => _setAllHidden(false) : null,
-            icon: const Icon(Icons.visibility_outlined, size: 18),
-            label: Text(l10n.libraryChapterShowAll),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: OutlinedButton.icon(
-            key: const Key('unified-detail-chapter-management-hide-all'),
-            onPressed: canBulk ? () => _setAllHidden(true) : null,
-            icon: const Icon(Icons.visibility_off_outlined, size: 18),
-            label: Text(l10n.libraryChapterHideAll),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildBody(ThemeData theme, ScrollController scrollController) {
     if (_loading) {
       return const Padding(
@@ -324,9 +284,17 @@ class _UnifiedDetailChapterManagementSheetState
     );
   }
 
+  int get _visibleChapterCount =>
+      _chapters.where((chapter) => !chapter.isHidden).length;
+
+  bool _isLastVisibleChapter(DetailManagedChapter chapter) {
+    return !chapter.isHidden && _visibleChapterCount <= 1;
+  }
+
   Widget _buildChapterRow(ThemeData theme, DetailManagedChapter chapter) {
     final l10n = AppLocalizations.of(context);
     final busy = _busyEpisodeIds.contains(chapter.episodeId);
+    final lastVisible = _isLastVisibleChapter(chapter);
     final dimmed = chapter.isHidden;
     final titleColor = dimmed
         ? theme.colorScheme.onSurfaceVariant
@@ -344,6 +312,8 @@ class _UnifiedDetailChapterManagementSheetState
         ),
         tooltip: chapter.isHidden
             ? l10n.libraryChapterShow
+            : lastVisible
+            ? l10n.libraryChapterKeepOneVisible
             : l10n.libraryChapterHide,
         icon: Icon(
           chapter.isHidden
@@ -353,7 +323,7 @@ class _UnifiedDetailChapterManagementSheetState
               ? theme.colorScheme.onSurfaceVariant
               : theme.colorScheme.primary,
         ),
-        onPressed: busy || _bulkBusy
+        onPressed: busy || lastVisible
             ? null
             : () => _toggleHidden(chapter, !chapter.isHidden),
       ),
@@ -403,16 +373,20 @@ class _UnifiedDetailChapterManagementSheetState
                   ),
                   tooltip: l10n.libraryChapterRename,
                   icon: const Icon(Icons.edit_outlined),
-                  onPressed: _bulkBusy ? null : () => _promptRename(chapter),
+                  onPressed: () => _promptRename(chapter),
                 ),
                 if (chapter.isManual)
                   IconButton(
                     key: ValueKey<String>(
                       'unified-detail-chapter-management-remove-${chapter.episodeId}',
                     ),
-                    tooltip: l10n.libraryChapterRemove,
+                    tooltip: lastVisible
+                        ? l10n.libraryChapterKeepOneVisible
+                        : l10n.libraryChapterRemove,
                     icon: const Icon(Icons.delete_outline),
-                    onPressed: _bulkBusy ? null : () => _confirmRemove(chapter),
+                    onPressed: lastVisible
+                        ? null
+                        : () => _confirmRemove(chapter),
                   ),
               ],
             ),
@@ -474,13 +448,27 @@ class _UnifiedDetailChapterManagementSheetState
     DetailManagedChapter chapter,
     bool isHidden,
   ) async {
+    if (isHidden && _isLastVisibleChapter(chapter)) {
+      _showMessage(AppLocalizations.of(context).libraryChapterKeepOneVisible);
+      return;
+    }
     setState(() => _busyEpisodeIds.add(chapter.episodeId));
     try {
-      await widget.adapter.setChapterHidden(
+      final result = await widget.adapter.setChapterHidden(
         workId: widget.workId,
         episodeId: chapter.episodeId,
         isHidden: isHidden,
       );
+      if (result.code != DetailChapterVisibilityUpdateCode.updated) {
+        if (mounted &&
+            result.code ==
+                DetailChapterVisibilityUpdateCode.rejectedLastVisible) {
+          _showMessage(
+            AppLocalizations.of(context).libraryChapterKeepOneVisible,
+          );
+        }
+        return;
+      }
       _notifyChanged();
       if (!mounted) {
         return;
@@ -570,39 +558,11 @@ class _UnifiedDetailChapterManagementSheetState
     }
   }
 
-  Future<void> _setAllHidden(bool isHidden) async {
-    setState(() => _bulkBusy = true);
-    try {
-      await widget.adapter.setAllChaptersHidden(
-        workId: widget.workId,
-        isHidden: isHidden,
-      );
-      _notifyChanged();
-      await _load();
-      if (mounted) {
-        _showMessage(
-          isHidden
-              ? AppLocalizations.of(context).libraryChapterAllHidden
-              : AppLocalizations.of(context).libraryChapterAllShown,
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        final l10n = AppLocalizations.of(context);
-        _showMessage(
-          l10n.libraryChapterBulkUpdateFailed(
-            LibraryDetailTextResolver.safeError(l10n, error),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _bulkBusy = false);
-      }
-    }
-  }
-
   Future<void> _confirmRemove(DetailManagedChapter chapter) async {
+    if (_isLastVisibleChapter(chapter)) {
+      _showMessage(AppLocalizations.of(context).libraryChapterKeepOneVisible);
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {

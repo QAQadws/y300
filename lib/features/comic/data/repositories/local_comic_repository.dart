@@ -400,7 +400,7 @@ class LocalComicRepository
   }
 
   @override
-  Future<bool> removeManualEpisode({
+  Future<ComicEpisodeRemovalResult> removeManualEpisode({
     required String comicId,
     required String episodeId,
   }) {
@@ -411,7 +411,7 @@ class LocalComicRepository
   }
 
   @override
-  Future<void> setEpisodeHidden({
+  Future<ComicEpisodeVisibilityUpdateResult> setEpisodeHidden({
     required String comicId,
     required String episodeId,
     required bool isHidden,
@@ -433,17 +433,6 @@ class LocalComicRepository
       comicId: comicId,
       episodeId: episodeId,
       customTitle: customTitle,
-    );
-  }
-
-  @override
-  Future<int> setAllEpisodesHidden({
-    required String comicId,
-    required bool isHidden,
-  }) {
-    return _episodeManagementStore.setAllEpisodesHidden(
-      comicId: comicId,
-      isHidden: isHidden,
     );
   }
 

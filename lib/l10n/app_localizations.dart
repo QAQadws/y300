@@ -1544,12 +1544,6 @@ abstract class AppLocalizations {
   /// **'删除该章节下载'**
   String get libraryDetailDeleteChapterDownload;
 
-  /// No description provided for @libraryDetailManageChaptersDescription.
-  ///
-  /// In zh, this message translates to:
-  /// **'显示或隐藏章节，手动添加或移除章节'**
-  String get libraryDetailManageChaptersDescription;
-
   /// No description provided for @libraryDetailResetReadingTitle.
   ///
   /// In zh, this message translates to:
@@ -1900,18 +1894,6 @@ abstract class AppLocalizations {
   /// **'支持 forum.php、thread-xxx.html、api/mobile 等链接形式'**
   String get libraryChapterAddHelp;
 
-  /// No description provided for @libraryChapterShowAll.
-  ///
-  /// In zh, this message translates to:
-  /// **'全部显示'**
-  String get libraryChapterShowAll;
-
-  /// No description provided for @libraryChapterHideAll.
-  ///
-  /// In zh, this message translates to:
-  /// **'全部隐藏'**
-  String get libraryChapterHideAll;
-
   /// No description provided for @libraryChapterManagementEmpty.
   ///
   /// In zh, this message translates to:
@@ -1941,6 +1923,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已隐藏'**
   String get libraryChapterHidden;
+
+  /// No description provided for @libraryChapterKeepOneVisible.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少保留一个可见章节'**
+  String get libraryChapterKeepOneVisible;
 
   /// No description provided for @libraryChapterRename.
   ///
@@ -2031,24 +2019,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'重命名失败：{error}'**
   String libraryChapterRenameFailed(String error);
-
-  /// No description provided for @libraryChapterAllHidden.
-  ///
-  /// In zh, this message translates to:
-  /// **'已隐藏全部章节'**
-  String get libraryChapterAllHidden;
-
-  /// No description provided for @libraryChapterAllShown.
-  ///
-  /// In zh, this message translates to:
-  /// **'已显示全部章节'**
-  String get libraryChapterAllShown;
-
-  /// No description provided for @libraryChapterBulkUpdateFailed.
-  ///
-  /// In zh, this message translates to:
-  /// **'批量更新失败：{error}'**
-  String libraryChapterBulkUpdateFailed(String error);
 
   /// No description provided for @libraryChapterRemoveTitle.
   ///

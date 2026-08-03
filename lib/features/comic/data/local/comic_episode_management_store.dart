@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 
 /// 章节管理写入端。
 ///
@@ -68,26 +69,47 @@ class ComicEpisodeManagementStore {
     });
   }
 
-  /// 移除手动章节。解析章节会被拒绝，避免刷新后“删了又回来”。
+  /// 移除手动章节。解析章节与最后一章可见章节会被拒绝。
   ///
   /// 章节图片、阅读进度和下载队列行都挂在 episode_id 外键上随级联删除；
   /// `library_*_state` 是跨模块共享表、没有外键，这里显式清掉孤儿状态行与
   /// 仍指向已删章节的“上次阅读”指针。
-  Future<bool> removeManualEpisode({
+  Future<ComicEpisodeRemovalResult> removeManualEpisode({
     required String comicId,
     required String episodeId,
   }) async {
     final db = await _dbFuture;
-    return db.transaction<bool>((txn) async {
+    return db.transaction<ComicEpisodeRemovalResult>((txn) async {
       final rows = await txn.query(
         ComicLocalDb.episodesTable,
-        columns: <String>['is_manual'],
+        columns: <String>['is_manual', 'is_hidden'],
         where: 'episode_id = ? AND comic_id = ?',
         whereArgs: <Object>[episodeId, comicId],
         limit: 1,
       );
-      if (rows.isEmpty || (rows.first['is_manual'] as int? ?? 0) != 1) {
-        return false;
+      if (rows.isEmpty) {
+        return const ComicEpisodeRemovalResult(
+          code: ComicEpisodeRemovalCode.notFound,
+        );
+      }
+      if ((rows.first['is_manual'] as int? ?? 0) != 1) {
+        return const ComicEpisodeRemovalResult(
+          code: ComicEpisodeRemovalCode.notManual,
+        );
+      }
+      if ((rows.first['is_hidden'] as int? ?? 0) == 0) {
+        final visibleRows = await txn.rawQuery(
+          'SELECT COUNT(*) AS visible_count FROM '
+          '${ComicLocalDb.episodesTable} '
+          'WHERE comic_id = ? AND is_hidden = 0',
+          <Object>[comicId],
+        );
+        final visibleCount = (visibleRows.first['visible_count'] as int?) ?? 0;
+        if (visibleCount <= 1) {
+          return const ComicEpisodeRemovalResult(
+            code: ComicEpisodeRemovalCode.lastVisible,
+          );
+        }
       }
 
       await txn.delete(
@@ -118,24 +140,61 @@ class ComicEpisodeManagementStore {
         whereArgs: <Object>['comic', comicId, episodeId],
       );
       await _touchComic(txn, comicId);
-      return true;
+      return const ComicEpisodeRemovalResult(
+        code: ComicEpisodeRemovalCode.removed,
+      );
     });
   }
 
-  Future<void> setEpisodeHidden({
+  Future<ComicEpisodeVisibilityUpdateResult> setEpisodeHidden({
     required String comicId,
     required String episodeId,
     required bool isHidden,
   }) async {
     final db = await _dbFuture;
-    await db.transaction((txn) async {
-      await txn.update(
+    return db.transaction<ComicEpisodeVisibilityUpdateResult>((txn) async {
+      final rows = await txn.query(
+        ComicLocalDb.episodesTable,
+        columns: <String>['is_hidden'],
+        where: 'episode_id = ? AND comic_id = ?',
+        whereArgs: <Object>[episodeId, comicId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        return const ComicEpisodeVisibilityUpdateResult(
+          code: ComicEpisodeVisibilityUpdateCode.notFound,
+        );
+      }
+      final wasHidden = (rows.first['is_hidden'] as int? ?? 0) == 1;
+      if (isHidden && !wasHidden) {
+        final visibleRows = await txn.rawQuery(
+          'SELECT COUNT(*) AS visible_count FROM '
+          '${ComicLocalDb.episodesTable} '
+          'WHERE comic_id = ? AND is_hidden = 0',
+          <Object>[comicId],
+        );
+        final visibleCount = (visibleRows.first['visible_count'] as int?) ?? 0;
+        if (visibleCount <= 1) {
+          return const ComicEpisodeVisibilityUpdateResult(
+            code: ComicEpisodeVisibilityUpdateCode.rejectedLastVisible,
+          );
+        }
+      }
+      final affected = await txn.update(
         ComicLocalDb.episodesTable,
         <String, Object?>{'is_hidden': isHidden ? 1 : 0},
         where: 'episode_id = ? AND comic_id = ?',
         whereArgs: <Object>[episodeId, comicId],
       );
+      if (affected == 0) {
+        return const ComicEpisodeVisibilityUpdateResult(
+          code: ComicEpisodeVisibilityUpdateCode.notFound,
+        );
+      }
       await _touchComic(txn, comicId);
+      return const ComicEpisodeVisibilityUpdateResult(
+        code: ComicEpisodeVisibilityUpdateCode.updated,
+      );
     });
   }
 
@@ -177,26 +236,6 @@ class ComicEpisodeManagementStore {
       );
       await _touchComic(txn, comicId);
       return true;
-    });
-  }
-
-  /// 批量设置整部漫画章节的显示状态，用于面板上的“全部显示/全部隐藏”。
-  Future<int> setAllEpisodesHidden({
-    required String comicId,
-    required bool isHidden,
-  }) async {
-    final db = await _dbFuture;
-    return db.transaction<int>((txn) async {
-      final affected = await txn.update(
-        ComicLocalDb.episodesTable,
-        <String, Object?>{'is_hidden': isHidden ? 1 : 0},
-        where: 'comic_id = ? AND is_hidden = ?',
-        whereArgs: <Object>[comicId, isHidden ? 0 : 1],
-      );
-      if (affected > 0) {
-        await _touchComic(txn, comicId);
-      }
-      return affected;
     });
   }
 

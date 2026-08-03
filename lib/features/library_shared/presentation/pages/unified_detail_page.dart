@@ -927,7 +927,6 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     key: const Key('unified-detail-chapter-management-action'),
                     leading: const Icon(Icons.playlist_add_check),
                     title: Text(l10n.libraryDetailManageChapters),
-                    subtitle: Text(l10n.libraryDetailManageChaptersDescription),
                     onTap: () async {
                       if (!sheetContext.mounted) {
                         return;

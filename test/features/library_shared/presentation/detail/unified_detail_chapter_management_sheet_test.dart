@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_chapter_management_sheet.dart';
@@ -39,6 +39,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(
+        find.byKey(const Key('unified-detail-chapter-management-show-all')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('unified-detail-chapter-management-hide-all')),
+        findsNothing,
+      );
+      expect(find.byIcon(Icons.close), findsNothing);
       expect(find.text('解析章节 100'), findsOneWidget);
       expect(find.text('手动章节 200'), findsOneWidget);
       expect(
@@ -98,6 +107,71 @@ void main() {
       expect(find.text('手动章节 200'), findsNothing);
     },
   );
+
+  testWidgets('keeps one visible chapter and blocks its hide or removal', (
+    tester,
+  ) async {
+    final adapter = _FakeManagementAdapter(
+      chapters: [
+        const DetailManagedChapter(
+          episodeId: 'comic:100',
+          title: '解析章节 100',
+          sourceTid: '100',
+          isManual: false,
+          isHidden: false,
+        ),
+        const DetailManagedChapter(
+          episodeId: 'comic:200',
+          title: '手动章节 200',
+          sourceTid: '200',
+          isManual: true,
+          isHidden: false,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: Scaffold(
+          body: UnifiedDetailChapterManagementSheet(
+            workId: 'comic',
+            adapter: adapter,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>(
+          'unified-detail-chapter-management-visibility-comic:100',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final lastVisibility = tester.widget<IconButton>(
+      find.byKey(
+        const ValueKey<String>(
+          'unified-detail-chapter-management-visibility-comic:200',
+        ),
+      ),
+    );
+    expect(lastVisibility.onPressed, isNull);
+    final lastRemoval = tester.widget<IconButton>(
+      find.byKey(
+        const ValueKey<String>(
+          'unified-detail-chapter-management-remove-comic:200',
+        ),
+      ),
+    );
+    expect(lastRemoval.onPressed, isNull);
+    expect(
+      adapter.chapters.where((chapter) => !chapter.isHidden),
+      hasLength(1),
+    );
+  });
 
   testWidgets('renames a parsed chapter and restores the source name', (
     tester,
@@ -323,7 +397,17 @@ class _FakeManagementAdapter implements DetailChapterManagementAdapter {
       (chapter) => chapter.episodeId == episodeId,
     );
     if (!item.isManual) {
-      return const DetailChapterRemovalResult(removed: false);
+      return const DetailChapterRemovalResult(
+        removed: false,
+        rejectionCode: DetailChapterRemovalRejectionCode.notManual,
+      );
+    }
+    if (!item.isHidden &&
+        chapters.where((chapter) => !chapter.isHidden).length <= 1) {
+      return const DetailChapterRemovalResult(
+        removed: false,
+        rejectionCode: DetailChapterRemovalRejectionCode.lastVisible,
+      );
     }
     chapters.removeWhere((chapter) => chapter.episodeId == episodeId);
     removedEpisodeIds.add(episodeId);
@@ -331,7 +415,7 @@ class _FakeManagementAdapter implements DetailChapterManagementAdapter {
   }
 
   @override
-  Future<void> setChapterHidden({
+  Future<DetailChapterVisibilityUpdateResult> setChapterHidden({
     required String workId,
     required String episodeId,
     required bool isHidden,
@@ -339,17 +423,22 @@ class _FakeManagementAdapter implements DetailChapterManagementAdapter {
     final index = chapters.indexWhere(
       (chapter) => chapter.episodeId == episodeId,
     );
-    chapters[index] = _copyWith(chapters[index], isHidden: isHidden);
-  }
-
-  @override
-  Future<void> setAllChaptersHidden({
-    required String workId,
-    required bool isHidden,
-  }) async {
-    for (var index = 0; index < chapters.length; index++) {
-      chapters[index] = _copyWith(chapters[index], isHidden: isHidden);
+    if (index < 0) {
+      return const DetailChapterVisibilityUpdateResult(
+        code: DetailChapterVisibilityUpdateCode.notFound,
+      );
     }
+    if (isHidden &&
+        !chapters[index].isHidden &&
+        chapters.where((chapter) => !chapter.isHidden).length <= 1) {
+      return const DetailChapterVisibilityUpdateResult(
+        code: DetailChapterVisibilityUpdateCode.rejectedLastVisible,
+      );
+    }
+    chapters[index] = _copyWith(chapters[index], isHidden: isHidden);
+    return const DetailChapterVisibilityUpdateResult(
+      code: DetailChapterVisibilityUpdateCode.updated,
+    );
   }
 
   @override

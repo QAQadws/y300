@@ -139,6 +139,10 @@ abstract final class LibraryDetailTextResolver {
     DetailChapterRemovalResult result,
   ) {
     if (!result.removed) {
+      if (result.rejectionCode ==
+          DetailChapterRemovalRejectionCode.lastVisible) {
+        return l10n.libraryChapterKeepOneVisible;
+      }
       return l10n.libraryChapterParsedCannotRemove;
     }
     if (result.warnings.isEmpty) {

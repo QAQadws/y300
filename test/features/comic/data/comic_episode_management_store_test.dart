@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 
 void main() {
@@ -49,23 +50,74 @@ void main() {
       expect(added, isTrue);
       expect(duplicate, isFalse);
 
-      await repository.setEpisodeHidden(
+      await repository.addManualEpisode(
+        comicId: 'comic-management',
+        sourceTid: '573441',
+        sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573441',
+      );
+
+      final visibility = await repository.setEpisodeHidden(
         comicId: 'comic-management',
         episodeId: 'comic-management:573440',
         isHidden: true,
       );
+      expect(visibility.code, ComicEpisodeVisibilityUpdateCode.updated);
 
       expect(
         await repository.getComicEpisodes(comicId: 'comic-management'),
-        isEmpty,
+        hasLength(1),
       );
       final managed = await repository.getManagedComicEpisodes(
         comicId: 'comic-management',
       );
-      expect(managed.single.isManual, isTrue);
-      expect(managed.single.isHidden, isTrue);
+      expect(managed, hasLength(2));
+      expect(
+        managed.firstWhere((episode) => episode.sourceTid == '573440').isHidden,
+        isTrue,
+      );
     },
   );
+
+  test('the last visible episode cannot be hidden', () async {
+    await repository.addManualEpisode(
+      comicId: 'comic-management',
+      sourceTid: '573440',
+      sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573440',
+    );
+
+    final result = await repository.setEpisodeHidden(
+      comicId: 'comic-management',
+      episodeId: 'comic-management:573440',
+      isHidden: true,
+    );
+
+    expect(result.code, ComicEpisodeVisibilityUpdateCode.rejectedLastVisible);
+    expect(
+      (await repository.getComicEpisodes(
+        comicId: 'comic-management',
+      )).single.isHidden,
+      isFalse,
+    );
+  });
+
+  test('the last visible manual episode cannot be removed', () async {
+    await repository.addManualEpisode(
+      comicId: 'comic-management',
+      sourceTid: '573440',
+      sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573440',
+    );
+
+    final result = await repository.removeManualEpisode(
+      comicId: 'comic-management',
+      episodeId: 'comic-management:573440',
+    );
+
+    expect(result.code, ComicEpisodeRemovalCode.lastVisible);
+    expect(
+      await repository.getManagedComicEpisodes(comicId: 'comic-management'),
+      hasLength(1),
+    );
+  });
 
   test('parsed episodes cannot be removed', () async {
     await database.insert(ComicLocalDb.episodesTable, <String, Object?>{
@@ -85,7 +137,7 @@ void main() {
       episodeId: 'comic-management:200',
     );
 
-    expect(removed, isFalse);
+    expect(removed.code, ComicEpisodeRemovalCode.notManual);
     expect(
       await repository.getManagedComicEpisodes(comicId: 'comic-management'),
       hasLength(1),
@@ -99,6 +151,7 @@ void main() {
       fallbackSourceTid: '100',
       episodeLinks: const <ComicEpisodeLink>[
         ComicEpisodeLink(url: 'thread-400-1-1.html', rawText: '第一话'),
+        ComicEpisodeLink(url: 'thread-401-1-1.html', rawText: '第二话'),
       ],
     );
     await repository.setEpisodeHidden(
@@ -153,11 +206,11 @@ void main() {
     );
     expect(managed.single.isManual, isFalse);
     expect(
-      await repository.removeManualEpisode(
+      (await repository.removeManualEpisode(
         comicId: 'comic-management',
         episodeId: 'comic-management:500',
-      ),
-      isFalse,
+      )).code,
+      ComicEpisodeRemovalCode.notManual,
     );
   });
 
@@ -287,6 +340,17 @@ void main() {
       'is_manual': 1,
       'is_hidden': 0,
     });
+    await database.insert(ComicLocalDb.episodesTable, <String, Object?>{
+      'episode_id': 'comic-management:301',
+      'comic_id': 'comic-management',
+      'episode_title': '另一章',
+      'source_tid': '301',
+      'source_url': 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
+      'order_index': 1,
+      'publish_time_text': null,
+      'is_manual': 0,
+      'is_hidden': 0,
+    });
     await database.insert(ComicLocalDb.episodeImagesTable, <String, Object?>{
       'episode_id': episodeId,
       'image_url': 'https://img.example/300.jpg',
@@ -322,7 +386,7 @@ void main() {
       episodeId: episodeId,
     );
 
-    expect(removed, isTrue);
+    expect(removed.code, ComicEpisodeRemovalCode.removed);
     expect(
       await database.query(
         ComicLocalDb.episodesTable,

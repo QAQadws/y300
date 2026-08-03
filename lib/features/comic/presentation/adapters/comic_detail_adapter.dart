@@ -1048,12 +1048,23 @@ class ComicDetailAdapter
   }) async {
     // 存储层先以 is_manual 做唯一准入判断并原子删除数据库状态；外部文件
     // 不属于 SQLite 事务，清理失败时保留“章节已移除”的事实并返回告警。
-    final removed = await _episodeManagementRepository.removeManualEpisode(
+    final removal = await _episodeManagementRepository.removeManualEpisode(
       comicId: workId,
       episodeId: episodeId,
     );
-    if (!removed) {
-      return const DetailChapterRemovalResult(removed: false);
+    if (removal.code != ComicEpisodeRemovalCode.removed) {
+      return DetailChapterRemovalResult(
+        removed: false,
+        rejectionCode: switch (removal.code) {
+          ComicEpisodeRemovalCode.lastVisible =>
+            DetailChapterRemovalRejectionCode.lastVisible,
+          ComicEpisodeRemovalCode.notManual =>
+            DetailChapterRemovalRejectionCode.notManual,
+          ComicEpisodeRemovalCode.notFound =>
+            DetailChapterRemovalRejectionCode.notFound,
+          ComicEpisodeRemovalCode.removed => null,
+        },
+      );
     }
     final warnings = <DetailChapterRemovalWarningCode>{};
     try {
@@ -1078,26 +1089,25 @@ class ComicDetailAdapter
   }
 
   @override
-  Future<void> setChapterHidden({
+  Future<DetailChapterVisibilityUpdateResult> setChapterHidden({
     required String workId,
     required String episodeId,
     required bool isHidden,
-  }) {
-    return _episodeManagementRepository.setEpisodeHidden(
+  }) async {
+    final result = await _episodeManagementRepository.setEpisodeHidden(
       comicId: workId,
       episodeId: episodeId,
       isHidden: isHidden,
     );
-  }
-
-  @override
-  Future<void> setAllChaptersHidden({
-    required String workId,
-    required bool isHidden,
-  }) {
-    return _episodeManagementRepository.setAllEpisodesHidden(
-      comicId: workId,
-      isHidden: isHidden,
+    return DetailChapterVisibilityUpdateResult(
+      code: switch (result.code) {
+        ComicEpisodeVisibilityUpdateCode.updated =>
+          DetailChapterVisibilityUpdateCode.updated,
+        ComicEpisodeVisibilityUpdateCode.rejectedLastVisible =>
+          DetailChapterVisibilityUpdateCode.rejectedLastVisible,
+        ComicEpisodeVisibilityUpdateCode.notFound =>
+          DetailChapterVisibilityUpdateCode.notFound,
+      },
     );
   }
 

@@ -214,19 +214,35 @@ class DetailManagedChapter {
   final bool isHidden;
 }
 
+enum DetailChapterVisibilityUpdateCode {
+  updated,
+  rejectedLastVisible,
+  notFound,
+}
+
+class DetailChapterVisibilityUpdateResult {
+  const DetailChapterVisibilityUpdateResult({required this.code});
+
+  final DetailChapterVisibilityUpdateCode code;
+}
+
 enum DetailChapterRemovalWarningCode {
   downloadTaskCleanupFailed,
   downloadFileCleanupFailed,
 }
 
+enum DetailChapterRemovalRejectionCode { notFound, notManual, lastVisible }
+
 class DetailChapterRemovalResult {
   const DetailChapterRemovalResult({
     required this.removed,
     this.warnings = const <DetailChapterRemovalWarningCode>{},
+    this.rejectionCode,
   });
 
   final bool removed;
   final Set<DetailChapterRemovalWarningCode> warnings;
+  final DetailChapterRemovalRejectionCode? rejectionCode;
 }
 
 enum DetailManualChapterInputErrorCode {
@@ -280,15 +296,9 @@ abstract interface class DetailChapterManagementAdapter {
     required String episodeId,
   });
 
-  Future<void> setChapterHidden({
+  Future<DetailChapterVisibilityUpdateResult> setChapterHidden({
     required String workId,
     required String episodeId,
-    required bool isHidden,
-  });
-
-  /// 一次性显示/隐藏全部章节。
-  Future<void> setAllChaptersHidden({
-    required String workId,
     required bool isHidden,
   });
 

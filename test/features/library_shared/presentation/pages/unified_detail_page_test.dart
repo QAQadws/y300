@@ -2057,7 +2057,7 @@ void main() {
   );
 
   testWidgets(
-    'UnifiedDetailPage recovers from hide-all through the AppBar chapter manager',
+    'UnifiedDetailPage manages chapter visibility one chapter at a time',
     (tester) async {
       final adapter = _ManageableDetailAdapter();
       await tester.pumpWidget(
@@ -2074,6 +2074,7 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pumpAndSettle();
+      expect(find.text('显示或隐藏章节，手动添加或移除章节'), findsNothing);
       await tester.tap(find.byKey(const Key('unified-detail-manage-chapters')));
       await tester.pumpAndSettle();
 
@@ -2082,16 +2083,24 @@ void main() {
         findsOneWidget,
       );
       await tester.tap(
-        find.byKey(const Key('unified-detail-chapter-management-hide-all')),
+        find.byKey(
+          const ValueKey<String>(
+            'unified-detail-chapter-management-visibility-e1',
+          ),
+        ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('关闭'));
+      await tester.tapAt(const Offset(1, 1));
       await tester.pumpAndSettle();
 
-      // 全部隐藏后章节列表为空，长按入口随之消失，只有 AppBar 菜单能救回来。
+      // 单章操作只隐藏目标章节，其他可见章节保持不变。
       expect(
         find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
         findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('unified-detail-chapter-e2')),
+        findsOneWidget,
       );
 
       await tester.tap(find.byIcon(Icons.more_vert));
@@ -2099,10 +2108,14 @@ void main() {
       await tester.tap(find.byKey(const Key('unified-detail-manage-chapters')));
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(const Key('unified-detail-chapter-management-show-all')),
+        find.byKey(
+          const ValueKey<String>(
+            'unified-detail-chapter-management-visibility-e1',
+          ),
+        ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('关闭'));
+      await tester.tapAt(const Offset(1, 1));
       await tester.pumpAndSettle();
 
       await tester.scrollUntilVisible(
@@ -2538,9 +2551,10 @@ class _CatalogEditableDetailAdapter extends _FakeDetailAdapter
 /// 存储层「隐藏在读取边界过滤」的语义一致。
 class _ManageableDetailAdapter extends _FakeDetailAdapter
     implements DetailChapterManagementAdapter {
-  _ManageableDetailAdapter() : super(module: LibraryModuleKey.comic);
+  _ManageableDetailAdapter()
+    : super(module: LibraryModuleKey.comic, includeSecondChapter: true);
 
-  final Map<String, bool> _hidden = <String, bool>{'e1': false};
+  final Map<String, bool> _hidden = <String, bool>{'e1': false, 'e2': false};
 
   @override
   Future<List<LibraryChapterItem>> loadChapters({
@@ -2600,22 +2614,27 @@ class _ManageableDetailAdapter extends _FakeDetailAdapter
   }) async {}
 
   @override
-  Future<void> setChapterHidden({
+  Future<DetailChapterVisibilityUpdateResult> setChapterHidden({
     required String workId,
     required String episodeId,
     required bool isHidden,
   }) async {
-    _hidden[episodeId] = isHidden;
-  }
-
-  @override
-  Future<void> setAllChaptersHidden({
-    required String workId,
-    required bool isHidden,
-  }) async {
-    for (final key in _hidden.keys.toList(growable: false)) {
-      _hidden[key] = isHidden;
+    if (!_hidden.containsKey(episodeId)) {
+      return const DetailChapterVisibilityUpdateResult(
+        code: DetailChapterVisibilityUpdateCode.notFound,
+      );
     }
+    if (isHidden &&
+        _hidden[episodeId] != true &&
+        _hidden.values.where((hidden) => !hidden).length <= 1) {
+      return const DetailChapterVisibilityUpdateResult(
+        code: DetailChapterVisibilityUpdateCode.rejectedLastVisible,
+      );
+    }
+    _hidden[episodeId] = isHidden;
+    return const DetailChapterVisibilityUpdateResult(
+      code: DetailChapterVisibilityUpdateCode.updated,
+    );
   }
 }
 
