@@ -10,11 +10,13 @@ import 'package:y300/features/novel/presentation/services/novel_reader_display_r
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
+import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   const NovelReaderHtmlDocumentView({
@@ -30,6 +32,8 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
     this.onOpenImage,
     this.onImageFallback,
     this.onContentReady,
+    this.onContentTerminal,
+    this.onRetry,
     this.preferencesAdapter = const NovelHtmlReaderPreferencesAdapter(),
     this.preparer = const NovelHtmlChapterRenderPreparer(),
     this.preparationService,
@@ -48,6 +52,8 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
   final VoidCallback? onContentReady;
+  final VoidCallback? onContentTerminal;
+  final VoidCallback? onRetry;
   final NovelHtmlReaderPreferencesAdapter preferencesAdapter;
   final NovelHtmlChapterPreparer preparer;
   final NovelReaderHtmlPreparationService? preparationService;
@@ -64,6 +70,7 @@ class _NovelReaderHtmlDocumentViewState
   Future<NovelReaderPreparedChapter>? _future;
   Object? _signature;
   Object? _reportedReadySignature;
+  Object? _reportedTerminalSignature;
   NovelReaderPreparedChapterCache? _ownedPreparedCache;
 
   @override
@@ -89,13 +96,19 @@ class _NovelReaderHtmlDocumentViewState
           future: _future,
           builder: (context, snapshot) {
             final prepared = snapshot.data;
+            if (snapshot.hasError) {
+              _scheduleContentTerminal();
+              return _NovelReaderHtmlFailureView(
+                error: snapshot.error!,
+                onRetry: widget.onRetry,
+              );
+            }
             if (prepared == null ||
                 prepared.renderDocument.themeSignature !=
                     widget.theme.signature) {
               return const SizedBox(
                 key: Key('novel-reader-html-loading'),
                 height: 96,
-                child: Center(child: CircularProgressIndicator()),
               );
             }
             _scheduleContentReady();
@@ -173,6 +186,19 @@ class _NovelReaderHtmlDocumentViewState
     });
   }
 
+  void _scheduleContentTerminal() {
+    final signature = _signature;
+    if (signature == null || _reportedTerminalSignature == signature) {
+      return;
+    }
+    _reportedTerminalSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _signature == signature) {
+        widget.onContentTerminal?.call();
+      }
+    });
+  }
+
   void _handleImageTap({
     required ForumHtmlImageRequest request,
     required ForumHtmlReadableImageSequence sequence,
@@ -192,5 +218,41 @@ class _NovelReaderHtmlDocumentViewState
     if (!request.isSticker) {
       widget.onImageFallback?.call(request);
     }
+  }
+}
+
+class _NovelReaderHtmlFailureView extends StatelessWidget {
+  const _NovelReaderHtmlFailureView({required this.error, this.onRetry});
+
+  final Object error;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Center(
+      key: const Key('novel-reader-html-failure'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.warning_amber_outlined, size: 34),
+          const SizedBox(height: 12),
+          Text(
+            l10n.novelReaderLoadFailed(
+              LibraryErrorSummary.resolve(l10n, error),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          if (onRetry != null) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: Text(l10n.commonRetry),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

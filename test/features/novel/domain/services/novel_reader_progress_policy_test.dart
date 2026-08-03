@@ -102,6 +102,19 @@ void main() {
     expect(policy.restoreScrollOffset(snapshot, maxScrollExtent: 320), 320);
   });
 
+  test('vertical restore uses percentage after the document is reflowed', () {
+    const snapshot = NovelReaderProgressSnapshot(
+      novelId: 'novel:1',
+      episodeId: 'episode-1',
+      flowMode: NovelReaderFlowMode.vertical,
+      scrollOffset: 900,
+      pageIndex: 0,
+      progressPercent: 0.25,
+    );
+
+    expect(policy.restoreScrollOffset(snapshot, maxScrollExtent: 400), 100);
+  });
+
   test('pagedSnapshot records the visible page identity and anchor', () {
     final snapshot = policy.pagedSnapshot(
       novelId: 'novel:1',
@@ -177,7 +190,7 @@ void main() {
     );
   });
 
-  test('restore policy prefers same layout page, then anchor and percent', () {
+  test('restore policy uses percentage before stale layout hints', () {
     const key = NovelReaderPaginationKey(
       episodeId: 'episode-1',
       contentHash: 'content',
@@ -250,6 +263,12 @@ void main() {
     expect(
       restorePolicy.resolveInitialPage(plan: plan, snapshot: sameLayout),
       2,
+    );
+
+    final changedPosition = sameLayout.copyWith(progressPercent: 0.1);
+    expect(
+      restorePolicy.resolveInitialPage(plan: plan, snapshot: changedPosition),
+      0,
     );
 
     final changedLayout = sameLayout.copyWith(

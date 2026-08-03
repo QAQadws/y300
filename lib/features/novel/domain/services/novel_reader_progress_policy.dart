@@ -206,10 +206,12 @@ class NovelReaderProgressPolicy {
     double viewportDimension = 0,
   }) {
     final safeMax = math.max(0.0, maxScrollExtent);
-    if (snapshot.flowMode != NovelReaderFlowMode.vertical &&
-        snapshot.progressPercent > 0) {
+    // Offset and page numbers belong to a previous layout. Percentage is the
+    // stable cross-layout position, so prefer it whenever it is meaningful.
+    if (snapshot.progressPercent.isFinite && snapshot.progressPercent > 0) {
       final target = _clampPercent(snapshot.progressPercent) * safeMax;
-      if (snapshot.pageCount != null) {
+      if (snapshot.flowMode == NovelReaderFlowMode.vertical ||
+          snapshot.pageCount != null) {
         return target;
       }
       return math.max(0.0, target - math.max(0.0, viewportDimension));

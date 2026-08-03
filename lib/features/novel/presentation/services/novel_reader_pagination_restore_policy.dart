@@ -23,6 +23,15 @@ final class NovelReaderPaginationRestorePolicy {
     if (snapshot.episodeId != plan.episodeId) {
       return 0;
     }
+    // A newly prepared plan may have a different page count or layout key.
+    // Once the complete plan is available, the persisted percentage is the
+    // stable position contract and must win over stale page/anchor hints.
+    if (isPlanComplete) {
+      final percentPage = _pageFromProgressPercent(snapshot, pageCount);
+      if (percentPage != null) {
+        return percentPage;
+      }
+    }
     if (snapshot.paginationKey == plan.key.layoutFingerprint &&
         _isValidPage(snapshot.pageIndex, pageCount)) {
       return snapshot.pageIndex;
@@ -49,6 +58,11 @@ final class NovelReaderPaginationRestorePolicy {
       return 0;
     }
 
+    final percentPage = _pageFromProgressPercent(snapshot, pageCount);
+    if (percentPage != null) {
+      return percentPage;
+    }
+
     if (snapshot.paginationKey == plan.key.layoutFingerprint &&
         _isValidPage(snapshot.pageIndex, pageCount)) {
       return snapshot.pageIndex;
@@ -62,18 +76,6 @@ final class NovelReaderPaginationRestorePolicy {
       }
     }
 
-    if (snapshot.progressPercent.isFinite && snapshot.progressPercent > 0) {
-      final scale =
-          snapshot.flowMode == NovelReaderFlowMode.vertical ||
-              snapshot.pageCount != null
-          ? pageCount
-          : pageCount - 1;
-      return (snapshot.progressPercent.clamp(0.0, 1.0) * scale)
-          .floor()
-          .clamp(0, pageCount - 1)
-          .toInt();
-    }
-
     // This is only a compatibility fallback for old rows or rows whose
     // layout identity was invalidated. Never clamp an oversized old page to
     // the last page; an uncertain location is safer at the beginning.
@@ -81,6 +83,24 @@ final class NovelReaderPaginationRestorePolicy {
       return snapshot.pageIndex;
     }
     return 0;
+  }
+
+  int? _pageFromProgressPercent(
+    NovelReaderProgressSnapshot snapshot,
+    int pageCount,
+  ) {
+    if (!snapshot.progressPercent.isFinite || snapshot.progressPercent <= 0) {
+      return null;
+    }
+    final scale =
+        snapshot.flowMode == NovelReaderFlowMode.vertical ||
+            snapshot.pageCount != null
+        ? pageCount
+        : pageCount - 1;
+    return (snapshot.progressPercent.clamp(0.0, 1.0) * scale)
+        .floor()
+        .clamp(0, pageCount - 1)
+        .toInt();
   }
 
   NovelReaderTextAnchor? _anchorFromSnapshot(

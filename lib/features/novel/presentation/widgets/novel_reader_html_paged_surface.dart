@@ -77,6 +77,8 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.onImageFallback,
     this.onFallbackToVertical,
     this.onPositionChanged,
+    this.onContentReady,
+    this.onContentTerminal,
     this.onNavigationUnavailable,
     this.onTurnToAdjacentChapter,
     this.chapterTurnPolicy = const NovelReaderChapterTurnPolicy(),
@@ -123,6 +125,8 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
   final VoidCallback? onFallbackToVertical;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
+  final VoidCallback? onContentReady;
+  final VoidCallback? onContentTerminal;
   final ValueChanged<NovelReaderAnchorNavigationRequest>?
   onNavigationUnavailable;
 
@@ -176,6 +180,8 @@ class _NovelReaderHtmlPagedSurfaceState
   bool _planCompleted = false;
   int _cancelledPlanCount = 0;
   int? _appliedChapterEntryRequestId;
+  Object? _reportedContentReadyIdentity;
+  Object? _reportedContentTerminalIdentity;
 
   @override
   void initState() {
@@ -242,6 +248,7 @@ class _NovelReaderHtmlPagedSurfaceState
               !constraints.hasBoundedHeight ||
               pageWidth <= 0 ||
               paginationHeight <= 0) {
+            _scheduleContentTerminal('invalid-viewport');
             return _NovelReaderPaginationStateView(
               key: const Key('novel-reader-paged-invalid-viewport'),
               icon: Icons.crop_free,
@@ -256,17 +263,18 @@ class _NovelReaderHtmlPagedSurfaceState
               final prepared = snapshot.data;
               if (prepared == null) {
                 if (snapshot.hasError) {
+                  _scheduleContentTerminal((
+                    'preparation-error',
+                    _prepareSignature,
+                  ));
                   return _NovelReaderPaginationFailureView(
                     error: snapshot.error!,
                     onRetry: _retryPreparation,
                     onFallbackToVertical: widget.onFallbackToVertical,
                   );
                 }
-                return _NovelReaderPaginationStateView(
-                  key: const Key('novel-reader-paged-preparing'),
-                  icon: Icons.menu_book_outlined,
-                  message: AppLocalizations.of(context).novelPagedPreparing,
-                  showProgress: true,
+                return const SizedBox.expand(
+                  key: Key('novel-reader-paged-preparing'),
                 );
               }
 
@@ -309,32 +317,27 @@ class _NovelReaderHtmlPagedSurfaceState
                   final plan = progress?.plan;
                   if (plan == null) {
                     if (planSnapshot.hasError) {
+                      _scheduleContentTerminal((
+                        'plan-error',
+                        key.cacheIdentity,
+                      ));
                       return _NovelReaderPaginationFailureView(
                         error: planSnapshot.error!,
                         onRetry: _retryPlan,
                         onFallbackToVertical: widget.onFallbackToVertical,
                       );
                     }
-                    return _NovelReaderPaginationStateView(
-                      key: const Key('novel-reader-paged-layout-loading'),
-                      icon: Icons.view_agenda_outlined,
-                      message: AppLocalizations.of(
-                        context,
-                      ).novelPagedCalculating,
-                      showProgress: true,
+                    return const SizedBox.expand(
+                      key: Key('novel-reader-paged-layout-loading'),
                     );
                   }
                   if (plan.pages.isEmpty) {
                     if (progress?.isComplete != true) {
-                      return _NovelReaderPaginationStateView(
-                        key: const Key('novel-reader-paged-layout-loading'),
-                        icon: Icons.view_agenda_outlined,
-                        message: AppLocalizations.of(
-                          context,
-                        ).novelPagedCalculating,
-                        showProgress: true,
+                      return const SizedBox.expand(
+                        key: Key('novel-reader-paged-layout-loading'),
                       );
                     }
+                    _scheduleContentTerminal(('empty-plan', key.cacheIdentity));
                     return _NovelReaderPaginationStateView(
                       key: const Key('novel-reader-paged-empty'),
                       icon: Icons.article_outlined,
@@ -371,15 +374,11 @@ class _NovelReaderHtmlPagedSurfaceState
                   if (navigationIsPending ||
                       entryIsPending ||
                       initialPage == null) {
-                    return _NovelReaderPaginationStateView(
-                      key: const Key('novel-reader-paged-restoring-position'),
-                      icon: Icons.bookmark_outline,
-                      message: AppLocalizations.of(
-                        context,
-                      ).novelPagedRestoringPosition,
-                      showProgress: true,
+                    return const SizedBox.expand(
+                      key: Key('novel-reader-paged-restoring-position'),
                     );
                   }
+                  _scheduleContentReady(key);
                   _firstPageBudgetTimer?.cancel();
                   _firstPageBudgetTimer = null;
                   _firstPageDuration ??= _layoutStopwatch?.elapsed;
@@ -524,6 +523,36 @@ class _NovelReaderHtmlPagedSurfaceState
     _planCompleted = false;
     _startFirstPageBudgetTimer(key);
     return _planStream!;
+  }
+
+  void _scheduleContentReady(NovelReaderPaginationKey key) {
+    final identity = key.cacheIdentity;
+    if (_reportedContentReadyIdentity == identity) {
+      return;
+    }
+    _reportedContentReadyIdentity = identity;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _planKey == key) {
+        widget.onContentReady?.call();
+      }
+    });
+  }
+
+  void _scheduleContentTerminal(Object identity) {
+    if (_reportedContentTerminalIdentity == identity) {
+      return;
+    }
+    _reportedContentTerminalIdentity = identity;
+    final prepareSignature = _prepareSignature;
+    final planKey = _planKey;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _prepareSignature != prepareSignature ||
+          _planKey != planKey) {
+        return;
+      }
+      widget.onContentTerminal?.call();
+    });
   }
 
   void _scheduleDiagnostics({
@@ -1612,12 +1641,10 @@ class _NovelReaderPaginationStateView extends StatelessWidget {
     super.key,
     required this.icon,
     required this.message,
-    this.showProgress = false,
   });
 
   final IconData icon;
   final String message;
-  final bool showProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -1629,10 +1656,6 @@ class _NovelReaderPaginationStateView extends StatelessWidget {
           Icon(icon, size: 34),
           const SizedBox(height: 12),
           Text(message),
-          if (showProgress) ...[
-            const SizedBox(height: 12),
-            const CircularProgressIndicator(),
-          ],
         ],
       ),
     );

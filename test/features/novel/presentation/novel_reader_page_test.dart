@@ -172,8 +172,12 @@ void main() {
       final position = tester.state<ScrollableState>(scrollable).position;
 
       expect(position.maxScrollExtent, greaterThan(320));
-      expect(position.pixels, closeTo(320, 0.01));
-      expect(repository.readingProgress?.scrollOffset, closeTo(320, 0.01));
+      final expectedOffset = position.maxScrollExtent * 0.25;
+      expect(position.pixels, closeTo(expectedOffset, 0.01));
+      expect(
+        repository.readingProgress?.scrollOffset,
+        closeTo(expectedOffset, 0.01),
+      );
     },
   );
 
@@ -254,12 +258,11 @@ void main() {
     await tester.pump();
 
     expect(
-      find.byKey(const Key('novel-reader-transition-mask')),
-      findsOneWidget,
+      find.byKey(const Key('novel-reader-delayed-loading-indicator')),
+      findsNothing,
     );
-    expect(_readerText('第一段。'), findsOneWidget);
     expect(
-      find.byKey(const Key('novel-reader-transition-indicator')),
+      find.byKey(const Key('novel-reader-delayed-loading-surface')),
       findsOneWidget,
     );
 
@@ -475,13 +478,12 @@ void main() {
     expect(repository.readingProgress?.progressPercent, closeTo(0.5, 0.01));
   });
 
-  testWidgets('NovelReaderPage transition chrome follows reader palette', (
+  testWidgets('NovelReaderPage chapter loading uses one neutral indicator', (
     tester,
   ) async {
     final theme = AppTheme.dark();
-    final chromePalette = const ReaderChromePaletteResolver().resolve(theme);
     final repository = _FakeNovelRepository.threeEpisodes(
-      chapterLoadDelay: const Duration(milliseconds: 120),
+      chapterLoadDelay: const Duration(milliseconds: 420),
     );
     await tester.pumpWidget(
       _buildReaderApp(repository: repository, theme: theme),
@@ -498,19 +500,32 @@ void main() {
     );
     await tester.pump();
 
-    final mask = tester.widget<ColoredBox>(
-      find.byKey(const Key('novel-reader-transition-mask')),
+    expect(find.byKey(const Key('novel-reader-transition-mask')), findsNothing);
+    expect(
+      find.byKey(const Key('novel-reader-delayed-loading-surface')),
+      findsOneWidget,
     );
-    final indicator = tester.widget<DecoratedBox>(
-      find.byKey(const Key('novel-reader-transition-indicator')),
+    expect(
+      find.byKey(const Key('novel-reader-delayed-loading-indicator')),
+      findsNothing,
     );
-    final decoration = indicator.decoration as BoxDecoration;
 
-    expect(mask.color, chromePalette.overlayScrim.withValues(alpha: 0.18));
-    expect(decoration.color, chromePalette.transitionCardBackground);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.byKey(const Key('novel-reader-delayed-loading-indicator')),
+      findsOneWidget,
+    );
+    final surface = tester.widget<ColoredBox>(
+      find.byKey(const Key('novel-reader-delayed-loading-surface')),
+    );
+    expect(surface.color, const Color(0xFFF4EAD7));
 
     await tester.pump(const Duration(milliseconds: 140));
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('novel-reader-delayed-loading-indicator')),
+      findsNothing,
+    );
   });
 
   testWidgets(
@@ -537,7 +552,7 @@ void main() {
   );
 
   testWidgets(
-    'NovelReaderPage chapter switch failure keeps old content and shows snackbar',
+    'NovelReaderPage chapter switch failure reveals old content and shows snackbar',
     (tester) async {
       final repository = _FakeNovelRepository.threeEpisodes(
         failedEpisodeIds: const <String>{'novel:49:100:5002'},
@@ -559,7 +574,7 @@ void main() {
 
       expect(
         find.byKey(const Key('novel-reader-transition-mask')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(_readerText('第一段。'), findsOneWidget);
 
@@ -569,7 +584,10 @@ void main() {
       expect(_readerText('第一段。'), findsOneWidget);
       expect(_readerText('第三段。'), findsNothing);
       expect(find.text('章节切换失败，已保留当前章节'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(
+        find.byKey(const Key('novel-reader-delayed-loading-indicator')),
+        findsNothing,
+      );
     },
   );
 
@@ -1466,7 +1484,10 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(
+        find.byKey(const Key('novel-reader-delayed-loading-indicator')),
+        findsNothing,
+      );
 
       await tester.pump(const Duration(milliseconds: 140));
       await tester.pump();
