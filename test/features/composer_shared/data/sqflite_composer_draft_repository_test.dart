@@ -106,27 +106,89 @@ void main() {
     expect(await repository.loadDraft(identity), isNull);
   });
 
-  test('load sanitizes expired attachments and owned cache files', () async {
-    final identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
-    await repository.saveDraft(
-      ComposerDraftSnapshot(
-        identity: identity,
-        message: '正文\n[attach]111[/attach]\n[attach]222[/attach]',
-        useSignature: true,
-        updatedAt: now,
-        imageAttachments: <ComposerImageAttachment>[
-          _attachment('expired', '111', now.subtract(const Duration(days: 2))),
-          _attachment('fresh', '222', now.subtract(const Duration(hours: 1))),
-        ],
-      ),
-    );
+  test(
+    'load expires only 14-day managed copies and preserves aid data',
+    () async {
+      final identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
+      await repository.saveDraft(
+        ComposerDraftSnapshot(
+          identity: identity,
+          message: '正文\n[attach]111[/attach]\n[attach]222[/attach]',
+          useSignature: true,
+          updatedAt: now,
+          imageAttachments: <ComposerImageAttachment>[
+            _attachment(
+              'expired',
+              '111',
+              now.subtract(const Duration(days: 15)),
+            ),
+            _attachment('fresh', '222', now.subtract(const Duration(hours: 1))),
+          ],
+        ),
+      );
 
-    final loaded = await repository.loadDraft(identity);
+      final loaded = await repository.loadDraft(identity);
 
-    expect(loaded?.message, '正文\n[attach]222[/attach]');
-    expect(loaded?.imageAttachments.single.localId, 'fresh');
-    expect(cacheStorage.deletedPaths, contains('/cache/expired.jpg'));
-  });
+      expect(loaded?.message, '正文\n[attach]111[/attach]\n[attach]222[/attach]');
+      expect(loaded?.imageAttachments, hasLength(2));
+      expect(loaded?.imageAttachments.first.aid, '111');
+      expect(loaded?.imageAttachments.first.cachePath, isNull);
+      expect(loaded?.imageAttachments.last.cachePath, '/cache/fresh.jpg');
+      expect(cacheStorage.deletedPaths, contains('/cache/expired.jpg'));
+    },
+  );
+
+  test(
+    'invalidates one aid across drafts while preserving all BBCode',
+    () async {
+      final first = ComposerDraftIdentity.thread(fid: '33', tid: 'one');
+      final second = ComposerDraftIdentity.thread(fid: '33', tid: 'two');
+      await repository.saveDraft(
+        ComposerDraftSnapshot(
+          identity: first,
+          message: 'A\n[attach]111[/attach]\n[attach]222[/attach]',
+          useSignature: true,
+          updatedAt: now,
+          imageAttachments: [
+            _attachment('first-invalid', '111', now),
+            _attachment('first-valid', '222', now),
+          ],
+        ),
+      );
+      await repository.saveDraft(
+        ComposerDraftSnapshot(
+          identity: second,
+          message: 'B\n[attachimg]111[/attachimg]',
+          useSignature: true,
+          updatedAt: now,
+          imageAttachments: [_attachment('second-invalid', '111', now)],
+        ),
+      );
+
+      final result = await repository.invalidateAttachmentAids(
+        aids: const <String>{'111'},
+      );
+
+      expect(result.affectedDraftCount, 2);
+      expect(result.removedAttachmentCount, 2);
+      final loadedFirst = await repository.loadDraft(first);
+      final loadedSecond = await repository.loadDraft(second);
+      expect(
+        loadedFirst?.message,
+        'A\n[attach]111[/attach]\n[attach]222[/attach]',
+      );
+      expect(loadedFirst?.imageAttachments.single.aid, '222');
+      expect(loadedSecond?.message, 'B\n[attachimg]111[/attachimg]');
+      expect(loadedSecond?.imageAttachments, isEmpty);
+      expect(
+        cacheStorage.deletedPaths,
+        containsAll(<String>[
+          '/cache/first-invalid.jpg',
+          '/cache/second-invalid.jpg',
+        ]),
+      );
+    },
+  );
 
   test('prunes expired and overflow snapshots while keeping newest', () async {
     await repository.saveDraft(

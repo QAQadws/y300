@@ -4,8 +4,12 @@ import 'package:y300/features/composer_shared/domain/models/composer_failure_mod
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 
-void showComposerSnackBar(BuildContext context, String message) {
-  showTransientSnackBar(context, message);
+void showComposerSnackBar(
+  BuildContext context,
+  String message, {
+  Key? snackBarKey,
+}) {
+  showTransientSnackBar(context, message, snackBarKey: snackBarKey);
 }
 
 class ComposerUploadFeedbackTracker {

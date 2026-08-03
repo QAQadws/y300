@@ -1,6 +1,7 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
 
 /// 编辑器通用状态字段。
 ///
@@ -23,6 +24,8 @@ abstract class ComposerStateBase {
     this.pendingAttachmentNotice,
     this.failure,
     this.imageUploadFailure,
+    this.draftAttachmentVerification =
+        const ComposerDraftAttachmentVerification.notRequired(),
   });
 
   final String message;
@@ -39,6 +42,7 @@ abstract class ComposerStateBase {
   final ComposerPendingAttachmentNotice? pendingAttachmentNotice;
   final ComposerFailure? failure;
   final ComposerImageUploadFailure? imageUploadFailure;
+  final ComposerDraftAttachmentVerification draftAttachmentVerification;
 
   bool get hasDraftContent =>
       message.trim().isNotEmpty || imageAttachments.isNotEmpty;

@@ -19,10 +19,14 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_unused_image_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_sanitizer.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_verification_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
@@ -447,7 +451,7 @@ void main() {
     );
   });
 
-  testWidgets('ReplyComposerPage omits expired restored image attachment', (
+  testWidgets('ReplyComposerPage keeps remote-valid image after cache expiry', (
     tester,
   ) async {
     final args = _threadArgs();
@@ -464,24 +468,133 @@ void main() {
           _uploadedAttachment(
             localId: 'expired',
             aid: '123456',
-            uploadedAt: DateTime.utc(2026, 6, 7, 12),
+            uploadedAt: DateTime.utc(2026, 5, 24, 12),
+            cachePath: '/cache/expired.jpg',
           ),
         ],
       ),
     );
 
     await tester.pumpWidget(
-      _buildPage(args: args, draftRepository: draftRepository),
+      _buildPage(
+        args: args,
+        draftRepository: draftRepository,
+        draftVerificationService: const _PassThroughDraftVerificationService(),
+      ),
     );
     await tester.pump();
 
-    expect(find.byKey(const Key('reply-composer-image-queue')), findsNothing);
-    expect(find.textContaining('[attach]123456[/attach]'), findsNothing);
+    expect(
+      find.byKey(const Key('composer-quill-attach-123456')),
+      findsOneWidget,
+    );
     await _openReplySourceEditor(tester);
     final sanitizedField = tester.widget<TextField>(
       find.byKey(const Key('reply-composer-message-input')),
     );
-    expect(sanitizedField.controller?.text, '正文');
+    expect(sanitizedField.controller?.text, '正文\n[attach]123456[/attach]');
+  });
+
+  testWidgets('ReplyComposerPage reports failed draft image verification', (
+    tester,
+  ) async {
+    final args = _threadArgs();
+    final draftRepository = _MemoryReplyDraftRepository();
+    await draftRepository.saveDraft(
+      ReplyDraftSnapshot(
+        identity: args.identity,
+        message: '正文\n[attach]123456[/attach]',
+        useSignature: true,
+        updatedAt: DateTime.utc(2026, 8, 3),
+        imageAttachments: [
+          _uploadedAttachment(
+            localId: 'image-1',
+            aid: '123456',
+            uploadedAt: DateTime.utc(2026, 8, 3),
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildPage(
+        args: args,
+        draftRepository: draftRepository,
+        draftVerificationService:
+            const _FailedDraftAttachmentVerificationService(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('reply-composer-draft-image-verification-error')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reply-composer-retry-draft-image-verification')),
+      findsOneWidget,
+    );
+    final sendButton = tester.widget<IconButton>(
+      find.byKey(const Key('reply-composer-send-button')),
+    );
+    expect(sendButton.onPressed, isNotNull);
+  });
+
+  testWidgets('ReplyComposerPage reports invalid images but keeps BBCode', (
+    tester,
+  ) async {
+    final args = _threadArgs();
+    final draftRepository = _MemoryReplyDraftRepository();
+    await draftRepository.saveDraft(
+      ReplyDraftSnapshot(
+        identity: args.identity,
+        message: '正文\n[attach]123456[/attach]',
+        useSignature: true,
+        updatedAt: DateTime.utc(2026, 8, 3),
+        imageAttachments: [
+          _uploadedAttachment(
+            localId: 'image-1',
+            aid: '123456',
+            uploadedAt: DateTime.utc(2026, 8, 3),
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildPage(
+        args: args,
+        draftRepository: draftRepository,
+        draftVerificationService:
+            const _InvalidDraftAttachmentVerificationService(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('reply-composer-invalid-draft-images-snackbar')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('reply-composer-invalid-draft-images')),
+      findsNothing,
+    );
+
+    // A normal page rebuild must not enqueue the same verification result again.
+    await tester.tap(find.byKey(const Key('reply-composer-source-button')));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('reply-composer-invalid-draft-images-snackbar')),
+      findsOneWidget,
+    );
+
+    await _openReplySourceEditor(tester);
+    final source = tester.widget<TextField>(
+      find.byKey(const Key('reply-composer-message-input')),
+    );
+    expect(source.controller?.text, '正文\n[attach]123456[/attach]');
   });
 
   testWidgets('ReplyComposerPage keeps send disabled for empty input', (
@@ -1248,6 +1361,7 @@ Widget _buildPage({
   ReplyRepository? replyRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
+  ComposerDraftAttachmentVerificationService? draftVerificationService,
   List<StickerGroup> stickerGroups = const [],
   ThemeData? theme,
   Locale locale = const Locale('zh'),
@@ -1268,6 +1382,10 @@ Widget _buildPage({
       ),
       composerImageUploadCoordinatorProvider.overrideWithValue(
         imageUploadCoordinator ?? _FakeReplyImageUploadCoordinator(),
+      ),
+      composerDraftAttachmentVerificationServiceProvider.overrideWithValue(
+        draftVerificationService ??
+            const _NoopDraftAttachmentVerificationService(),
       ),
       forumBbCodeRendererProvider.overrideWithValue(_testRenderer),
       stickerGroupsProvider.overrideWith((_) async => stickerGroups),
@@ -1359,6 +1477,9 @@ Widget _buildLauncher({
       composerImagePickerProvider.overrideWithValue(_FakeReplyImagePicker()),
       composerImageUploadCoordinatorProvider.overrideWithValue(
         _FakeReplyImageUploadCoordinator(),
+      ),
+      composerDraftAttachmentVerificationServiceProvider.overrideWithValue(
+        const _NoopDraftAttachmentVerificationService(),
       ),
       forumBbCodeRendererProvider.overrideWithValue(_testRenderer),
       stickerGroupsProvider.overrideWith((_) async => stickerGroups),
@@ -1536,6 +1657,7 @@ ReplyImageAttachment _uploadedAttachment({
   required String aid,
   required DateTime uploadedAt,
   String? localPath,
+  String? cachePath,
 }) {
   return ReplyImageAttachment(
     localId: localId,
@@ -1546,7 +1668,97 @@ ReplyImageAttachment _uploadedAttachment({
     status: ReplyImageAttachmentStatus.uploaded,
     aid: aid,
     uploadedAt: uploadedAt,
+    cachePath: cachePath,
   );
+}
+
+class _NoopDraftAttachmentVerificationService
+    implements ComposerDraftAttachmentVerificationService {
+  const _NoopDraftAttachmentVerificationService();
+
+  @override
+  Future<ComposerDraftAttachmentVerificationResult> verify(
+    ComposerDraftSnapshot draft,
+  ) async {
+    return ComposerDraftAttachmentVerificationResult(
+      draft: draft,
+      verification: const ComposerDraftAttachmentVerification.notRequired(),
+    );
+  }
+}
+
+class _FailedDraftAttachmentVerificationService
+    implements ComposerDraftAttachmentVerificationService {
+  const _FailedDraftAttachmentVerificationService();
+
+  @override
+  Future<ComposerDraftAttachmentVerificationResult> verify(
+    ComposerDraftSnapshot draft,
+  ) async {
+    return ComposerDraftAttachmentVerificationResult(
+      draft: draft,
+      verification: ComposerDraftAttachmentVerification.failed(
+        unverifiedAids: const <String>{'123456'},
+      ),
+    );
+  }
+}
+
+class _InvalidDraftAttachmentVerificationService
+    implements ComposerDraftAttachmentVerificationService {
+  const _InvalidDraftAttachmentVerificationService();
+
+  @override
+  Future<ComposerDraftAttachmentVerificationResult> verify(
+    ComposerDraftSnapshot draft,
+  ) async {
+    return ComposerDraftAttachmentVerificationResult(
+      draft: ReplyDraftSnapshot(
+        identity: draft.identity,
+        message: draft.message,
+        subject: draft.subject,
+        extras: draft.extras,
+        useSignature: draft.useSignature,
+        updatedAt: draft.updatedAt,
+        imageAttachments: const [],
+      ),
+      verification: ComposerDraftAttachmentVerification.verified(
+        imagesByAid: const {},
+        checkedAids: const <String>{'123456'},
+        invalidAidCount: 1,
+      ),
+    );
+  }
+}
+
+class _PassThroughDraftVerificationService
+    implements ComposerDraftAttachmentVerificationService {
+  const _PassThroughDraftVerificationService();
+
+  @override
+  Future<ComposerDraftAttachmentVerificationResult> verify(
+    ComposerDraftSnapshot draft,
+  ) async {
+    final aids = const ComposerAttachBbCodeService()
+        .extractAttachAids(draft.message)
+        .toSet();
+    return ComposerDraftAttachmentVerificationResult(
+      draft: draft,
+      verification: ComposerDraftAttachmentVerification.verified(
+        imagesByAid: <String, ComposerUnusedImage>{
+          for (final aid in aids)
+            aid: ComposerUnusedImage(
+              aid: aid,
+              thumbnailUri: Uri.parse(
+                'https://bbs.yamibo.com/forum.php?mod=image&aid=$aid&size=300x300',
+              ),
+            ),
+        },
+        checkedAids: aids,
+        invalidAidCount: 0,
+      ),
+    );
+  }
 }
 
 final _testRenderer = FlutterBbCodeForumRenderer(

@@ -2116,6 +2116,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get moreUnusedImages => '未使用图片管理';
+
+  @override
+  String get moreUnusedImagesSubtitle => '查看并删除尚未用于帖子的上传图片';
+
+  @override
   String get moreLogin => '登录';
 
   @override
@@ -2484,6 +2490,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get moreStorageImageBlogInline => '日志图片';
+
+  @override
+  String get moreStorageImageComposerUnusedAttachment => '未使用上传图片';
 
   @override
   String get moreStorageImageUnknown => '未分类图片';
@@ -3133,7 +3142,43 @@ class AppLocalizationsZh extends AppLocalizations {
   String get composerStartTypingHint => '请开始输入';
 
   @override
-  String get composerImageRetentionHint => '请注意上传的图片仅在本地保存 24 小时';
+  String get composerImageRetentionHint => '草稿图片本地副本最多保留 14 天，打开草稿时会联网校验';
+
+  @override
+  String get composerDraftImageVerificationFailed =>
+      '草稿图片校验失败，图片预览已暂时隐藏。你仍可编辑和发送，联网后可重试。';
+
+  @override
+  String composerDraftImagesInvalidated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '发现 $count 张已失效的草稿图片，正文代码已保留',
+      zero: '没有失效的草稿图片',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get unusedImagesPageTitle => '未使用图片管理';
+
+  @override
+  String get unusedImagesEmpty => '没有尚未用于帖子的上传图片';
+
+  @override
+  String get unusedImagesLoadFailed => '未能读取未使用图片，请检查网络或登录状态后重试';
+
+  @override
+  String get unusedImagesDeleteTooltip => '删除图片';
+
+  @override
+  String get unusedImagesDeleteTitle => '删除这张未使用图片？';
+
+  @override
+  String get unusedImagesDeleteBody => '图片将从服务器删除，草稿中的正文代码会保留。此操作不可撤销。';
+
+  @override
+  String get unusedImagesDeleteFailed => '图片删除未成功，图片仍保留';
 
   @override
   String get composerLinkTitle => '添加链接';
@@ -6316,6 +6361,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
+  String get moreUnusedImages => '未使用圖片管理';
+
+  @override
+  String get moreUnusedImagesSubtitle => '查看並刪除尚未用於帖子的上傳圖片';
+
+  @override
   String get moreLogin => '登入';
 
   @override
@@ -6684,6 +6735,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreStorageImageBlogInline => '日誌圖片';
+
+  @override
+  String get moreStorageImageComposerUnusedAttachment => '未使用上傳圖片';
 
   @override
   String get moreStorageImageUnknown => '未分類圖片';
@@ -7334,7 +7388,43 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get composerStartTypingHint => '請開始輸入';
 
   @override
-  String get composerImageRetentionHint => '請注意上傳的圖片僅在本機保留 24 小時';
+  String get composerImageRetentionHint => '草稿圖片本機副本最多保留 14 天，開啟草稿時會連線驗證';
+
+  @override
+  String get composerDraftImageVerificationFailed =>
+      '草稿圖片驗證失敗，圖片預覽已暫時隱藏。你仍可編輯和送出，連線後可重試。';
+
+  @override
+  String composerDraftImagesInvalidated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '發現 $count 張已失效的草稿圖片，正文代碼已保留',
+      zero: '沒有失效的草稿圖片',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get unusedImagesPageTitle => '未使用圖片管理';
+
+  @override
+  String get unusedImagesEmpty => '沒有尚未用於帖子的上傳圖片';
+
+  @override
+  String get unusedImagesLoadFailed => '無法讀取未使用圖片，請檢查網路或登入狀態後重試';
+
+  @override
+  String get unusedImagesDeleteTooltip => '刪除圖片';
+
+  @override
+  String get unusedImagesDeleteTitle => '刪除這張未使用圖片？';
+
+  @override
+  String get unusedImagesDeleteBody => '圖片將從伺服器刪除，草稿中的正文代碼會保留。此操作無法復原。';
+
+  @override
+  String get unusedImagesDeleteFailed => '圖片刪除未成功，圖片仍保留';
 
   @override
   String get composerLinkTitle => '新增連結';

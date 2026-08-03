@@ -34,6 +34,7 @@ class _TestComposerState extends ComposerStateBase {
     super.pendingAttachmentNotice,
     super.failure,
     super.imageUploadFailure,
+    super.draftAttachmentVerification,
   });
 
   factory _TestComposerState.initial({
@@ -77,6 +78,8 @@ class _TestComposerState extends ComposerStateBase {
       imageUploadFailure: patch.clearImageUploadFailure
           ? null
           : patch.imageUploadFailure ?? imageUploadFailure,
+      draftAttachmentVerification:
+          patch.draftAttachmentVerification ?? draftAttachmentVerification,
     );
   }
 }
@@ -254,6 +257,7 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
               localId: localId,
               aid: event.uploadedImage!.aid,
               uploadedAt: event.uploadedImage!.uploadedAt,
+              cachePath: event.uploadedImage!.cachePath,
             ),
           ),
         ComposerImageUploadEventType.failed => ComposerImageUploadEvent.failed(
@@ -331,6 +335,8 @@ ProviderContainer _buildContainer({
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
   ComposerPreferencesRepository? composerPreferencesRepository,
+  ComposerDraftAttachmentVerificationService? verificationService,
+  ComposerUploadCacheStorage? cacheStorage,
 }) {
   return ProviderContainer(
     overrides: [
@@ -346,8 +352,78 @@ ProviderContainer _buildContainer({
       composerImageUploadCoordinatorProvider.overrideWithValue(
         imageUploadCoordinator ?? _FakeUploadCoordinator(),
       ),
+      if (cacheStorage != null)
+        composerUploadCacheStorageProvider.overrideWithValue(cacheStorage),
+      if (verificationService != null)
+        composerDraftAttachmentVerificationServiceProvider.overrideWithValue(
+          verificationService,
+        ),
     ],
   );
+}
+
+class _RecordingUploadCacheStorage implements ComposerUploadCacheStorage {
+  final List<String> deletedPaths = <String>[];
+
+  @override
+  Future<bool> deleteCachePathIfOwned(String? cachePath) async {
+    final normalized = cachePath?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return false;
+    }
+    deletedPaths.add(normalized);
+    return true;
+  }
+}
+
+class _ControllableDraftVerificationService
+    implements ComposerDraftAttachmentVerificationService {
+  final Completer<ComposerDraftAttachmentVerificationResult> _retry =
+      Completer<ComposerDraftAttachmentVerificationResult>();
+  var _callCount = 0;
+  ComposerDraftSnapshot? _retryDraft;
+
+  @override
+  Future<ComposerDraftAttachmentVerificationResult> verify(
+    ComposerDraftSnapshot draft,
+  ) async {
+    _callCount += 1;
+    if (_callCount == 1) {
+      return ComposerDraftAttachmentVerificationResult(
+        draft: draft,
+        verification: ComposerDraftAttachmentVerification.failed(
+          unverifiedAids: const <String>{'12'},
+        ),
+      );
+    }
+    _retryDraft = draft;
+    return _retry.future;
+  }
+
+  void completeRetryWithInvalidAid(String aid) {
+    final draft = _retryDraft!;
+    _retry.complete(
+      ComposerDraftAttachmentVerificationResult(
+        draft: ComposerDraftSnapshot(
+          identity: draft.identity,
+          message: draft.message,
+          subject: draft.subject,
+          extras: draft.extras,
+          useSignature: draft.useSignature,
+          updatedAt: draft.updatedAt,
+          imageAttachments: [
+            for (final attachment in draft.imageAttachments)
+              if (attachment.aid?.trim() != aid) attachment,
+          ],
+        ),
+        verification: ComposerDraftAttachmentVerification.verified(
+          imagesByAid: const {},
+          checkedAids: <String>{aid},
+          invalidAidCount: 1,
+        ),
+      ),
+    );
+  }
 }
 
 ProviderSubscription<AsyncValue<_TestComposerState>> _keepAlive(

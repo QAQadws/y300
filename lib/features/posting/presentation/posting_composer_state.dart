@@ -2,6 +2,7 @@ import 'package:y300/features/composer_shared/domain/models/composer_attachment_
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
@@ -71,6 +72,7 @@ class PostingComposerState extends ComposerStateBase {
     this.poll,
     super.failure,
     super.imageUploadFailure,
+    super.draftAttachmentVerification,
   });
 
   factory PostingComposerState.initial({
@@ -95,6 +97,8 @@ class PostingComposerState extends ComposerStateBase {
     List<String> tags = const <String>[],
     NewThreadSpecial special = NewThreadSpecial.normal,
     NewThreadPollDraft? poll,
+    ComposerDraftAttachmentVerification draftAttachmentVerification =
+        const ComposerDraftAttachmentVerification.notRequired(),
   }) {
     return PostingComposerState(
       target: target,
@@ -122,6 +126,7 @@ class PostingComposerState extends ComposerStateBase {
       tags: tags,
       special: special,
       poll: poll,
+      draftAttachmentVerification: draftAttachmentVerification,
     );
   }
 
@@ -236,6 +241,7 @@ class PostingComposerState extends ComposerStateBase {
     NewThreadPollDraft? poll,
     ComposerFailure? failure,
     ComposerImageUploadFailure? imageUploadFailure,
+    ComposerDraftAttachmentVerification? draftAttachmentVerification,
     bool clearMetadata = false,
     bool clearMetadataFailure = false,
     bool clearSelectedTypeId = false,
@@ -284,6 +290,8 @@ class PostingComposerState extends ComposerStateBase {
       imageUploadFailure: clearImageUploadFailure
           ? null
           : imageUploadFailure ?? this.imageUploadFailure,
+      draftAttachmentVerification:
+          draftAttachmentVerification ?? this.draftAttachmentVerification,
     );
   }
 }

@@ -151,6 +151,8 @@ final class MoreTextResolver {
       'forum_head_image' => l10n.moreStorageImageForumHead,
       'forum_icon' => l10n.moreStorageImageForumIcon,
       'blog_inline' => l10n.moreStorageImageBlogInline,
+      'composer_unused_attachment' =>
+        l10n.moreStorageImageComposerUnusedAttachment,
       _ => code.isEmpty ? l10n.moreStorageImageUnknown : code,
     };
   }

@@ -5,6 +5,7 @@ void showTransientSnackBar(
   BuildContext context,
   String message, {
   SnackBarAction? action,
+  Key? snackBarKey,
 }) {
   final trimmed = message.trim();
   if (trimmed.isEmpty) {
@@ -16,5 +17,7 @@ void showTransientSnackBar(
   }
   messenger
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(trimmed), action: action));
+    ..showSnackBar(
+      SnackBar(key: snackBarKey, content: Text(trimmed), action: action),
+    );
 }

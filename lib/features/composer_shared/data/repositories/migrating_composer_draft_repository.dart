@@ -5,7 +5,8 @@ import 'package:y300/features/composer_shared/data/repositories/composer_draft_r
 import 'package:y300/features/composer_shared/data/services/composer_draft_snapshot_codec.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 
-class MigratingComposerDraftRepository implements ComposerDraftRepository {
+class MigratingComposerDraftRepository
+    implements ComposerDraftRepository, ComposerDraftAttachmentInvalidator {
   MigratingComposerDraftRepository({
     required ComposerDraftRepository target,
     required ComposerDraftLegacyStore legacyStore,
@@ -61,6 +62,15 @@ class MigratingComposerDraftRepository implements ComposerDraftRepository {
   }) async {
     await _ensureMigrated();
     return _target.listDraftsForThread(fid: fid, tid: tid);
+  }
+
+  @override
+  Future<ComposerDraftAttachmentInvalidationResult> invalidateAttachmentAids({
+    required Set<String> aids,
+    ComposerDraftIdentity? identity,
+  }) async {
+    await _ensureMigrated();
+    return _target.invalidateAttachmentAids(aids: aids, identity: identity);
   }
 
   Future<void> _ensureMigrated() async {

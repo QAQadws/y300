@@ -140,6 +140,25 @@ void main() {
       expect(payload.uploadedAttachmentAids, ['222']);
     });
 
+    test('binds remotely verified aids without a retained local copy', () {
+      final payload = builder.build(
+        input: const NewThreadDraftInput(
+          subject: '标题',
+          message: '[attach]777[/attach]\n正文',
+          selectedTypeId: null,
+          useSignature: true,
+          allowNoticeAuthor: false,
+          bbCodeOff: false,
+          smileyOff: false,
+          parseUrlOff: false,
+          additionalValidAttachmentAids: <String>['777'],
+        ),
+        metadata: _metadata(),
+      );
+
+      expect(payload.uploadedAttachmentAids, <String>['777']);
+    });
+
     test(
       'skips uploaded attachment when its attach code was removed from message',
       () {

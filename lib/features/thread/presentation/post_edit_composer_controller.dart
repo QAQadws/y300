@@ -139,6 +139,7 @@ final class PostEditComposerController
       clearImageUploadFailure: patch.clearImageUploadFailure,
       clearLastMessageMutation: patch.clearLastMessageMutation,
       clearPendingAttachmentNotice: patch.clearPendingAttachmentNotice,
+      draftAttachmentVerification: patch.draftAttachmentVerification,
       clearLastSubmitOutcome: patch.message != null,
       serverMutationPossible: serverMutationPossible,
     );

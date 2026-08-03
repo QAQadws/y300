@@ -3,6 +3,7 @@ import 'package:file/file.dart';
 import 'package:file/local.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/services/composer_attachment_remote_data_source.dart';
+import 'package:y300/features/composer_shared/data/services/composer_upload_cache_storage.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_attachment_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
@@ -12,13 +13,17 @@ class DiscuzComposerAttachmentRepository
   DiscuzComposerAttachmentRepository({
     required ComposerAttachmentRemoteDataSource remoteDataSource,
     FileSystem fileSystem = const LocalFileSystem(),
+    ComposerUploadCacheStorage cacheStorage =
+        const NoopComposerUploadCacheStorage(),
     DateTime Function()? now,
   }) : _remoteDataSource = remoteDataSource,
        _fileSystem = fileSystem,
+       _cacheStorage = cacheStorage,
        _now = now ?? DateTime.now;
 
   final ComposerAttachmentRemoteDataSource _remoteDataSource;
   final FileSystem _fileSystem;
+  final ComposerUploadCacheStorage _cacheStorage;
   final DateTime Function() _now;
   static const Set<String> _supportedImageExtensions = <String>{
     'jpg',
@@ -123,11 +128,24 @@ class DiscuzComposerAttachmentRepository
           ),
         );
       }
+      String? cachePath;
+      try {
+        cachePath = await _cacheStorage.retainUploadedCopy(
+          sourcePath: attachment.localPath,
+          localId: attachment.localId,
+          fileName: attachment.fileName,
+        );
+      } catch (_) {
+        // The server upload is already confirmed. A local cache-copy failure
+        // must not turn it into a failed upload; remote preview remains the
+        // restoration fallback.
+      }
       return ApiSuccess<ComposerUploadedImage>(
         ComposerUploadedImage(
           localId: attachment.localId,
           aid: aid,
           uploadedAt: _now(),
+          cachePath: cachePath,
         ),
       );
     } on DioException catch (error) {

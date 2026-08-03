@@ -62,6 +62,10 @@ abstract final class ImageCacheKeys {
     return _normalizedUrlKey('blog/inline', sourceUrl);
   }
 
+  static String composerUnusedAttachment(String aid) {
+    return 'composer/unused/${_normalizePart(aid)}';
+  }
+
   static String remoteSmiley(String source) {
     final path = normalizeRemoteSmileyPath(source);
     final digest = _shortHash(path);

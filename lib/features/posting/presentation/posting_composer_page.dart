@@ -12,6 +12,7 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_mess
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_error_summary.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_draft_attachment_preview_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
@@ -54,6 +55,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
   bool _allowPopWithoutConfirm = false;
   String? _lastAppliedStateMessage;
   String? _lastAppliedStateSubject;
+  Object? _lastNotifiedDraftImageVerification;
   final ComposerUploadFeedbackTracker _uploadFeedbackTracker =
       ComposerUploadFeedbackTracker();
 
@@ -196,6 +198,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
             },
             onSelectedTypeIdChanged: controller.updateSelectedTypeId,
             onRetryLoadMetadata: controller.retryLoadMetadata,
+            onRetryDraftImages: controller.retryDraftAttachmentVerification,
             onSpecialChanged: controller.updateSpecial,
             onPollOptionsChanged: controller.updatePollOptions,
             onPollMultipleChanged: controller.updatePollMultiple,
@@ -309,6 +312,13 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
 
   void _scheduleTransientFeedback(PostingComposerState state) {
     final l10n = AppLocalizations.of(context);
+    final verification = state.draftAttachmentVerification;
+    final shouldNotifyInvalidDraftImages =
+        verification.invalidAidCount > 0 &&
+        !identical(_lastNotifiedDraftImageVerification, verification);
+    if (shouldNotifyInvalidDraftImages) {
+      _lastNotifiedDraftImageVerification = verification;
+    }
     final shouldNotifyMetadataLoading =
         state.isLoadingMetadata && !_wasLoadingMetadata;
     _wasLoadingMetadata = state.isLoadingMetadata;
@@ -326,6 +336,8 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
             ? l10n.composerRestoredDraft
             : l10n.postingRestoredDraftWithTags,
       if (shouldNotifyMetadataLoading) l10n.postingFormLoading,
+      if (shouldNotifyInvalidDraftImages)
+        l10n.composerDraftImagesInvalidated(verification.invalidAidCount),
       ...uploadMessages,
     ];
     if (messages.isEmpty) {
@@ -335,7 +347,13 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
       if (!mounted) {
         return;
       }
-      showComposerSnackBar(context, messages.join('\n'));
+      showComposerSnackBar(
+        context,
+        messages.join('\n'),
+        snackBarKey: shouldNotifyInvalidDraftImages
+            ? const Key('posting-composer-invalid-draft-images-snackbar')
+            : null,
+      );
     });
   }
 
@@ -551,6 +569,7 @@ class _PostingComposerBody extends StatefulWidget {
     required this.onMessageChanged,
     required this.onSelectedTypeIdChanged,
     required this.onRetryLoadMetadata,
+    required this.onRetryDraftImages,
     required this.onSpecialChanged,
     required this.onPollOptionsChanged,
     required this.onPollMultipleChanged,
@@ -574,6 +593,7 @@ class _PostingComposerBody extends StatefulWidget {
   final ValueChanged<String> onMessageChanged;
   final ValueChanged<String?> onSelectedTypeIdChanged;
   final VoidCallback onRetryLoadMetadata;
+  final Future<void> Function() onRetryDraftImages;
   final ValueChanged<NewThreadSpecial> onSpecialChanged;
   final ValueChanged<List<String>> onPollOptionsChanged;
   final ValueChanged<bool> onPollMultipleChanged;
@@ -626,6 +646,10 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
       onMessageChanged: widget.onMessageChanged,
       onImagePressed: widget.onImagePressed,
       imageAttachments: widget.state.imageAttachments,
+      attachmentResolver: ComposerDraftAttachmentPreviewResolver(
+        imageAttachments: widget.state.imageAttachments,
+        verification: widget.state.draftAttachmentVerification,
+      ),
       keyPrefix: 'posting-composer',
       hintText: AppLocalizations.of(context).composerImageRetentionHint,
       messageRevision: widget.state.messageRevision,
@@ -686,7 +710,23 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
   List<Widget> _buildFormFields(BuildContext context) {
     final state = widget.state;
     final disabled = state.isSubmitting;
+    final verification = state.draftAttachmentVerification;
     return [
+      if (verification.failed) ...[
+        ComposerStatusBanner.error(
+          key: const Key('posting-composer-draft-image-verification-error'),
+          text: AppLocalizations.of(
+            context,
+          ).composerDraftImageVerificationFailed,
+          retryButtonKey: const Key(
+            'posting-composer-retry-draft-image-verification',
+          ),
+          onRetry: () {
+            unawaited(widget.onRetryDraftImages());
+          },
+        ),
+        const SizedBox(height: 12),
+      ],
       if (state.pendingAttachmentNotice case final notice?) ...[
         ComposerStatusBanner.info(
           key: const Key('posting-composer-pending-attachment'),

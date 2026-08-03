@@ -11,7 +11,8 @@ import 'package:y300/features/composer_shared/domain/services/composer_draft_att
 
 typedef ComposerDraftDatabaseProvider = Future<Database> Function();
 
-class SqfliteComposerDraftRepository implements ComposerDraftRepository {
+class SqfliteComposerDraftRepository
+    implements ComposerDraftRepository, ComposerDraftAttachmentInvalidator {
   SqfliteComposerDraftRepository({
     required ComposerDraftDatabaseProvider databaseProvider,
     ComposerDraftSnapshotJsonCodec codec =
@@ -53,7 +54,7 @@ class SqfliteComposerDraftRepository implements ComposerDraftRepository {
   @override
   Future<void> saveDraft(ComposerDraftSnapshot draft) async {
     final sanitized = _sanitizeSnapshot(draft);
-    await _deleteCacheFiles(sanitized.removedAttachments);
+    await _deleteCacheFiles(sanitized.cacheCleanupAttachments);
     if (sanitized.snapshot.isEmpty) {
       await deleteDraft(draft.identity);
       return;
@@ -114,7 +115,7 @@ class SqfliteComposerDraftRepository implements ComposerDraftRepository {
         final sanitized = _sanitizeSnapshot(decoded);
         removedAttachmentCount += sanitized.removedAttachments.length;
         deletedCacheFileCount += await _deleteCacheFiles(
-          sanitized.removedAttachments,
+          sanitized.cacheCleanupAttachments,
         );
         final draft = sanitized.snapshot;
         if (draft.isEmpty || draft.updatedAt.isBefore(cutoff)) {
@@ -187,6 +188,100 @@ class SqfliteComposerDraftRepository implements ComposerDraftRepository {
     return drafts;
   }
 
+  @override
+  Future<ComposerDraftAttachmentInvalidationResult> invalidateAttachmentAids({
+    required Set<String> aids,
+    ComposerDraftIdentity? identity,
+  }) async {
+    final normalizedAids = aids
+        .map((aid) => aid.trim())
+        .where((aid) => aid.isNotEmpty)
+        .toSet();
+    if (normalizedAids.isEmpty) {
+      return const ComposerDraftAttachmentInvalidationResult();
+    }
+    final db = await _databaseProvider();
+    final writeResult = await db.transaction<_DraftInvalidationWriteResult>((
+      transaction,
+    ) async {
+      final rows = await transaction.query(
+        ComposerDraftLocalDb.draftsTable,
+        where: identity == null ? null : 'storage_key = ?',
+        whereArgs: identity == null ? null : <Object>[identity.storageKey],
+        orderBy: 'updated_at DESC, storage_key ASC',
+      );
+      var affectedDraftCount = 0;
+      var removedAttachmentCount = 0;
+      ComposerDraftSnapshot? updatedDraft;
+      final cacheCleanup = <ComposerImageAttachment>[];
+
+      for (final row in rows) {
+        final decoded = _decodeRow(row);
+        final storageKey = row['storage_key'] as String?;
+        if (decoded == null ||
+            storageKey == null ||
+            decoded.identity.storageKey != storageKey) {
+          if (storageKey != null) {
+            await _deleteRow(transaction, storageKey);
+          }
+          continue;
+        }
+        final sanitized = _sanitizeSnapshot(decoded);
+        cacheCleanup.addAll(sanitized.cacheCleanupAttachments);
+        final removed = <ComposerImageAttachment>[];
+        final kept = <ComposerImageAttachment>[];
+        for (final attachment in sanitized.snapshot.imageAttachments) {
+          final aid = attachment.aid?.trim();
+          if (aid != null && normalizedAids.contains(aid)) {
+            removed.add(attachment);
+          } else {
+            kept.add(attachment);
+          }
+        }
+        cacheCleanup.addAll(removed);
+        final next = ComposerDraftSnapshot(
+          identity: sanitized.snapshot.identity,
+          message: sanitized.snapshot.message,
+          subject: sanitized.snapshot.subject,
+          extras: sanitized.snapshot.extras,
+          useSignature: sanitized.snapshot.useSignature,
+          updatedAt: sanitized.snapshot.updatedAt,
+          imageAttachments: kept,
+        );
+        final changed = sanitized.changed || removed.isNotEmpty;
+        if (removed.isNotEmpty) {
+          affectedDraftCount += 1;
+          removedAttachmentCount += removed.length;
+        }
+        if (changed) {
+          if (next.isEmpty) {
+            await _deleteRow(transaction, storageKey);
+          } else {
+            await _write(transaction, next);
+          }
+        }
+        if (identity != null) {
+          updatedDraft = next.isEmpty ? null : next;
+        }
+      }
+      return _DraftInvalidationWriteResult(
+        affectedDraftCount: affectedDraftCount,
+        removedAttachmentCount: removedAttachmentCount,
+        cacheCleanupAttachments: cacheCleanup,
+        updatedDraft: updatedDraft,
+      );
+    });
+    final deletedCacheFileCount = await _deleteCacheFiles(
+      writeResult.cacheCleanupAttachments,
+    );
+    return ComposerDraftAttachmentInvalidationResult(
+      affectedDraftCount: writeResult.affectedDraftCount,
+      removedAttachmentCount: writeResult.removedAttachmentCount,
+      deletedCacheFileCount: deletedCacheFileCount,
+      updatedDraft: writeResult.updatedDraft,
+    );
+  }
+
   Future<ComposerDraftSnapshot?> _loadSanitizedRow(
     Database db,
     Map<String, Object?> row, {
@@ -204,7 +299,7 @@ class SqfliteComposerDraftRepository implements ComposerDraftRepository {
       return null;
     }
     final sanitized = _sanitizeSnapshot(decoded);
-    await _deleteCacheFiles(sanitized.removedAttachments);
+    await _deleteCacheFiles(sanitized.cacheCleanupAttachments);
     if (sanitized.snapshot.isEmpty) {
       await _deleteRow(db, storageKey);
       return null;
@@ -220,7 +315,7 @@ class SqfliteComposerDraftRepository implements ComposerDraftRepository {
     return raw is String ? _codec.decode(raw) : null;
   }
 
-  Future<void> _write(Database db, ComposerDraftSnapshot draft) {
+  Future<void> _write(DatabaseExecutor db, ComposerDraftSnapshot draft) {
     return db.insert(
       ComposerDraftLocalDb.draftsTable,
       <String, Object?>{
@@ -235,7 +330,7 @@ class SqfliteComposerDraftRepository implements ComposerDraftRepository {
     );
   }
 
-  Future<void> _deleteRow(Database db, String storageKey) {
+  Future<void> _deleteRow(DatabaseExecutor db, String storageKey) {
     return db.delete(
       ComposerDraftLocalDb.draftsTable,
       where: 'storage_key = ?',
@@ -260,6 +355,7 @@ class SqfliteComposerDraftRepository implements ComposerDraftRepository {
         imageAttachments: result.imageAttachments,
       ),
       removedAttachments: result.removedAttachments,
+      expiredCacheAttachments: result.expiredCacheAttachments,
     );
   }
 
@@ -284,10 +380,33 @@ class _SanitizedDraftSnapshot {
   const _SanitizedDraftSnapshot({
     required this.snapshot,
     required this.removedAttachments,
+    required this.expiredCacheAttachments,
   });
 
   final ComposerDraftSnapshot snapshot;
   final List<ComposerImageAttachment> removedAttachments;
+  final List<ComposerImageAttachment> expiredCacheAttachments;
 
-  bool get changed => removedAttachments.isNotEmpty;
+  List<ComposerImageAttachment> get cacheCleanupAttachments =>
+      <ComposerImageAttachment>[
+        ...removedAttachments,
+        ...expiredCacheAttachments,
+      ];
+
+  bool get changed =>
+      removedAttachments.isNotEmpty || expiredCacheAttachments.isNotEmpty;
+}
+
+class _DraftInvalidationWriteResult {
+  const _DraftInvalidationWriteResult({
+    required this.affectedDraftCount,
+    required this.removedAttachmentCount,
+    required this.cacheCleanupAttachments,
+    required this.updatedDraft,
+  });
+
+  final int affectedDraftCount;
+  final int removedAttachmentCount;
+  final List<ComposerImageAttachment> cacheCleanupAttachments;
+  final ComposerDraftSnapshot? updatedDraft;
 }

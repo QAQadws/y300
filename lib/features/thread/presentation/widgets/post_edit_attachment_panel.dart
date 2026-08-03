@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_attachment_preview.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_image_delete_button.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -140,8 +141,8 @@ class _PostEditAttachmentCard extends StatelessWidget {
                   Positioned(
                     top: 0,
                     right: 0,
-                    child: _PostEditDeleteImageButton(
-                      buttonKey: Key('post-edit-delete-image-$aid'),
+                    child: ComposerImageDeleteButton(
+                      key: Key('post-edit-delete-image-$aid'),
                       visualKey: Key('post-edit-delete-image-visual-$aid'),
                       tooltip: l10n.postEditDeleteImage,
                       onPressed: () => _confirmDelete(context, aid),
@@ -205,56 +206,5 @@ class _PostEditAttachmentCard extends StatelessWidget {
     if (confirmed == true) {
       onDelete(aid);
     }
-  }
-}
-
-class _PostEditDeleteImageButton extends StatelessWidget {
-  const _PostEditDeleteImageButton({
-    required this.buttonKey,
-    required this.visualKey,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  final Key buttonKey;
-  final Key visualKey;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: tooltip,
-      child: Semantics(
-        button: true,
-        label: tooltip,
-        child: SizedBox.square(
-          dimension: 40,
-          child: Material(
-            color: Colors.transparent,
-            shape: const CircleBorder(),
-            child: InkWell(
-              key: buttonKey,
-              onTap: onPressed,
-              customBorder: const CircleBorder(),
-              child: Center(
-                child: DecoratedBox(
-                  key: visualKey,
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const SizedBox.square(
-                    dimension: 24,
-                    child: Icon(Icons.close, size: 14),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

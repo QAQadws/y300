@@ -46,6 +46,17 @@ void main() {
       MoreTextResolver.storageLabel(
         l10n,
         const StorageUsageLabelRef(
+          kind: StorageUsageLabelKind.imageRole,
+          code: 'composer_unused_attachment',
+          qualifier: 'ephemeral',
+        ),
+      ),
+      '未使用上传图片',
+    );
+    expect(
+      MoreTextResolver.storageLabel(
+        l10n,
+        const StorageUsageLabelRef(
           kind: StorageUsageLabelKind.historyKind,
           code: 'entries',
           count: 12,

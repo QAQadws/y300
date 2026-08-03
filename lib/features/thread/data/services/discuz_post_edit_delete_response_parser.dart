@@ -1,15 +1,19 @@
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
+import 'package:y300/core/network/discuz_ajax_cdata_parser.dart';
 
 /// Parses the integer CDATA payload returned by Discuz deleteattach.
 final class DiscuzPostEditDeleteResponseParser {
-  const DiscuzPostEditDeleteResponseParser();
+  const DiscuzPostEditDeleteResponseParser({
+    this.cdataParser = const DiscuzAjaxCdataParser(),
+  });
+
+  final DiscuzAjaxCdataParser cdataParser;
 
   PostEditAttachmentDeleteResult parse({
     required String body,
     required String aid,
   }) {
-    final cdata = _extractCdata(body);
-    final count = cdata == null ? null : int.tryParse(cdata.trim());
+    final count = cdataParser.extractInteger(body);
     if (count == null) {
       return PostEditAttachmentDeleteResult(
         aid: aid,
@@ -23,18 +27,5 @@ final class DiscuzPostEditDeleteResponseParser {
           ? PostEditAttachmentDeleteOutcome.deleted
           : PostEditAttachmentDeleteOutcome.notDeleted,
     );
-  }
-
-  String? _extractCdata(String body) {
-    final start = body.indexOf('<![CDATA[');
-    if (start < 0) {
-      return null;
-    }
-    final contentStart = start + '<![CDATA['.length;
-    final end = body.indexOf(']]>', contentStart);
-    if (end < 0) {
-      return null;
-    }
-    return body.substring(contentStart, end);
   }
 }

@@ -3408,6 +3408,18 @@ abstract class AppLocalizations {
   /// **'{username} 的资料与消息提醒'**
   String moreMyProfileSubtitle(String username);
 
+  /// No description provided for @moreUnusedImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'未使用图片管理'**
+  String get moreUnusedImages;
+
+  /// No description provided for @moreUnusedImagesSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看并删除尚未用于帖子的上传图片'**
+  String get moreUnusedImagesSubtitle;
+
   /// No description provided for @moreLogin.
   ///
   /// In zh, this message translates to:
@@ -4024,6 +4036,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'日志图片'**
   String get moreStorageImageBlogInline;
+
+  /// No description provided for @moreStorageImageComposerUnusedAttachment.
+  ///
+  /// In zh, this message translates to:
+  /// **'未使用上传图片'**
+  String get moreStorageImageComposerUnusedAttachment;
 
   /// No description provided for @moreStorageImageUnknown.
   ///
@@ -5162,8 +5180,62 @@ abstract class AppLocalizations {
   /// No description provided for @composerImageRetentionHint.
   ///
   /// In zh, this message translates to:
-  /// **'请注意上传的图片仅在本地保存 24 小时'**
+  /// **'草稿图片本地副本最多保留 14 天，打开草稿时会联网校验'**
   String get composerImageRetentionHint;
+
+  /// No description provided for @composerDraftImageVerificationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'草稿图片校验失败，图片预览已暂时隐藏。你仍可编辑和发送，联网后可重试。'**
+  String get composerDraftImageVerificationFailed;
+
+  /// No description provided for @composerDraftImagesInvalidated.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0 {没有失效的草稿图片} other {发现 {count} 张已失效的草稿图片，正文代码已保留}}'**
+  String composerDraftImagesInvalidated(int count);
+
+  /// No description provided for @unusedImagesPageTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未使用图片管理'**
+  String get unusedImagesPageTitle;
+
+  /// No description provided for @unusedImagesEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有尚未用于帖子的上传图片'**
+  String get unusedImagesEmpty;
+
+  /// No description provided for @unusedImagesLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未能读取未使用图片，请检查网络或登录状态后重试'**
+  String get unusedImagesLoadFailed;
+
+  /// No description provided for @unusedImagesDeleteTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除图片'**
+  String get unusedImagesDeleteTooltip;
+
+  /// No description provided for @unusedImagesDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除这张未使用图片？'**
+  String get unusedImagesDeleteTitle;
+
+  /// No description provided for @unusedImagesDeleteBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片将从服务器删除，草稿中的正文代码会保留。此操作不可撤销。'**
+  String get unusedImagesDeleteBody;
+
+  /// No description provided for @unusedImagesDeleteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片删除未成功，图片仍保留'**
+  String get unusedImagesDeleteFailed;
 
   /// No description provided for @composerLinkTitle.
   ///

@@ -14,6 +14,7 @@ import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/presentation/comic_download_queue_page.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/data/about_providers.dart';
 import 'package:y300/features/more/presentation/about_page.dart';
@@ -77,6 +78,13 @@ class _MorePageState extends ConsumerState<MorePage> {
             onTap: authSession.isLoggedIn
                 ? () => _openMyProfileWebViewPage(context, authSession)
                 : () => _openLoginPage(context),
+          ),
+          ListTile(
+            key: const Key('more-unused-images-entry'),
+            leading: const Icon(Icons.photo_library_outlined),
+            title: Text(l10n.moreUnusedImages),
+            subtitle: Text(l10n.moreUnusedImagesSubtitle),
+            onTap: () => _openUnusedImagesPage(context, authSession),
           ),
           ListTile(
             key: const Key('more-forum-mode-entry'),
@@ -278,11 +286,32 @@ class _MorePageState extends ConsumerState<MorePage> {
     }
   }
 
-  Future<void> _openLoginPage(BuildContext context) async {
-    await Navigator.of(context).push<bool>(
+  Future<bool> _openLoginPage(BuildContext context) async {
+    final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         settings: const RouteSettings(name: LoginWebViewPage.routeName),
         builder: (_) => const LoginWebViewPage(),
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> _openUnusedImagesPage(
+    BuildContext context,
+    AuthSessionViewState session,
+  ) async {
+    if (!session.isLoggedIn) {
+      final loggedIn = await _openLoginPage(context);
+      if (!loggedIn || !context.mounted) {
+        return;
+      }
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(
+          name: ComposerUnusedImageManagementPage.routeName,
+        ),
+        builder: (_) => const ComposerUnusedImageManagementPage(),
       ),
     );
   }

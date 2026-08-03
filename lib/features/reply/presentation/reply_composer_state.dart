@@ -1,6 +1,7 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -75,6 +76,7 @@ class ReplyComposerState extends ComposerStateBase {
     this.preparationFailure,
     super.failure,
     super.imageUploadFailure,
+    super.draftAttachmentVerification,
   });
 
   factory ReplyComposerState.initial({
@@ -93,6 +95,8 @@ class ReplyComposerState extends ComposerStateBase {
     ComposerPendingAttachmentNotice? pendingAttachmentNotice,
     ReplyPreparation? preparation,
     ComposerOperationFailure? preparationFailure,
+    ComposerDraftAttachmentVerification draftAttachmentVerification =
+        const ComposerDraftAttachmentVerification.notRequired(),
   }) {
     return ReplyComposerState(
       target: target,
@@ -111,6 +115,7 @@ class ReplyComposerState extends ComposerStateBase {
       pendingAttachmentNotice: pendingAttachmentNotice,
       preparation: preparation,
       preparationFailure: preparationFailure,
+      draftAttachmentVerification: draftAttachmentVerification,
     );
   }
 
@@ -149,6 +154,7 @@ class ReplyComposerState extends ComposerStateBase {
     ComposerOperationFailure? preparationFailure,
     ComposerFailure? failure,
     ComposerImageUploadFailure? imageUploadFailure,
+    ComposerDraftAttachmentVerification? draftAttachmentVerification,
     bool clearPreparation = false,
     bool clearPreparationFailure = false,
     bool clearFailure = false,
@@ -184,6 +190,8 @@ class ReplyComposerState extends ComposerStateBase {
       imageUploadFailure: clearImageUploadFailure
           ? null
           : imageUploadFailure ?? this.imageUploadFailure,
+      draftAttachmentVerification:
+          draftAttachmentVerification ?? this.draftAttachmentVerification,
     );
   }
 }

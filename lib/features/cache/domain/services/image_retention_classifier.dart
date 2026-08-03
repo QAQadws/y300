@@ -31,6 +31,7 @@ abstract final class ImageRetentionClassifier {
       case ImageCacheRole.blogInline:
       case ImageCacheRole.comicPage:
       case ImageCacheRole.novelInline:
+      case ImageCacheRole.composerUnusedAttachment:
         return ImageRetentionClass.ephemeral;
     }
   }

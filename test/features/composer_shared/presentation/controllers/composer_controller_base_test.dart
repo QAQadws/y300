@@ -4,15 +4,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
+import 'package:y300/features/composer_shared/data/services/composer_upload_cache_storage.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_verification_service.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_controller_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
@@ -211,122 +214,214 @@ void main() {
       expect(saved?.imageAttachments.single.aid, '789');
     });
 
-    test('local attachment delegate applies without mutating root message', () async {
-      final args = _TestArgs(fid: '33', tid: '572063');
-      final container = _buildContainer(
-        imagePicker: _FakeImagePicker(
-          images: const [
-            ComposerPickedImage(
-              path: '/gallery/local.jpg',
-              fileName: 'local.jpg',
-              mimeType: 'image/jpeg',
-              originalIndex: 0,
-            ),
-          ],
-        ),
-        imageUploadCoordinator: _FakeUploadCoordinator(
-          events: [
-            const ComposerImageUploadEvent.started(
-              localId: '',
-              current: 1,
-              total: 1,
-            ),
-            ComposerImageUploadEvent.uploaded(
-              localId: '',
-              current: 1,
-              total: 1,
-              uploadedImage: ComposerUploadedImage(
-                localId: '',
-                aid: '792',
-                uploadedAt: DateTime.utc(2026, 8, 2),
+    test(
+      'verification retry preserves attachments uploaded while in flight',
+      () async {
+        final drafts = _MemoryDraftRepository();
+        final args = _TestArgs(fid: '33', tid: '572063');
+        final originalAttachment = ComposerImageAttachment(
+          localId: 'restored-12',
+          localPath: '/gallery/12.jpg',
+          fileName: '12.jpg',
+          mimeType: 'image/jpeg',
+          order: 0,
+          status: ComposerImageAttachmentStatus.uploaded,
+          aid: '12',
+          uploadedAt: DateTime.utc(2026, 8, 3),
+        );
+        await drafts.saveDraft(
+          ComposerDraftSnapshot(
+            identity: args.identity,
+            message: '[attach]12[/attach]',
+            useSignature: true,
+            updatedAt: DateTime.utc(2026, 8, 3),
+            imageAttachments: [originalAttachment],
+          ),
+        );
+        final verification = _ControllableDraftVerificationService();
+        final coordinator = _ControllableUploadCoordinator();
+        addTearDown(coordinator.close);
+        final container = _buildContainer(
+          draftRepository: drafts,
+          verificationService: verification,
+          imagePicker: _FakeImagePicker(
+            images: const [
+              ComposerPickedImage(
+                path: '/gallery/new.jpg',
+                fileName: 'new.jpg',
+                mimeType: 'image/jpeg',
+                originalIndex: 0,
               ),
-            ),
-            const ComposerImageUploadEvent.completed(total: 1),
-          ],
-        ),
-      );
-      addTearDown(container.dispose);
-      _keepAlive(container, args);
-      await container.read(_testControllerProvider(args).future);
-      final controller = container.read(_testControllerProvider(args).notifier);
-      controller.updateMessage('根正文');
-      List<String>? insertedCodes;
+            ],
+          ),
+          imageUploadCoordinator: coordinator,
+        );
+        addTearDown(container.dispose);
+        _keepAlive(container, args);
+        await container.read(_testControllerProvider(args).future);
+        final controller = container.read(
+          _testControllerProvider(args).notifier,
+        );
 
-      await controller.pickImages(
-        insertionAnchor: ComposerInsertionAnchor(
-          // Local revisions are intentionally unrelated to the root tracker.
-          baseRevision: 100,
-          selection: const ComposerSelection(start: 1, end: 1),
-          mode: ComposerEditorMode.quill,
-          localAttachmentInsertion: (codes) {
-            insertedCodes = codes;
-            return ComposerLocalAttachmentInsertionResult.applied;
-          },
-        ),
-      );
-      await _drain();
-
-      final state = container.read(_testControllerProvider(args)).value!;
-      expect(insertedCodes, ['[attach]792[/attach]']);
-      expect(state.message, '根正文');
-      expect(state.pendingAttachmentAids, isEmpty);
-      expect(state.lastMessageMutation, isNull);
-    });
-
-    test('stale local attachment delegate moves uploaded aid to pending', () async {
-      final args = _TestArgs(fid: '33', tid: '572063');
-      final container = _buildContainer(
-        imagePicker: _FakeImagePicker(
-          images: const [
-            ComposerPickedImage(
-              path: '/gallery/stale.jpg',
-              fileName: 'stale.jpg',
-              mimeType: 'image/jpeg',
-              originalIndex: 0,
+        final retry = controller.retryDraftAttachmentVerification();
+        await _drain();
+        final beforeUpload = controller.latestState!;
+        await controller.pickImages(
+          insertionAnchor: ComposerInsertionAnchor(
+            baseRevision: beforeUpload.messageRevision,
+            selection: ComposerSelection(
+              start: beforeUpload.message.length,
+              end: beforeUpload.message.length,
             ),
-          ],
-        ),
-        imageUploadCoordinator: _FakeUploadCoordinator(
-          events: [
-            const ComposerImageUploadEvent.started(
-              localId: '',
-              current: 1,
-              total: 1,
-            ),
-            ComposerImageUploadEvent.uploaded(
-              localId: '',
-              current: 1,
-              total: 1,
-              uploadedImage: ComposerUploadedImage(
-                localId: '',
-                aid: '793',
-                uploadedAt: DateTime.utc(2026, 8, 2),
+            mode: ComposerEditorMode.source,
+          ),
+        );
+        coordinator.emitStarted();
+        coordinator.emitUploaded(aid: '99');
+        coordinator.emitCompleted();
+        await _drain();
+
+        verification.completeRetryWithInvalidAid('12');
+        await retry;
+
+        final state = container.read(_testControllerProvider(args)).value!;
+        expect(state.message, contains('[attach]12[/attach]'));
+        expect(state.message, contains('[attach]99[/attach]'));
+        expect(state.imageAttachments.map((item) => item.aid), <String?>['99']);
+        expect(state.draftAttachmentVerification.checkedAids, <String>{'12'});
+        expect(
+          (await drafts.loadDraft(args.identity))?.imageAttachments.single.aid,
+          '99',
+        );
+      },
+    );
+
+    test(
+      'local attachment delegate applies without mutating root message',
+      () async {
+        final args = _TestArgs(fid: '33', tid: '572063');
+        final container = _buildContainer(
+          imagePicker: _FakeImagePicker(
+            images: const [
+              ComposerPickedImage(
+                path: '/gallery/local.jpg',
+                fileName: 'local.jpg',
+                mimeType: 'image/jpeg',
+                originalIndex: 0,
               ),
-            ),
-            const ComposerImageUploadEvent.completed(total: 1),
-          ],
-        ),
-      );
-      addTearDown(container.dispose);
-      _keepAlive(container, args);
-      await container.read(_testControllerProvider(args).future);
-      final controller = container.read(_testControllerProvider(args).notifier);
+            ],
+          ),
+          imageUploadCoordinator: _FakeUploadCoordinator(
+            events: [
+              const ComposerImageUploadEvent.started(
+                localId: '',
+                current: 1,
+                total: 1,
+              ),
+              ComposerImageUploadEvent.uploaded(
+                localId: '',
+                current: 1,
+                total: 1,
+                uploadedImage: ComposerUploadedImage(
+                  localId: '',
+                  aid: '792',
+                  uploadedAt: DateTime.utc(2026, 8, 2),
+                ),
+              ),
+              const ComposerImageUploadEvent.completed(total: 1),
+            ],
+          ),
+        );
+        addTearDown(container.dispose);
+        _keepAlive(container, args);
+        await container.read(_testControllerProvider(args).future);
+        final controller = container.read(
+          _testControllerProvider(args).notifier,
+        );
+        controller.updateMessage('根正文');
+        List<String>? insertedCodes;
 
-      await controller.pickImages(
-        insertionAnchor: ComposerInsertionAnchor(
-          baseRevision: 0,
-          selection: const ComposerSelection(start: 0, end: 0),
-          mode: ComposerEditorMode.quill,
-          localAttachmentInsertion: (_) =>
-              ComposerLocalAttachmentInsertionResult.stale,
-        ),
-      );
-      await _drain();
+        await controller.pickImages(
+          insertionAnchor: ComposerInsertionAnchor(
+            // Local revisions are intentionally unrelated to the root tracker.
+            baseRevision: 100,
+            selection: const ComposerSelection(start: 1, end: 1),
+            mode: ComposerEditorMode.quill,
+            localAttachmentInsertion: (codes) {
+              insertedCodes = codes;
+              return ComposerLocalAttachmentInsertionResult.applied;
+            },
+          ),
+        );
+        await _drain();
 
-      final state = container.read(_testControllerProvider(args)).value!;
-      expect(state.message, isEmpty);
-      expect(state.pendingAttachmentAids, ['793']);
-    });
+        final state = container.read(_testControllerProvider(args)).value!;
+        expect(insertedCodes, ['[attach]792[/attach]']);
+        expect(state.message, '根正文');
+        expect(state.pendingAttachmentAids, isEmpty);
+        expect(state.lastMessageMutation, isNull);
+      },
+    );
+
+    test(
+      'stale local attachment delegate moves uploaded aid to pending',
+      () async {
+        final args = _TestArgs(fid: '33', tid: '572063');
+        final container = _buildContainer(
+          imagePicker: _FakeImagePicker(
+            images: const [
+              ComposerPickedImage(
+                path: '/gallery/stale.jpg',
+                fileName: 'stale.jpg',
+                mimeType: 'image/jpeg',
+                originalIndex: 0,
+              ),
+            ],
+          ),
+          imageUploadCoordinator: _FakeUploadCoordinator(
+            events: [
+              const ComposerImageUploadEvent.started(
+                localId: '',
+                current: 1,
+                total: 1,
+              ),
+              ComposerImageUploadEvent.uploaded(
+                localId: '',
+                current: 1,
+                total: 1,
+                uploadedImage: ComposerUploadedImage(
+                  localId: '',
+                  aid: '793',
+                  uploadedAt: DateTime.utc(2026, 8, 2),
+                ),
+              ),
+              const ComposerImageUploadEvent.completed(total: 1),
+            ],
+          ),
+        );
+        addTearDown(container.dispose);
+        _keepAlive(container, args);
+        await container.read(_testControllerProvider(args).future);
+        final controller = container.read(
+          _testControllerProvider(args).notifier,
+        );
+
+        await controller.pickImages(
+          insertionAnchor: ComposerInsertionAnchor(
+            baseRevision: 0,
+            selection: const ComposerSelection(start: 0, end: 0),
+            mode: ComposerEditorMode.quill,
+            localAttachmentInsertion: (_) =>
+                ComposerLocalAttachmentInsertionResult.stale,
+          ),
+        );
+        await _drain();
+
+        final state = container.read(_testControllerProvider(args)).value!;
+        expect(state.message, isEmpty);
+        expect(state.pendingAttachmentAids, ['793']);
+      },
+    );
 
     test(
       'upload without an anchor stays pending until a new position is chosen',
@@ -490,6 +585,72 @@ void main() {
       expect(state.imageAttachments, isEmpty);
       expect(await draftRepository.loadDraft(args.identity), isNull);
     });
+
+    test(
+      'successful submit cleans an unpersisted managed image copy',
+      () async {
+        final cacheStorage = _RecordingUploadCacheStorage();
+        final coordinator = _FakeUploadCoordinator(
+          events: [
+            const ComposerImageUploadEvent.started(
+              localId: '',
+              current: 1,
+              total: 1,
+            ),
+            ComposerImageUploadEvent.uploaded(
+              localId: '',
+              current: 1,
+              total: 1,
+              uploadedImage: ComposerUploadedImage(
+                localId: '',
+                aid: '789',
+                uploadedAt: DateTime.utc(2026, 8, 3),
+                cachePath: '/cache/reply_uploads/local/preview.jpg',
+              ),
+            ),
+            const ComposerImageUploadEvent.completed(total: 1),
+          ],
+        );
+        final args = _TestArgs(fid: '33', tid: '572063');
+        final container = _buildContainer(
+          cacheStorage: cacheStorage,
+          imagePicker: _FakeImagePicker(
+            images: const [
+              ComposerPickedImage(
+                path: '/gallery/photo.jpg',
+                fileName: 'photo.jpg',
+                mimeType: 'image/jpeg',
+                originalIndex: 0,
+              ),
+            ],
+          ),
+          imageUploadCoordinator: coordinator,
+        );
+        addTearDown(container.dispose);
+        _keepAlive(container, args);
+        await container.read(_testControllerProvider(args).future);
+        final controller = container.read(
+          _testControllerProvider(args).notifier,
+        );
+
+        await controller.pickImages(
+          insertionAnchor: const ComposerInsertionAnchor(
+            baseRevision: 0,
+            selection: ComposerSelection(start: 0, end: 0),
+            mode: ComposerEditorMode.source,
+          ),
+        );
+        await _drain();
+        controller.outcome = const ComposerSubmissionOutcome.success();
+
+        final result = await controller.submit();
+
+        expect(result.sent, isTrue);
+        expect(cacheStorage.deletedPaths, <String>[
+          '/cache/reply_uploads/local/preview.jpg',
+        ]);
+      },
+    );
 
     test(
       'failed submit preserves draft and writes structured failure',

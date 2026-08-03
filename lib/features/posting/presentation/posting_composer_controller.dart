@@ -130,6 +130,7 @@ class PostingComposerController
       clearImageUploadFailure: patch.clearImageUploadFailure,
       clearLastMessageMutation: patch.clearLastMessageMutation,
       clearPendingAttachmentNotice: patch.clearPendingAttachmentNotice,
+      draftAttachmentVerification: patch.draftAttachmentVerification,
     );
   }
 
@@ -507,6 +508,7 @@ class PostingComposerController
       smileyOff: state.smileyOff,
       parseUrlOff: state.parseUrlOff,
       imageAttachments: state.imageAttachments,
+      additionalValidAttachmentAids: uploadedAids,
       tags: state.tags,
       special: state.special,
       poll: state.poll,

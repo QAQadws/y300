@@ -1,6 +1,7 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
 
 /// 基类向子类下发"状态增量"的值对象。
 ///
@@ -31,6 +32,7 @@ class ComposerStatePatch {
     this.clearImageUploadFailure = false,
     this.clearLastMessageMutation = false,
     this.clearPendingAttachmentNotice = false,
+    this.draftAttachmentVerification,
   });
 
   final String? message;
@@ -51,4 +53,5 @@ class ComposerStatePatch {
   final bool clearImageUploadFailure;
   final bool clearLastMessageMutation;
   final bool clearPendingAttachmentNotice;
+  final ComposerDraftAttachmentVerification? draftAttachmentVerification;
 }

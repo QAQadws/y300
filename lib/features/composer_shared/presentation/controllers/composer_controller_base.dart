@@ -3,15 +3,18 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
+import 'package:y300/features/composer_shared/data/services/composer_upload_cache_storage.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_sanitizer.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_verification_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_message_insertion_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_message_revision_tracker.dart';
@@ -43,9 +46,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   /// The business context used for structured submission failures.
   ComposerKind get composerKind => ComposerKind.reply;
 
-  /// Reply/posting keep the historical expiry sanitation. Editors whose
-  /// server text must remain byte-for-byte user-owned can opt out and surface
-  /// dangling references for explicit confirmation instead.
+  /// Reply/posting apply managed-copy retention sanitation before submit.
+  /// Editors whose server text must remain byte-for-byte user-owned can opt
+  /// out and surface dangling references for explicit confirmation instead.
   bool get sanitizeAttachmentsBeforeSubmit => true;
 
   // ── 子类必须实现 ─────────────────────────────────────────────
@@ -99,11 +102,15 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   ComposerImagePicker? _imagePicker;
   ComposerImageUploadCoordinator? _imageUploadCoordinator;
   ComposerAttachBbCodeService? _attachBbCodeService;
+  ComposerDraftAttachmentVerificationService? _draftVerificationService;
+  ComposerUploadCacheStorage? _uploadCacheStorage;
   final ComposerDraftAttachmentSanitizer _draftAttachmentSanitizer =
       const ComposerDraftAttachmentSanitizer();
   TState? _latestState;
   StreamSubscription<ComposerImageUploadEvent>? _imageUploadSubscription;
   int _uploadGeneration = 0;
+  int _draftVerificationGeneration = 0;
+  bool _draftVerificationInFlight = false;
   final ComposerMessageInsertionService _messageInsertionService =
       const ComposerMessageInsertionService();
   final ComposerMessageRevisionTracker _messageRevisionTracker =
@@ -122,10 +129,15 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     _imagePicker = ref.read(composerImagePickerProvider);
     _imageUploadCoordinator = ref.read(composerImageUploadCoordinatorProvider);
     _attachBbCodeService = ref.read(composerAttachBbCodeServiceProvider);
+    _draftVerificationService = ref.read(
+      composerDraftAttachmentVerificationServiceProvider,
+    );
+    _uploadCacheStorage = ref.read(composerUploadCacheStorageProvider);
 
     ref.onDispose(() {
       _saveTimer?.cancel();
       _uploadGeneration += 1;
+      _draftVerificationGeneration += 1;
       _imageUploadCoordinator?.cancel();
       unawaited(_imageUploadSubscription?.cancel());
       _imageUploadSubscription = null;
@@ -140,22 +152,149 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     final snapshot = draftsEnabled && identity != null
         ? await _draftRepository!.loadDraft(identity)
         : null;
+    var restored = restoreDraft(
+      snapshot != null && !snapshot.isEmpty ? snapshot : null,
+    );
+    var verification = const ComposerDraftAttachmentVerification.notRequired();
+    if (restored != null) {
+      final beforeVerification = restored;
+      final result = await _verifyDraftSnapshot(restored);
+      restored = result.draft;
+      verification = result.verification;
+      if (verification.verified &&
+          !identical(beforeVerification, result.draft)) {
+        await _draftRepository!.saveDraft(result.draft);
+      }
+    }
     final preferences = await ref.read(
       composerPreferencesControllerProvider.future,
     );
     final initial = await buildInitialState(
-      restoredDraft: restoreDraft(
-        snapshot != null && !snapshot.isEmpty ? snapshot : null,
-      ),
+      restoredDraft: restored,
       preferences: preferences,
     );
-    _latestState = initial;
-    _messageRevisionTracker.reset(
-      source: initial.message,
-      revision: initial.messageRevision,
+    final effectiveInitial = applyPatch(
+      initial,
+      ComposerStatePatch(draftAttachmentVerification: verification),
     );
-    onAfterBuild(initial);
-    return initial;
+    _latestState = effectiveInitial;
+    _messageRevisionTracker.reset(
+      source: effectiveInitial.message,
+      revision: effectiveInitial.messageRevision,
+    );
+    onAfterBuild(effectiveInitial);
+    return effectiveInitial;
+  }
+
+  Future<ComposerDraftAttachmentVerificationResult> _verifyDraftSnapshot(
+    ComposerDraftSnapshot draft,
+  ) async {
+    try {
+      return await _draftVerificationService!.verify(draft);
+    } catch (error) {
+      return ComposerDraftAttachmentVerificationResult(
+        draft: draft,
+        verification: ComposerDraftAttachmentVerification.failed(
+          unverifiedAids: _attachmentAidsForDraft(draft),
+          failureDetail: error.toString(),
+        ),
+      );
+    }
+  }
+
+  Set<String> _attachmentAidsForDraft(ComposerDraftSnapshot draft) {
+    return <String>{
+      ...attachBbCodeService.extractAttachAids(draft.message),
+      for (final attachment in draft.imageAttachments)
+        if (attachment.aid?.trim() case final aid?)
+          if (aid.isNotEmpty) aid,
+    };
+  }
+
+  Future<void> retryDraftAttachmentVerification() async {
+    final current = state.value ?? _latestState;
+    if (current == null ||
+        !draftsEnabled ||
+        _draftVerificationInFlight ||
+        !current.draftAttachmentVerification.failed) {
+      return;
+    }
+    _draftVerificationInFlight = true;
+    final generation = ++_draftVerificationGeneration;
+    final verificationDraft = draftSnapshotFor(current);
+    try {
+      final result = await _verifyDraftSnapshot(verificationDraft);
+      if (generation != _draftVerificationGeneration) {
+        return;
+      }
+      final latest = state.value ?? _latestState;
+      if (latest == null) {
+        return;
+      }
+      final next = applyPatch(
+        latest,
+        ComposerStatePatch(
+          imageAttachments: _mergeVerifiedDraftAttachments(
+            verificationDraft: verificationDraft,
+            verifiedDraft: result.draft,
+            latestAttachments: latest.imageAttachments,
+            verification: result.verification,
+          ),
+          draftAttachmentVerification: result.verification,
+        ),
+      );
+      _setDataState(next);
+      await _saveSnapshot(next);
+    } finally {
+      if (generation == _draftVerificationGeneration) {
+        _draftVerificationInFlight = false;
+      }
+    }
+  }
+
+  List<ComposerImageAttachment> _mergeVerifiedDraftAttachments({
+    required ComposerDraftSnapshot verificationDraft,
+    required ComposerDraftSnapshot verifiedDraft,
+    required List<ComposerImageAttachment> latestAttachments,
+    required ComposerDraftAttachmentVerification verification,
+  }) {
+    if (!verification.verified) {
+      return latestAttachments;
+    }
+    final verifiedByLocalId = <String, ComposerImageAttachment>{
+      for (final attachment in verifiedDraft.imageAttachments)
+        attachment.localId: attachment,
+    };
+    final originalByLocalId = <String, ComposerImageAttachment>{
+      for (final attachment in verificationDraft.imageAttachments)
+        attachment.localId: attachment,
+    };
+    final invalidAids = verification.checkedAids.difference(
+      verification.verifiedImagesByAid.keys.toSet(),
+    );
+    return <ComposerImageAttachment>[
+      for (final latest in latestAttachments)
+        if (!invalidAids.contains(latest.aid?.trim()))
+          _mergeVerifiedCachePath(
+            latest: latest,
+            original: originalByLocalId[latest.localId],
+            verified: verifiedByLocalId[latest.localId],
+          ),
+    ];
+  }
+
+  ComposerImageAttachment _mergeVerifiedCachePath({
+    required ComposerImageAttachment latest,
+    required ComposerImageAttachment? original,
+    required ComposerImageAttachment? verified,
+  }) {
+    if (original == null ||
+        verified == null ||
+        original.aid?.trim() != latest.aid?.trim() ||
+        original.cachePath != latest.cachePath) {
+      return latest;
+    }
+    return latest.copyWith(cachePath: verified.cachePath);
   }
 
   /// 子类钩子：基类构造完成、`_latestState` 已经写入之后调用，
@@ -272,12 +411,20 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   Future<void> discardDraft() async {
     _saveTimer?.cancel();
     _saveTimer = null;
+    final attachments = List<ComposerImageAttachment>.of(
+      _latestState?.imageAttachments ?? const <ComposerImageAttachment>[],
+    );
     final repository = _draftRepository;
     final identity = draftIdentity;
-    if (repository == null || !draftsEnabled || identity == null) {
-      return;
+    if (repository != null && draftsEnabled && identity != null) {
+      try {
+        await _enqueueDraftWrite(() => repository.deleteDraft(identity));
+      } catch (_) {
+        // A confirmed server submission must not be reported as failed only
+        // because best-effort local draft cleanup could not complete.
+      }
     }
-    await _enqueueDraftWrite(() => repository.deleteDraft(identity));
+    await _deleteOwnedAttachmentCopiesBestEffort(attachments);
   }
 
   Future<void> resetDraft() async {
@@ -311,6 +458,8 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           imageUploadTotal: 0,
           clearFailure: true,
           clearImageUploadFailure: true,
+          draftAttachmentVerification:
+              const ComposerDraftAttachmentVerification.notRequired(),
         ),
       ),
     );
@@ -329,6 +478,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
         _scheduleDraftSave();
       }
     }
+    await _deleteOwnedAttachmentCopiesBestEffort(current.imageAttachments);
   }
 
   void _scheduleDraftSave() {
@@ -550,6 +700,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
                 status: ComposerImageAttachmentStatus.uploaded,
                 aid: uploadedImage.aid,
                 uploadedAt: uploadedImage.uploadedAt,
+                cachePath: uploadedImage.cachePath,
                 clearFailureCode: true,
               ),
               isUploadingImages: true,
@@ -784,23 +935,21 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     DateTime? uploadedAt,
     ComposerImageUploadFailureCode? failureCode,
     bool clearFailureCode = false,
+    Object? cachePath = _unsetControllerValue,
   }) {
     return [
       for (final attachment in attachments)
         if (attachment.localId == localId)
-          ComposerImageAttachment(
-            localId: attachment.localId,
-            localPath: attachment.localPath,
-            fileName: attachment.fileName,
-            mimeType: attachment.mimeType,
-            order: attachment.order,
+          attachment.copyWith(
             status: status,
             aid: aid ?? attachment.aid,
             uploadedAt: uploadedAt ?? attachment.uploadedAt,
             failureCode: clearFailureCode
                 ? null
                 : failureCode ?? attachment.failureCode,
-            cachePath: attachment.cachePath,
+            cachePath: identical(cachePath, _unsetControllerValue)
+                ? attachment.cachePath
+                : cachePath,
           )
         else
           attachment,
@@ -856,6 +1005,8 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           clearLastMessageMutation: true,
           clearPendingAttachmentNotice: true,
           clearFailure: true,
+          draftAttachmentVerification:
+              const ComposerDraftAttachmentVerification.notRequired(),
         ),
       );
       _setDataState(resetAfterSuccess(reset));
@@ -907,8 +1058,14 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
         clearImageUploadFailure: true,
       ),
     );
+    // Persist the pre-sanitized snapshot so the repository still receives the
+    // old cachePath and can safely delete that composer-owned file before it
+    // writes the sanitized attachment metadata.
+    await _saveSnapshot(current);
+    await _deleteOwnedAttachmentCopiesBestEffort(
+      result.cacheCleanupAttachments,
+    );
     _setDataState(sanitized);
-    await _saveSnapshot(sanitized);
     return sanitized;
   }
 
@@ -919,6 +1076,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     final validAids = <String>{
       for (final attachment in current.imageAttachments)
         if (attachment.canEnterSubmitPayload) attachment.aid!.trim(),
+      ...current.draftAttachmentVerification.verifiedImagesByAid.keys,
     };
     if (validAids.isEmpty) {
       return const <String>[];
@@ -942,6 +1100,23 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     return _messageRevisionTracker.revision;
   }
 
+  Future<void> _deleteOwnedAttachmentCopiesBestEffort(
+    Iterable<ComposerImageAttachment> attachments,
+  ) async {
+    final storage = _uploadCacheStorage;
+    if (storage == null) {
+      return;
+    }
+    for (final attachment in attachments) {
+      try {
+        await storage.deleteCachePathIfOwned(attachment.cachePath);
+      } catch (_) {
+        // The cache is reproducible. Cleanup failure must not block editing,
+        // resetting, or a server-confirmed submission.
+      }
+    }
+  }
+
   // ── 内部 ─────────────────────────────────────────────────────
   /// 子类直接写 state 的入口（被业务专属字段更新使用，例如 reply 的 preparation）。
   ///
@@ -954,6 +1129,8 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
   void _setDataState(TState value) => setStateValue(value);
 }
+
+const Object _unsetControllerValue = Object();
 
 class _ComposerUploadBatch {
   const _ComposerUploadBatch({required this.anchor, required this.localIds});

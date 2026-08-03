@@ -97,6 +97,7 @@ class ReplyComposerController
       clearImageUploadFailure: patch.clearImageUploadFailure,
       clearLastMessageMutation: patch.clearLastMessageMutation,
       clearPendingAttachmentNotice: patch.clearPendingAttachmentNotice,
+      draftAttachmentVerification: patch.draftAttachmentVerification,
     );
   }
 

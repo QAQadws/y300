@@ -11,10 +11,12 @@ import 'package:y300/features/composer_shared/data/services/composer_image_picke
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_verification_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/posting/data/repositories/new_thread_repository.dart';
@@ -363,6 +365,60 @@ void main() {
     expect(find.text('已恢复未发送的草稿，请注意已恢复的主题标签'), findsOneWidget);
     expect(find.text('已恢复未发送草稿'), findsNothing);
   });
+
+  testWidgets(
+    'PostingComposerPage reports invalid draft images once via SnackBar',
+    (tester) async {
+      final draftRepository = _MemoryDraftRepository();
+      await draftRepository.saveDraft(
+        ComposerDraftSnapshot(
+          identity: const ComposerDraftIdentity.newThread(fid: '33'),
+          subject: '草稿标题',
+          message: '正文\n[attach]123456[/attach]',
+          useSignature: true,
+          updatedAt: DateTime.utc(2026, 8, 3),
+          imageAttachments: [
+            ComposerImageAttachment(
+              localId: 'image-1',
+              localPath: 'missing.jpg',
+              fileName: 'missing.jpg',
+              mimeType: 'image/jpeg',
+              order: 0,
+              status: ComposerImageAttachmentStatus.uploaded,
+              aid: '123456',
+              uploadedAt: DateTime.utc(2026, 8, 3),
+            ),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(
+        _buildPage(
+          draftRepository: draftRepository,
+          draftVerificationService:
+              const _InvalidPostingDraftAttachmentVerificationService(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('posting-composer-invalid-draft-images-snackbar')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('posting-composer-invalid-draft-images')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const Key('posting-composer-source-button')));
+      await tester.pump();
+      expect(
+        find.byKey(const Key('posting-composer-invalid-draft-images-snackbar')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
     'PostingComposerPage resets persisted title and message after confirmation',

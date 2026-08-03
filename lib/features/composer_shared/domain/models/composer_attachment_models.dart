@@ -51,7 +51,41 @@ class ComposerImageAttachment {
     }
     return localPath;
   }
+
+  ComposerImageAttachment copyWith({
+    String? localId,
+    String? localPath,
+    String? fileName,
+    String? mimeType,
+    int? order,
+    ComposerImageAttachmentStatus? status,
+    Object? aid = _unsetAttachmentValue,
+    Object? uploadedAt = _unsetAttachmentValue,
+    Object? failureCode = _unsetAttachmentValue,
+    Object? cachePath = _unsetAttachmentValue,
+  }) {
+    return ComposerImageAttachment(
+      localId: localId ?? this.localId,
+      localPath: localPath ?? this.localPath,
+      fileName: fileName ?? this.fileName,
+      mimeType: mimeType ?? this.mimeType,
+      order: order ?? this.order,
+      status: status ?? this.status,
+      aid: identical(aid, _unsetAttachmentValue) ? this.aid : aid as String?,
+      uploadedAt: identical(uploadedAt, _unsetAttachmentValue)
+          ? this.uploadedAt
+          : uploadedAt as DateTime?,
+      failureCode: identical(failureCode, _unsetAttachmentValue)
+          ? this.failureCode
+          : failureCode as ComposerImageUploadFailureCode?,
+      cachePath: identical(cachePath, _unsetAttachmentValue)
+          ? this.cachePath
+          : cachePath as String?,
+    );
+  }
 }
+
+const Object _unsetAttachmentValue = Object();
 
 class ComposerAttachRemain {
   const ComposerAttachRemain({required this.size, required this.count});
@@ -136,9 +170,11 @@ class ComposerUploadedImage {
     required this.localId,
     required this.aid,
     required this.uploadedAt,
+    this.cachePath,
   });
 
   final String localId;
   final String aid;
   final DateTime uploadedAt;
+  final String? cachePath;
 }

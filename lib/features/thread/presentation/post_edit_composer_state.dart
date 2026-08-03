@@ -1,6 +1,7 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_base.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
@@ -49,6 +50,7 @@ final class PostEditComposerState extends ComposerStateBase {
     super.pendingAttachmentNotice,
     super.failure,
     super.imageUploadFailure,
+    super.draftAttachmentVerification,
   });
 
   factory PostEditComposerState.initial({
@@ -195,6 +197,7 @@ final class PostEditComposerState extends ComposerStateBase {
     ComposerPendingAttachmentNotice? pendingAttachmentNotice,
     ComposerFailure? failure,
     ComposerImageUploadFailure? imageUploadFailure,
+    ComposerDraftAttachmentVerification? draftAttachmentVerification,
     PostEditFormSnapshot? snapshot,
     String? baselineSubject,
     String? baselineMessage,
@@ -248,6 +251,8 @@ final class PostEditComposerState extends ComposerStateBase {
       imageUploadFailure: clearImageUploadFailure
           ? null
           : imageUploadFailure ?? this.imageUploadFailure,
+      draftAttachmentVerification:
+          draftAttachmentVerification ?? this.draftAttachmentVerification,
       webReturnVerificationState:
           webReturnVerificationState ?? this.webReturnVerificationState,
       pendingConflict: clearPendingConflict

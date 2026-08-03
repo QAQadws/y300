@@ -11,6 +11,8 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_unused_image_management_controller.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
@@ -71,6 +73,8 @@ void main() {
     expect(find.text('登录'), findsOneWidget);
     expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
     expect(find.text('我的资料'), findsOneWidget);
+    expect(find.byKey(const Key('more-unused-images-entry')), findsOneWidget);
+    expect(find.text('未使用图片管理'), findsOneWidget);
     expect(find.byKey(const Key('more-forum-mode-entry')), findsOneWidget);
     expect(find.text('论坛显示模式'), findsOneWidget);
     expect(find.text('当前：WebView 模式'), findsOneWidget);
@@ -298,6 +302,91 @@ void main() {
     // 登录检测/校验逻辑已由 resolver 单测覆盖。
 
     expect(routeObserver.pushedNames, contains(LoginWebViewPage.routeName));
+  });
+
+  testWidgets(
+    'unused images entry resumes navigation after WebView login succeeds',
+    (tester) async {
+      final routeObserver = _RouteNameObserver();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(
+              _FakeAuthRepository(isLoggedIn: false),
+            ),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(),
+            ),
+            appAppearanceControllerProvider.overrideWith(
+              () => _FakeAppAppearanceController(),
+            ),
+            composerUnusedImageManagementControllerProvider.overrideWith(
+              _FakeUnusedImagesController.new,
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: const MorePage(),
+            navigatorObservers: [routeObserver],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('more-unused-images-entry')));
+      expect(routeObserver.pushedNames.last, LoginWebViewPage.routeName);
+
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop(true);
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        routeObserver.pushedNames,
+        contains(ComposerUnusedImageManagementPage.routeName),
+      );
+      expect(find.byType(ComposerUnusedImageManagementPage), findsOneWidget);
+    },
+  );
+
+  testWidgets('unused images entry stays on More after login is cancelled', (
+    tester,
+  ) async {
+    final routeObserver = _RouteNameObserver();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            _FakeAuthRepository(isLoggedIn: false),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+          composerUnusedImageManagementControllerProvider.overrideWith(
+            _FakeUnusedImagesController.new,
+          ),
+        ],
+        child: LocalizedTestApp(
+          home: const MorePage(),
+          navigatorObservers: [routeObserver],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('more-unused-images-entry')));
+    tester.state<NavigatorState>(find.byType(Navigator).first).pop(false);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MorePage), findsOneWidget);
+    expect(find.byType(ComposerUnusedImageManagementPage), findsNothing);
+    expect(
+      routeObserver.pushedNames
+          .where((name) => name == ComposerUnusedImageManagementPage.routeName)
+          .length,
+      0,
+    );
   });
 
   testWidgets('MorePage shows snackbar when forum mode save fails', (
@@ -535,6 +624,14 @@ class _RouteNameObserver extends NavigatorObserver {
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     pushedNames.add(route.settings.name);
     super.didPush(route, previousRoute);
+  }
+}
+
+class _FakeUnusedImagesController
+    extends ComposerUnusedImageManagementController {
+  @override
+  Future<ComposerUnusedImageManagementState> build() async {
+    return ComposerUnusedImageManagementState(images: const []);
   }
 }
 

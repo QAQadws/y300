@@ -1,10 +1,10 @@
-/// 已上传附件的过期策略：上传后超过一定时长视为过期。
+/// 已上传附件本地副本的过期策略。
 ///
-/// 站点端会在一段时间内把临时附件清理掉；本地草稿即便仍然引用 aid
-/// 也已经无意义。`maxAge` 默认 24 小时与现有 reply 行为保持一致。
+/// 远端 aid 是否有效由 Discuz unused-image catalog 决定；时间策略只清理
+/// composer 自己持有的本地副本，不能删除附件元数据或用户正文。
 class ComposerImageAttachmentExpiryPolicy {
   const ComposerImageAttachmentExpiryPolicy({
-    this.maxAge = const Duration(hours: 24),
+    this.maxAge = const Duration(days: 14),
   });
 
   final Duration maxAge;

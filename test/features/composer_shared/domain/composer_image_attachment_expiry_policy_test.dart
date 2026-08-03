@@ -5,16 +5,18 @@ void main() {
   group('ComposerImageAttachmentExpiryPolicy', () {
     const policy = ComposerImageAttachmentExpiryPolicy();
 
-    test('does not expire before 24 hours', () {
+    test('does not expire before 14 days', () {
       final uploadedAt = DateTime.utc(2026, 6, 8, 1);
-      final now = uploadedAt.add(const Duration(hours: 23, minutes: 59));
+      final now = uploadedAt.add(
+        const Duration(days: 13, hours: 23, minutes: 59),
+      );
 
       expect(policy.isExpired(uploadedAt: uploadedAt, now: now), isFalse);
     });
 
-    test('expires exactly at 24 hours', () {
+    test('expires exactly at 14 days', () {
       final uploadedAt = DateTime.utc(2026, 6, 8, 1);
-      final now = uploadedAt.add(const Duration(hours: 24));
+      final now = uploadedAt.add(const Duration(days: 14));
 
       expect(policy.isExpired(uploadedAt: uploadedAt, now: now), isTrue);
     });

@@ -109,4 +109,21 @@ abstract final class ForumImageCacheRequests {
       ),
     );
   }
+
+  static ImageCacheRequest composerUnusedAttachment({
+    required String aid,
+    required String url,
+  }) {
+    final normalizedAid = aid.trim().isEmpty ? 'unknown' : aid.trim();
+    return ImageCacheRequest(
+      cacheKey: ImageCacheKeys.composerUnusedAttachment(normalizedAid),
+      sourceUrl: url,
+      ownerType: ImageCacheOwnerType.composer,
+      ownerId: normalizedAid,
+      role: ImageCacheRole.composerUnusedAttachment,
+      retentionClass: ImageRetentionClassifier.defaultFor(
+        ImageCacheRole.composerUnusedAttachment,
+      ),
+    );
+  }
 }

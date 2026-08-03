@@ -20,6 +20,7 @@ class NewThreadDraftInput {
     required this.smileyOff,
     required this.parseUrlOff,
     this.imageAttachments = const <ComposerImageAttachment>[],
+    this.additionalValidAttachmentAids = const <String>[],
     this.tags = const <String>[],
     this.special = NewThreadSpecial.normal,
     this.poll,
@@ -36,6 +37,7 @@ class NewThreadDraftInput {
   final bool smileyOff;
   final bool parseUrlOff;
   final List<ComposerImageAttachment> imageAttachments;
+  final List<String> additionalValidAttachmentAids;
 
   // ── 扩展轴 1：tags ──────────────────────────────
   final List<String> tags;
@@ -146,6 +148,8 @@ class DefaultNewThreadPayloadBuilder implements NewThreadPayloadBuilder {
     final validAids = <String>{
       for (final attachment in input.imageAttachments)
         if (attachment.canEnterSubmitPayload) attachment.aid!.trim(),
+      for (final aid in input.additionalValidAttachmentAids)
+        if (aid.trim().isNotEmpty) aid.trim(),
     };
     if (validAids.isEmpty) {
       return const <String>[];

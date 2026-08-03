@@ -14,6 +14,7 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_stat
 import 'package:y300/features/composer_shared/presentation/widgets/composer_transient_feedback.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_error_summary.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
+import 'package:y300/features/composer_shared/presentation/services/composer_draft_attachment_preview_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
@@ -38,6 +39,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
   bool _didNotifyRestoredDraft = false;
   bool _allowPopWithoutConfirm = false;
   String? _lastAppliedStateMessage;
+  Object? _lastNotifiedDraftImageVerification;
   final ComposerUploadFeedbackTracker _uploadFeedbackTracker =
       ComposerUploadFeedbackTracker();
 
@@ -174,6 +176,7 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
               controller.updateMessage(value);
             },
             onRetryPrepare: controller.retryPreparePostReply,
+            onRetryDraftImages: controller.retryDraftAttachmentVerification,
             onImagePressed: (anchor) {
               if (state.pendingAttachmentAids.isNotEmpty) {
                 if (anchor == null) {
@@ -255,6 +258,13 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
 
   void _scheduleTransientFeedback(ReplyComposerState state) {
     final l10n = AppLocalizations.of(context);
+    final verification = state.draftAttachmentVerification;
+    final shouldNotifyInvalidDraftImages =
+        verification.invalidAidCount > 0 &&
+        !identical(_lastNotifiedDraftImageVerification, verification);
+    if (shouldNotifyInvalidDraftImages) {
+      _lastNotifiedDraftImageVerification = verification;
+    }
     final shouldNotifyRestoredDraft =
         state.restoredDraft && !_didNotifyRestoredDraft;
     if (shouldNotifyRestoredDraft) {
@@ -262,6 +272,8 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
     }
     final messages = <String>[
       if (shouldNotifyRestoredDraft) l10n.composerRestoredDraft,
+      if (shouldNotifyInvalidDraftImages)
+        l10n.composerDraftImagesInvalidated(verification.invalidAidCount),
       ..._uploadFeedbackTracker
           .update(state)
           .map(
@@ -275,7 +287,13 @@ class _ReplyComposerPageState extends ConsumerState<ReplyComposerPage> {
       if (!mounted) {
         return;
       }
-      showComposerSnackBar(context, messages.join('\n'));
+      showComposerSnackBar(
+        context,
+        messages.join('\n'),
+        snackBarKey: shouldNotifyInvalidDraftImages
+            ? const Key('reply-composer-invalid-draft-images-snackbar')
+            : null,
+      );
     });
   }
 
@@ -443,6 +461,7 @@ class _ReplyComposerBody extends StatelessWidget {
     required this.onStickerGroupChanged,
     required this.onMessageChanged,
     required this.onRetryPrepare,
+    required this.onRetryDraftImages,
     required this.onImagePressed,
   });
 
@@ -455,6 +474,7 @@ class _ReplyComposerBody extends StatelessWidget {
   final ValueChanged<String> onStickerGroupChanged;
   final ValueChanged<String> onMessageChanged;
   final VoidCallback onRetryPrepare;
+  final Future<void> Function() onRetryDraftImages;
   final ComposerImageInsertCallback onImagePressed;
 
   @override
@@ -472,6 +492,10 @@ class _ReplyComposerBody extends StatelessWidget {
       onMessageChanged: onMessageChanged,
       onImagePressed: onImagePressed,
       imageAttachments: state.imageAttachments,
+      attachmentResolver: ComposerDraftAttachmentPreviewResolver(
+        imageAttachments: state.imageAttachments,
+        verification: state.draftAttachmentVerification,
+      ),
       keyPrefix: 'reply-composer',
       hintText: AppLocalizations.of(context).replyMessageHint,
       messageRevision: state.messageRevision,
@@ -528,7 +552,23 @@ class _ReplyComposerBody extends StatelessWidget {
   }
 
   List<Widget> _buildLeadingFeedbackWidgets(BuildContext context) {
+    final verification = state.draftAttachmentVerification;
     return [
+      if (verification.failed) ...[
+        ComposerStatusBanner.error(
+          key: const Key('reply-composer-draft-image-verification-error'),
+          text: AppLocalizations.of(
+            context,
+          ).composerDraftImageVerificationFailed,
+          retryButtonKey: const Key(
+            'reply-composer-retry-draft-image-verification',
+          ),
+          onRetry: () {
+            unawaited(onRetryDraftImages());
+          },
+        ),
+        const SizedBox(height: 12),
+      ],
       if (state.pendingAttachmentNotice case final notice?) ...[
         ComposerStatusBanner.info(
           key: const Key('reply-composer-pending-attachment'),

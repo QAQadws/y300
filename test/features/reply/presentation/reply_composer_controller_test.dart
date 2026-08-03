@@ -9,11 +9,15 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_unused_image_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_verification_service.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reply/data/repositories/reply_repository.dart';
@@ -277,44 +281,58 @@ void main() {
       expect(await draftRepository.loadDraft(args.identity), isNull);
     });
 
-    test('submit sanitizes expired attachments before sending', () async {
-      final draftRepository = _MemoryReplyDraftRepository();
-      final replyRepository = _FakeReplyRepository();
-      final args = _threadArgs(tid: '572063');
-      await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
-          identity: args.identity,
-          message: '正文\n[attach]123456[/attach]',
-          useSignature: true,
-          updatedAt: DateTime.utc(2026, 6, 8),
-          imageAttachments: [
-            _uploadedAttachment(
-              localId: 'expired',
-              aid: '123456',
-              uploadedAt: DateTime.now().subtract(const Duration(hours: 24)),
-            ),
-          ],
-        ),
-      );
-      final container = _buildContainer(
-        draftRepository: draftRepository,
-        replyRepository: replyRepository,
-      );
-      addTearDown(container.dispose);
-      final subscription = _keepComposerAlive(container, args);
-      addTearDown(subscription.close);
-      await container.read(replyComposerControllerProvider(args).future);
+    test(
+      'submit keeps a remote-valid aid after local retention elapses',
+      () async {
+        final draftRepository = _MemoryReplyDraftRepository();
+        final replyRepository = _FakeReplyRepository();
+        final args = _threadArgs(tid: '572063');
+        await draftRepository.saveDraft(
+          ReplyDraftSnapshot(
+            identity: args.identity,
+            message: '正文\n[attach]123456[/attach]',
+            useSignature: true,
+            updatedAt: DateTime.utc(2026, 6, 8),
+            imageAttachments: [
+              _uploadedAttachment(
+                localId: 'expired',
+                aid: '123456',
+                uploadedAt: DateTime.now().subtract(const Duration(days: 15)),
+                cachePath: '/cache/expired.jpg',
+              ),
+            ],
+          ),
+        );
+        final container = _buildContainer(
+          draftRepository: draftRepository,
+          replyRepository: replyRepository,
+          draftVerificationService:
+              const _PassThroughDraftVerificationService(),
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepComposerAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(replyComposerControllerProvider(args).future);
 
-      final result = await container
-          .read(replyComposerControllerProvider(args).notifier)
-          .submit();
+        final result = await container
+            .read(replyComposerControllerProvider(args).notifier)
+            .submit();
 
-      expect(result.sent, isTrue);
-      expect(replyRepository.sentDrafts.single.message, '正文');
-      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, isEmpty);
-      final state = container.read(replyComposerControllerProvider(args)).value;
-      expect(state?.imageAttachments, isEmpty);
-    });
+        expect(result.sent, isTrue);
+        expect(
+          replyRepository.sentDrafts.single.message,
+          '正文\n[attach]123456[/attach]',
+        );
+        expect(
+          replyRepository.sentDrafts.single.uploadedAttachmentAids,
+          <String>['123456'],
+        );
+        final state = container
+            .read(replyComposerControllerProvider(args))
+            .value;
+        expect(state?.imageAttachments, isEmpty);
+      },
+    );
 
     test(
       'submit binds uploaded attachment aid when attach code remains',
@@ -1148,12 +1166,14 @@ ReplyImageAttachment _uploadedAttachment({
   required String localId,
   required String aid,
   required DateTime uploadedAt,
+  String? cachePath,
 }) {
   return _attachmentWithStatus(
     localId: localId,
     aid: aid,
     status: ReplyImageAttachmentStatus.uploaded,
     uploadedAt: uploadedAt,
+    cachePath: cachePath,
   );
 }
 
@@ -1162,6 +1182,7 @@ ReplyImageAttachment _attachmentWithStatus({
   required String aid,
   required ReplyImageAttachmentStatus status,
   DateTime? uploadedAt,
+  String? cachePath,
 }) {
   return ReplyImageAttachment(
     localId: localId,
@@ -1172,6 +1193,7 @@ ReplyImageAttachment _attachmentWithStatus({
     status: status,
     aid: aid,
     uploadedAt: uploadedAt,
+    cachePath: cachePath,
   );
 }
 
@@ -1202,6 +1224,7 @@ ProviderContainer _buildContainer({
   ReplyRepository? replyRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
+  ComposerDraftAttachmentVerificationService? draftVerificationService,
 }) {
   return ProviderContainer(
     overrides: [
@@ -1220,8 +1243,57 @@ ProviderContainer _buildContainer({
       composerImageUploadCoordinatorProvider.overrideWithValue(
         imageUploadCoordinator ?? _FakeReplyImageUploadCoordinator(),
       ),
+      composerDraftAttachmentVerificationServiceProvider.overrideWithValue(
+        draftVerificationService ??
+            const _NoopDraftAttachmentVerificationService(),
+      ),
     ],
   );
+}
+
+class _NoopDraftAttachmentVerificationService
+    implements ComposerDraftAttachmentVerificationService {
+  const _NoopDraftAttachmentVerificationService();
+
+  @override
+  Future<ComposerDraftAttachmentVerificationResult> verify(
+    ComposerDraftSnapshot draft,
+  ) async {
+    return ComposerDraftAttachmentVerificationResult(
+      draft: draft,
+      verification: const ComposerDraftAttachmentVerification.notRequired(),
+    );
+  }
+}
+
+class _PassThroughDraftVerificationService
+    implements ComposerDraftAttachmentVerificationService {
+  const _PassThroughDraftVerificationService();
+
+  @override
+  Future<ComposerDraftAttachmentVerificationResult> verify(
+    ComposerDraftSnapshot draft,
+  ) async {
+    final aids = const ComposerAttachBbCodeService()
+        .extractAttachAids(draft.message)
+        .toSet();
+    return ComposerDraftAttachmentVerificationResult(
+      draft: draft,
+      verification: ComposerDraftAttachmentVerification.verified(
+        imagesByAid: <String, ComposerUnusedImage>{
+          for (final aid in aids)
+            aid: ComposerUnusedImage(
+              aid: aid,
+              thumbnailUri: Uri.parse(
+                'https://bbs.yamibo.com/forum.php?mod=image&aid=$aid&size=300x300',
+              ),
+            ),
+        },
+        checkedAids: aids,
+        invalidAidCount: 0,
+      ),
+    );
+  }
 }
 
 ProviderSubscription<AsyncValue<ReplyComposerState>> _keepComposerAlive(

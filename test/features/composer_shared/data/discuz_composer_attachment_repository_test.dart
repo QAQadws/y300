@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/services/composer_attachment_remote_data_source.dart';
 import 'package:y300/features/composer_shared/data/repositories/discuz_composer_attachment_repository.dart';
+import 'package:y300/features/composer_shared/data/services/composer_upload_cache_storage.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 
@@ -196,6 +197,53 @@ void main() {
       },
     );
 
+    test('uploadImage retains a composer-owned local copy', () async {
+      final fileSystem = _fileSystemWithFile('/gallery/photo.jpg');
+      final cacheStorage = _FakeUploadCacheStorage(
+        retainedPath: '/composer/local-1/preview.jpg',
+      );
+      final repository = _buildRepository(
+        remoteDataSource: _FakeUploadRemoteDataSource(),
+        fileSystem: fileSystem,
+        cacheStorage: cacheStorage,
+      );
+
+      final result = await repository.uploadImage(
+        fid: '33',
+        permission: _permission(),
+        attachment: _attachment(localPath: '/gallery/photo.jpg'),
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull?.cachePath, '/composer/local-1/preview.jpg');
+      expect(cacheStorage.retainCalls, hasLength(1));
+      expect(cacheStorage.retainCalls.single.sourcePath, '/gallery/photo.jpg');
+      expect(cacheStorage.retainCalls.single.localId, 'local-1');
+      expect(cacheStorage.retainCalls.single.fileName, 'photo.jpg');
+    });
+
+    test(
+      'local copy failure does not turn a confirmed upload into failure',
+      () async {
+        final fileSystem = _fileSystemWithFile('/gallery/photo.jpg');
+        final repository = _buildRepository(
+          remoteDataSource: _FakeUploadRemoteDataSource(),
+          fileSystem: fileSystem,
+          cacheStorage: _FakeUploadCacheStorage(throwOnRetain: true),
+        );
+
+        final result = await repository.uploadImage(
+          fid: '33',
+          permission: _permission(),
+          attachment: _attachment(localPath: '/gallery/photo.jpg'),
+        );
+
+        expect(result.isSuccess, isTrue);
+        expect(result.dataOrNull?.aid, '123456');
+        expect(result.dataOrNull?.cachePath, isNull);
+      },
+    );
+
     test(
       'uploadImage fails when remote aid is negative non-number or empty',
       () async {
@@ -284,11 +332,13 @@ void main() {
 DiscuzComposerAttachmentRepository _buildRepository({
   required ComposerAttachmentRemoteDataSource remoteDataSource,
   FileSystem? fileSystem,
+  ComposerUploadCacheStorage? cacheStorage,
   DateTime Function()? now,
 }) {
   return DiscuzComposerAttachmentRepository(
     remoteDataSource: remoteDataSource,
     fileSystem: fileSystem ?? MemoryFileSystem(),
+    cacheStorage: cacheStorage ?? const NoopComposerUploadCacheStorage(),
     now: now ?? DateTime.now,
   );
 }
@@ -372,4 +422,46 @@ class _FakeUploadRemoteDataSource
     onSendProgress?.call(5, 10);
     return uploadResponse;
   }
+}
+
+final class _RetainCall {
+  const _RetainCall({
+    required this.sourcePath,
+    required this.localId,
+    required this.fileName,
+  });
+
+  final String sourcePath;
+  final String localId;
+  final String fileName;
+}
+
+final class _FakeUploadCacheStorage
+    implements ComposerUploadCacheStorage, ComposerUploadCacheRetentionStorage {
+  _FakeUploadCacheStorage({this.retainedPath, this.throwOnRetain = false});
+
+  final String? retainedPath;
+  final bool throwOnRetain;
+  final List<_RetainCall> retainCalls = <_RetainCall>[];
+
+  @override
+  Future<String?> retainUploadedCopy({
+    required String sourcePath,
+    required String localId,
+    required String fileName,
+  }) async {
+    retainCalls.add(
+      _RetainCall(sourcePath: sourcePath, localId: localId, fileName: fileName),
+    );
+    if (throwOnRetain) {
+      throw StateError('copy failed');
+    }
+    return retainedPath;
+  }
+
+  @override
+  Future<bool> deleteCachePathIfOwned(String? cachePath) async => false;
+
+  @override
+  bool cachePathExists(String? cachePath) => false;
 }

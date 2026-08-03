@@ -283,6 +283,7 @@ abstract class ReaderCapability {
       case ImageCacheRole.comicPage:
         return ForumImageKind.comicReaderPage;
       case ImageCacheRole.threadAttachment:
+      case ImageCacheRole.composerUnusedAttachment:
         return ForumImageKind.threadAttachment;
       case ImageCacheRole.blogInline:
         return ForumImageKind.blogInline;

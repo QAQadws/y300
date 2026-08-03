@@ -3,8 +3,8 @@ import 'package:y300/features/composer_shared/domain/services/composer_attach_bb
 /// Maintains `[attach]aid[/attach]` and `[attachimg]aid[/attachimg]`
 /// fragments in composer messages.
 ///
-/// 仅依赖纯字符串处理，不感知附件状态——所以同样适用于
-/// 草稿持久化中"附件过期 → 把对应的 attach 片段从 message 中删除"。
+/// 仅依赖纯字符串处理，不感知附件状态。草稿的远端失效与显式服务器删除
+/// 均保留用户 BBCode；[removeAttachCodes] 只服务明确要求改写正文的调用方。
 ///
 /// 提取与清理同样只接受 [ComposerAttachBbCodeGrammar] 的合法 token，避免
 /// 把未知/非法 aid 猜成可提交的附件引用；非法原文仍由编辑器保留。

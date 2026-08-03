@@ -32,6 +32,7 @@ Widget _buildPage({
   NewThreadRepository? newThreadRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
+  ComposerDraftAttachmentVerificationService? draftVerificationService,
   ThemeData? theme,
   Locale locale = const Locale('zh'),
 }) {
@@ -48,6 +49,10 @@ Widget _buildPage({
       ),
       composerImageUploadCoordinatorProvider.overrideWithValue(
         imageUploadCoordinator ?? _FakeUploadCoordinator(),
+      ),
+      composerDraftAttachmentVerificationServiceProvider.overrideWithValue(
+        draftVerificationService ??
+            const _NoopPostingDraftAttachmentVerificationService(),
       ),
       postingFormMetadataRepositoryProvider.overrideWithValue(
         metadataRepository ?? _FakeMetadataRepository.success(_metadata()),
@@ -112,6 +117,9 @@ Widget _buildLauncher({
       ),
       composerImageUploadCoordinatorProvider.overrideWithValue(
         imageUploadCoordinator ?? _FakeUploadCoordinator(),
+      ),
+      composerDraftAttachmentVerificationServiceProvider.overrideWithValue(
+        const _NoopPostingDraftAttachmentVerificationService(),
       ),
       postingFormMetadataRepositoryProvider.overrideWithValue(
         metadataRepository ?? _FakeMetadataRepository.success(_metadata()),
@@ -210,6 +218,47 @@ class _MemoryDraftRepository implements ComposerDraftRepository {
       return;
     }
     _drafts[draft.identity.storageKey] = draft;
+  }
+}
+
+class _NoopPostingDraftAttachmentVerificationService
+    implements ComposerDraftAttachmentVerificationService {
+  const _NoopPostingDraftAttachmentVerificationService();
+
+  @override
+  Future<ComposerDraftAttachmentVerificationResult> verify(
+    ComposerDraftSnapshot draft,
+  ) async {
+    return ComposerDraftAttachmentVerificationResult(
+      draft: draft,
+      verification: const ComposerDraftAttachmentVerification.notRequired(),
+    );
+  }
+}
+
+class _InvalidPostingDraftAttachmentVerificationService
+    implements ComposerDraftAttachmentVerificationService {
+  const _InvalidPostingDraftAttachmentVerificationService();
+
+  @override
+  Future<ComposerDraftAttachmentVerificationResult> verify(
+    ComposerDraftSnapshot draft,
+  ) async {
+    return ComposerDraftAttachmentVerificationResult(
+      draft: ComposerDraftSnapshot(
+        identity: draft.identity,
+        message: draft.message,
+        useSignature: draft.useSignature,
+        updatedAt: draft.updatedAt,
+        subject: draft.subject,
+        extras: draft.extras,
+      ),
+      verification: ComposerDraftAttachmentVerification.verified(
+        imagesByAid: const {},
+        checkedAids: const <String>{'123456'},
+        invalidAidCount: 1,
+      ),
+    );
   }
 }
 

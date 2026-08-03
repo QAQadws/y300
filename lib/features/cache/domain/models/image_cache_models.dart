@@ -27,7 +27,8 @@ enum ImageCacheRole {
   threadAttachment('thread_attachment'),
   avatar('avatar'),
   remoteSmiley('remote_smiley'),
-  blogInline('blog_inline');
+  blogInline('blog_inline'),
+  composerUnusedAttachment('composer_unused_attachment');
 
   const ImageCacheRole(this.dbValue);
 
