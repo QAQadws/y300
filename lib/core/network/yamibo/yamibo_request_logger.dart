@@ -58,6 +58,27 @@ class YamiboRequestLogger {
     );
   }
 
+  void logSecurityChallenge({
+    required YamiboRequestContext context,
+    required String requestId,
+    required String method,
+    required Uri uri,
+    required int? statusCode,
+    required String evidence,
+    required bool willRetry,
+    required String recovery,
+  }) {
+    if (!_enableLog || context.silent) {
+      return;
+    }
+    _logger.w(
+      '[YamiboHTTP][${_kindName(context.kind)}][${context.operation}] '
+      '$method ${_uriRedactor.redact(uri)} -> security_challenge '
+      '${statusCode ?? 'unknown'} requestId=$requestId '
+      'evidence=$evidence retry=$willRetry recovery=$recovery',
+    );
+  }
+
   String describeBody(Object? body) {
     if (body == null) {
       return 'null';

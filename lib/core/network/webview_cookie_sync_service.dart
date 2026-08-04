@@ -9,6 +9,9 @@ abstract class WebViewCookieJar {
   /// 读取指定 URL 作用域下的全部 cookie（name → value）。
   Future<Map<String, String>> readCookies(Uri uri);
 
+  /// Merge cookies into the WebView jar without clearing unrelated entries.
+  Future<void> writeCookies(Uri uri, Map<String, String> cookies);
+
   /// 清空 WebView 平台 cookie jar，用于登出。
   Future<void> clear();
 }
@@ -49,6 +52,24 @@ class InAppWebViewCookieJar implements WebViewCookieJar {
   }
 
   @override
+  Future<void> writeCookies(Uri uri, Map<String, String> cookies) async {
+    final webUri = inapp.WebUri(uri.toString());
+    for (final entry in cookies.entries) {
+      final name = entry.key.trim();
+      final value = entry.value.trim();
+      if (name.isEmpty || value.isEmpty || value.toLowerCase() == 'deleted') {
+        continue;
+      }
+      await _cookieManager.setCookie(
+        url: webUri,
+        name: name,
+        value: value,
+        path: '/',
+      );
+    }
+  }
+
+  @override
   Future<void> clear() {
     return _cookieManager.deleteAllCookies();
   }
@@ -79,6 +100,18 @@ class WebViewCookieSyncService {
     final cookies = await _cookieJar.readCookies(uri);
     if (cookies.isNotEmpty) {
       await _cookieStore.saveCookies(uri, cookies);
+    }
+    return cookies;
+  }
+
+  /// Seeds the browser with the native cookie snapshot before navigation.
+  ///
+  /// This is merge-only in both directions: security verification must never
+  /// clear an auth cookie, formhash-related cookie, or unrelated WebView state.
+  Future<Map<String, String>> seedFromStore(Uri uri) async {
+    final cookies = await _cookieStore.readCookieMap(uri);
+    if (cookies.isNotEmpty) {
+      await _cookieJar.writeCookies(uri, cookies);
     }
     return cookies;
   }

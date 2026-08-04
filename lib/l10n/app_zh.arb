@@ -37,6 +37,19 @@
   "commonRemove": "移除",
   "commonUnknownError": "未知错误",
 
+  "networkSecurityVerificationTitle": "安全验证",
+  "@networkSecurityVerificationTitle": {
+    "description": "站点反爬虫要求使用前台 WebView 验证时的页面标题"
+  },
+  "networkSecurityVerificationPreparing": "正在完成站点安全验证…",
+  "@networkSecurityVerificationPreparing": {
+    "description": "安全验证 WebView 初始化前的等待提示"
+  },
+  "networkSecurityVerificationFailed": "安全验证未完成，请重试",
+  "@networkSecurityVerificationFailed": {
+    "description": "安全验证超时或 Cookie 同步失败时的提示"
+  },
+
   "forumHomeTitle": "论坛首页",
   "forumHomeSearch": "搜索论坛",
   "forumHomeRefresh": "刷新论坛首页",

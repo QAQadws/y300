@@ -6,6 +6,7 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_logger.dart';
@@ -20,13 +21,17 @@ class YamiboHttpGateway {
     required Logger logger,
     YamiboSessionStore? sessionStore,
     YamiboSessionExtractor? sessionExtractor,
+    WafChallengeRecoveryCoordinator? wafChallengeRecoveryCoordinator,
     Dio? dio,
     bool enableLog = true,
     String defaultUserAgent = BrowserUserAgents.mobile,
+    Uri? siteUri,
   }) : _cookieStore = cookieStore,
        _sessionStore = sessionStore,
        _sessionExtractor = sessionExtractor,
+       _wafChallengeRecoveryCoordinator = wafChallengeRecoveryCoordinator,
        _defaultUserAgent = defaultUserAgent,
+       _siteUri = siteUri ?? Uri.parse(AppConfig.siteBaseUrl),
        _requestLogger = YamiboRequestLogger(
          logger: logger,
          enableLog: enableLog,
@@ -47,7 +52,9 @@ class YamiboHttpGateway {
   final CookieStore _cookieStore;
   final YamiboSessionStore? _sessionStore;
   final YamiboSessionExtractor? _sessionExtractor;
+  final WafChallengeRecoveryCoordinator? _wafChallengeRecoveryCoordinator;
   final String _defaultUserAgent;
+  final Uri _siteUri;
   final YamiboRequestLogger _requestLogger;
   final Dio _dio;
   int _nextRequestSequence = 0;
@@ -110,6 +117,90 @@ class YamiboHttpGateway {
         return const <int>[];
       },
     );
+  }
+
+  /// Checks whether the shared native cookie jar can now access a same-site
+  /// page without the WAF challenge.
+  ///
+  /// This intentionally bypasses [_request]'s recovery hook. It is called
+  /// while the foreground recovery route is still open; routing the probe
+  /// through the coordinator would make it await itself forever. Challenge
+  /// responses are not persisted or used for session extraction.
+  Future<WafChallengeClearance> probeWafChallengeClearance(
+    Uri uri, {
+    required String userAgent,
+    CancelToken? cancelToken,
+  }) async {
+    if (!_isSameSite(uri)) {
+      return WafChallengeClearance.inconclusive;
+    }
+
+    final headers = <String, String>{
+      'User-Agent': userAgent.trim().isEmpty ? _defaultUserAgent : userAgent,
+      'Accept':
+          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Referer': _siteUri
+          .replace(
+            path: '/',
+            queryParameters: const <String, String>{},
+            fragment: '',
+          )
+          .toString(),
+    };
+    final cookieHeader = await _cookieStore.readCookieHeader(uri);
+    if (cookieHeader != null && cookieHeader.isNotEmpty) {
+      headers['Cookie'] = cookieHeader;
+    }
+
+    try {
+      final response = await _dio.requestUri<dynamic>(
+        uri,
+        options: Options(
+          method: 'GET',
+          headers: headers,
+          responseType: ResponseType.plain,
+          followRedirects: true,
+          // A 405 is evidence, not a Dio transport exception, so the probe
+          // must inspect every HTTP status itself.
+          validateStatus: (status) => status != null,
+        ),
+        cancelToken: cancelToken,
+      );
+      if (!_isSameSite(response.realUri)) {
+        return WafChallengeClearance.inconclusive;
+      }
+      final evidence = WafChallengeDetector.detect(
+        body: response.data,
+        statusCode: response.statusCode,
+        method: 'GET',
+      );
+      if (evidence != null) {
+        return WafChallengeClearance.challenged;
+      }
+      final statusCode = response.statusCode;
+      if (statusCode != null && statusCode >= 200 && statusCode < 400) {
+        return WafChallengeClearance.cleared;
+      }
+      return WafChallengeClearance.inconclusive;
+    } on DioException catch (error) {
+      final response = error.response;
+      if (response != null) {
+        final evidence = WafChallengeDetector.detect(
+          body: response.data,
+          statusCode: response.statusCode,
+          method: 'GET',
+        );
+        if (evidence != null) {
+          return WafChallengeClearance.challenged;
+        }
+      }
+      return WafChallengeClearance.inconclusive;
+    } catch (_) {
+      return WafChallengeClearance.inconclusive;
+    }
   }
 
   Future<ApiResult<YamiboHttpResponse<String>>> postForm(
@@ -225,6 +316,7 @@ class YamiboHttpGateway {
     bool? followRedirects,
     ValidateStatus? validateStatus,
     ProgressCallback? onSendProgress,
+    int attempt = 0,
   }) async {
     final startedAt = DateTime.now();
     final requestId = _generateRequestId();
@@ -236,6 +328,7 @@ class YamiboHttpGateway {
     if (!_hasHeader(requestHeaders, 'user-agent')) {
       requestHeaders['User-Agent'] = _defaultUserAgent;
     }
+    final effectiveUserAgent = _headerValue(requestHeaders, 'user-agent');
     final cookieHeader = await _cookieStore.readCookieHeader(uri);
     if (cookieHeader != null && cookieHeader.isNotEmpty) {
       requestHeaders['Cookie'] = cookieHeader;
@@ -256,8 +349,62 @@ class YamiboHttpGateway {
         cancelToken: cancelToken,
         onSendProgress: onSendProgress,
       );
-      await _saveCookies(response);
       final body = normalizeBody(response.data);
+
+      final challengeEvidence = _detectSecurityChallenge(
+        context: context,
+        uri: response.requestOptions.uri,
+        method: response.requestOptions.method,
+        statusCode: response.statusCode,
+        body: body,
+      );
+      if (challengeEvidence != null) {
+        final recovery = attempt == 0
+            ? await _recoverSecurityChallenge(
+                uri: response.requestOptions.uri,
+                method: response.requestOptions.method,
+                evidence: challengeEvidence,
+                userAgent: effectiveUserAgent,
+              )
+            : null;
+        final recovered = recovery == WafChallengeRecoveryResult.verified;
+        _requestLogger.logSecurityChallenge(
+          context: context,
+          requestId: requestId,
+          method: response.requestOptions.method,
+          uri: response.requestOptions.uri,
+          statusCode: response.statusCode,
+          evidence: challengeEvidence.name,
+          willRetry: recovered,
+          recovery: recovery?.name ?? 'retryLimitReached',
+        );
+        if (recovered) {
+          return _request<T>(
+            uri,
+            method: method,
+            context: context,
+            responseType: responseType,
+            normalizeBody: normalizeBody,
+            headers: headers,
+            cancelToken: cancelToken,
+            data: _cloneRequestData(data),
+            contentType: contentType,
+            followRedirects: followRedirects,
+            validateStatus: validateStatus,
+            onSendProgress: onSendProgress,
+            attempt: attempt + 1,
+          );
+        }
+        return ApiFailure(
+          _securityChallengeError(
+            statusCode: response.statusCode,
+            body: body,
+            alreadyRetried: attempt > 0,
+          ),
+        );
+      }
+
+      await _saveCookies(response);
 
       _saveExtractedSession(body: body, context: context);
       final elapsedMs = _elapsedMs(startedAt);
@@ -281,6 +428,58 @@ class YamiboHttpGateway {
     } on DioException catch (error) {
       final elapsedMs = _elapsedMs(startedAt);
       final response = error.response;
+      final challengeEvidence = _detectSecurityChallenge(
+        context: context,
+        uri: error.requestOptions.uri,
+        method: error.requestOptions.method,
+        statusCode: response?.statusCode,
+        body: response?.data,
+      );
+      if (challengeEvidence != null) {
+        final recovery = attempt == 0
+            ? await _recoverSecurityChallenge(
+                uri: error.requestOptions.uri,
+                method: error.requestOptions.method,
+                evidence: challengeEvidence,
+                userAgent: effectiveUserAgent,
+              )
+            : null;
+        final recovered = recovery == WafChallengeRecoveryResult.verified;
+        _requestLogger.logSecurityChallenge(
+          context: context,
+          requestId: requestId,
+          method: error.requestOptions.method,
+          uri: error.requestOptions.uri,
+          statusCode: response?.statusCode,
+          evidence: challengeEvidence.name,
+          willRetry: recovered,
+          recovery: recovery?.name ?? 'retryLimitReached',
+        );
+        if (recovered) {
+          return _request<T>(
+            uri,
+            method: method,
+            context: context,
+            responseType: responseType,
+            normalizeBody: normalizeBody,
+            headers: headers,
+            cancelToken: cancelToken,
+            data: _cloneRequestData(data),
+            contentType: contentType,
+            followRedirects: followRedirects,
+            validateStatus: validateStatus,
+            onSendProgress: onSendProgress,
+            attempt: attempt + 1,
+          );
+        }
+        return ApiFailure(
+          _securityChallengeError(
+            statusCode: response?.statusCode,
+            body: response?.data,
+            alreadyRetried: attempt > 0,
+          ),
+        );
+      }
       if (response != null) {
         await _saveCookies(response);
       }
@@ -303,6 +502,78 @@ class YamiboHttpGateway {
         ),
       );
     }
+  }
+
+  WafChallengeEvidence? _detectSecurityChallenge({
+    required YamiboRequestContext context,
+    required Uri uri,
+    required String method,
+    required int? statusCode,
+    required Object? body,
+  }) {
+    if (!_isSameSite(uri)) {
+      return null;
+    }
+    final evidence = WafChallengeDetector.detect(
+      body: body,
+      statusCode: statusCode,
+      method: method,
+    );
+    if (evidence == WafChallengeEvidence.httpMethodNotAllowed &&
+        (context.kind == YamiboRequestKind.resource ||
+            context.kind == YamiboRequestKind.imageProbe)) {
+      return null;
+    }
+    return evidence;
+  }
+
+  Future<WafChallengeRecoveryResult> _recoverSecurityChallenge({
+    required Uri uri,
+    required String method,
+    required WafChallengeEvidence evidence,
+    required String? userAgent,
+  }) async {
+    final coordinator = _wafChallengeRecoveryCoordinator;
+    if (coordinator == null) {
+      return WafChallengeRecoveryResult.unavailable;
+    }
+    return coordinator.recover(
+      WafChallengeRecoveryRequest(
+        triggeringUri: uri,
+        method: method,
+        evidence: evidence,
+        userAgent: userAgent ?? _defaultUserAgent,
+      ),
+    );
+  }
+
+  ApiError _securityChallengeError({
+    required int? statusCode,
+    required Object? body,
+    required bool alreadyRetried,
+  }) {
+    return ApiError(
+      type: ApiErrorType.server,
+      message: alreadyRetried
+          ? 'network.security_challenge_persisted'
+          : 'network.security_verification_not_completed',
+      code: alreadyRetried
+          ? 'security_challenge_persisted'
+          : 'security_verification_not_completed',
+      statusCode: statusCode,
+      raw: body,
+    );
+  }
+
+  Object? _cloneRequestData(Object? data) {
+    return data is FormData ? data.clone() : data;
+  }
+
+  bool _isSameSite(Uri uri) {
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      return false;
+    }
+    return uri.host.toLowerCase() == _siteUri.host.toLowerCase();
   }
 
   Future<void> _saveCookies(Response<dynamic> response) async {
@@ -450,6 +721,17 @@ class YamiboHttpGateway {
   bool _hasHeader(Map<String, String> headers, String name) {
     final lower = name.toLowerCase();
     return headers.keys.any((key) => key.toLowerCase() == lower);
+  }
+
+  String? _headerValue(Map<String, String> headers, String name) {
+    final lower = name.toLowerCase();
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() == lower) {
+        final value = entry.value.trim();
+        return value.isEmpty ? null : value;
+      }
+    }
+    return null;
   }
 
   String _generateRequestId() {

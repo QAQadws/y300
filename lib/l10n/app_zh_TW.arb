@@ -17,6 +17,10 @@
   "commonRemove": "移除",
   "commonUnknownError": "未知錯誤",
 
+  "networkSecurityVerificationTitle": "安全驗證",
+  "networkSecurityVerificationPreparing": "正在完成網站安全驗證…",
+  "networkSecurityVerificationFailed": "安全驗證未完成，請重試",
+
   "forumHomeTitle": "論壇首頁",
   "forumHomeSearch": "搜尋論壇",
   "forumHomeRefresh": "重新整理論壇首頁",

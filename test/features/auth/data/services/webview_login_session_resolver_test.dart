@@ -17,6 +17,11 @@ class _FakeWebViewCookieJar implements WebViewCookieJar {
       Map<String, String>.from(cookies);
 
   @override
+  Future<void> writeCookies(Uri uri, Map<String, String> values) async {
+    cookies.addAll(values);
+  }
+
+  @override
   Future<void> clear() async => cookies = <String, String>{};
 }
 

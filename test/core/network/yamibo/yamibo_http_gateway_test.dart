@@ -4,7 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
@@ -178,6 +180,283 @@ void main() {
       expect(logOutput.lines.join('\n'), contains('requestId=yhttp-1'));
     });
 
+    test(
+      'runs foreground recovery and retries an explicit script challenge',
+      () async {
+        final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
+          _ScriptedResponse(
+            textBody:
+                "<html><script>var arg1='ABC';document.cookie="
+                "'acw_sc__v2=pass';</script></html>",
+          ),
+          _ScriptedResponse(textBody: '<html>forum home</html>'),
+        ]);
+        final coordinator = WafChallengeRecoveryCoordinator(
+          retryCooldown: Duration.zero,
+        );
+        var launchCount = 0;
+        coordinator.attachLauncher((request) async {
+          launchCount += 1;
+          expect(request.evidence, WafChallengeEvidence.scriptBody);
+          expect(request.userAgent, BrowserUserAgents.mobile);
+          return WafChallengeRecoveryResult.verified;
+        });
+        final gateway = _buildGateway(
+          adapter: adapter,
+          wafChallengeRecoveryCoordinator: coordinator,
+        );
+
+        final result = await gateway.getText(
+          Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+          context: const YamiboRequestContext(
+            kind: YamiboRequestKind.html,
+            operation: 'forum.home.html',
+          ),
+        );
+
+        expect(result.dataOrNull?.body, '<html>forum home</html>');
+        expect(adapter.fetchCount, 2);
+        expect(launchCount, 1);
+      },
+    );
+
+    test('treats a GET 405 as a one-time suspected challenge', () async {
+      final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
+        _ScriptedResponse(statusCode: 405, textBody: 'Method Not Allowed'),
+        _ScriptedResponse(textBody: '<html>recovered</html>'),
+      ]);
+      final coordinator =
+          WafChallengeRecoveryCoordinator(
+            retryCooldown: Duration.zero,
+          )..attachLauncher((request) async {
+            expect(request.evidence, WafChallengeEvidence.httpMethodNotAllowed);
+            return WafChallengeRecoveryResult.verified;
+          });
+      final gateway = _buildGateway(
+        adapter: adapter,
+        wafChallengeRecoveryCoordinator: coordinator,
+      );
+
+      final result = await gateway.getText(
+        Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'forum.home.html',
+        ),
+      );
+
+      expect(result.dataOrNull?.body, '<html>recovered</html>');
+      expect(adapter.fetchCount, 2);
+    });
+
+    test(
+      'native clearance probe classifies a WAF 405 without opening recovery',
+      () async {
+        final adapter = _GatewayTestAdapter(
+          statusCode: 405,
+          textBody: 'Method Not Allowed',
+        );
+        final coordinator = WafChallengeRecoveryCoordinator(
+          retryCooldown: Duration.zero,
+        );
+        var launchCount = 0;
+        coordinator.attachLauncher((_) async {
+          launchCount += 1;
+          return WafChallengeRecoveryResult.verified;
+        });
+        final gateway = _buildGateway(
+          adapter: adapter,
+          wafChallengeRecoveryCoordinator: coordinator,
+        );
+
+        final result = await gateway.probeWafChallengeClearance(
+          Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+          userAgent: 'probe-agent',
+        );
+
+        expect(result, WafChallengeClearance.challenged);
+        expect(adapter.fetchCount, 1);
+        expect(launchCount, 0);
+        expect(adapter.lastHeaders['User-Agent'], 'probe-agent');
+      },
+    );
+
+    test(
+      'native clearance probe accepts normal HTML and preserves cookies',
+      () async {
+        final cookieStore = CookieStore();
+        final uri = Uri.parse('https://bbs.yamibo.com/index.php?mobile=2');
+        await cookieStore.saveCookies(uri, const <String, String>{
+          'EeqY_2132_auth': 'confirmed-auth',
+        });
+        final adapter = _GatewayTestAdapter(
+          textBody: '<html><body>forum home</body></html>',
+          setCookie: <String>['acw_sc__v2=probe-pass; Path=/'],
+        );
+        final gateway = _buildGateway(
+          adapter: adapter,
+          cookieStore: cookieStore,
+        );
+
+        final result = await gateway.probeWafChallengeClearance(
+          uri,
+          userAgent: 'probe-agent',
+        );
+
+        expect(result, WafChallengeClearance.cleared);
+        expect(adapter.lastHeaders['Cookie'], contains('confirmed-auth'));
+        expect(adapter.lastHeaders['User-Agent'], 'probe-agent');
+        expect(
+          await cookieStore.readCookieMap(uri),
+          containsPair('EeqY_2132_auth', 'confirmed-auth'),
+        );
+        expect(
+          await cookieStore.readCookieMap(uri),
+          isNot(contains('acw_sc__v2')),
+        );
+      },
+    );
+
+    test(
+      'native clearance probe rejects a non-empty challenge document',
+      () async {
+        final adapter = _GatewayTestAdapter(
+          textBody:
+              "<html><script>var arg1='ABC';document.cookie='acw_sc__v2=x';"
+              '</script></html>',
+        );
+        final gateway = _buildGateway(adapter: adapter);
+
+        final result = await gateway.probeWafChallengeClearance(
+          Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+          userAgent: 'probe-agent',
+        );
+
+        expect(result, WafChallengeClearance.challenged);
+      },
+    );
+
+    test(
+      'native clearance probe treats server errors as inconclusive',
+      () async {
+        final gateway = _buildGateway(
+          adapter: _GatewayTestAdapter(statusCode: 503, textBody: 'down'),
+        );
+
+        final result = await gateway.probeWafChallengeClearance(
+          Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+          userAgent: 'probe-agent',
+        );
+
+        expect(result, WafChallengeClearance.inconclusive);
+      },
+    );
+
+    test('does not recover or replay an ordinary POST 405', () async {
+      final adapter = _GatewayTestAdapter(
+        statusCode: 405,
+        textBody: 'Method Not Allowed',
+      );
+      final coordinator = WafChallengeRecoveryCoordinator(
+        retryCooldown: Duration.zero,
+      );
+      var launchCount = 0;
+      coordinator.attachLauncher((_) async {
+        launchCount += 1;
+        return WafChallengeRecoveryResult.verified;
+      });
+      final gateway = _buildGateway(
+        adapter: adapter,
+        wafChallengeRecoveryCoordinator: coordinator,
+      );
+
+      final result = await gateway.postForm(
+        Uri.parse('https://bbs.yamibo.com/forum.php?mod=example'),
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'example.post',
+        ),
+        data: const <String, String>{'value': '1'},
+      );
+
+      expect(result.isFailure, isTrue);
+      expect(result.errorOrNull?.statusCode, 405);
+      expect(adapter.fetchCount, 1);
+      expect(launchCount, 0);
+    });
+
+    test(
+      'does not loop when the retried request is still challenged',
+      () async {
+        final adapter = _GatewayTestAdapter(
+          textBody: "<html><script>var arg1='ABC';</script></html>",
+        );
+        final coordinator = WafChallengeRecoveryCoordinator(
+          retryCooldown: Duration.zero,
+        );
+        var launchCount = 0;
+        coordinator.attachLauncher((_) async {
+          launchCount += 1;
+          return WafChallengeRecoveryResult.verified;
+        });
+        final gateway = _buildGateway(
+          adapter: adapter,
+          wafChallengeRecoveryCoordinator: coordinator,
+        );
+
+        final result = await gateway.getText(
+          Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
+          context: const YamiboRequestContext(
+            kind: YamiboRequestKind.html,
+            operation: 'forum.home.html',
+          ),
+        );
+
+        expect(result.isFailure, isTrue);
+        expect(result.errorOrNull?.code, 'security_challenge_persisted');
+        expect(adapter.fetchCount, 2);
+        expect(launchCount, 1);
+      },
+    );
+
+    test('challenge responses cannot delete an existing auth cookie', () async {
+      final uri = Uri.parse('https://bbs.yamibo.com/index.php?mobile=2');
+      final cookieStore = CookieStore();
+      await cookieStore.saveCookies(uri, const <String, String>{
+        'EeqY_2132_auth': 'confirmed-auth',
+      });
+      final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
+        _ScriptedResponse(
+          textBody: "<html><script>var arg1='ABC';</script></html>",
+          setCookie: <String>['EeqY_2132_auth=deleted; Max-Age=0; Path=/'],
+        ),
+        _ScriptedResponse(textBody: '<html>recovered</html>'),
+      ]);
+      final coordinator = WafChallengeRecoveryCoordinator(
+        retryCooldown: Duration.zero,
+      )..attachLauncher((_) async => WafChallengeRecoveryResult.verified);
+      final gateway = _buildGateway(
+        adapter: adapter,
+        cookieStore: cookieStore,
+        wafChallengeRecoveryCoordinator: coordinator,
+      );
+
+      final result = await gateway.getText(
+        uri,
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'forum.home.html',
+        ),
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(
+        await cookieStore.readCookieMap(uri),
+        containsPair('EeqY_2132_auth', 'confirmed-auth'),
+      );
+      expect(adapter.lastHeaders['Cookie'], contains('confirmed-auth'));
+    });
+
     test('getText stores session snapshot extracted from HTML', () async {
       final sessionStore = YamiboSessionStore();
       final gateway = _buildGateway(
@@ -258,6 +537,7 @@ YamiboHttpGateway _buildGateway({
   _MemoryLogOutput? logOutput,
   YamiboSessionStore? sessionStore,
   YamiboSessionExtractor? sessionExtractor,
+  WafChallengeRecoveryCoordinator? wafChallengeRecoveryCoordinator,
 }) {
   final dio = Dio(
     BaseOptions(
@@ -276,6 +556,7 @@ YamiboHttpGateway _buildGateway({
     ),
     sessionStore: sessionStore,
     sessionExtractor: sessionExtractor,
+    wafChallengeRecoveryCoordinator: wafChallengeRecoveryCoordinator,
     dio: dio,
   );
 }
@@ -311,6 +592,11 @@ class _GatewayTestAdapter implements HttpClientAdapter {
          ),
        ],
        _replayLastForever = true;
+
+  _GatewayTestAdapter.scripted(List<_ScriptedResponse> responses)
+    : assert(responses.isNotEmpty),
+      _responses = List<_ScriptedResponse>.of(responses),
+      _replayLastForever = false;
 
   final List<_ScriptedResponse> _responses;
   final bool _replayLastForever;

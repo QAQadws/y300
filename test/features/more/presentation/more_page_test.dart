@@ -770,6 +770,9 @@ class _FakeWebViewCookieJar implements WebViewCookieJar {
   Future<Map<String, String>> readCookies(Uri uri) async {
     return const <String, String>{};
   }
+
+  @override
+  Future<void> writeCookies(Uri uri, Map<String, String> cookies) async {}
 }
 
 class _FakeWebViewCookieSyncService extends WebViewCookieSyncService {

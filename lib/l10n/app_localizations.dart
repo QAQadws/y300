@@ -187,6 +187,24 @@ abstract class AppLocalizations {
   /// **'未知错误'**
   String get commonUnknownError;
 
+  /// 站点反爬虫要求使用前台 WebView 验证时的页面标题
+  ///
+  /// In zh, this message translates to:
+  /// **'安全验证'**
+  String get networkSecurityVerificationTitle;
+
+  /// 安全验证 WebView 初始化前的等待提示
+  ///
+  /// In zh, this message translates to:
+  /// **'正在完成站点安全验证…'**
+  String get networkSecurityVerificationPreparing;
+
+  /// 安全验证超时或 Cookie 同步失败时的提示
+  ///
+  /// In zh, this message translates to:
+  /// **'安全验证未完成，请重试'**
+  String get networkSecurityVerificationFailed;
+
   /// No description provided for @forumHomeTitle.
   ///
   /// In zh, this message translates to:

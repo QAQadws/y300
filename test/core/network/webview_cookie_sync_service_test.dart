@@ -16,6 +16,13 @@ class _FakeWebViewCookieJar implements WebViewCookieJar {
   }
 
   @override
+  Future<void> writeCookies(Uri uri, Map<String, String> cookies) async {
+    _cookiesByHost
+        .putIfAbsent(uri.host, () => <String, String>{})
+        .addAll(cookies);
+  }
+
+  @override
   Future<void> clear() async {
     clearCount += 1;
   }
@@ -112,5 +119,30 @@ void main() {
     await service.clearWebViewCookies();
 
     expect(jar.clearCount, 1);
+  });
+
+  test('seedFromStore merges native cookies into the WebView jar', () async {
+    final uri = Uri.parse('https://bbs.yamibo.com/index.php?mobile=2');
+    final cookieStore = CookieStore();
+    await cookieStore.saveCookies(uri, const <String, String>{
+      'acw_sc__v2': 'native-pass',
+      'EeqY_2132_auth': 'auth-token',
+    });
+    final jar = _FakeWebViewCookieJar(<String, Map<String, String>>{
+      'bbs.yamibo.com': <String, String>{'keep': 'webview'},
+    });
+    final service = WebViewCookieSyncService(
+      cookieJar: jar,
+      cookieStore: cookieStore,
+    );
+
+    final seeded = await service.seedFromStore(uri);
+
+    expect(seeded['acw_sc__v2'], 'native-pass');
+    expect(await jar.readCookies(uri), <String, String>{
+      'keep': 'webview',
+      'acw_sc__v2': 'native-pass',
+      'EeqY_2132_auth': 'auth-token',
+    });
   });
 }

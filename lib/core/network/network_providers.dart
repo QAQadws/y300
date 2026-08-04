@@ -4,6 +4,7 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/core/network/yamibo/yamibo.dart';
 
@@ -25,6 +26,13 @@ final webViewCookieSyncServiceProvider = Provider<WebViewCookieSyncService>((
     cookieStore: ref.watch(cookieStoreProvider),
   );
 });
+
+/// Process-wide bridge between challenged native requests and the single
+/// foreground verification route mounted by the application root.
+final wafChallengeRecoveryCoordinatorProvider =
+    Provider<WafChallengeRecoveryCoordinator>((ref) {
+      return WafChallengeRecoveryCoordinator();
+    });
 
 final yamiboSessionStoreProvider = Provider<YamiboSessionStore>((ref) {
   return YamiboSessionStore();
@@ -50,8 +58,32 @@ final yamiboHttpGatewayProvider = Provider<YamiboHttpGateway>((ref) {
     logger: ref.watch(loggerProvider),
     sessionStore: ref.watch(yamiboSessionStoreProvider),
     sessionExtractor: ref.watch(yamiboSessionExtractorProvider),
+    wafChallengeRecoveryCoordinator: ref.watch(
+      wafChallengeRecoveryCoordinatorProvider,
+    ),
   );
 });
+
+/// Native clearance check used while the foreground WAF WebView is still
+/// mounted. It deliberately delegates to the shared gateway transport so it
+/// uses the same CookieStore and User-Agent without invoking recovery again.
+final wafChallengeClearanceProbeProvider = Provider<WafChallengeClearanceProbe>(
+  (ref) {
+    final gateway = ref.watch(yamiboHttpGatewayProvider);
+    return ({required uri, required userAgent}) =>
+        gateway.probeWafChallengeClearance(uri, userAgent: userAgent);
+  },
+);
+
+final wafChallengeVerificationServiceProvider =
+    Provider<WafChallengeVerificationService>((ref) {
+      return WafChallengeVerificationService(
+        syncCookies: (uri) async {
+          await ref.read(webViewCookieSyncServiceProvider).syncToStore(uri);
+        },
+        probe: ref.watch(wafChallengeClearanceProbeProvider),
+      );
+    });
 
 final yamiboApiClientProvider = Provider<YamiboApiClient>((ref) {
   return YamiboApiClient(gateway: ref.watch(yamiboHttpGatewayProvider));

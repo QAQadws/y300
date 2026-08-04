@@ -6,6 +6,7 @@ import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/app_update/presentation/widgets/app_update_alert_host.dart';
+import 'package:y300/features/forum/presentation/webview/waf_challenge_recovery_host.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -41,7 +42,9 @@ class Y300App extends ConsumerWidget {
       locale: localeForAppLanguage(settings.languagePreference),
       localeListResolutionCallback: (locales, _) => resolveAppLocale(locales),
       supportedLocales: AppLocalizations.supportedLocales,
-      home: enableAppUpdatePrompt ? AppUpdateAlertHost(child: home) : home,
+      home: WafChallengeRecoveryHost(
+        child: enableAppUpdatePrompt ? AppUpdateAlertHost(child: home) : home,
+      ),
     );
   }
 }

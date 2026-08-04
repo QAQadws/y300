@@ -56,6 +56,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonUnknownError => '未知错误';
 
   @override
+  String get networkSecurityVerificationTitle => '安全验证';
+
+  @override
+  String get networkSecurityVerificationPreparing => '正在完成站点安全验证…';
+
+  @override
+  String get networkSecurityVerificationFailed => '安全验证未完成，请重试';
+
+  @override
   String get forumHomeTitle => '论坛首页';
 
   @override
@@ -4299,6 +4308,15 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get commonUnknownError => '未知錯誤';
+
+  @override
+  String get networkSecurityVerificationTitle => '安全驗證';
+
+  @override
+  String get networkSecurityVerificationPreparing => '正在完成網站安全驗證…';
+
+  @override
+  String get networkSecurityVerificationFailed => '安全驗證未完成，請重試';
 
   @override
   String get forumHomeTitle => '論壇首頁';
