@@ -12,6 +12,32 @@ import 'package:y300/features/library_shared/presentation/services/library_detai
 import 'package:y300/l10n/app_localizations_zh.dart';
 
 void main() {
+  testWidgets('header long press remains a normal refresh without capability', (
+    tester,
+  ) async {
+    final adapter = _FakeDetailAdapter(module: LibraryModuleKey.comic);
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: UnifiedDetailPage(
+          adapter: adapter,
+          workId: 'work-1',
+          onOpenReader: (context, target) async {},
+          onOpenThread: (context, target) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final update = find.byKey(const Key('unified-detail-header-update'));
+    await tester.longPress(update);
+    await tester.pumpAndSettle();
+    expect(adapter.refreshWorkCallCount, 1);
+
+    await tester.tap(update);
+    await tester.pumpAndSettle();
+    expect(adapter.refreshWorkCallCount, 2);
+  });
+
   testWidgets('UnifiedDetailPage renders header/chapter and FAB', (
     tester,
   ) async {

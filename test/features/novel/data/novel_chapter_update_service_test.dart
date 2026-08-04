@@ -6,6 +6,7 @@ import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.dart';
+import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_source_metadata_recovery_service.dart';
 
 void main() {
@@ -52,6 +53,32 @@ void main() {
     expect(syncService.request?.mode, NovelChapterSyncMode.initialFull);
     expect(syncService.request?.checkpoint, isNull);
   });
+
+  test(
+    'explicit full update rebuilds a ready novel without a checkpoint',
+    () async {
+      final sourceRepository = _MemorySourceStateRepository(
+        _sourceState(
+          hydrationState: NovelChapterHydrationState.ready,
+          publisherId: '406769',
+          checkpointPage: 3,
+        ),
+      );
+      final syncService = _RecordingChapterSyncService();
+      final service = _service(
+        sourceRepository: sourceRepository,
+        syncService: syncService,
+      );
+
+      await service.update(
+        'novel:55:521519',
+        intent: NovelChapterUpdateIntent.full,
+      );
+
+      expect(syncService.request?.mode, NovelChapterSyncMode.fullRefresh);
+      expect(syncService.request?.checkpoint, isNull);
+    },
+  );
 
   test('missing publisher is recovered before initial full update', () async {
     final sourceRepository = _MemorySourceStateRepository(

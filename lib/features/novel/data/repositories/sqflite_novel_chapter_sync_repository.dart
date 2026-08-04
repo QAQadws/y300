@@ -110,6 +110,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
     required NovelChapterSyncRequest request,
     required NovelChapterSyncCheckpoint checkpoint,
     required int fetchedPages,
+    String? sourceTitle,
   }) async {
     final normalizedRunId = _requireText(runId, 'runId');
     final normalizedNovelId = _requireText(request.novelId, 'request.novelId');
@@ -223,7 +224,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
         );
       }
 
-      if (request.mode == NovelChapterSyncMode.initialFull) {
+      if (request.mode != NovelChapterSyncMode.incremental) {
         for (final staleId in existingIds.difference(stagedIds)) {
           await txn.delete(
             ComicLocalDb.workEpisodesTable,
@@ -267,6 +268,17 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
         throw StateError(
           'Novel source state is missing or publisher identity changed: '
           '$normalizedNovelId',
+        );
+      }
+      final normalizedSourceTitle = _trimToNull(sourceTitle);
+      if (normalizedSourceTitle != null) {
+        await txn.update(
+          ComicLocalDb.worksTable,
+          <String, Object?>{'title': normalizedSourceTitle},
+          where:
+              'work_id = ? AND content_type = ? '
+              "AND (custom_title IS NULL OR TRIM(custom_title) = '')",
+          whereArgs: <Object?>[normalizedNovelId, _contentType],
         );
       }
       await txn.update(

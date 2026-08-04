@@ -117,6 +117,14 @@ abstract class DetailModuleAdapter {
   });
 }
 
+/// Optional capability for an explicit server-authoritative full refresh.
+///
+/// Shared detail surfaces keep their normal refresh behavior unless the
+/// concrete module opts into this contract.
+abstract interface class DetailFullRefreshAdapter {
+  Future<DetailRefreshResult> refreshWorkFully({required String workId});
+}
+
 /// Optional chapter read-state capability.
 ///
 /// Modules such as novels that cannot reliably infer read completion do not

@@ -9,7 +9,10 @@ import 'package:y300/features/novel/domain/repositories/novel_chapter_sync_repos
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_author_post_episode_builder.dart';
 import 'package:y300/features/novel/domain/services/novel_sync_request_governor.dart';
+import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+
+import '../test_support/novel_title_fixtures.dart';
 
 void main() {
   test(
@@ -18,6 +21,7 @@ void main() {
       final gateway = _FakeGateway(<int, Future<ThreadDetailData> Function()>{
         1: () async => _page(
           page: 1,
+          subject: novelTitleFixtures.first.raw,
           posts: <ThreadPost>[
             _post(
               pid: '1',
@@ -30,6 +34,7 @@ void main() {
         ),
         2: () async => _page(
           page: 2,
+          subject: '后续页面标题不应覆盖起始页',
           posts: <ThreadPost>[
             _post(pid: '2', number: 3, message: '<p>重复 PID。</p>'),
             _post(
@@ -61,6 +66,7 @@ void main() {
         threadGateway: gateway,
         governor: governor,
         episodeBuilder: const DefaultNovelAuthorPostEpisodeBuilder(),
+        titleSanitizer: const DefaultNovelTitleSanitizer(),
         repository: repository,
         sourceStateRepository: sourceStateRepository,
         clock: () => DateTime(2026, 7, 13),
@@ -86,6 +92,10 @@ void main() {
         <int>[0, 1, 2],
       );
       expect(repository.promoteCount, 1);
+      expect(
+        repository.sourceTitle,
+        novelTitleFixtures.first.expectedSanitized,
+      );
       expect(repository.discardCount, 0);
       expect(result.fetchedPages, 3);
       expect(result.totalCount, 3);
@@ -108,6 +118,7 @@ void main() {
       threadGateway: gateway,
       governor: _RecordingGovernor(),
       episodeBuilder: const DefaultNovelAuthorPostEpisodeBuilder(),
+      titleSanitizer: const DefaultNovelTitleSanitizer(),
       repository: repository,
       sourceStateRepository: sourceStateRepository,
       runIdFactory: (_, _) => 'run-failure',
@@ -153,6 +164,7 @@ void main() {
         threadGateway: gateway,
         governor: _RecordingGovernor(),
         episodeBuilder: const DefaultNovelAuthorPostEpisodeBuilder(),
+        titleSanitizer: const DefaultNovelTitleSanitizer(),
         repository: repository,
         sourceStateRepository: _FakeSourceStateRepository(),
         clock: () => DateTime(2026, 7, 14),
@@ -193,6 +205,7 @@ void main() {
         threadGateway: gateway,
         governor: _RecordingGovernor(),
         episodeBuilder: const DefaultNovelAuthorPostEpisodeBuilder(),
+        titleSanitizer: const DefaultNovelTitleSanitizer(),
         repository: repository,
         sourceStateRepository: sourceStateRepository,
         runIdFactory: (_, _) => 'run-incremental-failure',
@@ -221,6 +234,7 @@ void main() {
       threadGateway: gateway,
       governor: _RecordingGovernor(),
       episodeBuilder: const DefaultNovelAuthorPostEpisodeBuilder(),
+      titleSanitizer: const DefaultNovelTitleSanitizer(),
       repository: repository,
       sourceStateRepository: _FakeSourceStateRepository(),
       runIdFactory: (_, _) => 'run-shared',
@@ -245,6 +259,44 @@ void main() {
     expect(repository.beginCount, 1);
     expect(repository.promoteCount, 1);
   });
+
+  test(
+    'full refresh starts at page one and failures keep ready state',
+    () async {
+      final gateway = _FakeGateway(<int, Future<ThreadDetailData> Function()>{
+        1: () async => _page(
+          page: 1,
+          replies: 3,
+          posts: <ThreadPost>[
+            _post(pid: '2', number: 2, message: '<p>重新获取第一章。</p>'),
+          ],
+        ),
+        2: () async => throw StateError('page 2 failed'),
+      });
+      final repository = _FakeSyncRepository();
+      final sourceStateRepository = _FakeSourceStateRepository();
+      final service = DefaultNovelChapterSyncService(
+        threadGateway: gateway,
+        governor: _RecordingGovernor(),
+        episodeBuilder: const DefaultNovelAuthorPostEpisodeBuilder(),
+        titleSanitizer: const DefaultNovelTitleSanitizer(),
+        repository: repository,
+        sourceStateRepository: sourceStateRepository,
+        runIdFactory: (_, _) => 'run-full-refresh-failure',
+      );
+      addTearDown(service.dispose);
+
+      await expectLater(
+        service.synchronize(_fullRefreshRequest()),
+        throwsStateError,
+      );
+
+      expect(gateway.calls.map((call) => call.page), <int>[1, 2]);
+      expect(repository.promoteCount, 0);
+      expect(repository.discardCount, 1);
+      expect(sourceStateRepository.lastState, NovelChapterHydrationState.ready);
+    },
+  );
 }
 
 NovelChapterSyncRequest _request() {
@@ -272,15 +324,25 @@ NovelChapterSyncRequest _incrementalRequest() {
   );
 }
 
+NovelChapterSyncRequest _fullRefreshRequest() {
+  return const NovelChapterSyncRequest(
+    novelId: 'novel:55:521519',
+    tid: '521519',
+    publisherId: '406769',
+    mode: NovelChapterSyncMode.fullRefresh,
+  );
+}
+
 ThreadDetailData _page({
   required int page,
   required List<ThreadPost> posts,
   int replies = 4,
+  String subject = '测试小说',
 }) {
   return ThreadDetailData(
     tid: '521519',
     fid: '55',
-    subject: '测试小说',
+    subject: subject,
     author: 'INCSKY16',
     replies: replies,
     views: 1,
@@ -355,6 +417,7 @@ class _FakeSyncRepository implements NovelChapterSyncRepository {
   int promoteCount = 0;
   int discardCount = 0;
   final List<List<NovelEpisodeDraft>> staged = <List<NovelEpisodeDraft>>[];
+  String? sourceTitle;
 
   @override
   Future<void> beginRun({
@@ -379,8 +442,10 @@ class _FakeSyncRepository implements NovelChapterSyncRepository {
     required NovelChapterSyncRequest request,
     required NovelChapterSyncCheckpoint checkpoint,
     required int fetchedPages,
+    String? sourceTitle,
   }) async {
     promoteCount++;
+    this.sourceTitle = sourceTitle;
     final count = staged.expand((batch) => batch).length;
     return NovelChapterSyncResult(
       mode: request.mode,

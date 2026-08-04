@@ -30,6 +30,7 @@ class UnifiedDetailHeaderSection extends StatelessWidget {
     required this.imageHeaderBuilder,
     required this.onToggleShelf,
     required this.onRefresh,
+    this.onRefreshLongPress,
     required this.onOpenThread,
   });
 
@@ -42,6 +43,7 @@ class UnifiedDetailHeaderSection extends StatelessWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final VoidCallback onToggleShelf;
   final VoidCallback onRefresh;
+  final VoidCallback? onRefreshLongPress;
   final VoidCallback onOpenThread;
 
   @override
@@ -61,6 +63,7 @@ class UnifiedDetailHeaderSection extends StatelessWidget {
             header: header,
             onToggleShelf: onToggleShelf,
             onRefresh: onRefresh,
+            onRefreshLongPress: onRefreshLongPress,
             onOpenThread: onOpenThread,
           ),
         ],
@@ -84,6 +87,7 @@ class UnifiedDetailHeaderSection extends StatelessWidget {
               header: header,
               onToggleShelf: onToggleShelf,
               onRefresh: onRefresh,
+              onRefreshLongPress: onRefreshLongPress,
               onOpenThread: onOpenThread,
             ),
           ],
@@ -530,12 +534,14 @@ class _HeaderActionsRow extends StatelessWidget {
     required this.header,
     required this.onToggleShelf,
     required this.onRefresh,
+    required this.onRefreshLongPress,
     required this.onOpenThread,
   });
 
   final LibraryDetailHeader header;
   final VoidCallback onToggleShelf;
   final VoidCallback onRefresh;
+  final VoidCallback? onRefreshLongPress;
   final VoidCallback onOpenThread;
 
   @override
@@ -559,9 +565,11 @@ class _HeaderActionsRow extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: _ActionChip(
+              key: const Key('unified-detail-header-update'),
               icon: Icons.refresh,
               label: l10n.libraryDetailUpdate,
               onTap: onRefresh,
+              onLongPress: onRefreshLongPress,
             ),
           ),
           const SizedBox(width: 8),
@@ -648,19 +656,23 @@ class _CoverImage extends StatelessWidget {
 
 class _ActionChip extends StatelessWidget {
   const _ActionChip({
+    super.key,
     required this.icon,
     required this.label,
     required this.onTap,
+    this.onLongPress,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(10),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),

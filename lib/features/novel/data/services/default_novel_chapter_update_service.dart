@@ -23,7 +23,10 @@ class DefaultNovelChapterUpdateService implements NovelChapterUpdateService {
   final NovelSourceMetadataRecoveryService _metadataRecoveryService;
 
   @override
-  Future<NovelChapterSyncResult> update(String novelId) async {
+  Future<NovelChapterSyncResult> update(
+    String novelId, {
+    NovelChapterUpdateIntent intent = NovelChapterUpdateIntent.normal,
+  }) async {
     final normalizedNovelId = novelId.trim();
     if (normalizedNovelId.isEmpty) {
       throw ArgumentError.value(novelId, 'novelId', 'must not be empty');
@@ -59,22 +62,27 @@ class DefaultNovelChapterUpdateService implements NovelChapterUpdateService {
       );
     }
 
-    final isIncremental =
+    final isReady =
         sourceState.hydrationState == NovelChapterHydrationState.ready;
+    final isIncremental = isReady && intent == NovelChapterUpdateIntent.normal;
     final checkpoint = isIncremental ? sourceState.checkpoint : null;
     if (isIncremental && checkpoint == null) {
       throw const NovelChapterSyncException(
         NovelChapterSyncFailureCode.missingCheckpoint,
       );
     }
+    final syncMode = switch ((isReady, intent)) {
+      (true, NovelChapterUpdateIntent.normal) =>
+        NovelChapterSyncMode.incremental,
+      (true, NovelChapterUpdateIntent.full) => NovelChapterSyncMode.fullRefresh,
+      (false, _) => NovelChapterSyncMode.initialFull,
+    };
     return _syncService.synchronize(
       NovelChapterSyncRequest(
         novelId: normalizedNovelId,
         tid: tid,
         publisherId: publisherId,
-        mode: isIncremental
-            ? NovelChapterSyncMode.incremental
-            : NovelChapterSyncMode.initialFull,
+        mode: syncMode,
         checkpoint: checkpoint,
       ),
     );

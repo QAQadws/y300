@@ -90,6 +90,20 @@ class UnifiedDetailController {
   }
 
   Future<DetailRefreshResult> refresh() async {
+    return _runRefresh(() => _adapter.refreshWork(workId: _workId));
+  }
+
+  Future<DetailRefreshResult> refreshFully() async {
+    final adapter = _fullRefreshAdapter;
+    if (adapter == null) {
+      throw UnsupportedError('fullRefresh');
+    }
+    return _runRefresh(() => adapter.refreshWorkFully(workId: _workId));
+  }
+
+  Future<DetailRefreshResult> _runRefresh(
+    Future<DetailRefreshResult> Function() action,
+  ) async {
     _state = _state.copyWith(
       isRefreshing: true,
       clearError: true,
@@ -97,7 +111,7 @@ class UnifiedDetailController {
     );
     late final DetailRefreshResult result;
     try {
-      result = await _adapter.refreshWork(workId: _workId);
+      result = await action();
       if (result.shouldReload) {
         await _load();
       }
@@ -211,6 +225,13 @@ class UnifiedDetailController {
     final adapter = _adapter;
     return adapter is DetailWorkReadingResetAdapter
         ? adapter as DetailWorkReadingResetAdapter
+        : null;
+  }
+
+  DetailFullRefreshAdapter? get _fullRefreshAdapter {
+    final adapter = _adapter;
+    return adapter is DetailFullRefreshAdapter
+        ? adapter as DetailFullRefreshAdapter
         : null;
   }
 

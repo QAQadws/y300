@@ -18,6 +18,7 @@ abstract interface class NovelChapterSyncRepository {
     required NovelChapterSyncRequest request,
     required NovelChapterSyncCheckpoint checkpoint,
     required int fetchedPages,
+    String? sourceTitle,
   });
 
   Future<void> discardRun(String runId);

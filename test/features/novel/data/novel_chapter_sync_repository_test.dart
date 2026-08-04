@@ -153,6 +153,7 @@ void main() {
           completedAt: DateTime(2026, 7, 13),
         ),
         fetchedPages: 1,
+        sourceTitle: '不应提交的新标题',
       ),
       throwsA(anything),
     );
@@ -165,6 +166,13 @@ void main() {
     expect(officialRows.map((row) => row['episode_id']), <String>[
       'novel:55:521519:old',
     ]);
+    final workRows = await db.query(
+      ComicLocalDb.worksTable,
+      columns: const <String>['title'],
+      where: 'work_id = ?',
+      whereArgs: const <Object?>['novel:55:521519'],
+    );
+    expect(workRows.single['title'], '测试小说');
     expect(
       await db.query(
         ComicLocalDb.novelEpisodeSyncStagingTable,
@@ -282,6 +290,239 @@ void main() {
       expect(sourceState?.checkpoint?.lastSeenPid, '4');
     },
   );
+
+  test(
+    'full refresh replaces stale chapters and preserves PID based user state',
+    () async {
+      const keptEpisodeId = 'novel:55:521519:2';
+      const staleEpisodeId = 'novel:55:521519:stale';
+      await _insertOfficialEpisode(db, episodeId: keptEpisodeId, orderIndex: 0);
+      await _insertOfficialEpisode(
+        db,
+        episodeId: staleEpisodeId,
+        orderIndex: 1,
+      );
+      await db.insert(ComicLocalDb.libraryEpisodeStateTable, <String, Object?>{
+        'content_type': 'novel',
+        'episode_id': keptEpisodeId,
+        'work_id': 'novel:55:521519',
+        'is_read': 1,
+        'is_downloaded': 0,
+        'is_bookmarked': 1,
+        'read_at': 10,
+      });
+      await db.insert(ComicLocalDb.libraryEpisodeStateTable, <String, Object?>{
+        'content_type': 'novel',
+        'episode_id': staleEpisodeId,
+        'work_id': 'novel:55:521519',
+        'is_read': 0,
+        'is_downloaded': 0,
+        'is_bookmarked': 1,
+      });
+      await db.insert(ComicLocalDb.readerBookmarksTable, <String, Object?>{
+        'bookmark_id': 'reader-bookmark-2',
+        'novel_id': 'novel:55:521519',
+        'episode_id': keptEpisodeId,
+        'node_id': 'paragraph-2',
+        'text_offset': 8,
+        'page_index': 3,
+        'scroll_offset': 120.0,
+        'progress_percent': 0.625,
+        'title': '正文书签',
+        'snippet': '书签摘要',
+        'created_at': 1,
+        'updated_at': 1,
+      });
+      await db.insert(ComicLocalDb.novelReadingProgressTable, <String, Object?>{
+        'novel_id': 'novel:55:521519',
+        'episode_id': staleEpisodeId,
+        'scroll_offset': 120.0,
+        'flow_mode': 'pagedLtr',
+        'page_index': 3,
+        'page_count': 8,
+        'anchor_node_id': 'paragraph-2',
+        'anchor_text_offset': 8,
+        'pagination_key': 'old-layout',
+        'progress_percent': 0.625,
+        'updated_at': 1,
+      });
+      await db.insert(ComicLocalDb.libraryWorkStateTable, <String, Object?>{
+        'content_type': 'novel',
+        'work_id': 'novel:55:521519',
+        'last_read_episode_id': staleEpisodeId,
+        'last_read_at': 10,
+        'created_at': 1,
+        'updated_at': 1,
+      });
+      final previousCheckpoint = NovelChapterSyncCheckpoint(
+        novelId: 'novel:55:521519',
+        publisherId: '406769',
+        lastCompletedAuthorPage: 3,
+        lastSeenPid: 'stale',
+        completedAt: DateTime(2026, 7, 13),
+      );
+      await SqfliteNovelSourceStateRepository(
+        Future<Database>.value(db),
+      ).saveCheckpoint(previousCheckpoint);
+
+      await repository.beginRun(
+        runId: 'run-full-refresh',
+        novelId: 'novel:55:521519',
+        mode: NovelChapterSyncMode.fullRefresh,
+      );
+      await repository.stageEpisodes(
+        runId: 'run-full-refresh',
+        episodes: <NovelEpisodeDraft>[
+          _draft(pid: '2', title: '修订后的第一章', orderIndex: 0),
+          _draft(pid: '3', title: '全量新增章节', orderIndex: 1),
+        ],
+      );
+      final completedAt = DateTime(2026, 7, 15);
+      final result = await repository.promote(
+        runId: 'run-full-refresh',
+        request: _fullRefreshRequest(),
+        checkpoint: NovelChapterSyncCheckpoint(
+          novelId: 'novel:55:521519',
+          publisherId: '406769',
+          lastCompletedAuthorPage: 2,
+          lastSeenPid: '3',
+          completedAt: completedAt,
+        ),
+        fetchedPages: 2,
+        sourceTitle: '更新后的解析标题',
+      );
+
+      final episodes = await db.query(
+        ComicLocalDb.workEpisodesTable,
+        where: 'work_id = ?',
+        whereArgs: const <Object?>['novel:55:521519'],
+        orderBy: 'order_index ASC',
+      );
+      expect(episodes.map((row) => row['episode_id']), <String>[
+        keptEpisodeId,
+        'novel:55:521519:3',
+      ]);
+      expect(episodes.first['episode_title'], '修订后的第一章');
+      final stateRows = await db.query(
+        ComicLocalDb.libraryEpisodeStateTable,
+        where: 'content_type = ? AND work_id = ?',
+        whereArgs: const <Object?>['novel', 'novel:55:521519'],
+        orderBy: 'episode_id ASC',
+      );
+      expect(stateRows.map((row) => row['episode_id']), <String>[
+        keptEpisodeId,
+        staleEpisodeId,
+      ]);
+      expect(stateRows.first['is_bookmarked'], 1);
+      expect(
+        await db.query(
+          ComicLocalDb.readerBookmarksTable,
+          where: 'bookmark_id = ?',
+          whereArgs: const <Object?>['reader-bookmark-2'],
+        ),
+        hasLength(1),
+      );
+      final progress = await db.query(
+        ComicLocalDb.novelReadingProgressTable,
+        where: 'novel_id = ?',
+        whereArgs: const <Object?>['novel:55:521519'],
+      );
+      expect(progress.single['episode_id'], staleEpisodeId);
+      expect(progress.single['progress_percent'], 0.625);
+      final workState = await db.query(
+        ComicLocalDb.libraryWorkStateTable,
+        where: 'content_type = ? AND work_id = ?',
+        whereArgs: const <Object?>['novel', 'novel:55:521519'],
+      );
+      expect(workState.single['last_read_episode_id'], staleEpisodeId);
+      final work = await db.query(
+        ComicLocalDb.worksTable,
+        columns: const <String>['title'],
+        where: 'work_id = ?',
+        whereArgs: const <Object?>['novel:55:521519'],
+      );
+      expect(work.single['title'], '更新后的解析标题');
+      expect(result.mode, NovelChapterSyncMode.fullRefresh);
+      final sourceState = await SqfliteNovelSourceStateRepository(
+        Future<Database>.value(db),
+      ).getSourceState(novelId: 'novel:55:521519');
+      expect(sourceState?.hydrationState, NovelChapterHydrationState.ready);
+    },
+  );
+
+  test(
+    'source title respects and can resume after a manual title override',
+    () async {
+      await db.update(
+        ComicLocalDb.worksTable,
+        <String, Object?>{'title': '旧解析标题', 'custom_title': '手动标题'},
+        where: 'work_id = ?',
+        whereArgs: const <Object?>['novel:55:521519'],
+      );
+
+      Future<void> promoteTitle(String runId, String sourceTitle) async {
+        await repository.beginRun(
+          runId: runId,
+          novelId: 'novel:55:521519',
+          mode: NovelChapterSyncMode.initialFull,
+        );
+        await repository.stageEpisodes(
+          runId: runId,
+          episodes: <NovelEpisodeDraft>[
+            _draft(pid: '2', title: '第一章', orderIndex: 0),
+          ],
+        );
+        await repository.promote(
+          runId: runId,
+          request: _request(),
+          checkpoint: NovelChapterSyncCheckpoint(
+            novelId: 'novel:55:521519',
+            publisherId: '406769',
+            lastCompletedAuthorPage: 1,
+            lastSeenPid: '2',
+            completedAt: DateTime(2026, 7, 15),
+          ),
+          fetchedPages: 1,
+          sourceTitle: sourceTitle,
+        );
+      }
+
+      await promoteTitle('run-manual-title', '不应覆盖的解析标题');
+      var work = await db.query(
+        ComicLocalDb.worksTable,
+        columns: const <String>['title', 'custom_title'],
+        where: 'work_id = ?',
+        whereArgs: const <Object?>['novel:55:521519'],
+      );
+      expect(work.single['title'], '旧解析标题');
+      expect(work.single['custom_title'], '手动标题');
+
+      await db.update(
+        ComicLocalDb.worksTable,
+        <String, Object?>{'custom_title': null},
+        where: 'work_id = ?',
+        whereArgs: const <Object?>['novel:55:521519'],
+      );
+      await promoteTitle('run-resumed-title', '恢复自动更新的标题');
+      work = await db.query(
+        ComicLocalDb.worksTable,
+        columns: const <String>['title', 'custom_title'],
+        where: 'work_id = ?',
+        whereArgs: const <Object?>['novel:55:521519'],
+      );
+      expect(work.single['title'], '恢复自动更新的标题');
+      expect(work.single['custom_title'], isNull);
+
+      await promoteTitle('run-empty-source-title', '   ');
+      work = await db.query(
+        ComicLocalDb.worksTable,
+        columns: const <String>['title'],
+        where: 'work_id = ?',
+        whereArgs: const <Object?>['novel:55:521519'],
+      );
+      expect(work.single['title'], '恢复自动更新的标题');
+    },
+  );
 }
 
 NovelChapterSyncRequest _request() {
@@ -302,6 +543,15 @@ NovelChapterSyncRequest _incrementalRequest(
     publisherId: '406769',
     mode: NovelChapterSyncMode.incremental,
     checkpoint: checkpoint,
+  );
+}
+
+NovelChapterSyncRequest _fullRefreshRequest() {
+  return const NovelChapterSyncRequest(
+    novelId: 'novel:55:521519',
+    tid: '521519',
+    publisherId: '406769',
+    mode: NovelChapterSyncMode.fullRefresh,
   );
 }
 

@@ -509,33 +509,78 @@ void main() {
     expect(resolver.callCount, 1);
   });
 
-  testWidgets(
-    'pull refresh and refresh menu use the same chapter update service',
-    (tester) async {
-      final updateService = _RecordingNovelChapterUpdateService();
-      await _pumpNovelDetail(
-        tester,
-        preferences: _MemoryNovelInteractionPreferencesRepository(),
-        routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
-        chapterUpdateService: updateService,
-      );
+  testWidgets('only a header long press requests a full chapter update', (
+    tester,
+  ) async {
+    final updateService = _RecordingNovelChapterUpdateService();
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(),
+      routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+      chapterUpdateService: updateService,
+    );
 
-      final refreshIndicator = tester.widget<RefreshIndicator>(
-        find.byType(RefreshIndicator),
-      );
-      await refreshIndicator.onRefresh();
-      await tester.pumpAndSettle();
+    final headerUpdate = find.byKey(const Key('unified-detail-header-update'));
+    await tester.tap(headerUpdate);
+    await tester.pumpAndSettle();
 
-      expect(updateService.novelIds, <String>['novel:1']);
+    await tester.longPress(headerUpdate);
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('刷新'));
-      await tester.pumpAndSettle();
+    final refreshIndicator = tester.widget<RefreshIndicator>(
+      find.byType(RefreshIndicator),
+    );
+    await refreshIndicator.onRefresh();
+    await tester.pumpAndSettle();
 
-      expect(updateService.novelIds, <String>['novel:1', 'novel:1']);
-    },
-  );
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('刷新'));
+    await tester.pumpAndSettle();
+
+    expect(updateService.novelIds, <String>[
+      'novel:1',
+      'novel:1',
+      'novel:1',
+      'novel:1',
+    ]);
+    expect(updateService.intents, <NovelChapterUpdateIntent>[
+      NovelChapterUpdateIntent.normal,
+      NovelChapterUpdateIntent.full,
+      NovelChapterUpdateIntent.normal,
+      NovelChapterUpdateIntent.normal,
+    ]);
+  });
+
+  testWidgets('refresh gestures share one in-flight detail update', (
+    tester,
+  ) async {
+    final updateService = _BlockingNovelChapterUpdateService();
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(),
+      routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+      chapterUpdateService: updateService,
+    );
+
+    await tester.longPress(
+      find.byKey(const Key('unified-detail-header-update')),
+    );
+    await tester.pump();
+    final refreshIndicator = tester.widget<RefreshIndicator>(
+      find.byType(RefreshIndicator),
+    );
+    final duplicate = refreshIndicator.onRefresh();
+
+    expect(updateService.intents, <NovelChapterUpdateIntent>[
+      NovelChapterUpdateIntent.full,
+    ]);
+
+    updateService.complete();
+    await duplicate;
+    await tester.pumpAndSettle();
+    expect(updateService.intents, hasLength(1));
+  });
 }
 
 Future<void> _pumpNovelDetail(
@@ -826,12 +871,19 @@ class _ControlledNovelChapterSyncService implements NovelChapterSyncService {
 
 class _RecordingNovelChapterUpdateService implements NovelChapterUpdateService {
   final List<String> novelIds = <String>[];
+  final List<NovelChapterUpdateIntent> intents = <NovelChapterUpdateIntent>[];
 
   @override
-  Future<NovelChapterSyncResult> update(String novelId) async {
+  Future<NovelChapterSyncResult> update(
+    String novelId, {
+    NovelChapterUpdateIntent intent = NovelChapterUpdateIntent.normal,
+  }) async {
     novelIds.add(novelId);
+    intents.add(intent);
     return NovelChapterSyncResult(
-      mode: NovelChapterSyncMode.incremental,
+      mode: intent == NovelChapterUpdateIntent.full
+          ? NovelChapterSyncMode.fullRefresh
+          : NovelChapterSyncMode.incremental,
       fetchedPages: 1,
       insertedCount: 0,
       updatedCount: 1,
@@ -842,6 +894,40 @@ class _RecordingNovelChapterUpdateService implements NovelChapterUpdateService {
         lastCompletedAuthorPage: 1,
         lastSeenPid: '5001',
         completedAt: DateTime(2026, 7, 14),
+      ),
+    );
+  }
+}
+
+class _BlockingNovelChapterUpdateService implements NovelChapterUpdateService {
+  final Completer<NovelChapterSyncResult> _completion =
+      Completer<NovelChapterSyncResult>();
+  final List<NovelChapterUpdateIntent> intents = <NovelChapterUpdateIntent>[];
+
+  @override
+  Future<NovelChapterSyncResult> update(
+    String novelId, {
+    NovelChapterUpdateIntent intent = NovelChapterUpdateIntent.normal,
+  }) {
+    intents.add(intent);
+    return _completion.future;
+  }
+
+  void complete() {
+    _completion.complete(
+      NovelChapterSyncResult(
+        mode: NovelChapterSyncMode.fullRefresh,
+        fetchedPages: 1,
+        insertedCount: 0,
+        updatedCount: 1,
+        totalCount: 1,
+        checkpoint: NovelChapterSyncCheckpoint(
+          novelId: 'novel:1',
+          publisherId: '406769',
+          lastCompletedAuthorPage: 1,
+          lastSeenPid: '5001',
+          completedAt: DateTime(2026, 7, 14),
+        ),
       ),
     );
   }

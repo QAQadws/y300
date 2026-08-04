@@ -93,6 +93,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   final Set<String> _downloadingEpisodeIds = <String>{};
   final Set<String> _readingStateMutationEpisodeIds = <String>{};
   bool _isResettingWorkReading = false;
+  Future<void>? _refreshInFlight;
   Listenable? _chapterDownloadActivityListenable;
   final RouteContentPresentationGuard _contentPresentationGuard =
       RouteContentPresentationGuard();
@@ -121,6 +122,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   bool get _supportsChapterReadState => _readStateAdapter != null;
+
+  bool get _supportsFullRefresh => widget.adapter is DetailFullRefreshAdapter;
 
   DetailWorkReadingResetAdapter? get _workReadingResetAdapter {
     final adapter = widget.adapter;
@@ -430,6 +433,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         imageHeaderBuilder: widget.imageHeaderBuilder,
                         onToggleShelf: () => _showMoveCategorySheet(),
                         onRefresh: _refreshAndShowFeedback,
+                        onRefreshLongPress: _supportsFullRefresh
+                            ? () => _refreshAndShowFeedback(full: true)
+                            : null,
                         onOpenThread: () async {
                           final target = await widget.adapter
                               .getThreadRouteTarget(workId: widget.workId);
@@ -1054,9 +1060,26 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     }
   }
 
-  Future<void> _refreshAndShowFeedback() async {
+  Future<void> _refreshAndShowFeedback({bool full = false}) {
+    final active = _refreshInFlight;
+    if (active != null) {
+      return active;
+    }
+    late final Future<void> guardedRun;
+    guardedRun = _performRefreshAndShowFeedback(full: full).whenComplete(() {
+      if (identical(_refreshInFlight, guardedRun)) {
+        _refreshInFlight = null;
+      }
+    });
+    _refreshInFlight = guardedRun;
+    return guardedRun;
+  }
+
+  Future<void> _performRefreshAndShowFeedback({required bool full}) async {
     try {
-      final result = await _controller.refresh();
+      final result = full
+          ? await _controller.refreshFully()
+          : await _controller.refresh();
       await widget.onRefreshCompleted?.call(result);
       if (!mounted) {
         return;

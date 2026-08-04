@@ -1661,7 +1661,10 @@ class _RecordingNovelChapterUpdateService implements NovelChapterUpdateService {
   final List<String> novelIds = <String>[];
 
   @override
-  Future<NovelChapterSyncResult> update(String novelId) async {
+  Future<NovelChapterSyncResult> update(
+    String novelId, {
+    NovelChapterUpdateIntent intent = NovelChapterUpdateIntent.normal,
+  }) async {
     novelIds.add(novelId);
     return NovelChapterSyncResult(
       mode: NovelChapterSyncMode.incremental,

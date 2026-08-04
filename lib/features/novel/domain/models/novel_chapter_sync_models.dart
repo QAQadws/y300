@@ -1,4 +1,16 @@
-enum NovelChapterSyncMode { initialFull, incremental }
+enum NovelChapterSyncMode {
+  /// First hydration for a work that does not yet have a complete chapter set.
+  initialFull,
+
+  /// Revisit the persisted overlap page and append/update chapters from there.
+  incremental,
+
+  /// Rebuild an already hydrated work from author-filtered page one.
+  ///
+  /// Unlike [initialFull], a failed refresh must not invalidate the existing
+  /// ready chapter set.
+  fullRefresh,
+}
 
 class NovelChapterSyncCheckpoint {
   const NovelChapterSyncCheckpoint({

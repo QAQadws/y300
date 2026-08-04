@@ -11,6 +11,7 @@ import 'package:y300/features/novel/domain/repositories/novel_source_state_repos
 import 'package:y300/features/novel/domain/services/novel_author_post_episode_builder.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.dart';
 import 'package:y300/features/novel/domain/services/novel_sync_request_governor.dart';
+import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 typedef NovelChapterSyncClock = DateTime Function();
@@ -22,6 +23,7 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
     required NovelThreadGateway threadGateway,
     required NovelSyncRequestGovernor governor,
     required NovelAuthorPostEpisodeBuilder episodeBuilder,
+    required NovelTitleSanitizer titleSanitizer,
     required NovelChapterSyncRepository repository,
     required NovelSourceStateRepository sourceStateRepository,
     LibraryShelfRefreshBus? shelfRefreshBus,
@@ -31,6 +33,7 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
   }) : _threadGateway = threadGateway,
        _governor = governor,
        _episodeBuilder = episodeBuilder,
+       _titleSanitizer = titleSanitizer,
        _repository = repository,
        _sourceStateRepository = sourceStateRepository,
        _shelfRefreshBus = shelfRefreshBus,
@@ -40,6 +43,7 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
   final NovelThreadGateway _threadGateway;
   final NovelSyncRequestGovernor _governor;
   final NovelAuthorPostEpisodeBuilder _episodeBuilder;
+  final NovelTitleSanitizer _titleSanitizer;
   final NovelChapterSyncRepository _repository;
   final NovelSourceStateRepository _sourceStateRepository;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
@@ -99,6 +103,7 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
     var acceptedCount = 0;
     var totalPages = page;
     var lastSeenPid = persistedCheckpoint?.lastSeenPid;
+    String? sourceTitle;
     var runBegan = false;
     final seenPids = <String>{};
 
@@ -161,6 +166,10 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
           throw StateError(
             'Author-filtered page $page is empty before the last page.',
           );
+        }
+        if (fetchedPages == 1) {
+          final sanitizedTitle = _titleSanitizer.sanitize(detail.subject);
+          sourceTitle = sanitizedTitle.isEmpty ? null : sanitizedTitle;
         }
 
         _emit(
@@ -229,6 +238,7 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
         request: request,
         checkpoint: checkpoint,
         fetchedPages: fetchedPages,
+        sourceTitle: sourceTitle,
       );
       _emit(
         NovelChapterSyncProgress(
@@ -243,9 +253,14 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
       );
       _shelfRefreshBus?.notify(
         modules: const <LibraryModuleKey>{LibraryModuleKey.novel},
-        reason: request.mode == NovelChapterSyncMode.initialFull
-            ? 'novel_initial_chapter_hydration_completed'
-            : 'novel_incremental_chapter_sync_completed',
+        reason: switch (request.mode) {
+          NovelChapterSyncMode.initialFull =>
+            'novel_initial_chapter_hydration_completed',
+          NovelChapterSyncMode.incremental =>
+            'novel_incremental_chapter_sync_completed',
+          NovelChapterSyncMode.fullRefresh =>
+            'novel_full_chapter_refresh_completed',
+        },
         source: LibraryMutationSource.novelRefresh,
         workId: novelId,
         tid: tid,
@@ -307,7 +322,7 @@ class DefaultNovelChapterSyncService implements NovelChapterSyncService {
     required String novelId,
     required String publisherId,
   }) {
-    if (request.mode == NovelChapterSyncMode.initialFull) {
+    if (request.mode != NovelChapterSyncMode.incremental) {
       return request.checkpoint;
     }
     final checkpoint = request.checkpoint;

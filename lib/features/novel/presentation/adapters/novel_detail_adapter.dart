@@ -16,7 +16,11 @@ import 'package:y300/features/novel/domain/services/novel_chapter_update_service
 
 /// 小说详情适配器（Phase 6）。
 class NovelDetailAdapter
-    implements DetailModuleAdapter, DetailMetadataEditor, DetailCoverEditor {
+    implements
+        DetailModuleAdapter,
+        DetailFullRefreshAdapter,
+        DetailMetadataEditor,
+        DetailCoverEditor {
   NovelDetailAdapter(
     this._repository, {
     ImageCacheService? imageCacheService,
@@ -219,6 +223,24 @@ class NovelDetailAdapter
       );
     }
     final result = await updateServiceFactory().update(workId);
+    return DetailRefreshResult.chaptersChanged(
+      insertedCount: result.insertedCount,
+      updatedCount: result.updatedCount,
+    );
+  }
+
+  @override
+  Future<DetailRefreshResult> refreshWorkFully({required String workId}) async {
+    final updateServiceFactory = _chapterUpdateServiceFactory;
+    if (updateServiceFactory == null) {
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
+    }
+    final result = await updateServiceFactory().update(
+      workId,
+      intent: NovelChapterUpdateIntent.full,
+    );
     return DetailRefreshResult.chaptersChanged(
       insertedCount: result.insertedCount,
       updatedCount: result.updatedCount,

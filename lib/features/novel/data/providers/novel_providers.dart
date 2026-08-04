@@ -170,6 +170,7 @@ final novelChapterSyncServiceProvider = Provider<NovelChapterSyncService>((
     threadGateway: ref.watch(novelThreadGatewayProvider),
     governor: ref.watch(novelSyncRequestGovernorProvider),
     episodeBuilder: ref.watch(novelAuthorPostEpisodeBuilderProvider),
+    titleSanitizer: ref.watch(novelTitleSanitizerProvider),
     repository: ref.watch(novelChapterSyncRepositoryProvider),
     sourceStateRepository: ref.watch(novelSourceStateRepositoryProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),

@@ -184,12 +184,18 @@ void main() {
     );
 
     final result = await adapter.refreshWork(workId: 'novel:1');
+    final fullResult = await adapter.refreshWorkFully(workId: 'novel:1');
 
-    expect(updateService.novelIds, <String>['novel:1']);
+    expect(updateService.novelIds, <String>['novel:1', 'novel:1']);
+    expect(updateService.intents, <NovelChapterUpdateIntent>[
+      NovelChapterUpdateIntent.normal,
+      NovelChapterUpdateIntent.full,
+    ]);
     expect(result.status, DetailRefreshStatus.immediate);
     expect(result.outcomeCode, DetailRefreshOutcomeCode.chaptersChanged);
     expect(result.insertedCount, 1);
     expect(result.updatedCount, 2);
+    expect(fullResult.outcomeCode, DetailRefreshOutcomeCode.chaptersChanged);
     expect(repository.lastRefreshMode, isNull);
   });
 
@@ -388,10 +394,15 @@ class _FakeNovelSourceStateRepository implements NovelSourceStateRepository {
 
 class _RecordingNovelChapterUpdateService implements NovelChapterUpdateService {
   final List<String> novelIds = <String>[];
+  final List<NovelChapterUpdateIntent> intents = <NovelChapterUpdateIntent>[];
 
   @override
-  Future<NovelChapterSyncResult> update(String novelId) async {
+  Future<NovelChapterSyncResult> update(
+    String novelId, {
+    NovelChapterUpdateIntent intent = NovelChapterUpdateIntent.normal,
+  }) async {
     novelIds.add(novelId);
+    intents.add(intent);
     return NovelChapterSyncResult(
       mode: NovelChapterSyncMode.incremental,
       fetchedPages: 1,
