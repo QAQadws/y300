@@ -596,6 +596,7 @@ void main() {
     (tester) async {
       final repository = _FakeNovelRepository(
         preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.vertical,
           themePreset: NovelReaderThemePreset.light,
         ),
       );
@@ -778,6 +779,7 @@ void main() {
     (tester) async {
       final repository = _FakeNovelRepository(
         preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.vertical,
           themePreset: NovelReaderThemePreset.light,
         ),
       );
@@ -824,13 +826,9 @@ void main() {
     },
   );
 
-  testWidgets('NovelReaderPage renders the saved paged preference', (
-    tester,
-  ) async {
+  testWidgets('NovelReaderPage renders the paged LTR default', (tester) async {
     final repository = _FakeNovelRepository(
-      preferences: NovelReaderPreferences.defaults().copyWith(
-        flowMode: NovelReaderFlowMode.pagedLtr,
-      ),
+      preferences: NovelReaderPreferences.defaults(),
       firstParagraphs: List<String>.generate(
         12,
         (index) => '首屏分页段落 $index ${List<String>.filled(60, '正文').join()}',
@@ -1059,6 +1057,7 @@ void main() {
   testWidgets('NovelReaderPage constrains wide content column', (tester) async {
     final repository = _FakeNovelRepository(
       preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.vertical,
         contentMaxWidth: 360,
       ),
     );
@@ -1950,7 +1949,11 @@ class _FakeNovelRepository implements NovelRepository {
              firstParagraphs: firstParagraphs,
              firstRawHtml: firstRawHtml,
            ),
-       preferences = preferences ?? NovelReaderPreferences.defaults();
+       preferences =
+           preferences ??
+           NovelReaderPreferences.defaults().copyWith(
+             flowMode: NovelReaderFlowMode.vertical,
+           );
 
   factory _FakeNovelRepository.threeEpisodes({
     NovelReadingProgress? readingProgress,

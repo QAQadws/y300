@@ -42,7 +42,12 @@ final class SqliteNovelReaderPreferencesLegacySource
           max: NovelReaderPreferencesSnapshotCodec.maximumLineHeight,
           fallback: defaults.lineHeight,
         ),
-        flowMode: _flowMode(_stringValue(row['flow_mode']), defaults.flowMode),
+        // Existing SQLite rows used vertical as their implicit flow mode.
+        // Keep that compatibility fallback while new installs use paged LTR.
+        flowMode: _flowMode(
+          _stringValue(row['flow_mode']),
+          NovelReaderFlowMode.vertical,
+        ),
         themePreset: _themePreset(
           _stringValue(row['theme_preset']) ?? _stringValue(row['theme_mode']),
           defaults.themePreset,

@@ -30,6 +30,7 @@ void main() {
     expect(loaded, NovelReaderPreferences.defaults());
     expect(loaded.fontSize, 18.5);
     expect(loaded.lineHeight, 1.6);
+    expect(loaded.flowMode, NovelReaderFlowMode.pagedLtr);
     expect(loaded.themePreset, NovelReaderThemePreset.sepia);
     expect(legacySource.callCount, 1);
   });
@@ -100,6 +101,23 @@ void main() {
     expect(legacySource.callCount, 0);
   });
 
+  test('saved vertical mode survives the new-reader default change', () async {
+    await repository.save(
+      NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.vertical,
+      ),
+    );
+    repository = SharedPreferencesNovelReaderPreferencesRepository(
+      preferencesStore: SharedPreferencesStore(),
+      legacySource: legacySource,
+    );
+
+    final loaded = await repository.load();
+
+    expect(loaded.flowMode, NovelReaderFlowMode.vertical);
+    expect(legacySource.callCount, 0);
+  });
+
   test('codec round-trips every supported flow mode', () {
     const codec = NovelReaderPreferencesSnapshotCodec();
 
@@ -134,7 +152,7 @@ void main() {
     },
   );
 
-  test('schema 1 snapshot without flow mode remains compatible', () {
+  test('schema 1 snapshot without flow mode preserves vertical mode', () {
     const codec = NovelReaderPreferencesSnapshotCodec();
 
     final decoded = codec.decode(

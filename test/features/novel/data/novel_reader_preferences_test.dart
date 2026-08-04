@@ -4,7 +4,7 @@ import 'package:y300/features/novel/data/preferences/novel_reader_preferences_sn
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 
 void main() {
-  test('NovelReaderPreferences.defaults uses the phase-0 baseline', () {
+  test('NovelReaderPreferences.defaults uses the current reader baseline', () {
     final defaults = NovelReaderPreferences.defaults();
 
     expect(defaults.fontSize, 18.5);
@@ -12,7 +12,7 @@ void main() {
     expect(defaults.paragraphSpacing, 10);
     expect(defaults.pagePadding, NovelReaderSpacing.pagedPagePadding);
     expect(defaults.fontFamily, 'system');
-    expect(defaults.flowMode, NovelReaderFlowMode.vertical);
+    expect(defaults.flowMode, NovelReaderFlowMode.pagedLtr);
     expect(defaults.themePreset, NovelReaderThemePreset.sepia);
     expect(defaults.contentMaxWidth, 720);
     expect(defaults.firstLineIndent, 0);
@@ -33,6 +33,7 @@ void main() {
     );
 
     expect(preferences.themePreset, NovelReaderThemePreset.sepia);
+    expect(preferences.flowMode, NovelReaderFlowMode.pagedLtr);
   });
 
   group('NovelReaderThemePresetCodec', () {

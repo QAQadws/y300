@@ -72,19 +72,27 @@ void main() {
     expect(loaded.showProgressIndicator, isTrue);
   });
 
-  test('invalid legacy display values fall back to new defaults', () async {
-    await db.insert(ComicLocalDb.readerPreferencesTable, <String, Object?>{
-      'content_type': 'novel',
-      'font_size': 100.0,
-      'line_height': 0.5,
-      'paragraph_spacing': 10.0,
-      'page_padding': 16.0,
-      'theme_mode': 'future-theme',
-      'font_family': 'system',
-      'flow_mode': 'future-flow',
-      'conversion_mode': 'future-conversion',
-    });
+  test(
+    'invalid legacy display values preserve the old flow fallback',
+    () async {
+      await db.insert(ComicLocalDb.readerPreferencesTable, <String, Object?>{
+        'content_type': 'novel',
+        'font_size': 100.0,
+        'line_height': 0.5,
+        'paragraph_spacing': 10.0,
+        'page_padding': 16.0,
+        'theme_mode': 'future-theme',
+        'font_family': 'system',
+        'flow_mode': 'future-flow',
+        'conversion_mode': 'future-conversion',
+      });
 
-    expect(await source.load(), NovelReaderPreferences.defaults());
-  });
+      expect(
+        await source.load(),
+        NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.vertical,
+        ),
+      );
+    },
+  );
 }

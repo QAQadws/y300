@@ -6,6 +6,8 @@ final class NovelReaderPreferencesSnapshotCodec {
   const NovelReaderPreferencesSnapshotCodec();
 
   static const int schemaVersion = 1;
+  static const NovelReaderFlowMode _legacyFlowModeFallback =
+      NovelReaderFlowMode.vertical;
   static const double minimumFontSize = 14;
   static const double maximumFontSize = 30;
   static const double minimumLineHeight = 1.2;
@@ -48,7 +50,10 @@ final class NovelReaderPreferencesSnapshotCodec {
           max: maximumLineHeight,
           fallback: defaults.lineHeight,
         ),
-        flowMode: _flowMode(decoded['flowMode'], defaults.flowMode),
+        // A persisted schema-1 snapshot predates the new-reader default.
+        // Preserve its former implicit vertical mode when this field is
+        // absent or unknown instead of silently migrating an existing user.
+        flowMode: _flowMode(decoded['flowMode'], _legacyFlowModeFallback),
         themePreset: _themePreset(decoded['themePreset'], defaults.themePreset),
         conversionMode: _conversionMode(
           decoded['conversionMode'],

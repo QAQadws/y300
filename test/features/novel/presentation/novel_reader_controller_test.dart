@@ -108,6 +108,31 @@ void main() {
   );
 
   test(
+    'NovelReaderController exposes paged LTR for new-reader defaults',
+    () async {
+      final repository = _ControllerNovelRepository(
+        preferences: NovelReaderPreferences.defaults(),
+      );
+      final container = _buildContainer(repository: repository);
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+
+      final state = await container.read(
+        novelReaderControllerProvider(args).future,
+      );
+
+      expect(state.persistedPreferences.flowMode, NovelReaderFlowMode.pagedLtr);
+      expect(state.effectivePreferences.flowMode, NovelReaderFlowMode.pagedLtr);
+      expect(state.progressSnapshot.flowMode, NovelReaderFlowMode.pagedLtr);
+    },
+  );
+
+  test(
     'NovelReaderController previewPreferences only updates effective state',
     () async {
       final repository = _ControllerNovelRepository();
@@ -1107,7 +1132,11 @@ class _ControllerNovelRepository implements NovelRepository {
   _ControllerNovelRepository({
     this.readingProgress,
     NovelReaderPreferences? preferences,
-  }) : preferences = preferences ?? NovelReaderPreferences.defaults() {
+  }) : preferences =
+           preferences ??
+           NovelReaderPreferences.defaults().copyWith(
+             flowMode: NovelReaderFlowMode.vertical,
+           ) {
     contentsByEpisodeId = <String, NovelChapterContent>{
       for (final episode in episodes)
         episode.episodeId: _content(
