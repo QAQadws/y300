@@ -9,6 +9,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 
 void main() {
@@ -159,6 +160,65 @@ void main() {
     expect(find.byType(ReaderPagedImageFitSurface), findsNothing);
     expect(find.byType(PageView), findsNothing);
   });
+
+  testWidgets(
+    'decoded dimensions remove internal vertical slot padding at zero spacing',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const <String, Object>{
+        'reader_pref_mode': 'vertical',
+        'reader_pref_page_fit': 'fitWidth',
+        'reader_pref_page_spacing': 0.0,
+      });
+      tester.view.physicalSize = const Size(600, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumImagePrecacheServiceProvider.overrideWithValue(
+              _NoopForumImagePrecacheService(),
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: ImageReaderEngine(
+              capability: _DecodedVerticalDimensionCapability(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final reader = tester.widget<ContinuousImageReaderView>(
+        find.byType(ContinuousImageReaderView),
+      );
+      expect(reader.items, hasLength(2));
+      expect(reader.items.map((item) => item.spacingAfter), everyElement(0));
+      expect(
+        reader.items.map((item) => item.knownDimensionSource),
+        everyElement(ContinuousImageDimensionSource.decodedImage),
+      );
+
+      final firstSlot = tester.getRect(
+        find.byKey(const ValueKey<String>('image-reader-engine-image-slot-0')),
+      );
+      final secondSlot = tester.getRect(
+        find.byKey(const ValueKey<String>('image-reader-engine-image-slot-1')),
+      );
+      final firstImage = tester.getRect(
+        find.byKey(const ValueKey<String>('decoded-vertical-image-0')),
+      );
+
+      // The HTML hint reserves 1200dp (600 / 0.5), while the decoded image is
+      // 600x300. The final slot must follow the decoded 2:1 ratio so the
+      // image does not sit inside a taller box that looks like page spacing.
+      expect(firstSlot.height, closeTo(300, 0.5));
+      expect(firstImage.height, closeTo(firstSlot.height, 0.5));
+      expect(secondSlot.top - firstSlot.bottom, closeTo(0, 0.5));
+    },
+  );
 
   testWidgets('loading indicator color contrasts reader backgrounds', (
     tester,
@@ -410,6 +470,82 @@ class _DecodedDimensionCapability extends ReaderCapability {
       });
     }
     return const ColoredBox(color: Colors.black);
+  }
+
+  @override
+  ImageCacheRequest cacheRequestFor(ContinuousImageItem item) {
+    return ImageCacheRequest(
+      cacheKey: item.cacheKey,
+      sourceUrl: item.url,
+      ownerType: ImageCacheOwnerType.thread,
+      ownerId: item.ownerId,
+      role: ImageCacheRole.threadInline,
+      imageIndex: item.index,
+      retentionClass: ImageRetentionClass.recentReader,
+    );
+  }
+}
+
+class _DecodedVerticalDimensionCapability extends ReaderCapability {
+  final Set<String> _reportedItemIds = <String>{};
+
+  @override
+  ReaderContent get content => const ReaderContent(
+    ownerId: 'decoded-vertical-owner',
+    initialIndex: 0,
+    items: <ContinuousImageItem>[
+      ContinuousImageItem(
+        ownerId: 'decoded-vertical-owner',
+        id: 'decoded-vertical-item-0',
+        url: 'https://img.test/decoded-vertical-0.jpg',
+        cacheKey: 'reader/decoded-vertical-0',
+        index: 0,
+        sourceKind: ContinuousImageSourceKind.threadImageReader,
+        knownWidth: 200,
+        knownHeight: 400,
+        knownDimensionSource: ContinuousImageDimensionSource.html,
+      ),
+      ContinuousImageItem(
+        ownerId: 'decoded-vertical-owner',
+        id: 'decoded-vertical-item-1',
+        url: 'https://img.test/decoded-vertical-1.jpg',
+        cacheKey: 'reader/decoded-vertical-1',
+        index: 1,
+        sourceKind: ContinuousImageSourceKind.threadImageReader,
+        knownWidth: 200,
+        knownHeight: 400,
+        knownDimensionSource: ContinuousImageDimensionSource.html,
+      ),
+    ],
+  );
+
+  @override
+  ImageRequestHeaderBuilder? get imageHeaderBuilder => null;
+
+  @override
+  ReaderTitleSpec titleFor(ReaderEngineContext context) {
+    return ReaderTitleSpec(
+      title: 'reader',
+      subtitle: '${context.currentIndex + 1} / ${context.totalCount}',
+    );
+  }
+
+  @override
+  Widget buildImageContent(BuildContext context, ReaderImageBuildSpec spec) {
+    if (_reportedItemIds.add(spec.item.id)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        spec.onDimensionsResolved(const Size(600, 300));
+      });
+    }
+    return Align(
+      child: AspectRatio(
+        aspectRatio: 2,
+        child: ColoredBox(
+          key: ValueKey<String>('decoded-vertical-image-${spec.index}'),
+          color: Colors.black,
+        ),
+      ),
+    );
   }
 
   @override

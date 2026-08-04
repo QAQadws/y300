@@ -10,7 +10,6 @@ void main() {
     test('maps reader images to stable continuous image items', () {
       final items = adapter.mapImages(
         episodeId: 'episode-1',
-        pageSpacing: 12,
         images: const <ComicReaderImageState>[
           ComicReaderImageState(
             imageUrl: 'https://img.test/1.jpg',
@@ -31,13 +30,12 @@ void main() {
       expect(items.single.knownWidth, 900);
       expect(items.single.knownHeight, 1800);
       expect(items.single.fallbackAspectRatio, 0.75);
-      expect(items.single.spacingAfter, 12);
+      expect(items.single.spacingAfter, 0);
     });
 
     test('falls back to image url when cache key is absent', () {
       final item = adapter.mapImage(
         episodeId: 'episode-1',
-        pageSpacing: 99,
         image: const ComicReaderImageState(
           imageUrl: 'https://img.test/1.jpg',
           imageIndex: 4,
@@ -47,7 +45,7 @@ void main() {
 
       expect(item.id, 'episode-1:4:https://img.test/1.jpg');
       expect(item.cacheKey, 'https://img.test/1.jpg');
-      expect(item.spacingAfter, 48);
+      expect(item.spacingAfter, 0);
     });
   });
 }

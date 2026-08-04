@@ -8,7 +8,6 @@ class ThreadImageReaderContinuousImageAdapter {
   List<ContinuousImageItem> mapRequest(
     ThreadImageOpenRequest request, {
     double fallbackAspectRatio = 0.7,
-    double spacingAfter = 10,
   }) {
     final ownerId = _ownerIdFor(request);
     return request.group.entries
@@ -18,7 +17,6 @@ class ThreadImageReaderContinuousImageAdapter {
             entry: entry,
             referer: request.referer,
             fallbackAspectRatio: fallbackAspectRatio,
-            spacingAfter: spacingAfter,
           ),
         )
         .toList(growable: false);
@@ -29,7 +27,6 @@ class ThreadImageReaderContinuousImageAdapter {
     required ThreadPostImageEntry entry,
     required String referer,
     required double fallbackAspectRatio,
-    required double spacingAfter,
   }) {
     final dimensions = _dimensionsFor(entry.layoutHint);
     return ContinuousImageItem(
@@ -44,7 +41,6 @@ class ThreadImageReaderContinuousImageAdapter {
       knownHeight: dimensions?.height,
       knownDimensionSource: dimensions?.source,
       fallbackAspectRatio: fallbackAspectRatio,
-      spacingAfter: spacingAfter,
       extra: <String, Object?>{
         'rawUrl': entry.rawUrl,
         if (entry.aid != null) 'aid': entry.aid,

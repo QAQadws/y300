@@ -89,7 +89,6 @@ class ComicReaderCapability extends ReaderCapability {
       items: _adapter.mapImages(
         episodeId: viewState.episodeId,
         images: viewState.images,
-        pageSpacing: preferences.pageSpacing,
       ),
     );
   }

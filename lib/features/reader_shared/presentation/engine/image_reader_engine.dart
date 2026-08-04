@@ -65,8 +65,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   late final ValueNotifier<int> _activePagedIndex;
   ScrollHoldController? _pagedZoomScrollHold;
   final Map<int, bool> _pagedHorizontalOverflowByIndex = <int, bool>{};
-  final Map<String, double> _resolvedPagedAspectRatioByItemId =
-      <String, double>{};
+  final Map<String, ContinuousImageDimensions> _resolvedDimensionsByItemId =
+      <String, ContinuousImageDimensions>{};
 
   int _lastKnownIndex = 0;
   ReaderSequencePosition _pagedPosition = const ReaderSequencePosition.image(0);
@@ -118,6 +118,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   List<ContinuousImageItem> _latestItems = const <ContinuousImageItem>[];
   double _pendingScrollCompensationDelta = 0;
+  double _pendingPageSpacingCompensationDelta = 0;
+  String? _verticalSpacingOwnerId;
+  double? _appliedVerticalPageSpacing;
+  int _verticalSpacingCompensationGeneration = 0;
   ScrollPosition? _observedScrollPosition;
 
   ReaderCapability get _capability => widget.capability;
@@ -257,7 +261,15 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     ReaderPreferences preferences,
     ReaderEngineContext engineContext,
   ) {
-    final items = content.items;
+    final pageSpacing = preferences.pageSpacing.clamp(0.0, 48.0).toDouble();
+    final items = _applyVerticalPageSpacing(
+      _applyResolvedVerticalDimensions(content.items),
+      pageSpacing,
+    );
+    _scheduleVerticalPageSpacingCompensation(
+      ownerId: content.ownerId,
+      pageSpacing: pageSpacing,
+    );
     _latestItems = items;
     _syncVerticalItemAnchors(items);
     final verticalTrailing = _buildVerticalTrailingSpec(engineContext);
@@ -313,6 +325,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   }
 
   Widget _buildPaged(ReaderContent content, ReaderPreferences preferences) {
+    _resetVerticalPageSpacingTracking();
     final items = content.items;
     final tail = _tailSurface;
     final pageController = _pageController;
@@ -359,6 +372,137 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     );
   }
 
+  List<ContinuousImageItem> _applyVerticalPageSpacing(
+    List<ContinuousImageItem> items,
+    double pageSpacing,
+  ) {
+    if (items.every((item) => item.spacingAfter == pageSpacing)) {
+      return items;
+    }
+    return List<ContinuousImageItem>.unmodifiable(
+      items.map((item) => item.copyWith(spacingAfter: pageSpacing)),
+    );
+  }
+
+  List<ContinuousImageItem> _applyResolvedVerticalDimensions(
+    List<ContinuousImageItem> items,
+  ) {
+    if (!widget.flowPolicy.updateVisibleItemAspectRatio ||
+        _resolvedDimensionsByItemId.isEmpty) {
+      return items;
+    }
+    var changed = false;
+    final resolvedItems = items
+        .map((item) {
+          final dimensions = _resolvedDimensionsByItemId[item.id];
+          if (dimensions == null ||
+              (item.knownWidth == dimensions.width &&
+                  item.knownHeight == dimensions.height &&
+                  item.knownDimensionSource ==
+                      ContinuousImageDimensionSource.decodedImage)) {
+            return item;
+          }
+          changed = true;
+          return item.copyWith(
+            knownWidth: dimensions.width,
+            knownHeight: dimensions.height,
+            knownDimensionSource: ContinuousImageDimensionSource.decodedImage,
+          );
+        })
+        .toList(growable: false);
+    return changed
+        ? List<ContinuousImageItem>.unmodifiable(resolvedItems)
+        : items;
+  }
+
+  void _scheduleVerticalPageSpacingCompensation({
+    required String ownerId,
+    required double pageSpacing,
+  }) {
+    final previousOwnerId = _verticalSpacingOwnerId;
+    final previousSpacing = _appliedVerticalPageSpacing;
+    _verticalSpacingOwnerId = ownerId;
+    _appliedVerticalPageSpacing = pageSpacing;
+
+    if (previousOwnerId != ownerId || previousSpacing == null) {
+      _verticalSpacingCompensationGeneration += 1;
+      return;
+    }
+    if ((previousSpacing - pageSpacing).abs() < 0.001) {
+      return;
+    }
+
+    final generation = ++_verticalSpacingCompensationGeneration;
+    if (!_scrollController.hasClients || _latestItems.isEmpty) {
+      return;
+    }
+    final anchorIndex = _lastKnownIndex
+        .clamp(0, _latestItems.length - 1)
+        .toInt();
+    // Capture the old render-tree anchor before this build publishes the new
+    // gaps. Comparing the same stable item after layout also preserves the
+    // reader's intra-image offset when several slider changes are coalesced.
+    final oldAnchorOffset =
+        _resolveExactVerticalOffset(anchorIndex) ??
+        _estimateVerticalOffset(anchorIndex);
+    if (oldAnchorOffset == null || !oldAnchorOffset.isFinite) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          generation != _verticalSpacingCompensationGeneration ||
+          _verticalSpacingOwnerId != ownerId ||
+          _lastOwnerId != ownerId ||
+          _diagnosticMode != ReaderModePreference.vertical ||
+          !_scrollController.hasClients ||
+          anchorIndex >= _latestItems.length) {
+        return;
+      }
+      final newAnchorOffset =
+          _resolveExactVerticalOffset(anchorIndex) ??
+          _estimateVerticalOffset(anchorIndex);
+      if (newAnchorOffset == null || !newAnchorOffset.isFinite) {
+        return;
+      }
+      _applyVerticalPageSpacingCompensation(newAnchorOffset - oldAnchorOffset);
+    });
+  }
+
+  void _applyVerticalPageSpacingCompensation(double delta) {
+    if (!delta.isFinite ||
+        delta.abs() <= 0.5 ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    _syncScrollPositionActivityListener();
+    final position = _scrollController.position;
+    if (position.isScrollingNotifier.value ||
+        _viewportTracker.directionFromPosition(position) !=
+            ContinuousImageScrollDirection.idle) {
+      _pendingPageSpacingCompensationDelta += delta;
+      return;
+    }
+    final targetOffset = (position.pixels + delta)
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    if ((targetOffset - position.pixels).abs() > 0.5) {
+      _scrollController.jumpTo(targetOffset);
+    }
+  }
+
+  void _resetVerticalPageSpacingTracking() {
+    if (_verticalSpacingOwnerId == null &&
+        _appliedVerticalPageSpacing == null &&
+        _pendingPageSpacingCompensationDelta == 0) {
+      return;
+    }
+    _verticalSpacingOwnerId = null;
+    _appliedVerticalPageSpacing = null;
+    _pendingPageSpacingCompensationDelta = 0;
+    _verticalSpacingCompensationGeneration += 1;
+  }
+
   Widget _buildImage(
     ContinuousImageItem item,
     int index,
@@ -369,7 +513,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final sessionGeneration = _readerSessionGeneration;
     final pageController = _pageController;
     final aspectRatio = paged
-        ? _resolvedPagedAspectRatioByItemId[item.id] ??
+        ? _resolvedDimensionsByItemId[item.id]?.aspectRatioOrNull ??
               _layoutResolver.resolveInitialHint(item: item).aspectRatio
         : null;
     final sessionBinding = _imageSessionStore.bindingFor(
@@ -462,8 +606,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     required bool paged,
     required Size size,
   }) {
-    if (!paged ||
-        !mounted ||
+    if (!mounted ||
         _lastOwnerId != ownerId ||
         _capability.content.ownerId != ownerId ||
         _readerSessionGeneration != sessionGeneration ||
@@ -473,12 +616,20 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         size.height <= 0) {
       return;
     }
-    final aspectRatio = size.width / size.height;
-    final previous = _resolvedPagedAspectRatioByItemId[itemId];
-    if (previous != null && (previous - aspectRatio).abs() < 0.0001) {
+    final dimensions = ContinuousImageDimensions(
+      width: size.width.round(),
+      height: size.height.round(),
+    );
+    if (!dimensions.isValid ||
+        (!paged && !widget.flowPolicy.updateVisibleItemAspectRatio)) {
       return;
     }
-    _resolvedPagedAspectRatioByItemId[itemId] = aspectRatio;
+    final previous = _resolvedDimensionsByItemId[itemId];
+    if (previous?.width == dimensions.width &&
+        previous?.height == dimensions.height) {
+      return;
+    }
+    _resolvedDimensionsByItemId[itemId] = dimensions;
     setState(() {});
   }
 
@@ -866,12 +1017,13 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _lastOwnerId = content.ownerId;
     _latestItems = const <ContinuousImageItem>[];
     _pendingScrollCompensationDelta = 0;
+    _resetVerticalPageSpacingTracking();
     _reportedVisibleImageIndexes.clear();
     _reportedTailSurfaceKeys.clear();
     _reportedAdvanceSurfaceKeys.clear();
     _reportedAdjacentPreloadKeys.clear();
     _pagedHorizontalOverflowByIndex.clear();
-    _resolvedPagedAspectRatioByItemId.clear();
+    _resolvedDimensionsByItemId.clear();
     _pagedPosition = ReaderSequencePosition.image(initialIndex);
     _setZoomGate(false, paged: false);
     _activePagedIndex.value = initialIndex;
@@ -1384,7 +1536,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   }
 
   void _applyPendingScrollCompensationIfIdle() {
-    if (_pendingScrollCompensationDelta == 0 || !_scrollController.hasClients) {
+    if ((_pendingScrollCompensationDelta == 0 &&
+            _pendingPageSpacingCompensationDelta == 0) ||
+        !_scrollController.hasClients) {
       return;
     }
     final position = _scrollController.position;
@@ -1393,8 +1547,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
             ContinuousImageScrollDirection.idle) {
       return;
     }
-    final delta = _pendingScrollCompensationDelta;
+    final delta =
+        _pendingScrollCompensationDelta + _pendingPageSpacingCompensationDelta;
     _pendingScrollCompensationDelta = 0;
+    _pendingPageSpacingCompensationDelta = 0;
     final targetOffset = (position.pixels + delta)
         .clamp(position.minScrollExtent, position.maxScrollExtent)
         .toDouble();

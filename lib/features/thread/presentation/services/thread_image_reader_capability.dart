@@ -44,7 +44,7 @@ class ThreadImageReaderCapability extends ReaderCapability {
       ownerId: 'thread:${request.tid}:post:${request.pid}',
       initialIndex: request.initialIndex,
       // request.continuousImages 已由 ThreadImageReaderContinuousImageAdapter
-      // 在打开入口处映射好，这里直接复用，避免二次映射。
+      // 在打开入口处映射好；显示偏好由共享引擎在布局时统一应用。
       items: request.continuousImages,
     );
   }

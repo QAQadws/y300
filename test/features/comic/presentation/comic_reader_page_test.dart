@@ -24,6 +24,7 @@ import 'package:y300/features/comic/domain/services/comic_reading_state_writer.d
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/widgets/reader_session_image.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
@@ -204,6 +205,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SnackBar), findsOneWidget);
     expect(find.text('已添加书签'), findsOneWidget);
+  });
+
+  testWidgets('ComicReaderPage applies shared vertical page spacing', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'reader_pref_mode': 'vertical',
+      'reader_pref_page_spacing': 24.0,
+    });
+    await prepareLargeViewport(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicReadingStateWriterProvider.overrideWithValue(
+            _NoopReadingStateWriter(),
+          ),
+          comicReaderServiceProvider.overrideWith(
+            (ref) async => _ReaderFakeService(),
+          ),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+        child: const LocalizedTestApp(
+          home: ComicReaderPage(
+            comicId: 'yamibo:100',
+            episodeId: 'yamibo:100:101',
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    final reader = tester.widget<ContinuousImageReaderView>(
+      find.byType(ContinuousImageReaderView),
+    );
+    expect(reader.items.map((item) => item.spacingAfter), everyElement(24));
   });
 
   testWidgets('ComicReaderPage records preload tasks without duplicates', (

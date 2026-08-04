@@ -12,6 +12,7 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
+import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -44,6 +45,153 @@ void main() {
     expect(find.byType(CachedLibraryImage), findsWidgets);
     expect(find.byType(ReaderSessionImage), findsWidgets);
   });
+
+  testWidgets(
+    'ThreadImageReaderPage applies live shared spacing over request snapshots',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _RecordingImageCacheService(),
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: ThreadImageReaderPage(request: _request()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // The request fixture deliberately carries the old fixed 10dp gap.
+      // The shared preference default (0dp) must win at render time.
+      expect(
+        _verticalReaderView(tester).items.map((item) => item.spacingAfter),
+        everyElement(0),
+      );
+      expect(_verticalSlotGap(tester, 0, 1), closeTo(0, 0.5));
+
+      await _openReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-display')),
+      );
+      await tester.pumpAndSettle();
+
+      tester
+          .widget<Slider>(
+            find.byKey(const Key('comic-reader-page-spacing-slider')),
+          )
+          .onChanged!
+          .call(24);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        _verticalReaderView(tester).items.map((item) => item.spacingAfter),
+        everyElement(24),
+      );
+      expect(_verticalSlotGap(tester, 0, 1), closeTo(24, 0.5));
+
+      tester
+          .widget<Slider>(
+            find.byKey(const Key('comic-reader-page-spacing-slider')),
+          )
+          .onChanged!
+          .call(48);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        _verticalReaderView(tester).items.map((item) => item.spacingAfter),
+        everyElement(48),
+      );
+      expect(_verticalSlotGap(tester, 0, 1), closeTo(48, 0.5));
+    },
+  );
+
+  testWidgets(
+    'ThreadImageReaderPage preserves its vertical anchor when spacing changes',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final recorder = _RecordingContinuousImageDiagnosticRecorder();
+      final precacheService = _RecordingForumImagePrecacheService();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _RecordingImageCacheService(),
+            ),
+            forumImagePrecacheServiceProvider.overrideWithValue(
+              precacheService,
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: ThreadImageReaderPage(
+              request: _request(),
+              diagnosticRecorder: recorder,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final list = tester.widget<ListView>(
+        find.byKey(const Key('thread-image-reader-list')),
+      );
+      list.controller!.jumpTo(1000);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+
+      final indicator = tester.widget<Text>(
+        find.byKey(const Key('comic-reader-page-indicator-text')),
+      );
+      final logicalIndex =
+          int.parse(indicator.data!.split('/').first.trim()) - 1;
+      final anchor = find.byKey(
+        ValueKey<String>('thread-image-reader-image-slot-$logicalIndex'),
+      );
+      final anchorTopBefore = tester.getTopLeft(anchor).dy;
+      final preloadCountBefore = precacheService.decodedSpecs.length;
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ThreadImageReaderPage)),
+      );
+      await container
+          .read(readerPreferencesControllerProvider.notifier)
+          .setPageSpacing(24);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 16));
+
+      expect(tester.getTopLeft(anchor).dy, closeTo(anchorTopBefore, 1));
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const Key('comic-reader-page-indicator-text')),
+            )
+            .data,
+        indicator.data,
+      );
+      expect(precacheService.decodedSpecs, hasLength(preloadCountBefore));
+      expect(
+        recorder.events
+            .where(
+              (event) =>
+                  event.type ==
+                  ContinuousImageDiagnosticEventType.readerSessionCreated,
+            )
+            .length,
+        1,
+      );
+    },
+  );
 
   testWidgets('ThreadImageReaderPage uses the shared default LTR snapshot', (
     tester,
@@ -657,6 +805,22 @@ PageController _pageController(WidgetTester tester) {
     find.byKey(const Key('thread-image-reader-page-view')),
   );
   return pageView.controller!;
+}
+
+ContinuousImageReaderView _verticalReaderView(WidgetTester tester) {
+  return tester.widget<ContinuousImageReaderView>(
+    find.byType(ContinuousImageReaderView),
+  );
+}
+
+double _verticalSlotGap(WidgetTester tester, int first, int second) {
+  final firstRect = tester.getRect(
+    find.byKey(ValueKey<String>('thread-image-reader-image-slot-$first')),
+  );
+  final secondRect = tester.getRect(
+    find.byKey(ValueKey<String>('thread-image-reader-image-slot-$second')),
+  );
+  return secondRect.top - firstRect.bottom;
 }
 
 Future<void> _openReaderMenu(WidgetTester tester) async {

@@ -33,7 +33,6 @@ void main() {
           ],
         ),
         fallbackAspectRatio: 0.7,
-        spacingAfter: 10,
       );
 
       expect(items, hasLength(2));
@@ -53,7 +52,7 @@ void main() {
         items.first.knownDimensionSource,
         ContinuousImageDimensionSource.persistedCache,
       );
-      expect(items.first.spacingAfter, 10);
+      expect(items.first.spacingAfter, 0);
       expect(items.first.extra['rawUrl'], 'data/attachment/forum/page-1.jpg');
       expect(items.first.extra['aid'], 'aid-1');
 

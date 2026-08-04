@@ -7,23 +7,15 @@ class ComicReaderContinuousImageAdapter {
   List<ContinuousImageItem> mapImages({
     required String episodeId,
     required List<ComicReaderImageState> images,
-    required double pageSpacing,
   }) {
     return images
-        .map(
-          (image) => mapImage(
-            episodeId: episodeId,
-            image: image,
-            pageSpacing: pageSpacing,
-          ),
-        )
+        .map((image) => mapImage(episodeId: episodeId, image: image))
         .toList(growable: false);
   }
 
   ContinuousImageItem mapImage({
     required String episodeId,
     required ComicReaderImageState image,
-    required double pageSpacing,
   }) {
     final cacheKey = image.cacheKey?.trim();
     final effectiveCacheKey = cacheKey == null || cacheKey.isEmpty
@@ -40,7 +32,6 @@ class ComicReaderContinuousImageAdapter {
       knownHeight: image.height,
       knownDimensionSource: ContinuousImageDimensionSource.persistedCache,
       fallbackAspectRatio: 3 / 4,
-      spacingAfter: pageSpacing.clamp(0.0, 48.0).toDouble(),
     );
   }
 }
