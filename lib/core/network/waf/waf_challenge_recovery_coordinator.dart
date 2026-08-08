@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/waf/waf_challenge_detector.dart';
 
-/// Result of a foreground WAF recovery attempt.
+/// Result of a background WAF recovery attempt.
 ///
 /// [verified] is the only result that permits the transport layer to replay a
 /// request. The other values are intentionally explicit so that an
@@ -37,7 +37,7 @@ final class WafChallengeRecoveryRequest {
   final String userAgent;
 }
 
-/// Bridges transport-level challenge detection to one foreground UI flow.
+/// Bridges transport-level challenge detection to one background browser.
 ///
 /// The coordinator deliberately knows nothing about Flutter navigation or a
 /// WebView. The root presentation host attaches a launcher while mounted. All

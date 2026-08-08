@@ -2,7 +2,7 @@
 ///
 /// The WebView document is deliberately not used as proof of clearance: a
 /// WAF can return a non-empty error document and still reject the native
-/// client. Only [cleared] is sufficient to close the verification route.
+/// client. Only [cleared] is sufficient to finish background recovery.
 enum WafChallengeClearance { cleared, challenged, inconclusive }
 
 typedef WafChallengeClearanceProbe =

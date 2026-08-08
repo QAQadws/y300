@@ -42,9 +42,9 @@ class Y300App extends ConsumerWidget {
       locale: localeForAppLanguage(settings.languagePreference),
       localeListResolutionCallback: (locales, _) => resolveAppLocale(locales),
       supportedLocales: AppLocalizations.supportedLocales,
-      home: WafChallengeRecoveryHost(
-        child: enableAppUpdatePrompt ? AppUpdateAlertHost(child: home) : home,
-      ),
+      builder: (context, child) =>
+          WafChallengeRecoveryHost(child: child ?? const SizedBox.shrink()),
+      home: enableAppUpdatePrompt ? AppUpdateAlertHost(child: home) : home,
     );
   }
 }

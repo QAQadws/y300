@@ -123,7 +123,7 @@ class YamiboHttpGateway {
   /// page without the WAF challenge.
   ///
   /// This intentionally bypasses [_request]'s recovery hook. It is called
-  /// while the foreground recovery route is still open; routing the probe
+  /// while the background recovery WebView is still mounted; routing the probe
   /// through the coordinator would make it await itself forever. Challenge
   /// responses are not persisted or used for session extraction.
   Future<WafChallengeClearance> probeWafChallengeClearance(

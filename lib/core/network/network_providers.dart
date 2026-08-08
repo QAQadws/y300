@@ -28,7 +28,7 @@ final webViewCookieSyncServiceProvider = Provider<WebViewCookieSyncService>((
 });
 
 /// Process-wide bridge between challenged native requests and the single
-/// foreground verification route mounted by the application root.
+/// background WebView mounted by the application root.
 final wafChallengeRecoveryCoordinatorProvider =
     Provider<WafChallengeRecoveryCoordinator>((ref) {
       return WafChallengeRecoveryCoordinator();
@@ -64,7 +64,7 @@ final yamiboHttpGatewayProvider = Provider<YamiboHttpGateway>((ref) {
   );
 });
 
-/// Native clearance check used while the foreground WAF WebView is still
+/// Native clearance check used while the background WAF WebView is still
 /// mounted. It deliberately delegates to the shared gateway transport so it
 /// uses the same CookieStore and User-Agent without invoking recovery again.
 final wafChallengeClearanceProbeProvider = Provider<WafChallengeClearanceProbe>(
