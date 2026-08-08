@@ -1604,7 +1604,8 @@ class _ThreadFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasTag = thread.sourceTagName?.trim().isNotEmpty == true;
+    final tagName = _forumTagNameForDisplay(thread.sourceTagName);
+    final hasTag = tagName != null;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -1634,6 +1635,7 @@ class _ThreadFooter extends StatelessWidget {
               widthFactor: 1,
               child: _ThreadTagChip(
                 thread: thread,
+                tagName: tagName,
                 onTapTag: onTapTag,
                 palette: palette,
               ),
@@ -1648,20 +1650,18 @@ class _ThreadFooter extends StatelessWidget {
 class _ThreadTagChip extends StatelessWidget {
   const _ThreadTagChip({
     required this.thread,
+    required this.tagName,
     required this.onTapTag,
     required this.palette,
   });
 
   final ForumThreadSummary thread;
+  final String tagName;
   final VoidCallback onTapTag;
   final ForumDisplayThemePalette palette;
 
   @override
   Widget build(BuildContext context) {
-    final tagName = thread.sourceTagName?.trim();
-    if (tagName == null || tagName.isEmpty) {
-      return const SizedBox.shrink();
-    }
     final isClickable = thread.sourceTagUrl?.trim().isNotEmpty == true;
     return InkWell(
       key: Key('forum-thread-tag-${thread.tid}'),
@@ -1685,7 +1685,7 @@ class _ThreadTagChip extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
           child: Text(
-            '#$tagName',
+            tagName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.end,
@@ -1698,6 +1698,18 @@ class _ThreadTagChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The hash is a forum-side visual marker, not part of the tag label shown
+/// in the native list. Keep this normalization at the presentation boundary
+/// so the raw tag value remains available for parsing, snapshots and routing.
+String? _forumTagNameForDisplay(String? sourceTagName) {
+  final normalized = sourceTagName?.trim();
+  if (normalized == null || normalized.isEmpty) {
+    return null;
+  }
+  final displayName = normalized.replaceFirst(RegExp(r'^#+'), '').trim();
+  return displayName.isEmpty ? null : displayName;
 }
 
 class _Avatar extends StatelessWidget {

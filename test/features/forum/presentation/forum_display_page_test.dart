@@ -528,7 +528,7 @@ void main() {
         expect(find.text('T:公告区'), findsWidgets);
         expect(find.text('T:帖子标题'), findsOneWidget);
         expect(find.text('T:帖子摘要'), findsOneWidget);
-        expect(find.text('#T:漫画'), findsOneWidget);
+        expect(find.text('T:漫画'), findsOneWidget);
         expect(find.text('T:今天'), findsWidgets);
         expect(find.text('alice'), findsOneWidget);
         expect(conversionService.callCount, 1);
@@ -1152,7 +1152,7 @@ void main() {
       expect(find.textContaining('请勿随意转载'), findsOneWidget);
       expect(find.text('119'), findsOneWidget);
       expect(find.text('0'), findsOneWidget);
-      expect(find.text('#長篇連載'), findsOneWidget);
+      expect(find.text('長篇連載'), findsOneWidget);
       expect(find.text('投票'), findsOneWidget);
 
       final threadDecoration = _firstAnimatedContainerDecoration(
@@ -1232,7 +1232,7 @@ void main() {
                 views: 86,
                 dateline: 'today',
                 excerpt: '短 tag 摘要',
-                sourceTagName: '短',
+                sourceTagName: '#短',
               ),
               ForumThreadSummary(
                 tid: 'tag-long',
@@ -1252,6 +1252,9 @@ void main() {
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.text('短'), findsOneWidget);
+      expect(find.text('#短'), findsNothing);
 
       final shortTagRight = tester.getBottomRight(
         find.byKey(const Key('forum-thread-tag-tag-short')),
