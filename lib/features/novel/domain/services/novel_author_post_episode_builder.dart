@@ -64,7 +64,9 @@ class DefaultNovelAuthorPostEpisodeBuilder
   }) {
     final normalizedPid = post.pid.trim();
     final normalizedPublisherId = publisherId.trim();
+    final normalizedTid = tid.trim();
     if (normalizedPid.isEmpty ||
+        normalizedTid.isEmpty ||
         normalizedPublisherId.isEmpty ||
         post.authorId.trim() != normalizedPublisherId) {
       return null;
@@ -96,17 +98,26 @@ class DefaultNovelAuthorPostEpisodeBuilder
       return null;
     }
 
+    final titleCandidate = _titlePolicy.buildTitle(
+      normalizedPlainText: titleText,
+      orderIndex: orderIndex,
+      pid: normalizedPid,
+    );
+    // The sync staging schema requires a non-empty title, while presentation
+    // owns the localized fallback. Using the source TID as a sentinel keeps
+    // that fallback out of the domain/data layer; NovelTextResolver already
+    // recognizes a title equal to sourceTid as generated metadata.
+    final episodeTitle = titleCandidate.trim().isEmpty
+        ? normalizedTid
+        : titleCandidate;
+
     return NovelEpisodeDraft(
       episodeId: '$novelId:$normalizedPid',
       novelId: novelId,
-      sourceTid: tid.trim(),
+      sourceTid: normalizedTid,
       sourcePid: normalizedPid,
       sourcePage: authorFilteredPage,
-      episodeTitle: _titlePolicy.buildTitle(
-        normalizedPlainText: titleText,
-        orderIndex: orderIndex,
-        pid: normalizedPid,
-      ),
+      episodeTitle: episodeTitle,
       orderIndex: orderIndex,
       datelineText: post.dateline,
       rawHtml: rawHtml,

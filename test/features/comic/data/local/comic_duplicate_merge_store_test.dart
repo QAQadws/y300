@@ -4,6 +4,7 @@ import 'package:y300/features/comic/data/local/comic_cover_store.dart';
 import 'package:y300/features/comic/data/local/comic_duplicate_merge_store.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -351,7 +352,11 @@ void main() {
           title: 'Short',
           parsedPost: const ParsedComicPost(
             imageUrls: <String>[],
-            episodeLinks: <ComicEpisodeLink>[],
+            // 保留另一条可见章节，满足“不能隐藏最后一个可见章节”的契约，
+            // 同时让本测试专注验证重复章节的隐藏意图是否被合并保留。
+            episodeLinks: <ComicEpisodeLink>[
+              ComicEpisodeLink(url: 'thread-7002-1-1.html', rawText: '2'),
+            ],
             plainTextSummary: '',
           ),
         );
@@ -361,11 +366,12 @@ void main() {
           sourceTid: '7001',
           sourceUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7001',
         );
-        await repository.setEpisodeHidden(
+        final visibility = await repository.setEpisodeHidden(
           comicId: 'yamibo:merge',
           episodeId: 'yamibo:merge:7001',
           isHidden: true,
         );
+        expect(visibility.code, ComicEpisodeVisibilityUpdateCode.updated);
 
         final result = await store.mergeDuplicateGroup(
           comicIds: const <String>{'yamibo:merge-long-title', 'yamibo:merge'},

@@ -345,7 +345,9 @@ void main() {
     );
 
     expect(draft, isNotNull);
-    expect(draft?.episodeTitle, '第 3 章');
+    // The domain keeps a stable source-TID sentinel; the presentation resolver
+    // turns it into the localized fallback title.
+    expect(draft?.episodeTitle, '521519');
     expect(draft?.rawHtml, contains('<img src='));
     expect(draft?.imageUrls, hasLength(1));
   });
