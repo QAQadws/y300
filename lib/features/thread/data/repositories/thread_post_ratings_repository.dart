@@ -3,8 +3,9 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
@@ -27,14 +28,26 @@ abstract interface class ThreadPostRatingsRepository {
 final class ThreadPostRatingsHtmlParser {
   const ThreadPostRatingsHtmlParser();
 
-  ThreadPostRatingDetails parse(String html) {
-    final document = html_parser.parse(_extractCData(html) ?? html);
-    final drafts = _parseMobileDrafts(document);
-    if (drafts.isEmpty) {
-      drafts.addAll(_parseDesktopDrafts(document));
+  ThreadPostRatingDetails parse(String response) {
+    final fragment = _extractAjaxFragment(response);
+    if (fragment == null) {
+      throw const ThreadPostRatingsParseException('完整评分 AJAX 响应缺少 CDATA 内容');
     }
+    final document = html_parser.parse(fragment);
+    final table = document.querySelector('.f_c table.list');
+    if (table == null) {
+      throw const ThreadPostRatingsParseException('完整评分表格缺失');
+    }
+
+    final rows = table.querySelectorAll('tr');
+    final header = _findHeader(rows);
+    if (header == null) {
+      throw const ThreadPostRatingsParseException('完整评分表头缺失');
+    }
+
+    final drafts = _parseRows(rows, header);
     if (drafts.isEmpty) {
-      throw ThreadPostRatingsParseException(_missingListMessage(document));
+      throw const ThreadPostRatingsParseException('完整评分列表缺失');
     }
 
     final ratings = drafts
@@ -61,142 +74,96 @@ final class ThreadPostRatingsHtmlParser {
     );
   }
 
-  List<_ThreadPostRatingDraft> _parseMobileDrafts(html_dom.Document document) {
-    final list = document.querySelector('ul.post_box');
-    if (list == null) {
-      return <_ThreadPostRatingDraft>[];
-    }
-    final drafts = <_ThreadPostRatingDraft>[];
-    for (final row in list.querySelectorAll('li.flex-box.mli')) {
-      final cells = row.children
-          .where((element) => element.localName == 'div')
-          .toList(growable: false);
-      if (cells.length >= 3) {
-        final score = _cleanText(cells[0].text);
-        final userName = _cleanText(cells[1].text);
-        final dateline = _cleanText(cells[2].text);
-        if (_isColumnHeader(score, userName, dateline)) {
-          continue;
-        }
-        if (score.isEmpty || userName.isEmpty) {
-          continue;
-        }
-        drafts.add(
-          _ThreadPostRatingDraft(
-            userName: userName,
-            score: _normalizeScore(score),
-            dateline: dateline,
-          ),
-        );
+  _ThreadPostRatingHeader? _findHeader(List<html_dom.Element> rows) {
+    for (final row in rows) {
+      final cells = _cellsOf(row);
+      if (cells.isEmpty) {
         continue;
       }
-
-      if (cells.length == 1 && drafts.isNotEmpty) {
-        final reason = _cleanText(cells.first.text);
-        if (reason.isNotEmpty) {
-          drafts.last.reason = reason;
-        }
+      final texts = cells.map((cell) => _cleanText(cell.text)).toList();
+      final scoreIndex = texts.indexWhere((text) => text == '积分');
+      final userIndex = texts.indexWhere((text) => text.contains('用户名'));
+      final datelineIndex = texts.indexWhere((text) => text.contains('时间'));
+      final reasonIndex = texts.indexWhere((text) => text.contains('理由'));
+      if (scoreIndex >= 0 && userIndex >= 0 && datelineIndex >= 0) {
+        return _ThreadPostRatingHeader(
+          scoreIndex: scoreIndex,
+          userIndex: userIndex,
+          datelineIndex: datelineIndex,
+          reasonIndex: reasonIndex,
+          row: row,
+        );
       }
+    }
+    return null;
+  }
+
+  List<_ThreadPostRatingDraft> _parseRows(
+    List<html_dom.Element> rows,
+    _ThreadPostRatingHeader header,
+  ) {
+    final drafts = <_ThreadPostRatingDraft>[];
+    final headerIndex = rows.indexOf(header.row);
+    for (final row in rows.skip(headerIndex + 1)) {
+      final cells = _cellsOf(row);
+      final requiredLastIndex = <int>[
+        header.scoreIndex,
+        header.userIndex,
+        header.datelineIndex,
+      ].reduce((left, right) => left > right ? left : right);
+      if (cells.length <= requiredLastIndex) {
+        continue;
+      }
+      final score = _cleanText(cells[header.scoreIndex].text);
+      final userName = _cleanText(cells[header.userIndex].text);
+      if (score.isEmpty || userName.isEmpty) {
+        continue;
+      }
+      drafts.add(
+        _ThreadPostRatingDraft(
+          userName: userName,
+          score: _normalizeScore(score),
+          dateline: _cleanText(cells[header.datelineIndex].text),
+          reason: header.reasonIndex >= 0 && cells.length > header.reasonIndex
+              ? _cleanText(cells[header.reasonIndex].text)
+              : '',
+        ),
+      );
     }
     return drafts;
   }
 
-  List<_ThreadPostRatingDraft> _parseDesktopDrafts(html_dom.Document document) {
-    for (final table in document.querySelectorAll('table')) {
-      final drafts = <_ThreadPostRatingDraft>[];
-      var scoreIndex = -1;
-      var userIndex = -1;
-      var datelineIndex = -1;
-      var reasonIndex = -1;
-      for (final row in table.querySelectorAll('tr')) {
-        final cells = row.children
-            .where(
-              (element) =>
-                  element.localName == 'th' || element.localName == 'td',
-            )
-            .toList(growable: false);
-        if (cells.isEmpty) {
-          continue;
-        }
-        final texts = cells
-            .map((cell) => _cleanText(cell.text))
-            .toList(growable: false);
-        if (scoreIndex < 0) {
-          scoreIndex = texts.indexWhere((text) => text == '积分');
-          userIndex = texts.indexWhere((text) => text.contains('用户名'));
-          datelineIndex = texts.indexWhere((text) => text.contains('时间'));
-          reasonIndex = texts.indexWhere((text) => text.contains('理由'));
-          if (scoreIndex < 0 || userIndex < 0 || datelineIndex < 0) {
-            scoreIndex = -1;
-            userIndex = -1;
-            datelineIndex = -1;
-          }
-          continue;
-        }
-        final requiredLastIndex = <int>[
-          scoreIndex,
-          userIndex,
-          datelineIndex,
-        ].reduce((left, right) => left > right ? left : right);
-        if (cells.length <= requiredLastIndex) {
-          continue;
-        }
-        final score = _cleanText(cells[scoreIndex].text);
-        final userName = _cleanText(cells[userIndex].text);
-        if (score.isEmpty || userName.isEmpty) {
-          continue;
-        }
-        drafts.add(
-          _ThreadPostRatingDraft(
-            userName: userName,
-            score: _normalizeScore(score),
-            dateline: _cleanText(cells[datelineIndex].text),
-            reason: reasonIndex >= 0 && cells.length > reasonIndex
-                ? _cleanText(cells[reasonIndex].text)
-                : '',
-          ),
-        );
-      }
-      if (drafts.isNotEmpty) {
-        return drafts;
-      }
-    }
-    return <_ThreadPostRatingDraft>[];
+  List<html_dom.Element> _cellsOf(html_dom.Element row) {
+    return row.children
+        .where(
+          (element) => element.localName == 'th' || element.localName == 'td',
+        )
+        .toList(growable: false);
   }
 
-  String _missingListMessage(html_dom.Document document) {
-    final prompt = document.querySelector(
-      '.alert_error, .alert_info, #messagetext p, .showmessage',
-    );
-    final promptText = _cleanText(prompt?.text ?? '');
-    if (promptText.isNotEmpty) {
-      return promptText;
+  String? _extractAjaxFragment(String response) {
+    final rootStart = RegExp(
+      r'<root(?:\s[^>]*)?>',
+      caseSensitive: false,
+    ).firstMatch(response);
+    final rootEnd = RegExp(
+      r'</root\s*>',
+      caseSensitive: false,
+    ).firstMatch(response);
+    if (rootStart == null || rootEnd == null || rootEnd.start < rootStart.end) {
+      return null;
     }
-    final title = _cleanText(document.querySelector('title')?.text ?? '');
-    final hasLoginForm =
-        document.querySelector('form[action*="logging"]') != null ||
-        title.contains('登录');
-    if (hasLoginForm) {
-      return '登录状态失效，请重新登录后查看完整评分';
-    }
-    return '完整评分列表缺失';
-  }
-
-  String? _extractCData(String html) {
-    final start = html.indexOf('<![CDATA[');
+    final rootBody = response.substring(rootStart.end, rootEnd.start);
+    final start = rootBody.indexOf('<![CDATA[');
     if (start < 0) {
       return null;
     }
     final contentStart = start + '<![CDATA['.length;
-    final end = html.indexOf(']]>', contentStart);
+    final end = rootBody.indexOf(']]>', contentStart);
     if (end < 0) {
       return null;
     }
-    return html.substring(contentStart, end);
-  }
-
-  bool _isColumnHeader(String score, String userName, String dateline) {
-    return score == '积分' && userName.contains('用户名') && dateline.contains('时间');
+    return rootBody.substring(contentStart, end);
   }
 
   String _normalizeScore(String value) {
@@ -234,12 +201,12 @@ final class ThreadPostRatingsHtmlParser {
 final class DiscuzThreadPostRatingsRepository
     implements ThreadPostRatingsRepository {
   DiscuzThreadPostRatingsRepository({
-    required YamiboHtmlClient htmlClient,
+    required YamiboHttpGateway gateway,
     ThreadPostRatingsHtmlParser parser = const ThreadPostRatingsHtmlParser(),
-  }) : _htmlClient = htmlClient,
+  }) : _gateway = gateway,
        _parser = parser;
 
-  final YamiboHtmlClient _htmlClient;
+  final YamiboHttpGateway _gateway;
   final ThreadPostRatingsHtmlParser _parser;
 
   @override
@@ -251,22 +218,22 @@ final class DiscuzThreadPostRatingsRepository
       );
     }
 
-    final response = await _htmlClient.getMobilePage(
-      path: endpoint.path,
-      queryParameters: endpoint.queryParameters,
+    final response = await _gateway.getText(
+      endpoint,
       context: const YamiboRequestContext(
         kind: YamiboRequestKind.html,
         operation: 'thread.post.ratings',
         pageKind: 'thread.detail',
       ),
-      referer: Uri.parse(AppConfig.siteBaseUrl).replace(
-        path: '/forum.php',
-        queryParameters: <String, String>{
-          'mod': 'viewthread',
-          'tid': endpoint.queryParameters['tid']!,
-          'mobile': '2',
-        },
-      ),
+      headers: <String, String>{
+        'User-Agent': DiscuzImageRequestHeaderBuilder.browserUserAgent,
+        'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Referer': _threadReferer(endpoint).toString(),
+      },
     );
     if (response case ApiFailure(:final error)) {
       return ApiFailure<ThreadPostRatingDetails>(error);
@@ -274,7 +241,7 @@ final class DiscuzThreadPostRatingsRepository
 
     try {
       return ApiSuccess<ThreadPostRatingDetails>(
-        _parser.parse(response.dataOrNull ?? ''),
+        _parser.parse(response.dataOrNull?.body ?? ''),
       );
     } on ThreadPostRatingsParseException catch (error) {
       return ApiFailure<ThreadPostRatingDetails>(
@@ -309,8 +276,29 @@ final class DiscuzThreadPostRatingsRepository
         !_isPositiveId(query['pid'])) {
       return null;
     }
-    return endpoint.replace(
-      queryParameters: <String, String>{...query, 'mobile': '2'},
+    return site.replace(
+      path: '/forum.php',
+      queryParameters: <String, String>{
+        'mod': 'misc',
+        'action': 'viewratings',
+        'tid': query['tid']!,
+        'pid': query['pid']!,
+        'infloat': 'yes',
+        'handlekey': 'viewratings',
+        'inajax': '1',
+        'ajaxtarget': 'fwin_content_viewratings',
+      },
+    );
+  }
+
+  Uri _threadReferer(Uri endpoint) {
+    return Uri.parse(AppConfig.siteBaseUrl).replace(
+      path: '/forum.php',
+      queryParameters: <String, String>{
+        'mod': 'viewthread',
+        'tid': endpoint.queryParameters['tid']!,
+        'mobile': '2',
+      },
     );
   }
 
@@ -343,6 +331,22 @@ final class _ThreadPostRatingDraft {
 final threadPostRatingsRepositoryProvider =
     Provider<ThreadPostRatingsRepository>(
       (ref) => DiscuzThreadPostRatingsRepository(
-        htmlClient: ref.watch(yamiboHtmlClientProvider),
+        gateway: ref.watch(yamiboHttpGatewayProvider),
       ),
     );
+
+final class _ThreadPostRatingHeader {
+  const _ThreadPostRatingHeader({
+    required this.scoreIndex,
+    required this.userIndex,
+    required this.datelineIndex,
+    required this.reasonIndex,
+    required this.row,
+  });
+
+  final int scoreIndex;
+  final int userIndex;
+  final int datelineIndex;
+  final int reasonIndex;
+  final html_dom.Element row;
+}
