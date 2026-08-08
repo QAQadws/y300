@@ -20,6 +20,7 @@ class ForumDisplayHtmlParser {
     final threads = _parseThreads(document);
     final currentPage = _parseCurrentPage(document, fallback: fallbackPage);
     final lastPage = _parseLastPage(document);
+    final favoriteAnchor = _findFavoriteAnchor(document);
     final nextPageUrl = _resolve(
       document.querySelector('.pg a.nxt')?.attributes['href'],
     );
@@ -43,11 +44,8 @@ class ForumDisplayHtmlParser {
       searchUrl: _resolve(
         document.querySelector('.nav-search')?.attributes['href'],
       ),
-      favoriteUrl: _resolve(
-        document
-            .querySelector('#nav-more-menu a[href*="favoriteforum"]')
-            ?.attributes['href'],
-      ),
+      favoriteUrl: _resolve(favoriteAnchor?.attributes['href']),
+      favoriteAction: _parseFavoriteAction(favoriteAnchor),
       primaryFilters: List<ForumDisplayFilterItem>.unmodifiable(
         _parseFilters(document, '.dhnav_box li'),
       ),
@@ -66,6 +64,34 @@ class ForumDisplayHtmlParser {
       ),
       nextPageUrl: nextPageUrl,
     );
+  }
+
+  ForumDisplayFavoriteAction _parseFavoriteAction(html_dom.Element? anchor) {
+    if (anchor == null) {
+      return ForumDisplayFavoriteAction.unknown;
+    }
+    final label = _cleanText(anchor.text);
+    if (label.contains('取消收藏')) {
+      return ForumDisplayFavoriteAction.unfavorite;
+    }
+    if (label.contains('收藏本版')) {
+      return ForumDisplayFavoriteAction.favorite;
+    }
+    return ForumDisplayFavoriteAction.unknown;
+  }
+
+  html_dom.Element? _findFavoriteAnchor(html_dom.Document document) {
+    for (final anchor in document.querySelectorAll('#nav-more-menu a')) {
+      final label = _cleanText(anchor.text);
+      final href = anchor.attributes['href'] ?? '';
+      if (label.contains('取消收藏') ||
+          label.contains('收藏本版') ||
+          label.contains('收藏') ||
+          href.contains('favoriteforum')) {
+        return anchor;
+      }
+    }
+    return null;
   }
 
   String _parseForumName(html_dom.Document document) {

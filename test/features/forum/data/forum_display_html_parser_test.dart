@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/forum/data/models/forum_display_models.dart';
 import 'package:y300/features/forum/data/services/forum_display_html_parser.dart';
 
 void main() {
@@ -21,6 +22,7 @@ void main() {
       expect(result.postUrl, contains('action=newthread'));
       expect(result.searchUrl, contains('search.php'));
       expect(result.favoriteUrl, contains('favoriteforum'));
+      expect(result.favoriteAction, ForumDisplayFavoriteAction.favorite);
 
       expect(result.primaryFilters.map((item) => item.label), [
         '全部',
@@ -80,6 +82,39 @@ void main() {
       expect(result.threads, isEmpty);
       expect(result.topEntries, isEmpty);
       expect(result.hasMore, isFalse);
+      expect(result.favoriteAction, ForumDisplayFavoriteAction.unknown);
+    });
+
+    test('parses favorite action from the visible menu label', () {
+      const parser = ForumDisplayHtmlParser();
+      const html = '''
+        <div id="nav-more-menu">
+          <a href="home.php?mod=spacecp&amp;ac=favorite">
+            <span>取消收藏</span>
+          </a>
+        </div>
+      ''';
+
+      final result = parser.parse(html, fallbackFid: '33', fallbackPage: 1);
+
+      expect(result.favoriteAction, ForumDisplayFavoriteAction.unfavorite);
+      expect(result.favoriteUrl, contains('spacecp'));
+    });
+
+    test('keeps an unrecognized favorite menu action fail closed', () {
+      const parser = ForumDisplayHtmlParser();
+      const html = '''
+        <div id="nav-more-menu">
+          <a href="home.php?mod=spacecp&amp;ac=favorite">
+            <span>收藏状态</span>
+          </a>
+        </div>
+      ''';
+
+      final result = parser.parse(html, fallbackFid: '33', fallbackPage: 1);
+
+      expect(result.favoriteAction, ForumDisplayFavoriteAction.unknown);
+      expect(result.favoriteUrl, contains('spacecp'));
     });
 
     test('parses optional forum head image', () {

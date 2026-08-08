@@ -7,6 +7,7 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
+import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/forum_content_projection_providers.dart';
@@ -17,6 +18,7 @@ import 'package:y300/features/forum/presentation/forum_home_state.dart';
 import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
+import 'package:y300/features/forum/presentation/widgets/forum_favorite_forum_picker.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -37,6 +39,8 @@ class ForumHomePage extends ConsumerStatefulWidget {
 
 class _ForumHomePageState extends ConsumerState<ForumHomePage>
     with WidgetsBindingObserver {
+  static const String _refreshPageAction = 'refresh-page';
+  static const String _unfavoriteAction = 'unfavorite';
   ProviderSubscription<AsyncValue<AuthSessionViewState>>? _authSubscription;
   String? _lastResolvedAuthContextKey;
   bool _isHandlingAuthContextChange = false;
@@ -132,6 +136,25 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
             },
             icon: const Icon(Icons.search),
           ),
+          PopupMenuButton<String>(
+            key: const Key('forum-home-more-button'),
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              unawaited(_handleMoreMenuSelected(context, value));
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                key: const Key('forum-home-refresh-action'),
+                value: _refreshPageAction,
+                child: Text(l10n.forumRefreshPage),
+              ),
+              PopupMenuItem<String>(
+                key: const Key('forum-home-unfavorite-action'),
+                value: _unfavoriteAction,
+                child: Text(l10n.forumUnfavoriteForum),
+              ),
+            ],
+          ),
         ],
       ),
       body: !isAuthResolved || _isSwitchingAuthContext
@@ -157,6 +180,48 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
         });
       }
     }
+  }
+
+  Future<void> _handleMoreMenuSelected(
+    BuildContext context,
+    String action,
+  ) async {
+    switch (action) {
+      case _refreshPageAction:
+        await ref
+            .read(forumHomeControllerProvider.notifier)
+            .refresh(forceNetwork: true);
+        return;
+      case _unfavoriteAction:
+        await _openFavoriteForumPicker(context);
+        return;
+    }
+  }
+
+  Future<void> _openFavoriteForumPicker(BuildContext context) {
+    final repository = ref.read(forumFavoriteRepositoryProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = AppLocalizations.of(context);
+    return showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => ForumFavoriteForumPicker(
+        loadFavoriteForums: repository.loadFavoriteForums,
+        onUnfavorite: (forum) => repository.unfavoriteForum(favid: forum.favid),
+        onSuccess: (_, _) async {
+          if (!mounted || !messenger.mounted) {
+            return;
+          }
+          messenger
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              SnackBar(content: Text(l10n.forumUnfavoriteSuccess)),
+            );
+          await ref
+              .read(forumHomeControllerProvider.notifier)
+              .refresh(forceNetwork: true);
+        },
+      ),
+    );
   }
 
   Future<void> _triggerSilentRefreshIfNeeded() async {

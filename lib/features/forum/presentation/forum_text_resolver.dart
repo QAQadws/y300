@@ -46,14 +46,14 @@ final class ForumTextResolver {
         boardName?.isNotEmpty == true
             ? boardName!
             : fid?.isNotEmpty == true
-            ? l10n.forumWebViewForumByFid(fid!)
+            ? l10n.forumForumByFid(fid!)
             : l10n.forumHomeTitle,
       ForumWebViewPageKind.search =>
         state.searchScope == ForumWebViewSearchScope.curForum
             ? boardName?.isNotEmpty == true
                   ? l10n.forumWebViewForumSearch(boardName!)
                   : fid?.isNotEmpty == true
-                  ? l10n.forumWebViewForumByFid(fid!)
+                  ? l10n.forumForumByFid(fid!)
                   : l10n.forumWebViewSearchForum
             : l10n.forumWebViewSearchForum,
       ForumWebViewPageKind.other =>
@@ -95,17 +95,15 @@ final class ForumTextResolver {
     return l10n.forumDisplayLoadFailed(_detailOrUnknown(l10n, detail));
   }
 
-  static String webViewActionFailure(AppLocalizations l10n, Object? error) {
-    return l10n.forumWebViewActionFailed(_detailOrUnknown(l10n, error));
+  static String favoriteActionFailure(AppLocalizations l10n, Object? error) {
+    return l10n.forumActionFailed(_detailOrUnknown(l10n, error));
   }
 
   static String favoriteForumsLoadFailure(
     AppLocalizations l10n,
     Object? error,
   ) {
-    return l10n.forumWebViewFavoriteForumsLoadFailed(
-      _detailOrUnknown(l10n, error),
-    );
+    return l10n.forumFavoriteForumsLoadFailed(_detailOrUnknown(l10n, error));
   }
 
   static String safeErrorSummary(Object? error) {

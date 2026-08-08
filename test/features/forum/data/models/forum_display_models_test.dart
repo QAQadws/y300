@@ -117,6 +117,7 @@ void main() {
         postUrl: 'post',
         searchUrl: 'search',
         favoriteUrl: 'favorite',
+        favoriteAction: ForumDisplayFavoriteAction.unfavorite,
         previousPageUrl: 'prev',
         nextPageUrl: 'next',
         lastPage: 5,
@@ -173,6 +174,34 @@ void main() {
       expect(decoded.topEntries.single.isAnnouncement, isTrue);
       expect(decoded.threads.single.sourceTagName, '長篇連載');
       expect(decoded.threads.single.isLocked, isTrue);
+      expect(decoded.favoriteAction, ForumDisplayFavoriteAction.unfavorite);
+    });
+
+    test('legacy snapshot with favoriteUrl defaults to favorite only', () {
+      final decoded = const ForumDisplaySnapshotCodec().decode({
+        'fid': '30',
+        'forumName': '论坛',
+        'currentPage': 1,
+        'perPage': 20,
+        'totalThreads': 0,
+        'favoriteUrl': 'home.php?mod=spacecp&ac=favorite',
+        'threads': const <Object?>[],
+      });
+
+      expect(decoded.favoriteAction, ForumDisplayFavoriteAction.favorite);
+    });
+
+    test('legacy snapshot without favorite metadata stays unknown', () {
+      final decoded = const ForumDisplaySnapshotCodec().decode({
+        'fid': '30',
+        'forumName': '论坛',
+        'currentPage': 1,
+        'perPage': 20,
+        'totalThreads': 0,
+        'threads': const <Object?>[],
+      });
+
+      expect(decoded.favoriteAction, ForumDisplayFavoriteAction.unknown);
     });
   });
 }

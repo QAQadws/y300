@@ -22,9 +22,11 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
+import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
@@ -36,6 +38,105 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 
 void main() {
   group('ForumHomePage', () {
+    testWidgets('more menu exposes refresh and unfavorite actions', (
+      tester,
+    ) async {
+      final repository = _FakeForumHomeRepository(
+        () async => ApiSuccess(_loggedOutPayload()),
+      );
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('forum-home-more-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('forum-home-refresh-action')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-home-unfavorite-action')),
+        findsOneWidget,
+      );
+      expect(find.text('刷新页面'), findsOneWidget);
+      expect(find.text('取消收藏'), findsOneWidget);
+    });
+
+    testWidgets('more menu refresh forces a network request', (tester) async {
+      final repository = _FakeForumHomeRepository(
+        () async => ApiSuccess(_loggedOutPayload()),
+      );
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-home-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-home-refresh-action')));
+      await tester.pumpAndSettle();
+
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+        CacheLoadPolicy.networkFirst,
+      ]);
+    });
+
+    testWidgets('more menu opens the shared unfavorite picker', (tester) async {
+      final homeRepository = _FakeForumHomeRepository(
+        () async => ApiSuccess(_loggedOutPayload()),
+      );
+      final favoriteRepository = _FakeForumFavoriteRepository(
+        favoriteForums: <FavoriteForum>[
+          _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          homeRepository,
+          extraOverrides: [
+            forumFavoriteRepositoryProvider.overrideWithValue(
+              favoriteRepository,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-home-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-home-unfavorite-action')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('forum-favorite-forum-picker')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('forum-favorite-forum-picker')),
+          matching: find.text('综合区'),
+        ),
+        findsOneWidget,
+      );
+      expect(favoriteRepository.loadCallCount, 1);
+
+      await tester.tap(
+        find.byKey(const Key('forum-favorite-forum-item-fav-55')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(favoriteRepository.unfavoriteFavids, <String>['fav-55']);
+      expect(
+        find.byKey(const Key('forum-favorite-forum-picker')),
+        findsNothing,
+      );
+      expect(find.text('已取消收藏本版'), findsOneWidget);
+      expect(homeRepository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+        CacheLoadPolicy.networkFirst,
+      ]);
+    });
+
     testWidgets('stays buildable before data returns and then renders list', (
       tester,
     ) async {
@@ -1106,6 +1207,57 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
     cachePolicies.add(cachePolicy);
     requestProfiles.add(requestProfileOverride);
     return _loader();
+  }
+}
+
+FavoriteForum _favoriteForum({
+  required String fid,
+  required String favid,
+  required String title,
+}) {
+  return FavoriteForum(
+    favid: favid,
+    fid: fid,
+    title: title,
+    description: '',
+    threads: 0,
+    posts: 0,
+    todayPosts: 0,
+  );
+}
+
+class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
+  _FakeForumFavoriteRepository({required this.favoriteForums});
+
+  final List<FavoriteForum> favoriteForums;
+  final favoriteFids = <String>[];
+  final unfavoriteFavids = <String>[];
+  int loadCallCount = 0;
+
+  @override
+  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
+    loadCallCount += 1;
+    return ApiSuccess<List<FavoriteForum>>(favoriteForums);
+  }
+
+  @override
+  Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
+    required String fid,
+  }) async {
+    favoriteFids.add(fid);
+    return const ApiSuccess<ForumFavoriteMutationResult>(
+      ForumFavoriteMutationResult(),
+    );
+  }
+
+  @override
+  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForum({
+    required String favid,
+  }) async {
+    unfavoriteFavids.add(favid);
+    return const ApiSuccess<ForumFavoriteMutationResult>(
+      ForumFavoriteMutationResult(),
+    );
   }
 }
 

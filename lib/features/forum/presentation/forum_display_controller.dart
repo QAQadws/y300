@@ -164,6 +164,7 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
         previousPageUrl: data.previousPageUrl,
         nextPageUrl: data.nextPageUrl,
         lastPage: data.lastPage,
+        favoriteAction: data.favoriteAction,
       );
     }
 

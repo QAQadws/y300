@@ -14,8 +14,11 @@ import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_display_repository.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
@@ -33,6 +36,144 @@ import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 void main() {
   group('ForumDisplayPage', () {
+    testWidgets('more menu always exposes a force-network refresh', (
+      tester,
+    ) async {
+      final repository = _FakeForumDisplayRepository((fid, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 1,
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-display-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-display-refresh-action')));
+      await tester.pumpAndSettle();
+
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+        CacheLoadPolicy.networkFirst,
+      ]);
+    });
+
+    testWidgets('more menu reflects a server-declared favorite action', (
+      tester,
+    ) async {
+      final repository = _FakeForumDisplayRepository((fid, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 1,
+            favoriteAction: ForumDisplayFavoriteAction.favorite,
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+      final favoriteRepository = _FakeForumFavoriteRepository();
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, favoriteRepository: favoriteRepository),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('forum-display-more-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('forum-display-favorite-action')),
+        findsOneWidget,
+      );
+      expect(find.text('收藏本版'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('forum-display-favorite-action')));
+      await tester.pumpAndSettle();
+
+      expect(favoriteRepository.favoriteFids, <String>['2']);
+      expect(find.text('已收藏本版'), findsOneWidget);
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+        CacheLoadPolicy.networkFirst,
+      ]);
+    });
+
+    testWidgets('unfavorite action resolves the current forum favid', (
+      tester,
+    ) async {
+      final repository = _FakeForumDisplayRepository((fid, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 1,
+            favoriteAction: ForumDisplayFavoriteAction.unfavorite,
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+      final favoriteRepository = _FakeForumFavoriteRepository(
+        favoriteForums: <FavoriteForum>[
+          _favoriteForum(fid: '2', favid: 'fav-2', title: '公告区'),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, favoriteRepository: favoriteRepository),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('forum-display-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('forum-display-unfavorite-action')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(favoriteRepository.loadCallCount, 1);
+      expect(favoriteRepository.unfavoriteFavids, <String>['fav-2']);
+      expect(find.text('已取消收藏本版'), findsOneWidget);
+      expect(repository.cachePolicies, <CacheLoadPolicy>[
+        CacheLoadPolicy.cacheFirst,
+        CacheLoadPolicy.networkFirst,
+      ]);
+    });
+
+    testWidgets('unknown favorite state does not guess a destructive action', (
+      tester,
+    ) async {
+      final repository = _FakeForumDisplayRepository((fid, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 1,
+            favoriteAction: ForumDisplayFavoriteAction.unknown,
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-display-more-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('forum-display-refresh-action')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-display-favorite-unavailable-action')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('forum-display-unfavorite-action')),
+        findsNothing,
+      );
+    });
+
     test('light palette uses forum home native colors', () {
       final theme = AppTheme.light();
       final displayPalette = ForumDisplayThemePalette.resolve(theme);
@@ -1377,12 +1518,15 @@ void main() {
 Widget _buildTestApp(
   ForumDisplayRepository repository, {
   ThreadRepository? threadRepository,
+  ForumFavoriteRepository? favoriteRepository,
   List<riverpod_misc.Override> extraOverrides =
       const <riverpod_misc.Override>[],
 }) {
   final overrides = [
     forumDisplayRepositoryProvider.overrideWithValue(repository),
     imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+    if (favoriteRepository != null)
+      forumFavoriteRepositoryProvider.overrideWithValue(favoriteRepository),
     if (threadRepository != null)
       threadRepositoryProvider.overrideWithValue(threadRepository),
     ...extraOverrides,
@@ -1406,6 +1550,8 @@ ForumDisplayData _displayData({
   String? headImageUrl,
   List<ForumDisplaySubForum>? subForums,
   int? lastPage,
+  ForumDisplayFavoriteAction favoriteAction =
+      ForumDisplayFavoriteAction.unknown,
 }) {
   return ForumDisplayData(
     fid: fid,
@@ -1424,6 +1570,7 @@ ForumDisplayData _displayData({
         ? 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&page=${page + 1}&mobile=2'
         : null,
     hasMoreOverride: page < (lastPage ?? total),
+    favoriteAction: favoriteAction,
     primaryFilters: const <ForumDisplayFilterItem>[
       ForumDisplayFilterItem(
         label: '全部',
@@ -1589,6 +1736,58 @@ class _FakeForumDisplayRepository implements ForumDisplayRepository {
     lastQuery = query;
     cachePolicies.add(cachePolicy);
     return _loader(query.fid, query.page, query);
+  }
+}
+
+FavoriteForum _favoriteForum({
+  required String fid,
+  required String favid,
+  required String title,
+}) {
+  return FavoriteForum(
+    favid: favid,
+    fid: fid,
+    title: title,
+    description: '',
+    threads: 0,
+    posts: 0,
+    todayPosts: 0,
+  );
+}
+
+class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
+  _FakeForumFavoriteRepository({List<FavoriteForum>? favoriteForums})
+    : favoriteForums = favoriteForums ?? <FavoriteForum>[];
+
+  final List<FavoriteForum> favoriteForums;
+  final favoriteFids = <String>[];
+  final unfavoriteFavids = <String>[];
+  int loadCallCount = 0;
+
+  @override
+  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
+    loadCallCount += 1;
+    return ApiSuccess<List<FavoriteForum>>(favoriteForums);
+  }
+
+  @override
+  Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
+    required String fid,
+  }) async {
+    favoriteFids.add(fid);
+    return const ApiSuccess<ForumFavoriteMutationResult>(
+      ForumFavoriteMutationResult(),
+    );
+  }
+
+  @override
+  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForum({
+    required String favid,
+  }) async {
+    unfavoriteFavids.add(favid);
+    return const ApiSuccess<ForumFavoriteMutationResult>(
+      ForumFavoriteMutationResult(),
+    );
   }
 }
 

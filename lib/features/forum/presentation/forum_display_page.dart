@@ -9,6 +9,7 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/data/services/forum_favorite_action_service.dart';
 import 'package:y300/features/forum/presentation/forum_content_projection_providers.dart';
 import 'package:y300/features/forum/presentation/forum_display_content_projection.dart';
 import 'package:y300/features/forum/presentation/forum_display_content_projector.dart';
@@ -38,10 +39,15 @@ class ForumDisplayPage extends ConsumerStatefulWidget {
 }
 
 class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
+  static const String _refreshPageAction = 'refresh-page';
+  static const String _favoriteAction = 'favorite-forum';
+  static const String _unfavoriteAction = 'unfavorite-forum';
+
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _filterAnchorKey = GlobalKey();
   final GlobalKey _headImageKey = GlobalKey();
   double? _lastKnownHeadImageExtent;
+  bool _isFavoriteMutationLoading = false;
 
   @override
   void dispose() {
@@ -103,6 +109,20 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
             onPressed: () => _openComposer(context, state),
             icon: const Icon(Icons.edit_outlined),
           ),
+          PopupMenuButton<String>(
+            key: const Key('forum-display-more-button'),
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              unawaited(
+                _handleMoreMenuSelected(context, state, controller, value),
+              );
+            },
+            itemBuilder: (context) => _buildMoreMenuItems(
+              context,
+              state,
+              isLoading: asyncState.isLoading,
+            ),
+          ),
         ],
       ),
       body: (asyncState.isLoading && state.threads.isEmpty)
@@ -139,6 +159,143 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
               ),
             ),
     );
+  }
+
+  List<PopupMenuEntry<String>> _buildMoreMenuItems(
+    BuildContext context,
+    ForumDisplayPageState state, {
+    required bool isLoading,
+  }) {
+    final l10n = AppLocalizations.of(context);
+    final items = <PopupMenuEntry<String>>[
+      PopupMenuItem<String>(
+        key: const Key('forum-display-refresh-action'),
+        value: _refreshPageAction,
+        child: Text(l10n.forumRefreshPage),
+      ),
+    ];
+    if (_isFavoriteMutationLoading || isLoading) {
+      items.add(
+        PopupMenuItem<String>(
+          key: const Key('forum-display-favorite-loading-action'),
+          enabled: false,
+          value: 'favorite-loading',
+          child: Text(l10n.forumProcessing),
+        ),
+      );
+    } else if (state.favoriteAction == ForumDisplayFavoriteAction.unknown) {
+      items.add(
+        PopupMenuItem<String>(
+          key: const Key('forum-display-favorite-unavailable-action'),
+          enabled: false,
+          value: 'favorite-unavailable',
+          child: Text(l10n.forumProcessing),
+        ),
+      );
+    } else {
+      switch (state.favoriteAction) {
+        case ForumDisplayFavoriteAction.favorite:
+          items.add(
+            PopupMenuItem<String>(
+              key: const Key('forum-display-favorite-action'),
+              value: _favoriteAction,
+              child: Text(l10n.forumFavoriteForum),
+            ),
+          );
+        case ForumDisplayFavoriteAction.unfavorite:
+          items.add(
+            PopupMenuItem<String>(
+              key: const Key('forum-display-unfavorite-action'),
+              value: _unfavoriteAction,
+              child: Text(l10n.forumUnfavoriteForum),
+            ),
+          );
+        case ForumDisplayFavoriteAction.unknown:
+          break;
+      }
+    }
+    return items;
+  }
+
+  Future<void> _handleMoreMenuSelected(
+    BuildContext context,
+    ForumDisplayPageState state,
+    ForumDisplayController controller,
+    String action,
+  ) async {
+    switch (action) {
+      case _refreshPageAction:
+        await controller.refresh(forceNetwork: true);
+        return;
+      case _favoriteAction:
+        await _applyFavoriteAction(
+          context,
+          state,
+          controller,
+          ForumDisplayFavoriteAction.favorite,
+        );
+        return;
+      case _unfavoriteAction:
+        await _applyFavoriteAction(
+          context,
+          state,
+          controller,
+          ForumDisplayFavoriteAction.unfavorite,
+        );
+        return;
+    }
+  }
+
+  Future<void> _applyFavoriteAction(
+    BuildContext context,
+    ForumDisplayPageState state,
+    ForumDisplayController controller,
+    ForumDisplayFavoriteAction action,
+  ) async {
+    if (_isFavoriteMutationLoading || state.favoriteAction != action) {
+      return;
+    }
+    setState(() {
+      _isFavoriteMutationLoading = true;
+    });
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final result = await ref
+        .read(forumFavoriteActionServiceProvider)
+        .apply(fid: state.fid, action: action);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isFavoriteMutationLoading = false;
+    });
+    if (result.isSuccess) {
+      messenger
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              action == ForumDisplayFavoriteAction.favorite
+                  ? l10n.forumFavoriteSuccess
+                  : l10n.forumUnfavoriteSuccess,
+            ),
+          ),
+        );
+      await controller.refresh(forceNetwork: true);
+      return;
+    }
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            ForumTextResolver.favoriteActionFailure(
+              l10n,
+              result.errorOrNull?.message,
+            ),
+          ),
+        ),
+      );
   }
 
   ForumDisplayContentProjection _projectionOrRaw(

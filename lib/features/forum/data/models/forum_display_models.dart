@@ -1,5 +1,7 @@
 import 'package:y300/core/utils/parse_utils.dart';
 
+enum ForumDisplayFavoriteAction { favorite, unfavorite, unknown }
+
 class ForumDisplayQuery {
   const ForumDisplayQuery({
     required this.fid,
@@ -321,6 +323,7 @@ class ForumDisplayData {
     this.postUrl,
     this.searchUrl,
     this.favoriteUrl,
+    this.favoriteAction = ForumDisplayFavoriteAction.unknown,
     this.previousPageUrl,
     this.nextPageUrl,
     this.lastPage,
@@ -344,6 +347,7 @@ class ForumDisplayData {
   final String? postUrl;
   final String? searchUrl;
   final String? favoriteUrl;
+  final ForumDisplayFavoriteAction favoriteAction;
   final String? previousPageUrl;
   final String? nextPageUrl;
   final int? lastPage;
@@ -390,6 +394,7 @@ class ForumDisplayData {
       perPage: perPage,
       totalThreads: totalThreads,
       threads: ForumDisplayJsonMapper.parseThreadList(variables),
+      favoriteAction: ForumDisplayFavoriteAction.unknown,
     );
   }
 }

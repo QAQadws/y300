@@ -30,6 +30,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_external_
 import 'package:y300/features/forum/presentation/webview/forum_webview_history_coordinator.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_resource_diagnostic_recorder.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
+import 'package:y300/features/forum/presentation/widgets/forum_favorite_forum_picker.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
@@ -670,7 +671,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final refreshItem = PopupMenuItem<String>(
       key: Key('forum-webview-refresh-action'),
       value: _refreshPageAction,
-      child: Text(l10n.forumWebViewRefresh),
+      child: Text(l10n.forumRefreshPage),
     );
 
     switch (state.pageKind) {
@@ -680,7 +681,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           PopupMenuItem<String>(
             key: Key('forum-webview-home-unfavorite-action'),
             value: _homeUnfavoriteAction,
-            child: Text(l10n.forumWebViewCancelFavorite),
+            child: Text(l10n.forumUnfavoriteForum),
           ),
         ];
       case ForumWebViewPageKind.forumDisplay:
@@ -717,7 +718,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         PopupMenuItem<String>(
           enabled: false,
           value: 'favorite-loading',
-          child: Text(l10n.forumWebViewProcessing),
+          child: Text(l10n.forumProcessing),
         ),
       ];
     }
@@ -729,8 +730,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             : _forumUnfavoriteAction,
         child: Text(
           state.currentFavoriteForum == null
-              ? l10n.forumWebViewFavoriteForum
-              : l10n.forumWebViewUnfavoriteForum,
+              ? l10n.forumFavoriteForum
+              : l10n.forumUnfavoriteForum,
         ),
       ),
     ];
@@ -1141,9 +1142,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           context: context,
           driver: driver,
           reloadUri: state.currentUri,
-          successMessage: AppLocalizations.of(
-            context,
-          ).forumWebViewFavoriteSuccess,
+          successMessage: AppLocalizations.of(context).forumFavoriteSuccess,
           action: ref
               .read(forumWebViewControllerProvider.notifier)
               .favoriteCurrentForum,
@@ -1154,9 +1153,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           context: context,
           driver: driver,
           reloadUri: state.currentUri,
-          successMessage: AppLocalizations.of(
-            context,
-          ).forumWebViewUnfavoriteSuccess,
+          successMessage: AppLocalizations.of(context).forumUnfavoriteSuccess,
           action: ref
               .read(forumWebViewControllerProvider.notifier)
               .unfavoriteCurrentForum,
@@ -1215,42 +1212,27 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final messenger = ScaffoldMessenger.of(context);
     return showModalBottomSheet<void>(
       context: context,
-      builder: (sheetContext) {
-        final sheetNavigator = Navigator.of(sheetContext);
-        return _FavoriteForumPickerSheet(
+      builder: (_) {
+        return ForumFavoriteForumPicker(
           loadFavoriteForums: controller.loadFavoriteForums,
-          onUnfavorite: (forum) async {
-            final result = await controller.unfavoriteForumByFavid(
-              favid: forum.favid,
-            );
+          onUnfavorite: (forum) =>
+              controller.unfavoriteForumByFavid(favid: forum.favid),
+          onSuccess: (_, _) async {
             if (!mounted || !messenger.mounted) {
               return;
             }
-            if (result case ApiSuccess<ForumFavoriteMutationResult>()) {
-              if (sheetNavigator.mounted) {
-                sheetNavigator.pop();
-              }
-              _showSnackBar(messenger, l10n.forumWebViewUnfavoriteSuccess);
-              final referrerUri =
-                  ref
-                      .read(forumWebViewControllerProvider)
-                      .asData
-                      ?.value
-                      .currentUri ??
-                  navigator.homeUri;
-              await _loadManagedUri(
-                driver,
-                navigator.homeUri,
-                referrerUri: referrerUri,
-              );
-              return;
-            }
-            _showSnackBar(
-              messenger,
-              ForumTextResolver.webViewActionFailure(
-                l10n,
-                result.errorOrNull?.message,
-              ),
+            _showSnackBar(messenger, l10n.forumUnfavoriteSuccess);
+            final referrerUri =
+                ref
+                    .read(forumWebViewControllerProvider)
+                    .asData
+                    ?.value
+                    .currentUri ??
+                navigator.homeUri;
+            await _loadManagedUri(
+              driver,
+              navigator.homeUri,
+              referrerUri: referrerUri,
             );
           },
         );
@@ -1278,7 +1260,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     _showSnackBar(
       messenger,
-      ForumTextResolver.webViewActionFailure(l10n, result.errorOrNull?.message),
+      ForumTextResolver.favoriteActionFailure(
+        l10n,
+        result.errorOrNull?.message,
+      ),
     );
   }
 
@@ -1358,175 +1343,5 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       mergedBlocks.add(trimmedBlock);
     }
     return mergedBlocks.join('\n');
-  }
-}
-
-class _FavoriteForumPickerSheet extends StatefulWidget {
-  const _FavoriteForumPickerSheet({
-    required this.loadFavoriteForums,
-    required this.onUnfavorite,
-  });
-
-  final Future<ApiResult<List<FavoriteForum>>> Function() loadFavoriteForums;
-  final Future<void> Function(FavoriteForum forum) onUnfavorite;
-
-  @override
-  State<_FavoriteForumPickerSheet> createState() =>
-      _FavoriteForumPickerSheetState();
-}
-
-class _FavoriteForumPickerSheetState extends State<_FavoriteForumPickerSheet> {
-  late Future<ApiResult<List<FavoriteForum>>> _future;
-  String? _submittingFavid;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = widget.loadFavoriteForums();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: SizedBox(
-        key: const Key('forum-favorite-forum-picker'),
-        height: 360,
-        child: FutureBuilder<ApiResult<List<FavoriteForum>>>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final result = snapshot.data;
-            if (result == null) {
-              return _FavoriteForumPickerErrorView(
-                message: ForumTextResolver.favoriteForumsLoadFailure(
-                  AppLocalizations.of(context),
-                  null,
-                ),
-                onRetry: _reload,
-              );
-            }
-
-            return result.when(
-              success: (forums) {
-                if (forums.isEmpty) {
-                  return Center(
-                    child: Text(
-                      AppLocalizations.of(context).forumWebViewNoFavoriteForums,
-                    ),
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Text(
-                        AppLocalizations.of(
-                          context,
-                        ).forumWebViewFavoriteForumsTitle,
-                      ),
-                    ),
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: forums.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final forum = forums[index];
-                          final isSubmitting = _submittingFavid == forum.favid;
-                          return ListTile(
-                            key: Key(
-                              'forum-favorite-forum-item-${forum.favid}',
-                            ),
-                            enabled: _submittingFavid == null,
-                            title: Text(forum.title),
-                            subtitle: Text(
-                              AppLocalizations.of(
-                                context,
-                              ).forumWebViewForumByFid(forum.fid),
-                            ),
-                            trailing: isSubmitting
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : null,
-                            onTap: _submittingFavid == null
-                                ? () => _handleUnfavorite(forum)
-                                : null,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                );
-              },
-              failure: (error) => _FavoriteForumPickerErrorView(
-                message: ForumTextResolver.favoriteForumsLoadFailure(
-                  AppLocalizations.of(context),
-                  error.message,
-                ),
-                onRetry: _reload,
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  void _reload() {
-    setState(() {
-      _future = widget.loadFavoriteForums();
-    });
-  }
-
-  Future<void> _handleUnfavorite(FavoriteForum forum) async {
-    setState(() {
-      _submittingFavid = forum.favid;
-    });
-    await widget.onUnfavorite(forum);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _submittingFavid = null;
-    });
-  }
-}
-
-class _FavoriteForumPickerErrorView extends StatelessWidget {
-  const _FavoriteForumPickerErrorView({
-    required this.message,
-    required this.onRetry,
-  });
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            FilledButton(
-              key: const Key('forum-favorite-forum-picker-retry'),
-              onPressed: onRetry,
-              child: Text(AppLocalizations.of(context).commonRetry),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

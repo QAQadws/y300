@@ -30,6 +30,7 @@ class ForumDisplaySnapshotCodec implements SnapshotCodec<ForumDisplayData> {
       'postUrl': value.postUrl,
       'searchUrl': value.searchUrl,
       'favoriteUrl': value.favoriteUrl,
+      'favoriteAction': value.favoriteAction.name,
       'previousPageUrl': value.previousPageUrl,
       'nextPageUrl': value.nextPageUrl,
       'lastPage': value.lastPage,
@@ -64,6 +65,7 @@ class ForumDisplaySnapshotCodec implements SnapshotCodec<ForumDisplayData> {
       postUrl: _nullableString(map['postUrl']),
       searchUrl: _nullableString(map['searchUrl']),
       favoriteUrl: _nullableString(map['favoriteUrl']),
+      favoriteAction: _decodeFavoriteAction(map),
       previousPageUrl: _nullableString(map['previousPageUrl']),
       nextPageUrl: _nullableString(map['nextPageUrl']),
       lastPage: _nullableInt(map['lastPage']),
@@ -191,6 +193,24 @@ class ForumDisplaySnapshotCodec implements SnapshotCodec<ForumDisplayData> {
   String? _nullableString(Object? value) {
     final text = ParseUtils.asString(value).trim();
     return text.isEmpty ? null : text;
+  }
+
+  ForumDisplayFavoriteAction _decodeFavoriteAction(Map<String, dynamic> map) {
+    final raw = ParseUtils.asString(map['favoriteAction']).trim();
+    switch (raw) {
+      case 'favorite':
+        return ForumDisplayFavoriteAction.favorite;
+      case 'unfavorite':
+        return ForumDisplayFavoriteAction.unfavorite;
+      case 'unknown':
+        return ForumDisplayFavoriteAction.unknown;
+      default:
+        // Older snapshots only stored favoriteUrl. It represented the
+        // positive action; never infer an unfavorite action from old data.
+        return _nullableString(map['favoriteUrl']) == null
+            ? ForumDisplayFavoriteAction.unknown
+            : ForumDisplayFavoriteAction.favorite;
+    }
   }
 
   int? _nullableInt(Object? value) {

@@ -177,7 +177,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get forumWebViewReplyThread => '回复帖子';
 
   @override
-  String get forumWebViewRefresh => '刷新页面';
+  String get forumRefreshPage => '刷新页面';
 
   @override
   String get forumWebViewBackHome => '返回首页';
@@ -186,38 +186,35 @@ class AppLocalizationsZh extends AppLocalizations {
   String get forumWebViewFeatureInProgress => '功能开发中';
 
   @override
-  String get forumWebViewProcessing => '处理中';
+  String get forumProcessing => '处理中';
 
   @override
-  String get forumWebViewFavoriteForum => '收藏本版';
+  String get forumFavoriteForum => '收藏本版';
 
   @override
-  String get forumWebViewUnfavoriteForum => '取消收藏';
+  String get forumUnfavoriteForum => '取消收藏';
 
   @override
-  String get forumWebViewCancelFavorite => '取消收藏';
+  String get forumFavoriteSuccess => '已收藏本版';
 
   @override
-  String get forumWebViewFavoriteSuccess => '已收藏本版';
+  String get forumUnfavoriteSuccess => '已取消收藏本版';
 
   @override
-  String get forumWebViewUnfavoriteSuccess => '已取消收藏本版';
-
-  @override
-  String forumWebViewActionFailed(String error) {
+  String forumActionFailed(String error) {
     return '操作失败，请稍后重试：$error';
   }
 
   @override
-  String get forumWebViewFavoriteForumsTitle => '取消收藏';
+  String get forumFavoriteForumsTitle => '取消收藏';
 
   @override
-  String forumWebViewFavoriteForumsLoadFailed(String error) {
+  String forumFavoriteForumsLoadFailed(String error) {
     return '加载收藏版块失败：$error';
   }
 
   @override
-  String get forumWebViewNoFavoriteForums => '暂无收藏版块';
+  String get forumNoFavoriteForums => '暂无收藏版块';
 
   @override
   String get forumWebViewAuthorOnly => '只看楼主';
@@ -252,7 +249,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get forumWebViewSearchForum => '论坛搜索';
 
   @override
-  String forumWebViewForumByFid(String fid) {
+  String forumForumByFid(String fid) {
     return 'fid=$fid';
   }
 
@@ -4431,7 +4428,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get forumWebViewReplyThread => '回覆帖子';
 
   @override
-  String get forumWebViewRefresh => '重新整理頁面';
+  String get forumRefreshPage => '重新整理頁面';
 
   @override
   String get forumWebViewBackHome => '返回首頁';
@@ -4440,38 +4437,35 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get forumWebViewFeatureInProgress => '功能開發中';
 
   @override
-  String get forumWebViewProcessing => '處理中';
+  String get forumProcessing => '處理中';
 
   @override
-  String get forumWebViewFavoriteForum => '收藏本版';
+  String get forumFavoriteForum => '收藏本版';
 
   @override
-  String get forumWebViewUnfavoriteForum => '取消收藏';
+  String get forumUnfavoriteForum => '取消收藏';
 
   @override
-  String get forumWebViewCancelFavorite => '取消收藏';
+  String get forumFavoriteSuccess => '已收藏本版';
 
   @override
-  String get forumWebViewFavoriteSuccess => '已收藏本版';
+  String get forumUnfavoriteSuccess => '已取消收藏本版';
 
   @override
-  String get forumWebViewUnfavoriteSuccess => '已取消收藏本版';
-
-  @override
-  String forumWebViewActionFailed(String error) {
+  String forumActionFailed(String error) {
     return '操作失敗，請稍後重試：$error';
   }
 
   @override
-  String get forumWebViewFavoriteForumsTitle => '取消收藏';
+  String get forumFavoriteForumsTitle => '取消收藏';
 
   @override
-  String forumWebViewFavoriteForumsLoadFailed(String error) {
+  String forumFavoriteForumsLoadFailed(String error) {
     return '載入收藏版塊失敗：$error';
   }
 
   @override
-  String get forumWebViewNoFavoriteForums => '目前沒有收藏版塊';
+  String get forumNoFavoriteForums => '目前沒有收藏版塊';
 
   @override
   String get forumWebViewAuthorOnly => '只看樓主';
@@ -4506,7 +4500,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get forumWebViewSearchForum => '論壇搜尋';
 
   @override
-  String forumWebViewForumByFid(String fid) {
+  String forumForumByFid(String fid) {
     return 'fid=$fid';
   }
 

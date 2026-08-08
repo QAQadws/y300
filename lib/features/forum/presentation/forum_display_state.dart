@@ -31,6 +31,7 @@ class ForumDisplayPageState {
     this.previousPageUrl,
     this.nextPageUrl,
     this.lastPage,
+    this.favoriteAction = ForumDisplayFavoriteAction.unknown,
     this.failure,
     @Deprecated('Use failure and presentation localization instead.')
     this.errorMessage,
@@ -56,6 +57,7 @@ class ForumDisplayPageState {
   final String? previousPageUrl;
   final String? nextPageUrl;
   final int? lastPage;
+  final ForumDisplayFavoriteAction favoriteAction;
 
   final ForumDisplayFailure? failure;
 
@@ -87,6 +89,7 @@ class ForumDisplayPageState {
       previousPageUrl: null,
       nextPageUrl: null,
       lastPage: null,
+      favoriteAction: ForumDisplayFavoriteAction.unknown,
       failure: null,
       errorMessage: null,
     );
@@ -113,6 +116,7 @@ class ForumDisplayPageState {
     String? previousPageUrl,
     String? nextPageUrl,
     int? lastPage,
+    ForumDisplayFavoriteAction? favoriteAction,
     ForumDisplayFailure? failure,
     String? errorMessage,
     bool clearError = false,
@@ -138,6 +142,7 @@ class ForumDisplayPageState {
       previousPageUrl: previousPageUrl ?? this.previousPageUrl,
       nextPageUrl: nextPageUrl ?? this.nextPageUrl,
       lastPage: lastPage ?? this.lastPage,
+      favoriteAction: favoriteAction ?? this.favoriteAction,
       failure: clearError ? null : (failure ?? this.failure),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );

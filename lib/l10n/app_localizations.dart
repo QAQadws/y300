@@ -409,11 +409,11 @@ abstract class AppLocalizations {
   /// **'回复帖子'**
   String get forumWebViewReplyThread;
 
-  /// No description provided for @forumWebViewRefresh.
+  /// No description provided for @forumRefreshPage.
   ///
   /// In zh, this message translates to:
   /// **'刷新页面'**
-  String get forumWebViewRefresh;
+  String get forumRefreshPage;
 
   /// No description provided for @forumWebViewBackHome.
   ///
@@ -427,65 +427,59 @@ abstract class AppLocalizations {
   /// **'功能开发中'**
   String get forumWebViewFeatureInProgress;
 
-  /// No description provided for @forumWebViewProcessing.
+  /// No description provided for @forumProcessing.
   ///
   /// In zh, this message translates to:
   /// **'处理中'**
-  String get forumWebViewProcessing;
+  String get forumProcessing;
 
-  /// No description provided for @forumWebViewFavoriteForum.
+  /// No description provided for @forumFavoriteForum.
   ///
   /// In zh, this message translates to:
   /// **'收藏本版'**
-  String get forumWebViewFavoriteForum;
+  String get forumFavoriteForum;
 
-  /// No description provided for @forumWebViewUnfavoriteForum.
+  /// No description provided for @forumUnfavoriteForum.
   ///
   /// In zh, this message translates to:
   /// **'取消收藏'**
-  String get forumWebViewUnfavoriteForum;
+  String get forumUnfavoriteForum;
 
-  /// No description provided for @forumWebViewCancelFavorite.
-  ///
-  /// In zh, this message translates to:
-  /// **'取消收藏'**
-  String get forumWebViewCancelFavorite;
-
-  /// No description provided for @forumWebViewFavoriteSuccess.
+  /// No description provided for @forumFavoriteSuccess.
   ///
   /// In zh, this message translates to:
   /// **'已收藏本版'**
-  String get forumWebViewFavoriteSuccess;
+  String get forumFavoriteSuccess;
 
-  /// No description provided for @forumWebViewUnfavoriteSuccess.
+  /// No description provided for @forumUnfavoriteSuccess.
   ///
   /// In zh, this message translates to:
   /// **'已取消收藏本版'**
-  String get forumWebViewUnfavoriteSuccess;
+  String get forumUnfavoriteSuccess;
 
-  /// WebView 论坛操作失败；error 是安全摘要
+  /// 论坛收藏或刷新操作失败；error 是安全摘要
   ///
   /// In zh, this message translates to:
   /// **'操作失败，请稍后重试：{error}'**
-  String forumWebViewActionFailed(String error);
+  String forumActionFailed(String error);
 
-  /// No description provided for @forumWebViewFavoriteForumsTitle.
+  /// No description provided for @forumFavoriteForumsTitle.
   ///
   /// In zh, this message translates to:
   /// **'取消收藏'**
-  String get forumWebViewFavoriteForumsTitle;
+  String get forumFavoriteForumsTitle;
 
   /// 收藏版块列表加载失败；error 是安全摘要
   ///
   /// In zh, this message translates to:
   /// **'加载收藏版块失败：{error}'**
-  String forumWebViewFavoriteForumsLoadFailed(String error);
+  String forumFavoriteForumsLoadFailed(String error);
 
-  /// No description provided for @forumWebViewNoFavoriteForums.
+  /// No description provided for @forumNoFavoriteForums.
   ///
   /// In zh, this message translates to:
   /// **'暂无收藏版块'**
-  String get forumWebViewNoFavoriteForums;
+  String get forumNoFavoriteForums;
 
   /// No description provided for @forumWebViewAuthorOnly.
   ///
@@ -551,7 +545,7 @@ abstract class AppLocalizations {
   ///
   /// In zh, this message translates to:
   /// **'fid={fid}'**
-  String forumWebViewForumByFid(String fid);
+  String forumForumByFid(String fid);
 
   /// No description provided for @historyTitle.
   ///

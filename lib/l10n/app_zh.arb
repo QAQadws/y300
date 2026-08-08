@@ -104,27 +104,26 @@
   "forumWebViewOpenExternalFailed": "打开外部链接失败",
   "forumWebViewClose": "关闭论坛页面",
   "forumWebViewReplyThread": "回复帖子",
-  "forumWebViewRefresh": "刷新页面",
+  "forumRefreshPage": "刷新页面",
   "forumWebViewBackHome": "返回首页",
   "forumWebViewFeatureInProgress": "功能开发中",
-  "forumWebViewProcessing": "处理中",
-  "forumWebViewFavoriteForum": "收藏本版",
-  "forumWebViewUnfavoriteForum": "取消收藏",
-  "forumWebViewCancelFavorite": "取消收藏",
-  "forumWebViewFavoriteSuccess": "已收藏本版",
-  "forumWebViewUnfavoriteSuccess": "已取消收藏本版",
-  "forumWebViewActionFailed": "操作失败，请稍后重试：{error}",
-  "@forumWebViewActionFailed": {
-    "description": "WebView 论坛操作失败；error 是安全摘要",
+  "forumProcessing": "处理中",
+  "forumFavoriteForum": "收藏本版",
+  "forumUnfavoriteForum": "取消收藏",
+  "forumFavoriteSuccess": "已收藏本版",
+  "forumUnfavoriteSuccess": "已取消收藏本版",
+  "forumActionFailed": "操作失败，请稍后重试：{error}",
+  "@forumActionFailed": {
+    "description": "论坛收藏或刷新操作失败；error 是安全摘要",
     "placeholders": {"error": {"type": "String"}}
   },
-  "forumWebViewFavoriteForumsTitle": "取消收藏",
-  "forumWebViewFavoriteForumsLoadFailed": "加载收藏版块失败：{error}",
-  "@forumWebViewFavoriteForumsLoadFailed": {
+  "forumFavoriteForumsTitle": "取消收藏",
+  "forumFavoriteForumsLoadFailed": "加载收藏版块失败：{error}",
+  "@forumFavoriteForumsLoadFailed": {
     "description": "收藏版块列表加载失败；error 是安全摘要",
     "placeholders": {"error": {"type": "String"}}
   },
-  "forumWebViewNoFavoriteForums": "暂无收藏版块",
+  "forumNoFavoriteForums": "暂无收藏版块",
   "forumWebViewAuthorOnly": "只看楼主",
   "forumWebViewAllPosts": "看全部",
   "forumWebViewNormalOrder": "正序浏览",
@@ -139,8 +138,8 @@
     "placeholders": {"board": {"type": "String"}}
   },
   "forumWebViewSearchForum": "论坛搜索",
-  "forumWebViewForumByFid": "fid={fid}",
-  "@forumWebViewForumByFid": {
+  "forumForumByFid": "fid={fid}",
+  "@forumForumByFid": {
     "description": "无法解析版块名称时的安全标题；fid 是原始版块 ID",
     "placeholders": {"fid": {"type": "String"}}
   },
