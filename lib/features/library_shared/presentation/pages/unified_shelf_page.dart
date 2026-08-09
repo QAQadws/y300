@@ -24,6 +24,7 @@ import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
+import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 
 /// 统一书架页面（Phase 3）。
 class UnifiedShelfPage extends StatefulWidget {
@@ -61,6 +62,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   late final PageController _pageController;
   late final ShelfSelectionController _selectionController;
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   final Object _selectionOwnerToken = Object();
 
   @override
@@ -137,6 +139,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     _controller.dispose();
     _pageController.dispose();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -164,10 +167,17 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     );
 
     return PopScope<void>(
-      canPop: !selecting,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && selecting) {
+      canPop: !selecting && !state.isSearchMode,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        if (selecting) {
           _exitSelection();
+          return;
+        }
+        if (state.isSearchMode) {
+          await _exitSearchMode();
         }
       },
       child: Scaffold(
@@ -515,22 +525,19 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         ),
         actions: [
           IconButton(
+            key: const Key('unified-shelf-search-button'),
             icon: const Icon(Icons.search),
             tooltip: AppLocalizations.of(context).libraryShelfSearch,
-            onPressed: () async {
-              await _controller.enterSearchMode();
-              if (!mounted) {
-                return;
-              }
-              setState(() {});
-            },
+            onPressed: _enterSearchMode,
           ),
           IconButton(
+            key: const Key('unified-shelf-filter-button'),
             icon: const Icon(Icons.filter_list),
             tooltip: AppLocalizations.of(context).libraryShelfFilterAndSort,
             onPressed: _showFilterSheet,
           ),
           PopupMenuButton<String>(
+            key: const Key('unified-shelf-more-button'),
             onSelected: _handleMenuAction,
             itemBuilder: (context) => [
               PopupMenuItem<String>(
@@ -572,60 +579,46 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       );
     }
 
-    return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () async {
-          _searchController.clear();
-          await _controller.exitSearchMode();
-          if (!mounted) {
-            return;
-          }
-          setState(() {});
-        },
-      ),
-      titleSpacing: 0,
-      title: TextField(
-        key: const Key('unified-shelf-search-input'),
-        controller: _searchController,
-        autofocus: true,
-        decoration: InputDecoration(
-          hintText: AppLocalizations.of(context).libraryShelfSearchHint,
-          border: InputBorder.none,
-        ),
-        onChanged: (value) async {
-          await _controller.updateKeyword(value);
-          if (!mounted) {
-            return;
-          }
-          setState(() {});
-        },
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.filter_list),
-          tooltip: AppLocalizations.of(context).libraryShelfFilterAndSort,
-          onPressed: _showFilterSheet,
-        ),
-        PopupMenuButton<String>(
-          onSelected: _handleMenuAction,
-          itemBuilder: (context) => [
-            if (moduleActions.isNotEmpty) ...[
-              ..._moduleActionItems(moduleActions),
-              const PopupMenuDivider(),
-            ],
-            PopupMenuItem<String>(
-              value: 'refresh-shelf',
-              child: Text(AppLocalizations.of(context).libraryShelfUpdate),
-            ),
-            PopupMenuItem<String>(
-              value: 'random-open',
-              child: Text(AppLocalizations.of(context).libraryShelfRandomOpen),
-            ),
-          ],
-        ),
-      ],
+    return InlineSearchAppBar(
+      controller: _searchController,
+      focusNode: _searchFocusNode,
+      fieldKey: const Key('unified-shelf-search-input'),
+      backButtonKey: const Key('unified-shelf-search-back-button'),
+      clearButtonKey: const Key('unified-shelf-search-clear-button'),
+      hintText: AppLocalizations.of(context).libraryShelfSearchHint,
+      clearTooltip: AppLocalizations.of(context).commonClear,
+      onBack: _exitSearchMode,
+      onChanged: (value) async {
+        await _controller.updateKeyword(value);
+        if (!mounted) {
+          return;
+        }
+        setState(() {});
+      },
     );
+  }
+
+  Future<void> _enterSearchMode() async {
+    await _controller.enterSearchMode();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _searchFocusNode.requestFocus();
+      }
+    });
+  }
+
+  Future<void> _exitSearchMode() async {
+    _searchFocusNode.unfocus();
+    _searchController.clear();
+    await _controller.exitSearchMode();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
   }
 
   Future<void> _showFilterSheet() async {

@@ -74,6 +74,12 @@ void main() {
     expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
     expect(find.text('收藏帖'), findsOneWidget);
     expect(bootstrapper.startCallCount, 1);
+
+    await tester.tap(find.byKey(const Key('unified-shelf-search-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unified-shelf-search-input')), findsOneWidget);
+    expect(find.byKey(const Key('unified-shelf-filter-button')), findsNothing);
+    expect(find.byKey(const Key('unified-shelf-more-button')), findsNothing);
   });
 
   testWidgets(

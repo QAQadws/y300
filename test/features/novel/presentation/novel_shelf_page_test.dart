@@ -48,6 +48,12 @@ void main() {
       find.byKey(const ValueKey<String>('unified-shelf-category-tab-default')),
       findsOneWidget,
     );
+
+    await tester.tap(find.byKey(const Key('unified-shelf-search-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unified-shelf-search-input')), findsOneWidget);
+    expect(find.byKey(const Key('unified-shelf-filter-button')), findsNothing);
+    expect(find.byKey(const Key('unified-shelf-more-button')), findsNothing);
   });
 
   testWidgets('NovelShelfPage long press omits read-state selection actions', (

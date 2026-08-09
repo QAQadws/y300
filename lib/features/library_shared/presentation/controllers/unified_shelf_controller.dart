@@ -227,15 +227,9 @@ class UnifiedShelfController {
     _taskProgressListenable?.removeListener(_handleTaskProgressChanged);
     _shelfRefreshSignals?.removeListener(_handleShelfRefreshSignalChanged);
     _stateListenable.dispose();
-    _keywordDebounceTimer?.cancel();
-    _keywordDebounceTimer = null;
+    _cancelPendingKeywordReload();
     _backgroundReloadTimer?.cancel();
     _backgroundReloadTimer = null;
-    if (_pendingKeywordCompleter != null &&
-        !_pendingKeywordCompleter!.isCompleted) {
-      _pendingKeywordCompleter!.complete();
-    }
-    _pendingKeywordCompleter = null;
   }
 
   Future<void> initialize() async {
@@ -266,6 +260,11 @@ class UnifiedShelfController {
   }
 
   Future<void> exitSearchMode() async {
+    final shouldRestore = _state.isSearchMode || _state.keyword.isNotEmpty;
+    _cancelPendingKeywordReload();
+    if (!shouldRestore) {
+      return;
+    }
     _setState(
       _state.copyWith(isSearchMode: false, keyword: '', clearError: true),
     );
@@ -274,12 +273,7 @@ class UnifiedShelfController {
 
   Future<void> updateKeyword(String value) async {
     _setState(_state.copyWith(keyword: value));
-    _keywordDebounceTimer?.cancel();
-    if (_pendingKeywordCompleter != null &&
-        !_pendingKeywordCompleter!.isCompleted) {
-      // 被新输入打断的旧查询直接完成，避免调用方悬挂等待。
-      _pendingKeywordCompleter!.complete();
-    }
+    _cancelPendingKeywordReload();
     final completer = Completer<void>();
     _pendingKeywordCompleter = completer;
     _keywordDebounceTimer = Timer(_keywordDebounceDuration, () async {
@@ -289,9 +283,23 @@ class UnifiedShelfController {
         if (!completer.isCompleted) {
           completer.complete();
         }
+        if (identical(_pendingKeywordCompleter, completer)) {
+          _pendingKeywordCompleter = null;
+          _keywordDebounceTimer = null;
+        }
       }
     });
     await completer.future;
+  }
+
+  void _cancelPendingKeywordReload() {
+    _keywordDebounceTimer?.cancel();
+    _keywordDebounceTimer = null;
+    final completer = _pendingKeywordCompleter;
+    _pendingKeywordCompleter = null;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
   }
 
   Future<void> selectCategory(String categoryId) async {

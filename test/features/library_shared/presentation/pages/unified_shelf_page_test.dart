@@ -16,6 +16,7 @@ import 'package:y300/features/library_shared/domain/services/shelf_feature_flags
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
+import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
@@ -35,12 +36,80 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.search), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.search));
+    expect(
+      find.byKey(const Key('unified-shelf-search-button')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('unified-shelf-search-button')));
     await tester.pumpAndSettle();
 
+    expect(find.byType(InlineSearchAppBar), findsOneWidget);
     expect(find.byKey(const Key('unified-shelf-search-input')), findsOneWidget);
     expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+    expect(find.byKey(const Key('unified-shelf-filter-button')), findsNothing);
+    expect(find.byKey(const Key('unified-shelf-more-button')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key('unified-shelf-search-input')),
+      'Comic',
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const Key('unified-shelf-search-clear-button')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('unified-shelf-search-clear-button')),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('unified-shelf-search-input')),
+          )
+          .controller
+          ?.text,
+      isEmpty,
+    );
+
+    await tester.tap(find.byKey(const Key('unified-shelf-search-back-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unified-shelf-search-input')), findsNothing);
+    expect(
+      find.byKey(const Key('unified-shelf-filter-button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('unified-shelf-more-button')), findsOneWidget);
+  });
+
+  testWidgets('system back exits shelf search before leaving the page', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+          ),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('unified-shelf-search-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unified-shelf-search-input')), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(UnifiedShelfPage), findsOneWidget);
+    expect(find.byKey(const Key('unified-shelf-search-input')), findsNothing);
+    expect(
+      find.byKey(const Key('unified-shelf-search-button')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('search updates category match count label', (tester) async {

@@ -492,6 +492,37 @@ void main() {
       controller.dispose();
     });
 
+    test('exit search cancels pending debounce and reloads once', () async {
+      final adapter = _FakeShelfAdapter(
+        categories: [
+          LibraryCategory(
+            categoryId: 'default',
+            name: 'default',
+            sortOrder: 0,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+        queriedItems: const <String, List<LibraryWorkItem>>{
+          'default': <LibraryWorkItem>[],
+        },
+      );
+      final controller = UnifiedShelfController(adapter: adapter);
+      await controller.initialize();
+      adapter.queryCallCount = 0;
+
+      final pendingKeyword = controller.updateKeyword('pending');
+      await controller.exitSearchMode();
+      await controller.exitSearchMode();
+      await pendingKeyword;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      expect(controller.state.isSearchMode, isFalse);
+      expect(controller.state.keyword, isEmpty);
+      expect(adapter.lastQueryKeyword, isEmpty);
+      expect(adapter.queryCallCount, 1);
+      controller.dispose();
+    });
+
     test(
       'update display and grid columns persists through shared repository',
       () async {
