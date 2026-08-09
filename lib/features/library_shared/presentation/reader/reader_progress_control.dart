@@ -6,6 +6,8 @@ import 'package:y300/l10n/app_localizations.dart';
 class ReaderProgressControl extends StatelessWidget {
   const ReaderProgressControl({super.key, required this.config});
 
+  static const double _minimumSliderWidth = 96;
+
   final ReaderProgressConfig config;
 
   @override
@@ -33,6 +35,12 @@ class ReaderProgressControl extends StatelessWidget {
     final trailingLabel =
         config.trailingLabel ?? (safeTotal ?? maxValue).toString();
     final sliderEnabled = config.sliderEnabled && hasRange;
+    final labelSlotWidth = _measureLabelSlotWidth(
+      context: context,
+      style: DefaultTextStyle.of(context).style,
+      leadingLabel: leadingLabel,
+      trailingLabel: trailingLabel,
+    );
 
     return Row(
       children: [
@@ -50,49 +58,71 @@ class ReaderProgressControl extends StatelessWidget {
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 56,
-                    child: Text(
-                      leadingLabel,
-                      key: const Key('shared-reader-current-label'),
-                      textAlign: TextAlign.left,
-                    ),
-                  ),
-                  Expanded(
-                    child: AbsorbPointer(
-                      absorbing: config.interactionLocked,
-                      child: Slider(
-                        key: const Key('shared-reader-progress-slider'),
-                        value: sliderValue,
-                        min: minValue,
-                        max: maxValue,
-                        divisions: isDiscrete
-                            ? (safeTotal! > 1 ? safeTotal - 1 : null)
-                            : config.divisions,
-                        semanticFormatterCallback: (_) =>
-                            l10n.readerProgressSemantics(
-                              leadingLabel,
-                              trailingLabel,
-                            ),
-                        onChangeStart: sliderEnabled
-                            ? config.onChangeStart
-                            : null,
-                        onChanged: sliderEnabled ? config.onChanged : null,
-                        onChangeEnd: sliderEnabled ? config.onChangeEnd : null,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final maximumLabelSlotWidth = constraints.hasBoundedWidth
+                      ? ((constraints.maxWidth - _minimumSliderWidth) / 2)
+                            .clamp(0.0, labelSlotWidth)
+                            .toDouble()
+                      : labelSlotWidth;
+                  final effectiveLabelSlotWidth = labelSlotWidth
+                      .clamp(0.0, maximumLabelSlotWidth)
+                      .toDouble();
+                  return Row(
+                    children: [
+                      SizedBox(
+                        key: const Key('shared-reader-current-label-slot'),
+                        width: effectiveLabelSlotWidth,
+                        child: Text(
+                          leadingLabel,
+                          key: const Key('shared-reader-current-label'),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.left,
+                        ),
                       ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 56,
-                    child: Text(
-                      trailingLabel,
-                      key: const Key('shared-reader-total-label'),
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                ],
+                      Expanded(
+                        child: AbsorbPointer(
+                          absorbing: config.interactionLocked,
+                          child: Slider(
+                            key: const Key('shared-reader-progress-slider'),
+                            value: sliderValue,
+                            min: minValue,
+                            max: maxValue,
+                            divisions: isDiscrete
+                                ? (safeTotal! > 1 ? safeTotal - 1 : null)
+                                : config.divisions,
+                            semanticFormatterCallback: (_) =>
+                                l10n.readerProgressSemantics(
+                                  leadingLabel,
+                                  trailingLabel,
+                                ),
+                            onChangeStart: sliderEnabled
+                                ? config.onChangeStart
+                                : null,
+                            onChanged: sliderEnabled ? config.onChanged : null,
+                            onChangeEnd: sliderEnabled
+                                ? config.onChangeEnd
+                                : null,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        key: const Key('shared-reader-total-label-slot'),
+                        width: effectiveLabelSlotWidth,
+                        child: Text(
+                          trailingLabel,
+                          key: const Key('shared-reader-total-label'),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -105,5 +135,42 @@ class ReaderProgressControl extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  double _measureLabelSlotWidth({
+    required BuildContext context,
+    required TextStyle style,
+    required String leadingLabel,
+    required String trailingLabel,
+  }) {
+    final leadingWidth = _measureLabelWidth(
+      context: context,
+      style: style,
+      label: leadingLabel,
+    );
+    final trailingWidth = _measureLabelWidth(
+      context: context,
+      style: style,
+      label: trailingLabel,
+    );
+    return (leadingWidth > trailingWidth ? leadingWidth : trailingWidth)
+        .ceilToDouble();
+  }
+
+  double _measureLabelWidth({
+    required BuildContext context,
+    required TextStyle style,
+    required String label,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: style),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
   }
 }

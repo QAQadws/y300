@@ -23,6 +23,59 @@ void main() {
     expect(find.text('12'), findsOneWidget);
   });
 
+  testWidgets('single digit labels use compact symmetric slots', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildProgress(
+        config: ReaderProgressConfig(
+          current: 1,
+          total: 9,
+          onChanged: (_) {},
+          onChangeEnd: (_) {},
+        ),
+      ),
+    );
+
+    final currentWidth = tester
+        .getSize(find.byKey(const Key('shared-reader-current-label-slot')))
+        .width;
+    final totalWidth = tester
+        .getSize(find.byKey(const Key('shared-reader-total-label-slot')))
+        .width;
+
+    expect(currentWidth, lessThan(24));
+    expect(totalWidth, currentWidth);
+  });
+
+  testWidgets('the longest label keeps the slider geometry stable', (
+    tester,
+  ) async {
+    Widget buildForCurrent(int current) {
+      return _buildProgress(
+        config: ReaderProgressConfig(
+          current: current,
+          total: 100,
+          onChanged: (_) {},
+          onChangeEnd: (_) {},
+        ),
+      );
+    }
+
+    await tester.pumpWidget(buildForCurrent(9));
+    final before = tester.getRect(
+      find.byKey(const Key('shared-reader-progress-slider')),
+    );
+
+    await tester.pumpWidget(buildForCurrent(10));
+    final after = tester.getRect(
+      find.byKey(const Key('shared-reader-progress-slider')),
+    );
+
+    expect(after.left, before.left);
+    expect(after.right, before.right);
+  });
+
   testWidgets('ReaderProgressControl emits slider callbacks', (tester) async {
     final events = <String>[];
     await tester.pumpWidget(
@@ -70,6 +123,51 @@ void main() {
     expect(slider.divisions, isNull);
     expect(find.text('42%'), findsOneWidget);
     expect(find.text('100%'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('shared-reader-current-label-slot')))
+          .width,
+      tester
+          .getSize(find.byKey(const Key('shared-reader-total-label-slot')))
+          .width,
+    );
+  });
+
+  testWidgets('narrow large-text layout preserves usable slider width', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildProgress(
+        width: 220,
+        textScaler: const TextScaler.linear(2),
+        config: ReaderProgressConfig.discrete(
+          current: 8,
+          total: 100,
+          leadingLabel: '88%',
+          trailingLabel: '计算中',
+          onChanged: (_) {},
+          onChangeEnd: (_) {},
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('shared-reader-progress-slider')))
+          .width,
+      greaterThanOrEqualTo(96),
+    );
+    final current = tester.widget<Text>(
+      find.byKey(const Key('shared-reader-current-label')),
+    );
+    final total = tester.widget<Text>(
+      find.byKey(const Key('shared-reader-total-label')),
+    );
+    expect(current.maxLines, 1);
+    expect(total.maxLines, 1);
+    expect(current.overflow, TextOverflow.ellipsis);
+    expect(total.overflow, TextOverflow.ellipsis);
   });
 
   testWidgets('discrete progress derives page divisions', (tester) async {
@@ -222,11 +320,24 @@ void main() {
 Widget _buildProgress({
   required ReaderProgressConfig config,
   ThemeData? theme,
+  double? width,
+  TextScaler? textScaler,
 }) {
   return LocalizedTestApp(
     theme: theme,
+    builder: textScaler == null
+        ? null
+        : (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+            child: child!,
+          ),
     home: Scaffold(
-      body: Center(child: ReaderProgressControl(config: config)),
+      body: Center(
+        child: SizedBox(
+          width: width,
+          child: ReaderProgressControl(config: config),
+        ),
+      ),
     ),
   );
 }
