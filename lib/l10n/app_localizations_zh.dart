@@ -1143,11 +1143,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String libraryChapterCurrentPageOfTotal(int page, int total) {
-    return '第 $page 页，共 $total 页';
-  }
-
-  @override
   String get libraryChapterLastRead => '上次阅读';
 
   @override
@@ -5391,11 +5386,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String libraryChapterCurrentPage(int page) {
     return '第 $page 頁';
-  }
-
-  @override
-  String libraryChapterCurrentPageOfTotal(int page, int total) {
-    return '第 $page 頁，共 $total 頁';
   }
 
   @override

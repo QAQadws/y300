@@ -520,10 +520,6 @@
   "libraryChapterMarkRead": "标记已读",
   "libraryChapterCurrentPage": "第 {page} 页",
   "@libraryChapterCurrentPage": {"placeholders": {"page": {"type": "int"}}},
-  "libraryChapterCurrentPageOfTotal": "第 {page} 页，共 {total} 页",
-  "@libraryChapterCurrentPageOfTotal": {
-    "placeholders": {"page": {"type": "int"}, "total": {"type": "int"}}
-  },
   "libraryChapterLastRead": "上次阅读",
   "libraryChapterProgressSemantics": "{subtitle}，{progress}",
   "@libraryChapterProgressSemantics": {

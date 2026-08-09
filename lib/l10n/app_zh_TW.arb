@@ -331,7 +331,6 @@
   "libraryChapterClearReadState": "清除閱讀狀態",
   "libraryChapterMarkRead": "標記為已讀",
   "libraryChapterCurrentPage": "第 {page} 頁",
-  "libraryChapterCurrentPageOfTotal": "第 {page} 頁，共 {total} 頁",
   "libraryChapterLastRead": "上次閱讀",
   "libraryChapterProgressSemantics": "{subtitle}，{progress}",
   "libraryChapterFilterAny": "不限",

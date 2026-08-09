@@ -832,6 +832,7 @@ void main() {
         kind: LibraryChapterProgressKind.currentPage,
         isCurrent: true,
         currentPage: 3,
+        totalPages: 12,
         fraction: 0.3,
       ),
     );
@@ -868,7 +869,16 @@ void main() {
         matching: find.byType(RichText),
       ),
     );
-    expect(progressLine.text.toPlainText(), contains('  ·  第 3 页'));
+    final progressText = progressLine.text.toPlainText();
+    expect(progressText, contains('  ·  第 3 页'));
+    expect(progressText, isNot(contains('共 12 页')));
+    final progressSemantics = tester.getSemantics(
+      find.byKey(
+        const ValueKey<String>('unified-detail-chapter-inline-progress-e1'),
+      ),
+    );
+    expect(progressSemantics.label, contains('第 3 页'));
+    expect(progressSemantics.label, isNot(contains('共 12 页')));
     expect(
       find.byKey(const ValueKey<String>('unified-detail-chapter-progress-e1')),
       findsNothing,

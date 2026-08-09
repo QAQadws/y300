@@ -1817,12 +1817,6 @@ abstract class AppLocalizations {
   /// **'第 {page} 页'**
   String libraryChapterCurrentPage(int page);
 
-  /// No description provided for @libraryChapterCurrentPageOfTotal.
-  ///
-  /// In zh, this message translates to:
-  /// **'第 {page} 页，共 {total} 页'**
-  String libraryChapterCurrentPageOfTotal(int page, int total);
-
   /// No description provided for @libraryChapterLastRead.
   ///
   /// In zh, this message translates to:

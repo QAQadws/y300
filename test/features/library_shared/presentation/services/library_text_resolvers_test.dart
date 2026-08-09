@@ -171,11 +171,11 @@ void main() {
 
       expect(
         LibraryDetailTextResolver.chapterProgress(simplified, progress),
-        simplified.libraryChapterCurrentPageOfTotal(3, 12),
+        simplified.libraryChapterCurrentPage(3),
       );
       expect(
         LibraryDetailTextResolver.chapterProgress(traditional, progress),
-        traditional.libraryChapterCurrentPageOfTotal(3, 12),
+        traditional.libraryChapterCurrentPage(3),
       );
     });
   });

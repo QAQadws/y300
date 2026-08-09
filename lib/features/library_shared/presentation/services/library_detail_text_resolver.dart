@@ -180,10 +180,7 @@ abstract final class LibraryDetailTextResolver {
     LibraryChapterProgressInfo progress,
   ) {
     final page = progress.currentPage ?? 1;
-    final total = progress.totalPages;
-    return total == null || total <= 0
-        ? l10n.libraryChapterCurrentPage(page)
-        : l10n.libraryChapterCurrentPageOfTotal(page, total);
+    return l10n.libraryChapterCurrentPage(page);
   }
 
   static String _manualUnexpectedHost(
