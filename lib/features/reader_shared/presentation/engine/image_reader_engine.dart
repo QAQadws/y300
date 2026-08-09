@@ -56,6 +56,14 @@ class ImageReaderEngine extends ConsumerStatefulWidget {
 
 class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     implements ReaderEngineActions {
+  static const Duration _pagedTapConfirmationDelay = Duration(
+    milliseconds: 220,
+  );
+  static const Duration _pagedTurnAnimationDuration = Duration(
+    milliseconds: 160,
+  );
+  static const Curve _pagedTurnAnimationCurve = Curves.easeOutCubic;
+
   late final ScrollController _scrollController;
   PageController? _pageController;
   String? _pageControllerOwnerId;
@@ -134,7 +142,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _scrollController = ScrollController()..addListener(_onVerticalScroll);
     _overlayController = ReaderOverlayController()
       ..addListener(_onOverlayVisibilityChanged);
-    _gestureCoordinator = ReaderGestureCoordinator();
+    _gestureCoordinator = ReaderGestureCoordinator(
+      doubleTapTimeout: _pagedTapConfirmationDelay,
+    );
     _zoomGate = ValueNotifier<bool>(false);
     _activePagedIndex = ValueNotifier<int>(0);
     _imageSessionStore = ReaderImageSessionStore();
@@ -693,11 +703,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (target < content.length) {
       _promoteSessionSeekTarget(target);
     }
-    expectedPageController.animateToPage(
-      target,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-    );
+    _animatePagedTurn(expectedPageController, target);
   }
 
   void _syncVerticalItemAnchors(List<ContinuousImageItem> items) {
@@ -1714,10 +1720,16 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (target < total) {
       _promoteSessionSeekTarget(target);
     }
-    pageController.animateToPage(
-      target,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
+    _animatePagedTurn(pageController, target);
+  }
+
+  void _animatePagedTurn(PageController pageController, int target) {
+    unawaited(
+      pageController.animateToPage(
+        target,
+        duration: _pagedTurnAnimationDuration,
+        curve: _pagedTurnAnimationCurve,
+      ),
     );
   }
 

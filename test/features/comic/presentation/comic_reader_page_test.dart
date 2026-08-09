@@ -410,7 +410,30 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
+          comicRepositoryProvider.overrideWithValue(
+            _ReaderFakeRepository(
+              images: const <ComicEpisodeImageItem>[
+                ComicEpisodeImageItem(
+                  episodeId: 'yamibo:100:101',
+                  imageUrl: 'https://img.test/101-1.jpg',
+                  imageIndex: 0,
+                  cacheStatus: 'none',
+                ),
+                ComicEpisodeImageItem(
+                  episodeId: 'yamibo:100:101',
+                  imageUrl: 'https://img.test/101-2.jpg',
+                  imageIndex: 1,
+                  cacheStatus: 'none',
+                ),
+                ComicEpisodeImageItem(
+                  episodeId: 'yamibo:100:101',
+                  imageUrl: 'https://img.test/101-3.jpg',
+                  imageIndex: 2,
+                  cacheStatus: 'none',
+                ),
+              ],
+            ),
+          ),
           comicReadingStateWriterProvider.overrideWithValue(
             _NoopReadingStateWriter(),
           ),
@@ -442,6 +465,20 @@ void main() {
           .reverse,
       isFalse,
     );
+
+    final pageController = tester
+        .widget<PageView>(find.byKey(const Key('comic-reader-page-view')))
+        .controller!;
+    expect(pageController.page, closeTo(0, 0.01));
+    await tester.tapAt(
+      tester.getCenter(find.byKey(const Key('shared-reader-right-tap-zone'))),
+    );
+    await tester.pump(const Duration(milliseconds: 219));
+    expect(pageController.page, closeTo(0, 0.01));
+
+    await tester.pump(const Duration(milliseconds: 2));
+    await tester.pump(const Duration(milliseconds: 170));
+    expect(pageController.page, closeTo(1, 0.01));
   });
 
   testWidgets(

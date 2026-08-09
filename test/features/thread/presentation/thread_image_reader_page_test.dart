@@ -555,6 +555,60 @@ void main() {
   }
 
   testWidgets(
+    'ThreadImageReaderPage confirms side taps at 220ms and settles smoothly',
+    (tester) async {
+      await _pumpHorizontalReader(tester, mode: 'ltr');
+      final controller = _pageController(tester);
+      expect(controller.page, closeTo(2, 0.01));
+
+      await tester.tapAt(
+        tester.getCenter(find.byKey(const Key('shared-reader-right-tap-zone'))),
+      );
+      await tester.pump(const Duration(milliseconds: 219));
+      expect(controller.page, closeTo(2, 0.01));
+
+      await tester.pump(const Duration(milliseconds: 2));
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(controller.page, greaterThan(2));
+      expect(controller.page, lessThan(3));
+
+      await tester.pump(const Duration(milliseconds: 90));
+      expect(controller.page, closeTo(3, 0.01));
+    },
+  );
+
+  testWidgets(
+    'ThreadImageReaderPage keeps side-zone double tap zoom without turning',
+    (tester) async {
+      final recorder = _RecordingContinuousImageDiagnosticRecorder();
+      await _pumpHorizontalReader(
+        tester,
+        mode: 'ltr',
+        diagnosticRecorder: recorder,
+      );
+      final controller = _pageController(tester);
+      final right = tester.getCenter(
+        find.byKey(const Key('shared-reader-right-tap-zone')),
+      );
+
+      await tester.tapAt(right);
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.tapAt(right);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 240));
+
+      expect(controller.page, closeTo(2, 0.01));
+      expect(
+        recorder.events.any(
+          (event) =>
+              event.type == ContinuousImageDiagnosticEventType.zoomActivated,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
     'ThreadImageReaderPage mode switch keeps committed logical page',
     (tester) async {
       await _pumpHorizontalReader(tester, mode: 'ltr');

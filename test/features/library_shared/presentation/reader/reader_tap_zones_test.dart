@@ -38,6 +38,30 @@ void main() {
     expect(rightTaps, 1);
   });
 
+  testWidgets('ReaderTapZones honors a shorter confirmation window', (
+    tester,
+  ) async {
+    var rightTaps = 0;
+    final coordinator = ReaderGestureCoordinator(
+      doubleTapTimeout: const Duration(milliseconds: 220),
+    );
+    addTearDown(coordinator.dispose);
+    await tester.pumpWidget(
+      _buildTapZones(
+        gestureCoordinator: coordinator,
+        onCenterTap: () {},
+        onRightTap: () => rightTaps += 1,
+      ),
+    );
+
+    await tester.tapAt(const Offset(500, 300));
+    await tester.pump(const Duration(milliseconds: 219));
+    expect(rightTaps, 0);
+
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(rightTaps, 1);
+  });
+
   testWidgets('ReaderTapZones disabled does not trigger callbacks', (
     tester,
   ) async {
