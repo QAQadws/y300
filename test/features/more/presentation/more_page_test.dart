@@ -21,6 +21,7 @@ import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
@@ -496,6 +497,87 @@ void main() {
     expect(find.text('当前：深色'), findsOneWidget);
   });
 
+  testWidgets(
+    'Appearance settings keeps each option group on one scrollable row',
+    (tester) async {
+      tester.view.physicalSize = const Size(280, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final appearanceController = _FakeAppAppearanceController();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appAppearanceControllerProvider.overrideWith(
+              () => appearanceController,
+            ),
+          ],
+          child: const LocalizedTestApp(
+            locale: Locale('zh', 'TW'),
+            home: MediaQuery(
+              data: MediaQueryData(
+                size: Size(280, 720),
+                textScaler: TextScaler.linear(1.6),
+              ),
+              child: Scaffold(body: AppearanceSettingsSheet()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final themeStrip = find.byKey(
+        const Key('appearance-theme-options-scroll'),
+      );
+      final languageStrip = find.byKey(
+        const Key('appearance-language-options-scroll'),
+      );
+      expect(
+        tester.widget<SingleChildScrollView>(themeStrip).scrollDirection,
+        Axis.horizontal,
+      );
+      expect(
+        tester.widget<SingleChildScrollView>(languageStrip).scrollDirection,
+        Axis.horizontal,
+      );
+
+      final themeScrollable = tester.state<ScrollableState>(
+        find.descendant(of: themeStrip, matching: find.byType(Scrollable)),
+      );
+      final languageScrollable = tester.state<ScrollableState>(
+        find.descendant(of: languageStrip, matching: find.byType(Scrollable)),
+      );
+      expect(themeScrollable.position.maxScrollExtent, greaterThan(0));
+      expect(languageScrollable.position.maxScrollExtent, greaterThan(0));
+
+      _expectSameVerticalCenter(tester, const <Key>[
+        Key('appearance-theme-option-light'),
+        Key('appearance-theme-option-dark'),
+        Key('appearance-theme-option-system'),
+      ]);
+      _expectSameVerticalCenter(tester, const <Key>[
+        Key('appearance-language-option-system'),
+        Key('appearance-language-option-simplifiedChinese'),
+        Key('appearance-language-option-traditionalChinese'),
+      ]);
+      _expectSingleLineButtonLabel(
+        tester,
+        const Key('appearance-theme-option-system'),
+      );
+      _expectSingleLineButtonLabel(
+        tester,
+        const Key('appearance-language-option-traditionalChinese'),
+      );
+
+      await tester.drag(languageStrip, const Offset(-160, 0));
+      await tester.pumpAndSettle();
+
+      expect(languageScrollable.position.pixels, greaterThan(0));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('Appearance settings drawer changes app language', (
     tester,
   ) async {
@@ -603,6 +685,23 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+void _expectSameVerticalCenter(WidgetTester tester, List<Key> keys) {
+  final centers = keys
+      .map((key) => tester.getCenter(find.byKey(key)).dy)
+      .toList(growable: false);
+  for (final center in centers.skip(1)) {
+    expect(center, closeTo(centers.first, 0.01));
+  }
+}
+
+void _expectSingleLineButtonLabel(WidgetTester tester, Key buttonKey) {
+  final label = tester.widget<Text>(
+    find.descendant(of: find.byKey(buttonKey), matching: find.byType(Text)),
+  );
+  expect(label.maxLines, 1);
+  expect(label.softWrap, isFalse);
 }
 
 Future<void> _scrollUntilVisibleIfNeeded(

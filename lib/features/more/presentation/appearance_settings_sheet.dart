@@ -31,9 +31,8 @@ class AppearanceSettingsSheet extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          _AppearanceOptionStrip(
+            scrollViewKey: const Key('appearance-theme-options-scroll'),
             children: [
               for (final preference in AppThemePreference.values)
                 _AppearanceThemeChoice(
@@ -53,9 +52,8 @@ class AppearanceSettingsSheet extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          _AppearanceOptionStrip(
+            scrollViewKey: const Key('appearance-language-options-scroll'),
             children: [
               for (final language in AppLanguage.values)
                 _AppearanceLanguageChoice(
@@ -119,6 +117,33 @@ class AppearanceSettingsSheet extends ConsumerWidget {
   }
 }
 
+class _AppearanceOptionStrip extends StatelessWidget {
+  const _AppearanceOptionStrip({
+    required this.scrollViewKey,
+    required this.children,
+  });
+
+  final Key scrollViewKey;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      key: scrollViewKey,
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            if (index > 0) const SizedBox(width: 8),
+            children[index],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _AppearanceThemeChoice extends StatelessWidget {
   const _AppearanceThemeChoice({
     required this.preference,
@@ -175,7 +200,7 @@ class _AppearanceThemeChoice extends StatelessWidget {
               size: 18,
             ),
           ),
-          label: Text(label),
+          label: Text(label, maxLines: 1, softWrap: false),
         ),
       ),
     );
@@ -241,7 +266,7 @@ class _AppearanceLanguageChoice extends StatelessWidget {
           ),
           size: 18,
         ),
-        label: Text(label),
+        label: Text(label, maxLines: 1, softWrap: false),
       ),
     );
   }
