@@ -145,6 +145,99 @@ void main() {
     );
   });
 
+  testWidgets('adjacent collapse cards get one scalable visual line gap', (
+    tester,
+  ) async {
+    const source =
+        '[collapse=0,第一]\n内容一[/collapse]\n'
+        '[collapse=0,第二]\n内容二[/collapse]\n'
+        '[collapse=0,第三]\n内容三[/collapse]';
+    const firstGap = Key('composer-quill-collapse-gap-after-collapse-0');
+    const secondGap = Key('composer-quill-collapse-gap-after-collapse-1');
+    const trailingGap = Key('composer-quill-collapse-gap-after-collapse-2');
+
+    await tester.pumpWidget(_buildEditor(initialBbCode: source, textScale: 1));
+
+    expect(find.byKey(firstGap), findsOneWidget);
+    expect(find.byKey(secondGap), findsOneWidget);
+    expect(find.byKey(trailingGap), findsNothing);
+    final normalHeight = tester.getSize(find.byKey(firstGap)).height;
+    expect(normalHeight, greaterThan(0));
+    expect(tester.getSize(find.byKey(secondGap)).height, normalHeight);
+
+    await tester.pumpWidget(
+      _buildEditor(initialBbCode: source, textScale: 1.5),
+    );
+    await tester.pump();
+
+    expect(
+      tester.getSize(find.byKey(firstGap)).height,
+      greaterThan(normalHeight),
+    );
+  });
+
+  testWidgets('existing blank or text suppresses synthetic collapse gap', (
+    tester,
+  ) async {
+    const gap = Key('composer-quill-collapse-gap-after-collapse-0');
+    await tester.pumpWidget(
+      _buildEditor(
+        initialBbCode:
+            '[collapse=0,第一]\n内容一[/collapse]\n\n'
+            '[collapse=0,第二]\n内容二[/collapse]',
+      ),
+    );
+    expect(find.byKey(gap), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(
+      _buildEditor(
+        initialBbCode:
+            '[collapse=0,第一]\n内容一[/collapse]\n'
+            '间隔正文\n'
+            '[collapse=0,第二]\n内容二[/collapse]',
+      ),
+    );
+    expect(find.byKey(gap), findsNothing);
+  });
+
+  testWidgets('surface strips formatting applied to an atomic collapse', (
+    tester,
+  ) async {
+    const codec = ComposerQuillBbCodeCodec();
+    const source = '[collapse=0,标题]\n[b]内部[/b][/collapse]';
+    final document = codec.decodeDocument(source);
+    const selection = TextSelection(baseOffset: 0, extentOffset: 1);
+    final controller = QuillController(
+      document: document,
+      selection: selection,
+    );
+    addTearDown(controller.dispose);
+    String? latest;
+    await tester.pumpWidget(
+      _buildEditor(
+        controller: controller,
+        onBbCodeChanged: (value) => latest = value,
+      ),
+    );
+
+    controller.formatText(0, 1, Attribute.bold);
+    controller.formatText(1, 1, Attribute.blockQuote);
+    await tester.pump();
+
+    final operations = controller.document.toDelta().toList();
+    final collapseIndex = operations.indexWhere(
+      (operation) => composerQuillCollapseEmbedPayload(operation.data) != null,
+    );
+    expect(operations[collapseIndex].attributes, isNull);
+    expect(operations[collapseIndex + 1].data, '\n');
+    expect(operations[collapseIndex + 1].attributes, isNull);
+    expect(controller.selection, selection);
+    expect(codec.encodeDocument(controller.document), source);
+    expect(latest, isNull);
+  });
+
   testWidgets('collapse title and save action match composer chrome', (
     tester,
   ) async {
@@ -2202,6 +2295,7 @@ Widget _buildEditor({
   int imageUploadTotal = 0,
   EdgeInsets viewInsets = EdgeInsets.zero,
   double? surfaceWidth,
+  double textScale = 1,
 }) {
   final editor = ComposerQuillPrototypeEditor(
     keyPrefix: 'test-quill',
@@ -2239,6 +2333,7 @@ Widget _buildEditor({
           data: MediaQueryData(
             size: const Size(800, 600),
             viewInsets: viewInsets,
+            textScaler: TextScaler.linear(textScale),
           ),
           child: surfaceWidth == null
               ? editor

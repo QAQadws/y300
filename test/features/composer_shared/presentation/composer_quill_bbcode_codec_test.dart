@@ -306,6 +306,101 @@ void main() {
     expect(codec.encodeDocument(document), source);
   });
 
+  test('keeps collapse outside inline and block formatting', () {
+    final collapse = composerQuillCollapseEmbedData(
+      id: 'collapse-format',
+      title: '标题',
+      body: '[b]内部粗体[/b]',
+    );
+    final delta = Delta()
+      ..insert('前文', {Attribute.bold.key: true})
+      ..insert('\n', {Attribute.blockQuote.key: true})
+      ..insert(collapse, {
+        Attribute.bold.key: true,
+        Attribute.italic.key: true,
+        Attribute.underline.key: true,
+        Attribute.strikeThrough.key: true,
+        Attribute.size.key: '18',
+        Attribute.color.key: '#ff0000',
+        Attribute.background.key: '#fff3b0',
+        Attribute.link.key: 'https://example.com',
+      })
+      ..insert('\n', {
+        Attribute.blockQuote.key: true,
+        Attribute.align.key: 'center',
+      })
+      ..insert('后文', {Attribute.bold.key: true})
+      ..insert('\n', {Attribute.blockQuote.key: true});
+
+    expect(
+      codec.encodeDelta(delta),
+      '[quote][b]前文[/b][/quote]\n'
+      '[collapse=0,标题]\n[b]内部粗体[/b][/collapse]\n'
+      '[quote][b]后文[/b][/quote]',
+    );
+  });
+
+  test('splits malformed mixed lines around an atomic collapse', () {
+    final collapse = composerQuillCollapseEmbedData(
+      id: 'collapse-mixed-line',
+      title: '标题',
+      body: '内容',
+    );
+    final delta = Delta()
+      ..insert('前文', {Attribute.bold.key: true})
+      ..insert(collapse, {Attribute.bold.key: true})
+      ..insert('后文', {Attribute.bold.key: true})
+      ..insert('\n');
+
+    expect(
+      codec.encodeDelta(delta),
+      '[b]前文[/b]\n'
+      '[collapse=0,标题]\n内容[/collapse]\n'
+      '[b]后文[/b]',
+    );
+  });
+
+  test('splits source formatting around a line-level collapse', () {
+    const source =
+        '[b]前文\n'
+        '[collapse=0,标题]\n'
+        '内容[/collapse]\n'
+        '后文[/b]';
+    final document = codec.decodeDocument(source);
+    final collapse = document.toDelta().toList().firstWhere(
+      (operation) => composerQuillCollapseEmbedPayload(operation.data) != null,
+    );
+
+    expect(collapse.attributes, isNull);
+    expect(
+      codec.encodeDocument(document),
+      '[b]前文[/b]\n'
+      '[collapse=0,标题]\n内容[/collapse]\n'
+      '[b]后文[/b]',
+    );
+  });
+
+  test('does not promote an inline malformed collapse into an embed', () {
+    const source = '[b][collapse=0,标题]\n内容[/collapse][/b]';
+    final document = codec.decodeDocument(source);
+
+    expect(
+      document.toDelta().toList().where(
+        (operation) =>
+            composerQuillCollapseEmbedPayload(operation.data) != null,
+      ),
+      isEmpty,
+    );
+  });
+
+  test('preserves wire spacing between adjacent collapse blocks', () {
+    const source =
+        '[collapse=0,第一]\n内容一[/collapse]\n'
+        '[collapse=0,第二]\n内容二[/collapse]';
+
+    expect(codec.encodeDocument(codec.decodeDocument(source)), source);
+  });
+
   test('round-trips supported recursive collapse layouts through Quill', () {
     for (final source in const [
       '[collapse=0,外层标题]\n'

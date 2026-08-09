@@ -20,7 +20,7 @@ class ComposerQuillBbCodeCodec {
 
   String encodeDelta(Delta delta) {
     final lines = <_EncodedLine>[];
-    final currentLine = StringBuffer();
+    final currentLine = _EncodedLineBuffer();
 
     for (final operation in delta.toList()) {
       if (!operation.isInsert) {
@@ -37,19 +37,19 @@ class ComposerQuillBbCodeCodec {
         );
         continue;
       }
-      final embedText = _encodeEmbed(data);
+      final collapseText = _encodeCollapseEmbed(data);
+      if (collapseText != null) {
+        currentLine.writeCollapse(collapseText);
+        continue;
+      }
+      final embedText = _encodeInlineEmbed(data);
       if (embedText.isNotEmpty) {
-        currentLine.write(_wrapInline(embedText, attributes));
+        currentLine.writeText(_wrapInline(embedText, attributes));
       }
     }
 
     if (currentLine.isNotEmpty) {
-      lines.add(
-        _EncodedLine(
-          content: currentLine.toString(),
-          block: const _BlockSignature(),
-        ),
-      );
+      lines.addAll(currentLine.takeLines(const _BlockSignature()));
     }
     return _renderLines(lines);
   }
@@ -119,23 +119,19 @@ class ComposerQuillBbCodeCodec {
   void _appendText({
     required String text,
     required Map<String, dynamic> attributes,
-    required StringBuffer currentLine,
+    required _EncodedLineBuffer currentLine,
     required List<_EncodedLine> lines,
   }) {
     final parts = text.split('\n');
     for (var index = 0; index < parts.length; index += 1) {
       final part = parts[index];
       if (part.isNotEmpty) {
-        currentLine.write(_wrapInline(part, attributes));
+        currentLine.writeText(_wrapInline(part, attributes));
       }
       if (index < parts.length - 1) {
-        lines.add(
-          _EncodedLine(
-            content: currentLine.toString(),
-            block: _BlockSignature.fromAttributes(attributes),
-          ),
+        lines.addAll(
+          currentLine.takeLines(_BlockSignature.fromAttributes(attributes)),
         );
-        currentLine.clear();
       }
     }
   }
@@ -149,6 +145,11 @@ class ComposerQuillBbCodeCodec {
         continue;
       }
       final line = lines[index];
+      if (line.isAtomicCollapse) {
+        rendered.add(line.content);
+        index += 1;
+        continue;
+      }
       if (!line.block.hasBlockFormat) {
         rendered.add(line.content);
         index += 1;
@@ -249,7 +250,7 @@ class ComposerQuillBbCodeCodec {
     return result;
   }
 
-  String _encodeEmbed(Object? data) {
+  String? _encodeCollapseEmbed(Object? data) {
     final collapse = composerQuillCollapseEmbedPayload(data);
     if (collapse != null) {
       final title = collapse['title']?.toString() ?? '';
@@ -261,6 +262,10 @@ class ComposerQuillBbCodeCodec {
         rawClosing: collapse['rawClosing'] as String?,
       );
     }
+    return null;
+  }
+
+  String _encodeInlineEmbed(Object? data) {
     final stickerCode = composerQuillEmbedData(
       data,
       composerQuillStickerEmbedType,
@@ -288,6 +293,7 @@ class _DeltaBbCodeBuilder {
   final Map<String, ComposerCollapseBlock> _collapseBlocks;
   final List<_ActiveBbCodeTag> _activeTags = <_ActiveBbCodeTag>[];
   bool _lineHasContent = false;
+  bool _lineContainsCollapse = false;
   bool _skipNextLeadingNewline = false;
 
   void appendToken(String token) {
@@ -301,9 +307,9 @@ class _DeltaBbCodeBuilder {
           rawOpeningLine: collapse.rawOpeningLine,
           rawClosing: collapse.rawClosing,
         ),
-        _inlineAttributes(),
       );
       _lineHasContent = true;
+      _lineContainsCollapse = true;
       return;
     }
     final lower = token.toLowerCase();
@@ -351,8 +357,7 @@ class _DeltaBbCodeBuilder {
           _skipNextLeadingNewline = false;
           continue;
         }
-        _delta.insert('\n', _blockAttributes());
-        _lineHasContent = false;
+        _appendLineBreak();
       }
     }
   }
@@ -364,7 +369,7 @@ class _DeltaBbCodeBuilder {
         operations.last.data is String &&
         (operations.last.data as String).endsWith('\n');
     if (!endsWithNewline) {
-      _delta.insert('\n', _blockAttributes());
+      _appendLineBreak();
     }
     return _delta;
   }
@@ -439,14 +444,19 @@ class _DeltaBbCodeBuilder {
     for (var index = _activeTags.length - 1; index >= 0; index -= 1) {
       if (_activeTags[index].name == normalized) {
         if (_isBlockTag(normalized) && _lineHasContent) {
-          _delta.insert('\n', _blockAttributes());
-          _lineHasContent = false;
+          _appendLineBreak();
           _skipNextLeadingNewline = true;
         }
         _activeTags.removeAt(index);
         return;
       }
     }
+  }
+
+  void _appendLineBreak() {
+    _delta.insert('\n', _lineContainsCollapse ? null : _blockAttributes());
+    _lineHasContent = false;
+    _lineContainsCollapse = false;
   }
 
   _ActiveBbCodeTag? _parseOpeningTag(String token) {
@@ -487,12 +497,82 @@ class _BbCodeTag {
 }
 
 class _EncodedLine {
-  const _EncodedLine({required this.content, required this.block});
+  const _EncodedLine({
+    required this.content,
+    required this.block,
+    this.isAtomicCollapse = false,
+  });
 
   final String content;
   final _BlockSignature block;
+  final bool isAtomicCollapse;
 
   bool get isBlank => content.trim().isEmpty;
+}
+
+final class _EncodedLineBuffer {
+  final List<_EncodedSegment> _segments = <_EncodedSegment>[];
+
+  bool get isNotEmpty => _segments.isNotEmpty;
+
+  void writeText(String source) {
+    if (source.isEmpty) {
+      return;
+    }
+    if (_segments.isNotEmpty && !_segments.last.isCollapse) {
+      final last = _segments.last;
+      _segments[_segments.length - 1] = _EncodedSegment(
+        source: '${last.source}$source',
+      );
+      return;
+    }
+    _segments.add(_EncodedSegment(source: source));
+  }
+
+  void writeCollapse(String source) {
+    _segments.add(_EncodedSegment(source: source, isCollapse: true));
+  }
+
+  List<_EncodedLine> takeLines(_BlockSignature block) {
+    if (_segments.isEmpty) {
+      return <_EncodedLine>[_EncodedLine(content: '', block: block)];
+    }
+    final lines = <_EncodedLine>[];
+    final text = StringBuffer();
+
+    void flushText() {
+      if (text.isEmpty) {
+        return;
+      }
+      lines.add(_EncodedLine(content: text.toString(), block: block));
+      text.clear();
+    }
+
+    for (final segment in _segments) {
+      if (segment.isCollapse) {
+        flushText();
+        lines.add(
+          _EncodedLine(
+            content: segment.source,
+            block: const _BlockSignature(),
+            isAtomicCollapse: true,
+          ),
+        );
+      } else {
+        text.write(segment.source);
+      }
+    }
+    flushText();
+    _segments.clear();
+    return lines;
+  }
+}
+
+final class _EncodedSegment {
+  const _EncodedSegment({required this.source, this.isCollapse = false});
+
+  final String source;
+  final bool isCollapse;
 }
 
 class _BlockSignature {

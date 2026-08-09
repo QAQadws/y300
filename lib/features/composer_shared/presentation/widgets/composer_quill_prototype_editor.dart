@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:y300/features/composer_shared/domain/services/composer_collapse_
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_attach_token_promoter.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_collapse_editor_models.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_collapse_format_sanitizer.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_collapse_insertion_service.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_size_mapping.dart';
@@ -240,6 +242,8 @@ class _ComposerQuillEditorSurfaceState
   static const _codec = ComposerQuillBbCodeCodec();
   static const _selectionAdapter = ComposerQuillSelectionAdapter();
   static const _attachTokenPromoter = ComposerQuillAttachTokenPromoter();
+  static const _collapseFormatSanitizer =
+      ComposerQuillCollapseFormatSanitizer();
   static const _collapseInsertionService =
       ComposerQuillCollapseInsertionService();
 
@@ -251,6 +255,8 @@ class _ComposerQuillEditorSurfaceState
   bool _isApplyingExternalBbCode = false;
   bool _isPromotingAttachTokens = false;
   bool _hasScheduledAttachTokenPromotion = false;
+  bool _isSanitizingCollapseFormats = false;
+  bool _hasScheduledCollapseFormatSanitization = false;
   int _documentGeneration = 0;
   int _nextCollapseId = 0;
   String? _ignoredExternalDocumentEncoding;
@@ -289,6 +295,7 @@ class _ComposerQuillEditorSurfaceState
     _bbCodeText = widget.bbCode ?? _codec.encodeDocument(_controller.document);
     // 外部直接塞进来的文档也可能带着字面 attach 代码。
     _scheduleAttachTokenPromotion();
+    _scheduleCollapseFormatSanitization();
   }
 
   String _initialBbCode() {
@@ -1087,6 +1094,9 @@ class _ComposerQuillEditorSurfaceState
     if (!_isPromotingAttachTokens) {
       _scheduleAttachTokenPromotion();
     }
+    if (!_isSanitizingCollapseFormats) {
+      _scheduleCollapseFormatSanitization();
+    }
     final next = _codec.encodeDocument(_controller.document);
     final ignoredEncoding = _ignoredExternalDocumentEncoding;
     if (ignoredEncoding != null) {
@@ -1137,6 +1147,38 @@ class _ComposerQuillEditorSurfaceState
     }
   }
 
+  /// Collapse is an atomic BBCode block, so Quill selection formatting must
+  /// not remain attached to either the embed or its line terminator.
+  void _scheduleCollapseFormatSanitization() {
+    if (_hasScheduledCollapseFormatSanitization) {
+      return;
+    }
+    _hasScheduledCollapseFormatSanitization = true;
+    final generation = _documentGeneration;
+    scheduleMicrotask(() {
+      _hasScheduledCollapseFormatSanitization = false;
+      if (!mounted || generation != _documentGeneration) {
+        return;
+      }
+      final sanitization = _collapseFormatSanitizer.buildSanitization(
+        _controller.document,
+      );
+      if (sanitization == null) {
+        return;
+      }
+      _isSanitizingCollapseFormats = true;
+      try {
+        _controller.compose(
+          sanitization,
+          _controller.selection,
+          ChangeSource.local,
+        );
+      } finally {
+        _isSanitizingCollapseFormats = false;
+      }
+    });
+  }
+
   void _syncExternalBbCode() {
     final external = widget.bbCode;
     if (external == null || external == _bbCodeText) {
@@ -1175,6 +1217,7 @@ class _ComposerQuillEditorSurfaceState
       _isApplyingExternalBbCode = false;
     }
     _documentGeneration += 1;
+    _scheduleCollapseFormatSanitization();
     setState(() {});
   }
 
@@ -2126,7 +2169,7 @@ class _CollapseEmbedBuilder extends EmbedBuilder {
     final title = payload['title']!.toString();
     final body = payload['body']!.toString();
     final localizations = AppLocalizations.of(context);
-    return ForumCollapseChrome(
+    final collapse = ForumCollapseChrome(
       key: Key('composer-quill-collapse-$id'),
       sourceId: id,
       keyPrefix: 'composer-quill-collapse',
@@ -2161,6 +2204,48 @@ class _CollapseEmbedBuilder extends EmbedBuilder {
       expandedSemanticsLabel: localizations.threadHtmlCollapseExpanded,
       collapsedSemanticsLabel: localizations.threadHtmlCollapseCollapsed,
     );
+    if (!_hasAdjacentNextCollapse(embedContext.node)) {
+      return collapse;
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        collapse,
+        SizedBox(
+          key: Key('composer-quill-collapse-gap-after-$id'),
+          height: _preferredLineHeight(context, embedContext.textStyle),
+        ),
+      ],
+    );
+  }
+
+  bool _hasAdjacentNextCollapse(Embed node) {
+    final line = node.parent;
+    if (line is! Line) {
+      return false;
+    }
+    final nextLine = line.nextLine;
+    if (nextLine == null || !nextLine.hasEmbed || nextLine.childCount != 1) {
+      return false;
+    }
+    final next = nextLine.first;
+    return next is Embed &&
+        composerQuillCollapseEmbedPayload(next.value.data) != null;
+  }
+
+  double _preferredLineHeight(BuildContext context, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: 'M', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    );
+    try {
+      return painter.preferredLineHeight;
+    } finally {
+      painter.dispose();
+    }
   }
 }
 
