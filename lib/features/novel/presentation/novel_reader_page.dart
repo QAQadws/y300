@@ -55,6 +55,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     with WidgetsBindingObserver {
   late final ScrollController _scrollController;
   late final ReaderOverlayController _overlayController;
+  late final ReaderGestureCoordinator _readerGestureCoordinator;
+  late final NovelReaderPagedNavigationController _pagedNavigationController;
   final NovelReaderThemeResolver _themeResolver =
       const NovelReaderThemeResolver();
   final NovelReaderTypographyResolver _typographyResolver =
@@ -105,6 +107,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     );
     WidgetsBinding.instance.addObserver(this);
     _overlayController = ReaderOverlayController();
+    _readerGestureCoordinator = ReaderGestureCoordinator(
+      doubleTapTimeout: ReaderPagedTurnMotion.tapConfirmationDelay,
+    );
+    _pagedNavigationController = NovelReaderPagedNavigationController();
     _scrollController = ScrollController()..addListener(_onScroll);
   }
 
@@ -112,6 +118,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _overlayController.dispose();
+    _readerGestureCoordinator.dispose();
+    _pagedNavigationController.dispose();
     _displayPreviewThrottle?.cancel();
     _displayPersistDebounce?.cancel();
     _scrollController
@@ -181,6 +189,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                 '${NovelReaderPaginationKey.logicalPixels(safeAreaTop)}|'
                 '${NovelReaderPaginationKey.logicalPixels(safeAreaBottom)}';
             if (_progressControlOwner != paginationGeometryOwner) {
+              _readerGestureCoordinator.cancelPendingTap();
               _progressControlOwner = paginationGeometryOwner;
               _pagedPosition = null;
               _pendingPageSeekRequest = null;
@@ -234,9 +243,26 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                 builder: (context) {
                   final reader = ReaderOverlayScaffold(
                     controller: _overlayController,
+                    gestureCoordinator: _readerGestureCoordinator,
                     topBar: _buildTopBarConfig(viewState),
                     bottomBar: _buildBottomBarConfig(viewState, controller),
                     bottomSafeFraction: 0.18,
+                    onLeftTap:
+                        viewState.preferences.flowMode ==
+                            NovelReaderFlowMode.vertical
+                        ? null
+                        : () => _turnPagedByPhysicalTap(
+                            surfaceIdentity: readerSurfaceIdentity,
+                            isLeftTap: true,
+                          ),
+                    onRightTap:
+                        viewState.preferences.flowMode ==
+                            NovelReaderFlowMode.vertical
+                        ? null
+                        : () => _turnPagedByPhysicalTap(
+                            surfaceIdentity: readerSurfaceIdentity,
+                            isLeftTap: false,
+                          ),
                     child: _buildReaderList(
                       viewState,
                       typography,
@@ -340,6 +366,36 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         .asData
         ?.value;
     return current != null && _readerSurfaceIdentity(current) == identity;
+  }
+
+  void _turnPagedByPhysicalTap({
+    required String surfaceIdentity,
+    required bool isLeftTap,
+  }) {
+    if (!mounted) {
+      return;
+    }
+    final current = ref
+        .read(novelReaderControllerProvider(_args))
+        .asData
+        ?.value;
+    if (current == null ||
+        current.transition != null ||
+        current.preferences.flowMode == NovelReaderFlowMode.vertical ||
+        _readerSurfaceIdentity(current) != surfaceIdentity) {
+      return;
+    }
+    final isRtl = current.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
+    final isPrevious = isRtl ? !isLeftTap : isLeftTap;
+    if (isPrevious) {
+      _pagedNavigationController.turnPrevious();
+    } else {
+      _pagedNavigationController.turnNext();
+    }
+  }
+
+  void _cancelPendingReaderTap() {
+    _readerGestureCoordinator.cancelPendingTap();
   }
 
   ReaderTopBarConfig _buildTopBarConfig(NovelReaderViewState viewState) {
@@ -570,6 +626,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         chromeInsets: chromeInsets,
         semanticDocument: viewState.document,
         pageSeekRequest: _pendingPageSeekRequest,
+        navigationController: _pagedNavigationController,
         chapterEntryRequest: _pendingChapterEntryRequest,
         onChapterEntryApplied: (request) {
           if (_isCurrentReaderSurface(surfaceIdentity)) {
@@ -603,6 +660,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             _copyNovelImageUrl(request.url);
           }
         },
+        onContentInteraction: _cancelPendingReaderTap,
         onFallbackToVertical: () {
           if (_isCurrentReaderSurface(surfaceIdentity)) {
             _fallbackToVertical(
@@ -664,6 +722,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             _copyNovelImageUrl(request.url);
           }
         },
+        onContentInteraction: _cancelPendingReaderTap,
         onContentReady: () => _markReaderSurfaceReady(surfaceIdentity),
         onContentTerminal: () =>
             _markReaderSurfaceReady(surfaceIdentity, terminal: true),

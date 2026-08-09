@@ -45,6 +45,7 @@ void main() {
 
   testWidgets('forwards link taps to callbacks', (tester) async {
     final tappedUrls = <String>[];
+    var interactions = 0;
     await tester.pumpWidget(
       LocalizedTestApp(
         home: Scaffold(
@@ -53,6 +54,7 @@ void main() {
             html: '<a href="forum.php?mod=viewthread&tid=1">链接</a>',
             sourceId: 'link',
             callbacks: ForumHtmlRenderCallbacks(
+              onInteraction: () => interactions += 1,
               onTapUrl: (url) async {
                 tappedUrls.add(url);
                 return true;
@@ -70,6 +72,7 @@ void main() {
     expect(tappedUrls, <String>[
       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1',
     ]);
+    expect(interactions, 1);
   });
 
   testWidgets('passes reader preferences to HtmlWidget', (tester) async {
@@ -305,6 +308,7 @@ void main() {
     tester,
   ) async {
     final tappedUrls = <String>[];
+    var interactions = 0;
     await tester.pumpWidget(
       LocalizedTestApp(
         home: Scaffold(
@@ -324,6 +328,7 @@ void main() {
                 '</div>'
                 '</div>',
             callbacks: ForumHtmlRenderCallbacks(
+              onInteraction: () => interactions += 1,
               onTapUrl: (url) async {
                 tappedUrls.add(url);
                 return true;
@@ -349,6 +354,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(interactions, 1);
     expect(find.textContaining('内容链接', findRichText: true), findsOneWidget);
     expect(find.byType(ForumCollapseBlock), findsNWidgets(2));
     expect(
@@ -356,10 +362,19 @@ void main() {
       findsOneWidget,
     );
 
+    await tester.tap(
+      find.byKey(
+        const Key('forum-html-collapse-toggle-collapse-toc-content-inner'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(interactions, 2);
+
     await tester.tap(find.text('内容链接', findRichText: true));
     await tester.pumpAndSettle();
 
     expect(tappedUrls, <String>['https://bbs.yamibo.com/thread.html']);
+    expect(interactions, 3);
   });
 
   testWidgets('starts active forum collapse blocks expanded', (tester) async {
@@ -410,6 +425,7 @@ void main() {
 
   testWidgets('maps tapped images to forum image requests', (tester) async {
     ForumHtmlImageRequest? tappedImage;
+    var interactions = 0;
     await tester.pumpWidget(
       LocalizedTestApp(
         home: Scaffold(
@@ -421,6 +437,7 @@ void main() {
                 'src="data/attachment/forum/month_1110/pic.jpg" '
                 'alt="预览图" title="图片标题" width="640" height="480">',
             callbacks: ForumHtmlRenderCallbacks(
+              onInteraction: () => interactions += 1,
               onTapImage: (request) => tappedImage = request,
             ),
           ),
@@ -456,12 +473,14 @@ void main() {
     expect(tappedImage?.height, 480);
     expect(tappedImage?.isSticker, isFalse);
     expect(tappedImage?.attachmentId, '286401');
+    expect(interactions, 1);
   });
 
   testWidgets('cached thread image taps include readable sequence metadata', (
     tester,
   ) async {
     ForumHtmlImageRequest? tappedImage;
+    var interactions = 0;
     final prepared = const DefaultForumHtmlRenderPreparer().prepare(
       html:
           '<img id="aimg_286401" '
@@ -490,6 +509,7 @@ void main() {
               preparedDocument: prepared,
               html: prepared.preparedHtml,
               callbacks: ForumHtmlRenderCallbacks(
+                onInteraction: () => interactions += 1,
                 onTapImage: (request) => tappedImage = request,
               ),
             ),
@@ -506,6 +526,7 @@ void main() {
     expect(tappedImage?.readableIndex, 0);
     expect(tappedImage?.attachmentId, '286401');
     expect(tappedImage?.kind, ForumImageKind.threadInline);
+    expect(interactions, 1);
     expect(
       tappedImage?.cacheKey,
       ForumImageCacheRequests.threadInline(
@@ -1352,6 +1373,7 @@ void main() {
 
   testWidgets('marks forum smiley images as stickers', (tester) async {
     ForumHtmlImageRequest? tappedImage;
+    var interactions = 0;
     await tester.pumpWidget(
       LocalizedTestApp(
         home: Scaffold(
@@ -1360,6 +1382,7 @@ void main() {
             sourceId: 'sticker',
             html: '<img src="static/image/smiley/gexing/008.gif" alt="">',
             callbacks: ForumHtmlRenderCallbacks(
+              onInteraction: () => interactions += 1,
               onTapImage: (request) => tappedImage = request,
             ),
           ),
@@ -1383,6 +1406,7 @@ void main() {
 
     expect(tappedImage?.isSticker, isTrue);
     expect(tappedImage?.attachmentId, isNull);
+    expect(interactions, 1);
   });
 }
 

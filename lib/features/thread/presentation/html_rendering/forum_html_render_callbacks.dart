@@ -7,11 +7,13 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 @immutable
 class ForumHtmlRenderCallbacks {
   const ForumHtmlRenderCallbacks({
+    this.onInteraction,
     this.onTapUrl,
     this.onTapImage,
     this.onImageLayoutShift,
   });
 
+  final VoidCallback? onInteraction;
   final FutureOr<bool> Function(String url)? onTapUrl;
   final void Function(ForumHtmlImageRequest request)? onTapImage;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;

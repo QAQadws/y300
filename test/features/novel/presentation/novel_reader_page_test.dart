@@ -977,6 +977,102 @@ void main() {
     expect(find.textContaining('${savedIndex! + 1} /'), findsOneWidget);
   });
 
+  testWidgets('NovelReaderPage turns paged LTR content from side taps', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+      firstParagraphs: List<String>.generate(
+        36,
+        (index) => '点击翻页段落 $index ${List<String>.filled(120, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('1 /'), findsOneWidget);
+    await tester.tapAt(const Offset(720, 300));
+    await tester.pump(
+      ReaderPagedTurnMotion.tapConfirmationDelay -
+          const Duration(milliseconds: 1),
+    );
+    expect(find.textContaining('1 /'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump(ReaderPagedTurnMotion.animationDuration);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 /'), findsOneWidget);
+
+    await _tapPagedReaderZone(tester, const Offset(80, 300));
+    expect(find.textContaining('1 /'), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage reverses side tap mapping in paged RTL', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedRtl,
+      ),
+      firstParagraphs: List<String>.generate(
+        36,
+        (index) => 'RTL 点击段落 $index ${List<String>.filled(120, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _tapPagedReaderZone(tester, const Offset(80, 300));
+    expect(find.textContaining('2 /'), findsOneWidget);
+
+    await _tapPagedReaderZone(tester, const Offset(720, 300));
+    expect(find.textContaining('1 /'), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage center tap still toggles paged chrome only', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+      firstParagraphs: List<String>.generate(
+        20,
+        (index) => '菜单段落 $index ${List<String>.filled(80, '正文').join()}',
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await _showReaderMenu(tester);
+
+    final topGate = tester.widget<IgnorePointer>(
+      find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
+    );
+    expect(topGate.ignoring, isFalse);
+    expect(find.textContaining('1 /'), findsOneWidget);
+  });
+
+  testWidgets('NovelReaderPage side taps continue across chapter boundaries', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(_readerText('第一段。'), findsOneWidget);
+    await _tapPagedReaderZone(tester, const Offset(720, 300));
+    expect(_readerText('第三段。'), findsOneWidget);
+
+    await _tapPagedReaderZone(tester, const Offset(80, 300));
+    expect(_readerText('第一段。'), findsOneWidget);
+  });
+
   testWidgets(
     'NovelReaderPage exposes paged semantics and mounts nearby pages only',
     (tester) async {
@@ -1560,6 +1656,13 @@ Future<void> _showReaderMenu(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 330));
   await tester.pump(const Duration(milliseconds: 260));
   await tester.pump();
+}
+
+Future<void> _tapPagedReaderZone(WidgetTester tester, Offset position) async {
+  await tester.tapAt(position);
+  await tester.pump(ReaderPagedTurnMotion.tapConfirmationDelay);
+  await tester.pump(ReaderPagedTurnMotion.animationDuration);
+  await tester.pumpAndSettle();
 }
 
 Finder _readerText(String text) {

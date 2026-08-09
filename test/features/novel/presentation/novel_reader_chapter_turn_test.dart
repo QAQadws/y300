@@ -66,6 +66,101 @@ void main() {
   });
 
   group('paged surface chapter turns', () {
+    testWidgets('tap controller animates between pages and rejects overlap', (
+      tester,
+    ) async {
+      final navigationController = NovelReaderPagedNavigationController();
+      addTearDown(navigationController.dispose);
+      final positions = <NovelReaderPaginationPosition>[];
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: _FixedPlanPaginationCoordinator(pageCount: 3),
+          navigationController: navigationController,
+          onPositionChanged: positions.add,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(navigationController.turnNext(), isTrue);
+      expect(navigationController.turnNext(), isFalse);
+      await tester.pumpAndSettle();
+      expect(positions.last.pageIndex, 1);
+
+      expect(navigationController.turnPrevious(), isTrue);
+      await tester.pumpAndSettle();
+      expect(positions.last.pageIndex, 0);
+    });
+
+    testWidgets('tap controller turns chapters at final plan boundaries', (
+      tester,
+    ) async {
+      final navigationController = NovelReaderPagedNavigationController();
+      addTearDown(navigationController.dispose);
+      final edges = <NovelReaderChapterEdge>[];
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: _FixedPlanPaginationCoordinator(pageCount: 1),
+          navigationController: navigationController,
+          previousChapterTitle: '第零章',
+          nextChapterTitle: '第二章',
+          onTurnToAdjacentChapter: _accepting(edges),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(navigationController.turnNext(), isTrue);
+      expect(navigationController.turnPrevious(), isFalse);
+      expect(edges, <NovelReaderChapterEdge>[NovelReaderChapterEdge.end]);
+    });
+
+    testWidgets('tap controller does not cross an incomplete plan boundary', (
+      tester,
+    ) async {
+      final navigationController = NovelReaderPagedNavigationController();
+      addTearDown(navigationController.dispose);
+      final coordinator = _GrowingPlanPaginationCoordinator();
+      final edges = <NovelReaderChapterEdge>[];
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: coordinator,
+          navigationController: navigationController,
+          nextChapterTitle: '第二章',
+          onTurnToAdjacentChapter: _accepting(edges),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(navigationController.turnNext(), isFalse);
+      expect(edges, isEmpty);
+
+      coordinator.complete();
+      await tester.pumpAndSettle();
+      expect(navigationController.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      expect(edges, isEmpty);
+    });
+
+    testWidgets('detached tap controller cannot drive a stale surface', (
+      tester,
+    ) async {
+      final navigationController = NovelReaderPagedNavigationController();
+      addTearDown(navigationController.dispose);
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: _FixedPlanPaginationCoordinator(pageCount: 2),
+          navigationController: navigationController,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+
+      expect(navigationController.turnNext(), isFalse);
+      expect(navigationController.turnPrevious(), isFalse);
+    });
+
     testWidgets('dragging past the last page turns to the next chapter', (
       tester,
     ) async {
@@ -467,6 +562,7 @@ Widget _buildSurface({
   String? previousChapterTitle,
   String? nextChapterTitle,
   NovelReaderChapterEntryRequest? chapterEntryRequest,
+  NovelReaderPagedNavigationController? navigationController,
   NovelReaderProgressSnapshot? progressSnapshot,
   NovelReaderChapterTurnHandler? onTurnToAdjacentChapter,
   ValueChanged<NovelReaderChapterEntryRequest>? onChapterEntryApplied,
@@ -508,6 +604,7 @@ Widget _buildSurface({
         previousChapterTitle: previousChapterTitle,
         nextChapterTitle: nextChapterTitle,
         chapterEntryRequest: chapterEntryRequest,
+        navigationController: navigationController,
         onChapterEntryApplied: onChapterEntryApplied,
         onTurnToAdjacentChapter: onTurnToAdjacentChapter,
         onPositionChanged: onPositionChanged,

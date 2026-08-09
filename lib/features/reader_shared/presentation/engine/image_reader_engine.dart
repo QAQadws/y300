@@ -56,14 +56,6 @@ class ImageReaderEngine extends ConsumerStatefulWidget {
 
 class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     implements ReaderEngineActions {
-  static const Duration _pagedTapConfirmationDelay = Duration(
-    milliseconds: 220,
-  );
-  static const Duration _pagedTurnAnimationDuration = Duration(
-    milliseconds: 160,
-  );
-  static const Curve _pagedTurnAnimationCurve = Curves.easeOutCubic;
-
   late final ScrollController _scrollController;
   PageController? _pageController;
   String? _pageControllerOwnerId;
@@ -143,7 +135,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _overlayController = ReaderOverlayController()
       ..addListener(_onOverlayVisibilityChanged);
     _gestureCoordinator = ReaderGestureCoordinator(
-      doubleTapTimeout: _pagedTapConfirmationDelay,
+      doubleTapTimeout: ReaderPagedTurnMotion.tapConfirmationDelay,
     );
     _zoomGate = ValueNotifier<bool>(false);
     _activePagedIndex = ValueNotifier<int>(0);
@@ -1727,8 +1719,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     unawaited(
       pageController.animateToPage(
         target,
-        duration: _pagedTurnAnimationDuration,
-        curve: _pagedTurnAnimationCurve,
+        duration: ReaderPagedTurnMotion.animationDuration,
+        curve: ReaderPagedTurnMotion.animationCurve,
       ),
     );
   }

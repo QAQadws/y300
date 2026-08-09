@@ -117,7 +117,12 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       enableCaching: enableCaching,
       renderMode: RenderMode.column,
       textStyle: stylePolicy.baseTextStyle(context),
-      onTapUrl: callbacks.onTapUrl,
+      onTapUrl: callbacks.onTapUrl == null
+          ? null
+          : (url) {
+              callbacks.onInteraction?.call();
+              return callbacks.onTapUrl!(url);
+            },
       onTapImage: handlesImageTapInFactory
           ? null
           : (image) => _handleTapImage(image, imageAttachmentIdsByUrl),
@@ -133,7 +138,12 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       threadId: tid,
       imageHeaderBuilder: imageHeaderBuilder,
       imageCacheOwnerId: imageCacheOwnerId,
-      onTapImageRequest: callbacks.onTapImage,
+      onTapImageRequest: callbacks.onTapImage == null
+          ? null
+          : (request) {
+              callbacks.onInteraction?.call();
+              callbacks.onTapImage!(request);
+            },
       onImageLayoutShift: callbacks.onImageLayoutShift,
       readableImageKeyPrefix: sourceId == null
           ? null
@@ -171,6 +181,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       contentHtml: _collapseContentHtml(element),
       initiallyExpanded: stylePolicy.isForumCollapseInitiallyExpanded(element),
       sourceId: collapseId,
+      onInteraction: callbacks.onInteraction,
       nestedRendererBuilder: (html, {required sourceId}) {
         return ForumHtmlWidgetPostRenderer(
           html: html,
@@ -259,6 +270,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     if (callback == null || image.sources.isEmpty) {
       return;
     }
+    callbacks.onInteraction?.call();
     final source = image.sources.first;
     callback(
       ForumHtmlImageRequest(

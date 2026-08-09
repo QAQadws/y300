@@ -31,6 +31,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
+    this.onContentInteraction,
     this.onContentReady,
     this.onContentTerminal,
     this.onRetry,
@@ -51,6 +52,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
+  final VoidCallback? onContentInteraction;
   final VoidCallback? onContentReady;
   final VoidCallback? onContentTerminal;
   final VoidCallback? onRetry;
@@ -123,6 +125,7 @@ class _NovelReaderHtmlDocumentViewState
               imageHeaderBuilder: widget.imageHeaderBuilder,
               imageCacheOwnerId: widget.episode.sourceTid,
               callbacks: ForumHtmlRenderCallbacks(
+                onInteraction: widget.onContentInteraction,
                 onTapUrl: (url) {
                   widget.onLinkTap?.call(NovelReaderLink(url: url, text: url));
                   return true;

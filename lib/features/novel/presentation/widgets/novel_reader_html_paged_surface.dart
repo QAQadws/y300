@@ -32,6 +32,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
@@ -54,6 +55,35 @@ typedef NovelReaderPaginationCoordinatorBuilder =
       required ImageRequestHeaderBuilder? imageHeaderBuilder,
     });
 
+/// Command-only bridge from the reader chrome to the currently mounted paged
+/// document. Page/progress state continues to flow out through
+/// [NovelReaderHtmlPagedSurface.onPositionChanged].
+final class NovelReaderPagedNavigationController {
+  _NovelReaderPagedPageViewState? _state;
+  bool _isDisposed = false;
+
+  bool turnPrevious() => _state?._turnPageByTap(-1) ?? false;
+
+  bool turnNext() => _state?._turnPageByTap(1) ?? false;
+
+  void _attach(_NovelReaderPagedPageViewState state) {
+    if (!_isDisposed) {
+      _state = state;
+    }
+  }
+
+  void _detach(_NovelReaderPagedPageViewState state) {
+    if (identical(_state, state)) {
+      _state = null;
+    }
+  }
+
+  void dispose() {
+    _isDisposed = true;
+    _state = null;
+  }
+}
+
 class NovelReaderHtmlPagedSurface extends StatefulWidget {
   const NovelReaderHtmlPagedSurface({
     super.key,
@@ -67,6 +97,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.semanticDocument,
     this.navigationRequest,
     this.pageSeekRequest,
+    this.navigationController,
     this.chapterEntryRequest,
     this.onChapterEntryApplied,
     this.previousChapterTitle,
@@ -75,6 +106,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
+    this.onContentInteraction,
     this.onFallbackToVertical,
     this.onPositionChanged,
     this.onContentReady,
@@ -107,6 +139,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final NovelReaderDocument? semanticDocument;
   final NovelReaderAnchorNavigationRequest? navigationRequest;
   final NovelReaderPageSeekRequest? pageSeekRequest;
+  final NovelReaderPagedNavigationController? navigationController;
   final NovelReaderChapterEntryRequest? chapterEntryRequest;
 
   /// Fired once [chapterEntryRequest] has actually been resolved into a page and
@@ -123,6 +156,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
+  final VoidCallback? onContentInteraction;
   final VoidCallback? onFallbackToVertical;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final VoidCallback? onContentReady;
@@ -422,6 +456,7 @@ class _NovelReaderHtmlPagedSurfaceState
                           initialPage: initialPage,
                           navigationRequest: widget.navigationRequest,
                           pageSeekRequest: widget.pageSeekRequest,
+                          navigationController: widget.navigationController,
                           targetPage: requestedPage,
                           reverse:
                               widget.preferences.flowMode ==
@@ -449,6 +484,7 @@ class _NovelReaderHtmlPagedSurfaceState
                           onLinkTap: widget.onLinkTap,
                           onOpenImage: widget.onOpenImage,
                           onImageFallback: widget.onImageFallback,
+                          onContentInteraction: widget.onContentInteraction,
                           imageReaderBridge: widget.imageReaderBridge,
                           onPositionChanged: (position) {
                             if (mounted && _planKey == plan.key) {
@@ -1009,6 +1045,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     required this.initialPage,
     this.navigationRequest,
     this.pageSeekRequest,
+    this.navigationController,
     this.targetPage,
     required this.reverse,
     required this.showProgressIndicator,
@@ -1029,6 +1066,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
+    this.onContentInteraction,
     this.onPositionChanged,
   });
 
@@ -1037,6 +1075,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final int initialPage;
   final NovelReaderAnchorNavigationRequest? navigationRequest;
   final NovelReaderPageSeekRequest? pageSeekRequest;
+  final NovelReaderPagedNavigationController? navigationController;
   final int? targetPage;
   final bool reverse;
   final bool showProgressIndicator;
@@ -1058,6 +1097,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
+  final VoidCallback? onContentInteraction;
   final NovelHtmlImageReaderBridge imageReaderBridge;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
 
@@ -1076,6 +1116,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   double _forwardOverscroll = 0;
   double _backwardOverscroll = 0;
   bool _chapterTurnRequested = false;
+  bool _tapTurnAnimationInFlight = false;
 
   @override
   void initState() {
@@ -1085,6 +1126,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       initialPage: widget.initialPage,
       keepPage: false,
     );
+    widget.navigationController?._attach(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_reportedInitialPage && widget.plan.pageCount > 0) {
         _reportedInitialPage = true;
@@ -1096,6 +1138,13 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   @override
   void didUpdateWidget(covariant _NovelReaderPagedPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(
+      oldWidget.navigationController,
+      widget.navigationController,
+    )) {
+      oldWidget.navigationController?._detach(this);
+      widget.navigationController?._attach(this);
+    }
     // A turn that ends without replacing this chapter (it failed, or it landed
     // back here) leaves this state alive, so release the latch on the falling
     // edge instead of keeping the gesture off for good.
@@ -1151,6 +1200,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
 
   @override
   void dispose() {
+    widget.navigationController?._detach(this);
     _chapterTurnHint.dispose();
     _pageController.dispose();
     super.dispose();
@@ -1232,6 +1282,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
                     onLinkTap: widget.onLinkTap,
                     onOpenImage: widget.onOpenImage,
                     onImageFallback: widget.onImageFallback,
+                    onContentInteraction: widget.onContentInteraction,
                     imageReaderBridge: widget.imageReaderBridge,
                   ),
                 );
@@ -1266,6 +1317,53 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         ],
       ),
     );
+  }
+
+  bool _turnPageByTap(int delta) {
+    assert(delta == -1 || delta == 1);
+    if (!mounted ||
+        widget.plan.pageCount <= 0 ||
+        !_pageController.hasClients ||
+        _pageController.position.isScrollingNotifier.value ||
+        _tapTurnAnimationInFlight ||
+        widget.chapterTurnIsInFlight ||
+        _chapterTurnRequested) {
+      return false;
+    }
+
+    final target = _currentPage + delta;
+    if (target >= 0 && target < widget.plan.pageCount) {
+      _hasUserNavigated = true;
+      _tapTurnAnimationInFlight = true;
+      unawaited(_animateTapTurnToPage(target));
+      return true;
+    }
+
+    if (!widget.isPageCountFinal || !_canTurnChapter()) {
+      return false;
+    }
+    final edge = delta < 0
+        ? NovelReaderChapterEdge.start
+        : NovelReaderChapterEdge.end;
+    final accepted = widget.onTurnToAdjacentChapter!(edge);
+    if (accepted) {
+      _chapterTurnRequested = true;
+    }
+    return accepted;
+  }
+
+  Future<void> _animateTapTurnToPage(int target) async {
+    try {
+      await _pageController.animateToPage(
+        target,
+        duration: ReaderPagedTurnMotion.animationDuration,
+        curve: ReaderPagedTurnMotion.animationCurve,
+      );
+    } finally {
+      if (mounted) {
+        _tapTurnAnimationInFlight = false;
+      }
+    }
   }
 
   void _jumpToPage(int index) {
@@ -1423,7 +1521,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   }
 
   bool _canTurnChapter() {
-    return widget.onTurnToAdjacentChapter != null &&
+    return widget.isPageCountFinal &&
+        widget.onTurnToAdjacentChapter != null &&
         !widget.chapterTurnIsInFlight &&
         !_chapterTurnRequested;
   }
@@ -1558,6 +1657,7 @@ class _NovelReaderPagedPage extends StatelessWidget {
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
+    this.onContentInteraction,
   });
 
   final NovelReaderPageFragment page;
@@ -1572,6 +1672,7 @@ class _NovelReaderPagedPage extends StatelessWidget {
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
+  final VoidCallback? onContentInteraction;
   final NovelHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -1589,6 +1690,7 @@ class _NovelReaderPagedPage extends StatelessWidget {
       imageCacheOwnerId: episode.sourceTid,
       blockSpacingMode: ForumHtmlBlockSpacingMode.discuzLineDivs,
       callbacks: ForumHtmlRenderCallbacks(
+        onInteraction: onContentInteraction,
         onTapUrl: (url) {
           onLinkTap?.call(NovelReaderLink(url: url, text: url));
           return true;

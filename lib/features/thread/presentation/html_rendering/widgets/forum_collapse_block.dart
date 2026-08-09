@@ -13,6 +13,7 @@ class ForumCollapseBlock extends StatelessWidget {
     required this.initiallyExpanded,
     required this.sourceId,
     required this.nestedRendererBuilder,
+    this.onInteraction,
   });
 
   final String titleHtml;
@@ -20,6 +21,7 @@ class ForumCollapseBlock extends StatelessWidget {
   final bool initiallyExpanded;
   final String sourceId;
   final ForumHtmlNestedRenderer nestedRendererBuilder;
+  final VoidCallback? onInteraction;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +37,7 @@ class ForumCollapseBlock extends StatelessWidget {
       collapsedSemanticsLabel: AppLocalizations.of(
         context,
       ).threadHtmlCollapseCollapsed,
+      onExpandedChanged: (_) => onInteraction?.call(),
     );
   }
 }

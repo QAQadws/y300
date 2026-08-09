@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_gesture_coordinator.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_tap_zones.dart';
 
 void main() {
@@ -43,7 +44,7 @@ void main() {
   ) async {
     var rightTaps = 0;
     final coordinator = ReaderGestureCoordinator(
-      doubleTapTimeout: const Duration(milliseconds: 220),
+      doubleTapTimeout: ReaderPagedTurnMotion.tapConfirmationDelay,
     );
     addTearDown(coordinator.dispose);
     await tester.pumpWidget(
@@ -60,6 +61,29 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 2));
     expect(rightTaps, 1);
+  });
+
+  testWidgets('consumed content interaction cancels a pending zone tap', (
+    tester,
+  ) async {
+    var rightTaps = 0;
+    final coordinator = ReaderGestureCoordinator(
+      doubleTapTimeout: ReaderPagedTurnMotion.tapConfirmationDelay,
+    );
+    addTearDown(coordinator.dispose);
+    await tester.pumpWidget(
+      _buildTapZones(
+        gestureCoordinator: coordinator,
+        onCenterTap: () {},
+        onRightTap: () => rightTaps += 1,
+      ),
+    );
+
+    await tester.tapAt(const Offset(500, 300));
+    coordinator.cancelPendingTap();
+    await tester.pump(ReaderPagedTurnMotion.tapConfirmationDelay);
+
+    expect(rightTaps, 0);
   });
 
   testWidgets('ReaderTapZones disabled does not trigger callbacks', (
