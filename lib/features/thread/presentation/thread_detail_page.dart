@@ -69,6 +69,7 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.da
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/app_popup_menu.dart';
 
 class ThreadDetailPage extends ConsumerStatefulWidget {
   const ThreadDetailPage({
@@ -1248,35 +1249,31 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return PopupMenuButton<String>(
+    return AppPopupMenuButton<String>(
       key: const Key('thread-detail-more-menu'),
       tooltip: l10n.threadDetailMore,
       itemBuilder: (context) => [
-        PopupMenuItem<String>(
+        AppPopupMenuItem<String>(
           value: state.isOnlyAuthorView ? 'all-posts' : 'only-author',
-          child: Text(
-            state.isOnlyAuthorView
-                ? l10n.threadDetailAllPosts
-                : l10n.threadDetailOnlyAuthor,
-          ),
+          label: state.isOnlyAuthorView
+              ? l10n.threadDetailAllPosts
+              : l10n.threadDetailOnlyAuthor,
         ),
-        PopupMenuItem<String>(
+        AppPopupMenuItem<String>(
           value: state.isReverseOrderView ? 'normal-order' : 'reverse-order',
-          child: Text(
-            state.isReverseOrderView
-                ? l10n.threadDetailNormalOrder
-                : l10n.threadDetailReverseOrder,
-          ),
+          label: state.isReverseOrderView
+              ? l10n.threadDetailNormalOrder
+              : l10n.threadDetailReverseOrder,
         ),
-        PopupMenuItem<String>(
+        AppPopupMenuItem<String>(
           key: Key('thread-detail-display-settings-menu-item'),
           value: 'display-settings',
-          child: Text(l10n.threadDetailDisplaySettings),
+          label: l10n.threadDetailDisplaySettings,
         ),
         if (state.homeUrl?.trim().isNotEmpty == true)
-          PopupMenuItem<String>(
+          AppPopupMenuItem<String>(
             value: 'home',
-            child: Text(l10n.threadDetailBackHome),
+            label: l10n.threadDetailBackHome,
           ),
       ],
       onSelected: (value) {

@@ -45,6 +45,7 @@ import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/app_popup_menu.dart';
 
 class ForumWebViewPage extends ConsumerStatefulWidget {
   const ForumWebViewPage({super.key});
@@ -651,7 +652,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             },
             icon: const Icon(Icons.reply),
           ),
-        PopupMenuButton<String>(
+        AppPopupMenuButton<String>(
           key: const Key('forum-webview-more-button'),
           icon: const Icon(Icons.more_vert),
           onSelected: (value) {
@@ -668,20 +669,20 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     ForumWebViewState state,
   ) {
     final l10n = AppLocalizations.of(context);
-    final refreshItem = PopupMenuItem<String>(
+    final refreshItem = AppPopupMenuItem<String>(
       key: Key('forum-webview-refresh-action'),
       value: _refreshPageAction,
-      child: Text(l10n.forumRefreshPage),
+      label: l10n.forumRefreshPage,
     );
 
     switch (state.pageKind) {
       case ForumWebViewPageKind.home:
         return <PopupMenuEntry<String>>[
           refreshItem,
-          PopupMenuItem<String>(
+          AppPopupMenuItem<String>(
             key: Key('forum-webview-home-unfavorite-action'),
             value: _homeUnfavoriteAction,
-            child: Text(l10n.forumUnfavoriteForum),
+            label: l10n.forumUnfavoriteForum,
           ),
         ];
       case ForumWebViewPageKind.forumDisplay:
@@ -697,10 +698,10 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       case ForumWebViewPageKind.search:
         return <PopupMenuEntry<String>>[
           refreshItem,
-          PopupMenuItem<String>(
+          AppPopupMenuItem<String>(
             key: Key('forum-webview-search-home-action'),
             value: _searchGoHomeAction,
-            child: Text(l10n.forumWebViewBackHome),
+            label: l10n.forumWebViewBackHome,
           ),
         ];
       case ForumWebViewPageKind.other:
@@ -715,24 +716,22 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final l10n = AppLocalizations.of(context);
     if (state.isFavoriteMutationLoading) {
       return <PopupMenuEntry<String>>[
-        PopupMenuItem<String>(
+        AppPopupMenuItem<String>(
           enabled: false,
           value: 'favorite-loading',
-          child: Text(l10n.forumProcessing),
+          label: l10n.forumProcessing,
         ),
       ];
     }
     return <PopupMenuEntry<String>>[
-      PopupMenuItem<String>(
+      AppPopupMenuItem<String>(
         key: const Key('forum-webview-forum-favorite-action'),
         value: state.currentFavoriteForum == null
             ? _forumFavoriteAction
             : _forumUnfavoriteAction,
-        child: Text(
-          state.currentFavoriteForum == null
-              ? l10n.forumFavoriteForum
-              : l10n.forumUnfavoriteForum,
-        ),
+        label: state.currentFavoriteForum == null
+            ? l10n.forumFavoriteForum
+            : l10n.forumUnfavoriteForum,
       ),
     ];
   }
@@ -748,40 +747,38 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final items = <PopupMenuEntry<String>>[];
     if (!menu.isAuthorOnly && menu.authorOnlyUri != null) {
       items.add(
-        PopupMenuItem<String>(
+        AppPopupMenuItem<String>(
           key: Key('forum-webview-thread-author-action'),
           value: _threadAuthorOnlyAction,
-          child: Text(l10n.forumWebViewAuthorOnly),
+          label: l10n.forumWebViewAuthorOnly,
         ),
       );
     } else if (menu.isAuthorOnly && menu.normalThreadUri != null) {
       items.add(
-        PopupMenuItem<String>(
+        AppPopupMenuItem<String>(
           key: Key('forum-webview-thread-author-action'),
           value: _threadNormalThreadAction,
-          child: Text(l10n.forumWebViewAllPosts),
+          label: l10n.forumWebViewAllPosts,
         ),
       );
     }
 
     items.add(
-      PopupMenuItem<String>(
+      AppPopupMenuItem<String>(
         key: const Key('forum-webview-thread-order-action'),
         value: menu.isReverseOrder
             ? _threadNormalOrderAction
             : _threadReverseOrderAction,
-        child: Text(
-          menu.isReverseOrder
-              ? l10n.forumWebViewNormalOrder
-              : l10n.forumWebViewReverseOrder,
-        ),
+        label: menu.isReverseOrder
+            ? l10n.forumWebViewNormalOrder
+            : l10n.forumWebViewReverseOrder,
       ),
     );
     items.add(
-      PopupMenuItem<String>(
+      AppPopupMenuItem<String>(
         key: Key('forum-webview-thread-home-action'),
         value: _threadGoHomeAction,
-        child: Text(l10n.forumWebViewBackHome),
+        label: l10n.forumWebViewBackHome,
       ),
     );
     return items;

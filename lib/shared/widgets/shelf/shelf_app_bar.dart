@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/app_popup_menu.dart';
 
 /// 书架页面通用 AppBar。
 ///
@@ -35,7 +36,7 @@ class ShelfAppBar extends StatelessWidget implements PreferredSizeWidget {
           icon: const Icon(Icons.search),
           onPressed: onSearchTap,
         ),
-        PopupMenuButton<String>(
+        AppPopupMenuButton<String>(
           tooltip: menuTooltip ?? AppLocalizations.of(context).commonMenu,
           onSelected: onMenuSelected,
           itemBuilder: (context) => menuItems,

@@ -23,6 +23,7 @@ import 'package:y300/features/library_shared/presentation/services/library_shelf
 import 'package:y300/features/library_shared/presentation/widgets/cover_focal_point_picker.dart';
 import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/app_popup_menu.dart';
 
 /// 统一详情页骨架（Phase 4）
 ///
@@ -338,7 +339,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
               ),
               actions: [
                 if (_supportsChapterDownloads)
-                  PopupMenuButton<String>(
+                  AppPopupMenuButton<String>(
                     key: const Key('unified-detail-appbar-download'),
                     tooltip: l10n.libraryDetailDownload,
                     icon: const Icon(Icons.file_download),
@@ -351,53 +352,53 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                   icon: const Icon(Icons.filter_list),
                   onPressed: _showChapterFilterSheet,
                 ),
-                PopupMenuButton<String>(
+                AppPopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
                   itemBuilder: (context) => [
-                    PopupMenuItem(
+                    AppPopupMenuItem<String>(
                       value: 'refresh',
-                      child: Text(l10n.libraryDetailRefresh),
+                      label: l10n.libraryDetailRefresh,
                     ),
-                    PopupMenuItem(
+                    AppPopupMenuItem<String>(
                       value: 'change-category',
-                      child: Text(l10n.libraryDetailChangeCategory),
+                      label: l10n.libraryDetailChangeCategory,
                     ),
                     if (widget.adapter is DetailMetadataEditor)
-                      PopupMenuItem(
+                      AppPopupMenuItem<String>(
                         key: const Key('unified-detail-edit-metadata'),
                         value: 'edit-metadata',
-                        child: Text(l10n.libraryDetailEditMetadata),
+                        label: l10n.libraryDetailEditMetadata,
                       ),
                     if (widget.adapter is DetailCatalogEditor)
-                      PopupMenuItem(
+                      AppPopupMenuItem<String>(
                         key: const Key('unified-detail-configure-catalog'),
                         value: 'configure-catalog',
-                        child: Text(l10n.libraryDetailConfigureCatalog),
+                        label: l10n.libraryDetailConfigureCatalog,
                       ),
                     // 章节长按之外的第二个入口：隐藏全部章节后列表为空，
                     // 长按目标随之消失，只靠长按会把“全部显示”永久锁死。
                     if (_chapterManagementAdapter != null)
-                      PopupMenuItem(
+                      AppPopupMenuItem<String>(
                         key: const Key('unified-detail-manage-chapters'),
                         value: 'manage-chapters',
-                        child: Text(l10n.libraryDetailManageChapters),
+                        label: l10n.libraryDetailManageChapters,
                       ),
                     if (_supportsCoverEditing) ...[
-                      PopupMenuItem(
+                      AppPopupMenuItem<String>(
                         key: const Key('unified-detail-set-cover'),
                         value: 'set-custom-cover',
-                        child: Text(l10n.libraryDetailSetCustomCover),
+                        label: l10n.libraryDetailSetCustomCover,
                       ),
                       if (_canRemoveCover)
-                        PopupMenuItem(
+                        AppPopupMenuItem<String>(
                           key: const Key('unified-detail-remove-cover'),
                           value: 'remove-custom-cover',
-                          child: Text(l10n.libraryDetailRemoveCustomCover),
+                          label: l10n.libraryDetailRemoveCustomCover,
                         ),
                     ],
-                    PopupMenuItem(
+                    AppPopupMenuItem<String>(
                       value: 'edit-intro',
-                      child: Text(l10n.libraryDetailEditIntro),
+                      label: l10n.libraryDetailEditIntro,
                     ),
                   ],
                   onSelected: (value) async {
@@ -656,13 +657,13 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   List<PopupMenuEntry<String>> _downloadMenuItems(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return [
-      PopupMenuItem(
+      AppPopupMenuItem<String>(
         value: 'download-unread',
-        child: Text(l10n.libraryDetailDownloadUnread),
+        label: l10n.libraryDetailDownloadUnread,
       ),
-      PopupMenuItem(
+      AppPopupMenuItem<String>(
         value: 'download-all',
-        child: Text(l10n.libraryDetailDownloadAll),
+        label: l10n.libraryDetailDownloadAll,
       ),
     ];
   }

@@ -23,6 +23,7 @@ import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/app_popup_menu.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 
@@ -136,22 +137,22 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
             },
             icon: const Icon(Icons.search),
           ),
-          PopupMenuButton<String>(
+          AppPopupMenuButton<String>(
             key: const Key('forum-home-more-button'),
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
               unawaited(_handleMoreMenuSelected(context, value));
             },
             itemBuilder: (context) => [
-              PopupMenuItem<String>(
+              AppPopupMenuItem<String>(
                 key: const Key('forum-home-refresh-action'),
                 value: _refreshPageAction,
-                child: Text(l10n.forumRefreshPage),
+                label: l10n.forumRefreshPage,
               ),
-              PopupMenuItem<String>(
+              AppPopupMenuItem<String>(
                 key: const Key('forum-home-unfavorite-action'),
                 value: _unfavoriteAction,
-                child: Text(l10n.forumUnfavoriteForum),
+                label: l10n.forumUnfavoriteForum,
               ),
             ],
           ),

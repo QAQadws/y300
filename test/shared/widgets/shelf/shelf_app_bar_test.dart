@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/shared/widgets/app_popup_menu.dart';
 import 'package:y300/shared/widgets/shelf/shelf_app_bar.dart';
 
 void main() {
@@ -16,8 +17,8 @@ void main() {
             title: '小说书架',
             onSearchTap: () {},
             onMenuSelected: (value) => selected = value,
-            menuItems: const [
-              PopupMenuItem<String>(value: 'add-category', child: Text('新建分类')),
+            menuItems: [
+              AppPopupMenuItem<String>(value: 'add-category', label: '新建分类'),
             ],
           ),
         ),

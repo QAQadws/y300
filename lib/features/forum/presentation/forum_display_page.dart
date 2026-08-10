@@ -27,6 +27,7 @@ import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/app_popup_menu.dart';
 
 class ForumDisplayPage extends ConsumerStatefulWidget {
   const ForumDisplayPage({super.key, required this.fid, this.title = ''});
@@ -39,6 +40,7 @@ class ForumDisplayPage extends ConsumerStatefulWidget {
 }
 
 class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
+  static const String _createThreadAction = 'create-thread';
   static const String _refreshPageAction = 'refresh-page';
   static const String _favoriteAction = 'favorite-forum';
   static const String _unfavoriteAction = 'unfavorite-forum';
@@ -103,13 +105,7 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
               onPressed: () => _openSearch(context, searchFid),
               icon: const Icon(Icons.search),
             ),
-          IconButton(
-            key: const Key('forum-display-compose-button'),
-            tooltip: l10n.forumDisplayCreateThread,
-            onPressed: () => _openComposer(context, state),
-            icon: const Icon(Icons.edit_outlined),
-          ),
-          PopupMenuButton<String>(
+          AppPopupMenuButton<String>(
             key: const Key('forum-display-more-button'),
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
@@ -168,52 +164,59 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
   }) {
     final l10n = AppLocalizations.of(context);
     final items = <PopupMenuEntry<String>>[
-      PopupMenuItem<String>(
+      AppPopupMenuItem<String>(
         key: const Key('forum-display-refresh-action'),
         value: _refreshPageAction,
-        child: Text(l10n.forumRefreshPage),
+        label: l10n.forumRefreshPage,
       ),
     ];
     if (_isFavoriteMutationLoading || isLoading) {
       items.add(
-        PopupMenuItem<String>(
+        AppPopupMenuItem<String>(
           key: const Key('forum-display-favorite-loading-action'),
           enabled: false,
           value: 'favorite-loading',
-          child: Text(l10n.forumProcessing),
+          label: l10n.forumProcessing,
         ),
       );
     } else if (state.favoriteAction == ForumDisplayFavoriteAction.unknown) {
       items.add(
-        PopupMenuItem<String>(
+        AppPopupMenuItem<String>(
           key: const Key('forum-display-favorite-unavailable-action'),
           enabled: false,
           value: 'favorite-unavailable',
-          child: Text(l10n.forumProcessing),
+          label: l10n.forumProcessing,
         ),
       );
     } else {
       switch (state.favoriteAction) {
         case ForumDisplayFavoriteAction.favorite:
           items.add(
-            PopupMenuItem<String>(
+            AppPopupMenuItem<String>(
               key: const Key('forum-display-favorite-action'),
               value: _favoriteAction,
-              child: Text(l10n.forumFavoriteForum),
+              label: l10n.forumFavoriteForum,
             ),
           );
         case ForumDisplayFavoriteAction.unfavorite:
           items.add(
-            PopupMenuItem<String>(
+            AppPopupMenuItem<String>(
               key: const Key('forum-display-unfavorite-action'),
               value: _unfavoriteAction,
-              child: Text(l10n.forumUnfavoriteForum),
+              label: l10n.forumUnfavoriteForum,
             ),
           );
         case ForumDisplayFavoriteAction.unknown:
           break;
       }
     }
+    items.add(
+      AppPopupMenuItem<String>(
+        key: const Key('forum-display-compose-action'),
+        value: _createThreadAction,
+        label: l10n.forumDisplayCreateThread,
+      ),
+    );
     return items;
   }
 
@@ -224,6 +227,9 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     String action,
   ) async {
     switch (action) {
+      case _createThreadAction:
+        _openComposer(context, state);
+        return;
       case _refreshPageAction:
         await controller.refresh(forceNetwork: true);
         return;

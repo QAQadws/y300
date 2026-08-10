@@ -36,6 +36,49 @@ import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 void main() {
   group('ForumDisplayPage', () {
+    testWidgets('moves create-thread entry into the more menu', (tester) async {
+      final repository = _FakeForumDisplayRepository((fid, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 1,
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('forum-display-compose-button')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const Key('forum-display-more-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('forum-display-compose-action')),
+        findsOneWidget,
+      );
+      expect(find.text('发帖'), findsOneWidget);
+      expect(
+        tester
+            .getCenter(
+              find.byKey(
+                const Key('forum-display-favorite-unavailable-action'),
+              ),
+            )
+            .dy,
+        lessThan(
+          tester
+              .getCenter(find.byKey(const Key('forum-display-compose-action')))
+              .dy,
+        ),
+      );
+    });
+
     testWidgets('more menu always exposes a force-network refresh', (
       tester,
     ) async {
@@ -1107,7 +1150,7 @@ void main() {
       );
       expect(
         find.byKey(const Key('forum-display-compose-button')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.byKey(const Key('forum-display-appbar-stats')),
@@ -1430,9 +1473,7 @@ void main() {
       final searchButton = find.byKey(const Key('forum-display-search-button'));
       expect(searchButton, findsOneWidget);
       expect(
-        tester
-            .getCenter(find.byKey(const Key('forum-display-compose-button')))
-            .dx,
+        tester.getCenter(find.byKey(const Key('forum-display-more-button'))).dx,
         greaterThan(
           tester
               .getCenter(find.byKey(const Key('forum-display-search-button')))

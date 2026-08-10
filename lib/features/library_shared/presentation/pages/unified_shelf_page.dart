@@ -20,6 +20,7 @@ import 'package:y300/features/library_shared/presentation/services/library_shelf
 import 'package:y300/features/library_shared/presentation/services/library_task_text_resolver.dart';
 import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/app_popup_menu.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
@@ -536,42 +537,34 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
             tooltip: AppLocalizations.of(context).libraryShelfFilterAndSort,
             onPressed: _showFilterSheet,
           ),
-          PopupMenuButton<String>(
+          AppPopupMenuButton<String>(
             key: const Key('unified-shelf-more-button'),
             onSelected: _handleMenuAction,
             itemBuilder: (context) => [
-              PopupMenuItem<String>(
+              AppPopupMenuItem<String>(
                 value: 'add-category',
-                child: Text(
-                  AppLocalizations.of(context).libraryShelfCreateCategory,
-                ),
+                label: AppLocalizations.of(context).libraryShelfCreateCategory,
               ),
-              PopupMenuItem<String>(
+              AppPopupMenuItem<String>(
                 value: 'rename-category',
-                child: Text(
-                  AppLocalizations.of(context).libraryShelfRenameCategory,
-                ),
+                label: AppLocalizations.of(context).libraryShelfRenameCategory,
               ),
-              PopupMenuItem<String>(
+              AppPopupMenuItem<String>(
                 value: 'delete-category',
-                child: Text(
-                  AppLocalizations.of(context).libraryShelfDeleteCategory,
-                ),
+                label: AppLocalizations.of(context).libraryShelfDeleteCategory,
               ),
               if (moduleActions.isNotEmpty) ...[
                 const PopupMenuDivider(),
                 ..._moduleActionItems(moduleActions),
               ],
               const PopupMenuDivider(),
-              PopupMenuItem<String>(
+              AppPopupMenuItem<String>(
                 value: 'refresh-shelf',
-                child: Text(AppLocalizations.of(context).libraryShelfUpdate),
+                label: AppLocalizations.of(context).libraryShelfUpdate,
               ),
-              PopupMenuItem<String>(
+              AppPopupMenuItem<String>(
                 value: 'random-open',
-                child: Text(
-                  AppLocalizations.of(context).libraryShelfRandomOpen,
-                ),
+                label: AppLocalizations.of(context).libraryShelfRandomOpen,
               ),
             ],
           ),
@@ -754,13 +747,11 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   ) {
     return actions
         .map(
-          (action) => PopupMenuItem<String>(
+          (action) => AppPopupMenuItem<String>(
             value: _moduleActionMenuValue(action),
-            child: Text(
-              LibraryShelfTextResolver.menuAction(
-                AppLocalizations.of(context),
-                action,
-              ),
+            label: LibraryShelfTextResolver.menuAction(
+              AppLocalizations.of(context),
+              action,
             ),
           ),
         )

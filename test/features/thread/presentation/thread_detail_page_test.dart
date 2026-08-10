@@ -81,6 +81,7 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.da
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/app_popup_menu.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -5172,7 +5173,7 @@ ThreadPost _post({
 
 Finder _popupMenuText(String text) {
   return find.descendant(
-    of: find.byType(PopupMenuItem<String>),
+    of: find.byType(AppPopupMenuItem<String>),
     matching: find.text(text),
   );
 }
