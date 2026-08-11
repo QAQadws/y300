@@ -75,6 +75,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   String? _verticalRestoreOwner;
   String? _verticalContentReadyOwner;
   String? _verticalRestoreScheduledOwner;
+  String? _verticalRenderThemeOwner;
+  String? _verticalRenderThemeSignature;
+  double? _pendingVerticalThemeRestoreOffset;
   bool _isProgrammaticScrollChange = false;
   bool _allowPopAfterProgressFlush = false;
   bool _isHandlingPop = false;
@@ -227,7 +230,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             final palette = _themeResolver.resolve(
               preferences: viewState.preferences,
               theme: theme,
-              platformBrightness: MediaQuery.platformBrightnessOf(context),
             );
             final typography = _typographyResolver.resolve(
               preferences: viewState.preferences,
@@ -238,6 +240,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                 viewState.transition != null ||
                 _readyReaderSurfaceIdentity != readerSurfaceIdentity;
             return ColoredBox(
+              key: const Key('novel-reader-background'),
               color: palette.background,
               child: Builder(
                 builder: (context) {
@@ -698,6 +701,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         },
       );
     }
+    final restoreOwner = _verticalRestoreOwnerFor(surfaceIdentity);
+    _trackVerticalRenderTheme(
+      owner: restoreOwner,
+      themeSignature: htmlTheme.signature,
+    );
     final children = <Widget>[
       NovelReaderHtmlDocumentView(
         rawHtml: viewState.currentContent.rawHtml,
@@ -723,9 +731,20 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           }
         },
         onContentInteraction: _cancelPendingReaderTap,
-        onContentReady: () => _markReaderSurfaceReady(surfaceIdentity),
-        onContentTerminal: () =>
-            _markReaderSurfaceReady(surfaceIdentity, terminal: true),
+        onContentReady: () {
+          _restoreVerticalOffsetAfterThemeUpdate(
+            owner: restoreOwner,
+            themeSignature: htmlTheme.signature,
+          );
+          _markReaderSurfaceReady(surfaceIdentity);
+        },
+        onContentTerminal: () {
+          _clearPendingVerticalThemeRestore(
+            owner: restoreOwner,
+            themeSignature: htmlTheme.signature,
+          );
+          _markReaderSurfaceReady(surfaceIdentity, terminal: true);
+        },
         onRetry: () {
           if (_isCurrentReaderSurface(surfaceIdentity)) {
             ref.invalidate(novelReaderControllerProvider(_args));
@@ -748,7 +767,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         ),
       ],
     ];
-    final restoreOwner = _verticalRestoreOwnerFor(surfaceIdentity);
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         if (notification.depth == 0 &&
@@ -815,6 +833,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (_isProgrammaticScrollChange) {
       return;
     }
+    if (_pendingVerticalThemeRestoreOffset != null) {
+      return;
+    }
     if (!_hasRestoredOffset) {
       // Ignore layout-driven position notifications until either restoration
       // succeeds or a real drag explicitly takes ownership of the position.
@@ -827,6 +848,65 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           _scrollController.offset,
           maxScrollExtent: _scrollController.position.maxScrollExtent,
         );
+  }
+
+  void _trackVerticalRenderTheme({
+    required String owner,
+    required String themeSignature,
+  }) {
+    if (_verticalRenderThemeOwner != owner) {
+      _verticalRenderThemeOwner = owner;
+      _verticalRenderThemeSignature = themeSignature;
+      _pendingVerticalThemeRestoreOffset = null;
+      return;
+    }
+    if (_verticalRenderThemeSignature == themeSignature) {
+      return;
+    }
+    _verticalRenderThemeSignature = themeSignature;
+    if (_pendingVerticalThemeRestoreOffset == null &&
+        _scrollController.hasClients &&
+        _hasRestoredOffset) {
+      _pendingVerticalThemeRestoreOffset = _scrollController.offset;
+    }
+  }
+
+  void _restoreVerticalOffsetAfterThemeUpdate({
+    required String owner,
+    required String themeSignature,
+  }) {
+    final offset = _pendingVerticalThemeRestoreOffset;
+    if (!mounted ||
+        offset == null ||
+        _verticalRenderThemeOwner != owner ||
+        _verticalRenderThemeSignature != themeSignature ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    final max = _scrollController.position.maxScrollExtent;
+    final restoredOffset = offset.clamp(0.0, max).toDouble();
+    _isProgrammaticScrollChange = true;
+    try {
+      _scrollController.jumpTo(restoredOffset);
+    } finally {
+      _isProgrammaticScrollChange = false;
+      _pendingVerticalThemeRestoreOffset = null;
+    }
+    unawaited(
+      ref
+          .read(novelReaderControllerProvider(_args).notifier)
+          .onScrollOffsetChanged(restoredOffset, maxScrollExtent: max),
+    );
+  }
+
+  void _clearPendingVerticalThemeRestore({
+    required String owner,
+    required String themeSignature,
+  }) {
+    if (_verticalRenderThemeOwner == owner &&
+        _verticalRenderThemeSignature == themeSignature) {
+      _pendingVerticalThemeRestoreOffset = null;
+    }
   }
 
   void _restoreVerticalOffsetAfterContentReady({

@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -518,7 +520,7 @@ void main() {
     final surface = tester.widget<ColoredBox>(
       find.byKey(const Key('novel-reader-delayed-loading-surface')),
     );
-    expect(surface.color, const Color(0xFFF4EAD7));
+    expect(surface.color, theme.scaffoldBackgroundColor);
 
     await tester.pump(const Duration(milliseconds: 140));
     await tester.pumpAndSettle();
@@ -550,6 +552,63 @@ void main() {
       expect(bottomPanel.color, palette.chromeBackground);
     },
   );
+
+  testWidgets('NovelReaderPage follows application family and brightness', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.vertical,
+      ),
+      firstParagraphs: List<String>.generate(
+        30,
+        (index) => '主题同步阅读位置段落 $index',
+      ),
+    );
+    final moonWhite = AppTheme.build(
+      family: AppThemeFamily.moonWhite,
+      brightness: Brightness.light,
+    );
+    final themeNotifier = ValueNotifier<ThemeData>(moonWhite);
+    addTearDown(themeNotifier.dispose);
+    await tester.pumpWidget(
+      _buildReaderApp(repository: repository, themeListenable: themeNotifier),
+    );
+    await tester.pumpAndSettle();
+
+    var background = tester.widget<ColoredBox>(
+      find.byKey(const Key('novel-reader-background')),
+    );
+    expect(background.color, moonWhite.scaffoldBackgroundColor);
+    final readerList = find.byKey(const Key('novel-reader-paragraph-list'));
+    await tester.drag(readerList, const Offset(0, -160));
+    await tester.pumpAndSettle();
+    final offsetBeforeThemeChange = tester
+        .state<ScrollableState>(
+          find.descendant(of: readerList, matching: find.byType(Scrollable)),
+        )
+        .position
+        .pixels;
+
+    final plumPurple = AppTheme.build(
+      family: AppThemeFamily.plumPurple,
+      brightness: Brightness.dark,
+    );
+    themeNotifier.value = plumPurple;
+    await tester.pumpAndSettle();
+
+    background = tester.widget<ColoredBox>(
+      find.byKey(const Key('novel-reader-background')),
+    );
+    expect(background.color, plumPurple.scaffoldBackgroundColor);
+    final offsetAfterThemeChange = tester
+        .state<ScrollableState>(
+          find.descendant(of: readerList, matching: find.byType(Scrollable)),
+        )
+        .position
+        .pixels;
+    expect(offsetAfterThemeChange, closeTo(offsetBeforeThemeChange, 0.01));
+  });
 
   testWidgets(
     'NovelReaderPage chapter switch failure reveals old content and shows snackbar',
@@ -610,6 +669,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('novel-theme-sepia')), findsOneWidget);
+      expect(find.byKey(const Key('novel-theme-follow-app')), findsOneWidget);
       expect(
         find.byKey(const Key('novel-reader-display-settings-sheet')),
         findsOneWidget,
@@ -699,6 +759,25 @@ void main() {
       find.byKey(const Key('novel-reader-safe-area-switch')),
       findsOneWidget,
     );
+    const themeKeys = <Key>[
+      Key('novel-theme-follow-app'),
+      Key('novel-theme-light'),
+      Key('novel-theme-sepia'),
+      Key('novel-theme-dark'),
+    ];
+    final widgets = tester.allWidgets.toList(growable: false);
+    final optionIndices = themeKeys
+        .map((key) => widgets.indexWhere((widget) => widget.key == key))
+        .toList(growable: false);
+    expect(optionIndices.every((index) => index >= 0), isTrue);
+    expect(optionIndices, orderedEquals(optionIndices.toList()..sort()));
+    for (final key in themeKeys) {
+      final chip = tester.widget<ChoiceChip>(
+        find.descendant(of: find.byKey(key), matching: find.byType(ChoiceChip)),
+      );
+      expect(chip.showCheckmark, isFalse);
+      expect(chip.selected, key == const Key('novel-theme-follow-app'));
+    }
     expect(find.text('分页 LTR'), findsOneWidget);
     expect(find.text('分页 RTL'), findsOneWidget);
     expect(find.byKey(const Key('novel-reader-paged-page-view')), findsNothing);
@@ -1679,6 +1758,7 @@ Widget _buildReaderApp({
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
   NovelChapterUpdateService? chapterUpdateService,
   ThemeData? theme,
+  ValueListenable<ThemeData>? themeListenable,
   String initialEpisodeId = 'novel:49:100:5001',
   Widget? home,
 }) {
@@ -1712,15 +1792,30 @@ Widget _buildReaderApp({
       if (threadRepository != null)
         threadRepositoryProvider.overrideWithValue(threadRepository),
     ],
-    child: LocalizedTestApp(
-      theme: theme,
-      home:
-          home ??
-          NovelReaderPage(
-            novelId: 'novel:49:100',
-            initialEpisodeId: initialEpisodeId,
+    child: themeListenable == null
+        ? LocalizedTestApp(
+            theme: theme,
+            home:
+                home ??
+                NovelReaderPage(
+                  novelId: 'novel:49:100',
+                  initialEpisodeId: initialEpisodeId,
+                ),
+          )
+        : ValueListenableBuilder<ThemeData>(
+            valueListenable: themeListenable,
+            builder: (context, activeTheme, child) {
+              return LocalizedTestApp(
+                theme: activeTheme,
+                home:
+                    home ??
+                    NovelReaderPage(
+                      novelId: 'novel:49:100',
+                      initialEpisodeId: initialEpisodeId,
+                    ),
+              );
+            },
           ),
-    ),
   );
 }
 

@@ -1898,7 +1898,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelThemeDark => '深色';
 
   @override
-  String get novelThemeSystem => '跟随系统';
+  String get novelThemeFollowApp => '跟随应用';
 
   @override
   String get novelReading => '阅读';
@@ -6170,7 +6170,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get novelThemeDark => '深色';
 
   @override
-  String get novelThemeSystem => '跟隨系統';
+  String get novelThemeFollowApp => '跟隨應用程式';
 
   @override
   String get novelReading => '閱讀';

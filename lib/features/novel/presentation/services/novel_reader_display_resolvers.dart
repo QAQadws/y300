@@ -29,15 +29,20 @@ class NovelReaderThemeResolver {
   NovelReaderPalette resolve({
     required NovelReaderPreferences preferences,
     required ThemeData theme,
-    required Brightness platformBrightness,
   }) {
-    final preset =
-        preferences.themePreset == NovelReaderThemePreset.followSystem
-        ? (platformBrightness == Brightness.dark
-              ? NovelReaderThemePreset.dark
-              : NovelReaderThemePreset.light)
-        : preferences.themePreset;
-    switch (preset) {
+    switch (preferences.themePreset) {
+      case NovelReaderThemePreset.followApp:
+        final scheme = theme.colorScheme;
+        return NovelReaderPalette(
+          brightness: theme.brightness,
+          background: theme.scaffoldBackgroundColor,
+          foreground: scheme.onSurface,
+          muted: scheme.onSurfaceVariant,
+          accent: scheme.primary,
+          surface: scheme.surfaceContainer,
+          link: scheme.primary,
+          quoteBackground: scheme.surfaceContainerHighest,
+        );
       case NovelReaderThemePreset.dark:
         return NovelReaderPalette(
           brightness: Brightness.dark,
@@ -60,7 +65,6 @@ class NovelReaderThemeResolver {
           link: const Color(0xFF6A55A3),
           quoteBackground: const Color(0xFFE8D8B8),
         );
-      case NovelReaderThemePreset.followSystem:
       case NovelReaderThemePreset.light:
         return NovelReaderPalette(
           brightness: Brightness.light,

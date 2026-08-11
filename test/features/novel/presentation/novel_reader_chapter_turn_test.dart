@@ -575,7 +575,6 @@ Widget _buildSurface({
   final palette = const NovelReaderThemeResolver().resolve(
     preferences: preferences,
     theme: theme,
-    platformBrightness: Brightness.light,
   );
   return LocalizedTestApp(
     theme: theme,

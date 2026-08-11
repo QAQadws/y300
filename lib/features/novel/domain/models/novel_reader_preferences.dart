@@ -1,6 +1,6 @@
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 
-enum NovelReaderThemePreset { light, sepia, dark, followSystem }
+enum NovelReaderThemePreset { followApp, light, sepia, dark }
 
 enum NovelReaderFlowMode { vertical, pagedLtr, pagedRtl }
 
@@ -37,31 +37,32 @@ extension NovelReaderConversionModeCodec on NovelReaderConversionMode {
 extension NovelReaderThemePresetCodec on NovelReaderThemePreset {
   String get storageValue {
     switch (this) {
+      case NovelReaderThemePreset.followApp:
+        return 'followApp';
       case NovelReaderThemePreset.light:
         return 'light';
       case NovelReaderThemePreset.sepia:
         return 'sepia';
       case NovelReaderThemePreset.dark:
         return 'dark';
-      case NovelReaderThemePreset.followSystem:
-        return 'followSystem';
     }
   }
 
   static NovelReaderThemePreset fromStorage(String? value) {
     switch (value) {
+      case 'followApp':
+      case 'followSystem':
+      case 'follow_system':
+      case 'system':
+        return NovelReaderThemePreset.followApp;
       case 'sepia':
         return NovelReaderThemePreset.sepia;
       case 'dark':
         return NovelReaderThemePreset.dark;
-      case 'followSystem':
-      case 'follow_system':
-      case 'system':
-        return NovelReaderThemePreset.followSystem;
       case 'light':
         return NovelReaderThemePreset.light;
       default:
-        return NovelReaderThemePreset.sepia;
+        return NovelReaderThemePreset.followApp;
     }
   }
 }
@@ -130,7 +131,7 @@ class NovelReaderPreferences {
     required this.pagePadding,
     required this.fontFamily,
     this.flowMode = NovelReaderFlowMode.pagedLtr,
-    NovelReaderThemePreset themePreset = NovelReaderThemePreset.sepia,
+    NovelReaderThemePreset themePreset = NovelReaderThemePreset.followApp,
     this.contentMaxWidth = 720,
     this.firstLineIndent = 0,
     this.fontWeight = 400,
@@ -168,7 +169,7 @@ class NovelReaderPreferences {
       pagePadding: NovelReaderSpacing.pagedPagePadding,
       fontFamily: 'system',
       flowMode: NovelReaderFlowMode.pagedLtr,
-      themePreset: NovelReaderThemePreset.sepia,
+      themePreset: NovelReaderThemePreset.followApp,
       contentMaxWidth: 720,
       firstLineIndent: 0,
       fontWeight: 400,

@@ -31,7 +31,7 @@ void main() {
     expect(loaded.fontSize, 18.5);
     expect(loaded.lineHeight, 1.6);
     expect(loaded.flowMode, NovelReaderFlowMode.pagedLtr);
-    expect(loaded.themePreset, NovelReaderThemePreset.sepia);
+    expect(loaded.themePreset, NovelReaderThemePreset.followApp);
     expect(legacySource.callCount, 1);
   });
 
@@ -135,6 +135,28 @@ void main() {
     }
   });
 
+  test('codec upgrades legacy system themes to follow app', () {
+    const codec = NovelReaderPreferencesSnapshotCodec();
+
+    for (final legacyValue in <String>[
+      'followSystem',
+      'follow_system',
+      'system',
+    ]) {
+      final decoded = codec.decode(
+        jsonEncode(<String, Object>{
+          'schemaVersion': 1,
+          'themePreset': legacyValue,
+        }),
+      );
+
+      expect(decoded.themePreset, NovelReaderThemePreset.followApp);
+      final normalized =
+          jsonDecode(codec.encode(decoded)) as Map<String, dynamic>;
+      expect(normalized['themePreset'], 'followApp');
+    }
+  });
+
   test(
     'saved safe area preference survives repository reconstruction',
     () async {
@@ -220,7 +242,7 @@ void main() {
     expect(decoded.fontSize, 18.5);
     expect(decoded.lineHeight, 1.9);
     expect(decoded.flowMode, NovelReaderFlowMode.vertical);
-    expect(decoded.themePreset, NovelReaderThemePreset.sepia);
+    expect(decoded.themePreset, NovelReaderThemePreset.followApp);
     expect(decoded.conversionMode, NovelReaderConversionMode.none);
   });
 }

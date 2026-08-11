@@ -3056,11 +3056,11 @@ abstract class AppLocalizations {
   /// **'深色'**
   String get novelThemeDark;
 
-  /// No description provided for @novelThemeSystem.
+  /// No description provided for @novelThemeFollowApp.
   ///
   /// In zh, this message translates to:
-  /// **'跟随系统'**
-  String get novelThemeSystem;
+  /// **'跟随应用'**
+  String get novelThemeFollowApp;
 
   /// No description provided for @novelReading.
   ///

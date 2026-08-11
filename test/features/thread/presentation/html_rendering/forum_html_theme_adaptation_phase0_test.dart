@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/app/theme/app_theme.dart';
@@ -104,21 +103,18 @@ void main() {
           themePreset: NovelReaderThemePreset.light,
         ),
         theme: AppTheme.light(),
-        platformBrightness: Brightness.light,
       );
       final dark = resolver.resolve(
         preferences: NovelReaderPreferences.defaults().copyWith(
           themePreset: NovelReaderThemePreset.dark,
         ),
         theme: AppTheme.dark(),
-        platformBrightness: Brightness.light,
       );
       final sepia = resolver.resolve(
         preferences: NovelReaderPreferences.defaults().copyWith(
           themePreset: NovelReaderThemePreset.sepia,
         ),
         theme: AppTheme.light(),
-        platformBrightness: Brightness.dark,
       );
 
       expect(_novelPaletteSnapshot(light), <String, int>{

@@ -118,8 +118,8 @@ final class NovelReaderPreferencesSnapshotCodec {
           return value;
         }
       }
-      if (raw == 'follow_system' || raw == 'system') {
-        return NovelReaderThemePreset.followSystem;
+      if (raw == 'followSystem' || raw == 'follow_system' || raw == 'system') {
+        return NovelReaderThemePreset.followApp;
       }
     }
     return fallback;

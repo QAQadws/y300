@@ -85,9 +85,10 @@ final class SqliteNovelReaderPreferencesLegacySource
       'light': NovelReaderThemePreset.light,
       'sepia': NovelReaderThemePreset.sepia,
       'dark': NovelReaderThemePreset.dark,
-      'followSystem': NovelReaderThemePreset.followSystem,
-      'follow_system': NovelReaderThemePreset.followSystem,
-      'system': NovelReaderThemePreset.followSystem,
+      'followApp': NovelReaderThemePreset.followApp,
+      'followSystem': NovelReaderThemePreset.followApp,
+      'follow_system': NovelReaderThemePreset.followApp,
+      'system': NovelReaderThemePreset.followApp,
     };
     return aliases[raw] ?? fallback;
   }

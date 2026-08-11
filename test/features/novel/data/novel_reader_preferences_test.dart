@@ -15,7 +15,7 @@ void main() {
     expect(defaults.pagePadding, NovelReaderSpacing.pagedPagePadding);
     expect(defaults.fontFamily, 'system');
     expect(defaults.flowMode, NovelReaderFlowMode.pagedLtr);
-    expect(defaults.themePreset, NovelReaderThemePreset.sepia);
+    expect(defaults.themePreset, NovelReaderThemePreset.followApp);
     expect(defaults.contentMaxWidth, 720);
     expect(defaults.firstLineIndent, 0);
     expect(defaults.fontWeight, 400);
@@ -34,7 +34,7 @@ void main() {
       fontFamily: 'system',
     );
 
-    expect(preferences.themePreset, NovelReaderThemePreset.sepia);
+    expect(preferences.themePreset, NovelReaderThemePreset.followApp);
     expect(preferences.flowMode, NovelReaderFlowMode.pagedLtr);
   });
 
@@ -48,22 +48,26 @@ void main() {
       }
     });
 
-    test('keeps legacy system aliases and falls back to sepia', () {
+    test('upgrades legacy system aliases and falls back to follow app', () {
+      expect(
+        NovelReaderThemePresetCodec.fromStorage('followSystem'),
+        NovelReaderThemePreset.followApp,
+      );
       expect(
         NovelReaderThemePresetCodec.fromStorage('follow_system'),
-        NovelReaderThemePreset.followSystem,
+        NovelReaderThemePreset.followApp,
       );
       expect(
         NovelReaderThemePresetCodec.fromStorage('system'),
-        NovelReaderThemePreset.followSystem,
+        NovelReaderThemePreset.followApp,
       );
       expect(
         NovelReaderThemePresetCodec.fromStorage('future-theme'),
-        NovelReaderThemePreset.sepia,
+        NovelReaderThemePreset.followApp,
       );
       expect(
         NovelReaderThemePresetCodec.fromStorage(null),
-        NovelReaderThemePreset.sepia,
+        NovelReaderThemePreset.followApp,
       );
     });
   });

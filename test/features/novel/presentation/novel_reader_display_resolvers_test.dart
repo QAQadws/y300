@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 
@@ -15,21 +17,18 @@ void main() {
         themePreset: NovelReaderThemePreset.light,
       ),
       theme: theme,
-      platformBrightness: Brightness.light,
     );
     final sepia = themeResolver.resolve(
       preferences: NovelReaderPreferences.defaults().copyWith(
         themePreset: NovelReaderThemePreset.sepia,
       ),
       theme: theme,
-      platformBrightness: Brightness.light,
     );
     final dark = themeResolver.resolve(
       preferences: NovelReaderPreferences.defaults().copyWith(
         themePreset: NovelReaderThemePreset.dark,
       ),
       theme: theme,
-      platformBrightness: Brightness.light,
     );
 
     expect(light.background, const Color(0xFFFDFDFD));
@@ -40,25 +39,32 @@ void main() {
     expect(dark.foreground, const Color(0xFFE9E9E9));
   });
 
-  test('NovelReaderThemeResolver follows system brightness', () {
-    final theme = ThemeData.light();
+  test('NovelReaderThemeResolver follows the active application theme', () {
     final preferences = NovelReaderPreferences.defaults().copyWith(
-      themePreset: NovelReaderThemePreset.followSystem,
+      themePreset: NovelReaderThemePreset.followApp,
     );
 
-    final light = themeResolver.resolve(
-      preferences: preferences,
-      theme: theme,
-      platformBrightness: Brightness.light,
-    );
-    final dark = themeResolver.resolve(
-      preferences: preferences,
-      theme: theme,
-      platformBrightness: Brightness.dark,
-    );
+    for (final family in AppThemeFamily.values) {
+      for (final brightness in Brightness.values) {
+        final theme = AppTheme.build(family: family, brightness: brightness);
+        final palette = themeResolver.resolve(
+          preferences: preferences,
+          theme: theme,
+        );
 
-    expect(light.background, const Color(0xFFFDFDFD));
-    expect(dark.background, const Color(0xFF141414));
+        expect(palette.brightness, theme.brightness);
+        expect(palette.background, theme.scaffoldBackgroundColor);
+        expect(palette.foreground, theme.colorScheme.onSurface);
+        expect(palette.muted, theme.colorScheme.onSurfaceVariant);
+        expect(palette.accent, theme.colorScheme.primary);
+        expect(palette.surface, theme.colorScheme.surfaceContainer);
+        expect(palette.link, theme.colorScheme.primary);
+        expect(
+          palette.quoteBackground,
+          theme.colorScheme.surfaceContainerHighest,
+        );
+      }
+    }
   });
 
   test('NovelReaderTypographyResolver applies advanced preferences', () {
@@ -66,7 +72,6 @@ void main() {
     final palette = themeResolver.resolve(
       preferences: NovelReaderPreferences.defaults(),
       theme: theme,
-      platformBrightness: Brightness.light,
     );
     final typography = typographyResolver.resolve(
       preferences: NovelReaderPreferences.defaults().copyWith(

@@ -32,7 +32,6 @@ void main() {
       final palette = const NovelReaderThemeResolver().resolve(
         preferences: novelPreferences,
         theme: appTheme,
-        platformBrightness: Brightness.light,
       );
       final htmlTheme = const NovelForumHtmlRenderThemeFactory().fromPalette(
         palette,

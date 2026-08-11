@@ -82,6 +82,18 @@ class _NovelReaderDisplaySettingsSheetState
                       runSpacing: 8,
                       children: [
                         _ThemeChip(
+                          key: const Key('novel-theme-follow-app'),
+                          label: l10n.novelThemeFollowApp,
+                          selected:
+                              _draft.themePreset ==
+                              NovelReaderThemePreset.followApp,
+                          onSelected: () => _applyPreferences(
+                            _draft.copyWith(
+                              themePreset: NovelReaderThemePreset.followApp,
+                            ),
+                          ),
+                        ),
+                        _ThemeChip(
                           key: const Key('novel-theme-light'),
                           label: l10n.novelThemeLight,
                           selected:
@@ -113,18 +125,6 @@ class _NovelReaderDisplaySettingsSheetState
                           onSelected: () => _applyPreferences(
                             _draft.copyWith(
                               themePreset: NovelReaderThemePreset.dark,
-                            ),
-                          ),
-                        ),
-                        _ThemeChip(
-                          key: const Key('novel-theme-follow-system'),
-                          label: l10n.novelThemeSystem,
-                          selected:
-                              _draft.themePreset ==
-                              NovelReaderThemePreset.followSystem,
-                          onSelected: () => _applyPreferences(
-                            _draft.copyWith(
-                              themePreset: NovelReaderThemePreset.followSystem,
                             ),
                           ),
                         ),
@@ -278,6 +278,7 @@ class _ThemeChip extends StatelessWidget {
     return ChoiceChip(
       label: Text(label),
       selected: selected,
+      showCheckmark: false,
       onSelected: (_) => onSelected(),
     );
   }

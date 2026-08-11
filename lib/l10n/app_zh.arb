@@ -789,7 +789,7 @@
   "novelThemeLight": "浅色",
   "novelThemeSepia": "护眼",
   "novelThemeDark": "深色",
-  "novelThemeSystem": "跟随系统",
+  "novelThemeFollowApp": "跟随应用",
   "novelReading": "阅读",
   "novelReadingMode": "阅读模式",
   "novelConversionMode": "简繁",

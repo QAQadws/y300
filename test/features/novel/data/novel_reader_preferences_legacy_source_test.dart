@@ -95,4 +95,26 @@ void main() {
       );
     },
   );
+
+  test('upgrades legacy system theme aliases to follow app', () async {
+    for (final legacyValue in <String>[
+      'followSystem',
+      'follow_system',
+      'system',
+    ]) {
+      await db.delete(ComicLocalDb.readerPreferencesTable);
+      await db.insert(ComicLocalDb.readerPreferencesTable, <String, Object?>{
+        'content_type': 'novel',
+        'font_size': 18.5,
+        'line_height': 1.6,
+        'paragraph_spacing': 10.0,
+        'page_padding': 8.0,
+        'theme_mode': legacyValue,
+      });
+
+      final loaded = await source.load();
+
+      expect(loaded?.themePreset, NovelReaderThemePreset.followApp);
+    }
+  });
 }

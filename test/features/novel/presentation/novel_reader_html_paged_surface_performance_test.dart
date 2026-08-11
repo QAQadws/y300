@@ -37,7 +37,6 @@ void main() {
     final palette = const NovelReaderThemeResolver().resolve(
       preferences: preferences,
       theme: theme,
-      platformBrightness: Brightness.light,
     );
     final htmlTheme = const NovelForumHtmlRenderThemeFactory().fromPalette(
       palette,
@@ -119,7 +118,6 @@ void main() {
     final palette = const NovelReaderThemeResolver().resolve(
       preferences: preferences,
       theme: theme,
-      platformBrightness: Brightness.light,
     );
     final htmlTheme = const NovelForumHtmlRenderThemeFactory().fromPalette(
       palette,
@@ -199,7 +197,6 @@ void main() {
     final palette = const NovelReaderThemeResolver().resolve(
       preferences: preferences,
       theme: theme,
-      platformBrightness: Brightness.light,
     );
     final typography = const NovelReaderTypographyResolver().resolve(
       preferences: preferences,
@@ -263,7 +260,6 @@ void main() {
     final palette = const NovelReaderThemeResolver().resolve(
       preferences: preferences,
       theme: theme,
-      platformBrightness: Brightness.light,
     );
     final typography = const NovelReaderTypographyResolver().resolve(
       preferences: preferences,
@@ -341,7 +337,6 @@ void main() {
     final palette = const NovelReaderThemeResolver().resolve(
       preferences: preferences,
       theme: theme,
-      platformBrightness: Brightness.light,
     );
     final typography = const NovelReaderTypographyResolver().resolve(
       preferences: preferences,
@@ -422,7 +417,6 @@ void main() {
       final palette = const NovelReaderThemeResolver().resolve(
         preferences: preferences,
         theme: theme,
-        platformBrightness: Brightness.light,
       );
       final typography = const NovelReaderTypographyResolver().resolve(
         preferences: preferences,

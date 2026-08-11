@@ -10,6 +10,7 @@ void main() {
   const themeFactory = NovelForumHtmlRenderThemeFactory();
 
   for (final preset in <NovelReaderThemePreset>[
+    NovelReaderThemePreset.followApp,
     NovelReaderThemePreset.light,
     NovelReaderThemePreset.sepia,
     NovelReaderThemePreset.dark,
@@ -20,7 +21,6 @@ void main() {
           themePreset: preset,
         ),
         theme: ThemeData.light(),
-        platformBrightness: Brightness.light,
       );
 
       final context = themeFactory.fromPalette(palette);
@@ -33,7 +33,7 @@ void main() {
       expect(context.codeSurface, palette.surface);
       expect(
         context.brightness,
-        preset == NovelReaderThemePreset.dark
+        palette.brightness == Brightness.dark
             ? ForumHtmlBrightness.dark
             : ForumHtmlBrightness.light,
       );
