@@ -54,7 +54,6 @@ void main() {
   test('unavailable document-start mode produces no initial user scripts', () {
     final scripts = builder.build(
       capabilityProfile: const ForumWebViewCapabilityProfile(
-        engine: ForumWebViewEngine.legacy,
         documentStartMode: ForumWebViewDocumentStartMode.unavailable,
         supportsContentBlockers: false,
         supportsTransparentBackground: false,
@@ -76,7 +75,6 @@ void main() {
       ]) {
         final scripts = builder.build(
           capabilityProfile: ForumWebViewCapabilityProfile(
-            engine: ForumWebViewEngine.advanced,
             documentStartMode: mode,
             supportsContentBlockers: false,
             supportsTransparentBackground: true,
@@ -119,7 +117,6 @@ void main() {
       ]) {
         final scripts = builder.build(
           capabilityProfile: ForumWebViewCapabilityProfile(
-            engine: ForumWebViewEngine.advanced,
             documentStartMode: mode,
             supportsContentBlockers: false,
             supportsTransparentBackground: true,

@@ -22,10 +22,6 @@ class DefaultForumWebViewPlatformConfigurator
   inapp.InAppWebViewSettings buildSettings({
     required ForumWebViewBootstrapConfig bootstrapConfig,
   }) {
-    assert(
-      bootstrapConfig.capabilityProfile.engine == ForumWebViewEngine.advanced,
-      'ForumWebViewPlatformConfigurator only supports advanced runtime.',
-    );
     return switch (defaultTargetPlatform) {
       TargetPlatform.android => _buildAndroidSettings(),
       TargetPlatform.iOS => _buildAppleSettings(),

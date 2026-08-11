@@ -116,7 +116,6 @@ class InAppForumWebViewDriver implements ForumWebViewDriver {
   @override
   Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
     return ForumWebViewCapabilityProfile(
-      engine: ForumWebViewEngine.advanced,
       documentStartMode: _resolveDocumentStartMode(),
       supportsContentBlockers: false,
       supportsTransparentBackground: true,

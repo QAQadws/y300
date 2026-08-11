@@ -21,47 +21,17 @@ import 'package:y300/features/forum/presentation/forum_shell_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 
 void main() {
-  test('forumWebViewDriverProvider uses advanced factory by default', () {
-    final legacyDriver = _FakeForumWebViewDriver();
-    final advancedDriver = _FakeForumWebViewDriver();
+  test('forumWebViewDriverProvider keeps its factory override boundary', () {
+    final driver = _FakeForumWebViewDriver();
     final container = ProviderContainer(
       overrides: [
-        forumWebViewLegacyDriverFactoryProvider.overrideWithValue(
-          () => legacyDriver,
-        ),
-        forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
-          () => advancedDriver,
-        ),
+        forumWebViewDriverFactoryProvider.overrideWithValue(() => driver),
       ],
     );
     addTearDown(container.dispose);
 
-    expect(container.read(forumWebViewDriverProvider), same(advancedDriver));
+    expect(container.read(forumWebViewDriverProvider), same(driver));
   });
-
-  test(
-    'forumWebViewDriverProvider uses legacy factory when preferred engine is overridden',
-    () {
-      final legacyDriver = _FakeForumWebViewDriver();
-      final advancedDriver = _FakeForumWebViewDriver();
-      final container = ProviderContainer(
-        overrides: [
-          forumWebViewPreferredEngineProvider.overrideWithValue(
-            ForumWebViewEngine.legacy,
-          ),
-          forumWebViewLegacyDriverFactoryProvider.overrideWithValue(
-            () => legacyDriver,
-          ),
-          forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
-            () => advancedDriver,
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      expect(container.read(forumWebViewDriverProvider), same(legacyDriver));
-    },
-  );
 
   testWidgets('ForumShellPage shows webview home page by default', (
     tester,
@@ -277,60 +247,6 @@ void main() {
     expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
   });
 
-  testWidgets(
-    'ForumShellPage rebuilds advanced webview after login state changes',
-    (tester) async {
-      final driverRegistry = _FakeForumWebViewDriverRegistry();
-      final authRepository = _FakeAuthRepository();
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            authRepositoryProvider.overrideWithValue(authRepository),
-            forumModeSettingsRepositoryProvider.overrideWithValue(
-              _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
-            ),
-            forumWebViewPreferredEngineProvider.overrideWithValue(
-              ForumWebViewEngine.advanced,
-            ),
-            forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
-              driverRegistry.create,
-            ),
-            cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
-          ],
-          child: const LocalizedTestApp(home: ForumShellPage()),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(driverRegistry.instances.length, 1);
-      expect(driverRegistry.instances.single.initializeCallCount, 1);
-      expect(driverRegistry.instances.single.loadCallCount, 1);
-
-      authRepository.setSession(
-        SessionInfo(
-          uid: '1',
-          username: 'alice',
-          formhash: 'hash',
-          isLoggedIn: true,
-        ),
-      );
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(ForumShellPage)),
-      );
-      await container.read(authSessionControllerProvider.notifier).refresh();
-      await tester.pumpAndSettle();
-
-      expect(driverRegistry.instances.length, 2);
-      expect(
-        driverRegistry.instances.last,
-        isNot(same(driverRegistry.instances.first)),
-      );
-      expect(driverRegistry.instances.last.initializeCallCount, 1);
-      expect(driverRegistry.instances.last.loadCallCount, 1);
-      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-    },
-  );
-
   testWidgets('ForumShellPage rebuilds webview after logout state changes', (
     tester,
   ) async {
@@ -379,59 +295,6 @@ void main() {
     expect(driverRegistry.instances.last.loadCallCount, 1);
     expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
   });
-
-  testWidgets(
-    'ForumShellPage rebuilds advanced webview after logout state changes',
-    (tester) async {
-      final driverRegistry = _FakeForumWebViewDriverRegistry();
-      final authRepository = _FakeAuthRepository(
-        session: SessionInfo(
-          uid: '1',
-          username: 'alice',
-          formhash: 'hash',
-          isLoggedIn: true,
-        ),
-      );
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            authRepositoryProvider.overrideWithValue(authRepository),
-            forumModeSettingsRepositoryProvider.overrideWithValue(
-              _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
-            ),
-            forumWebViewPreferredEngineProvider.overrideWithValue(
-              ForumWebViewEngine.advanced,
-            ),
-            forumWebViewAdvancedDriverFactoryProvider.overrideWithValue(
-              driverRegistry.create,
-            ),
-            cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
-          ],
-          child: const LocalizedTestApp(home: ForumShellPage()),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final initialDriverCount = driverRegistry.instances.length;
-      final activeDriverBeforeLogout = driverRegistry.instances.last;
-
-      authRepository.setSignedOut();
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(ForumShellPage)),
-      );
-      await container.read(authSessionControllerProvider.notifier).refresh();
-      await tester.pumpAndSettle();
-
-      expect(driverRegistry.instances.length, initialDriverCount + 1);
-      expect(
-        driverRegistry.instances.last,
-        isNot(same(activeDriverBeforeLogout)),
-      );
-      expect(driverRegistry.instances.last.initializeCallCount, 1);
-      expect(driverRegistry.instances.last.loadCallCount, 1);
-      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-    },
-  );
 
   testWidgets(
     'ForumShellPage native mode ignores auth changes for webview build',
@@ -629,7 +492,6 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
     probeCapabilitiesCallCount += 1;
     return const ForumWebViewCapabilityProfile(
-      engine: ForumWebViewEngine.advanced,
       documentStartMode: ForumWebViewDocumentStartMode.reliable,
       supportsContentBlockers: false,
       supportsTransparentBackground: true,

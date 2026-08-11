@@ -66,7 +66,6 @@ void main() {
     (tester) async {
       final driver = _FakeForumWebViewDriver()
         ..capabilityProfile = const ForumWebViewCapabilityProfile(
-          engine: ForumWebViewEngine.legacy,
           documentStartMode: ForumWebViewDocumentStartMode.unavailable,
           supportsContentBlockers: false,
           supportsTransparentBackground: false,
@@ -165,10 +164,6 @@ void main() {
         driver.bootstrapConfig?.initialUri.toString(),
         'https://bbs.yamibo.com/index.php?mobile=2',
       );
-      expect(
-        driver.bootstrapConfig?.capabilityProfile.engine,
-        ForumWebViewEngine.advanced,
-      );
       final bootstrapConfig = driver.bootstrapConfig!;
       expect(bootstrapConfig.visualPolicy.earlyHiddenSelectors, const <String>{
         '#header-padding',
@@ -218,7 +213,6 @@ void main() {
     (tester) async {
       final driver = _FakeForumWebViewDriver()
         ..capabilityProfile = const ForumWebViewCapabilityProfile(
-          engine: ForumWebViewEngine.advanced,
           documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
           supportsContentBlockers: false,
           supportsTransparentBackground: true,
@@ -230,10 +224,6 @@ void main() {
       await tester.pump();
 
       final bootstrapConfig = driver.bootstrapConfig!;
-      expect(
-        bootstrapConfig.capabilityProfile.engine,
-        ForumWebViewEngine.advanced,
-      );
       expect(bootstrapConfig.initialUserScripts, hasLength(1));
       expect(
         bootstrapConfig.initialUserScripts.single.injectionTime,
@@ -334,7 +324,6 @@ void main() {
     (tester) async {
       for (final profile in <ForumWebViewCapabilityProfile>[
         const ForumWebViewCapabilityProfile(
-          engine: ForumWebViewEngine.advanced,
           documentStartMode: ForumWebViewDocumentStartMode.bestEffort,
           supportsContentBlockers: false,
           supportsTransparentBackground: true,
@@ -343,7 +332,6 @@ void main() {
           supportsPageCommitVisible: true,
         ),
         const ForumWebViewCapabilityProfile(
-          engine: ForumWebViewEngine.legacy,
           documentStartMode: ForumWebViewDocumentStartMode.unavailable,
           supportsContentBlockers: false,
           supportsTransparentBackground: false,
@@ -453,7 +441,7 @@ void main() {
   );
 
   testWidgets(
-    'ForumWebViewPage advanced engine records only after visible commit and DOM proof',
+    'ForumWebViewPage with page-commit records only after visible commit and DOM proof',
     (tester) async {
       const url =
           'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=524596&page=3&highlight=%D2%B2%CE%DE&mobile=2';
@@ -497,7 +485,7 @@ void main() {
   );
 
   testWidgets(
-    'ForumWebViewPage advanced engine handles visible commit before finish once',
+    'ForumWebViewPage with page-commit handles visible commit before finish once',
     (tester) async {
       const url =
           'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101&mobile=2';
@@ -525,14 +513,13 @@ void main() {
   );
 
   testWidgets(
-    'ForumWebViewPage legacy engine uses finished plus DOM proof fallback',
+    'ForumWebViewPage without page-commit uses finished plus DOM proof fallback',
     (tester) async {
       const url =
           'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=202&mobile=2';
       final recorder = _RecordingHistoryVisitRecorder();
       final driver = _FakeForumWebViewDriver()
         ..capabilityProfile = const ForumWebViewCapabilityProfile(
-          engine: ForumWebViewEngine.legacy,
           documentStartMode: ForumWebViewDocumentStartMode.unavailable,
           supportsContentBlockers: false,
           supportsTransparentBackground: false,
@@ -541,7 +528,7 @@ void main() {
           supportsPageCommitVisible: false,
         )
         ..title = '主题'
-        ..javaScriptResult = _threadDocumentResult(title: 'Legacy 主题');
+        ..javaScriptResult = _threadDocumentResult(title: 'Fallback 主题');
 
       await tester.pumpWidget(
         _buildTestApp(driver: driver, historyRecorder: recorder),
@@ -553,7 +540,7 @@ void main() {
 
       expect(recorder.drafts, hasLength(1));
       expect(recorder.drafts.single.target.id, '202');
-      expect(recorder.drafts.single.title, 'Legacy 主题');
+      expect(recorder.drafts.single.title, 'Fallback 主题');
     },
   );
 
@@ -2233,7 +2220,6 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   ForumWebViewBootstrapConfig? bootstrapConfig;
   ForumWebViewCapabilityProfile capabilityProfile =
       const ForumWebViewCapabilityProfile(
-        engine: ForumWebViewEngine.advanced,
         documentStartMode: ForumWebViewDocumentStartMode.reliable,
         supportsContentBlockers: false,
         supportsTransparentBackground: true,

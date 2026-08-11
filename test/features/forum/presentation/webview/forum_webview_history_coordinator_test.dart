@@ -9,33 +9,36 @@ void main() {
     menu: ForumThreadMenuSnapshot(),
   );
 
-  test('advanced engine commits once regardless of gate order', () async {
-    final commits = <ForumWebViewHistoryCandidate>[];
-    final coordinator = ForumWebViewHistoryCoordinator(onCommit: commits.add)
-      ..configure(supportsPageCommitVisible: true);
-    final firstUri = _threadUri('101');
+  test(
+    'page-commit capability commits once regardless of gate order',
+    () async {
+      final commits = <ForumWebViewHistoryCandidate>[];
+      final coordinator = ForumWebViewHistoryCoordinator(onCommit: commits.add)
+        ..configure(supportsPageCommitVisible: true);
+      final firstUri = _threadUri('101');
 
-    coordinator.onPageStarted(generation: 1, uri: firstUri);
-    await coordinator.onPageFinished(
-      generation: 1,
-      finalUri: firstUri,
-      document: validDocument,
-    );
-    expect(commits, isEmpty);
-    await coordinator.onPageCommitVisible(generation: 1, uri: firstUri);
-    expect(commits.map((item) => item.tid), <String>['101']);
+      coordinator.onPageStarted(generation: 1, uri: firstUri);
+      await coordinator.onPageFinished(
+        generation: 1,
+        finalUri: firstUri,
+        document: validDocument,
+      );
+      expect(commits, isEmpty);
+      await coordinator.onPageCommitVisible(generation: 1, uri: firstUri);
+      expect(commits.map((item) => item.tid), <String>['101']);
 
-    final secondUri = _threadUri('202');
-    coordinator.onPageStarted(generation: 2, uri: secondUri);
-    await coordinator.onPageCommitVisible(generation: 2, uri: secondUri);
-    expect(commits, hasLength(1));
-    await coordinator.onPageFinished(
-      generation: 2,
-      finalUri: secondUri,
-      document: validDocument,
-    );
-    expect(commits.map((item) => item.tid), <String>['101', '202']);
-  });
+      final secondUri = _threadUri('202');
+      coordinator.onPageStarted(generation: 2, uri: secondUri);
+      await coordinator.onPageCommitVisible(generation: 2, uri: secondUri);
+      expect(commits, hasLength(1));
+      await coordinator.onPageFinished(
+        generation: 2,
+        finalUri: secondUri,
+        document: validDocument,
+      );
+      expect(commits.map((item) => item.tid), <String>['101', '202']);
+    },
+  );
 
   test('stale generations and mismatched final urls are ignored', () async {
     final commits = <ForumWebViewHistoryCandidate>[];

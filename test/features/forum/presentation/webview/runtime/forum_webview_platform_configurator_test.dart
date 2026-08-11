@@ -64,7 +64,6 @@ ForumWebViewBootstrapConfig _advancedBootstrapConfig() {
   return ForumWebViewBootstrapConfig(
     initialUri: Uri(scheme: 'https', host: 'bbs.yamibo.com', path: '/'),
     capabilityProfile: const ForumWebViewCapabilityProfile(
-      engine: ForumWebViewEngine.advanced,
       documentStartMode: ForumWebViewDocumentStartMode.reliable,
       supportsContentBlockers: false,
       supportsTransparentBackground: true,
