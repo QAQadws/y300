@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/models/yamibo_tag_thread_page.dart';
+import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 
 class YamiboTagThreadPageArgs {
   const YamiboTagThreadPageArgs({required this.url, this.title = ''});
@@ -100,6 +101,23 @@ class YamiboTagThreadPageController
     state = AsyncData(current.copyWith(isLoadingPage: true, clearError: true));
     final next = await _load(url, previous: current);
     state = AsyncData(next);
+  }
+
+  Future<void> loadPage(int page) async {
+    final current = state.value ?? YamiboTagThreadPageState.initial(_args);
+    final pagination = current.data?.pagination;
+    final lastPage = pagination?.totalPages;
+    if (page < 1 ||
+        page == pagination?.currentPage ||
+        (lastPage != null && page > lastPage)) {
+      return;
+    }
+    final sourceUri = Uri.tryParse(current.data?.url ?? current.url);
+    if (sourceUri == null) {
+      return;
+    }
+    final targetUri = const YamiboTagPageParsing().withPage(sourceUri, page);
+    await loadUrl(targetUri.toString());
   }
 
   Future<YamiboTagThreadPageState> _load(

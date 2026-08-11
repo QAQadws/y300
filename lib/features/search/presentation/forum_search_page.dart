@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
+import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/search_text_resolver.dart';
+import 'package:y300/features/search/presentation/widgets/forum_search_result_card.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';
@@ -267,7 +269,9 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final palette = ForumDisplayThemePalette.resolve(Theme.of(context));
     return Scaffold(
+      backgroundColor: palette.background,
       appBar: InlineSearchAppBar(
         controller: _controller,
         focusNode: _focusNode,
@@ -290,69 +294,91 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
           if (_loading) const LinearProgressIndicator(),
           if (_notice != null)
             Padding(
-              padding: const EdgeInsets.all(12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  SearchTextResolver.notice(l10n, _notice!),
-                  key: const Key('forum-search-hint'),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+              child: Material(
+                color: palette.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  child: Text(
+                    SearchTextResolver.notice(l10n, _notice!),
+                    key: const Key('forum-search-hint'),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: palette.bodyText,
+                      height: 1.35,
+                    ),
+                  ),
                 ),
               ),
             ),
           Expanded(
-            child: ListView.builder(
+            child: ListView.separated(
               key: const Key('forum-search-result-list'),
               controller: _scrollController,
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 16),
               itemCount:
                   _items.length +
                   ((_loadingMore || _loadMoreNotice != null) ? 1 : 0),
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 if (index == _items.length) {
                   if (_loadingMore) {
                     return const Padding(
                       key: Key('forum-search-load-more-progress'),
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Center(child: CircularProgressIndicator()),
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: SizedBox.square(
+                          dimension: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.4),
+                        ),
+                      ),
                     );
                   }
-                  return Padding(
+                  return Material(
                     key: const Key('forum-search-load-more-error'),
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      children: [
-                        Text(
-                          SearchTextResolver.notice(l10n, _loadMoreNotice!),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        OutlinedButton(
-                          key: const Key('forum-search-load-more-button'),
-                          onPressed: () => unawaited(_loadMore()),
-                          child: Text(l10n.commonRetry),
-                        ),
-                      ],
+                    color: palette.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 11, 12, 8),
+                      child: Column(
+                        children: [
+                          Text(
+                            SearchTextResolver.notice(l10n, _loadMoreNotice!),
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: palette.bodyText,
+                                  height: 1.35,
+                                ),
+                          ),
+                          const SizedBox(height: 2),
+                          TextButton(
+                            key: const Key('forum-search-load-more-button'),
+                            onPressed: () => unawaited(_loadMore()),
+                            child: Text(l10n.commonRetry),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }
                 final item = _items[index];
-                return Column(
-                  children: [
-                    ListTile(
-                      title: Text(item.title),
-                      subtitle: Text(l10n.searchResultTid(item.tid)),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => ThreadDetailPage(
-                              tid: item.tid,
-                              subject: item.title,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    const Divider(height: 1),
-                  ],
+                return ForumSearchResultCard(
+                  key: Key('forum-search-result-${item.tid}'),
+                  item: item,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ThreadDetailPage(
+                          tid: item.tid,
+                          subject: item.title,
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),

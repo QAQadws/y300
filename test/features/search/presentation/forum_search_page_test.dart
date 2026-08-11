@@ -20,6 +20,7 @@ import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
+import 'package:y300/features/search/presentation/widgets/forum_search_result_card.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 
 void main() {
@@ -139,6 +140,8 @@ void main() {
               title: '搜索结果',
               url: 'thread-301-1-1.html',
               fid: '30',
+              author: '搜索作者',
+              timeText: '2026-08-11',
             ),
           ],
           rateLimited: false,
@@ -168,8 +171,75 @@ void main() {
       expect(searchService.searchCallCount, 1);
       expect(searchService.lastKeyword, '测试关键词');
       expect(find.text('搜索结果'), findsOneWidget);
+      expect(find.byKey(const Key('forum-search-result-301')), findsOneWidget);
+      expect(find.text('搜索作者 · 2026-08-11'), findsOneWidget);
+      expect(find.text('TID：301'), findsOneWidget);
+      final resultList = find.byKey(const Key('forum-search-result-list'));
+      expect(
+        find.descendant(of: resultList, matching: find.byType(ListTile)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: resultList, matching: find.byType(Divider)),
+        findsNothing,
+      );
     },
   );
+
+  testWidgets('ForumSearchPage uses parsed-forum list spacing', (tester) async {
+    final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    addTearDown(queueSnapshot.dispose);
+    final searchService = _FakeDiscuzSearchService(
+      response: const DiscuzSearchResponse(
+        items: <DiscuzSearchResultItem>[
+          DiscuzSearchResultItem(
+            tid: '1',
+            title: '第一条结果',
+            url: 'thread-1-1-1.html',
+            fid: '30',
+          ),
+          DiscuzSearchResultItem(
+            tid: '2',
+            title: '第二条结果',
+            url: 'thread-2-1-1.html',
+            fid: '30',
+          ),
+        ],
+        rateLimited: false,
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          discuzSearchServiceProvider.overrideWithValue(searchService),
+          comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
+            queueSnapshot,
+          ),
+        ],
+        child: const LocalizedTestApp(home: ForumSearchPage()),
+      ),
+    );
+
+    await tester.enterText(find.byKey(const Key('forum-search-input')), '间距');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('forum-search-submit-button')));
+    await tester.pumpAndSettle();
+
+    final list = tester.widget<ListView>(
+      find.byKey(const Key('forum-search-result-list')),
+    );
+    expect(list.padding, const EdgeInsets.fromLTRB(10, 8, 10, 16));
+    expect(find.byType(ForumSearchResultCard), findsNWidgets(2));
+    final firstBottom = tester
+        .getBottomLeft(find.byKey(const Key('forum-search-result-1')))
+        .dy;
+    final secondTop = tester
+        .getTopLeft(find.byKey(const Key('forum-search-result-2')))
+        .dy;
+    expect(secondTop - firstBottom, 8);
+  });
 
   testWidgets(
     'ForumSearchPage shows scheduler wait when an interactive search is queued',
