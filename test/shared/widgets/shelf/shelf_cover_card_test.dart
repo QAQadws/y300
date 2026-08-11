@@ -41,6 +41,38 @@ void main() {
     },
   );
 
+  testWidgets('ShelfCoverCard uses compact shared cover geometry', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 120,
+            height: 180,
+            child: ShelfCoverCard(
+              title: 'Compact Cover',
+              coverImageUrl: null,
+              onTap: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final cardFinder = find.byType(ShelfCoverCard);
+    final container = tester.widget<AnimatedContainer>(
+      find.descendant(of: cardFinder, matching: find.byType(AnimatedContainer)),
+    );
+    final decoration = container.decoration! as BoxDecoration;
+    expect(decoration.borderRadius, BorderRadius.circular(10));
+
+    final clip = tester.widget<ClipRRect>(
+      find.descendant(of: cardFinder, matching: find.byType(ClipRRect)).first,
+    );
+    expect(clip.borderRadius, BorderRadius.circular(8));
+  });
+
   testWidgets('ShelfCoverCard supports custom two-line ellipsis mode', (
     tester,
   ) async {

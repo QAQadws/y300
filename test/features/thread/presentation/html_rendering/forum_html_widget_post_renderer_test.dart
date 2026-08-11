@@ -1060,6 +1060,77 @@ void main() {
   });
 
   testWidgets(
+    'uses the decoded ratio for small deltas without scroll compensation',
+    (tester) async {
+      final shifts = <ForumHtmlImageLayoutShift>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _RecordingImageCacheService(),
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: Scaffold(
+              body: ForumHtmlWidgetPostRenderer(
+                theme: forumHtmlTestTheme,
+                sourceId: 'small-decoded-size-delta-image',
+                threadId: '573279',
+                html: '<img src="data/attachment/forum/page-small-delta.jpg">',
+                callbacks: ForumHtmlRenderCallbacks(
+                  onImageLayoutShift: shifts.add,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      AspectRatio currentAspectRatio() {
+        return tester.widget<AspectRatio>(
+          find
+              .ancestor(
+                of: find.byType(CachedLibraryImage).first,
+                matching: find.byType(AspectRatio),
+              )
+              .first,
+        );
+      }
+
+      ClipRRect currentClip() {
+        return tester.widget<ClipRRect>(
+          find
+              .ancestor(
+                of: find.byType(CachedLibraryImage).first,
+                matching: find.byType(ClipRRect),
+              )
+              .first,
+        );
+      }
+
+      expect(currentAspectRatio().aspectRatio, 0.7);
+      expect(
+        currentClip().borderRadius,
+        const BorderRadius.all(Radius.circular(4)),
+      );
+
+      tester
+          .widget<CachedLibraryImage>(find.byType(CachedLibraryImage).first)
+          .onImageResolved
+          ?.call(const Size(720, 1000));
+      await tester.pump();
+
+      expect(currentAspectRatio().aspectRatio, 0.72);
+      expect(shifts, isEmpty);
+      expect(
+        currentClip().borderRadius,
+        const BorderRadius.all(Radius.circular(4)),
+      );
+    },
+  );
+
+  testWidgets(
     'does not retain a tall trailing line box after consecutive attachment images',
     (tester) async {
       await tester.pumpWidget(

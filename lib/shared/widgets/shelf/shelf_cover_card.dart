@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
+import 'package:y300/shared/widgets/shelf/shelf_grid_geometry.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
 typedef ShelfCoverLayerBuilder =
@@ -83,13 +84,20 @@ class ShelfCoverCard extends StatelessWidget {
       onLongPress: onLongPress,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(2),
+        padding: const EdgeInsets.all(ShelfGridGeometry.selectionPadding),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor, width: 2),
+          borderRadius: BorderRadius.circular(
+            ShelfGridGeometry.selectionCornerRadius,
+          ),
+          border: Border.all(
+            color: borderColor,
+            width: ShelfGridGeometry.selectionBorderWidth,
+          ),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(
+            ShelfGridGeometry.coverCornerRadius,
+          ),
           child: Stack(
             fit: StackFit.expand,
             children: [

@@ -396,15 +396,14 @@ class _ForumHtmlCachedBlockImageViewState
     }
     final relativeDelta =
         (decodedAspectRatio - currentAspectRatio).abs() / currentAspectRatio;
-    if (relativeDelta < _decodedAspectRatioPromotionThreshold) {
-      return;
-    }
-    final shift = _layoutShiftFromDecodedAspectRatio(
-      decodedAspectRatio: decodedAspectRatio,
-      currentAspectRatio: currentAspectRatio,
-    );
-    if (shift != null) {
-      widget.onImageLayoutShift?.call(shift);
+    if (relativeDelta >= _decodedAspectRatioPromotionThreshold) {
+      final shift = _layoutShiftFromDecodedAspectRatio(
+        decodedAspectRatio: decodedAspectRatio,
+        currentAspectRatio: currentAspectRatio,
+      );
+      if (shift != null) {
+        widget.onImageLayoutShift?.call(shift);
+      }
     }
     setState(() {
       _cachedHint = ForumImageLayoutHint(

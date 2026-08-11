@@ -203,6 +203,29 @@ void main() {
     expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
   });
 
+  testWidgets('grid mode uses compact shared cover spacing', (tester) async {
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+          ),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final grid = tester.widget<GridView>(
+      find.byKey(const Key('unified-shelf-grid-view')),
+    );
+    final delegate =
+        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(grid.padding, const EdgeInsets.all(12));
+    expect(delegate.crossAxisSpacing, 6);
+    expect(delegate.mainAxisSpacing, 6);
+  });
+
   testWidgets('public shelf sort sheet exposes three fields and desc default', (
     tester,
   ) async {

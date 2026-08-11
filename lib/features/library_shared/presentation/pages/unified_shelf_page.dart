@@ -24,6 +24,7 @@ import 'package:y300/shared/widgets/app_popup_menu.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
+import 'package:y300/shared/widgets/shelf/shelf_grid_geometry.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 
@@ -1195,11 +1196,11 @@ class _WorkGrid extends StatelessWidget {
         ),
         // 大书架场景预渲染适度前后缓存，降低滑动抖动。
         scrollCacheExtent: const ScrollCacheExtent.pixels(900),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(ShelfGridGeometry.contentPadding),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: gridColumns,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
+          crossAxisSpacing: ShelfGridGeometry.itemSpacing,
+          mainAxisSpacing: ShelfGridGeometry.itemSpacing,
           childAspectRatio: 2 / 3,
         ),
         itemCount: items.length,
