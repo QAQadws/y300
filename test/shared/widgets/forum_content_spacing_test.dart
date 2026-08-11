@@ -3,6 +3,13 @@ import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
 void main() {
   group('ForumContentSpacing derived tokens', () {
+    test('uses the compact twelve pixel readable body inset', () {
+      expect(ForumContentSpacing.pageHorizontal, 6);
+      expect(ForumContentSpacing.postBodyHorizontal, 6);
+      expect(ForumContentSpacing.readableBodyHorizontal, 12);
+      expect(ForumContentSpacing.composerPageHorizontal, 12);
+    });
+
     test('readable body inset is the sum of the two horizontal knobs', () {
       expect(
         ForumContentSpacing.readableBodyHorizontal,
@@ -52,6 +59,11 @@ void main() {
             'readableBodyHorizontal must stay >= composerPageHorizontal '
             '(${ForumContentSpacing.composerPageHorizontal})',
       );
+    });
+
+    test('compact composer surfaces need no additional padding', () {
+      expect(ForumContentSpacing.composerQuillSurfaceHorizontal, 0);
+      expect(ForumContentSpacing.composerSourceEditorHorizontal, 0);
     });
   });
 }

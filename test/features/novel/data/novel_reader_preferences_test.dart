@@ -7,6 +7,8 @@ void main() {
   test('NovelReaderPreferences.defaults uses the current reader baseline', () {
     final defaults = NovelReaderPreferences.defaults();
 
+    expect(NovelReaderSpacing.verticalPagePadding, 8);
+    expect(NovelReaderSpacing.pagedPagePadding, 8);
     expect(defaults.fontSize, 18.5);
     expect(defaults.lineHeight, 1.6);
     expect(defaults.paragraphSpacing, 10);

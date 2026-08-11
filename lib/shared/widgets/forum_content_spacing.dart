@@ -9,10 +9,10 @@ abstract final class ForumContentSpacing {
   // --- Horizontal knobs ---
 
   /// Space between the viewport edge and the post card.
-  static const double pageHorizontal = 10;
+  static const double pageHorizontal = 6;
 
   /// Space between a post card edge and its readable body.
-  static const double postBodyHorizontal = 8;
+  static const double postBodyHorizontal = 6;
 
   /// Internal horizontal padding supplied by QuillEditorConfig.
   ///
@@ -24,7 +24,7 @@ abstract final class ForumContentSpacing {
   ///
   /// Source-mode alignment depends on this matching the pages' actual list
   /// padding, so both read this token instead of repeating a literal.
-  static const double composerPageHorizontal = 16;
+  static const double composerPageHorizontal = 12;
 
   /// Vertical padding of the composer pages' own scroll views.
   static const double composerPageVertical = 16;

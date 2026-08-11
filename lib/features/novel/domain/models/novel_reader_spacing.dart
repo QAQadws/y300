@@ -19,8 +19,8 @@
 /// disagree. Shrinking it is the safe direction.
 abstract final class NovelReaderSpacing {
   /// Page margin of the scrolling (vertical) reading mode.
-  static const double verticalPagePadding = 12;
+  static const double verticalPagePadding = 8;
 
   /// Page margin of the paged reading modes. Feeds the pagination math.
-  static const double pagedPagePadding = 12;
+  static const double pagedPagePadding = 8;
 }
