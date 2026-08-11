@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/more/domain/models/about_app_info.dart';
@@ -12,10 +13,28 @@ void main() {
   final l10n = AppLocalizationsZh();
 
   test('resolves theme and forum mode labels in the presentation layer', () {
-    expect(MoreTextResolver.themeLabel(l10n, AppThemePreference.light), '浅色');
     expect(
-      MoreTextResolver.themeDescription(l10n, AppThemePreference.system),
-      '跟随系统浅色或深色设置',
+      MoreTextResolver.themeFamilyLabel(l10n, AppThemeFamily.moonWhite),
+      '月白',
+    );
+    expect(
+      MoreTextResolver.brightnessLabel(l10n, AppBrightnessPreference.light),
+      '日间',
+    );
+    expect(
+      MoreTextResolver.brightnessDescription(
+        l10n,
+        AppBrightnessPreference.system,
+      ),
+      '根据系统设置切换日间或夜间外观',
+    );
+    expect(
+      MoreTextResolver.appearanceSummary(
+        l10n,
+        AppThemeFamily.warmPaper,
+        AppBrightnessPreference.dark,
+      ),
+      '暖纸 · 夜间',
     );
     expect(
       MoreTextResolver.forumModeLabel(l10n, ForumShellMode.native),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
+import 'package:y300/app/theme/app_theme_palette.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 import 'package:y300/features/more/presentation/more_text_resolver.dart';
@@ -24,7 +26,7 @@ class AppearanceSettingsSheet extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         children: [
           Text(
-            l10n.moreThemeSectionTitle,
+            l10n.moreColorThemeSectionTitle,
             style: theme.textTheme.titleSmall?.copyWith(
               color: theme.colorScheme.primary,
               fontWeight: FontWeight.w700,
@@ -32,14 +34,34 @@ class AppearanceSettingsSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 10),
           _AppearanceOptionStrip(
-            scrollViewKey: const Key('appearance-theme-options-scroll'),
+            scrollViewKey: const Key('appearance-theme-family-options-scroll'),
             children: [
-              for (final preference in AppThemePreference.values)
-                _AppearanceThemeChoice(
+              for (final family in AppThemeFamily.values)
+                _AppearanceThemeFamilyChoice(
+                  family: family,
+                  selected: settings.themeFamily == family,
+                  onPressed: () => _setThemeFamily(context, ref, family),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            l10n.moreAppearanceModeSectionTitle,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _AppearanceOptionStrip(
+            scrollViewKey: const Key('appearance-brightness-options-scroll'),
+            children: [
+              for (final preference in AppBrightnessPreference.values)
+                _AppearanceBrightnessChoice(
                   preference: preference,
-                  selected: settings.themePreference == preference,
+                  selected: settings.brightnessPreference == preference,
                   onPressed: () =>
-                      _setThemePreference(context, ref, preference),
+                      _setBrightnessPreference(context, ref, preference),
                 ),
             ],
           ),
@@ -78,15 +100,35 @@ class AppearanceSettingsSheet extends ConsumerWidget {
     };
   }
 
-  Future<void> _setThemePreference(
+  Future<void> _setThemeFamily(
     BuildContext context,
     WidgetRef ref,
-    AppThemePreference preference,
+    AppThemeFamily family,
   ) async {
     try {
       await ref
           .read(appAppearanceControllerProvider.notifier)
-          .setThemePreference(preference);
+          .setThemeFamily(family);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      showTransientSnackBar(
+        context,
+        AppLocalizations.of(context).moreThemeSaveFailed('$error'),
+      );
+    }
+  }
+
+  Future<void> _setBrightnessPreference(
+    BuildContext context,
+    WidgetRef ref,
+    AppBrightnessPreference preference,
+  ) async {
+    try {
+      await ref
+          .read(appAppearanceControllerProvider.notifier)
+          .setBrightnessPreference(preference);
     } catch (error) {
       if (!context.mounted) {
         return;
@@ -144,14 +186,114 @@ class _AppearanceOptionStrip extends StatelessWidget {
   }
 }
 
-class _AppearanceThemeChoice extends StatelessWidget {
-  const _AppearanceThemeChoice({
+class _AppearanceThemeFamilyChoice extends StatelessWidget {
+  const _AppearanceThemeFamilyChoice({
+    required this.family,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final AppThemeFamily family;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
+    final label = MoreTextResolver.themeFamilyLabel(l10n, family);
+    final foreground = selected ? scheme.onPrimaryContainer : scheme.onSurface;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$label${l10n.moreColorThemeSectionTitle}',
+      child: Tooltip(
+        message: MoreTextResolver.themeFamilyDescription(l10n, family),
+        child: OutlinedButton(
+          key: Key('appearance-theme-family-${family.name}'),
+          onPressed: onPressed,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: foreground,
+            backgroundColor: selected ? scheme.primaryContainer : null,
+            minimumSize: const Size(0, 40),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            side: BorderSide(
+              color: selected ? Colors.transparent : scheme.outlineVariant,
+              width: selected ? 0 : 1,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ThemeFamilySwatch(family: family),
+              const SizedBox(width: 9),
+              Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                style: TextStyle(
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeFamilySwatch extends StatelessWidget {
+  const _ThemeFamilySwatch({required this.family});
+
+  final AppThemeFamily family;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppThemePalette.resolve(
+      family,
+      Theme.of(context).brightness,
+    );
+    return Container(
+      key: Key('appearance-theme-family-swatch-${family.name}'),
+      width: 30,
+      height: 18,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(6)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ColoredBox(
+              key: Key('appearance-theme-family-swatch-${family.name}-primary'),
+              color: palette.primary,
+            ),
+          ),
+          Expanded(
+            child: ColoredBox(
+              key: Key('appearance-theme-family-swatch-${family.name}-page'),
+              color: palette.surfaceContainer,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AppearanceBrightnessChoice extends StatelessWidget {
+  const _AppearanceBrightnessChoice({
     required this.preference,
     required this.selected,
     required this.onPressed,
   });
 
-  final AppThemePreference preference;
+  final AppBrightnessPreference preference;
   final bool selected;
   final VoidCallback onPressed;
 
@@ -160,16 +302,16 @@ class _AppearanceThemeChoice extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context);
     final foreground = selected ? scheme.onPrimaryContainer : scheme.onSurface;
-    final label = MoreTextResolver.themeLabel(l10n, preference);
+    final label = MoreTextResolver.brightnessLabel(l10n, preference);
 
     return Semantics(
       button: true,
       selected: selected,
-      label: '$label${l10n.moreThemeSectionTitle}',
+      label: '$label${l10n.moreAppearanceModeSectionTitle}',
       child: Tooltip(
-        message: MoreTextResolver.themeDescription(l10n, preference),
+        message: MoreTextResolver.brightnessDescription(l10n, preference),
         child: OutlinedButton.icon(
-          key: Key('appearance-theme-option-${preference.name}'),
+          key: Key('appearance-brightness-option-${preference.name}'),
           onPressed: onPressed,
           style: OutlinedButton.styleFrom(
             foregroundColor: foreground,
@@ -188,17 +330,10 @@ class _AppearanceThemeChoice extends StatelessWidget {
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
-          icon: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 160),
-            child: Icon(
-              selected ? Icons.check : _icon,
-              key: Key(
-                selected
-                    ? 'appearance-theme-selected-${preference.name}'
-                    : 'appearance-theme-unselected-${preference.name}',
-              ),
-              size: 18,
-            ),
+          icon: Icon(
+            _icon,
+            key: Key('appearance-brightness-icon-${preference.name}'),
+            size: 18,
           ),
           label: Text(label, maxLines: 1, softWrap: false),
         ),
@@ -208,9 +343,9 @@ class _AppearanceThemeChoice extends StatelessWidget {
 
   IconData get _icon {
     return switch (preference) {
-      AppThemePreference.light => Icons.light_mode_outlined,
-      AppThemePreference.dark => Icons.dark_mode_outlined,
-      AppThemePreference.system => Icons.brightness_auto_outlined,
+      AppBrightnessPreference.light => Icons.light_mode_outlined,
+      AppBrightnessPreference.dark => Icons.dark_mode_outlined,
+      AppBrightnessPreference.system => Icons.brightness_auto_outlined,
     };
   }
 }
@@ -258,12 +393,8 @@ class _AppearanceLanguageChoice extends StatelessWidget {
           ),
         ),
         icon: Icon(
-          selected ? Icons.check : Icons.language_outlined,
-          key: Key(
-            selected
-                ? 'appearance-language-selected-${language.name}'
-                : 'appearance-language-unselected-${language.name}',
-          ),
+          Icons.language_outlined,
+          key: Key('appearance-language-icon-${language.name}'),
           size: 18,
         ),
         label: Text(label, maxLines: 1, softWrap: false),

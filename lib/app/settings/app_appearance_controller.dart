@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/settings/app_appearance_settings_repository.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/core/preferences/preferences_providers.dart';
 
 final appAppearanceSettingsRepositoryProvider =
@@ -24,13 +25,32 @@ class AppAppearanceController extends AsyncNotifier<AppAppearanceSettings> {
     return _repository.load();
   }
 
-  Future<void> setThemePreference(AppThemePreference preference) async {
+  Future<void> setThemeFamily(AppThemeFamily family) async {
     final previous = state.value ?? AppAppearanceSettings.defaults();
-    if (previous.themePreference == preference) {
+    if (previous.themeFamily == family) {
       return;
     }
 
-    final next = previous.copyWith(themePreference: preference);
+    final next = previous.copyWith(themeFamily: family);
+    await _saveOrRollback(previous, next);
+  }
+
+  Future<void> setBrightnessPreference(
+    AppBrightnessPreference preference,
+  ) async {
+    final previous = state.value ?? AppAppearanceSettings.defaults();
+    if (previous.brightnessPreference == preference) {
+      return;
+    }
+
+    final next = previous.copyWith(brightnessPreference: preference);
+    await _saveOrRollback(previous, next);
+  }
+
+  Future<void> _saveOrRollback(
+    AppAppearanceSettings previous,
+    AppAppearanceSettings next,
+  ) async {
     state = AsyncData(next);
     try {
       await _repository.save(next);
@@ -49,14 +69,6 @@ class AppAppearanceController extends AsyncNotifier<AppAppearanceSettings> {
     }
 
     final next = previous.copyWith(languagePreference: preference);
-    state = AsyncData(next);
-    try {
-      await _repository.save(next);
-    } catch (error, stackTrace) {
-      if (ref.mounted) {
-        state = AsyncData(previous);
-      }
-      Error.throwWithStackTrace(error, stackTrace);
-    }
+    await _saveOrRollback(previous, next);
   }
 }

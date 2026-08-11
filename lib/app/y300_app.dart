@@ -32,8 +32,14 @@ class Y300App extends ConsumerWidget {
     return MaterialApp(
       title: 'Y300',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      theme: AppTheme.build(
+        family: settings.themeFamily,
+        brightness: Brightness.light,
+      ),
+      darkTheme: AppTheme.build(
+        family: settings.themeFamily,
+        brightness: Brightness.dark,
+      ),
       themeMode: settings.themeMode,
       localizationsDelegates: const [
         ...AppLocalizations.localizationsDelegates,

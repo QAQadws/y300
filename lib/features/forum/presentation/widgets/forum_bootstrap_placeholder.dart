@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:y300/app/theme/app_theme_tokens.dart';
 
 /// Neutral forum placeholder shared by shell loading and native/webview first paint.
 class ForumBootstrapPlaceholder extends StatelessWidget {
@@ -20,14 +19,13 @@ class ForumBootstrapPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final theme = Theme.of(context);
+    final backgroundColor = theme.scaffoldBackgroundColor;
+    final accentColor =
+        theme.appBarTheme.backgroundColor ?? theme.colorScheme.primary;
     final carouselColor =
-        Color.lerp(
-          AppThemeTokens.appBarBackground,
-          backgroundColor,
-          _carouselColorLerp,
-        ) ??
-        AppThemeTokens.appBarBackground;
+        Color.lerp(accentColor, backgroundColor, _carouselColorLerp) ??
+        accentColor;
     return ColoredBox(
       color: backgroundColor,
       child: ListView(
@@ -77,14 +75,15 @@ class _ForumPlaceholderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final theme = Theme.of(context);
+    final backgroundColor = theme.scaffoldBackgroundColor;
     final sectionBackgroundColor =
         Color.lerp(
-          AppThemeTokens.forumWebviewSectionBackground,
+          theme.colorScheme.surfaceContainer,
           backgroundColor,
           ForumBootstrapPlaceholder._sectionBackgroundColorLerp,
         ) ??
-        AppThemeTokens.forumWebviewSectionBackground;
+        theme.colorScheme.surfaceContainer;
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Column(
@@ -118,14 +117,17 @@ class _ForumPlaceholderSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final theme = Theme.of(context);
+    final backgroundColor = theme.scaffoldBackgroundColor;
+    final accentColor =
+        theme.appBarTheme.backgroundColor ?? theme.colorScheme.primary;
     final headerColor =
         Color.lerp(
-          AppThemeTokens.appBarBackground,
+          accentColor,
           backgroundColor,
           ForumBootstrapPlaceholder._sectionHeaderColorLerp,
         ) ??
-        AppThemeTokens.appBarBackground;
+        accentColor;
     return SizedBox(
       width: double.infinity,
       height: 44,
@@ -146,15 +148,18 @@ class _ForumPlaceholderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final backgroundColor = theme.scaffoldBackgroundColor;
+    final accentColor =
+        theme.appBarTheme.backgroundColor ?? colorScheme.primary;
     final itemBlockColor =
         Color.lerp(
-          AppThemeTokens.appBarBackground,
+          accentColor,
           backgroundColor,
           ForumBootstrapPlaceholder._sectionItemBlockColorLerp,
         ) ??
-        AppThemeTokens.appBarBackground;
+        accentColor;
     return Container(
       width: double.infinity,
       height: 64,

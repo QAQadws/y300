@@ -103,9 +103,10 @@ class _MorePageState extends ConsumerState<MorePage> {
             title: Text(l10n.moreAppearance),
             subtitle: Text(
               l10n.moreCurrentTheme(
-                MoreTextResolver.themeLabel(
+                MoreTextResolver.appearanceSummary(
                   l10n,
-                  appearanceSettings.themePreference,
+                  appearanceSettings.themeFamily,
+                  appearanceSettings.brightnessPreference,
                 ),
               ),
             ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:y300/app/theme/app_theme_tokens.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 
 @immutable
 class ForumDisplayThemePalette {
@@ -84,58 +84,45 @@ class ForumDisplayThemePalette {
         theme.appBarTheme.backgroundColor ?? scheme.primary;
     final appBarForeground =
         theme.appBarTheme.foregroundColor ?? scheme.onPrimary;
+    final native = theme.y300NativeContent;
     if (!isDark) {
       return ForumDisplayThemePalette(
-        background: AppThemeTokens.scaffoldBackground,
-        panel: AppThemeTokens.forumWebviewSectionBackground,
-        section: AppThemeTokens.forumWebviewSectionBackground,
-        sectionElevated: AppThemeTokens.forumWebviewSectionBackground,
-        card: AppThemeTokens.forumWebviewSectionBackground,
-        metricBackground: AppThemeTokens.navigationBarBackground.withValues(
-          alpha: 0.58,
-        ),
+        background: native.background,
+        panel: native.card,
+        section: native.card,
+        sectionElevated: native.elevatedCard,
+        card: native.card,
+        metricBackground: native.metricBackground,
         disabled: scheme.surfaceContainerHighest,
         border: scheme.outlineVariant.withValues(alpha: 0.42),
-        accent: AppThemeTokens.appBarBackground,
-        onAccent: AppThemeTokens.appBarForeground,
+        accent: native.accent,
+        onAccent: native.onAccent,
         warning: Colors.redAccent.shade200,
         onWarning: Colors.white,
-        title: AppThemeTokens.appBarBackground,
-        threadTitle: const Color(0xFF2F2117),
-        author: const Color(0xFF8A5A2B),
-        bodyText: const Color(0xFF6F5B46),
-        muted: const Color(0xFF7D6750),
-        softText: const Color(0xFF8F949A),
-        disabledText: const Color(0xFFBBAA91),
-        tag: const Color(0xFF8A5A2B),
-        filterSelectedBackground: AppThemeTokens.navigationBarBackground
-            .withValues(alpha: 0.72),
-        filterSelectedForeground: AppThemeTokens.appBarBackground,
-        threadPressedOverlay: AppThemeTokens.appBarBackground.withValues(
-          alpha: 0.06,
+        title: native.title,
+        threadTitle: native.itemTitle,
+        author: native.author,
+        bodyText: native.supportingText,
+        muted: native.muted,
+        softText: native.neutralText,
+        disabledText: native.disabled,
+        tag: native.author,
+        filterSelectedBackground: native.selectionBackground.withValues(
+          alpha: 0.72,
         ),
-        avatarBackground: AppThemeTokens.navigationBarBackground,
-        avatarForeground: AppThemeTokens.appBarBackground,
-        surfaceContainer: AppThemeTokens.forumWebviewSectionBackground,
+        filterSelectedForeground: native.selectionForeground,
+        threadPressedOverlay: native.subtleStateLayer,
+        avatarBackground: native.avatarBackground,
+        avatarForeground: native.avatarForeground,
+        surfaceContainer: native.card,
         surfaceContainerLow:
-            Color.lerp(
-              AppThemeTokens.scaffoldBackground,
-              AppThemeTokens.forumWebviewSectionBackground,
-              0.62,
-            ) ??
-            AppThemeTokens.forumWebviewSectionBackground,
+            Color.lerp(native.background, native.card, 0.62) ?? native.card,
         surfaceContainerHigh:
-            Color.lerp(
-              AppThemeTokens.navigationBarBackground,
-              AppThemeTokens.forumWebviewSectionBackground,
-              0.58,
-            ) ??
-            AppThemeTokens.navigationBarBackground,
-        stateLayer: AppThemeTokens.appBarBackground.withValues(alpha: 0.08),
-        selectedContainer: AppThemeTokens.navigationBarBackground.withValues(
-          alpha: 0.74,
-        ),
-        selectedForeground: AppThemeTokens.appBarBackground,
+            Color.lerp(scheme.secondaryContainer, native.card, 0.58) ??
+            scheme.secondaryContainer,
+        stateLayer: native.stateLayer,
+        selectedContainer: native.selectionBackground.withValues(alpha: 0.74),
+        selectedForeground: native.selectionForeground,
         outlineSoft: scheme.outlineVariant.withValues(alpha: 0.28),
         threadBadgeBackground: appBarBackground,
         threadBadgeForeground: appBarForeground,

@@ -3522,22 +3522,58 @@ abstract class AppLocalizations {
   /// **'当前：{theme}'**
   String moreCurrentTheme(String theme);
 
-  /// No description provided for @moreThemeSectionTitle.
+  /// No description provided for @moreColorThemeSectionTitle.
   ///
   /// In zh, this message translates to:
-  /// **'主题'**
-  String get moreThemeSectionTitle;
+  /// **'配色主题'**
+  String get moreColorThemeSectionTitle;
+
+  /// No description provided for @moreAppearanceModeSectionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'外观模式'**
+  String get moreAppearanceModeSectionTitle;
+
+  /// No description provided for @moreThemeFamilyWarmPaper.
+  ///
+  /// In zh, this message translates to:
+  /// **'暖纸'**
+  String get moreThemeFamilyWarmPaper;
+
+  /// No description provided for @moreThemeFamilyMoonWhite.
+  ///
+  /// In zh, this message translates to:
+  /// **'月白'**
+  String get moreThemeFamilyMoonWhite;
+
+  /// No description provided for @moreThemeFamilyWarmPaperDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'温暖柔和的米色与褐色配色'**
+  String get moreThemeFamilyWarmPaperDescription;
+
+  /// No description provided for @moreThemeFamilyMoonWhiteDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'清冷克制的月白与蓝灰配色'**
+  String get moreThemeFamilyMoonWhiteDescription;
+
+  /// No description provided for @moreThemeSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'{family} · {mode}'**
+  String moreThemeSummary(String family, String mode);
 
   /// No description provided for @moreThemeLight.
   ///
   /// In zh, this message translates to:
-  /// **'浅色'**
+  /// **'日间'**
   String get moreThemeLight;
 
   /// No description provided for @moreThemeDark.
   ///
   /// In zh, this message translates to:
-  /// **'深色'**
+  /// **'夜间'**
   String get moreThemeDark;
 
   /// No description provided for @moreThemeSystem.
@@ -3549,19 +3585,19 @@ abstract class AppLocalizations {
   /// No description provided for @moreThemeDescriptionLight.
   ///
   /// In zh, this message translates to:
-  /// **'保持浅色外观'**
+  /// **'始终使用日间外观'**
   String get moreThemeDescriptionLight;
 
   /// No description provided for @moreThemeDescriptionDark.
   ///
   /// In zh, this message translates to:
-  /// **'使用深色外观'**
+  /// **'始终使用夜间外观'**
   String get moreThemeDescriptionDark;
 
   /// No description provided for @moreThemeDescriptionSystem.
   ///
   /// In zh, this message translates to:
-  /// **'跟随系统浅色或深色设置'**
+  /// **'根据系统设置切换日间或夜间外观'**
   String get moreThemeDescriptionSystem;
 
   /// 保存主题偏好失败提示；error 是安全的外部错误摘要

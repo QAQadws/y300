@@ -25,6 +25,7 @@ void main() {
   });
 
   test('typed registry owns scalar, legacy, and snapshot names', () {
+    expect(PreferenceKeys.appThemeFamily.name, 'app_theme_family');
     expect(PreferenceKeys.appThemePreference.name, 'app_theme_preference');
     expect(
       PreferenceKeys.appNavigationSnapshotV1.name,

@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
+import 'package:y300/app/theme/app_theme_palette.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -81,7 +83,7 @@ void main() {
     expect(find.text('当前：WebView 模式'), findsOneWidget);
     expect(find.byKey(const Key('more-appearance-entry')), findsOneWidget);
     expect(find.text('外观与文字'), findsOneWidget);
-    expect(find.text('当前：浅色'), findsOneWidget);
+    expect(find.text('当前：暖纸 · 日间'), findsOneWidget);
     expect(
       find.byKey(const Key('more-navigation-management-entry')),
       findsOneWidget,
@@ -424,7 +426,7 @@ void main() {
     );
   });
 
-  testWidgets('MorePage opens appearance drawer and changes theme mode', (
+  testWidgets('MorePage changes theme family and brightness independently', (
     tester,
   ) async {
     final appearanceController = _FakeAppAppearanceController();
@@ -461,40 +463,111 @@ void main() {
       findsNothing,
     );
     expect(
-      find.byKey(const Key('appearance-theme-option-light')),
+      find.byKey(const Key('appearance-theme-family-warmPaper')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('appearance-theme-option-dark')),
+      find.byKey(const Key('appearance-theme-family-moonWhite')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('appearance-theme-option-system')),
+      find.byKey(const Key('appearance-brightness-option-system')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const Key('appearance-theme-selected-light')),
-      findsOneWidget,
-    );
+    expect(find.byIcon(Icons.check), findsNothing);
+    for (final family in AppThemeFamily.values) {
+      final palette = AppThemePalette.resolve(family, Brightness.light);
+      final swatch = tester.widget<Container>(
+        find.byKey(Key('appearance-theme-family-swatch-${family.name}')),
+      );
+      final primarySwatch = find.byKey(
+        Key('appearance-theme-family-swatch-${family.name}-primary'),
+      );
+      final pageSwatch = find.byKey(
+        Key('appearance-theme-family-swatch-${family.name}-page'),
+      );
+      expect(tester.widget<ColoredBox>(primarySwatch).color, palette.primary);
+      expect(
+        tester.widget<ColoredBox>(pageSwatch).color,
+        palette.surfaceContainer,
+      );
+      expect(tester.getSize(primarySwatch).height, greaterThan(0));
+      expect(tester.getSize(pageSwatch).height, greaterThan(0));
+      expect(
+        tester.getSize(primarySwatch).width,
+        tester.getSize(pageSwatch).width,
+      );
+      expect((swatch.decoration! as BoxDecoration).border, isNull);
+    }
 
-    await tester.tap(find.byKey(const Key('appearance-theme-option-dark')));
+    await tester.tap(
+      find.byKey(const Key('appearance-theme-family-moonWhite')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('appearance-brightness-option-dark')),
+    );
     await tester.pumpAndSettle();
 
-    expect(appearanceController.themePreference, AppThemePreference.dark);
+    expect(appearanceController.themeFamily, AppThemeFamily.moonWhite);
     expect(
-      find.byKey(const Key('appearance-theme-selected-dark')),
+      appearanceController.brightnessPreference,
+      AppBrightnessPreference.dark,
+    );
+    expect(
+      find.byKey(const Key('appearance-brightness-icon-dark')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const Key('appearance-theme-selected-light')),
-      findsNothing,
-    );
+    expect(find.byIcon(Icons.check), findsNothing);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('appearance-settings-sheet')), findsNothing);
-    expect(find.text('当前：深色'), findsOneWidget);
+    expect(find.text('当前：月白 · 夜间'), findsOneWidget);
+  });
+
+  testWidgets('Appearance theme swatches follow the active brightness', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appAppearanceControllerProvider.overrideWith(
+            _FakeAppAppearanceController.new,
+          ),
+        ],
+        child: LocalizedTestApp(
+          theme: AppTheme.dark(),
+          home: const Scaffold(body: AppearanceSettingsSheet()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final family in AppThemeFamily.values) {
+      final palette = AppThemePalette.resolve(family, Brightness.dark);
+      expect(
+        tester
+            .widget<ColoredBox>(
+              find.byKey(
+                Key('appearance-theme-family-swatch-${family.name}-primary'),
+              ),
+            )
+            .color,
+        palette.primary,
+      );
+      expect(
+        tester
+            .widget<ColoredBox>(
+              find.byKey(
+                Key('appearance-theme-family-swatch-${family.name}-page'),
+              ),
+            )
+            .color,
+        palette.surfaceContainer,
+      );
+    }
   });
 
   testWidgets(
@@ -527,14 +600,21 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final themeStrip = find.byKey(
-        const Key('appearance-theme-options-scroll'),
+      final familyStrip = find.byKey(
+        const Key('appearance-theme-family-options-scroll'),
+      );
+      final brightnessStrip = find.byKey(
+        const Key('appearance-brightness-options-scroll'),
       );
       final languageStrip = find.byKey(
         const Key('appearance-language-options-scroll'),
       );
       expect(
-        tester.widget<SingleChildScrollView>(themeStrip).scrollDirection,
+        tester.widget<SingleChildScrollView>(familyStrip).scrollDirection,
+        Axis.horizontal,
+      );
+      expect(
+        tester.widget<SingleChildScrollView>(brightnessStrip).scrollDirection,
         Axis.horizontal,
       );
       expect(
@@ -542,19 +622,26 @@ void main() {
         Axis.horizontal,
       );
 
-      final themeScrollable = tester.state<ScrollableState>(
-        find.descendant(of: themeStrip, matching: find.byType(Scrollable)),
+      final familyScrollable = tester.state<ScrollableState>(
+        find.descendant(of: familyStrip, matching: find.byType(Scrollable)),
+      );
+      final brightnessScrollable = tester.state<ScrollableState>(
+        find.descendant(of: brightnessStrip, matching: find.byType(Scrollable)),
       );
       final languageScrollable = tester.state<ScrollableState>(
         find.descendant(of: languageStrip, matching: find.byType(Scrollable)),
       );
-      expect(themeScrollable.position.maxScrollExtent, greaterThan(0));
+      expect(
+        familyScrollable.position.maxScrollExtent,
+        greaterThanOrEqualTo(0),
+      );
+      expect(brightnessScrollable.position.maxScrollExtent, greaterThan(0));
       expect(languageScrollable.position.maxScrollExtent, greaterThan(0));
 
       _expectSameVerticalCenter(tester, const <Key>[
-        Key('appearance-theme-option-light'),
-        Key('appearance-theme-option-dark'),
-        Key('appearance-theme-option-system'),
+        Key('appearance-brightness-option-light'),
+        Key('appearance-brightness-option-dark'),
+        Key('appearance-brightness-option-system'),
       ]);
       _expectSameVerticalCenter(tester, const <Key>[
         Key('appearance-language-option-system'),
@@ -563,7 +650,7 @@ void main() {
       ]);
       _expectSingleLineButtonLabel(
         tester,
-        const Key('appearance-theme-option-system'),
+        const Key('appearance-brightness-option-system'),
       );
       _expectSingleLineButtonLabel(
         tester,
@@ -616,9 +703,10 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('appearance-language-selected-system')),
+      find.byKey(const Key('appearance-language-icon-system')),
       findsOneWidget,
     );
+    expect(find.byIcon(Icons.check), findsNothing);
     expect(
       find.byKey(const Key('appearance-language-behavior-description')),
       findsNothing,
@@ -640,13 +728,10 @@ void main() {
       AppLanguage.traditionalChinese,
     );
     expect(
-      find.byKey(const Key('appearance-language-selected-traditionalChinese')),
+      find.byKey(const Key('appearance-language-icon-traditionalChinese')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const Key('appearance-language-selected-system')),
-      findsNothing,
-    );
+    expect(find.byIcon(Icons.check), findsNothing);
     expect(find.text('界面使用繁体，原生解析内容转换为繁体'), findsNothing);
   });
 
@@ -674,16 +759,22 @@ void main() {
 
     await tester.tap(find.byKey(const Key('more-appearance-entry')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('appearance-theme-option-system')));
+    await tester.tap(
+      find.byKey(const Key('appearance-brightness-option-system')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.textContaining('主题设置保存失败'), findsOneWidget);
-    expect(appearanceController.themePreference, AppThemePreference.light);
+    expect(
+      appearanceController.brightnessPreference,
+      AppBrightnessPreference.light,
+    );
     expect(find.byKey(const Key('appearance-settings-sheet')), findsOneWidget);
     expect(
-      find.byKey(const Key('appearance-theme-selected-light')),
+      find.byKey(const Key('appearance-brightness-icon-light')),
       findsOneWidget,
     );
+    expect(find.byIcon(Icons.check), findsNothing);
   });
 }
 
@@ -810,7 +901,9 @@ class _FakeAppAppearanceController extends AppAppearanceController {
   final bool failOnSave;
   var _settings = AppAppearanceSettings.defaults();
 
-  AppThemePreference get themePreference => _settings.themePreference;
+  AppThemeFamily get themeFamily => _settings.themeFamily;
+  AppBrightnessPreference get brightnessPreference =>
+      _settings.brightnessPreference;
   AppLanguage get languagePreference => _settings.languagePreference;
 
   @override
@@ -819,12 +912,30 @@ class _FakeAppAppearanceController extends AppAppearanceController {
   }
 
   @override
-  Future<void> setThemePreference(AppThemePreference preference) async {
+  Future<void> setThemeFamily(AppThemeFamily family) async {
     final previous = _settings;
-    if (previous.themePreference == preference) {
+    if (previous.themeFamily == family) {
       return;
     }
-    _settings = previous.copyWith(themePreference: preference);
+    _settings = previous.copyWith(themeFamily: family);
+    state = AsyncData(_settings);
+    if (!failOnSave) {
+      return;
+    }
+    _settings = previous;
+    state = AsyncData(previous);
+    throw StateError('save failed');
+  }
+
+  @override
+  Future<void> setBrightnessPreference(
+    AppBrightnessPreference preference,
+  ) async {
+    final previous = _settings;
+    if (previous.brightnessPreference == preference) {
+      return;
+    }
+    _settings = previous.copyWith(brightnessPreference: preference);
     state = AsyncData(_settings);
     if (!failOnSave) {
       return;

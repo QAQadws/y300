@@ -6,6 +6,9 @@ import 'package:y300/core/preferences/preference_key_names.dart';
 /// Existing scalar names remain unchanged for compatibility. New multi-field
 /// snapshots use a domain-scoped, versioned name.
 abstract final class PreferenceKeys {
+  static const appThemeFamily = PreferenceKey<String>(
+    PreferenceKeyNames.appThemeFamily,
+  );
   static const appThemePreference = PreferenceKey<String>(
     PreferenceKeyNames.appThemePreference,
   );

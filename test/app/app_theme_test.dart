@@ -10,11 +10,14 @@ import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/settings/app_appearance_settings_repository.dart';
 import 'package:y300/app/localization/app_locale_resolution.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_palette.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/app/y300_app.dart';
 import 'package:y300/features/forum/presentation/webview/theme/forum_webview_theme_palette_resolver.dart';
+import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
@@ -97,6 +100,79 @@ void main() {
     );
   });
 
+  test('warm paper native semantic colors preserve the legacy light UI', () {
+    final native = AppTheme.light()
+        .extension<Y300ThemeExtension>()!
+        .nativeContent;
+
+    expect(native.supportingText, const Color(0xFF6F5B46));
+    expect(native.muted, const Color(0xFF7D6750));
+    expect(native.soft, const Color(0xFF8F7A62));
+    expect(native.neutralText, const Color(0xFF8F949A));
+    expect(native.tertiaryText, const Color(0xFF9A8E82));
+    expect(native.notificationBadgeBackground, const Color(0xFFF7DDC2));
+    expect(native.selectionForeground, AppThemeTokens.appBarBackground);
+  });
+
+  test('moon white palettes expose the documented light and dark colors', () {
+    final light = AppThemePalette.resolve(
+      AppThemeFamily.moonWhite,
+      Brightness.light,
+    );
+    final dark = AppThemePalette.resolve(
+      AppThemeFamily.moonWhite,
+      Brightness.dark,
+    );
+
+    expect(light.scaffoldBackground, const Color(0xFFF3F6FA));
+    expect(light.appBarBackground, const Color(0xFF2E3F5A));
+    expect(light.primary, const Color(0xFF4E6D93));
+    expect(light.onSurface, const Color(0xFF202934));
+    expect(dark.scaffoldBackground, const Color(0xFF121820));
+    expect(dark.appBarBackground, const Color(0xFF1B2A3D));
+    expect(dark.primary, const Color(0xFFAFC8E6));
+    expect(dark.onSurface, const Color(0xFFEAF0F7));
+  });
+
+  test('moon white themes retain readable primary surface contrast', () {
+    for (final brightness in Brightness.values) {
+      final theme = AppTheme.build(
+        family: AppThemeFamily.moonWhite,
+        brightness: brightness,
+      );
+      expect(
+        _contrastRatio(theme.colorScheme.onSurface, theme.colorScheme.surface),
+        greaterThanOrEqualTo(4.5),
+      );
+      expect(
+        _contrastRatio(
+          theme.appBarTheme.foregroundColor!,
+          theme.appBarTheme.backgroundColor!,
+        ),
+        greaterThanOrEqualTo(4.5),
+      );
+    }
+  });
+
+  test(
+    'native forum and thread palettes follow moon white semantic colors',
+    () {
+      final theme = AppTheme.build(
+        family: AppThemeFamily.moonWhite,
+        brightness: Brightness.light,
+      );
+      final forum = ForumDisplayThemePalette.resolve(theme);
+      final thread = ThreadDetailNativePalette.resolve(theme);
+
+      expect(forum.background, const Color(0xFFF3F6FA));
+      expect(forum.card, const Color(0xFFF8FAFC));
+      expect(forum.accent, const Color(0xFF4E6D93));
+      expect(thread.background, const Color(0xFFF3F6FA));
+      expect(thread.card, const Color(0xFFF8FAFC));
+      expect(thread.title, const Color(0xFF2E3F5A));
+    },
+  );
+
   test('Y300ThemeExtension copyWith and lerp preserve semantic colors', () {
     final light = Y300ThemeExtension.light(AppThemePalette.light());
     final dark = Y300ThemeExtension.dark(AppThemePalette.dark());
@@ -175,7 +251,7 @@ void main() {
           appAppearanceSettingsRepositoryProvider.overrideWithValue(
             _FakeAppAppearanceSettingsRepository(
               settings: const AppAppearanceSettings(
-                themePreference: AppThemePreference.dark,
+                brightnessPreference: AppBrightnessPreference.dark,
                 languagePreference: AppLanguage.system,
               ),
             ),
@@ -225,7 +301,7 @@ void main() {
           appAppearanceSettingsRepositoryProvider.overrideWithValue(
             _FakeAppAppearanceSettingsRepository(
               settings: const AppAppearanceSettings(
-                themePreference: AppThemePreference.light,
+                brightnessPreference: AppBrightnessPreference.light,
                 languagePreference: AppLanguage.traditionalChinese,
               ),
             ),
@@ -241,6 +317,46 @@ void main() {
 
     final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(materialApp.locale, appTraditionalLocale);
+  });
+
+  testWidgets('Y300App builds both brightness variants from saved family', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appAppearanceSettingsRepositoryProvider.overrideWithValue(
+            _FakeAppAppearanceSettingsRepository(
+              settings: const AppAppearanceSettings(
+                themeFamily: AppThemeFamily.moonWhite,
+                brightnessPreference: AppBrightnessPreference.system,
+                languagePreference: AppLanguage.system,
+              ),
+            ),
+          ),
+        ],
+        child: const Y300App(
+          home: SizedBox.shrink(),
+          enableAppUpdatePrompt: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(materialApp.themeMode, ThemeMode.system);
+    expect(
+      materialApp.theme!.appBarTheme.backgroundColor,
+      const Color(0xFF2E3F5A),
+    );
+    expect(
+      materialApp.darkTheme!.appBarTheme.backgroundColor,
+      const Color(0xFF1B2A3D),
+    );
+    expect(
+      materialApp.theme!.extension<Y300ThemeExtension>()!.nativeContent.card,
+      const Color(0xFFF8FAFC),
+    );
   });
 
   testWidgets('AppTheme.dark builds common Material controls', (tester) async {
@@ -410,4 +526,16 @@ void _expectComponentThemesMatchScheme(ThemeData theme) {
   expect(theme.inputDecorationTheme.fillColor, scheme.surfaceContainer);
   expect(theme.chipTheme.backgroundColor, scheme.surfaceContainer);
   expect(theme.cardTheme.color, scheme.surfaceContainer);
+}
+
+double _contrastRatio(Color foreground, Color background) {
+  final foregroundLuminance = foreground.computeLuminance();
+  final backgroundLuminance = background.computeLuminance();
+  final lighter = foregroundLuminance > backgroundLuminance
+      ? foregroundLuminance
+      : backgroundLuminance;
+  final darker = foregroundLuminance > backgroundLuminance
+      ? backgroundLuminance
+      : foregroundLuminance;
+  return (lighter + 0.05) / (darker + 0.05);
 }

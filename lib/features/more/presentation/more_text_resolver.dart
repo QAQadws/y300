@@ -1,6 +1,7 @@
 import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/more/domain/models/about_app_info.dart';
@@ -10,26 +11,54 @@ import 'package:y300/l10n/app_localizations.dart';
 final class MoreTextResolver {
   const MoreTextResolver._();
 
-  static String themeLabel(
-    AppLocalizations l10n,
-    AppThemePreference preference,
-  ) {
-    return switch (preference) {
-      AppThemePreference.light => l10n.moreThemeLight,
-      AppThemePreference.dark => l10n.moreThemeDark,
-      AppThemePreference.system => l10n.moreThemeSystem,
+  static String themeFamilyLabel(AppLocalizations l10n, AppThemeFamily family) {
+    return switch (family) {
+      AppThemeFamily.warmPaper => l10n.moreThemeFamilyWarmPaper,
+      AppThemeFamily.moonWhite => l10n.moreThemeFamilyMoonWhite,
     };
   }
 
-  static String themeDescription(
+  static String themeFamilyDescription(
     AppLocalizations l10n,
-    AppThemePreference preference,
+    AppThemeFamily family,
+  ) {
+    return switch (family) {
+      AppThemeFamily.warmPaper => l10n.moreThemeFamilyWarmPaperDescription,
+      AppThemeFamily.moonWhite => l10n.moreThemeFamilyMoonWhiteDescription,
+    };
+  }
+
+  static String brightnessLabel(
+    AppLocalizations l10n,
+    AppBrightnessPreference preference,
   ) {
     return switch (preference) {
-      AppThemePreference.light => l10n.moreThemeDescriptionLight,
-      AppThemePreference.dark => l10n.moreThemeDescriptionDark,
-      AppThemePreference.system => l10n.moreThemeDescriptionSystem,
+      AppBrightnessPreference.light => l10n.moreThemeLight,
+      AppBrightnessPreference.dark => l10n.moreThemeDark,
+      AppBrightnessPreference.system => l10n.moreThemeSystem,
     };
+  }
+
+  static String brightnessDescription(
+    AppLocalizations l10n,
+    AppBrightnessPreference preference,
+  ) {
+    return switch (preference) {
+      AppBrightnessPreference.light => l10n.moreThemeDescriptionLight,
+      AppBrightnessPreference.dark => l10n.moreThemeDescriptionDark,
+      AppBrightnessPreference.system => l10n.moreThemeDescriptionSystem,
+    };
+  }
+
+  static String appearanceSummary(
+    AppLocalizations l10n,
+    AppThemeFamily family,
+    AppBrightnessPreference brightness,
+  ) {
+    return l10n.moreThemeSummary(
+      themeFamilyLabel(l10n, family),
+      brightnessLabel(l10n, brightness),
+    );
   }
 
   static String forumModeLabel(AppLocalizations l10n, ForumShellMode mode) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/app/theme/app_component_theme_builder.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_palette.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 
@@ -8,11 +9,21 @@ final class AppTheme {
   const AppTheme._();
 
   static ThemeData light() {
-    return _buildTheme(AppThemePalette.light());
+    return build(
+      family: AppThemeFamily.warmPaper,
+      brightness: Brightness.light,
+    );
   }
 
   static ThemeData dark() {
-    return _buildTheme(AppThemePalette.dark());
+    return build(family: AppThemeFamily.warmPaper, brightness: Brightness.dark);
+  }
+
+  static ThemeData build({
+    required AppThemeFamily family,
+    required Brightness brightness,
+  }) {
+    return _buildTheme(AppThemePalette.resolve(family, brightness));
   }
 
   static ThemeData _buildTheme(AppThemePalette palette) {

@@ -905,13 +905,25 @@
   "@moreCurrentTheme": {
     "placeholders": {"theme": {"type": "String"}}
   },
-  "moreThemeSectionTitle": "主题",
-  "moreThemeLight": "浅色",
-  "moreThemeDark": "深色",
+  "moreColorThemeSectionTitle": "配色主题",
+  "moreAppearanceModeSectionTitle": "外观模式",
+  "moreThemeFamilyWarmPaper": "暖纸",
+  "moreThemeFamilyMoonWhite": "月白",
+  "moreThemeFamilyWarmPaperDescription": "温暖柔和的米色与褐色配色",
+  "moreThemeFamilyMoonWhiteDescription": "清冷克制的月白与蓝灰配色",
+  "moreThemeSummary": "{family} · {mode}",
+  "@moreThemeSummary": {
+    "placeholders": {
+      "family": {"type": "String"},
+      "mode": {"type": "String"}
+    }
+  },
+  "moreThemeLight": "日间",
+  "moreThemeDark": "夜间",
   "moreThemeSystem": "跟随系统",
-  "moreThemeDescriptionLight": "保持浅色外观",
-  "moreThemeDescriptionDark": "使用深色外观",
-  "moreThemeDescriptionSystem": "跟随系统浅色或深色设置",
+  "moreThemeDescriptionLight": "始终使用日间外观",
+  "moreThemeDescriptionDark": "始终使用夜间外观",
+  "moreThemeDescriptionSystem": "根据系统设置切换日间或夜间外观",
   "moreThemeSaveFailed": "主题设置保存失败：{error}",
   "@moreThemeSaveFailed": {
     "description": "保存主题偏好失败提示；error 是安全的外部错误摘要",

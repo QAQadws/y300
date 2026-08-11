@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_tokens.dart';
 
 /// Concrete light/dark color palette used to build Material semantics.
@@ -8,6 +9,7 @@ import 'package:y300/app/theme/app_theme_tokens.dart';
 @immutable
 final class AppThemePalette {
   const AppThemePalette({
+    required this.family,
     required this.brightness,
     required this.seedColor,
     required this.scaffoldBackground,
@@ -27,8 +29,23 @@ final class AppThemePalette {
     required this.onSecondaryContainer,
   });
 
+  factory AppThemePalette.resolve(
+    AppThemeFamily family,
+    Brightness brightness,
+  ) {
+    return switch ((family, brightness)) {
+      (AppThemeFamily.warmPaper, Brightness.light) => AppThemePalette.light(),
+      (AppThemeFamily.warmPaper, Brightness.dark) => AppThemePalette.dark(),
+      (AppThemeFamily.moonWhite, Brightness.light) =>
+        AppThemePalette.moonWhiteLight(),
+      (AppThemeFamily.moonWhite, Brightness.dark) =>
+        AppThemePalette.moonWhiteDark(),
+    };
+  }
+
   factory AppThemePalette.light() {
     return const AppThemePalette(
+      family: AppThemeFamily.warmPaper,
       brightness: Brightness.light,
       seedColor: AppThemeTokens.seedColor,
       scaffoldBackground: AppThemeTokens.scaffoldBackground,
@@ -51,6 +68,7 @@ final class AppThemePalette {
 
   factory AppThemePalette.dark() {
     return const AppThemePalette(
+      family: AppThemeFamily.warmPaper,
       brightness: Brightness.dark,
       seedColor: AppThemeTokens.seedColor,
       scaffoldBackground: Color(0xFF17110F),
@@ -71,6 +89,53 @@ final class AppThemePalette {
     );
   }
 
+  factory AppThemePalette.moonWhiteLight() {
+    return const AppThemePalette(
+      family: AppThemeFamily.moonWhite,
+      brightness: Brightness.light,
+      seedColor: Color(0xFF4E6D93),
+      scaffoldBackground: Color(0xFFF3F6FA),
+      appBarBackground: Color(0xFF2E3F5A),
+      appBarForeground: Color(0xFFF8FAFD),
+      navigationBarBackground: Color(0xFFE4EAF2),
+      primary: Color(0xFF4E6D93),
+      onPrimary: Color(0xFFFFFFFF),
+      surface: Color(0xFFF3F6FA),
+      onSurface: Color(0xFF202934),
+      surfaceContainerLowest: Color(0xFFFCFDFE),
+      surfaceContainer: Color(0xFFF8FAFC),
+      surfaceContainerHighest: Color(0xFFE4EAF2),
+      onSurfaceVariant: Color(0xFF667487),
+      outlineVariant: Color(0xFFCAD4E0),
+      secondaryContainer: Color(0xFFDFE8F2),
+      onSecondaryContainer: Color(0xFF263C55),
+    );
+  }
+
+  factory AppThemePalette.moonWhiteDark() {
+    return const AppThemePalette(
+      family: AppThemeFamily.moonWhite,
+      brightness: Brightness.dark,
+      seedColor: Color(0xFFAFC8E6),
+      scaffoldBackground: Color(0xFF121820),
+      appBarBackground: Color(0xFF1B2A3D),
+      appBarForeground: Color(0xFFF2F6FB),
+      navigationBarBackground: Color(0xFF1D2B3A),
+      primary: Color(0xFFAFC8E6),
+      onPrimary: Color(0xFF18324D),
+      surface: Color(0xFF121820),
+      onSurface: Color(0xFFEAF0F7),
+      surfaceContainerLowest: Color(0xFF0D131A),
+      surfaceContainer: Color(0xFF19222D),
+      surfaceContainerHighest: Color(0xFF263444),
+      onSurfaceVariant: Color(0xFFB6C2D0),
+      outlineVariant: Color(0xFF3D4D60),
+      secondaryContainer: Color(0xFF293D53),
+      onSecondaryContainer: Color(0xFFDDEAF6),
+    );
+  }
+
+  final AppThemeFamily family;
   final Brightness brightness;
   final Color seedColor;
   final Color scaffoldBackground;

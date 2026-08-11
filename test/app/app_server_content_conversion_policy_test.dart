@@ -86,7 +86,7 @@ void main() {
             appAppearanceControllerProvider.overrideWith(
               () => _FixedAppAppearanceController(
                 const AppAppearanceSettings(
-                  themePreference: AppThemePreference.light,
+                  brightnessPreference: AppBrightnessPreference.light,
                   languagePreference: AppLanguage.system,
                 ),
               ),
@@ -136,7 +136,7 @@ ProviderContainer _containerFor(AppLanguage language) {
       appAppearanceControllerProvider.overrideWith(
         () => _FixedAppAppearanceController(
           AppAppearanceSettings(
-            themePreference: AppThemePreference.light,
+            brightnessPreference: AppBrightnessPreference.light,
             languagePreference: language,
           ),
         ),

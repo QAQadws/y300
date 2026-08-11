@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 
-enum AppThemePreference {
+enum AppBrightnessPreference {
   light,
   dark,
   system;
 
   ThemeMode get themeMode {
     return switch (this) {
-      AppThemePreference.light => ThemeMode.light,
-      AppThemePreference.dark => ThemeMode.dark,
-      AppThemePreference.system => ThemeMode.system,
+      AppBrightnessPreference.light => ThemeMode.light,
+      AppBrightnessPreference.dark => ThemeMode.dark,
+      AppBrightnessPreference.system => ThemeMode.system,
     };
   }
 }
@@ -18,28 +19,33 @@ enum AppLanguage { system, simplifiedChinese, traditionalChinese }
 
 class AppAppearanceSettings {
   const AppAppearanceSettings({
-    required this.themePreference,
+    this.themeFamily = AppThemeFamily.warmPaper,
+    this.brightnessPreference = AppBrightnessPreference.light,
     required this.languagePreference,
   });
 
   factory AppAppearanceSettings.defaults() {
     return const AppAppearanceSettings(
-      themePreference: AppThemePreference.light,
+      themeFamily: AppThemeFamily.warmPaper,
+      brightnessPreference: AppBrightnessPreference.light,
       languagePreference: AppLanguage.system,
     );
   }
 
-  final AppThemePreference themePreference;
+  final AppThemeFamily themeFamily;
+  final AppBrightnessPreference brightnessPreference;
   final AppLanguage languagePreference;
 
-  ThemeMode get themeMode => themePreference.themeMode;
+  ThemeMode get themeMode => brightnessPreference.themeMode;
 
   AppAppearanceSettings copyWith({
-    AppThemePreference? themePreference,
+    AppThemeFamily? themeFamily,
+    AppBrightnessPreference? brightnessPreference,
     AppLanguage? languagePreference,
   }) {
     return AppAppearanceSettings(
-      themePreference: themePreference ?? this.themePreference,
+      themeFamily: themeFamily ?? this.themeFamily,
+      brightnessPreference: brightnessPreference ?? this.brightnessPreference,
       languagePreference: languagePreference ?? this.languagePreference,
     );
   }

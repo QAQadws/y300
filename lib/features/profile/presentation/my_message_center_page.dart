@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/app/theme/app_theme_tokens.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -457,6 +457,7 @@ class _MessageCenterPalette {
     final isDark = scheme.brightness == Brightness.dark;
     final appBarBackground =
         theme.appBarTheme.backgroundColor ?? scheme.primary;
+    final native = theme.y300NativeContent;
     if (isDark) {
       return _MessageCenterPalette(
         background: theme.scaffoldBackgroundColor,
@@ -473,16 +474,16 @@ class _MessageCenterPalette {
       );
     }
     return _MessageCenterPalette(
-      background: AppThemeTokens.scaffoldBackground,
-      header: AppThemeTokens.forumWebviewSectionBackground,
-      card: AppThemeTokens.forumWebviewSectionBackground,
-      title: AppThemeTokens.appBarBackground,
-      body: const Color(0xFF4F3A2A),
-      muted: const Color(0xFF9A8E82),
+      background: native.background,
+      header: native.card,
+      card: native.card,
+      title: native.title,
+      body: native.body,
+      muted: native.tertiaryText,
       accent: appBarBackground,
       iconBackground: appBarBackground.withValues(alpha: 0.10),
-      badgeBackground: const Color(0xFFF7DDC2),
-      badgeForeground: AppThemeTokens.appBarBackground,
+      badgeBackground: native.notificationBadgeBackground,
+      badgeForeground: native.avatarForeground,
       shadow: appBarBackground.withValues(alpha: 0.07),
     );
   }

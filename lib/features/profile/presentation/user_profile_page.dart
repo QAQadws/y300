@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/app/theme/app_theme_tokens.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -803,6 +803,7 @@ class _UserProfilePalette {
         theme.appBarTheme.backgroundColor ?? scheme.primary;
     final appBarForeground =
         theme.appBarTheme.foregroundColor ?? scheme.onPrimary;
+    final native = theme.y300NativeContent;
     if (isDark) {
       return _UserProfilePalette(
         background: theme.scaffoldBackgroundColor,
@@ -819,16 +820,16 @@ class _UserProfilePalette {
       );
     }
     return _UserProfilePalette(
-      background: AppThemeTokens.scaffoldBackground,
-      card: AppThemeTokens.forumWebviewSectionBackground,
-      actionBackground: Colors.white.withValues(alpha: 0.68),
-      heroFallback: AppThemeTokens.appBarBackground,
+      background: native.background,
+      card: native.card,
+      actionBackground: native.translucentSurface,
+      heroFallback: native.accent,
       accent: appBarBackground,
       onAccent: appBarForeground,
-      title: AppThemeTokens.appBarBackground,
-      body: const Color(0xFF4F3A2A),
-      muted: const Color(0xFF9A8E82),
-      border: AppThemeTokens.appBarBackground.withValues(alpha: 0.10),
+      title: native.title,
+      body: native.body,
+      muted: native.tertiaryText,
+      border: native.accent.withValues(alpha: 0.10),
       actionIconBackground: appBarBackground,
     );
   }

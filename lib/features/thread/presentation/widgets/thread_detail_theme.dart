@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:y300/app/theme/app_theme_tokens.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 
 @immutable
 class ThreadDetailNativePalette {
@@ -52,40 +52,33 @@ class ThreadDetailNativePalette {
         theme.appBarTheme.backgroundColor ?? scheme.primary;
     final appBarForeground =
         theme.appBarTheme.foregroundColor ?? scheme.onPrimary;
+    final native = theme.y300NativeContent;
 
     if (!isDark) {
       final listTagChipBackground =
-          (Color.lerp(
-                    AppThemeTokens.navigationBarBackground,
-                    AppThemeTokens.forumWebviewSectionBackground,
-                    0.58,
-                  ) ??
-                  AppThemeTokens.navigationBarBackground)
+          (Color.lerp(scheme.secondaryContainer, native.card, 0.58) ??
+                  scheme.secondaryContainer)
               .withValues(alpha: 0.42);
       return ThreadDetailNativePalette(
-        background: AppThemeTokens.scaffoldBackground,
-        card: AppThemeTokens.forumWebviewSectionBackground,
-        cardElevated: AppThemeTokens.forumWebviewSectionBackground,
-        metricBackground: AppThemeTokens.navigationBarBackground.withValues(
-          alpha: 0.58,
-        ),
+        background: native.background,
+        card: native.card,
+        cardElevated: native.elevatedCard,
+        metricBackground: native.metricBackground,
         chipBackground: listTagChipBackground,
-        panelBackground: AppThemeTokens.navigationBarBackground.withValues(
-          alpha: 0.18,
-        ),
+        panelBackground: native.panelBackground,
         accent: appBarBackground,
         onAccent: appBarForeground,
-        title: AppThemeTokens.appBarBackground,
-        author: const Color(0xFF8A5A2B),
-        bodyText: const Color(0xFF4F3A2A),
-        muted: const Color(0xFF7D6750),
-        softText: const Color(0xFF8F7A62),
+        title: native.title,
+        author: native.author,
+        bodyText: native.body,
+        muted: native.muted,
+        softText: native.soft,
         border: scheme.outlineVariant.withValues(alpha: 0.28),
         outlineSoft: scheme.outlineVariant.withValues(alpha: 0.22),
-        stateLayer: AppThemeTokens.appBarBackground.withValues(alpha: 0.07),
-        avatarBackground: AppThemeTokens.navigationBarBackground,
-        avatarForeground: AppThemeTokens.appBarBackground,
-        pollTrack: AppThemeTokens.scaffoldBackground.withValues(alpha: 0.86),
+        stateLayer: native.stateLayer,
+        avatarBackground: native.avatarBackground,
+        avatarForeground: native.avatarForeground,
+        pollTrack: native.background.withValues(alpha: 0.86),
       );
     }
 

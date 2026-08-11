@@ -2181,25 +2181,45 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get moreThemeSectionTitle => '主题';
+  String get moreColorThemeSectionTitle => '配色主题';
 
   @override
-  String get moreThemeLight => '浅色';
+  String get moreAppearanceModeSectionTitle => '外观模式';
 
   @override
-  String get moreThemeDark => '深色';
+  String get moreThemeFamilyWarmPaper => '暖纸';
+
+  @override
+  String get moreThemeFamilyMoonWhite => '月白';
+
+  @override
+  String get moreThemeFamilyWarmPaperDescription => '温暖柔和的米色与褐色配色';
+
+  @override
+  String get moreThemeFamilyMoonWhiteDescription => '清冷克制的月白与蓝灰配色';
+
+  @override
+  String moreThemeSummary(String family, String mode) {
+    return '$family · $mode';
+  }
+
+  @override
+  String get moreThemeLight => '日间';
+
+  @override
+  String get moreThemeDark => '夜间';
 
   @override
   String get moreThemeSystem => '跟随系统';
 
   @override
-  String get moreThemeDescriptionLight => '保持浅色外观';
+  String get moreThemeDescriptionLight => '始终使用日间外观';
 
   @override
-  String get moreThemeDescriptionDark => '使用深色外观';
+  String get moreThemeDescriptionDark => '始终使用夜间外观';
 
   @override
-  String get moreThemeDescriptionSystem => '跟随系统浅色或深色设置';
+  String get moreThemeDescriptionSystem => '根据系统设置切换日间或夜间外观';
 
   @override
   String moreThemeSaveFailed(String error) {
@@ -6427,25 +6447,45 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get moreThemeSectionTitle => '主題';
+  String get moreColorThemeSectionTitle => '配色主題';
 
   @override
-  String get moreThemeLight => '淺色';
+  String get moreAppearanceModeSectionTitle => '外觀模式';
 
   @override
-  String get moreThemeDark => '深色';
+  String get moreThemeFamilyWarmPaper => '暖紙';
+
+  @override
+  String get moreThemeFamilyMoonWhite => '月白';
+
+  @override
+  String get moreThemeFamilyWarmPaperDescription => '溫暖柔和的米色與褐色配色';
+
+  @override
+  String get moreThemeFamilyMoonWhiteDescription => '清冷克制的月白與藍灰配色';
+
+  @override
+  String moreThemeSummary(String family, String mode) {
+    return '$family · $mode';
+  }
+
+  @override
+  String get moreThemeLight => '日間';
+
+  @override
+  String get moreThemeDark => '夜間';
 
   @override
   String get moreThemeSystem => '跟隨系統';
 
   @override
-  String get moreThemeDescriptionLight => '保持淺色外觀';
+  String get moreThemeDescriptionLight => '始終使用日間外觀';
 
   @override
-  String get moreThemeDescriptionDark => '使用深色外觀';
+  String get moreThemeDescriptionDark => '始終使用夜間外觀';
 
   @override
-  String get moreThemeDescriptionSystem => '跟隨系統淺色或深色設定';
+  String get moreThemeDescriptionSystem => '根據系統設定切換日間或夜間外觀';
 
   @override
   String moreThemeSaveFailed(String error) {

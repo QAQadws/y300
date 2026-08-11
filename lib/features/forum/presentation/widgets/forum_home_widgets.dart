@@ -4,7 +4,7 @@ import 'package:animated_flip_counter/animated_flip_counter.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/app/theme/app_theme_tokens.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
@@ -616,6 +616,7 @@ class ForumHomeNativePalette {
 
   static ForumHomeNativePalette resolve(ThemeData theme) {
     final scheme = theme.colorScheme;
+    final native = theme.y300NativeContent;
     if (scheme.brightness == Brightness.dark) {
       return ForumHomeNativePalette(
         background: theme.scaffoldBackgroundColor,
@@ -630,19 +631,14 @@ class ForumHomeNativePalette {
       );
     }
     return ForumHomeNativePalette(
-      background: AppThemeTokens.scaffoldBackground,
+      background: native.background,
       carouselPlaceholder:
-          Color.lerp(
-            AppThemeTokens.appBarBackground,
-            AppThemeTokens.scaffoldBackground,
-            0.8,
-          ) ??
-          AppThemeTokens.forumWebviewSectionBackground,
-      sectionHeaderBackground: AppThemeTokens.appBarBackground,
-      sectionHeaderForeground: AppThemeTokens.appBarForeground,
-      sectionBodyBackground: AppThemeTokens.forumWebviewSectionBackground,
-      forumTitle: AppThemeTokens.appBarBackground,
-      descriptionText: const Color(0xFF8F949A),
+          Color.lerp(native.accent, native.background, 0.8) ?? native.card,
+      sectionHeaderBackground: native.accent,
+      sectionHeaderForeground: native.onAccent,
+      sectionBodyBackground: native.card,
+      forumTitle: native.title,
+      descriptionText: native.neutralText,
       todayText: Colors.redAccent.shade200,
       rowDivider: scheme.outlineVariant.withValues(alpha: 0.58),
     );
