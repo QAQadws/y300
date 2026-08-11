@@ -748,6 +748,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     unawaited(
       showModalBottomSheet<void>(
         context: context,
+        showDragHandle: false,
         builder: (context) => const ForumHtmlReaderSettingsSheet(
           key: Key('thread-detail-display-settings-sheet'),
           showAuthorStyleControls: false,

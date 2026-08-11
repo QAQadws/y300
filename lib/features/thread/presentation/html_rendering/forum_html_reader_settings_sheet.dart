@@ -31,28 +31,17 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 32,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
             if (showConversionControls) ...[
               _ConversionModeSegmentedControl(
                 mode: preferences.conversionMode,
                 onChanged: controller.setConversionMode,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 20),
             ],
             _TypographySlider(
               key: const Key('forum-html-reader-font-scale-slider'),
@@ -64,6 +53,7 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
               display: '${(typography.fontScale * 100).round()}%',
               onChanged: controller.setFontScale,
             ),
+            const SizedBox(height: 16),
             _TypographySlider(
               key: const Key('forum-html-reader-line-height-slider'),
               label: l10n.threadHtmlLineSpacing,
@@ -75,7 +65,7 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
               onChanged: controller.setLineHeightScale,
             ),
             if (showAuthorStyleControls) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               SwitchListTile(
                 key: const Key('forum-html-reader-preserve-font-size-switch'),
                 contentPadding: EdgeInsets.zero,
@@ -172,30 +162,34 @@ class _TypographySlider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        SizedBox(
-          width: 32,
-          child: Text(label, style: theme.textTheme.labelMedium),
-        ),
-        Expanded(
-          child: Slider(
+    return Semantics(
+      container: true,
+      label: '$label $display',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(label, style: theme.textTheme.labelLarge)),
+              Text(
+                display,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.end,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Slider(
             value: value.clamp(min, max),
             min: min,
             max: max,
             divisions: divisions,
             onChanged: onChanged,
           ),
-        ),
-        SizedBox(
-          width: 48,
-          child: Text(
-            display,
-            style: theme.textTheme.labelSmall,
-            textAlign: TextAlign.end,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

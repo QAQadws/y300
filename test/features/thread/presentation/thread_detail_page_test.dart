@@ -4067,6 +4067,8 @@ void main() {
         find.byKey(const Key('thread-detail-display-settings-sheet')),
         findsOneWidget,
       );
+      final bottomSheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
+      expect(bottomSheet.showDragHandle, isFalse);
       expect(
         find.byKey(const Key('forum-html-reader-conversion-mode-control')),
         findsNothing,
@@ -4092,6 +4094,22 @@ void main() {
       expect(
         find.byKey(const Key('forum-html-reader-line-height-slider')),
         findsOneWidget,
+      );
+      final fontScaleSlider = find.descendant(
+        of: find.byKey(const Key('forum-html-reader-font-scale-slider')),
+        matching: find.byType(Slider),
+      );
+      final lineHeightSlider = find.descendant(
+        of: find.byKey(const Key('forum-html-reader-line-height-slider')),
+        matching: find.byType(Slider),
+      );
+      expect(fontScaleSlider, findsOneWidget);
+      expect(lineHeightSlider, findsOneWidget);
+      expect(tester.getSize(fontScaleSlider).height, greaterThanOrEqualTo(48));
+      expect(
+        tester.getCenter(lineHeightSlider).dy -
+            tester.getCenter(fontScaleSlider).dy,
+        greaterThanOrEqualTo(72),
       );
       expect(
         find.byKey(const Key('forum-html-reader-paragraph-spacing-slider')),
