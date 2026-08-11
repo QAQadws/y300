@@ -421,8 +421,10 @@
   "moreAppearanceModeSectionTitle": "外觀模式",
   "moreThemeFamilyWarmPaper": "暖紙",
   "moreThemeFamilyMoonWhite": "月白",
+  "moreThemeFamilyPlumPurple": "梅紫",
   "moreThemeFamilyWarmPaperDescription": "溫暖柔和的米色與褐色配色",
   "moreThemeFamilyMoonWhiteDescription": "清冷克制的月白與藍灰配色",
+  "moreThemeFamilyPlumPurpleDescription": "溫潤沉靜的煙粉與梅紫配色",
   "moreThemeSummary": "{family} · {mode}",
   "@moreThemeSummary": {
     "placeholders": {

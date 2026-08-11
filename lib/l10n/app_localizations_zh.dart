@@ -2193,10 +2193,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreThemeFamilyMoonWhite => '月白';
 
   @override
+  String get moreThemeFamilyPlumPurple => '梅紫';
+
+  @override
   String get moreThemeFamilyWarmPaperDescription => '温暖柔和的米色与褐色配色';
 
   @override
   String get moreThemeFamilyMoonWhiteDescription => '清冷克制的月白与蓝灰配色';
+
+  @override
+  String get moreThemeFamilyPlumPurpleDescription => '温润沉静的烟粉与梅紫配色';
 
   @override
   String moreThemeSummary(String family, String mode) {
@@ -6459,10 +6465,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get moreThemeFamilyMoonWhite => '月白';
 
   @override
+  String get moreThemeFamilyPlumPurple => '梅紫';
+
+  @override
   String get moreThemeFamilyWarmPaperDescription => '溫暖柔和的米色與褐色配色';
 
   @override
   String get moreThemeFamilyMoonWhiteDescription => '清冷克制的月白與藍灰配色';
+
+  @override
+  String get moreThemeFamilyPlumPurpleDescription => '溫潤沉靜的煙粉與梅紫配色';
 
   @override
   String moreThemeSummary(String family, String mode) {

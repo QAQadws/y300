@@ -18,6 +18,14 @@ void main() {
       '月白',
     );
     expect(
+      MoreTextResolver.themeFamilyLabel(l10n, AppThemeFamily.plumPurple),
+      '梅紫',
+    );
+    expect(
+      MoreTextResolver.themeFamilyDescription(l10n, AppThemeFamily.plumPurple),
+      '温润沉静的烟粉与梅紫配色',
+    );
+    expect(
       MoreTextResolver.brightnessLabel(l10n, AppBrightnessPreference.light),
       '日间',
     );

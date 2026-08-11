@@ -471,6 +471,10 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(const Key('appearance-theme-family-plumPurple')),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const Key('appearance-brightness-option-system')),
       findsOneWidget,
     );
@@ -501,7 +505,7 @@ void main() {
     }
 
     await tester.tap(
-      find.byKey(const Key('appearance-theme-family-moonWhite')),
+      find.byKey(const Key('appearance-theme-family-plumPurple')),
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -509,7 +513,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(appearanceController.themeFamily, AppThemeFamily.moonWhite);
+    expect(appearanceController.themeFamily, AppThemeFamily.plumPurple);
     expect(
       appearanceController.brightnessPreference,
       AppBrightnessPreference.dark,
@@ -524,7 +528,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('appearance-settings-sheet')), findsNothing);
-    expect(find.text('当前：月白 · 夜间'), findsOneWidget);
+    expect(find.text('当前：梅紫 · 夜间'), findsOneWidget);
   });
 
   testWidgets('Appearance theme swatches follow the active brightness', (
@@ -631,10 +635,7 @@ void main() {
       final languageScrollable = tester.state<ScrollableState>(
         find.descendant(of: languageStrip, matching: find.byType(Scrollable)),
       );
-      expect(
-        familyScrollable.position.maxScrollExtent,
-        greaterThanOrEqualTo(0),
-      );
+      expect(familyScrollable.position.maxScrollExtent, greaterThan(0));
       expect(brightnessScrollable.position.maxScrollExtent, greaterThan(0));
       expect(languageScrollable.position.maxScrollExtent, greaterThan(0));
 

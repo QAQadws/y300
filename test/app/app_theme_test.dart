@@ -154,6 +154,52 @@ void main() {
     }
   });
 
+  test('plum purple palettes expose the documented light and dark colors', () {
+    final light = AppThemePalette.resolve(
+      AppThemeFamily.plumPurple,
+      Brightness.light,
+    );
+    final dark = AppThemePalette.resolve(
+      AppThemeFamily.plumPurple,
+      Brightness.dark,
+    );
+
+    expect(light.scaffoldBackground, const Color(0xFFF8F1F4));
+    expect(light.surfaceContainer, const Color(0xFFFFF8FA));
+    expect(light.appBarBackground, const Color(0xFF67404F));
+    expect(light.primary, const Color(0xFF8B5D70));
+    expect(light.onSurface, const Color(0xFF34252B));
+    expect(dark.scaffoldBackground, const Color(0xFF1A1216));
+    expect(dark.surfaceContainer, const Color(0xFF261A20));
+    expect(dark.appBarBackground, const Color(0xFF3A2430));
+    expect(dark.primary, const Color(0xFFD9AFC0));
+    expect(dark.onSurface, const Color(0xFFF4E8ED));
+  });
+
+  test('plum purple themes retain readable primary surface contrast', () {
+    for (final brightness in Brightness.values) {
+      final theme = AppTheme.build(
+        family: AppThemeFamily.plumPurple,
+        brightness: brightness,
+      );
+      expect(
+        _contrastRatio(theme.colorScheme.onSurface, theme.colorScheme.surface),
+        greaterThanOrEqualTo(4.5),
+      );
+      expect(
+        _contrastRatio(
+          theme.appBarTheme.foregroundColor!,
+          theme.appBarTheme.backgroundColor!,
+        ),
+        greaterThanOrEqualTo(4.5),
+      );
+      expect(
+        _contrastRatio(theme.colorScheme.onPrimary, theme.colorScheme.primary),
+        greaterThanOrEqualTo(4.5),
+      );
+    }
+  });
+
   test(
     'native forum and thread palettes follow moon white semantic colors',
     () {
@@ -328,7 +374,7 @@ void main() {
           appAppearanceSettingsRepositoryProvider.overrideWithValue(
             _FakeAppAppearanceSettingsRepository(
               settings: const AppAppearanceSettings(
-                themeFamily: AppThemeFamily.moonWhite,
+                themeFamily: AppThemeFamily.plumPurple,
                 brightnessPreference: AppBrightnessPreference.system,
                 languagePreference: AppLanguage.system,
               ),
@@ -347,15 +393,15 @@ void main() {
     expect(materialApp.themeMode, ThemeMode.system);
     expect(
       materialApp.theme!.appBarTheme.backgroundColor,
-      const Color(0xFF2E3F5A),
+      const Color(0xFF67404F),
     );
     expect(
       materialApp.darkTheme!.appBarTheme.backgroundColor,
-      const Color(0xFF1B2A3D),
+      const Color(0xFF3A2430),
     );
     expect(
       materialApp.theme!.extension<Y300ThemeExtension>()!.nativeContent.card,
-      const Color(0xFFF8FAFC),
+      const Color(0xFFFFF8FA),
     );
   });
 

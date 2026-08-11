@@ -3546,6 +3546,12 @@ abstract class AppLocalizations {
   /// **'月白'**
   String get moreThemeFamilyMoonWhite;
 
+  /// No description provided for @moreThemeFamilyPlumPurple.
+  ///
+  /// In zh, this message translates to:
+  /// **'梅紫'**
+  String get moreThemeFamilyPlumPurple;
+
   /// No description provided for @moreThemeFamilyWarmPaperDescription.
   ///
   /// In zh, this message translates to:
@@ -3557,6 +3563,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'清冷克制的月白与蓝灰配色'**
   String get moreThemeFamilyMoonWhiteDescription;
+
+  /// No description provided for @moreThemeFamilyPlumPurpleDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'温润沉静的烟粉与梅紫配色'**
+  String get moreThemeFamilyPlumPurpleDescription;
 
   /// No description provided for @moreThemeSummary.
   ///

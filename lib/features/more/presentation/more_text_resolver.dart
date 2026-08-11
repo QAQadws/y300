@@ -15,6 +15,7 @@ final class MoreTextResolver {
     return switch (family) {
       AppThemeFamily.warmPaper => l10n.moreThemeFamilyWarmPaper,
       AppThemeFamily.moonWhite => l10n.moreThemeFamilyMoonWhite,
+      AppThemeFamily.plumPurple => l10n.moreThemeFamilyPlumPurple,
     };
   }
 
@@ -25,6 +26,7 @@ final class MoreTextResolver {
     return switch (family) {
       AppThemeFamily.warmPaper => l10n.moreThemeFamilyWarmPaperDescription,
       AppThemeFamily.moonWhite => l10n.moreThemeFamilyMoonWhiteDescription,
+      AppThemeFamily.plumPurple => l10n.moreThemeFamilyPlumPurpleDescription,
     };
   }
 
