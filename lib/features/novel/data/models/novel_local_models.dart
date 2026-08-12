@@ -15,6 +15,8 @@ class NovelWorkRecord {
     this.customCoverLocalPath,
     this.customCoverFocusX,
     this.customCoverFocusY,
+    this.coverRevision = 0,
+    this.customCoverRevision = 0,
     required this.updatedAt,
   });
 
@@ -32,6 +34,8 @@ class NovelWorkRecord {
   final String? customCoverLocalPath;
   final double? customCoverFocusX;
   final double? customCoverFocusY;
+  final int coverRevision;
+  final int customCoverRevision;
   final int updatedAt;
 }
 

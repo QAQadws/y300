@@ -4,6 +4,8 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_grid_geometry.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
+import 'package:y300/shared/widgets/library_cover_placeholder.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 
 typedef ShelfCoverLayerBuilder =
     Widget Function(BuildContext context, ShelfCoverLayerConfig config);
@@ -47,11 +49,10 @@ class ShelfCoverCard extends StatelessWidget {
     this.onLongPress,
     this.topLeftBadge,
     this.showTwoLineCustomEllipsis = false,
-    this.placeholderIcon = Icons.image_not_supported_outlined,
-    this.fallbackBackground,
     this.imageHeaderBuilder,
     this.coverLayerBuilder,
     this.selected = false,
+    this.coverAsset,
   });
 
   final String? coverKey;
@@ -67,11 +68,10 @@ class ShelfCoverCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final Widget? topLeftBadge;
   final bool showTwoLineCustomEllipsis;
-  final IconData placeholderIcon;
-  final Decoration? fallbackBackground;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ShelfCoverLayerBuilder? coverLayerBuilder;
   final bool selected;
+  final LibraryCoverAssetRef? coverAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -148,12 +148,16 @@ class ShelfCoverCard extends StatelessWidget {
       imageHeaderBuilder: imageHeaderBuilder,
       fit: BoxFit.cover,
       alignment: alignment,
+      coverAsset: coverAsset,
       placeholder: placeholder,
     );
   }
 
   /// 当前是否在展示自定义封面（自定义本地图存在时优先于来源封面）。
   bool get _isShowingCustomCover {
+    if (coverAsset?.kind == LibraryCoverAssetKind.custom) {
+      return true;
+    }
     final custom = customCoverLocalPath?.trim();
     return custom != null && custom.isNotEmpty;
   }
@@ -171,12 +175,9 @@ class ShelfCoverCard extends StatelessWidget {
     final palette = const ShelfThemePaletteResolver().resolve(
       Theme.of(context),
     );
-    return Container(
-      decoration: fallbackBackground,
-      color: fallbackBackground == null
-          ? palette.coverPlaceholderBackground
-          : null,
-      child: Icon(placeholderIcon),
+    return LibraryCoverPlaceholder(
+      key: const Key('shelf-cover-placeholder'),
+      color: palette.coverPlaceholderBackground,
     );
   }
 

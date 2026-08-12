@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/painting.dart' show ImageCache;
+import 'package:y300/core/media/device_memory_profile.dart';
 
 /// 配置运行时解码图片缓存（`PaintingBinding.instance.imageCache`）的字节预算。
 ///
@@ -30,17 +31,32 @@ abstract class GlobalImageCacheTuner {
 /// bitmap 常驻而不被驱逐。配合 [ImageDownscalePolicy] 降采样后，单张 bitmap 很小，
 /// 该预算可容纳相当多的图片。
 class PlatformImageCacheTuner implements GlobalImageCacheTuner {
-  const PlatformImageCacheTuner();
+  const PlatformImageCacheTuner({this.deviceProfile});
+
+  final DeviceMemoryProfile? deviceProfile;
 
   static const int _mb = 1024 * 1024;
 
   @override
   int recommendedBudgetBytes() {
-    // 桌面端（开发/平板形态）内存充裕，给高档；移动端给中档。
+    final profile = deviceProfile;
+    final memoryClassMb = profile?.memoryClassMb;
+    if (profile != null && memoryClassMb != null && memoryClassMb > 0) {
+      if (profile.isLowRamDevice) {
+        return (memoryClassMb * _mb * 0.08)
+            .round()
+            .clamp(16 * _mb, 48 * _mb)
+            .toInt();
+      }
+      return (memoryClassMb * _mb * 0.15)
+          .round()
+          .clamp(48 * _mb, 192 * _mb)
+          .toInt();
+    }
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       return 256 * _mb;
     }
-    return 192 * _mb;
+    return 96 * _mb;
   }
 
   @override

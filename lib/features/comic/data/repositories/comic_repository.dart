@@ -292,6 +292,15 @@ abstract class ComicCoverCacheWriter {
   });
 }
 
+abstract interface class ComicCustomCoverAssetWriter {
+  Future<void> activateCustomCoverAsset({
+    required String comicId,
+    required int revision,
+    double? focusX,
+    double? focusY,
+  });
+}
+
 abstract class ComicFirstEpisodeCoverWriter {
   Future<bool> promoteFirstEpisodeCover({
     required String comicId,
@@ -387,4 +396,8 @@ abstract class ComicDuplicateMergeRepository {
   Future<ComicDuplicateMergeResult> mergeDuplicateGroup({
     required Set<String> comicIds,
   });
+}
+
+abstract interface class ComicCoverMergeRecovery {
+  Future<void> recoverPendingCoverMerges();
 }

@@ -1,8 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
@@ -12,19 +9,9 @@ import 'package:y300/features/library_shared/domain/contracts/shelf_selection_ac
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
-import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
-import 'package:y300/features/library_shared/domain/services/library_cover_image_adapter.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
-import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
-import 'package:y300/features/novel/data/repositories/novel_repository.dart';
-import 'package:y300/features/thread/domain/thread_content_classifier.dart';
-
-typedef _FavoriteCoverWriteBack =
-    Future<void> Function(String sourceUrl, String localPath);
-typedef ComicCoverCacheWriterResolver = ComicCoverCacheWriter? Function();
-typedef NovelCoverCacheWriterResolver = NovelCoverCacheWriter? Function();
 typedef ShelfCategoryAssignUseCaseResolver =
     ShelfCategoryAssignUseCase? Function();
 typedef UnfavoriteThreadUseCaseResolver = UnfavoriteThreadUseCase? Function();
@@ -34,17 +21,10 @@ class FavoriteShelfAdapter
         ShelfModuleAdapter,
         ShelfDownloadStatusAdapter,
         ShelfSnapshotAdapter,
-        ShelfCoverWarmupAdapter,
         ShelfSelectionActionAdapter {
   FavoriteShelfAdapter(
     this._repository, {
     required FavoriteSyncService syncService,
-    ImageCacheService? imageCacheService,
-    ImageCacheServiceResolver? imageCacheServiceResolver,
-    ComicCoverCacheWriter? comicCoverCacheWriter,
-    ComicCoverCacheWriterResolver? comicCoverCacheWriterResolver,
-    NovelCoverCacheWriter? novelCoverCacheWriter,
-    NovelCoverCacheWriterResolver? novelCoverCacheWriterResolver,
     LibraryTaskProgressHub? taskProgressHub,
     LibraryShelfRefreshBus? shelfRefreshBus,
     ShelfCategoryAssignUseCase? categoryAssignUseCase,
@@ -53,13 +33,6 @@ class FavoriteShelfAdapter
     UnfavoriteThreadUseCaseResolver? unfavoriteThreadUseCaseResolver,
   }) : _syncService = syncService,
        _shelfRefreshBus = shelfRefreshBus,
-       _coverCacheService = imageCacheServiceResolver == null
-           ? LibraryCoverCacheService(imageCacheService)
-           : LibraryCoverCacheService.lazy(imageCacheServiceResolver),
-       _comicCoverCacheWriterResolver =
-           comicCoverCacheWriterResolver ?? (() => comicCoverCacheWriter),
-       _novelCoverCacheWriterResolver =
-           novelCoverCacheWriterResolver ?? (() => novelCoverCacheWriter),
        _categoryAssignUseCaseResolver =
            categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
        _unfavoriteThreadUseCaseResolver =
@@ -75,16 +48,11 @@ class FavoriteShelfAdapter
   final LocalFavoriteRepository _repository;
   final FavoriteSyncService _syncService;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
-  final LibraryCoverCacheService _coverCacheService;
-  final ComicCoverCacheWriterResolver _comicCoverCacheWriterResolver;
-  final NovelCoverCacheWriterResolver _novelCoverCacheWriterResolver;
   final ShelfCategoryAssignUseCaseResolver _categoryAssignUseCaseResolver;
   final UnfavoriteThreadUseCaseResolver _unfavoriteThreadUseCaseResolver;
   final bool _supportsCategoryAssign;
   final bool _supportsUnfavorite;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgress;
-  final LibraryCoverImageAdapter _coverImageAdapter =
-      const LibraryCoverImageAdapter();
 
   @override
   ValueListenable<LibraryShelfTaskProgress?>? get taskProgress => _taskProgress;
@@ -378,160 +346,4 @@ class FavoriteShelfAdapter
     );
   }
 
-  @override
-  Future<List<ShelfCoverWarmupRequest>> buildCoverWarmupRequests({
-    required Map<String, List<LibraryWorkItem>> itemsByCategory,
-    String? selectedCategoryId,
-  }) async {
-    final requests = <ShelfCoverWarmupRequest>[];
-    final items = orderedShelfItemsForCoverWarmup(
-      itemsByCategory: itemsByCategory,
-      selectedCategoryId: selectedCategoryId,
-    );
-    for (final item in items) {
-      final target = await _repository.getRouteTargetByShelfWorkId(item.workId);
-      final moduleWorkId = target?.workId?.trim();
-      if (target == null || moduleWorkId == null || moduleWorkId.isEmpty) {
-        continue;
-      }
-      final useCustomCover =
-          item.customCoverImageUrl?.trim().isNotEmpty ?? false;
-      final cacheTarget = _resolveCacheTarget(
-        target.contentKind,
-        moduleWorkId,
-        useCustomCover: useCustomCover,
-      );
-      if (cacheTarget == null) {
-        continue;
-      }
-      final specRequest = _coverImageAdapter.buildCoverSpec(
-        moduleKey: LibraryModuleKey.favorite,
-        item: item,
-        ownerType: cacheTarget.ownerType,
-        ownerId: moduleWorkId,
-      );
-      if (specRequest == null) {
-        continue;
-      }
-      requests.add(
-        ShelfCoverWarmupRequest(
-          moduleKey: LibraryModuleKey.favorite,
-          workId: item.workId,
-          cacheKey: specRequest.imageSpec.cacheKey!,
-          sourceUrl: specRequest.imageSpec.sourceUrl,
-          ownerType: cacheTarget.ownerType,
-          ownerId: moduleWorkId,
-          role: cacheTarget.role,
-          useCustomCover: specRequest.useCustomCover,
-          imageSpec: specRequest.imageSpec,
-        ),
-      );
-    }
-    return requests;
-  }
-
-  @override
-  Future<ShelfCoverWarmupResult?> warmCover(
-    ShelfCoverWarmupRequest request,
-  ) async {
-    final cached = await _coverCacheService.ensureProtectedCover(
-      cacheKey: request.cacheKey,
-      sourceUrl: request.sourceUrl,
-      ownerType: request.ownerType,
-      ownerId: request.ownerId,
-      role: request.role,
-    );
-    final localPath = cached?.localPath?.trim();
-    if (localPath == null || localPath.isEmpty) {
-      return null;
-    }
-    return applyWarmedCover(request: request, localPath: localPath);
-  }
-
-  @override
-  Future<ShelfCoverWarmupResult?> applyWarmedCover({
-    required ShelfCoverWarmupRequest request,
-    required String localPath,
-  }) async {
-    final cacheTarget = _resolveCacheTarget(
-      _kindFromOwnerType(request.ownerType),
-      request.ownerId,
-      useCustomCover: request.useCustomCover,
-    );
-    if (cacheTarget == null) {
-      return null;
-    }
-    await cacheTarget.writeBack(request.sourceUrl, localPath);
-    return ShelfCoverWarmupResult(
-      workId: request.workId,
-      coverLocalPath: request.useCustomCover ? null : localPath,
-      customCoverLocalPath: request.useCustomCover ? localPath : null,
-    );
-  }
-
-  ThreadContentKind _kindFromOwnerType(ImageCacheOwnerType ownerType) {
-    return switch (ownerType) {
-      ImageCacheOwnerType.comic => ThreadContentKind.comic,
-      ImageCacheOwnerType.novel => ThreadContentKind.novel,
-      _ => ThreadContentKind.forum,
-    };
-  }
-
-  _FavoriteCoverCacheTarget? _resolveCacheTarget(
-    ThreadContentKind kind,
-    String workId, {
-    required bool useCustomCover,
-  }) {
-    switch (kind) {
-      case ThreadContentKind.comic:
-        final writer = _comicCoverCacheWriterResolver();
-        if (writer == null) {
-          return null;
-        }
-        return _FavoriteCoverCacheTarget(
-          ownerType: ImageCacheOwnerType.comic,
-          role: useCustomCover
-              ? ImageCacheRole.customCover
-              : ImageCacheRole.cover,
-          writeBack: (sourceUrl, localPath) => writer.updateCoverCache(
-            comicId: workId,
-            coverImageUrl: useCustomCover ? null : sourceUrl,
-            coverLocalPath: useCustomCover ? null : localPath,
-            customCoverLocalPath: useCustomCover ? localPath : null,
-          ),
-        );
-      case ThreadContentKind.novel:
-        final writer = _novelCoverCacheWriterResolver();
-        if (writer == null) {
-          return null;
-        }
-        return _FavoriteCoverCacheTarget(
-          ownerType: ImageCacheOwnerType.novel,
-          role: useCustomCover
-              ? ImageCacheRole.customCover
-              : ImageCacheRole.cover,
-          writeBack: (sourceUrl, localPath) => writer.updateCoverCache(
-            novelId: workId,
-            coverImageUrl: useCustomCover ? null : sourceUrl,
-            coverLocalPath: useCustomCover ? null : localPath,
-            customCoverLocalPath: useCustomCover ? localPath : null,
-          ),
-        );
-      case ThreadContentKind.unknown:
-      case ThreadContentKind.forum:
-        return null;
-    }
-  }
-}
-
-class _FavoriteCoverCacheTarget {
-  const _FavoriteCoverCacheTarget({
-    required this.ownerType,
-    required this.role,
-    required this.writeBack,
-  });
-
-  final ImageCacheOwnerType ownerType;
-  final ImageCacheRole role;
-  final _FavoriteCoverWriteBack writeBack;
 }

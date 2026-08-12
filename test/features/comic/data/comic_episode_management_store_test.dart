@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
+import '../../../test_support/unavailable_library_cover_store.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 
@@ -17,7 +18,10 @@ void main() {
     databaseName =
         'comic_episode_management_${DateTime.now().microsecondsSinceEpoch}.db';
     database = await ComicLocalDb.open(databaseName: databaseName);
-    repository = LocalComicRepository(Future<Database>.value(database));
+    repository = LocalComicRepository(
+      Future<Database>.value(database),
+      libraryCoverStore: const UnavailableLibraryCoverStore(),
+    );
     await database.insert(ComicLocalDb.comicsTable, <String, Object?>{
       'comic_id': 'comic-management',
       'source_tid': '100',

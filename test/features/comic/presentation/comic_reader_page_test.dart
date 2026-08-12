@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
@@ -28,6 +29,9 @@ import 'package:y300/features/reader_shared/presentation/continuous_image/contin
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/widgets/reader_session_image.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
@@ -700,6 +704,7 @@ void main() {
     await prepareLargeViewport(tester);
     final repository = _ReaderFakeRepository();
     final imageCache = _FakeImageCacheService();
+    final coverStore = _ReaderCoverStoreFake();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -714,6 +719,7 @@ void main() {
             _NoopComicDownloadService(),
           ),
           imageCacheServiceProvider.overrideWithValue(imageCache),
+          libraryCoverStoreProvider.overrideWithValue(coverStore),
         ],
         child: const LocalizedTestApp(
           home: ComicReaderPage(
@@ -749,8 +755,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(repository.lastCustomCoverLocalPath, '/protected/cover.jpg');
-    expect(imageCache.lastLocalCopyRequest?.role, ImageCacheRole.customCover);
+    expect(coverStore.installedSourcePath, '/cache/mock.jpg');
+    expect(coverStore.installedAsset?.assetId, 'comic/yamibo:100/custom');
+    expect(coverStore.installedAsset?.revision, 1);
+    expect(coverStore.installedAsset?.kind, LibraryCoverAssetKind.custom);
+    expect(repository.lastActivatedCustomCoverRevision, 1);
     expect(find.byType(SnackBar), findsOneWidget);
     expect(find.text('封面已更新'), findsOneWidget);
   });
@@ -1283,6 +1292,42 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<void> pruneToLimit({required int maxBytes}) async {}
 }
 
+class _ReaderCoverStoreFake implements LibraryCoverStore {
+  LibraryCoverAssetRef? installedAsset;
+  String? installedSourcePath;
+
+  @override
+  Future<int> calculateUsageBytes() async => 0;
+
+  @override
+  Future<void> deleteAsset(String assetId) async {}
+
+  @override
+  Future<void> deleteOlderRevisions(LibraryCoverAssetRef asset) async {}
+
+  @override
+  Future<void> invalidate(LibraryCoverAssetRef asset) async {}
+
+  @override
+  Future<io.File> ensureAvailable(LibraryCoverAssetRef asset) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<io.File> fileFor(LibraryCoverAssetRef asset) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> installLocalFile({
+    required LibraryCoverAssetRef asset,
+    required String sourcePath,
+  }) async {
+    installedAsset = asset;
+    installedSourcePath = sourcePath;
+  }
+}
+
 class _NoopReadingStateWriter implements ComicReadingStateWriter {
   @override
   Future<bool> isEpisodeRead({
@@ -1333,7 +1378,11 @@ class _NoopReadingStateWriter implements ComicReadingStateWriter {
   }) async {}
 }
 
-class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
+class _ReaderFakeRepository
+    implements
+        ComicRepository,
+        ComicCoverCacheWriter,
+        ComicCustomCoverAssetWriter {
   _ReaderFakeRepository({
     this.includeNextEpisode = false,
     ComicReadingProgress? progress,
@@ -1347,6 +1396,7 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
   final bool includeNextEpisode;
   ComicReadingProgress? _progress;
   String? lastCustomCoverLocalPath;
+  int? lastActivatedCustomCoverRevision;
   final Map<String, List<ComicEpisodeImageItem>> _episodeImages =
       <String, List<ComicEpisodeImageItem>>{
         'yamibo:100:101': const <ComicEpisodeImageItem>[
@@ -1443,6 +1493,16 @@ class _ReaderFakeRepository implements ComicRepository, ComicCoverCacheWriter {
     required double? focusX,
     required double? focusY,
   }) async {}
+
+  @override
+  Future<void> activateCustomCoverAsset({
+    required String comicId,
+    required int revision,
+    double? focusX,
+    double? focusY,
+  }) async {
+    lastActivatedCustomCoverRevision = revision;
+  }
 
   @override
   Future<void> deleteCategory({required String categoryId}) async {}

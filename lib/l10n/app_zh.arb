@@ -1027,6 +1027,7 @@
   "moreStorageReloadUsage": "重新统计",
   "moreStorageExportDiagnostics": "缓存诊断导出",
   "moreStorageBucketImageCache": "图片缓存",
+  "moreStorageBucketLibraryCover": "书架封面资产",
   "moreStorageBucketPageCache": "页面缓存",
   "moreStorageBucketLibraryMetadata": "书架数据",
   "moreStorageBucketHistory": "浏览记录",

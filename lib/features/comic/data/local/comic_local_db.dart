@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 38;
+  static const int dbVersion = 40;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -34,6 +34,11 @@ class ComicLocalDb {
   static const String cachedImagesTable = 'cached_images';
   static const String cachedDocumentsTable = 'cached_documents';
   static const String cachedSnapshotsTable = 'cached_snapshots';
+  static const String libraryCoverMigrationsTable = 'library_cover_migrations';
+  static const String comicCoverMergeOperationsTable =
+      'comic_cover_merge_operations';
+  static const String comicCoverMergeMembersTable = 'comic_cover_merge_members';
+  static const String comicCoverMergeAssetsTable = 'comic_cover_merge_assets';
   static const String comicSearchRefreshQueueTable =
       'comic_search_refresh_queue';
   static const String comicDownloadQueueTable = 'comic_download_queue';
@@ -113,6 +118,72 @@ class ComicLocalDb {
     if (oldVersion < 38 && newVersion >= 38) {
       await _upgradeFrom37To38(db);
     }
+    if (oldVersion < 39 && newVersion >= 39) {
+      await _upgradeFrom38To39(db);
+    }
+    if (oldVersion < 40 && newVersion >= 40) {
+      await _upgradeFrom39To40(db);
+    }
+  }
+
+  static Future<void> _upgradeFrom39To40(Database db) async {
+    await _createComicCoverMergeJournalTables(db);
+  }
+
+  static Future<void> _upgradeFrom38To39(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: comicsTable,
+      column: 'cover_revision',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: comicsTable,
+      column: 'custom_cover_revision',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: worksTable,
+      column: 'cover_revision',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: worksTable,
+      column: 'custom_cover_revision',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _backfillCoverRevision(
+      db,
+      table: comicsTable,
+      revisionColumn: 'cover_revision',
+      sourceColumns: const <String>['cover_image_url', 'cover_local_path'],
+    );
+    await _backfillCoverRevision(
+      db,
+      table: comicsTable,
+      revisionColumn: 'custom_cover_revision',
+      sourceColumns: const <String>[
+        'custom_cover_image_url',
+        'custom_cover_local_path',
+      ],
+    );
+    await _backfillCoverRevision(
+      db,
+      table: worksTable,
+      revisionColumn: 'cover_revision',
+      sourceColumns: const <String>['cover_image_url', 'cover_local_path'],
+    );
+    await _backfillCoverRevision(
+      db,
+      table: worksTable,
+      revisionColumn: 'custom_cover_revision',
+      sourceColumns: const <String>['custom_cover_local_path'],
+    );
+    await _createLibraryCoverMigrationTable(db);
+    await _createLibraryCoverRevisionTriggers(db);
   }
 
   static Future<void> _upgradeFrom27To28(Database db) async {
@@ -308,6 +379,32 @@ class ComicLocalDb {
     await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
+  static Future<void> _backfillCoverRevision(
+    Database db, {
+    required String table,
+    required String revisionColumn,
+    required List<String> sourceColumns,
+  }) async {
+    final columns = await _columnNames(db, table);
+    if (!columns.contains(revisionColumn)) {
+      return;
+    }
+    final availableSources = sourceColumns
+        .where(columns.contains)
+        .toList(growable: false);
+    if (availableSources.isEmpty) {
+      return;
+    }
+    final sourcePredicate = availableSources
+        .map((column) => '$column IS NOT NULL')
+        .join(' OR ');
+    await db.execute('''
+      UPDATE $table
+      SET $revisionColumn = 1
+      WHERE $revisionColumn = 0 AND ($sourcePredicate)
+    ''');
+  }
+
   static Future<void> _createTables(Database db) async {
     await db.execute('''
       CREATE TABLE $comicsTable (
@@ -326,6 +423,8 @@ class ComicLocalDb {
         custom_cover_image_url TEXT,
         cover_local_path TEXT,
         custom_cover_local_path TEXT,
+        cover_revision INTEGER NOT NULL DEFAULT 0,
+        custom_cover_revision INTEGER NOT NULL DEFAULT 0,
         translation_group TEXT,
         source_translation_group TEXT,
         custom_translation_group TEXT,
@@ -434,6 +533,9 @@ class ComicLocalDb {
     await _createPhase7PerformanceIndexes(db);
     await _createFavoriteTables(db);
     await _createImageCacheTables(db);
+    await _createLibraryCoverMigrationTable(db);
+    await _createComicCoverMergeJournalTables(db);
+    await _createLibraryCoverRevisionTriggers(db);
     await _createDocumentCacheTables(db);
     await _createSnapshotCacheTables(db);
     await _createComicSearchRefreshQueueTable(db);
@@ -498,6 +600,8 @@ class ComicLocalDb {
         cover_image_url TEXT,
         cover_local_path TEXT,
         custom_cover_local_path TEXT,
+        cover_revision INTEGER NOT NULL DEFAULT 0,
+        custom_cover_revision INTEGER NOT NULL DEFAULT 0,
         custom_cover_focus_x REAL,
         custom_cover_focus_y REAL,
         cover_hidden INTEGER NOT NULL DEFAULT 0,
@@ -938,6 +1042,126 @@ class ComicLocalDb {
     );
   }
 
+  static Future<void> _createLibraryCoverMigrationTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $libraryCoverMigrationsTable (
+        asset_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        completed_at INTEGER NOT NULL,
+        PRIMARY KEY (asset_id, revision)
+      )
+    ''');
+  }
+
+  static Future<void> _createComicCoverMergeJournalTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $comicCoverMergeOperationsTable (
+        operation_id TEXT PRIMARY KEY,
+        target_comic_id TEXT NOT NULL,
+        state TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $comicCoverMergeMembersTable (
+        operation_id TEXT NOT NULL,
+        source_comic_id TEXT NOT NULL,
+        PRIMARY KEY (operation_id, source_comic_id),
+        FOREIGN KEY (operation_id)
+          REFERENCES $comicCoverMergeOperationsTable(operation_id)
+          ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $comicCoverMergeAssetsTable (
+        operation_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        source_comic_id TEXT NOT NULL,
+        source_asset_id TEXT NOT NULL,
+        source_revision INTEGER NOT NULL,
+        target_asset_id TEXT NOT NULL,
+        target_revision INTEGER NOT NULL,
+        mode TEXT NOT NULL,
+        PRIMARY KEY (operation_id, kind),
+        FOREIGN KEY (operation_id)
+          REFERENCES $comicCoverMergeOperationsTable(operation_id)
+          ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_comic_cover_merge_state ON '
+      '$comicCoverMergeOperationsTable(state, created_at)',
+    );
+  }
+
+  static Future<void> _createLibraryCoverRevisionTriggers(Database db) async {
+    final comicColumns = await _columnNames(db, comicsTable);
+    if (comicColumns.containsAll(const <String>{
+      'comic_id',
+      'cover_image_url',
+      'cover_local_path',
+      'cover_revision',
+    })) {
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS trg_comics_cover_revision_update
+        AFTER UPDATE OF cover_image_url ON $comicsTable
+        WHEN OLD.cover_image_url IS NOT NEW.cover_image_url
+        BEGIN
+          UPDATE $comicsTable
+          SET cover_revision = CASE
+            WHEN NEW.cover_image_url IS NULL AND NEW.cover_local_path IS NULL THEN 0
+            ELSE OLD.cover_revision + 1
+          END
+          WHERE comic_id = NEW.comic_id;
+        END
+      ''');
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS trg_comics_cover_revision_insert
+        AFTER INSERT ON $comicsTable
+        WHEN NEW.cover_revision = 0
+          AND (NEW.cover_image_url IS NOT NULL OR NEW.cover_local_path IS NOT NULL)
+        BEGIN
+          UPDATE $comicsTable SET cover_revision = 1
+          WHERE comic_id = NEW.comic_id;
+        END
+      ''');
+    }
+
+    final workColumns = await _columnNames(db, worksTable);
+    if (workColumns.containsAll(const <String>{
+      'work_id',
+      'cover_image_url',
+      'cover_local_path',
+      'cover_revision',
+    })) {
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS trg_works_cover_revision_update
+        AFTER UPDATE OF cover_image_url ON $worksTable
+        WHEN OLD.cover_image_url IS NOT NEW.cover_image_url
+        BEGIN
+          UPDATE $worksTable
+          SET cover_revision = CASE
+            WHEN NEW.cover_image_url IS NULL AND NEW.cover_local_path IS NULL THEN 0
+            ELSE OLD.cover_revision + 1
+          END
+          WHERE work_id = NEW.work_id;
+        END
+      ''');
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS trg_works_cover_revision_insert
+        AFTER INSERT ON $worksTable
+        WHEN NEW.cover_revision = 0
+          AND (NEW.cover_image_url IS NOT NULL OR NEW.cover_local_path IS NOT NULL)
+        BEGIN
+          UPDATE $worksTable SET cover_revision = 1
+          WHERE work_id = NEW.work_id;
+        END
+      ''');
+    }
+  }
+
   /// 原生模式 Phase 3：HTML 文档缓存。
   ///
   /// 只保存 GET 页面 HTML；评分、点评、投票、回复等提交响应不进入这里。
@@ -1088,6 +1312,10 @@ class ComicLocalDb {
   }
 
   static const List<String> _managedTablesInDropOrder = <String>[
+    comicCoverMergeAssetsTable,
+    comicCoverMergeMembersTable,
+    comicCoverMergeOperationsTable,
+    libraryCoverMigrationsTable,
     novelEpisodeSyncStagingTable,
     novelSourceStateTable,
     comicDownloadQueueTable,

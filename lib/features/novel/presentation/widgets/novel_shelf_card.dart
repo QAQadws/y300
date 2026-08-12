@@ -18,14 +18,6 @@ class NovelShelfCard extends StatelessWidget {
       title: NovelTextResolver.workTitle(l10n, item.title, item.novelId),
       coverImageUrl: item.coverImageUrl,
       onTap: onTap,
-      placeholderIcon: Icons.menu_book_outlined,
-      fallbackBackground: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF3B5B7C), Color(0xFF6A7FA0)],
-        ),
-      ),
       topLeftBadge: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(

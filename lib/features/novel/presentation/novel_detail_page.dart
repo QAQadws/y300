@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/presentation/mappers/library_detail_history_visit_mapper.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
@@ -68,7 +68,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     final openMode = openModeState.value ?? NovelChapterOpenMode.reader;
     final adapter = NovelDetailAdapter(
       ref.watch(novelRepositoryProvider),
-      imageCacheService: ref.watch(imageCacheServiceProvider),
+      coverStore: ref.watch(libraryCoverStoreProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
       sourceStateRepository: ref.watch(novelSourceStateRepositoryProvider),
       chapterUpdateServiceFactory: () =>

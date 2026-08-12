@@ -19,6 +19,8 @@ class ComicShelfItem {
     this.customCoverLocalPath,
     this.customCoverFocusX,
     this.customCoverFocusY,
+    this.coverRevision = 0,
+    this.customCoverRevision = 0,
     required this.categoryId,
     required this.addedAt,
   });
@@ -48,6 +50,8 @@ class ComicShelfItem {
   /// 自定义封面焦点（归一化 [-1,1]，映射为 Alignment）。为空表示居中。
   final double? customCoverFocusX;
   final double? customCoverFocusY;
+  final int coverRevision;
+  final int customCoverRevision;
   final String categoryId;
   final DateTime addedAt;
 }

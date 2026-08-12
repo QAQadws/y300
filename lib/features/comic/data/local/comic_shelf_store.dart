@@ -253,6 +253,8 @@ class ComicShelfStore {
         c.custom_cover_image_url,
         c.cover_local_path,
         c.custom_cover_local_path,
+        c.cover_revision,
+        c.custom_cover_revision,
         c.custom_cover_focus_x,
         c.custom_cover_focus_y
       FROM ${ComicLocalDb.shelfItemsTable} si
@@ -284,6 +286,8 @@ class ComicShelfStore {
             customCoverImageUrl: row['custom_cover_image_url'] as String?,
             coverLocalPath: row['cover_local_path'] as String?,
             customCoverLocalPath: row['custom_cover_local_path'] as String?,
+            coverRevision: row['cover_revision'] as int? ?? 0,
+            customCoverRevision: row['custom_cover_revision'] as int? ?? 0,
             customCoverFocusX: (row['custom_cover_focus_x'] as num?)
                 ?.toDouble(),
             customCoverFocusY: (row['custom_cover_focus_y'] as num?)

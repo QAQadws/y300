@@ -15,24 +15,57 @@ class ComicDetailStore {
     required String? customCoverImageUrl,
   }) async {
     final db = await _dbFuture;
-    await db.update(
-      ComicLocalDb.comicsTable,
-      <String, Object?>{
-        'custom_cover_image_url': customCoverImageUrl?.trim().isEmpty ?? true
-            ? null
-            : customCoverImageUrl!.trim(),
-        'custom_cover_local_path': null,
-        'custom_cover_source_episode_id': null,
-        'custom_cover_source_image_index': null,
-        'custom_cover_source_image_url': null,
-        'custom_cover_focus_x': null,
-        'custom_cover_focus_y': null,
-        'metadata_updated_at': DateTime.now().millisecondsSinceEpoch,
-        'updated_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      where: 'comic_id = ?',
-      whereArgs: <Object>[comicId],
-    );
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        ComicLocalDb.comicsTable,
+        columns: const <String>[
+          'custom_cover_image_url',
+          'custom_cover_local_path',
+          'custom_cover_revision',
+        ],
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+        limit: 1,
+      );
+      final normalizedUrl = normalizeNullable(customCoverImageUrl);
+      final current = rows.isEmpty ? null : rows.single;
+      final hadCustom =
+          normalizeNullable(current?['custom_cover_image_url'] as String?) !=
+              null ||
+          normalizeNullable(current?['custom_cover_local_path'] as String?) !=
+              null ||
+          (current?['custom_cover_revision'] as int? ?? 0) > 0;
+      final changed =
+          normalizedUrl !=
+              normalizeNullable(
+                current?['custom_cover_image_url'] as String?,
+              ) ||
+          (normalizedUrl == null && hadCustom);
+      final currentRevision = current?['custom_cover_revision'] as int? ?? 0;
+      final nextRevision = normalizedUrl == null
+          ? 0
+          : changed
+          ? currentRevision + 1
+          : currentRevision;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await txn.update(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{
+          'custom_cover_image_url': normalizedUrl,
+          'custom_cover_local_path': null,
+          'custom_cover_revision': nextRevision,
+          'custom_cover_source_episode_id': null,
+          'custom_cover_source_image_index': null,
+          'custom_cover_source_image_url': null,
+          'custom_cover_focus_x': null,
+          'custom_cover_focus_y': null,
+          'metadata_updated_at': now,
+          'updated_at': now,
+        },
+        where: 'comic_id = ?',
+        whereArgs: <Object>[comicId],
+      );
+    });
   }
 
   Future<void> updateCustomCoverFromLocalFile({
@@ -50,11 +83,22 @@ class ComicDetailStore {
     }
 
     final db = await _dbFuture;
+    final rows = await db.query(
+      ComicLocalDb.comicsTable,
+      columns: const <String>['custom_cover_revision'],
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+      limit: 1,
+    );
+    final nextRevision =
+        (rows.isEmpty ? 0 : rows.single['custom_cover_revision'] as int? ?? 0) +
+        1;
     await db.update(
       ComicLocalDb.comicsTable,
       <String, Object?>{
         'custom_cover_image_url': normalizeNullable(sourceImageUrl),
         'custom_cover_local_path': normalizedPath,
+        'custom_cover_revision': nextRevision,
         'custom_cover_source_episode_id': normalizeNullable(sourceEpisodeId),
         'custom_cover_source_image_index': sourceImageIndex,
         'custom_cover_source_image_url': normalizeNullable(sourceImageUrl),
@@ -62,6 +106,36 @@ class ComicDetailStore {
         'custom_cover_focus_y': focusY,
         'metadata_updated_at': DateTime.now().millisecondsSinceEpoch,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'comic_id = ?',
+      whereArgs: <Object>[comicId],
+    );
+  }
+
+  Future<void> activateCustomCoverAsset({
+    required String comicId,
+    required int revision,
+    double? focusX,
+    double? focusY,
+  }) async {
+    if (revision <= 0) {
+      throw ArgumentError.value(revision, 'revision');
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final db = await _dbFuture;
+    await db.update(
+      ComicLocalDb.comicsTable,
+      <String, Object?>{
+        'custom_cover_image_url': null,
+        'custom_cover_local_path': null,
+        'custom_cover_revision': revision,
+        'custom_cover_source_episode_id': null,
+        'custom_cover_source_image_index': null,
+        'custom_cover_source_image_url': null,
+        'custom_cover_focus_x': focusX,
+        'custom_cover_focus_y': focusY,
+        'metadata_updated_at': now,
+        'updated_at': now,
       },
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
@@ -251,6 +325,8 @@ class ComicDetailStore {
         c.custom_cover_image_url,
         c.cover_local_path,
         c.custom_cover_local_path,
+        c.cover_revision,
+        c.custom_cover_revision,
         c.custom_cover_source_episode_id,
         c.custom_cover_source_image_index,
         c.custom_cover_source_image_url,
@@ -295,6 +371,8 @@ class ComicDetailStore {
       customCoverImageUrl: row['custom_cover_image_url'] as String?,
       coverLocalPath: row['cover_local_path'] as String?,
       customCoverLocalPath: row['custom_cover_local_path'] as String?,
+      coverRevision: row['cover_revision'] as int? ?? 0,
+      customCoverRevision: row['custom_cover_revision'] as int? ?? 0,
       customCoverSourceEpisodeId:
           row['custom_cover_source_episode_id'] as String?,
       customCoverSourceImageIndex:

@@ -19,6 +19,11 @@ typedef CacheOwnerDeleter =
 typedef ComicDownloadDeleter = Future<bool> Function({required String workId});
 typedef NovelDownloadDeleter = Future<bool> Function({required String novelId});
 typedef ComicQueueDeleter = Future<void> Function(String comicId);
+typedef LibraryCoverAssetDeleter =
+    Future<void> Function({
+      required ThreadContentKind kind,
+      required String workId,
+    });
 
 class DefaultWorkPurgeService implements WorkPurgeService {
   DefaultWorkPurgeService({
@@ -30,9 +35,11 @@ class DefaultWorkPurgeService implements WorkPurgeService {
     required ComicDownloadDeleter deleteComicDownloads,
     required NovelDownloadDeleter deleteNovelDownloads,
     required ComicQueueDeleter deleteComicQueueByComicId,
+    LibraryCoverAssetDeleter? deleteLibraryCoverAssets,
   }) : _purgeLibraryWorkState = purgeLibraryWorkState,
        _markFavoriteRemovedByWorkId = markFavoriteRemovedByWorkId,
        _deleteCacheByOwner = deleteCacheByOwner,
+       _deleteLibraryCoverAssets = deleteLibraryCoverAssets,
        _strategies = <ThreadContentKind, _WorkPurgeStrategy>{
          ThreadContentKind.comic: _ComicWorkPurgeStrategy(
            purgeComicWork: purgeComicWork,
@@ -48,6 +55,7 @@ class DefaultWorkPurgeService implements WorkPurgeService {
   final LibraryWorkStatePurger _purgeLibraryWorkState;
   final FavoriteWorkMarker _markFavoriteRemovedByWorkId;
   final CacheOwnerDeleter _deleteCacheByOwner;
+  final LibraryCoverAssetDeleter? _deleteLibraryCoverAssets;
   final Map<ThreadContentKind, _WorkPurgeStrategy> _strategies;
 
   @override
@@ -77,11 +85,21 @@ class DefaultWorkPurgeService implements WorkPurgeService {
     var purgedDownload = false;
 
     try {
+      final deleteCovers = _deleteLibraryCoverAssets;
+      if (deleteCovers != null) {
+        await deleteCovers(kind: kind, workId: normalizedWorkId);
+        purgedCache = true;
+      }
+    } catch (error) {
+      errors.add('清理封面资产失败：$error');
+    }
+
+    try {
       final deletedCount = await _deleteCacheByOwner(
         ownerType: strategy.ownerType,
         ownerId: normalizedWorkId,
       );
-      purgedCache = deletedCount > 0;
+      purgedCache = purgedCache || deletedCount > 0;
     } catch (error) {
       errors.add('清理缓存失败：$error');
     }

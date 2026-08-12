@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
-import '../../../test_support/localized_test_app.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_decode_scheduler.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
+import 'package:y300/features/library_shared/presentation/images/library_cover_image_provider.dart';
+import 'package:y300/shared/widgets/library_cover_placeholder.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
+import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/unavailable_library_cover_store.dart';
+
 void main() {
   testWidgets(
-    'ShelfCoverCard renders title and badge with fallback background',
+    'ShelfCoverCard renders title and badge over a neutral placeholder',
     (tester) async {
       await tester.pumpWidget(
         LocalizedTestApp(
@@ -20,11 +28,6 @@ void main() {
                 coverImageUrl: null,
                 onTap: () {},
                 topLeftBadge: const Text('角标'),
-                fallbackBackground: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF000000), Color(0xFF333333)],
-                  ),
-                ),
               ),
             ),
           ),
@@ -65,12 +68,66 @@ void main() {
       find.descendant(of: cardFinder, matching: find.byType(AnimatedContainer)),
     );
     final decoration = container.decoration! as BoxDecoration;
-    expect(decoration.borderRadius, BorderRadius.circular(10));
+    expect(decoration.borderRadius, BorderRadius.circular(8));
 
     final clip = tester.widget<ClipRRect>(
       find.descendant(of: cardFinder, matching: find.byType(ClipRRect)).first,
     );
-    expect(clip.borderRadius, BorderRadius.circular(8));
+    expect(clip.borderRadius, BorderRadius.circular(7));
+  });
+
+  testWidgets('cover provider uses the actual inner image size', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          libraryCoverStoreProvider.overrideWithValue(
+            const UnavailableLibraryCoverStore(),
+          ),
+          libraryCoverDecodeSchedulerProvider.overrideWithValue(
+            LibraryCoverDecodeScheduler(maxConcurrent: 3),
+          ),
+        ],
+        child: LocalizedTestApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 120,
+              height: 180,
+              child: ShelfCoverCard(
+                title: 'Sized Cover',
+                coverImageUrl: null,
+                coverAsset: const LibraryCoverAssetRef(
+                  assetId: 'comic/sized/source',
+                  revision: 1,
+                  kind: LibraryCoverAssetKind.source,
+                ),
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final imageFinder = find.descendant(
+      of: find.byType(ShelfCoverCard),
+      matching: find.byType(Image),
+    );
+    final imageSize = tester.getSize(imageFinder);
+    final provider = tester.widget<Image>(imageFinder).image;
+
+    expect(imageSize, const Size(112, 172));
+    expect(provider, isA<LibraryCoverImageProvider>());
+    final coverProvider = provider as LibraryCoverImageProvider;
+    expect(coverProvider.decodeTarget.targetWidthPx, imageSize.width * 2);
+    expect(coverProvider.decodeTarget.targetHeightPx, imageSize.height * 2);
+    expect(coverProvider.decodeTarget.targetWidthPx, isNot(240));
+    expect(coverProvider.decodeTarget.targetHeightPx, isNot(360));
   });
 
   testWidgets('ShelfCoverCard supports custom two-line ellipsis mode', (
@@ -119,16 +176,12 @@ void main() {
       ),
     );
 
-    final fallback = tester.widget<Container>(
-      find
-          .ancestor(
-            of: find.byIcon(Icons.image_not_supported_outlined),
-            matching: find.byType(Container),
-          )
-          .first,
+    final fallback = tester.widget<LibraryCoverPlaceholder>(
+      find.byKey(const Key('shelf-cover-placeholder')),
     );
 
     expect(fallback.color, palette.coverPlaceholderBackground);
+    expect(find.byType(Icon), findsNothing);
   });
 
   testWidgets('ShelfCoverCard applies focus only to custom covers', (

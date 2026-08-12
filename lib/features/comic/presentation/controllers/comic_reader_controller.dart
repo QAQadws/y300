@@ -1,10 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
@@ -17,6 +15,8 @@ import 'package:y300/features/comic/domain/services/comic_reading_state_writer.d
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
 import 'package:y300/features/comic/presentation/comic_presentation_models.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 
 class ComicReaderArgs {
@@ -259,7 +259,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   late ComicReaderService _readerService;
   late ComicDownloadService _downloadService;
   late ComicReadingStateWriter _readingStateWriter;
-  late ImageCacheService _imageCacheService;
   late ComicReaderEventLogger _eventLogger;
   late ComicReaderFeatureFlags _featureFlags;
   Timer? _progressPersistDebounceTimer;
@@ -300,7 +299,6 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     _readerService = await ref.read(comicReaderServiceProvider.future);
     _downloadService = ref.read(comicDownloadServiceProvider);
     _readingStateWriter = ref.read(comicReadingStateWriterProvider);
-    _imageCacheService = ref.read(imageCacheServiceProvider);
     _eventLogger = ref.read(comicReaderEventLoggerProvider);
     _featureFlags = ref.read(comicReaderFeatureFlagsProvider);
     _openedAt = DateTime.now();
@@ -391,6 +389,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     double? focusX,
     double? focusY,
   }) async {
+    final coverStore = ref.read(libraryCoverStoreProvider);
     final current = state.value;
     final image = current?.currentImage;
     if (current == null || image == null) {
@@ -408,22 +407,8 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       return ComicReaderNoticeCode.coverImageUnavailable;
     }
 
-    final result = await _imageCacheService.copyProtectedLocalFile(
-      ImageCacheLocalCopyRequest(
-        cacheKey: ImageCacheKeys.customCover(
-          ownerType: ImageCacheOwnerType.comic.dbValue,
-          ownerId: _args.comicId,
-        ),
-        sourcePath: localPath,
-        ownerType: ImageCacheOwnerType.comic,
-        ownerId: _args.comicId,
-        role: ImageCacheRole.customCover,
-        episodeId: current.episodeId,
-        imageIndex: image.imageIndex,
-      ),
-    );
-    final protectedPath = result.localPath?.trim();
-    if (!result.success || protectedPath == null || protectedPath.isEmpty) {
+    final repository = _repository;
+    if (repository is! ComicCustomCoverAssetWriter) {
       if (!ref.mounted) {
         return null;
       }
@@ -431,17 +416,31 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       state = AsyncData(latest.copyWith(clearNotice: true));
       return ComicReaderNoticeCode.coverUpdateFailed;
     }
+    final assetWriter = repository as ComicCustomCoverAssetWriter;
+    final detail = await repository.getComicDetail(comicId: _args.comicId);
+    final asset = LibraryCoverAssetRef(
+      assetId: LibraryCoverAssetIds.custom(
+        ownerType: 'comic',
+        ownerId: _args.comicId,
+      ),
+      revision: (detail?.customCoverRevision ?? 0) + 1,
+      kind: LibraryCoverAssetKind.custom,
+    );
+    var installed = false;
     try {
-      await _repository.updateCustomCoverFromLocalFile(
+      await coverStore.installLocalFile(asset: asset, sourcePath: localPath);
+      installed = true;
+      await assetWriter.activateCustomCoverAsset(
         comicId: _args.comicId,
-        localCoverPath: protectedPath,
-        sourceEpisodeId: current.episodeId,
-        sourceImageIndex: image.imageIndex,
-        sourceImageUrl: image.imageUrl,
+        revision: asset.revision,
         focusX: focusX,
         focusY: focusY,
       );
+      await coverStore.deleteOlderRevisions(asset);
     } catch (_) {
+      if (installed) {
+        await coverStore.invalidate(asset);
+      }
       if (!ref.mounted) {
         return null;
       }

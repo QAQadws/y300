@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
@@ -200,36 +200,30 @@ void main() {
   });
 
   test(
-    'loadHeader caches remote cover as protected and writes local path',
+    'loadHeader exposes source asset without synchronous caching',
     () async {
       final repository = _FakeNovelRepositoryWithCoverWriter(
         coverImageUrl: 'https://img.test/novel-cover.jpg',
       );
-      final cacheService = _FakeImageCacheService(
-        localPath: '/cache/novel-cover.jpg',
-      );
       final adapter = NovelDetailAdapter(
         repository,
-        imageCacheService: cacheService,
         stateRepository: _RecordingLibraryStateRepository(),
       );
 
       final header = await adapter.loadHeader(workId: 'novel:1');
 
-      expect(header.coverLocalPath, '/cache/novel-cover.jpg');
+      expect(header.coverLocalPath, isNull);
+      expect(header.coverAsset?.assetId, 'novel/novel:1/source');
+      expect(header.coverAsset?.kind, LibraryCoverAssetKind.source);
+      expect(
+        header.coverAsset?.sourceUrl,
+        'https://img.test/novel-cover.jpg',
+      );
       expect(header.sourceTitle, 'Novel');
       expect(header.sourceAuthor, isNull);
       expect(header.publisherName, 'Novel Author');
-      expect(cacheService.lastRequest?.cacheKey, 'cover/novel/novel:1');
-      expect(cacheService.lastRequest?.ownerType, ImageCacheOwnerType.novel);
-      expect(cacheService.lastRequest?.role, ImageCacheRole.cover);
-      expect(cacheService.lastRequest?.protected, isTrue);
-      expect(
-        cacheService.lastRequest?.effectiveRetentionClass,
-        ImageRetentionClass.protected,
-      );
-      expect(repository.lastCoverImageUrl, 'https://img.test/novel-cover.jpg');
-      expect(repository.lastCoverLocalPath, '/cache/novel-cover.jpg');
+      expect(repository.lastCoverImageUrl, isNull);
+      expect(repository.lastCoverLocalPath, isNull);
     },
   );
 
@@ -323,12 +317,10 @@ void main() {
     'metadata and custom cover mutations delegate to novel capabilities',
     () async {
       final repository = _EditableNovelRepository();
-      final cacheService = _FakeImageCacheService(
-        localPath: '/protected/custom-novel-cover.jpg',
-      );
+      final coverStore = _RecordingLibraryCoverStore();
       final adapter = NovelDetailAdapter(
         repository,
-        imageCacheService: cacheService,
+        coverStore: coverStore,
         stateRepository: _RecordingLibraryStateRepository(),
       );
 
@@ -351,18 +343,13 @@ void main() {
       await adapter.removeCustomCover(workId: 'novel:1');
 
       expect(repository.lastCustomTitle, '标题');
-      expect(
-        repository.lastCustomCoverPath,
-        '/protected/custom-novel-cover.jpg',
-      );
+      expect(coverStore.installedSourcePath, '/picked/source.jpg');
+      expect(coverStore.installedAsset?.assetId, 'novel/novel:1/custom');
+      expect(coverStore.installedAsset?.revision, 1);
+      expect(repository.activatedRevision, 1);
       expect(repository.lastFocusX, -0.1);
       expect(repository.lastFocusY, 0.3);
       expect(repository.coverRemoved, isTrue);
-      expect(
-        cacheService.lastCopyRequest?.ownerType,
-        ImageCacheOwnerType.novel,
-      );
-      expect(cacheService.lastCopyRequest?.role, ImageCacheRole.customCover);
     },
   );
 }
@@ -615,12 +602,28 @@ class _FakeNovelRepositoryWithCoverWriter extends _FakeNovelRepository
 }
 
 class _EditableNovelRepository extends _FakeNovelRepository
-    implements NovelCustomMetadataWriter, NovelCustomCoverWriter {
+    implements
+        NovelCustomMetadataWriter,
+        NovelCustomCoverWriter,
+        NovelCustomCoverAssetWriter {
   String? lastCustomTitle;
   String? lastCustomCoverPath;
   double? lastFocusX;
   double? lastFocusY;
   bool coverRemoved = false;
+  int? activatedRevision;
+
+  @override
+  Future<void> activateCustomCoverAsset({
+    required String novelId,
+    required int revision,
+    double? focusX,
+    double? focusY,
+  }) async {
+    activatedRevision = revision;
+    lastFocusX = focusX;
+    lastFocusY = focusY;
+  }
 
   @override
   Future<void> updateCustomMetadata({
@@ -658,59 +661,36 @@ class _EditableNovelRepository extends _FakeNovelRepository
   }
 }
 
-class _FakeImageCacheService implements ImageCacheService {
-  _FakeImageCacheService({required this.localPath});
-
-  final String localPath;
-  ImageCacheRequest? lastRequest;
-  ImageCacheLocalCopyRequest? lastCopyRequest;
-
-  @override
-  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
+class _RecordingLibraryCoverStore implements LibraryCoverStore {
+  LibraryCoverAssetRef? installedAsset;
+  String? installedSourcePath;
+  String? deletedAssetId;
+  LibraryCoverAssetRef? reclaimedAsset;
 
   @override
-  Future<int> clearUnprotectedByRoles({
-    required List<ImageCacheRole> roles,
+  Future<void> installLocalFile({
+    required LibraryCoverAssetRef asset,
+    required String sourcePath,
   }) async {
-    return 0;
+    installedAsset = asset;
+    installedSourcePath = sourcePath;
   }
 
   @override
-  Future<void> clearUnprotected() async {}
-
-  @override
-  Future<CachedImageResult> copyProtectedLocalFile(
-    ImageCacheLocalCopyRequest request,
-  ) async {
-    lastCopyRequest = request;
-    return CachedImageResult(
-      success: true,
-      cacheKey: request.cacheKey,
-      localPath: localPath,
-    );
+  Future<void> deleteAsset(String assetId) async {
+    deletedAssetId = assetId;
   }
 
   @override
-  Future<int> deleteByOwner({
-    required ImageCacheOwnerType ownerType,
-    required String ownerId,
-  }) async => 0;
-
-  @override
-  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
-    lastRequest = request;
-    return CachedImageResult(
-      success: true,
-      cacheKey: request.cacheKey,
-      localPath: localPath,
-    );
+  Future<void> deleteOlderRevisions(LibraryCoverAssetRef asset) async {
+    reclaimedAsset = asset;
   }
 
   @override
-  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+  Future<void> invalidate(LibraryCoverAssetRef asset) async {}
 
   @override
-  Future<void> pruneToLimit({required int maxBytes}) async {}
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _RecordingLibraryStateRepository implements LibraryStateRepository {

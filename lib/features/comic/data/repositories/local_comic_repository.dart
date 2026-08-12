@@ -17,6 +17,7 @@ import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 
 /// SQLite-backed comic repository facade.
 class LocalComicRepository
@@ -29,12 +30,15 @@ class LocalComicRepository
         ComicShelfSnapshotRepository,
         ComicShelfStatsRepository,
         ComicCoverCacheWriter,
+        ComicCustomCoverAssetWriter,
         ComicFirstEpisodeCoverWriter,
         ComicDuplicateMergeRepository,
+        ComicCoverMergeRecovery,
         ComicEpisodeManagementRepository,
         ComicEpisodeImageCacheMetadataWriter {
   LocalComicRepository(
     this._dbFuture, {
+    required LibraryCoverStore libraryCoverStore,
     ComicSubjectParser? subjectParser,
     ComicSingleThreadEpisodeNamer? singleThreadEpisodeNamer,
   }) : _subjectParser = subjectParser ?? const RuleBasedComicSubjectParser(),
@@ -56,6 +60,7 @@ class LocalComicRepository
     _duplicateMergeStore = ComicDuplicateMergeStore(
       _dbFuture,
       coverStore: _coverStore,
+      libraryCoverStore: libraryCoverStore,
     );
     _snapshotStore = ComicSnapshotStore(_dbFuture);
     _episodeManagementStore = ComicEpisodeManagementStore(_dbFuture);
@@ -162,6 +167,21 @@ class LocalComicRepository
   }) {
     return _detailStore.updateCustomCoverFocus(
       comicId: comicId,
+      focusX: focusX,
+      focusY: focusY,
+    );
+  }
+
+  @override
+  Future<void> activateCustomCoverAsset({
+    required String comicId,
+    required int revision,
+    double? focusX,
+    double? focusY,
+  }) {
+    return _detailStore.activateCustomCoverAsset(
+      comicId: comicId,
+      revision: revision,
       focusX: focusX,
       focusY: focusY,
     );
@@ -632,5 +652,10 @@ class LocalComicRepository
     required Set<String> comicIds,
   }) {
     return _duplicateMergeStore.mergeDuplicateGroup(comicIds: comicIds);
+  }
+
+  @override
+  Future<void> recoverPendingCoverMerges() {
+    return _duplicateMergeStore.recoverPendingCoverMerges();
   }
 }

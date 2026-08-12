@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
 import 'package:y300/features/comic/data/use_cases/bulk_download_use_case_providers.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
@@ -16,6 +15,7 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/presentation/mappers/library_detail_history_visit_mapper.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
@@ -42,7 +42,7 @@ class ComicDetailPage extends ConsumerWidget {
       refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
       downloadService: ref.watch(comicDownloadServiceProvider),
       downloadQueue: ref.watch(comicDownloadQueueProvider),
-      imageCacheService: ref.watch(imageCacheServiceProvider),
+      coverStore: ref.watch(libraryCoverStoreProvider),
       bulkDownloadUseCase: ref.watch(bulkDownloadUseCaseProvider),
       incrementalDiscovery: ref.watch(comicIncrementalEpisodeDiscoveryProvider),
       discoveryService: ref.watch(comicEpisodeDiscoveryServiceProvider),

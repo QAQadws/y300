@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
@@ -93,7 +92,6 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
     final ref = this.ref;
     ref.watch(favoriteSyncTaskProgressRegistrationProvider);
     ref.watch(comicSearchQueueTaskProgressRegistrationProvider);
-    final taskProgressHub = ref.watch(libraryTaskProgressHubWorkflowProvider);
     final adapter = ref.watch(favoriteShelfAdapterProvider);
     final repository = ref.watch(localFavoriteRepositoryProvider);
     return UnifiedShelfPage(
@@ -103,10 +101,7 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
       ),
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       isActive: widget.isActive,
-      taskProgressHub: taskProgressHub,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
-      coverPrecacheServiceResolver: () =>
-          ref.read(forumImagePrecacheServiceProvider),
       onOpenWork: (context, workId) async {
         final target = await repository.getRouteTargetByShelfWorkId(workId);
         if (!context.mounted || target == null) {

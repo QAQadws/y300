@@ -2,8 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
@@ -11,13 +9,11 @@ import 'package:y300/features/library_shared/domain/contracts/shelf_selection_ac
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
-import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
-import 'package:y300/features/library_shared/domain/services/library_cover_image_adapter.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
-import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_asset_factory.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -31,13 +27,10 @@ class NovelShelfAdapter
         ShelfModuleAdapter,
         ShelfModuleCapabilitiesAdapter,
         ShelfSnapshotAdapter,
-        ShelfCoverWarmupAdapter,
         ShelfSelectionActionAdapter {
   NovelShelfAdapter(
     this._repository, {
     required LibraryStateRepository stateRepository,
-    ImageCacheService? imageCacheService,
-    ImageCacheServiceResolver? imageCacheServiceResolver,
     LibraryShelfRefreshBus? shelfRefreshBus,
     LibraryTaskProgressHub? taskProgressHub,
     ShelfCategoryAssignUseCase? categoryAssignUseCase,
@@ -56,10 +49,7 @@ class NovelShelfAdapter
            categoryAssignUseCaseResolver != null,
        _supportsUnfavorite =
            unfavoriteWorkUseCase != null ||
-           unfavoriteWorkUseCaseResolver != null,
-       _coverCacheService = imageCacheServiceResolver == null
-           ? LibraryCoverCacheService(imageCacheService)
-           : LibraryCoverCacheService.lazy(imageCacheServiceResolver);
+           unfavoriteWorkUseCaseResolver != null;
 
   final NovelRepository _repository;
   final LibraryStateRepository _stateRepository;
@@ -69,9 +59,6 @@ class NovelShelfAdapter
   final UnfavoriteWorkUseCaseResolver _unfavoriteWorkUseCaseResolver;
   final bool _supportsCategoryAssign;
   final bool _supportsUnfavorite;
-  final LibraryCoverCacheService _coverCacheService;
-  final LibraryCoverImageAdapter _coverImageAdapter =
-      const LibraryCoverImageAdapter();
 
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.novel;
@@ -390,6 +377,17 @@ class NovelShelfAdapter
           : source.customCoverLocalPath,
       customCoverFocusX: source.coverHidden ? null : source.customCoverFocusX,
       customCoverFocusY: source.coverHidden ? null : source.customCoverFocusY,
+      coverAsset: source.coverHidden
+          ? null
+          : LibraryCoverAssetFactory.preferred(
+              ownerType: 'novel',
+              ownerId: source.novelId,
+              sourceUrl: source.coverImageUrl,
+              sourceLegacyPath: source.coverLocalPath,
+              sourceRevision: source.coverRevision,
+              customLegacyPath: source.customCoverLocalPath,
+              customRevision: source.customCoverRevision,
+            ),
       unreadCount: 0,
       totalChapterCount: source.episodeCount,
       readChapterCount: 0,
@@ -400,76 +398,4 @@ class NovelShelfAdapter
     );
   }
 
-  @override
-  Future<List<ShelfCoverWarmupRequest>> buildCoverWarmupRequests({
-    required Map<String, List<LibraryWorkItem>> itemsByCategory,
-    String? selectedCategoryId,
-  }) async {
-    final requests = <ShelfCoverWarmupRequest>[];
-    final items = orderedShelfItemsForCoverWarmup(
-      itemsByCategory: itemsByCategory,
-      selectedCategoryId: selectedCategoryId,
-    );
-    for (final item in items) {
-      final specRequest = _coverImageAdapter.buildCoverSpec(
-        moduleKey: LibraryModuleKey.novel,
-        item: item,
-      );
-      if (specRequest == null) {
-        continue;
-      }
-      requests.add(
-        ShelfCoverWarmupRequest(
-          moduleKey: LibraryModuleKey.novel,
-          workId: item.workId,
-          cacheKey: specRequest.imageSpec.cacheKey!,
-          sourceUrl: specRequest.imageSpec.sourceUrl,
-          ownerType: specRequest.imageSpec.ownerType!,
-          ownerId: specRequest.imageSpec.ownerId!,
-          role: specRequest.useCustomCover
-              ? ImageCacheRole.customCover
-              : ImageCacheRole.cover,
-          useCustomCover: specRequest.useCustomCover,
-          imageSpec: specRequest.imageSpec,
-        ),
-      );
-    }
-    return requests;
-  }
-
-  @override
-  Future<ShelfCoverWarmupResult?> warmCover(
-    ShelfCoverWarmupRequest request,
-  ) async {
-    final cached = await _coverCacheService.ensureProtectedCover(
-      cacheKey: request.cacheKey,
-      sourceUrl: request.sourceUrl,
-      ownerType: ImageCacheOwnerType.novel,
-      ownerId: request.ownerId,
-      role: request.role,
-    );
-    final localPath = cached?.localPath?.trim();
-    if (localPath == null || localPath.isEmpty) {
-      return null;
-    }
-    return applyWarmedCover(request: request, localPath: localPath);
-  }
-
-  @override
-  Future<ShelfCoverWarmupResult?> applyWarmedCover({
-    required ShelfCoverWarmupRequest request,
-    required String localPath,
-  }) async {
-    if (_repository is NovelCoverCacheWriter) {
-      await (_repository as NovelCoverCacheWriter).updateCoverCache(
-        novelId: request.ownerId,
-        coverImageUrl: request.sourceUrl,
-        coverLocalPath: localPath,
-      );
-    }
-    return ShelfCoverWarmupResult(
-      workId: request.workId,
-      coverLocalPath: localPath,
-    );
-  }
 }

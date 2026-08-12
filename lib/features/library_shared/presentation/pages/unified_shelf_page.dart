@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/library_view_preferences_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
-import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/presentation/controllers/unified_shelf_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/selection_app_bar.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_controller.dart';
@@ -26,6 +26,7 @@ import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_grid_geometry.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
+import 'package:y300/shared/widgets/library_cover_placeholder.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 
 /// 统一书架页面（Phase 3）。
@@ -38,9 +39,7 @@ class UnifiedShelfPage extends StatefulWidget {
     this.imageHeaderBuilder,
     this.featureFlags = ShelfFeatureFlags.defaults,
     this.isActive = true,
-    this.taskProgressHub,
     this.selectionHost,
-    this.coverPrecacheServiceResolver,
   });
 
   final ShelfModuleAdapter adapter;
@@ -49,9 +48,7 @@ class UnifiedShelfPage extends StatefulWidget {
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ShelfFeatureFlags featureFlags;
   final bool isActive;
-  final LibraryTaskProgressHub? taskProgressHub;
   final ShelfSelectionHostController? selectionHost;
-  final ForumImagePrecacheService Function()? coverPrecacheServiceResolver;
 
   @override
   State<UnifiedShelfPage> createState() => _UnifiedShelfPageState();
@@ -76,8 +73,6 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       featureFlags: widget.featureFlags,
       onStateChanged: _handleControllerStateChanged,
       backgroundReloadEnabled: widget.isActive,
-      taskProgressHub: widget.taskProgressHub,
-      coverPrecacheServiceResolver: widget.coverPrecacheServiceResolver,
     );
     _pageController = PageController();
     _selectionController = ShelfSelectionController()
@@ -168,7 +163,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       Theme.of(context),
     );
 
-    return PopScope<void>(
+    final content = PopScope<void>(
       canPop: !selecting && !state.isSearchMode,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) {
@@ -348,6 +343,14 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
         ),
       ),
     );
+    try {
+      ProviderScope.containerOf(context, listen: false);
+      return content;
+    } on StateError {
+      // Keep the shared page embeddable in isolated hosts and widget tests.
+      // Production inherits the app-level container through the branch above.
+      return ProviderScope(child: content);
+    }
   }
 
   Future<void> _handlePullToRefresh() async {
@@ -997,7 +1000,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   }
 }
 
-class _ShelfCategoryPage extends StatefulWidget {
+class _ShelfCategoryPage extends ConsumerStatefulWidget {
   const _ShelfCategoryPage({
     super.key,
     required this.categoryId,
@@ -1031,10 +1034,10 @@ class _ShelfCategoryPage extends StatefulWidget {
   onVisibleRangeChanged;
 
   @override
-  State<_ShelfCategoryPage> createState() => _ShelfCategoryPageState();
+  ConsumerState<_ShelfCategoryPage> createState() => _ShelfCategoryPageState();
 }
 
-class _ShelfCategoryPageState extends State<_ShelfCategoryPage>
+class _ShelfCategoryPageState extends ConsumerState<_ShelfCategoryPage>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
@@ -1131,6 +1134,24 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage>
     );
   }
 
+  Size _coverDisplaySize() {
+    if (widget.displayMode == LibraryDisplayMode.list) {
+      return const Size.square(52);
+    }
+    final columns = widget.gridColumns.clamp(1, 20).toInt();
+    final layoutWidth = context.size?.width;
+    final viewportWidth =
+        layoutWidth != null && layoutWidth.isFinite && layoutWidth > 0
+        ? layoutWidth
+        : MediaQuery.sizeOf(context).width;
+    final width =
+        (viewportWidth -
+            ShelfGridGeometry.contentPadding * 2 -
+            ShelfGridGeometry.itemSpacing * (columns - 1)) /
+        columns;
+    return Size(width, width * 1.5);
+  }
+
   int _estimateFirstIndex(double scrollOffset) {
     if (widget.displayMode == LibraryDisplayMode.list) {
       return (scrollOffset / 72)
@@ -1150,10 +1171,15 @@ class _ShelfCategoryPageState extends State<_ShelfCategoryPage>
 
   int _estimateVisibleCount() {
     if (widget.displayMode == LibraryDisplayMode.list) {
-      return 10;
+      return (MediaQuery.sizeOf(context).height / 82).ceil() + 1;
     }
     final columns = widget.gridColumns < 1 ? 1 : widget.gridColumns;
-    return columns * 4;
+    final size = _coverDisplaySize();
+    final rows =
+        (MediaQuery.sizeOf(context).height /
+                (size.height + ShelfGridGeometry.itemSpacing))
+            .ceil();
+    return columns * (rows + 1);
   }
 }
 
@@ -1186,56 +1212,67 @@ class _WorkGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return KeyedSubtree(
-      key: PageStorageKey<String>('unified-shelf-grid-storage-$categoryId'),
-      child: GridView.builder(
-        key: const Key('unified-shelf-grid-view'),
-        // 保证短列表也能触发 RefreshIndicator 下拉手势。
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: ClampingScrollPhysics(),
-        ),
-        // 大书架场景预渲染适度前后缓存，降低滑动抖动。
-        scrollCacheExtent: const ScrollCacheExtent.pixels(900),
-        padding: const EdgeInsets.all(ShelfGridGeometry.contentPadding),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: gridColumns,
-          crossAxisSpacing: ShelfGridGeometry.itemSpacing,
-          mainAxisSpacing: ShelfGridGeometry.itemSpacing,
-          childAspectRatio: 2 / 3,
-        ),
-        itemCount: items.length,
-        itemBuilder: (context, index) {
-          final item = items[index];
-          return ShelfCoverCard(
-            key: ValueKey<String>('unified-shelf-grid-item-${item.workId}'),
-            coverKey: item.workId,
-            title: LibraryShelfTextResolver.workTitle(
-              AppLocalizations.of(context),
-              moduleKey,
-              item.title,
-              item.workId,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalSpace =
+            ShelfGridGeometry.contentPadding * 2 +
+            ShelfGridGeometry.itemSpacing * (gridColumns - 1);
+        final itemWidth =
+            (constraints.maxWidth - horizontalSpace) / gridColumns;
+        final rowExtent = itemWidth * 1.5 + ShelfGridGeometry.itemSpacing;
+        return KeyedSubtree(
+          key: PageStorageKey<String>('unified-shelf-grid-storage-$categoryId'),
+          child: GridView.builder(
+            key: const Key('unified-shelf-grid-view'),
+            // 保证短列表也能触发 RefreshIndicator 下拉手势。
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: ClampingScrollPhysics(),
             ),
-            coverImageUrl: item.coverImageUrl,
-            coverLocalPath: item.coverLocalPath,
-            customCoverLocalPath: item.customCoverLocalPath,
-            customCoverFocusX: item.customCoverFocusX,
-            customCoverFocusY: item.customCoverFocusY,
-            imageHeaderBuilder: imageHeaderBuilder,
-            coverLayerBuilder: useShelfCoverImage
-                ? null
-                : _legacyCoverLayerBuilder,
-            onTap: () async => onTapItem(item.workId),
-            onLongPress: selectionEnabled
-                ? () async => onLongPressItem(item.workId)
-                : null,
-            topLeftBadge: showUnreadBadge
-                ? _UnreadBadge(count: item.unreadCount)
-                : null,
-            showTwoLineCustomEllipsis: true,
-            selected: selectedWorkIds.contains(item.workId),
-          );
-        },
-      ),
+            // 大书架场景预渲染适度前后缓存，降低滑动抖动。
+            scrollCacheExtent: ScrollCacheExtent.pixels(rowExtent),
+            padding: const EdgeInsets.all(ShelfGridGeometry.contentPadding),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: gridColumns,
+              crossAxisSpacing: ShelfGridGeometry.itemSpacing,
+              mainAxisSpacing: ShelfGridGeometry.itemSpacing,
+              childAspectRatio: 2 / 3,
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return ShelfCoverCard(
+                key: ValueKey<String>('unified-shelf-grid-item-${item.workId}'),
+                coverKey: item.workId,
+                title: LibraryShelfTextResolver.workTitle(
+                  AppLocalizations.of(context),
+                  moduleKey,
+                  item.title,
+                  item.workId,
+                ),
+                coverImageUrl: item.coverImageUrl,
+                coverLocalPath: item.coverLocalPath,
+                customCoverLocalPath: item.customCoverLocalPath,
+                customCoverFocusX: item.customCoverFocusX,
+                customCoverFocusY: item.customCoverFocusY,
+                coverAsset: item.coverAsset,
+                imageHeaderBuilder: imageHeaderBuilder,
+                coverLayerBuilder: useShelfCoverImage
+                    ? null
+                    : _legacyCoverLayerBuilder,
+                onTap: () async => onTapItem(item.workId),
+                onLongPress: selectionEnabled
+                    ? () async => onLongPressItem(item.workId)
+                    : null,
+                topLeftBadge: showUnreadBadge
+                    ? _UnreadBadge(count: item.unreadCount)
+                    : null,
+                showTwoLineCustomEllipsis: true,
+                selected: selectedWorkIds.contains(item.workId),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -1353,7 +1390,7 @@ class _WorkList extends StatelessWidget {
           parent: ClampingScrollPhysics(),
         ),
         // 大书架场景预渲染适度前后缓存，降低滑动抖动。
-        scrollCacheExtent: const ScrollCacheExtent.pixels(900),
+        scrollCacheExtent: const ScrollCacheExtent.pixels(82),
         padding: const EdgeInsets.all(12),
         itemCount: items.length,
         separatorBuilder: (context, index) => const SizedBox(height: 10),
@@ -1427,9 +1464,9 @@ class _WorkList extends StatelessWidget {
     final shelfPalette = const ShelfThemePaletteResolver().resolve(
       Theme.of(context),
     );
-    final placeholder = Container(
+    final placeholder = LibraryCoverPlaceholder(
+      key: const Key('shelf-list-cover-placeholder'),
       color: shelfPalette.coverPlaceholderBackground,
-      child: const Icon(Icons.image_not_supported_outlined),
     );
     // 焦点仅作用于自定义封面；展示来源封面时保持居中。
     final alignment = _isShowingCustomCover(item)
@@ -1450,6 +1487,7 @@ class _WorkList extends StatelessWidget {
     }
     return ShelfCoverImage(
       coverKey: item.workId,
+      coverAsset: item.coverAsset,
       localPath: _preferredLocalPath(item),
       remoteUrl: _preferredRemoteUrl(item),
       imageHeaderBuilder: imageHeaderBuilder,
@@ -1460,6 +1498,9 @@ class _WorkList extends StatelessWidget {
   }
 
   bool _isShowingCustomCover(LibraryWorkItem item) {
+    if (item.coverAsset?.kind == LibraryCoverAssetKind.custom) {
+      return true;
+    }
     final custom = item.customCoverLocalPath?.trim();
     return custom != null && custom.isNotEmpty;
   }
@@ -1467,7 +1508,8 @@ class _WorkList extends StatelessWidget {
   bool _hasCoverSource(LibraryWorkItem item) {
     // 区分“作品没有配置封面”和“封面配置存在但加载失败”：
     // 前者在列表模式不占 leading，后者仍交给图片组件显示兜底。
-    return _preferredLocalPath(item) != null ||
+    return item.coverAsset != null ||
+        _preferredLocalPath(item) != null ||
         _preferredRemoteUrl(item) != null;
   }
 

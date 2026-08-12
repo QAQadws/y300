@@ -6,6 +6,7 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import '../../../test_support/unavailable_library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
 void main() {
@@ -19,7 +20,10 @@ void main() {
     setUp(() async {
       await deleteDatabase(ComicLocalDb.dbName);
       dbFuture = ComicLocalDb.open();
-      repository = LocalComicRepository(dbFuture);
+      repository = LocalComicRepository(
+        dbFuture,
+        libraryCoverStore: const UnavailableLibraryCoverStore(),
+      );
     });
 
     test(

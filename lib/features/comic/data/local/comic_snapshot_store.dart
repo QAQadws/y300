@@ -5,6 +5,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_asset_factory.dart';
 
 class ComicSnapshotStore {
   ComicSnapshotStore(this._dbFuture);
@@ -69,6 +70,8 @@ class ComicSnapshotStore {
         c.custom_cover_image_url,
         c.cover_local_path,
         c.custom_cover_local_path,
+        c.cover_revision,
+        c.custom_cover_revision,
         c.custom_cover_focus_x,
         c.custom_cover_focus_y,
         c.updated_at AS work_updated_at,
@@ -190,6 +193,18 @@ class ComicSnapshotStore {
           ? null
           : row['cover_local_path'] as String?,
       customCoverLocalPath: customLocal,
+      coverAsset: LibraryCoverAssetFactory.preferred(
+        ownerType: 'comic',
+        ownerId: row['comic_id'] as String,
+        sourceUrl: customSource == null
+            ? row['cover_image_url'] as String?
+            : null,
+        sourceLegacyPath: row['cover_local_path'] as String?,
+        sourceRevision: row['cover_revision'] as int? ?? 0,
+        customSourceUrl: customSource,
+        customLegacyPath: customLocal,
+        customRevision: row['custom_cover_revision'] as int? ?? 0,
+      ),
       customCoverFocusX: (row['custom_cover_focus_x'] as num?)?.toDouble(),
       customCoverFocusY: (row['custom_cover_focus_y'] as num?)?.toDouble(),
       unreadCount: unreadCount,

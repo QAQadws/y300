@@ -6,13 +6,11 @@
 class ShelfFeatureFlags {
   const ShelfFeatureFlags({
     this.useShelfSnapshotQuery = true,
-    this.useShelfCoverQueue = true,
     this.useShelfCoverImage = true,
     this.useStaleWhileRevalidate = true,
   });
 
   final bool useShelfSnapshotQuery;
-  final bool useShelfCoverQueue;
   final bool useShelfCoverImage;
   final bool useStaleWhileRevalidate;
 
@@ -20,14 +18,12 @@ class ShelfFeatureFlags {
 
   ShelfFeatureFlags copyWith({
     bool? useShelfSnapshotQuery,
-    bool? useShelfCoverQueue,
     bool? useShelfCoverImage,
     bool? useStaleWhileRevalidate,
   }) {
     return ShelfFeatureFlags(
       useShelfSnapshotQuery:
           useShelfSnapshotQuery ?? this.useShelfSnapshotQuery,
-      useShelfCoverQueue: useShelfCoverQueue ?? this.useShelfCoverQueue,
       useShelfCoverImage: useShelfCoverImage ?? this.useShelfCoverImage,
       useStaleWhileRevalidate:
           useStaleWhileRevalidate ?? this.useStaleWhileRevalidate,

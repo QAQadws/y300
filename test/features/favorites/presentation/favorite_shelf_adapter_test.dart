@@ -1,9 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
@@ -17,7 +13,6 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
-import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
   test(
@@ -72,173 +67,34 @@ void main() {
     },
   );
 
-  test(
-    'FavoriteShelfAdapter returns metadata before warming comic cover, then writes local path back',
-    () async {
-      final local = _FakeLocalFavoriteRepository(
-        items: <LibraryWorkItem>[
-          LibraryWorkItem(
-            workId: FavoriteShelfWorkId.fromTid('100'),
-            categoryId: favoriteComicCategoryId,
-            title: 'Favorite Comic',
-            coverImageUrl: 'https://img.test/cover.jpg',
-            unreadCount: 0,
-            totalChapterCount: 1,
-            readChapterCount: 0,
-            addedAt: DateTime(2026, 1, 1),
-          ),
-        ],
-        routeTargets: const <String, FavoriteRouteTarget>{
-          'favorite:100': FavoriteRouteTarget(
-            tid: '100',
-            title: 'Favorite Comic',
-            contentKind: ThreadContentKind.comic,
-            workId: 'yamibo:100',
-          ),
-        },
-      );
-      final imageCache = _FakeImageCacheService(
-        localPath: '/cache/comic-cover.jpg',
-      );
-      final writer = _FakeComicCoverCacheWriter();
-      final sync = _FakeFavoriteSyncService()..markSynced();
-      final adapter = FavoriteShelfAdapter(
-        local,
-        syncService: sync,
-        imageCacheService: imageCache,
-        comicCoverCacheWriter: writer,
-      );
-
-      final items = await adapter.loadCategoryItems(
-        categoryId: favoriteComicCategoryId,
-      );
-
-      expect(items.single.coverLocalPath, isNull);
-      expect(imageCache.lastRequest, isNull);
-
-      final requests = await adapter.buildCoverWarmupRequests(
-        selectedCategoryId: favoriteComicCategoryId,
-        itemsByCategory: <String, List<LibraryWorkItem>>{
-          favoriteComicCategoryId: items,
-        },
-      );
-      expect(requests.single.imageSpec.kind, ForumImageKind.favoriteCover);
-      expect(requests.single.imageSpec.ownerType, ImageCacheOwnerType.comic);
-      expect(requests.single.imageSpec.ownerId, 'yamibo:100');
-      expect(requests.single.imageSpec.cacheKey, 'cover/comic/yamibo:100');
-      final result = await adapter.warmCover(requests.single);
-
-      expect(result?.coverLocalPath, '/cache/comic-cover.jpg');
-      expect(imageCache.lastRequest?.cacheKey, 'cover/comic/yamibo:100');
-      expect(writer.lastComicId, 'yamibo:100');
-      expect(writer.lastCoverLocalPath, '/cache/comic-cover.jpg');
-    },
-  );
-
-  test('FavoriteShelfAdapter warms custom comic cover separately', () async {
+  test('FavoriteShelfAdapter cover reads do not resolve route targets', () async {
     final local = _FakeLocalFavoriteRepository(
       items: <LibraryWorkItem>[
         LibraryWorkItem(
-          workId: FavoriteShelfWorkId.fromTid('101'),
+          workId: FavoriteShelfWorkId.fromTid('100'),
           categoryId: favoriteComicCategoryId,
-          title: 'Custom Cover Comic',
-          coverImageUrl: 'https://img.test/custom-cover.jpg',
-          customCoverImageUrl: 'https://img.test/custom-cover.jpg',
+          title: 'Favorite Comic',
+          coverImageUrl: 'https://img.test/cover.jpg',
           unreadCount: 0,
           totalChapterCount: 1,
           readChapterCount: 0,
           addedAt: DateTime(2026, 1, 1),
         ),
       ],
-      routeTargets: const <String, FavoriteRouteTarget>{
-        'favorite:101': FavoriteRouteTarget(
-          tid: '101',
-          title: 'Custom Cover Comic',
-          contentKind: ThreadContentKind.comic,
-          workId: 'yamibo:101',
-        ),
-      },
     );
-    final imageCache = _FakeImageCacheService(
-      localPath: '/cache/custom-cover.jpg',
-    );
-    final writer = _FakeComicCoverCacheWriter();
-    final sync = _FakeFavoriteSyncService()..markSynced();
     final adapter = FavoriteShelfAdapter(
       local,
-      syncService: sync,
-      imageCacheService: imageCache,
-      comicCoverCacheWriter: writer,
+      syncService: _FakeFavoriteSyncService(),
     );
 
     final items = await adapter.loadCategoryItems(
       categoryId: favoriteComicCategoryId,
     );
 
+    expect(items.single.coverImageUrl, 'https://img.test/cover.jpg');
     expect(items.single.coverLocalPath, isNull);
-    expect(items.single.customCoverLocalPath, isNull);
-    expect(imageCache.lastRequest, isNull);
-
-    final requests = await adapter.buildCoverWarmupRequests(
-      selectedCategoryId: favoriteComicCategoryId,
-      itemsByCategory: <String, List<LibraryWorkItem>>{
-        favoriteComicCategoryId: items,
-      },
-    );
-    expect(requests.single.imageSpec.kind, ForumImageKind.customCover);
-    expect(requests.single.imageSpec.protected, isTrue);
-    expect(requests.single.imageSpec.ownerId, 'yamibo:101');
-    final result = await adapter.warmCover(requests.single);
-
-    expect(result?.coverLocalPath, isNull);
-    expect(result?.customCoverLocalPath, '/cache/custom-cover.jpg');
-    expect(imageCache.lastRequest?.cacheKey, 'cover/custom/comic/yamibo:101');
-    expect(imageCache.lastRequest?.role, ImageCacheRole.customCover);
-    expect(writer.lastCoverImageUrl, isNull);
-    expect(writer.lastCoverLocalPath, isNull);
-    expect(writer.lastCustomCoverLocalPath, '/cache/custom-cover.jpg');
+    expect(local.routeTargetLookupCount, 0);
   });
-
-  test(
-    'FavoriteShelfAdapter skips cover warmup when route target is missing',
-    () async {
-      final local = _FakeLocalFavoriteRepository(
-        items: <LibraryWorkItem>[
-          LibraryWorkItem(
-            workId: FavoriteShelfWorkId.fromTid('102'),
-            categoryId: favoriteComicCategoryId,
-            title: 'Missing Target',
-            coverImageUrl: 'https://img.test/missing.jpg',
-            unreadCount: 0,
-            totalChapterCount: 1,
-            readChapterCount: 0,
-            addedAt: DateTime(2026, 1, 1),
-          ),
-        ],
-      );
-      final sync = _FakeFavoriteSyncService()..markSynced();
-      final adapter = FavoriteShelfAdapter(
-        local,
-        syncService: sync,
-        imageCacheService: _FakeImageCacheService(
-          localPath: '/cache/missing.jpg',
-        ),
-        comicCoverCacheWriter: _FakeComicCoverCacheWriter(),
-      );
-
-      final items = await adapter.loadCategoryItems(
-        categoryId: favoriteComicCategoryId,
-      );
-      final requests = await adapter.buildCoverWarmupRequests(
-        selectedCategoryId: favoriteComicCategoryId,
-        itemsByCategory: <String, List<LibraryWorkItem>>{
-          favoriteComicCategoryId: items,
-        },
-      );
-
-      expect(requests, isEmpty);
-    },
-  );
 
   test(
     'FavoriteShelfAdapter exposes favorite progress from task progress hub',
@@ -381,12 +237,11 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   _FakeLocalFavoriteRepository({
     this.items = const <LibraryWorkItem>[],
-    this.routeTargets = const <String, FavoriteRouteTarget>{},
   });
 
   FavoriteSyncSnapshot? snapshot;
   final List<LibraryWorkItem> items;
-  final Map<String, FavoriteRouteTarget> routeTargets;
+  int routeTargetLookupCount = 0;
 
   @override
   Future<FavoriteSyncSnapshot?> getSyncSnapshot() async => snapshot;
@@ -429,7 +284,8 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<FavoriteRouteTarget?> getRouteTargetByShelfWorkId(
     String workId,
   ) async {
-    return routeTargets[workId];
+    routeTargetLookupCount++;
+    return null;
   }
 
   @override
@@ -451,57 +307,6 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _FakeImageCacheService implements ImageCacheService {
-  _FakeImageCacheService({required this.localPath});
-
-  final String localPath;
-  ImageCacheRequest? lastRequest;
-
-  @override
-  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
-    lastRequest = request;
-    return CachedImageResult(
-      success: true,
-      cacheKey: request.cacheKey,
-      localPath: localPath,
-    );
-  }
-
-  @override
-  Future<CachedImageResult> copyProtectedLocalFile(
-    ImageCacheLocalCopyRequest request,
-  ) async {
-    return CachedImageResult(
-      success: true,
-      cacheKey: request.cacheKey,
-      localPath: localPath,
-    );
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _FakeComicCoverCacheWriter implements ComicCoverCacheWriter {
-  String? lastComicId;
-  String? lastCoverImageUrl;
-  String? lastCoverLocalPath;
-  String? lastCustomCoverLocalPath;
-
-  @override
-  Future<void> updateCoverCache({
-    required String comicId,
-    String? coverImageUrl,
-    String? coverLocalPath,
-    String? customCoverLocalPath,
-  }) async {
-    lastComicId = comicId;
-    lastCoverImageUrl = coverImageUrl;
-    lastCoverLocalPath = coverLocalPath;
-    lastCustomCoverLocalPath = customCoverLocalPath;
-  }
 }
 
 class _FakeShelfCategoryAssignUseCase implements ShelfCategoryAssignUseCase {

@@ -150,6 +150,7 @@ final class MoreTextResolver {
   static String _bucketLabel(AppLocalizations l10n, String code) {
     return switch (code) {
       'image_cache' => l10n.moreStorageBucketImageCache,
+      'library_cover' => l10n.moreStorageBucketLibraryCover,
       'page_cache' => l10n.moreStorageBucketPageCache,
       'library_metadata' => l10n.moreStorageBucketLibraryMetadata,
       'history' => l10n.moreStorageBucketHistory,

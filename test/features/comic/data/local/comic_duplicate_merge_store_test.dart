@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
@@ -8,6 +10,8 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -19,15 +23,34 @@ void main() {
     late Future<Database> dbFuture;
     late LocalComicRepository repository;
     late ComicDuplicateMergeStore store;
+    late io.Directory coverRoot;
+    late LocalLibraryCoverStore libraryCoverStore;
 
     setUp(() async {
       await deleteDatabase(databaseName);
       dbFuture = ComicLocalDb.open(databaseName: databaseName);
-      repository = LocalComicRepository(dbFuture);
+      coverRoot = await io.Directory.systemTemp.createTemp(
+        'y300-duplicate-cover-',
+      );
+      libraryCoverStore = LocalLibraryCoverStore(
+        rootPath: Future<String>.value(coverRoot.path),
+        downloader: const _NoCoverDownload(),
+      );
+      repository = LocalComicRepository(
+        dbFuture,
+        libraryCoverStore: libraryCoverStore,
+      );
       store = ComicDuplicateMergeStore(
         dbFuture,
         coverStore: ComicCoverStore(dbFuture),
+        libraryCoverStore: libraryCoverStore,
       );
+    });
+
+    tearDown(() async {
+      if (await coverRoot.exists()) {
+        await coverRoot.delete(recursive: true);
+      }
     });
 
     test(
@@ -119,6 +142,478 @@ void main() {
         expect(customItems.map((item) => item.comicId).toSet(), <String>{
           'yamibo:2000',
         });
+      },
+    );
+
+    test(
+      'merge reowns a source cover file and removes source assets',
+      () async {
+        await _seedDuplicatePair(repository);
+        final db = await dbFuture;
+        await db.update(
+          ComicLocalDb.comicsTable,
+          <String, Object?>{
+            'cover_image_url': 'https://img.test/source.jpg',
+            'metadata_updated_at': 20,
+          },
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:source'],
+        );
+        const sourceAsset = LibraryCoverAssetRef(
+          assetId: 'comic/yamibo:source/source',
+          revision: 1,
+          kind: LibraryCoverAssetKind.source,
+        );
+        final picked = io.File('${coverRoot.path}/picked-source.jpg');
+        await picked.writeAsBytes(<int>[0xff, 0xd8, 1, 2, 0xff, 0xd9]);
+        await libraryCoverStore.installLocalFile(
+          asset: sourceAsset,
+          sourcePath: picked.path,
+        );
+
+        final result = await store.mergeDuplicateGroup(
+          comicIds: const <String>{'yamibo:source', 'yamibo:target'},
+        );
+
+        expect(result.targetComicId, 'yamibo:target');
+        const targetAsset = LibraryCoverAssetRef(
+          assetId: 'comic/yamibo:target/source',
+          revision: 1,
+          kind: LibraryCoverAssetKind.source,
+        );
+        expect(
+          await (await libraryCoverStore.fileFor(targetAsset)).exists(),
+          isTrue,
+        );
+        expect(
+          await (await libraryCoverStore.fileFor(sourceAsset)).exists(),
+          isFalse,
+        );
+        final detail = await repository.getComicDetail(
+          comicId: 'yamibo:target',
+        );
+        expect(detail?.coverRevision, 1);
+        expect(detail?.coverImageUrl, 'https://img.test/source.jpg');
+        expect(
+          await db.query(ComicLocalDb.comicCoverMergeOperationsTable),
+          isEmpty,
+        );
+      },
+    );
+
+    test('valid target cover wins and keeps its complete identity', () async {
+      await _seedDuplicatePair(repository);
+      final db = await dbFuture;
+      await db.update(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{
+          'cover_image_url': 'https://img.test/target.jpg',
+          'metadata_updated_at': 10,
+        },
+        where: 'comic_id = ?',
+        whereArgs: const <Object>['yamibo:target'],
+      );
+      await db.update(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{
+          'cover_image_url': 'https://img.test/newer-source.jpg',
+          'metadata_updated_at': 99,
+        },
+        where: 'comic_id = ?',
+        whereArgs: const <Object>['yamibo:source'],
+      );
+      await db.update(
+        ComicLocalDb.comicsTable,
+        const <String, Object?>{'cover_revision': 3},
+        where: 'comic_id = ?',
+        whereArgs: const <Object>['yamibo:target'],
+      );
+      const targetAsset = LibraryCoverAssetRef(
+        assetId: 'comic/yamibo:target/source',
+        revision: 3,
+        kind: LibraryCoverAssetKind.source,
+      );
+      const oldTargetAsset = LibraryCoverAssetRef(
+        assetId: 'comic/yamibo:target/source',
+        revision: 2,
+        kind: LibraryCoverAssetKind.source,
+      );
+      final targetImage = io.File('${coverRoot.path}/target.jpg');
+      await targetImage.writeAsBytes(<int>[0xff, 0xd8, 3, 0xff, 0xd9]);
+      await libraryCoverStore.installLocalFile(
+        asset: targetAsset,
+        sourcePath: targetImage.path,
+      );
+      await libraryCoverStore.installLocalFile(
+        asset: oldTargetAsset,
+        sourcePath: targetImage.path,
+      );
+      await db.insert(
+        ComicLocalDb.libraryCoverMigrationsTable,
+        const <String, Object?>{
+          'asset_id': 'comic/yamibo:target/source',
+          'revision': 2,
+          'kind': 'installed',
+          'completed_at': 1,
+        },
+      );
+
+      await store.mergeDuplicateGroup(
+        comicIds: const <String>{'yamibo:source', 'yamibo:target'},
+      );
+
+      final detail = await repository.getComicDetail(comicId: 'yamibo:target');
+      expect(detail?.coverImageUrl, 'https://img.test/target.jpg');
+      expect(detail?.coverRevision, 3);
+      expect(
+        await (await libraryCoverStore.fileFor(targetAsset)).exists(),
+        isTrue,
+      );
+      expect(
+        await (await libraryCoverStore.fileFor(oldTargetAsset)).exists(),
+        isFalse,
+      );
+      expect(
+        await db.query(
+          ComicLocalDb.libraryCoverMigrationsTable,
+          where: 'asset_id = ? AND revision = ?',
+          whereArgs: const <Object>['comic/yamibo:target/source', 2],
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
+      'source and custom covers are selected as independent bundles',
+      () async {
+        await _seedDuplicatePair(repository);
+        final db = await dbFuture;
+        await repository.addToShelf(
+          comicId: 'yamibo:custom',
+          tid: '9200',
+          fid: '30',
+          title: 'A Longer Custom Donor',
+          parsedPost: const ParsedComicPost(
+            imageUrls: <String>[],
+            episodeLinks: <ComicEpisodeLink>[
+              ComicEpisodeLink(url: 'thread-9001-1-1.html', rawText: '1'),
+            ],
+            plainTextSummary: '',
+          ),
+        );
+        await db.update(
+          ComicLocalDb.comicsTable,
+          <String, Object?>{
+            'cover_image_url': 'https://img.test/source-bundle.jpg',
+            'metadata_updated_at': 30,
+          },
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:source'],
+        );
+        await db.update(
+          ComicLocalDb.comicsTable,
+          <String, Object?>{
+            'custom_cover_image_url': 'https://img.test/custom-bundle.jpg',
+            'custom_cover_revision': 4,
+            'custom_cover_source_episode_id': 'yamibo:custom:9001',
+            'custom_cover_source_image_index': 7,
+            'custom_cover_source_image_url':
+                'https://img.test/custom-origin.jpg',
+            'custom_cover_focus_x': 0.25,
+            'custom_cover_focus_y': -0.5,
+            'metadata_updated_at': 20,
+          },
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:custom'],
+        );
+        const donorCustomAsset = LibraryCoverAssetRef(
+          assetId: 'comic/yamibo:custom/custom',
+          revision: 4,
+          kind: LibraryCoverAssetKind.custom,
+        );
+        final customImage = io.File('${coverRoot.path}/custom.jpg');
+        await customImage.writeAsBytes(<int>[0xff, 0xd8, 4, 0xff, 0xd9]);
+        await libraryCoverStore.installLocalFile(
+          asset: donorCustomAsset,
+          sourcePath: customImage.path,
+        );
+
+        await store.mergeDuplicateGroup(
+          comicIds: const <String>{
+            'yamibo:source',
+            'yamibo:target',
+            'yamibo:custom',
+          },
+        );
+
+        final detail = await repository.getComicDetail(
+          comicId: 'yamibo:target',
+        );
+        final coverColumns = (await db.query(
+          ComicLocalDb.comicsTable,
+          columns: const <String>[
+            'cover_image_url',
+            'cover_revision',
+            'custom_cover_image_url',
+            'custom_cover_revision',
+          ],
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:target'],
+        )).single;
+        expect(
+          coverColumns['cover_image_url'],
+          'https://img.test/source-bundle.jpg',
+        );
+        expect(coverColumns['cover_revision'], 1);
+        expect(
+          coverColumns['custom_cover_image_url'],
+          'https://img.test/custom-bundle.jpg',
+        );
+        expect(coverColumns['custom_cover_revision'], 1);
+        expect(
+          detail?.customCoverImageUrl,
+          'https://img.test/custom-bundle.jpg',
+        );
+        expect(detail?.customCoverSourceEpisodeId, 'yamibo:target:9001');
+        expect(detail?.customCoverSourceImageIndex, 7);
+        expect(
+          detail?.customCoverSourceImageUrl,
+          'https://img.test/custom-origin.jpg',
+        );
+        expect(detail?.customCoverFocusX, 0.25);
+        expect(detail?.customCoverFocusY, -0.5);
+        const targetCustomAsset = LibraryCoverAssetRef(
+          assetId: 'comic/yamibo:target/custom',
+          revision: 1,
+          kind: LibraryCoverAssetKind.custom,
+        );
+        expect(
+          await (await libraryCoverStore.fileFor(targetCustomAsset)).exists(),
+          isTrue,
+        );
+      },
+    );
+
+    test('URL-only source cover moves metadata without downloading', () async {
+      await _seedDuplicatePair(repository);
+      final db = await dbFuture;
+      await db.update(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{
+          'cover_image_url': 'https://img.test/remote-only.jpg',
+          'metadata_updated_at': 30,
+        },
+        where: 'comic_id = ?',
+        whereArgs: const <Object>['yamibo:source'],
+      );
+
+      await store.mergeDuplicateGroup(
+        comicIds: const <String>{'yamibo:source', 'yamibo:target'},
+      );
+
+      final detail = await repository.getComicDetail(comicId: 'yamibo:target');
+      expect(detail?.coverRevision, 1);
+      expect(detail?.coverImageUrl, 'https://img.test/remote-only.jpg');
+      const targetAsset = LibraryCoverAssetRef(
+        assetId: 'comic/yamibo:target/source',
+        revision: 1,
+        kind: LibraryCoverAssetKind.source,
+      );
+      expect(
+        await (await libraryCoverStore.fileFor(targetAsset)).exists(),
+        isFalse,
+      );
+      final marker = (await db.query(
+        ComicLocalDb.libraryCoverMigrationsTable,
+        where: 'asset_id = ?',
+        whereArgs: const <Object>['comic/yamibo:target/source'],
+      )).single;
+      expect(marker['kind'], 'remote');
+    });
+
+    test('unrecoverable custom cover aborts before deleting comics', () async {
+      await _seedDuplicatePair(repository);
+      final db = await dbFuture;
+      await db.update(
+        ComicLocalDb.comicsTable,
+        <String, Object?>{'custom_cover_revision': 3},
+        where: 'comic_id = ?',
+        whereArgs: const <Object>['yamibo:source'],
+      );
+
+      await expectLater(
+        store.mergeDuplicateGroup(
+          comicIds: const <String>{'yamibo:source', 'yamibo:target'},
+        ),
+        throwsStateError,
+      );
+
+      final rows = await db.query(
+        ComicLocalDb.comicsTable,
+        columns: const <String>['comic_id'],
+        where: 'comic_id IN (?, ?)',
+        whereArgs: const <Object>['yamibo:source', 'yamibo:target'],
+      );
+      expect(rows, hasLength(2));
+      expect(
+        await db.query(ComicLocalDb.comicCoverMergeOperationsTable),
+        isEmpty,
+      );
+    });
+
+    test('recovery rolls back preparing target revision', () async {
+      await _seedDuplicatePair(repository);
+      final db = await dbFuture;
+      const targetAsset = LibraryCoverAssetRef(
+        assetId: 'comic/yamibo:target/source',
+        revision: 1,
+        kind: LibraryCoverAssetKind.source,
+      );
+      final staged = io.File('${coverRoot.path}/staged.jpg');
+      await staged.writeAsBytes(<int>[0xff, 0xd8, 1, 0xff, 0xd9]);
+      await libraryCoverStore.installLocalFile(
+        asset: targetAsset,
+        sourcePath: staged.path,
+      );
+      await _insertJournal(
+        db,
+        operationId: 'preparing-op',
+        state: 'preparing',
+        targetAsset: targetAsset,
+      );
+
+      await store.recoverPendingCoverMerges();
+
+      expect(
+        await (await libraryCoverStore.fileFor(targetAsset)).exists(),
+        isFalse,
+      );
+      expect(
+        await db.query(ComicLocalDb.comicCoverMergeOperationsTable),
+        isEmpty,
+      );
+    });
+
+    test(
+      'recovery finishes committed cleanup without deleting target',
+      () async {
+        await _seedDuplicatePair(repository);
+        final db = await dbFuture;
+        const sourceAsset = LibraryCoverAssetRef(
+          assetId: 'comic/yamibo:source/source',
+          revision: 1,
+          kind: LibraryCoverAssetKind.source,
+        );
+        const targetAsset = LibraryCoverAssetRef(
+          assetId: 'comic/yamibo:target/source',
+          revision: 1,
+          kind: LibraryCoverAssetKind.source,
+        );
+        final image = io.File('${coverRoot.path}/committed.jpg');
+        await image.writeAsBytes(<int>[0xff, 0xd8, 1, 0xff, 0xd9]);
+        await libraryCoverStore.installLocalFile(
+          asset: sourceAsset,
+          sourcePath: image.path,
+        );
+        await libraryCoverStore.installLocalFile(
+          asset: targetAsset,
+          sourcePath: image.path,
+        );
+        await db.update(
+          ComicLocalDb.comicsTable,
+          <String, Object?>{'cover_revision': 1},
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:target'],
+        );
+        await _insertJournal(
+          db,
+          operationId: 'committed-op',
+          state: 'database_committed',
+          targetAsset: targetAsset,
+        );
+
+        await store.recoverPendingCoverMerges();
+
+        expect(
+          await (await libraryCoverStore.fileFor(sourceAsset)).exists(),
+          isFalse,
+        );
+        expect(
+          await (await libraryCoverStore.fileFor(targetAsset)).exists(),
+          isTrue,
+        );
+        expect(
+          await db.query(ComicLocalDb.comicCoverMergeOperationsTable),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      'committed cleanup failure keeps journal and later recovery converges',
+      () async {
+        await _seedDuplicatePair(repository);
+        final db = await dbFuture;
+        await db.update(
+          ComicLocalDb.comicsTable,
+          <String, Object?>{
+            'cover_image_url': 'https://img.test/retry.jpg',
+            'metadata_updated_at': 20,
+          },
+          where: 'comic_id = ?',
+          whereArgs: const <Object>['yamibo:source'],
+        );
+        const sourceAsset = LibraryCoverAssetRef(
+          assetId: 'comic/yamibo:source/source',
+          revision: 1,
+          kind: LibraryCoverAssetKind.source,
+        );
+        final image = io.File('${coverRoot.path}/retry.jpg');
+        await image.writeAsBytes(<int>[0xff, 0xd8, 5, 0xff, 0xd9]);
+        await libraryCoverStore.installLocalFile(
+          asset: sourceAsset,
+          sourcePath: image.path,
+        );
+        final failingStore = _FailDeleteOnceCoverStore(libraryCoverStore);
+        final retryingMergeStore = ComicDuplicateMergeStore(
+          dbFuture,
+          coverStore: ComicCoverStore(dbFuture),
+          libraryCoverStore: failingStore,
+        );
+
+        final result = await retryingMergeStore.mergeDuplicateGroup(
+          comicIds: const <String>{'yamibo:source', 'yamibo:target'},
+        );
+
+        expect(result.targetComicId, 'yamibo:target');
+        final pending = await db.query(
+          ComicLocalDb.comicCoverMergeOperationsTable,
+        );
+        expect(pending.single['state'], 'database_committed');
+        expect(
+          await (await libraryCoverStore.fileFor(sourceAsset)).exists(),
+          isTrue,
+        );
+
+        await retryingMergeStore.recoverPendingCoverMerges();
+
+        expect(
+          await db.query(ComicLocalDb.comicCoverMergeOperationsTable),
+          isEmpty,
+        );
+        expect(
+          await (await libraryCoverStore.fileFor(sourceAsset)).exists(),
+          isFalse,
+        );
+        const targetAsset = LibraryCoverAssetRef(
+          assetId: 'comic/yamibo:target/source',
+          revision: 1,
+          kind: LibraryCoverAssetKind.source,
+        );
+        expect(
+          await (await libraryCoverStore.fileFor(targetAsset)).exists(),
+          isTrue,
+        );
       },
     );
 
@@ -461,4 +956,119 @@ void main() {
       },
     );
   });
+}
+
+Future<void> _seedDuplicatePair(LocalComicRepository repository) async {
+  await repository.addToShelf(
+    comicId: 'yamibo:source',
+    tid: '9000',
+    fid: '30',
+    title: 'Long Duplicate Source',
+    parsedPost: const ParsedComicPost(
+      imageUrls: <String>[],
+      episodeLinks: <ComicEpisodeLink>[
+        ComicEpisodeLink(url: 'thread-9001-1-1.html', rawText: '1'),
+      ],
+      plainTextSummary: '',
+    ),
+  );
+  await repository.addToShelf(
+    comicId: 'yamibo:target',
+    tid: '9100',
+    fid: '30',
+    title: 'Short',
+    parsedPost: const ParsedComicPost(
+      imageUrls: <String>[],
+      episodeLinks: <ComicEpisodeLink>[
+        ComicEpisodeLink(url: 'thread-9001-1-1.html', rawText: '1'),
+      ],
+      plainTextSummary: '',
+    ),
+  );
+}
+
+Future<void> _insertJournal(
+  Database db, {
+  required String operationId,
+  required String state,
+  required LibraryCoverAssetRef targetAsset,
+}) async {
+  await db
+      .insert(ComicLocalDb.comicCoverMergeOperationsTable, <String, Object?>{
+        'operation_id': operationId,
+        'target_comic_id': 'yamibo:target',
+        'state': state,
+        'created_at': 1,
+        'updated_at': 1,
+      });
+  await db.insert(ComicLocalDb.comicCoverMergeMembersTable, <String, Object?>{
+    'operation_id': operationId,
+    'source_comic_id': 'yamibo:source',
+  });
+  await db.insert(ComicLocalDb.comicCoverMergeAssetsTable, <String, Object?>{
+    'operation_id': operationId,
+    'kind': 'source',
+    'source_comic_id': 'yamibo:source',
+    'source_asset_id': 'comic/yamibo:source/source',
+    'source_revision': 1,
+    'target_asset_id': targetAsset.assetId,
+    'target_revision': targetAsset.revision,
+    'mode': 'installed',
+  });
+}
+
+class _NoCoverDownload implements LibraryCoverDownloader {
+  const _NoCoverDownload();
+
+  @override
+  Future<void> download({required String url, required String targetPath}) {
+    throw StateError('duplicate merge must not download covers');
+  }
+}
+
+class _FailDeleteOnceCoverStore implements LibraryCoverStore {
+  _FailDeleteOnceCoverStore(this.delegate);
+
+  final LibraryCoverStore delegate;
+  bool _shouldFailDelete = true;
+
+  @override
+  Future<int> calculateUsageBytes() => delegate.calculateUsageBytes();
+
+  @override
+  Future<void> deleteAsset(String assetId) {
+    if (_shouldFailDelete) {
+      _shouldFailDelete = false;
+      throw io.FileSystemException('simulated cleanup failure');
+    }
+    return delegate.deleteAsset(assetId);
+  }
+
+  @override
+  Future<void> deleteOlderRevisions(LibraryCoverAssetRef asset) {
+    return delegate.deleteOlderRevisions(asset);
+  }
+
+  @override
+  Future<io.File> ensureAvailable(LibraryCoverAssetRef asset) {
+    return delegate.ensureAvailable(asset);
+  }
+
+  @override
+  Future<io.File> fileFor(LibraryCoverAssetRef asset) {
+    return delegate.fileFor(asset);
+  }
+
+  @override
+  Future<void> installLocalFile({
+    required LibraryCoverAssetRef asset,
+    required String sourcePath,
+  }) {
+    return delegate.installLocalFile(asset: asset, sourcePath: sourcePath);
+  }
+
+  @override
+  Future<void> invalidate(LibraryCoverAssetRef asset) {
+    return delegate.invalidate(asset);
+  }
 }

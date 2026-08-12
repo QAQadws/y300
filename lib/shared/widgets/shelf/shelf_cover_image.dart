@@ -3,6 +3,8 @@ import 'package:y300/core/media/image_downscale_policy.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/image_loading/domain/app_image_source.dart';
 import 'package:y300/features/image_loading/presentation/app_image.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
+import 'package:y300/features/library_shared/presentation/images/library_cover_image.dart';
 
 /// Shelf cover image widget.
 ///
@@ -25,6 +27,7 @@ class ShelfCoverImage extends StatelessWidget {
     this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
     this.errorPlaceholder,
+    this.coverAsset,
   });
 
   final String coverKey;
@@ -40,9 +43,21 @@ class ShelfCoverImage extends StatelessWidget {
   final ImageDownscalePolicy downscalePolicy;
   final Widget placeholder;
   final Widget? errorPlaceholder;
+  final LibraryCoverAssetRef? coverAsset;
 
   @override
   Widget build(BuildContext context) {
+    final asset = coverAsset;
+    if (asset != null) {
+      return LibraryCoverImage(
+        asset: asset,
+        fit: fit,
+        width: width,
+        height: height,
+        alignment: alignment,
+        placeholder: errorPlaceholder ?? placeholder,
+      );
+    }
     final remote = remoteUrl?.trim();
     final networkSource = (remote != null && remote.isNotEmpty)
         ? NetworkAppImageSource(url: remote, headerBuilder: imageHeaderBuilder)

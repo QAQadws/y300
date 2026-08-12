@@ -46,7 +46,11 @@ void main() {
       expect(await db.getVersion(), ComicLocalDb.dbVersion);
       final after = await readNovelPhase0PersistenceBaseline(db);
 
-      expect(after.work, before.work);
+      // A legacy custom-cover path is an existing user asset. Migration gives
+      // it the first revision so the new stable cover identity can address it.
+      final expectedWork = Map<String, Object?>.from(before.work)
+        ..['custom_cover_revision'] = 1;
+      expect(after.work, expectedWork);
       expect(after.episode, before.episode);
       expect(after.content, before.content);
       expect(after.shelfItem, before.shelfItem);

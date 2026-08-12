@@ -8,6 +8,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_asset_factory.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 abstract class LocalFavoriteRepository {
@@ -784,6 +785,16 @@ class SqfliteLocalFavoriteRepository
           WHEN ft.content_kind = 'novel' AND w.cover_hidden = 0 THEN w.custom_cover_local_path
           ELSE NULL
         END AS module_custom_cover_local_path,
+        CASE
+          WHEN ft.content_kind = 'comic' THEN c.cover_revision
+          WHEN ft.content_kind = 'novel' THEN w.cover_revision
+          ELSE 0
+        END AS module_cover_revision,
+        CASE
+          WHEN ft.content_kind = 'comic' THEN c.custom_cover_revision
+          WHEN ft.content_kind = 'novel' THEN w.custom_cover_revision
+          ELSE 0
+        END AS module_custom_cover_revision,
         COALESCE(tags.has_tags, 0) AS has_tags
       FROM ${ComicLocalDb.favoriteThreadsTable} ft
       LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
@@ -1123,6 +1134,22 @@ class SqfliteLocalFavoriteRepository
       customCoverImageUrl: cover.customCoverImageUrl,
       coverLocalPath: cover.coverLocalPath,
       customCoverLocalPath: cover.customCoverLocalPath,
+      coverAsset:
+          record.contentKind == ThreadContentKind.comic ||
+              record.contentKind == ThreadContentKind.novel
+          ? LibraryCoverAssetFactory.preferred(
+              ownerType: record.contentKind == ThreadContentKind.comic
+                  ? 'comic'
+                  : 'novel',
+              ownerId: record.workId ?? record.shelfWorkId,
+              sourceUrl: cover.coverImageUrl,
+              sourceLegacyPath: cover.coverLocalPath,
+              sourceRevision: cover.coverRevision,
+              customSourceUrl: cover.customCoverImageUrl,
+              customLegacyPath: cover.customCoverLocalPath,
+              customRevision: cover.customCoverRevision,
+            )
+          : null,
       unreadCount: 0,
       totalChapterCount: totalCount,
       readChapterCount: 0,
@@ -1151,6 +1178,20 @@ class SqfliteLocalFavoriteRepository
       customCoverImageUrl: row['module_custom_cover_image_url'] as String?,
       coverLocalPath: row['module_cover_local_path'] as String?,
       customCoverLocalPath: row['module_custom_cover_local_path'] as String?,
+      coverAsset:
+          row['content_kind'] == 'comic' || row['content_kind'] == 'novel'
+          ? LibraryCoverAssetFactory.preferred(
+              ownerType: row['content_kind'] == 'comic' ? 'comic' : 'novel',
+              ownerId: row['work_id'] as String? ?? workId,
+              sourceUrl: row['module_cover_image_url'] as String?,
+              sourceLegacyPath: row['module_cover_local_path'] as String?,
+              sourceRevision: row['module_cover_revision'] as int? ?? 0,
+              customSourceUrl: row['module_custom_cover_image_url'] as String?,
+              customLegacyPath:
+                  row['module_custom_cover_local_path'] as String?,
+              customRevision: row['module_custom_cover_revision'] as int? ?? 0,
+            )
+          : null,
       unreadCount: 0,
       totalChapterCount: totalCount,
       readChapterCount: 0,
@@ -1201,6 +1242,8 @@ class SqfliteLocalFavoriteRepository
             'custom_cover_image_url',
             'cover_local_path',
             'custom_cover_local_path',
+            'cover_revision',
+            'custom_cover_revision',
           ],
           where: 'comic_id = ?',
           whereArgs: <Object>[workId],
@@ -1214,6 +1257,8 @@ class SqfliteLocalFavoriteRepository
             'cover_image_url',
             'cover_local_path',
             'custom_cover_local_path',
+            'cover_revision',
+            'custom_cover_revision',
             'cover_hidden',
           ],
           where: 'work_id = ? AND content_type = ?',
@@ -1243,6 +1288,8 @@ class SqfliteLocalFavoriteRepository
       customCoverImageUrl: customCoverImageUrl,
       coverLocalPath: row['cover_local_path'] as String?,
       customCoverLocalPath: row['custom_cover_local_path'] as String?,
+      coverRevision: row['cover_revision'] as int? ?? 0,
+      customCoverRevision: row['custom_cover_revision'] as int? ?? 0,
     );
   }
 
@@ -1387,16 +1434,22 @@ class _FavoriteCoverSnapshot {
     this.customCoverImageUrl,
     this.coverLocalPath,
     this.customCoverLocalPath,
+    this.coverRevision = 0,
+    this.customCoverRevision = 0,
   });
 
   const _FavoriteCoverSnapshot.empty()
     : coverImageUrl = null,
       customCoverImageUrl = null,
       coverLocalPath = null,
-      customCoverLocalPath = null;
+      customCoverLocalPath = null,
+      coverRevision = 0,
+      customCoverRevision = 0;
 
   final String? coverImageUrl;
   final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+  final int coverRevision;
+  final int customCoverRevision;
 }

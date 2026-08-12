@@ -33,6 +33,7 @@ import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/cache/presentation/services/default_forum_image_precache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
 
 final imageCacheDirectoryResolverProvider =
     Provider<ImageCacheDirectoryResolver>((ref) {
@@ -182,6 +183,9 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
   return DefaultStorageAccountingService(
     adapters: <StorageAccountingAdapter>[
       ImageCacheStorageAccountingAdapter(repository: imageCacheRepository),
+      LibraryCoverStorageAccountingAdapter(
+        store: ref.watch(libraryCoverStoreProvider),
+      ),
       PageCacheStorageAccountingAdapter(
         documentCacheService: ref.watch(documentCacheServiceProvider),
         snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),

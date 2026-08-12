@@ -15,6 +15,9 @@ import 'package:y300/features/comic/domain/models/comic_download_queue_models.da
 import 'package:y300/features/comic/domain/services/comic_download_execution.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_asset_factory.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
@@ -45,12 +48,14 @@ class DefaultComicDownloadService
     required Future<ComicReaderService> readerServiceFuture,
     required DownloadStorageService storageService,
     ImageCacheService? imageCacheService,
+    LibraryCoverStore? coverStore,
     ComicDownloadImageRequestGovernor? imageRequestGovernor,
     io.Directory? readerExtractionRoot,
   }) : _repository = repository,
        _readerServiceFuture = readerServiceFuture,
        _storageService = storageService,
        _imageCacheService = imageCacheService,
+       _coverStore = coverStore,
        _imageRequestGovernor =
            imageRequestGovernor ?? DefaultComicDownloadImageRequestGovernor(),
        _readerExtractionRoot =
@@ -63,6 +68,7 @@ class DefaultComicDownloadService
   final Future<ComicReaderService> _readerServiceFuture;
   final DownloadStorageService _storageService;
   final ImageCacheService? _imageCacheService;
+  final LibraryCoverStore? _coverStore;
   final ComicDownloadImageRequestGovernor _imageRequestGovernor;
   final io.Directory _readerExtractionRoot;
   final Map<String, Future<List<io.File>>> _readerExtractionTasks =
@@ -431,43 +437,38 @@ class DefaultComicDownloadService
     if (await target.exists()) {
       return;
     }
+    final coverStore = _coverStore;
+    final asset = LibraryCoverAssetFactory.preferred(
+      ownerType: 'comic',
+      ownerId: detail.comicId,
+      sourceUrl: detail.coverImageUrl,
+      sourceLegacyPath: detail.coverLocalPath,
+      sourceRevision: detail.coverRevision,
+      customSourceUrl: detail.customCoverImageUrl,
+      customLegacyPath: detail.customCoverLocalPath,
+      customRevision: detail.customCoverRevision,
+    );
+    if (coverStore != null && asset != null) {
+      cancellationToken?.throwIfCancellationRequested();
+      try {
+        final source = await coverStore.ensureAvailable(asset);
+        cancellationToken?.throwIfCancellationRequested();
+        if (await source.exists()) {
+          await source.copy(target.path);
+          return;
+        }
+      } catch (_) {
+        // A missing cover must not fail an otherwise valid offline chapter.
+      }
+    }
+    // Keep a narrow compatibility fallback for injected legacy services used
+    // by older callers/tests. Production always supplies the dedicated Store.
     final localCover = _firstExistingPath(<String?>[
       detail.customCoverLocalPath,
       detail.coverLocalPath,
     ]);
     if (localCover != null) {
       await io.File(localCover).copy(target.path);
-      return;
-    }
-    final coverUrl = detail.coverImageUrl?.trim();
-    if (coverUrl == null || coverUrl.isEmpty) {
-      return;
-    }
-    final cacheKey = ImageCacheKeys.comicCover(detail.comicId);
-    final cached = await _imageCacheService?.getCached(cacheKey);
-    final cachedPath = cached?.localPath?.trim();
-    if (cached?.success == true &&
-        cachedPath != null &&
-        cachedPath.isNotEmpty &&
-        await io.File(cachedPath).exists()) {
-      await io.File(cachedPath).copy(target.path);
-      return;
-    }
-    cancellationToken?.throwIfCancellationRequested();
-    await _imageRequestGovernor.waitForTurn();
-    cancellationToken?.throwIfCancellationRequested();
-    final readerService = await _readerServiceFuture;
-    final result = await readerService.cacheImage(
-      imageUrl: coverUrl,
-      cacheKey: cacheKey,
-      ownerType: ImageCacheOwnerType.comic,
-      ownerId: detail.comicId,
-      role: ImageCacheRole.cover,
-      protected: true,
-    );
-    final path = result.localPath;
-    if (result.success && path != null && await io.File(path).exists()) {
-      await io.File(path).copy(target.path);
     }
   }
 
@@ -860,6 +861,7 @@ final comicDownloadServiceProvider = Provider<ComicDownloadService>((ref) {
     readerServiceFuture: ref.watch(comicReaderServiceProvider.future),
     storageService: ref.watch(downloadStorageServiceProvider),
     imageCacheService: ref.watch(imageCacheServiceProvider),
+    coverStore: ref.watch(libraryCoverStoreProvider),
     imageRequestGovernor: ref.watch(comicDownloadImageRequestGovernorProvider),
   );
 });

@@ -6,9 +6,12 @@ import 'package:y300/features/comic/data/providers/comic_refresh_workflow_provid
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/library_shared/data/services/default_work_purge_service.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/library_shared/domain/services/work_purge_service.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
+import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 final workPurgeServiceProvider = Provider<WorkPurgeService>((ref) {
   final comicRepository = ref.watch(comicRepositoryProvider);
@@ -20,6 +23,7 @@ final workPurgeServiceProvider = Provider<WorkPurgeService>((ref) {
   final comicQueueRepository = ref.watch(
     comicSearchRefreshQueueRepositoryProvider,
   );
+  final coverStore = ref.watch(libraryCoverStoreProvider);
 
   return DefaultWorkPurgeService(
     purgeComicWork: ({required comicId}) {
@@ -50,6 +54,15 @@ final workPurgeServiceProvider = Provider<WorkPurgeService>((ref) {
     deleteComicQueueByComicId: (comicId) async {
       await ref.read(comicDownloadQueueProvider).cancelComic(comicId);
       await comicQueueRepository.deleteByComicId(comicId);
+    },
+    deleteLibraryCoverAssets: ({required kind, required workId}) async {
+      final ownerType = kind == ThreadContentKind.comic ? 'comic' : 'novel';
+      await coverStore.deleteAsset(
+        LibraryCoverAssetIds.source(ownerType: ownerType, ownerId: workId),
+      );
+      await coverStore.deleteAsset(
+        LibraryCoverAssetIds.custom(ownerType: ownerType, ownerId: workId),
+      );
     },
   );
 });

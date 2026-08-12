@@ -1,7 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -27,8 +24,10 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_operation_failure.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
-import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_source_id_comparator.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_asset_factory.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 /// 漫画详情适配器（Phase 6）。
@@ -56,7 +55,7 @@ class ComicDetailAdapter
     ComicRefreshOutcomeApplier? refreshOutcomeApplier,
     ComicDownloadService? downloadService,
     ComicDownloadQueue? downloadQueue,
-    ImageCacheService? imageCacheService,
+    LibraryCoverStore? coverStore,
     BulkDownloadUseCase? bulkDownloadUseCase,
     ComicIncrementalEpisodeDiscovery? incrementalDiscovery,
     ComicEpisodeDiscoveryService? discoveryService,
@@ -72,7 +71,7 @@ class ComicDetailAdapter
        _refreshOutcomeApplier = refreshOutcomeApplier,
        _downloadService = downloadService,
        _downloadQueue = downloadQueue,
-       _coverCacheService = LibraryCoverCacheService(imageCacheService),
+       _coverStore = coverStore,
        _bulkDownloadUseCase = bulkDownloadUseCase,
        _incrementalDiscovery = incrementalDiscovery,
        _discoveryService = discoveryService,
@@ -91,7 +90,7 @@ class ComicDetailAdapter
   final ComicRefreshOutcomeApplier? _refreshOutcomeApplier;
   final ComicDownloadService? _downloadService;
   final ComicDownloadQueue? _downloadQueue;
-  final LibraryCoverCacheService _coverCacheService;
+  final LibraryCoverStore? _coverStore;
   final BulkDownloadUseCase? _bulkDownloadUseCase;
   final ComicIncrementalEpisodeDiscovery? _incrementalDiscovery;
   final ComicEpisodeDiscoveryService? _discoveryService;
@@ -156,6 +155,8 @@ class ComicDetailAdapter
     var customCoverLocalPath = useCustomMetadata
         ? detail.customCoverLocalPath
         : null;
+    var coverRevision = detail.coverRevision;
+    var customCoverRevision = detail.customCoverRevision;
     if (coverImageUrl == null || coverImageUrl.trim().isEmpty) {
       final promoted = await _firstEpisodeCoverService?.promoteIfPossible(
         comicId: workId,
@@ -172,58 +173,14 @@ class ComicDetailAdapter
           customCoverLocalPath = useCustomMetadata
               ? refreshed.customCoverLocalPath
               : null;
+          coverRevision = refreshed.coverRevision;
+          customCoverRevision = refreshed.customCoverRevision;
         }
       }
       // 漫画初始封面使用“tid 最小的话的第一张图”。orderIndex 只代表
       // 当前解析顺序，遇到目录/补全章节时不一定等于真实首话。
       if (coverImageUrl == null || coverImageUrl.trim().isEmpty) {
         coverImageUrl = await _loadFirstEpisodeImageUrl(workId);
-      }
-    }
-    if (customCoverImageUrl != null &&
-        customCoverImageUrl.isNotEmpty &&
-        (customCoverLocalPath == null || customCoverLocalPath.trim().isEmpty)) {
-      final cachedCustomCover = await _cacheCover(
-        comicId: workId,
-        sourceUrl: customCoverImageUrl,
-        cacheKey: ImageCacheKeys.customCover(
-          ownerType: ImageCacheOwnerType.comic.dbValue,
-          ownerId: workId,
-        ),
-        role: ImageCacheRole.customCover,
-      );
-      if (cachedCustomCover?.localPath != null) {
-        customCoverLocalPath = cachedCustomCover!.localPath;
-        if (_repository is ComicCoverCacheWriter) {
-          await (_repository as ComicCoverCacheWriter).updateCoverCache(
-            comicId: workId,
-            customCoverLocalPath: customCoverLocalPath,
-          );
-        }
-      }
-      if (customCoverLocalPath == null || customCoverLocalPath.trim().isEmpty) {
-        // 自定义远程封面应优先于普通本地封面；缓存未完成时让 UI 使用远程图。
-        coverLocalPath = null;
-      }
-    } else if ((coverLocalPath == null || coverLocalPath.trim().isEmpty) &&
-        coverImageUrl != null &&
-        coverImageUrl.trim().isNotEmpty) {
-      final cachedCover = await _cacheCover(
-        comicId: workId,
-        sourceUrl: coverImageUrl,
-        cacheKey: ImageCacheKeys.comicCover(workId),
-        role: ImageCacheRole.cover,
-      );
-      if (cachedCover?.localPath != null) {
-        coverLocalPath = cachedCover!.localPath;
-        if (_repository is ComicCoverCacheWriter) {
-          final writer = _repository as ComicCoverCacheWriter;
-          await writer.updateCoverCache(
-            comicId: workId,
-            coverImageUrl: coverImageUrl,
-            coverLocalPath: coverLocalPath,
-          );
-        }
       }
     }
     return LibraryDetailHeader(
@@ -237,6 +194,16 @@ class ComicDetailAdapter
       customCoverLocalPath: useCustomMetadata ? customCoverLocalPath : null,
       customCoverFocusX: useCustomMetadata ? detail.customCoverFocusX : null,
       customCoverFocusY: useCustomMetadata ? detail.customCoverFocusY : null,
+      coverAsset: LibraryCoverAssetFactory.preferred(
+        ownerType: 'comic',
+        ownerId: workId,
+        sourceUrl: coverImageUrl,
+        sourceLegacyPath: coverLocalPath,
+        sourceRevision: coverRevision,
+        customSourceUrl: useCustomMetadata ? customCoverImageUrl : null,
+        customLegacyPath: useCustomMetadata ? customCoverLocalPath : null,
+        customRevision: customCoverRevision,
+      ),
       author: useCustomMetadata
           ? detail.author
           : (detail.sourceAuthor ?? detail.author),
@@ -1136,7 +1103,8 @@ class ComicDetailAdapter
 
   @override
   bool canRemoveCover(LibraryDetailHeader header) {
-    return _hasCoverValue(header.customCoverLocalPath) ||
+    return header.coverAsset?.kind == LibraryCoverAssetKind.custom ||
+        _hasCoverValue(header.customCoverLocalPath) ||
         _hasCoverValue(header.customCoverImageUrl);
   }
 
@@ -1149,28 +1117,37 @@ class ComicDetailAdapter
     double? focusX,
     double? focusY,
   }) async {
-    // 复制到受保护缓存区，避免引用用户原图路径（可能被系统清理/移动）。
-    final cached = await _coverCacheService.copyProtectedCoverFromLocalFile(
-      cacheKey: ImageCacheKeys.customCover(
-        ownerType: ImageCacheOwnerType.comic.dbValue,
-        ownerId: workId,
-      ),
-      sourcePath: sourceLocalPath,
-      ownerType: ImageCacheOwnerType.comic,
-      ownerId: workId,
-    );
-    final protectedPath = cached?.localPath?.trim();
-    if (protectedPath == null || protectedPath.isEmpty) {
+    final store = _coverStore;
+    final repository = _repository;
+    if (store == null || repository is! ComicCustomCoverAssetWriter) {
       throw const LibraryOperationException(
-        LibraryOperationFailureCode.cacheWriteFailed,
+        LibraryOperationFailureCode.unsupported,
       );
     }
-    await _repository.updateCustomCoverFromLocalFile(
-      comicId: workId,
-      localCoverPath: protectedPath,
-      focusX: focusX,
-      focusY: focusY,
+    final assetWriter = repository as ComicCustomCoverAssetWriter;
+    final detail = await repository.getComicDetail(comicId: workId);
+    final revision = (detail?.customCoverRevision ?? 0) + 1;
+    final asset = LibraryCoverAssetRef(
+      assetId: LibraryCoverAssetIds.custom(
+        ownerType: 'comic',
+        ownerId: workId,
+      ),
+      revision: revision,
+      kind: LibraryCoverAssetKind.custom,
     );
+    await store.installLocalFile(asset: asset, sourcePath: sourceLocalPath);
+    try {
+      await assetWriter.activateCustomCoverAsset(
+        comicId: workId,
+        revision: revision,
+        focusX: focusX,
+        focusY: focusY,
+      );
+    } catch (_) {
+      await store.invalidate(asset);
+      rethrow;
+    }
+    await store.deleteOlderRevisions(asset);
   }
 
   @override
@@ -1187,10 +1164,13 @@ class ComicDetailAdapter
   }
 
   @override
-  Future<void> removeCustomCover({required String workId}) {
-    return _repository.updateCustomCover(
+  Future<void> removeCustomCover({required String workId}) async {
+    await _repository.updateCustomCover(
       comicId: workId,
       customCoverImageUrl: null,
+    );
+    await _coverStore?.deleteAsset(
+      LibraryCoverAssetIds.custom(ownerType: 'comic', ownerId: workId),
     );
   }
 
@@ -1236,21 +1216,6 @@ class ComicDetailAdapter
       }
     }
     return null;
-  }
-
-  Future<CachedImageResult?> _cacheCover({
-    required String comicId,
-    required String sourceUrl,
-    required String cacheKey,
-    required ImageCacheRole role,
-  }) async {
-    return _coverCacheService.ensureProtectedCover(
-      cacheKey: cacheKey,
-      sourceUrl: sourceUrl,
-      ownerType: ImageCacheOwnerType.comic,
-      ownerId: comicId,
-      role: role,
-    );
   }
 
   List<LibraryChapterItem> _applyFilters(

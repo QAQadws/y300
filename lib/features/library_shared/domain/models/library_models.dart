@@ -1,3 +1,5 @@
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
+
 /// 模块标识：用于区分漫画与小说的默认行为差异。
 enum LibraryModuleKey { comic, novel, favorite }
 
@@ -86,6 +88,7 @@ class LibraryWorkItem {
     this.customCoverLocalPath,
     this.customCoverFocusX,
     this.customCoverFocusY,
+    this.coverAsset,
     required this.unreadCount,
     required this.totalChapterCount,
     required this.readChapterCount,
@@ -107,6 +110,7 @@ class LibraryWorkItem {
   final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+  final LibraryCoverAssetRef? coverAsset;
 
   /// 自定义封面焦点（归一化 [-1,1]，映射为 [Alignment]）。
   ///
@@ -135,6 +139,7 @@ class LibraryWorkItem {
     String? customCoverLocalPath,
     double? customCoverFocusX,
     double? customCoverFocusY,
+    LibraryCoverAssetRef? coverAsset,
     int? unreadCount,
     int? totalChapterCount,
     int? readChapterCount,
@@ -169,6 +174,7 @@ class LibraryWorkItem {
       customCoverFocusY: clearCustomCoverFocus
           ? null
           : (customCoverFocusY ?? this.customCoverFocusY),
+      coverAsset: coverAsset ?? this.coverAsset,
       unreadCount: unreadCount ?? this.unreadCount,
       totalChapterCount: totalChapterCount ?? this.totalChapterCount,
       readChapterCount: readChapterCount ?? this.readChapterCount,
@@ -195,6 +201,7 @@ class LibraryDetailHeader {
     this.customCoverLocalPath,
     this.customCoverFocusX,
     this.customCoverFocusY,
+    this.coverAsset,
     this.author,
     this.sourceAuthor,
     this.sourceAuthorId,
@@ -220,6 +227,7 @@ class LibraryDetailHeader {
   final String? customCoverImageUrl;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
+  final LibraryCoverAssetRef? coverAsset;
 
   /// 自定义封面焦点（归一化 [-1,1]，映射为 [Alignment]）。详见 [LibraryWorkItem]。
   final double? customCoverFocusX;

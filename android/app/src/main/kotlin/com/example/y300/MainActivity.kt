@@ -2,6 +2,8 @@ package com.example.y300
 
 import android.Manifest
 import android.content.ContentValues
+import android.app.ActivityManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.media.MediaScannerConnection
 import android.net.Uri
@@ -19,6 +21,7 @@ import java.io.FileOutputStream
 class MainActivity : FlutterActivity() {
     private companion object {
         const val EXPORT_CHANNEL = "com.adws.y300/reader_image_export"
+        const val DEVICE_MEMORY_CHANNEL = "com.adws.y300/device_memory"
         const val STORAGE_PERMISSION_REQUEST = 7301
     }
 
@@ -28,6 +31,20 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, EXPORT_CHANNEL)
             .setMethodCallHandler(::handleExportCall)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_MEMORY_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                if (call.method != "getProfile") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                result.success(
+                    mapOf(
+                        "memoryClassMb" to manager.memoryClass,
+                        "isLowRamDevice" to manager.isLowRamDevice,
+                    ),
+                )
+            }
     }
 
     private fun handleExportCall(call: MethodCall, result: MethodChannel.Result) {

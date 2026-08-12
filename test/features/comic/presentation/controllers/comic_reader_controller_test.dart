@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,6 +21,9 @@ import 'package:y300/features/comic/domain/services/comic_reading_state_writer.d
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/comic_presentation_models.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
@@ -732,12 +737,13 @@ void main() {
   });
 
   test(
-    'setCurrentImageAsCover copies current page into protected cover cache',
+    'setCurrentImageAsCover installs current page into the cover store',
     () async {
       final repository = _ReaderRepoForControllerTest();
       final service = _ReaderServiceSpy();
       final writer = _ReadingStateWriterSpy(repository);
       final imageCache = _FakeImageCacheService();
+      final coverStore = _ControllerCoverStoreFake();
       final container = ProviderContainer(
         overrides: [
           comicRepositoryProvider.overrideWithValue(repository),
@@ -747,6 +753,7 @@ void main() {
             _NoopComicDownloadService(),
           ),
           imageCacheServiceProvider.overrideWithValue(imageCache),
+          libraryCoverStoreProvider.overrideWithValue(coverStore),
         ],
       );
       addTearDown(container.dispose);
@@ -761,8 +768,11 @@ void main() {
           .read(comicReaderControllerProvider(args).notifier)
           .setCurrentImageAsCover();
 
-      expect(imageCache.lastLocalCopyRequest?.role, ImageCacheRole.customCover);
-      expect(repository.lastCustomCoverLocalPath, '/protected/cover.jpg');
+      expect(coverStore.installedSourcePath, '/cache/mock.jpg');
+      expect(coverStore.installedAsset?.assetId, 'comic/yamibo:100/custom');
+      expect(coverStore.installedAsset?.revision, 1);
+      expect(coverStore.installedAsset?.kind, LibraryCoverAssetKind.custom);
+      expect(repository.lastActivatedCustomCoverRevision, 1);
       expect(notice, ComicReaderNoticeCode.coverUpdated);
     },
   );
@@ -1352,6 +1362,42 @@ class _FakeImageCacheService implements ImageCacheService {
   Future<void> pruneToLimit({required int maxBytes}) async {}
 }
 
+class _ControllerCoverStoreFake implements LibraryCoverStore {
+  LibraryCoverAssetRef? installedAsset;
+  String? installedSourcePath;
+
+  @override
+  Future<int> calculateUsageBytes() async => 0;
+
+  @override
+  Future<void> deleteAsset(String assetId) async {}
+
+  @override
+  Future<void> deleteOlderRevisions(LibraryCoverAssetRef asset) async {}
+
+  @override
+  Future<void> invalidate(LibraryCoverAssetRef asset) async {}
+
+  @override
+  Future<io.File> ensureAvailable(LibraryCoverAssetRef asset) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<io.File> fileFor(LibraryCoverAssetRef asset) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> installLocalFile({
+    required LibraryCoverAssetRef asset,
+    required String sourcePath,
+  }) async {
+    installedAsset = asset;
+    installedSourcePath = sourcePath;
+  }
+}
+
 class _ProgressWrite {
   const _ProgressWrite({required this.imageIndex, required this.scrollOffset});
 
@@ -1476,6 +1522,7 @@ class _ReaderRepoForControllerTest
     implements
         ComicRepository,
         ComicCoverCacheWriter,
+        ComicCustomCoverAssetWriter,
         ComicEpisodeImageCacheMetadataWriter {
   _ReaderRepoForControllerTest({
     this.singlePage = false,
@@ -1504,6 +1551,7 @@ class _ReaderRepoForControllerTest
   final Map<String, List<String>> savedImageUrlsByEpisode =
       <String, List<String>>{};
   String? lastCustomCoverLocalPath;
+  int? lastActivatedCustomCoverRevision;
   double? lastCustomCoverFocusX;
   double? lastCustomCoverFocusY;
 
@@ -1560,6 +1608,16 @@ class _ReaderRepoForControllerTest
   }) async {
     lastCustomCoverFocusX = focusX;
     lastCustomCoverFocusY = focusY;
+  }
+
+  @override
+  Future<void> activateCustomCoverAsset({
+    required String comicId,
+    required int revision,
+    double? focusX,
+    double? focusY,
+  }) async {
+    lastActivatedCustomCoverRevision = revision;
   }
 
   @override

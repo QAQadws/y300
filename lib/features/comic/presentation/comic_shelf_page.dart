@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/comic/data/use_cases/bulk_download_use_case_providers.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_shelf_adapter.dart';
@@ -29,7 +28,6 @@ class ComicShelfPage extends ConsumerWidget {
     final adapter = ComicShelfAdapter(
       ref.watch(comicRepositoryProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
-      imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
       featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
       taskProgressHub: taskProgressHub,
@@ -49,10 +47,7 @@ class ComicShelfPage extends ConsumerWidget {
       ),
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       isActive: isActive,
-      taskProgressHub: taskProgressHub,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
-      coverPrecacheServiceResolver: () =>
-          ref.read(forumImagePrecacheServiceProvider),
       onOpenWork: (context, workId) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(

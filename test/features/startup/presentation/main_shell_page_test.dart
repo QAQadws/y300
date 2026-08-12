@@ -358,7 +358,7 @@ void main() {
       ),
     );
 
-    await tester.pump();
+    await _pumpMainShellReady(tester);
 
     expect(find.byIcon(Icons.local_library_outlined), findsOneWidget);
     expect(find.byIcon(Icons.local_library), findsNothing);
@@ -418,7 +418,7 @@ void main() {
         ),
       );
 
-      await tester.pump();
+      await _pumpMainShellReady(tester);
 
       final navigationBarContext = tester.element(find.byType(NavigationBar));
       expect(

@@ -1,15 +1,25 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/media/cover_focal_point.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
 import 'package:y300/features/library_shared/presentation/detail/unified_detail_palette.dart';
+import 'package:y300/features/library_shared/presentation/images/library_cover_image.dart';
+import 'package:y300/features/library_shared/presentation/images/library_cover_image_provider.dart';
+import 'package:y300/features/library_shared/presentation/images/library_cover_original_page.dart';
 import 'package:y300/features/library_shared/presentation/services/library_shelf_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/library_cover_placeholder.dart';
 
 bool hasUnifiedDetailCover(LibraryDetailHeader header) {
+  if (header.coverAsset != null) {
+    return true;
+  }
   return <String?>[
     header.customCoverLocalPath,
     header.coverLocalPath,
@@ -20,7 +30,7 @@ bool hasUnifiedDetailCover(LibraryDetailHeader header) {
 
 /// 顶部视觉区与动作区作为一个滚动单元，避免 RefreshIndicator 下拉拉伸时
 /// 两个 Sliver 独立变形造成肉眼可见的缝隙。
-class UnifiedDetailHeaderSection extends StatelessWidget {
+class UnifiedDetailHeaderSection extends ConsumerWidget {
   const UnifiedDetailHeaderSection({
     super.key,
     required this.header,
@@ -47,7 +57,7 @@ class UnifiedDetailHeaderSection extends StatelessWidget {
   final VoidCallback onOpenThread;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (!hasUnifiedDetailCover(header)) {
       return Column(
         key: const Key('unified-detail-header-section'),
@@ -69,6 +79,16 @@ class UnifiedDetailHeaderSection extends StatelessWidget {
         ],
       );
     }
+    final asset = header.coverAsset;
+    final coverProvider = asset == null
+        ? null
+        : LibraryCoverProviderResolver.resolve(
+            asset: asset,
+            displaySize: const Size(120, 168),
+            devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+            store: ref.watch(libraryCoverStoreProvider),
+            scheduler: ref.watch(libraryCoverDecodeSchedulerProvider),
+          );
     return Stack(
       key: const Key('unified-detail-header-section'),
       clipBehavior: Clip.none,
@@ -82,6 +102,7 @@ class UnifiedDetailHeaderSection extends StatelessWidget {
               topInset: topInset,
               palette: palette,
               imageHeaderBuilder: imageHeaderBuilder,
+              coverProvider: coverProvider,
             ),
             _HeaderActionsRow(
               header: header,
@@ -118,6 +139,7 @@ class _HeroInfoSection extends StatelessWidget {
     required this.topInset,
     required this.palette,
     required this.imageHeaderBuilder,
+    required this.coverProvider,
   });
 
   // Hero 区高度（含状态栏与 AppBar 覆盖区）
@@ -134,6 +156,7 @@ class _HeroInfoSection extends StatelessWidget {
   final double topInset;
   final UnifiedDetailPalette palette;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final LibraryCoverImageProvider? coverProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +182,7 @@ class _HeroInfoSection extends StatelessWidget {
             customCoverLocalPath: header.customCoverLocalPath,
             palette: palette,
             imageHeaderBuilder: imageHeaderBuilder,
+            coverProvider: coverProvider,
           ),
           Padding(
             padding: _contentPadding.copyWith(
@@ -176,9 +200,10 @@ class _HeroInfoSection extends StatelessWidget {
                           header.customCoverFocusY,
                         )
                       : Alignment.center,
-                  moduleKey: moduleKey,
                   palette: palette,
                   imageHeaderBuilder: imageHeaderBuilder,
+                  coverProvider: coverProvider,
+                  coverAsset: header.coverAsset,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -221,6 +246,9 @@ class _HeroInfoSection extends StatelessWidget {
 
   /// 当前是否在展示自定义封面（焦点仅对自定义封面生效）。
   bool _isShowingCustomCover(LibraryDetailHeader header) {
+    if (header.coverAsset?.kind == LibraryCoverAssetKind.custom) {
+      return true;
+    }
     final custom = header.customCoverLocalPath?.trim();
     return custom != null && custom.isNotEmpty;
   }
@@ -450,6 +478,7 @@ class _DetailHeaderBackground extends StatelessWidget {
     required this.customCoverLocalPath,
     required this.palette,
     required this.imageHeaderBuilder,
+    required this.coverProvider,
   });
 
   // 可统一调节模糊强度；你觉得偏糊就继续往下调。
@@ -461,47 +490,61 @@ class _DetailHeaderBackground extends StatelessWidget {
   final String? customCoverLocalPath;
   final UnifiedDetailPalette palette;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final LibraryCoverImageProvider? coverProvider;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // 仅对背景图本身做模糊，避免把滚动中的列表内容一起模糊。
-        ClipRect(
-          child: ImageFiltered(
-            imageFilter: ImageFilter.blur(
-              sigmaX: _blurSigma,
-              sigmaY: _blurSigma,
-            ),
-            child: LibraryCachedImage(
-              localPath: _preferredLocalPath,
-              imageUrl: _preferredRemoteUrl,
-              fit: BoxFit.cover,
-              placeholder: Container(
-                color: palette.headerPlaceholderBackground,
+    return RepaintBoundary(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 背景与前景订阅同一个 provider key；这里只在 GPU 上放大和模糊。
+          ClipRect(
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(
+                sigmaX: _blurSigma,
+                sigmaY: _blurSigma,
               ),
-              headerBuilder: imageHeaderBuilder,
+              child: coverProvider == null
+                  ? LibraryCachedImage(
+                      localPath: _preferredLocalPath,
+                      imageUrl: _preferredRemoteUrl,
+                      fit: BoxFit.cover,
+                      placeholder: LibraryCoverPlaceholder(
+                        key: const Key('unified-detail-background-placeholder'),
+                        color: palette.headerPlaceholderBackground,
+                      ),
+                      headerBuilder: imageHeaderBuilder,
+                    )
+                  : LibraryCoverProviderImage(
+                      provider: coverProvider!,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.low,
+                      placeholder: LibraryCoverPlaceholder(
+                        key: const Key('unified-detail-background-placeholder'),
+                        color: palette.headerPlaceholderBackground,
+                      ),
+                    ),
             ),
           ),
-        ),
-        DecoratedBox(
-          key: const Key('unified-detail-header-gradient'),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                palette.headerGradientStart,
-                palette.headerGradientMiddle,
-                palette.headerGradientEnd,
-              ],
-              // 最后一段必须落到页面背景，避免动态主题下出现固定白边。
-              stops: const [0.0, 0.72, 1.0],
+          DecoratedBox(
+            key: const Key('unified-detail-header-gradient'),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  palette.headerGradientStart,
+                  palette.headerGradientMiddle,
+                  palette.headerGradientEnd,
+                ],
+                // 最后一段必须落到页面背景，避免动态主题下出现固定白边。
+                stops: const [0.0, 0.72, 1.0],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -590,66 +633,74 @@ class _CoverImage extends StatelessWidget {
   const _CoverImage({
     required this.url,
     required this.localPath,
-    required this.moduleKey,
     required this.palette,
     required this.imageHeaderBuilder,
+    required this.coverProvider,
+    required this.coverAsset,
     this.alignment = Alignment.center,
   });
 
   final String? url;
   final String? localPath;
-  final LibraryModuleKey moduleKey;
   final UnifiedDetailPalette palette;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final LibraryCoverImageProvider? coverProvider;
+  final LibraryCoverAssetRef? coverAsset;
 
   /// `BoxFit.cover` 下的对齐点（自定义封面焦点）。默认居中。
   final AlignmentGeometry alignment;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
+    final cover = ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: SizedBox(
         width: 120,
         height: 168,
-        child:
-            (url == null || url!.trim().isEmpty) &&
-                (localPath == null || localPath!.trim().isEmpty)
-            ? Container(
+        child: coverProvider != null
+            ? LibraryCoverProviderImage(
+                provider: coverProvider!,
+                fit: BoxFit.cover,
+                alignment: alignment,
+                placeholder: LibraryCoverPlaceholder(
+                  key: const Key('unified-detail-cover-placeholder'),
+                  color: palette.headerPlaceholderBackground,
+                ),
+              )
+            : (url == null || url!.trim().isEmpty) &&
+                  (localPath == null || localPath!.trim().isEmpty)
+            ? LibraryCoverPlaceholder(
+                key: const Key('unified-detail-cover-placeholder'),
                 color: palette.headerPlaceholderBackground,
-                child: moduleKey == LibraryModuleKey.novel
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.menu_book_outlined,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            AppLocalizations.of(
-                              context,
-                            ).libraryDetailNoNovelCover,
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        ],
-                      )
-                    : const Icon(Icons.image_not_supported_outlined),
               )
             : LibraryCachedImage(
                 localPath: localPath,
                 imageUrl: url,
                 fit: BoxFit.cover,
                 alignment: alignment,
-                placeholder: Container(
+                placeholder: LibraryCoverPlaceholder(
+                  key: const Key('unified-detail-cover-placeholder'),
                   color: palette.headerPlaceholderBackground,
-                  child: const Icon(Icons.broken_image_outlined),
                 ),
                 headerBuilder: imageHeaderBuilder,
               ),
       ),
+    );
+    final asset = coverAsset;
+    if (asset == null) {
+      return cover;
+    }
+    return GestureDetector(
+      key: const Key('unified-detail-cover-open-original'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => LibraryCoverOriginalPage(asset: asset),
+          ),
+        );
+      },
+      child: cover,
     );
   }
 }

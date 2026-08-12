@@ -14,11 +14,24 @@ import 'package:y300/features/comic/domain/services/comic_reader_events.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/thread/data/repositories/thread_reply_page_repository.dart';
 
 final comicRepositoryProvider = Provider<ComicRepository>((ref) {
-  return LocalComicRepository(ComicLocalDb.open());
+  return LocalComicRepository(
+    ComicLocalDb.open(),
+    libraryCoverStore: ref.watch(libraryCoverStoreProvider),
+  );
+});
+
+final comicCoverMergeRecoveryProvider = Provider<ComicCoverMergeRecovery?>((
+  ref,
+) {
+  final repository = ref.watch(comicRepositoryProvider);
+  return repository is ComicCoverMergeRecovery
+      ? repository as ComicCoverMergeRecovery
+      : null;
 });
 
 final comicDuplicateMergeServiceProvider =

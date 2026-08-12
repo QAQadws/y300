@@ -13,6 +13,8 @@ import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_download_execution.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/storage/data/storage_location_repository.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
@@ -184,7 +186,7 @@ void main() {
     },
   );
 
-  test('cover and page network downloads share the same governor', () async {
+  test('offline package reads cover through the dedicated cover store', () async {
     final temp = await io.Directory.systemTemp.createTemp(
       'y300-comic-download-cover-limit-test-',
     );
@@ -200,13 +202,13 @@ void main() {
     final image2 = io.File(p.join(temp.path, 'source-2.png'))
       ..writeAsBytesSync(<int>[4, 5, 6]);
     final governor = _RecordingGovernor();
+    final coverStore = _CoverStoreFake(cover);
     final service = DefaultComicDownloadService(
       repository: _ComicDownloadRepositoryFake(
         coverImageUrl: 'https://img.test/cover.jpg',
       ),
       readerServiceFuture: Future<ComicReaderService>.value(
         _ComicReaderServiceFake(<String, String>{
-          'https://img.test/cover.jpg': cover.path,
           'https://img.test/1.jpg': image1.path,
           'https://img.test/2.png': image2.path,
         }),
@@ -215,6 +217,7 @@ void main() {
         locationRepository: _FakeStorageLocationRepository(temp.path),
       ),
       imageRequestGovernor: governor,
+      coverStore: coverStore,
     );
 
     await service.downloadEpisode(
@@ -222,7 +225,8 @@ void main() {
       episodeId: 'yamibo:100:101',
     );
 
-    expect(governor.waitCount, 3);
+    expect(governor.waitCount, 2);
+    expect(coverStore.ensureCalls, 1);
   });
 
   test(
@@ -380,6 +384,22 @@ final class _ImageCacheServiceFake implements ImageCacheService {
       bytes: io.File(path).lengthSync(),
       fromCache: true,
     );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _CoverStoreFake implements LibraryCoverStore {
+  _CoverStoreFake(this.file);
+
+  final io.File file;
+  int ensureCalls = 0;
+
+  @override
+  Future<io.File> ensureAvailable(LibraryCoverAssetRef asset) async {
+    ensureCalls++;
+    return file;
   }
 
   @override

@@ -3941,6 +3941,12 @@ abstract class AppLocalizations {
   /// **'图片缓存'**
   String get moreStorageBucketImageCache;
 
+  /// No description provided for @moreStorageBucketLibraryCover.
+  ///
+  /// In zh, this message translates to:
+  /// **'书架封面资产'**
+  String get moreStorageBucketLibraryCover;
+
   /// No description provided for @moreStorageBucketPageCache.
   ///
   /// In zh, this message translates to:

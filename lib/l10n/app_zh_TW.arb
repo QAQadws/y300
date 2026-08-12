@@ -492,6 +492,7 @@
   "moreStorageReloadUsage": "重新統計",
   "moreStorageExportDiagnostics": "快取診斷匯出",
   "moreStorageBucketImageCache": "圖片快取",
+  "moreStorageBucketLibraryCover": "書架封面資產",
   "moreStorageBucketPageCache": "頁面快取",
   "moreStorageBucketLibraryMetadata": "書架資料",
   "moreStorageBucketHistory": "瀏覽記錄",

@@ -17,11 +17,15 @@ class ComicRecord {
     required this.customSearchTitle,
     required this.coverImageUrl,
     required this.customCoverImageUrl,
+    this.coverRevision = 0,
+    this.customCoverRevision = 0,
     this.coverLocalPath,
     this.customCoverLocalPath,
     this.customCoverSourceEpisodeId,
     this.customCoverSourceImageIndex,
     this.customCoverSourceImageUrl,
+    this.customCoverFocusX,
+    this.customCoverFocusY,
     this.metadataUpdatedAt,
     required this.createdAt,
     required this.updatedAt,
@@ -47,11 +51,15 @@ class ComicRecord {
   final String? customSearchTitle;
   final String? coverImageUrl;
   final String? customCoverImageUrl;
+  final int coverRevision;
+  final int customCoverRevision;
   final String? coverLocalPath;
   final String? customCoverLocalPath;
   final String? customCoverSourceEpisodeId;
   final int? customCoverSourceImageIndex;
   final String? customCoverSourceImageUrl;
+  final double? customCoverFocusX;
+  final double? customCoverFocusY;
   final int? metadataUpdatedAt;
   final int createdAt;
   final int updatedAt;
@@ -78,11 +86,15 @@ class ComicRecord {
       'custom_search_title': customSearchTitle,
       'cover_image_url': coverImageUrl,
       'custom_cover_image_url': customCoverImageUrl,
+      'cover_revision': coverRevision,
+      'custom_cover_revision': customCoverRevision,
       'cover_local_path': coverLocalPath,
       'custom_cover_local_path': customCoverLocalPath,
       'custom_cover_source_episode_id': customCoverSourceEpisodeId,
       'custom_cover_source_image_index': customCoverSourceImageIndex,
       'custom_cover_source_image_url': customCoverSourceImageUrl,
+      'custom_cover_focus_x': customCoverFocusX,
+      'custom_cover_focus_y': customCoverFocusY,
       'metadata_updated_at': metadataUpdatedAt,
       'created_at': createdAt,
       'updated_at': updatedAt,
@@ -111,6 +123,8 @@ class ComicRecord {
       customSearchTitle: map['custom_search_title'] as String?,
       coverImageUrl: map['cover_image_url'] as String?,
       customCoverImageUrl: map['custom_cover_image_url'] as String?,
+      coverRevision: map['cover_revision'] as int? ?? 0,
+      customCoverRevision: map['custom_cover_revision'] as int? ?? 0,
       coverLocalPath: map['cover_local_path'] as String?,
       customCoverLocalPath: map['custom_cover_local_path'] as String?,
       customCoverSourceEpisodeId:
@@ -119,6 +133,8 @@ class ComicRecord {
           map['custom_cover_source_image_index'] as int?,
       customCoverSourceImageUrl:
           map['custom_cover_source_image_url'] as String?,
+      customCoverFocusX: (map['custom_cover_focus_x'] as num?)?.toDouble(),
+      customCoverFocusY: (map['custom_cover_focus_y'] as num?)?.toDouble(),
       metadataUpdatedAt: map['metadata_updated_at'] as int?,
       createdAt: map['created_at'] as int,
       updatedAt: map['updated_at'] as int,

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/favorites/data/use_cases/unfavorite_use_case_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
@@ -27,7 +26,6 @@ class NovelShelfPage extends ConsumerWidget {
     final adapter = NovelShelfAdapter(
       ref.watch(novelRepositoryProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
-      imageCacheServiceResolver: () => ref.read(imageCacheServiceProvider),
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
       taskProgressHub: taskProgressHub,
       categoryAssignUseCaseResolver: () =>
@@ -42,10 +40,7 @@ class NovelShelfPage extends ConsumerWidget {
       ),
       imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
       isActive: isActive,
-      taskProgressHub: taskProgressHub,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
-      coverPrecacheServiceResolver: () =>
-          ref.read(forumImagePrecacheServiceProvider),
       onOpenWork: (context, workId) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(

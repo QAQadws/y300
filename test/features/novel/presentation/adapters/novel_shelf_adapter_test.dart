@@ -1,12 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
@@ -19,7 +17,7 @@ import 'package:y300/features/novel/presentation/adapters/novel_shelf_adapter.da
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
-  test('NovelShelfAdapter returns metadata before cover warmup', () async {
+  test('NovelShelfAdapter maps a stable source cover asset', () async {
     final repository = _FakeNovelRepository(
       shelfItems: <NovelItem>[
         NovelItem(
@@ -34,12 +32,10 @@ void main() {
         ),
       ],
     );
-    final cache = _FakeImageCacheService(localPath: '/cache/novel-1.jpg');
     final stateRepository = _FakeLibraryStateRepository(hasBookmarks: true);
     final adapter = NovelShelfAdapter(
       repository,
       stateRepository: stateRepository,
-      imageCacheService: cache,
     );
 
     final items = await adapter.loadCategoryItems(categoryId: 'default');
@@ -50,20 +46,13 @@ void main() {
     expect(items.single.hasBookmarks, isTrue);
     expect(stateRepository.countUnreadCalls, 0);
     expect(stateRepository.countReadCalls, 0);
-    expect(cache.lastRequest, isNull);
-
-    final requests = await adapter.buildCoverWarmupRequests(
-      selectedCategoryId: 'default',
-      itemsByCategory: <String, List<LibraryWorkItem>>{'default': items},
+    expect(items.single.coverAsset?.assetId, 'novel/novel-1/source');
+    expect(items.single.coverAsset?.kind, LibraryCoverAssetKind.source);
+    expect(
+      items.single.coverAsset?.sourceUrl,
+      'https://img.test/novel-1.jpg',
     );
-    expect(requests.single.imageSpec.kind, ForumImageKind.cover);
-    expect(requests.single.imageSpec.ownerType, ImageCacheOwnerType.novel);
-    expect(requests.single.imageSpec.cacheKey, 'cover/novel/novel-1');
-    final result = await adapter.warmCover(requests.single);
-
-    expect(result?.coverLocalPath, '/cache/novel-1.jpg');
-    expect(cache.lastRequest?.cacheKey, 'cover/novel/novel-1');
-    expect(repository.lastCoverLocalPath, '/cache/novel-1.jpg');
+    expect(repository.lastCoverLocalPath, isNull);
   });
 
   test(
@@ -254,37 +243,6 @@ class _FakeNovelRepository implements NovelRepository, NovelCoverCacheWriter {
     String? customCoverLocalPath,
   }) async {
     lastCoverLocalPath = coverLocalPath ?? customCoverLocalPath;
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _FakeImageCacheService implements ImageCacheService {
-  _FakeImageCacheService({required this.localPath});
-
-  final String localPath;
-  ImageCacheRequest? lastRequest;
-
-  @override
-  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
-    lastRequest = request;
-    return CachedImageResult(
-      success: true,
-      cacheKey: request.cacheKey,
-      localPath: localPath,
-    );
-  }
-
-  @override
-  Future<CachedImageResult> copyProtectedLocalFile(
-    ImageCacheLocalCopyRequest request,
-  ) async {
-    return CachedImageResult(
-      success: true,
-      cacheKey: request.cacheKey,
-      localPath: localPath,
-    );
   }
 
   @override

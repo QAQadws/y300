@@ -1,7 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
@@ -24,6 +22,7 @@ import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.d
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
@@ -271,15 +270,11 @@ void main() {
     final repository = _FakeComicRepositoryWithCoverWriter(
       customCoverImageUrl: 'https://img.test/custom-cover.jpg',
     );
-    final cacheService = _FakeImageCacheService(
-      localPath: '/cache/custom-cover.jpg',
-    );
     final refreshService = _FakeComicEpisodeRefreshService();
     final adapter = ComicDetailAdapter(
       repository,
       refreshService: refreshService,
       refreshOutcomeApplier: _RecordingRefreshOutcomeApplier(),
-      imageCacheService: cacheService,
       featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
         readerCustomMetadataEnabled: false,
       ),
@@ -319,44 +314,44 @@ void main() {
     },
   );
 
-  test('loadHeader caches first episode cover and writes local path', () async {
+  test('loadHeader exposes source asset without synchronous caching', () async {
     final repository = _FakeComicRepositoryWithCoverWriter();
-    final cacheService = _FakeImageCacheService(localPath: '/cache/cover.jpg');
     final adapter = ComicDetailAdapter(
       repository,
-      imageCacheService: cacheService,
       stateRepository: _FakeLibraryStateRepository(),
     );
 
     final header = await adapter.loadHeader(workId: 'comic:1');
 
-    expect(header.coverLocalPath, '/cache/cover.jpg');
-    expect(cacheService.lastRequest?.cacheKey, 'cover/comic/comic:1');
-    expect(repository.lastCoverImageUrl, 'https://img.test/90-1.jpg');
-    expect(repository.lastCoverLocalPath, '/cache/cover.jpg');
+    expect(header.coverLocalPath, isNull);
+    expect(header.coverAsset?.assetId, 'comic/comic:1/source');
+    expect(header.coverAsset?.kind, LibraryCoverAssetKind.source);
+    expect(header.coverAsset?.sourceUrl, 'https://img.test/90-1.jpg');
+    expect(repository.lastCoverImageUrl, isNull);
+    expect(repository.lastCoverLocalPath, isNull);
   });
 
-  test('loadHeader caches custom cover into custom local path', () async {
+  test('loadHeader exposes custom asset without synchronous caching', () async {
     final repository = _FakeComicRepositoryWithCoverWriter(
       customCoverImageUrl: 'https://img.test/custom-cover.jpg',
     );
-    final cacheService = _FakeImageCacheService(
-      localPath: '/cache/custom-cover.jpg',
-    );
     final adapter = ComicDetailAdapter(
       repository,
-      imageCacheService: cacheService,
       stateRepository: _FakeLibraryStateRepository(),
     );
 
     final header = await adapter.loadHeader(workId: 'comic:1');
 
-    expect(header.customCoverLocalPath, '/cache/custom-cover.jpg');
-    expect(cacheService.lastRequest?.cacheKey, 'cover/custom/comic/comic:1');
-    expect(cacheService.lastRequest?.role, ImageCacheRole.customCover);
+    expect(header.customCoverLocalPath, isNull);
+    expect(header.coverAsset?.assetId, 'comic/comic:1/custom');
+    expect(header.coverAsset?.kind, LibraryCoverAssetKind.custom);
+    expect(
+      header.coverAsset?.sourceUrl,
+      'https://img.test/custom-cover.jpg',
+    );
     expect(repository.lastCoverImageUrl, isNull);
     expect(repository.lastCoverLocalPath, isNull);
-    expect(repository.lastCustomCoverLocalPath, '/cache/custom-cover.jpg');
+    expect(repository.lastCustomCoverLocalPath, isNull);
   });
 
   test('getReaderRouteTarget continues from reading progress first', () async {
@@ -1311,59 +1306,6 @@ class _FakeComicRepositoryWithCoverWriter extends _FakeComicRepository
     lastCoverLocalPath = coverLocalPath;
     lastCustomCoverLocalPath = customCoverLocalPath;
   }
-}
-
-class _FakeImageCacheService implements ImageCacheService {
-  _FakeImageCacheService({required this.localPath});
-
-  final String localPath;
-  ImageCacheRequest? lastRequest;
-
-  @override
-  Future<int> calculateUsageBytes({bool includeProtected = false}) async => 0;
-
-  @override
-  Future<int> clearUnprotectedByRoles({
-    required List<ImageCacheRole> roles,
-  }) async {
-    return 0;
-  }
-
-  @override
-  Future<void> clearUnprotected() async {}
-
-  @override
-  Future<int> deleteByOwner({
-    required ImageCacheOwnerType ownerType,
-    required String ownerId,
-  }) async => 0;
-
-  @override
-  Future<CachedImageResult> copyProtectedLocalFile(
-    ImageCacheLocalCopyRequest request,
-  ) async {
-    return CachedImageResult(
-      success: true,
-      cacheKey: request.cacheKey,
-      localPath: localPath,
-    );
-  }
-
-  @override
-  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
-    lastRequest = request;
-    return CachedImageResult(
-      success: true,
-      cacheKey: request.cacheKey,
-      localPath: localPath,
-    );
-  }
-
-  @override
-  Future<CachedImageResult?> getCached(String cacheKey) async => null;
-
-  @override
-  Future<void> pruneToLimit({required int maxBytes}) async {}
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {

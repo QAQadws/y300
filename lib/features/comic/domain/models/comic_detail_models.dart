@@ -24,6 +24,8 @@ class ComicDetail {
     this.customCoverSourceImageUrl,
     this.customCoverFocusX,
     this.customCoverFocusY,
+    this.coverRevision = 0,
+    this.customCoverRevision = 0,
     required this.updatedAt,
     required this.episodeCount,
     this.catalogUrl,
@@ -67,6 +69,8 @@ class ComicDetail {
   /// 非破坏性：原图保持不变，仅记录裁剪/对齐焦点，由显示层按 cover 对齐应用。
   final double? customCoverFocusX;
   final double? customCoverFocusY;
+  final int coverRevision;
+  final int customCoverRevision;
   final DateTime updatedAt;
   final int episodeCount;
 

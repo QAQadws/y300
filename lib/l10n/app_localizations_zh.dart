@@ -2442,6 +2442,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreStorageBucketImageCache => '图片缓存';
 
   @override
+  String get moreStorageBucketLibraryCover => '书架封面资产';
+
+  @override
   String get moreStorageBucketPageCache => '页面缓存';
 
   @override
@@ -6712,6 +6715,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreStorageBucketImageCache => '圖片快取';
+
+  @override
+  String get moreStorageBucketLibraryCover => '書架封面資產';
 
   @override
   String get moreStorageBucketPageCache => '頁面快取';

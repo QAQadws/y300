@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
+import '../../../test_support/unavailable_library_cover_store.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -87,7 +88,10 @@ void main() {
 
       // 存量标题必须落进来源列：漏了这步回填，用户清空一次重命名就再也拿不回
       // 原本的解析名，只会退成空标题。
-      final repository = LocalComicRepository(Future<Database>.value(db));
+      final repository = LocalComicRepository(
+        Future<Database>.value(db),
+        libraryCoverStore: const UnavailableLibraryCoverStore(),
+      );
       final episodes = await repository.getComicEpisodes(
         comicId: 'legacy-comic',
       );

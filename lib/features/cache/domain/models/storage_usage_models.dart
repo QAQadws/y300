@@ -1,5 +1,6 @@
 enum StorageBucket {
   imageCache('image_cache'),
+  libraryCover('library_cover'),
   pageCache('page_cache'),
   libraryMetadata('library_metadata'),
   history('history'),

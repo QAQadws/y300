@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
@@ -14,6 +12,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_operation_failure.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_asset_factory.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
@@ -32,7 +31,8 @@ class LocalNovelRepository
         NovelShelfSnapshotRepository,
         NovelCoverCacheWriter,
         NovelCustomMetadataWriter,
-        NovelCustomCoverWriter {
+        NovelCustomCoverWriter,
+        NovelCustomCoverAssetWriter {
   LocalNovelRepository(
     this._dbFuture, {
     LegacyNovelThreadGateway? threadGateway,
@@ -43,7 +43,6 @@ class LocalNovelRepository
     LibraryStateRepository? stateRepository,
   }) : _threadGateway = threadGateway,
        _discoveryService = discoveryService,
-       _imageCacheService = imageCacheService,
        _titleSanitizer = titleSanitizer,
        _introExtractor = introExtractor,
        _stateRepository =
@@ -52,7 +51,6 @@ class LocalNovelRepository
   final Future<Database> _dbFuture;
   final LegacyNovelThreadGateway? _threadGateway;
   final NovelEpisodeDiscoveryService? _discoveryService;
-  final ImageCacheService? _imageCacheService;
   final NovelTitleSanitizer? _titleSanitizer;
   final NovelIntroSectionExtractor? _introExtractor;
   final LibraryStateRepository _stateRepository;
@@ -254,6 +252,8 @@ class LocalNovelRepository
         w.cover_image_url,
         w.cover_local_path,
         w.custom_cover_local_path,
+        w.cover_revision,
+        w.custom_cover_revision,
         w.custom_cover_focus_x,
         w.custom_cover_focus_y,
         w.cover_hidden,
@@ -329,6 +329,8 @@ class LocalNovelRepository
         w.cover_image_url,
         w.cover_local_path,
         w.custom_cover_local_path,
+        w.cover_revision,
+        w.custom_cover_revision,
         w.custom_cover_focus_x,
         w.custom_cover_focus_y,
         w.cover_hidden,
@@ -405,6 +407,8 @@ class LocalNovelRepository
         w.cover_image_url,
         w.cover_local_path,
         w.custom_cover_local_path,
+        w.cover_revision,
+        w.custom_cover_revision,
         w.custom_cover_focus_x,
         w.custom_cover_focus_y,
         w.cover_hidden,
@@ -486,10 +490,51 @@ class LocalNovelRepository
       throw ArgumentError('自定义封面路径不能为空');
     }
     final db = await _dbFuture;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        ComicLocalDb.worksTable,
+        columns: const <String>['custom_cover_revision'],
+        where: 'work_id = ? AND content_type = ?',
+        whereArgs: <Object>[novelId, _contentType],
+        limit: 1,
+      );
+      final nextRevision =
+          (rows.isEmpty
+              ? 0
+              : rows.single['custom_cover_revision'] as int? ?? 0) +
+          1;
+      await txn.update(
+        ComicLocalDb.worksTable,
+        <String, Object?>{
+          'custom_cover_local_path': normalizedPath,
+          'custom_cover_revision': nextRevision,
+          'custom_cover_focus_x': focusX,
+          'custom_cover_focus_y': focusY,
+          'cover_hidden': 0,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+        },
+        where: 'work_id = ? AND content_type = ?',
+        whereArgs: <Object>[novelId, _contentType],
+      );
+    });
+  }
+
+  @override
+  Future<void> activateCustomCoverAsset({
+    required String novelId,
+    required int revision,
+    double? focusX,
+    double? focusY,
+  }) async {
+    if (revision <= 0) {
+      throw ArgumentError.value(revision, 'revision');
+    }
+    final db = await _dbFuture;
     await db.update(
       ComicLocalDb.worksTable,
       <String, Object?>{
-        'custom_cover_local_path': normalizedPath,
+        'custom_cover_local_path': null,
+        'custom_cover_revision': revision,
         'custom_cover_focus_x': focusX,
         'custom_cover_focus_y': focusY,
         'cover_hidden': 0,
@@ -526,6 +571,7 @@ class LocalNovelRepository
       ComicLocalDb.worksTable,
       <String, Object?>{
         'custom_cover_local_path': null,
+        'custom_cover_revision': 0,
         'custom_cover_focus_x': null,
         'custom_cover_focus_y': null,
         'cover_hidden': 1,
@@ -800,21 +846,6 @@ class LocalNovelRepository
     // 这样可以保留用户的「编辑简介」结果，同时让首次入库 / 用户未编辑
     // 的小说自动获得简介展示。
     await _maybeWriteParsedIntro(novelId: novelId, pages: pages);
-
-    final coverUrl = _normalizeNullable(plan.coverImageUrl);
-    if (coverUrl != null) {
-      final coverResult = await _cacheNovelCover(
-        novelId: novelId,
-        sourceUrl: coverUrl,
-      );
-      if (coverResult?.localPath != null) {
-        await updateCoverCache(
-          novelId: novelId,
-          coverImageUrl: coverUrl,
-          coverLocalPath: coverResult!.localPath,
-        );
-      }
-    }
 
     final total = await getEpisodes(novelId: novelId);
     return NovelEpisodeRefreshResult(
@@ -1259,6 +1290,8 @@ class LocalNovelRepository
       coverImageUrl: row['cover_image_url'] as String?,
       coverLocalPath: row['cover_local_path'] as String?,
       customCoverLocalPath: row['custom_cover_local_path'] as String?,
+      coverRevision: row['cover_revision'] as int? ?? 0,
+      customCoverRevision: row['custom_cover_revision'] as int? ?? 0,
       customCoverFocusX: (row['custom_cover_focus_x'] as num?)?.toDouble(),
       customCoverFocusY: (row['custom_cover_focus_y'] as num?)?.toDouble(),
       coverHidden: coverHidden,
@@ -1301,6 +1334,17 @@ class LocalNovelRepository
       customCoverLocalPath: coverHidden
           ? null
           : row['custom_cover_local_path'] as String?,
+      coverAsset: coverHidden
+          ? null
+          : LibraryCoverAssetFactory.preferred(
+              ownerType: 'novel',
+              ownerId: row['work_id'] as String,
+              sourceUrl: row['cover_image_url'] as String?,
+              sourceLegacyPath: row['cover_local_path'] as String?,
+              sourceRevision: row['cover_revision'] as int? ?? 0,
+              customLegacyPath: row['custom_cover_local_path'] as String?,
+              customRevision: row['custom_cover_revision'] as int? ?? 0,
+            ),
       customCoverFocusX: coverHidden
           ? null
           : (row['custom_cover_focus_x'] as num?)?.toDouble(),
@@ -1416,27 +1460,6 @@ class LocalNovelRepository
       }
     }
     return pages;
-  }
-
-  Future<CachedImageResult?> _cacheNovelCover({
-    required String novelId,
-    required String sourceUrl,
-  }) async {
-    final cacheService = _imageCacheService;
-    if (cacheService == null) {
-      return null;
-    }
-    final result = await cacheService.ensureCached(
-      ImageCacheRequest(
-        cacheKey: ImageCacheKeys.novelCover(novelId),
-        sourceUrl: sourceUrl,
-        ownerType: ImageCacheOwnerType.novel,
-        ownerId: novelId,
-        role: ImageCacheRole.cover,
-        protected: true,
-      ),
-    );
-    return result.success ? result : null;
   }
 
   String? _normalizeNullable(String? value) {

@@ -3,6 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
+import '../../../../test_support/unavailable_library_cover_store.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 
 void main() {
@@ -19,7 +20,10 @@ void main() {
     setUp(() async {
       await deleteDatabase(databaseName);
       dbFuture = ComicLocalDb.open(databaseName: databaseName);
-      repository = LocalComicRepository(dbFuture);
+      repository = LocalComicRepository(
+        dbFuture,
+        libraryCoverStore: const UnavailableLibraryCoverStore(),
+      );
       store = ComicCoverStore(dbFuture);
     });
 

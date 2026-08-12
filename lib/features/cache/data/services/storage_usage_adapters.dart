@@ -11,6 +11,43 @@ import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/composer_shared/data/local/composer_draft_local_db.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
+
+class LibraryCoverStorageAccountingAdapter implements StorageAccountingAdapter {
+  const LibraryCoverStorageAccountingAdapter({required LibraryCoverStore store})
+    : _store = store;
+
+  final LibraryCoverStore _store;
+
+  @override
+  StorageBucket get bucket => StorageBucket.libraryCover;
+
+  @override
+  Future<StorageUsageSection> calculateUsage() async {
+    final bytes = await _store.calculateUsageBytes();
+    return StorageUsageSection(
+      bucket: bucket,
+      labelRef: StorageUsageLabelRef(
+        kind: StorageUsageLabelKind.bucket,
+        code: bucket.id,
+      ),
+      bytes: bytes,
+      clearable: false,
+      slices: <StorageUsageSlice>[
+        if (bytes > 0)
+          StorageUsageSlice(
+            id: 'library_cover:protected',
+            labelRef: StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.bucket,
+              code: bucket.id,
+            ),
+            bytes: bytes,
+            protected: true,
+          ),
+      ],
+    );
+  }
+}
 
 class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
   const ImageCacheStorageAccountingAdapter({

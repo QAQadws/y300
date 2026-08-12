@@ -1,25 +1,32 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_decode_scheduler.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
+import 'package:y300/features/library_shared/presentation/images/library_cover_image_provider.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';
+import 'package:y300/shared/widgets/library_cover_placeholder.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
+
+import '../../../../test_support/localized_test_app.dart';
+import '../../../../test_support/unavailable_library_cover_store.dart';
 
 void main() {
   testWidgets('search mode switches app bar layout', (tester) async {
@@ -221,9 +228,9 @@ void main() {
     );
     final delegate =
         grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-    expect(grid.padding, const EdgeInsets.all(12));
-    expect(delegate.crossAxisSpacing, 6);
-    expect(delegate.mainAxisSpacing, 6);
+    expect(grid.padding, const EdgeInsets.all(8));
+    expect(delegate.crossAxisSpacing, 4);
+    expect(delegate.mainAxisSpacing, 4);
   });
 
   testWidgets('public shelf sort sheet exposes three fields and desc default', (
@@ -379,41 +386,121 @@ void main() {
     },
   );
 
-  testWidgets(
-    'grid and list have scrollCacheExtent for large shelf scrolling',
-    (tester) async {
-      await tester.pumpWidget(
-        LocalizedTestApp(
+  testWidgets('grid and list buffer only one row for cover loading', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+          ),
+          onOpenWork: (context, workId) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final grid = tester.widget<GridView>(
+      find.byKey(const Key('unified-shelf-grid-view')),
+    );
+    expect(grid.scrollCacheExtent, const ScrollCacheExtent.pixels(392));
+
+    await tester.tap(find.byIcon(Icons.filter_list).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TextButton).at(2));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Radio<LibraryDisplayMode>).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton).first);
+    await tester.pumpAndSettle();
+
+    final list = tester.widget<ListView>(
+      find.byKey(const Key('unified-shelf-list-view')),
+    );
+    expect(list.scrollCacheExtent, const ScrollCacheExtent.pixels(82));
+  });
+
+  testWidgets('cached grid cover keeps its exact key when it becomes visible', (
+    tester,
+  ) async {
+    final items = List<LibraryWorkItem>.generate(
+      12,
+      (index) => _item(
+        workId: 'cached-$index',
+        title: 'Cached $index',
+        coverAsset: LibraryCoverAssetRef(
+          assetId: 'comic/cached-$index/source',
+          revision: 1,
+          kind: LibraryCoverAssetKind.source,
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          libraryCoverStoreProvider.overrideWithValue(
+            const UnavailableLibraryCoverStore(),
+          ),
+          libraryCoverDecodeSchedulerProvider.overrideWithValue(
+            LibraryCoverDecodeScheduler(maxConcurrent: 3),
+          ),
+        ],
+        child: LocalizedTestApp(
           home: UnifiedShelfPage(
             adapter: _FakeShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.grid,
+              itemsByCategory: {'default': items},
             ),
             onOpenWork: (context, workId) async {},
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      final grid = tester.widget<GridView>(
-        find.byKey(const Key('unified-shelf-grid-view')),
-      );
-      expect(grid.scrollCacheExtent, const ScrollCacheExtent.pixels(900));
+    final gridRect = tester.getRect(
+      find.byKey(const Key('unified-shelf-grid-view')),
+    );
+    final cachedIndex = List<int>.generate(items.length, (index) => index)
+        .where((index) {
+          final item = find.byKey(
+            ValueKey<String>('unified-shelf-grid-item-cached-$index'),
+            skipOffstage: false,
+          );
+          return item.evaluate().isNotEmpty &&
+              tester.getTopLeft(item).dy >= gridRect.bottom;
+        })
+        .first;
+    final cachedItem = find.byKey(
+      ValueKey<String>('unified-shelf-grid-item-cached-$cachedIndex'),
+      skipOffstage: false,
+    );
+    expect(
+      tester.getTopLeft(cachedItem).dy,
+      greaterThanOrEqualTo(gridRect.bottom),
+    );
 
-      await tester.tap(find.byIcon(Icons.filter_list).first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(TextButton).at(2));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(Radio<LibraryDisplayMode>).at(1));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(FilledButton).first);
-      await tester.pumpAndSettle();
-
-      final list = tester.widget<ListView>(
-        find.byKey(const Key('unified-shelf-list-view')),
+    LibraryCoverImageProvider providerForCachedItem() {
+      final image = tester.widget<Image>(
+        find.descendant(
+          of: cachedItem,
+          matching: find.byType(Image, skipOffstage: false),
+        ),
       );
-      expect(list.scrollCacheExtent, const ScrollCacheExtent.pixels(900));
-    },
-  );
+      return image.image as LibraryCoverImageProvider;
+    }
+
+    final cachedKey = providerForCachedItem().cacheKey;
+    await tester.ensureVisible(cachedItem);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getTopLeft(cachedItem).dy,
+      inInclusiveRange(gridRect.top, gridRect.bottom),
+    );
+    expect(providerForCachedItem().cacheKey, cachedKey);
+  });
 
   testWidgets('cover image feature flag can fall back to LibraryCachedImage', (
     tester,
@@ -512,6 +599,23 @@ void main() {
       ),
       findsOneWidget,
     );
+    final coverImage = tester.widget<ShelfCoverImage>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('unified-shelf-list-item-covered'),
+        ),
+        matching: find.byType(ShelfCoverImage),
+      ),
+    );
+    expect(coverImage.placeholder, isA<LibraryCoverPlaceholder>());
+    expect(
+      (coverImage.placeholder as LibraryCoverPlaceholder).color,
+      const ShelfThemePaletteResolver()
+          .resolve(Theme.of(tester.element(find.byType(UnifiedShelfPage))))
+          .coverPlaceholderBackground,
+    );
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+    expect(find.byIcon(Icons.image_not_supported_outlined), findsNothing);
   });
 
   testWidgets('grid and list covers use the custom focal alignment', (
@@ -1269,6 +1373,7 @@ LibraryWorkItem _item({
   required String workId,
   required String title,
   String? coverImageUrl,
+  LibraryCoverAssetRef? coverAsset,
   String? customCoverLocalPath,
   double? customCoverFocusX,
   double? customCoverFocusY,
@@ -1280,6 +1385,7 @@ LibraryWorkItem _item({
     categoryId: 'default',
     title: title,
     coverImageUrl: coverImageUrl,
+    coverAsset: coverAsset,
     customCoverLocalPath: customCoverLocalPath,
     customCoverFocusX: customCoverFocusX,
     customCoverFocusY: customCoverFocusY,

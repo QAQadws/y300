@@ -4,12 +4,11 @@ import 'package:y300/features/library_shared/domain/services/shelf_feature_flags
 void main() {
   test('ShelfFeatureFlags can disable one shelf optimization at a time', () {
     final flags = ShelfFeatureFlags.defaults.copyWith(
-      useShelfCoverQueue: false,
+      useShelfCoverImage: false,
     );
 
     expect(flags.useShelfSnapshotQuery, isTrue);
-    expect(flags.useShelfCoverQueue, isFalse);
-    expect(flags.useShelfCoverImage, isTrue);
+    expect(flags.useShelfCoverImage, isFalse);
     expect(flags.useStaleWhileRevalidate, isTrue);
   });
 }

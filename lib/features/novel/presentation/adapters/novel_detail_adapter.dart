@@ -4,11 +4,10 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_operation_failure.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
-import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
-import 'package:y300/features/library_shared/domain/services/library_cover_cache_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_source_id_comparator.dart';
+import 'package:y300/features/library_shared/domain/services/library_cover_asset_factory.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
@@ -23,17 +22,17 @@ class NovelDetailAdapter
         DetailCoverEditor {
   NovelDetailAdapter(
     this._repository, {
-    ImageCacheService? imageCacheService,
+    LibraryCoverStore? coverStore,
     required LibraryStateRepository stateRepository,
     NovelSourceStateRepository? sourceStateRepository,
     NovelChapterUpdateService Function()? chapterUpdateServiceFactory,
-  }) : _coverCacheService = LibraryCoverCacheService(imageCacheService),
+  }) : _coverStore = coverStore,
        _stateRepository = stateRepository,
        _sourceStateRepository = sourceStateRepository,
        _chapterUpdateServiceFactory = chapterUpdateServiceFactory;
 
   final NovelRepository _repository;
-  final LibraryCoverCacheService _coverCacheService;
+  final LibraryCoverStore? _coverStore;
   final LibraryStateRepository _stateRepository;
   final NovelSourceStateRepository? _sourceStateRepository;
   final NovelChapterUpdateService Function()? _chapterUpdateServiceFactory;
@@ -64,29 +63,7 @@ class NovelDetailAdapter
       novelId: workId,
     );
     final coverImageUrl = detail.coverHidden ? null : detail.coverImageUrl;
-    var coverLocalPath = detail.coverHidden ? null : detail.coverLocalPath;
-    if ((coverLocalPath == null || coverLocalPath.trim().isEmpty) &&
-        coverImageUrl != null &&
-        coverImageUrl.trim().isNotEmpty) {
-      final cachedCover = await _coverCacheService.ensureProtectedCover(
-        cacheKey: ImageCacheKeys.novelCover(workId),
-        sourceUrl: coverImageUrl,
-        ownerType: ImageCacheOwnerType.novel,
-        ownerId: workId,
-        role: ImageCacheRole.cover,
-      );
-      final localPath = cachedCover?.localPath?.trim();
-      if (localPath != null && localPath.isNotEmpty) {
-        coverLocalPath = localPath;
-        if (_repository is NovelCoverCacheWriter) {
-          await (_repository as NovelCoverCacheWriter).updateCoverCache(
-            novelId: workId,
-            coverImageUrl: coverImageUrl,
-            coverLocalPath: coverLocalPath,
-          );
-        }
-      }
-    }
+    final coverLocalPath = detail.coverHidden ? null : detail.coverLocalPath;
     return LibraryDetailHeader(
       workId: detail.novelId,
       title: detail.displayTitle,
@@ -97,6 +74,17 @@ class NovelDetailAdapter
           : detail.customCoverLocalPath,
       customCoverFocusX: detail.coverHidden ? null : detail.customCoverFocusX,
       customCoverFocusY: detail.coverHidden ? null : detail.customCoverFocusY,
+      coverAsset: detail.coverHidden
+          ? null
+          : LibraryCoverAssetFactory.preferred(
+              ownerType: 'novel',
+              ownerId: workId,
+              sourceUrl: coverImageUrl,
+              sourceLegacyPath: coverLocalPath,
+              sourceRevision: detail.coverRevision,
+              customLegacyPath: detail.customCoverLocalPath,
+              customRevision: detail.customCoverRevision,
+            ),
       sourceTitle: detail.sourceTitle,
       customTitle: detail.customTitle,
       publisherName: sourceState?.publisherName ?? detail.publisherName,
@@ -293,27 +281,36 @@ class NovelDetailAdapter
         LibraryOperationFailureCode.unsupported,
       );
     }
-    final cached = await _coverCacheService.copyProtectedCoverFromLocalFile(
-      cacheKey: ImageCacheKeys.customCover(
-        ownerType: ImageCacheOwnerType.novel.dbValue,
-        ownerId: workId,
-      ),
-      sourcePath: sourceLocalPath,
-      ownerType: ImageCacheOwnerType.novel,
-      ownerId: workId,
-    );
-    final protectedPath = cached?.localPath?.trim();
-    if (protectedPath == null || protectedPath.isEmpty) {
+    final store = _coverStore;
+    if (store == null || repository is! NovelCustomCoverAssetWriter) {
       throw const LibraryOperationException(
-        LibraryOperationFailureCode.cacheWriteFailed,
+        LibraryOperationFailureCode.unsupported,
       );
     }
-    await (repository as NovelCustomCoverWriter).updateCustomCover(
-      novelId: workId,
-      customCoverLocalPath: protectedPath,
-      focusX: focusX,
-      focusY: focusY,
+    final assetWriter = repository as NovelCustomCoverAssetWriter;
+    final detail = await repository.getDetail(novelId: workId);
+    final revision = (detail?.customCoverRevision ?? 0) + 1;
+    final asset = LibraryCoverAssetRef(
+      assetId: LibraryCoverAssetIds.custom(
+        ownerType: 'novel',
+        ownerId: workId,
+      ),
+      revision: revision,
+      kind: LibraryCoverAssetKind.custom,
     );
+    await store.installLocalFile(asset: asset, sourcePath: sourceLocalPath);
+    try {
+      await assetWriter.activateCustomCoverAsset(
+        novelId: workId,
+        revision: revision,
+        focusX: focusX,
+        focusY: focusY,
+      );
+    } catch (_) {
+      await store.invalidate(asset);
+      rethrow;
+    }
+    await store.deleteOlderRevisions(asset);
   }
 
   @override
@@ -344,11 +341,15 @@ class NovelDetailAdapter
   }
 
   @override
-  Future<void> removeCustomCover({required String workId}) {
+  Future<void> removeCustomCover({required String workId}) async {
     final repository = _repository;
     if (repository is NovelCustomCoverWriter) {
       final writer = repository as NovelCustomCoverWriter;
-      return writer.removeCustomCover(novelId: workId);
+      await writer.removeCustomCover(novelId: workId);
+      await _coverStore?.deleteAsset(
+        LibraryCoverAssetIds.custom(ownerType: 'novel', ownerId: workId),
+      );
+      return;
     }
     throw const LibraryOperationException(
       LibraryOperationFailureCode.unsupported,

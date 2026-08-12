@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
+import '../../../test_support/unavailable_library_cover_store.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -72,7 +73,10 @@ void main() {
 
       // 存量章节必须落在“解析且可见”这一侧：默认值写错会让老用户整部漫画消失，
       // 或者把不可移除的解析章节显示成可移除。
-      final repository = LocalComicRepository(Future<Database>.value(db));
+      final repository = LocalComicRepository(
+        Future<Database>.value(db),
+        libraryCoverStore: const UnavailableLibraryCoverStore(),
+      );
       final visible = await repository.getComicEpisodes(
         comicId: 'legacy-comic',
       );

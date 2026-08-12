@@ -12,9 +12,11 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/data/services/cache_budget_scheduler.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
+import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/data/providers/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_migration_providers.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/forum/presentation/forum_shell_page.dart';
 import 'package:y300/features/history/presentation/history_page.dart';
@@ -35,17 +37,31 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 final mainShellBackgroundTaskStarterProvider =
     Provider<Future<void> Function()>((ref) {
       return () async {
-        await Future.wait<void>(<Future<void>>[
-          _startBackgroundTaskSafely(
-            ref.read(mainShellCacheBudgetSchedulerProvider).start,
-          ),
-          _startBackgroundTaskSafely(
-            ref.read(comicSearchRefreshQueueServiceProvider).start,
-          ),
-          _startBackgroundTaskSafely(
-            ref.read(comicDownloadQueueProvider).start,
-          ),
-        ]);
+        final migrator = ref.read(libraryCoverLegacyMigratorProvider);
+        final mergeRecovery = ref.read(comicCoverMergeRecoveryProvider);
+        if (mergeRecovery != null) {
+          await _startBackgroundTaskSafely(
+            mergeRecovery.recoverPendingCoverMerges,
+          );
+        }
+        // Custom covers are user assets: finish their lossless adoption before
+        // any shelf can render. Regenerable source covers continue in the
+        // detached maintenance batch below.
+        await _startBackgroundTaskSafely(migrator.migrateCustomAssets);
+        unawaited(
+          Future.wait<void>(<Future<void>>[
+            _startBackgroundTaskSafely(
+              ref.read(mainShellCacheBudgetSchedulerProvider).start,
+            ),
+            _startBackgroundTaskSafely(
+              ref.read(comicSearchRefreshQueueServiceProvider).start,
+            ),
+            _startBackgroundTaskSafely(
+              ref.read(comicDownloadQueueProvider).start,
+            ),
+            _startBackgroundTaskSafely(migrator.migrateSourceAssets),
+          ]),
+        );
       };
     });
 
@@ -124,12 +140,16 @@ class MainShellPage extends ConsumerStatefulWidget {
 class _MainShellPageState extends ConsumerState<MainShellPage> {
   MainShellDestination? _currentDestination;
   final Set<MainShellDestination> _builtDestinations = <MainShellDestination>{};
+  late final Future<void> _coverMigrationReady;
 
   @override
   void initState() {
     super.initState();
-    // 主壳创建后恢复搜索刷新队列，确保用户离开详情页或收藏页后任务仍继续。
-    unawaited(ref.read(mainShellBackgroundTaskStarterProvider).call());
+    // This future completes after custom-cover migration; other startup work
+    // is detached by the starter and does not delay the shell.
+    _coverMigrationReady = ref
+        .read(mainShellBackgroundTaskStarterProvider)
+        .call();
     // 初始化系统通知能力并请求权限；失败不应阻塞主壳，detach 执行即可。
     unawaited(ref.read(mainShellNotificationInitializerProvider).call());
     // 清理遗忘回复草稿中的过期临时附件，避免只依赖用户重新打开草稿。
@@ -145,6 +165,20 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _coverMigrationReady,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return _buildReadyShell(context);
+      },
+    );
+  }
+
+  Widget _buildReadyShell(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     ref.watch(favoriteSyncTaskProgressRegistrationProvider);
     ref.watch(comicSearchQueueTaskProgressRegistrationProvider);

@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
-import 'package:y300/features/image_loading/domain/image_prefetcher.dart';
 import 'package:y300/features/library_shared/domain/contracts/library_view_preferences_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -10,9 +8,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_view_preferences.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_snapshot_diff.dart';
-import 'package:y300/features/library_shared/domain/services/shelf_cover_warmup_service.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_feature_flags.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_perf_trace.dart';
 
@@ -113,45 +109,22 @@ class UnifiedShelfController {
   UnifiedShelfController({
     required ShelfModuleAdapter adapter,
     LibraryViewPreferencesRepository? viewPreferencesRepository,
-    int coverPrefetchConcurrency = 3,
-    ImagePrefetcher Function(
-      ImagePrefetchRunner runner,
-      ImagePrefetcherSnapshotHandler onSnapshot,
-    )?
-    coverPrefetcherFactory,
     ShelfFeatureFlags featureFlags = ShelfFeatureFlags.defaults,
     void Function()? onStateChanged,
     bool backgroundReloadEnabled = true,
-    LibraryTaskProgressHub? taskProgressHub,
-    ForumImagePrecacheService Function()? coverPrecacheServiceResolver,
   }) : _adapter = adapter,
        _viewPreferencesRepository =
            viewPreferencesRepository ??
            VolatileLibraryViewPreferencesRepository(),
-       _coverPrefetchConcurrency = coverPrefetchConcurrency,
-       _coverPrefetcherFactory = coverPrefetcherFactory,
        _featureFlags = featureFlags,
        _onStateChanged = onStateChanged,
        _backgroundReloadEnabled = backgroundReloadEnabled,
-       _coverPrecacheServiceResolver = coverPrecacheServiceResolver,
        _taskProgressListenable = adapter.taskProgress,
        _shelfRefreshSignals = adapter.shelfRefreshSignals,
        _state = _initialState(adapter),
        _stateListenable = ValueNotifier<UnifiedShelfState>(
          _initialState(adapter),
        ) {
-    final warmupAdapter = adapter is ShelfCoverWarmupAdapter
-        ? adapter as ShelfCoverWarmupAdapter
-        : null;
-    if (taskProgressHub != null && warmupAdapter != null) {
-      final progress = ValueNotifier<LibraryShelfTaskProgress?>(null);
-      _coverWarmupProgress = progress;
-      _coverWarmupProgressRegistration = taskProgressHub.registerSource(
-        modules: <LibraryModuleKey>{adapter.moduleKey},
-        progress: progress,
-        priority: LibraryTaskProgressPriority.low,
-      );
-    }
     final taskProgressListenable = _taskProgressListenable;
     _lastTaskProgress = taskProgressListenable?.value;
     taskProgressListenable?.addListener(_handleTaskProgressChanged);
@@ -160,17 +133,10 @@ class UnifiedShelfController {
 
   final ShelfModuleAdapter _adapter;
   final LibraryViewPreferencesRepository _viewPreferencesRepository;
-  final int _coverPrefetchConcurrency;
-  final ImagePrefetcher Function(
-    ImagePrefetchRunner runner,
-    ImagePrefetcherSnapshotHandler onSnapshot,
-  )?
-  _coverPrefetcherFactory;
   final ShelfFeatureFlags _featureFlags;
   final LibraryShelfSnapshotDiffer _snapshotDiffer =
       const LibraryShelfSnapshotDiffer();
   final void Function()? _onStateChanged;
-  final ForumImagePrecacheService Function()? _coverPrecacheServiceResolver;
   final ValueListenable<LibraryShelfTaskProgress?>? _taskProgressListenable;
   final ValueListenable<LibraryShelfRefreshSignal?>? _shelfRefreshSignals;
   UnifiedShelfState _state;
@@ -182,14 +148,6 @@ class UnifiedShelfController {
   Timer? _keywordDebounceTimer;
   Timer? _backgroundReloadTimer;
   Completer<void>? _pendingKeywordCompleter;
-  final Map<String, ShelfCoverVisibleRange> _visibleRangesByCategory =
-      <String, ShelfCoverVisibleRange>{};
-
-  /// 持久化封面预取器：跨可见区变化复用，只重排不取消可见项（替代旧的
-  /// cancel-restart 令牌）。懒创建于首次预热。
-  ImagePrefetcher? _coverPrefetcher;
-  ValueNotifier<LibraryShelfTaskProgress?>? _coverWarmupProgress;
-  LibraryTaskProgressRegistration? _coverWarmupProgressRegistration;
   LibraryShelfTaskProgress? _lastTaskProgress;
   bool _adapterRefreshInProgress = false;
   bool _backgroundReloadInProgress = false;
@@ -217,13 +175,6 @@ class UnifiedShelfController {
   void dispose() {
     _disposed = true;
     _reloadGeneration++;
-    _coverPrefetcher?.dispose();
-    _coverPrefetcher = null;
-    _coverWarmupProgress?.value = null;
-    _coverWarmupProgressRegistration?.dispose();
-    _coverWarmupProgressRegistration = null;
-    _coverWarmupProgress?.dispose();
-    _coverWarmupProgress = null;
     _taskProgressListenable?.removeListener(_handleTaskProgressChanged);
     _shelfRefreshSignals?.removeListener(_handleShelfRefreshSignalChanged);
     _stateListenable.dispose();
@@ -312,7 +263,6 @@ class UnifiedShelfController {
       _setState(_state.copyWith(selectedCategoryId: categoryId));
     }
     await _persistViewPreferences();
-    _startCoverWarmup(generation: _reloadGeneration);
   }
 
   void reportVisibleRange({
@@ -320,20 +270,8 @@ class UnifiedShelfController {
     required int firstIndex,
     required int lastIndex,
   }) {
-    if (_disposed) {
-      return;
-    }
-    final range = ShelfCoverVisibleRange(
-      firstIndex: firstIndex,
-      lastIndex: lastIndex,
-    );
-    if (_visibleRangesByCategory[categoryId] == range) {
-      return;
-    }
-    _visibleRangesByCategory[categoryId] = range;
-    if (categoryId == _state.selectedCategoryId) {
-      _startCoverWarmup(generation: _reloadGeneration);
-    }
+    // Retained as a source-compatible no-op for callers compiled against the
+    // retired whole-shelf warmup API. Visible widgets now own cover loading.
   }
 
   Future<void> updateFilters(LibraryFilterSet filters) async {
@@ -503,7 +441,6 @@ class UnifiedShelfController {
       if (shouldPersistResolvedCategory) {
         await _persistViewPreferences();
       }
-      _startCoverWarmup(generation: generation);
     } catch (error) {
       if (_disposed || generation != _reloadGeneration) {
         return;
@@ -626,187 +563,6 @@ class UnifiedShelfController {
         }
       }
     }());
-  }
-
-  void _startCoverWarmup({required int generation}) {
-    final warmupAdapter = _adapter is ShelfCoverWarmupAdapter
-        ? _adapter as ShelfCoverWarmupAdapter
-        : null;
-    if (!_featureFlags.useShelfCoverQueue || warmupAdapter == null) {
-      _setCoverWarmupProgress(null, generation: generation);
-      return;
-    }
-    final prefetcher = _ensureCoverPrefetcher(warmupAdapter);
-    final snapshot = _state;
-    unawaited(() async {
-      try {
-        final requests = await warmupAdapter.buildCoverWarmupRequests(
-          itemsByCategory: snapshot.itemsByCategory,
-          selectedCategoryId: snapshot.selectedCategoryId,
-        );
-        if (_disposed || generation != _reloadGeneration) {
-          return;
-        }
-        final prioritized = prioritizeShelfCoverWarmupRequests(
-          requests: requests,
-          itemsByCategory: snapshot.itemsByCategory,
-          categories: snapshot.categories,
-          selectedCategoryId: snapshot.selectedCategoryId,
-          visibleRangesByCategory: Map<String, ShelfCoverVisibleRange>.from(
-            _visibleRangesByCategory,
-          ),
-          displayMode: snapshot.displayMode,
-          gridColumnCount: snapshot.gridColumnCount,
-        );
-        if (prioritized.isEmpty) {
-          return;
-        }
-        // 只重排、不取消：把新窗口的优先级合并进持久队列。快速滚动时可见项
-        // （priority=currentViewport）始终排在最前，且正在运行的下载不被打断。
-        prefetcher.submit(<ImagePrefetchRequest>[
-          for (final request in prioritized)
-            ImagePrefetchRequest(
-              dedupeKey: request.dedupeKey,
-              priority: request.priority.index,
-              payload: request,
-            ),
-        ]);
-      } catch (_) {
-        // Cover warmup is an opportunistic background path. Request building
-        // failures must not escape into Flutter's unawaited future handler.
-      }
-    }());
-  }
-
-  /// 懒创建持久封面预取器。runner 执行实际预热与写回，snapshot 驱动进度提示。
-  ImagePrefetcher _ensureCoverPrefetcher(
-    ShelfCoverWarmupAdapter warmupAdapter,
-  ) {
-    final existing = _coverPrefetcher;
-    if (existing != null) {
-      return existing;
-    }
-    Future<bool> runner(ImagePrefetchRequest request) async {
-      if (_disposed) {
-        return false;
-      }
-      final coverRequest = request.payload as ShelfCoverWarmupRequest;
-      final result = await _warmCover(
-        warmupAdapter: warmupAdapter,
-        coverRequest: coverRequest,
-      );
-      if (_disposed || result == null || !result.hasPath) {
-        return false;
-      }
-      // workId 已不在当前书架时，_applyCoverWarmupResult 自然 no-op。
-      _applyCoverWarmupResult(result);
-      return true;
-    }
-
-    void onSnapshot(ImagePrefetcherSnapshot snapshot) {
-      if (_disposed) {
-        return;
-      }
-      final progress = snapshot.isIdle
-          ? null
-          : LibraryShelfTaskProgress(
-              code: LibraryShelfTaskProgressCode.coverWarmup,
-              current: snapshot.runningCount,
-              total: snapshot.runningCount + snapshot.pendingCount,
-              source: LibraryMutationSource.coverWarmup,
-              visible: false,
-              reloadOnCompletion: false,
-            );
-      _setCoverWarmupProgress(progress, generation: _reloadGeneration);
-    }
-
-    final factory = _coverPrefetcherFactory;
-    final prefetcher = factory != null
-        ? factory(runner, onSnapshot)
-        : DefaultImagePrefetcher(
-            runner: runner,
-            onSnapshot: onSnapshot,
-            maxConcurrent: _coverPrefetchConcurrency,
-          );
-    _coverPrefetcher = prefetcher;
-    return prefetcher;
-  }
-
-  Future<ShelfCoverWarmupResult?> _warmCover({
-    required ShelfCoverWarmupAdapter warmupAdapter,
-    required ShelfCoverWarmupRequest coverRequest,
-  }) async {
-    final precacheService = _coverPrecacheServiceResolver?.call();
-    if (precacheService == null) {
-      return warmupAdapter.warmCover(coverRequest);
-    }
-    final result = await precacheService.ensureDiskCached(
-      coverRequest.imageSpec,
-    );
-    final localPath = result.localPath?.trim();
-    if (!result.success || localPath == null || localPath.isEmpty) {
-      return null;
-    }
-    return warmupAdapter.applyWarmedCover(
-      request: coverRequest,
-      localPath: localPath,
-    );
-  }
-
-  void _setCoverWarmupProgress(
-    LibraryShelfTaskProgress? progress, {
-    required int generation,
-  }) {
-    final notifier = _coverWarmupProgress;
-    if (notifier == null || _disposed || generation != _reloadGeneration) {
-      return;
-    }
-    notifier.value = progress;
-  }
-
-  void _applyCoverWarmupResult(ShelfCoverWarmupResult result) {
-    final nextItemsByCategory = <String, List<LibraryWorkItem>>{};
-    var changed = false;
-    for (final entry in _state.itemsByCategory.entries) {
-      final nextItems = <LibraryWorkItem>[];
-      var categoryChanged = false;
-      for (final item in entry.value) {
-        if (item.workId != result.workId) {
-          nextItems.add(item);
-          continue;
-        }
-        final nextCoverLocalPath = result.coverLocalPath ?? item.coverLocalPath;
-        final nextCustomCoverLocalPath =
-            result.customCoverLocalPath ?? item.customCoverLocalPath;
-        final itemChanged =
-            nextCoverLocalPath != item.coverLocalPath ||
-            nextCustomCoverLocalPath != item.customCoverLocalPath;
-        if (!itemChanged) {
-          nextItems.add(item);
-          continue;
-        }
-        final next = item.copyWith(
-          coverLocalPath: nextCoverLocalPath,
-          customCoverLocalPath: nextCustomCoverLocalPath,
-        );
-        nextItems.add(next);
-        categoryChanged = true;
-      }
-      nextItemsByCategory[entry.key] = categoryChanged
-          ? List<LibraryWorkItem>.unmodifiable(nextItems)
-          : entry.value;
-      changed = changed || categoryChanged;
-    }
-    if (!changed) {
-      return;
-    }
-    _setState(
-      _state.copyWith(
-        itemsByCategory: Map<String, List<LibraryWorkItem>>.unmodifiable(
-          nextItemsByCategory,
-        ),
-      ),
-    );
   }
 
   void _setState(UnifiedShelfState next) {
