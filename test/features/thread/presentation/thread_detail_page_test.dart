@@ -83,6 +83,7 @@ import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dar
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
@@ -1755,6 +1756,7 @@ void main() {
       expect(avatarImage.request?.role, ImageCacheRole.avatar);
       expect(avatarImage.request?.ownerType, ImageCacheOwnerType.thread);
       expect(avatarImage.request?.ownerId, '1');
+      expect(avatarImage.fadeInDuration, ForumCachedAvatar.fadeInDuration);
       expect(
         avatarImage.request?.sourceUrl,
         'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/01_avatar_small.jpg',

@@ -32,6 +32,7 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 void main() {
@@ -630,6 +631,7 @@ void main() {
       expect(avatarImage.request?.role, ImageCacheRole.avatar);
       expect(avatarImage.request?.ownerType, ImageCacheOwnerType.forumDisplay);
       expect(avatarImage.request?.ownerId, '42');
+      expect(avatarImage.fadeInDuration, ForumCachedAvatar.fadeInDuration);
     });
 
     testWidgets('loads next page when tapping load more', (tester) async {

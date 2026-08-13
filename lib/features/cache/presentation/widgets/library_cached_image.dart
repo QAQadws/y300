@@ -36,6 +36,7 @@ class LibraryCachedImage extends StatefulWidget {
     this.onImageResolved,
     this.onRemoteImageResolved,
     this.onImageFailed,
+    this.fadeInDuration = Duration.zero,
     this.retryToken = 0,
   });
 
@@ -59,6 +60,10 @@ class LibraryCachedImage extends StatefulWidget {
   final ValueChanged<Size>? onImageResolved;
   final VoidCallback? onRemoteImageResolved;
   final VoidCallback? onImageFailed;
+
+  /// Duration used to cross-fade the placeholder into an asynchronously
+  /// decoded first frame. Synchronous image-cache hits remain immediate.
+  final Duration fadeInDuration;
 
   /// 重试代次。调用方自增即可让本控件重新解码一次同一来源。
   ///
@@ -169,14 +174,20 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
         alignment: widget.alignment,
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-          if (frame != null || wasSynchronouslyLoaded) {
+          final isResolved = frame != null || wasSynchronouslyLoaded;
+          if (isResolved) {
             _reportImageResolved(
               testProvider,
               'override:${identityHashCode(testProvider)}',
             );
-            return child;
           }
-          return widget.placeholder;
+          return _buildFirstFrameTransition(
+            context: context,
+            child: child,
+            isResolved: isResolved,
+            wasSynchronouslyLoaded: wasSynchronouslyLoaded,
+            identity: 'override:${identityHashCode(testProvider)}',
+          );
         },
         errorBuilder: (context, error, stackTrace) {
           _markImageFailed('override:${identityHashCode(testProvider)}');
@@ -206,11 +217,17 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
           alignment: widget.alignment,
           gaplessPlayback: true,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-            if (frame != null || wasSynchronouslyLoaded) {
+            final isResolved = frame != null || wasSynchronouslyLoaded;
+            if (isResolved) {
               _reportImageResolved(fileProvider, 'file:${file.path}');
-              return child;
             }
-            return widget.placeholder;
+            return _buildFirstFrameTransition(
+              context: context,
+              child: child,
+              isResolved: isResolved,
+              wasSynchronouslyLoaded: wasSynchronouslyLoaded,
+              identity: 'file:${file.path}',
+            );
           },
           errorBuilder: (context, error, stackTrace) {
             _evictFailedProvider(displayProvider, 'file:${file.path}');
@@ -260,11 +277,10 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
   }
 
   Widget _buildRemoteImageShell(String remote, Map<String, String>? headers) {
-    final children = <Widget>[
-      if (!_remoteResolved) widget.placeholder,
-      if (headers != null) _buildNetworkImage(remote, headers),
-    ];
-    return Stack(fit: StackFit.passthrough, children: children);
+    if (headers == null) {
+      return widget.placeholder;
+    }
+    return _buildNetworkImage(remote, headers);
   }
 
   Widget _buildNetworkImage(String remote, Map<String, String> headers) {
@@ -292,16 +308,22 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
       alignment: widget.alignment,
       gaplessPlayback: true,
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (frame != null || wasSynchronouslyLoaded) {
+        final isResolved = frame != null || wasSynchronouslyLoaded;
+        if (isResolved) {
           final isFirstFrame = !_remoteResolved && !_remoteResolveScheduled;
           _markRemoteResolved();
           if (isFirstFrame) {
             widget.onRemoteImageResolved?.call();
           }
           _reportImageResolved(provider, 'remote:$remote');
-          return child;
         }
-        return const SizedBox.shrink();
+        return _buildFirstFrameTransition(
+          context: context,
+          child: child,
+          isResolved: isResolved,
+          wasSynchronouslyLoaded: wasSynchronouslyLoaded,
+          identity: 'remote:$remote',
+        );
       },
       errorBuilder: (context, error, stackTrace) {
         _markRemoteResolved();
@@ -309,6 +331,40 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
         _markImageFailed('remote:$remote');
         return _errorPlaceholder;
       },
+    );
+  }
+
+  Widget _buildFirstFrameTransition({
+    required BuildContext context,
+    required Widget child,
+    required bool isResolved,
+    required bool wasSynchronouslyLoaded,
+    required String identity,
+  }) {
+    final duration = widget.fadeInDuration;
+    if (wasSynchronouslyLoaded ||
+        duration <= Duration.zero ||
+        MediaQuery.disableAnimationsOf(context)) {
+      return isResolved ? child : widget.placeholder;
+    }
+    return AnimatedSwitcher(
+      duration: duration,
+      reverseDuration: duration,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          fit: StackFit.passthrough,
+          alignment: Alignment.center,
+          children: <Widget>[...previousChildren, ?currentChild],
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey<String>(
+          isResolved ? 'image:$identity' : 'placeholder:$identity',
+        ),
+        child: isResolved ? child : widget.placeholder,
+      ),
     );
   }
 

@@ -161,6 +161,135 @@ void main() {
     expect(find.byType(RawImage), findsOneWidget);
   });
 
+  testWidgets('cross-fades an asynchronously decoded first frame', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 3, height: 5, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final provider = _DeferredImageProvider();
+
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: LibraryCachedImage(
+          imageProviderOverride: provider,
+          fit: BoxFit.cover,
+          placeholder: const SizedBox(key: Key('placeholder')),
+          fadeInDuration: const Duration(milliseconds: 120),
+        ),
+      ),
+    );
+
+    provider.complete(testImage);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('placeholder')), findsOneWidget);
+    expect(find.byType(RawImage), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(find.byKey(const Key('placeholder')), findsOneWidget);
+    expect(find.byType(RawImage), findsOneWidget);
+
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('placeholder')), findsNothing);
+    expect(find.byType(RawImage), findsOneWidget);
+  });
+
+  testWidgets('shows a synchronously cached frame without fading', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 3, height: 5, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: LibraryCachedImage(
+          imageProviderOverride: _SynchronousImageProvider(testImage),
+          fit: BoxFit.cover,
+          placeholder: const SizedBox(key: Key('placeholder')),
+          fadeInDuration: const Duration(milliseconds: 120),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('placeholder')), findsNothing);
+    expect(find.byType(RawImage), findsOneWidget);
+  });
+
+  testWidgets('disables the first-frame fade when animations are disabled', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 3, height: 5, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final provider = _DeferredImageProvider();
+
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: LibraryCachedImage(
+            imageProviderOverride: provider,
+            fit: BoxFit.cover,
+            placeholder: const SizedBox(key: Key('placeholder')),
+            fadeInDuration: const Duration(milliseconds: 120),
+          ),
+        ),
+      ),
+    );
+
+    provider.complete(testImage);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('placeholder')), findsNothing);
+    expect(find.byType(RawImage), findsOneWidget);
+  });
+
+  testWidgets('does not replay the fade for an unchanged image source', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 3, height: 5, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final provider = _DeferredImageProvider();
+
+    Widget build() {
+      return LocalizedTestApp(
+        home: LibraryCachedImage(
+          imageProviderOverride: provider,
+          fit: BoxFit.cover,
+          placeholder: const SizedBox(key: Key('placeholder')),
+          fadeInDuration: const Duration(milliseconds: 120),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(build());
+    provider.complete(testImage);
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(tester.hasRunningAnimations, isFalse);
+
+    await tester.pumpWidget(build());
+    await tester.pump();
+
+    expect(find.byKey(const Key('placeholder')), findsNothing);
+    expect(find.byType(RawImage), findsOneWidget);
+    expect(tester.hasRunningAnimations, isFalse);
+  });
+
   testWidgets('bumping retryToken re-resolves a failed remote image', (
     tester,
   ) async {

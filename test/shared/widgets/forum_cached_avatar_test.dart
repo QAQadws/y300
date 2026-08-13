@@ -61,6 +61,8 @@ void main() {
       image.request?.effectiveRetentionClass,
       ImageRetentionClass.ephemeral,
     );
+    expect(image.fadeInDuration, ForumCachedAvatar.fadeInDuration);
+    expect(image.fadeInDuration, const Duration(milliseconds: 120));
   });
 }
 

@@ -8,6 +8,8 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 class ForumCachedAvatar extends ConsumerWidget {
+  static const Duration fadeInDuration = Duration(milliseconds: 120);
+
   const ForumCachedAvatar({
     super.key,
     required this.imageUrl,
@@ -61,6 +63,7 @@ class ForumCachedAvatar extends ConsumerWidget {
             placeholder: fallback,
             errorPlaceholder: fallback,
             headerBuilder: headerBuilder,
+            fadeInDuration: fadeInDuration,
           );
     return SizedBox(
       key: const Key('forum-cached-avatar'),

@@ -34,6 +34,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     this.showDelayedLoadingIndicator = false,
     this.loadingIndicatorDelay = const Duration(milliseconds: 300),
     this.loadingIndicatorColor,
+    this.fadeInDuration = Duration.zero,
     this.retryToken = 0,
   });
 
@@ -56,6 +57,10 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   final bool showDelayedLoadingIndicator;
   final Duration loadingIndicatorDelay;
   final Color? loadingIndicatorColor;
+
+  /// Optional first-frame transition. It remains disabled by default so each
+  /// business surface can opt in without changing shared image behavior.
+  final Duration fadeInDuration;
 
   /// 重试代次。自增会重跑一次"缓存查询 → ensureCached → 远端兜底"整条流程，
   /// 并透传给 [LibraryCachedImage] 重建解码；失败可能出在其中任一段。
@@ -121,6 +126,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
         placeholder: widget.placeholder,
         errorPlaceholder: widget.errorPlaceholder,
         headerBuilder: widget.headerBuilder,
+        fadeInDuration: widget.fadeInDuration,
         retryToken: widget.retryToken,
         onImageResolved: (size) =>
             _handleImageResolved(request, size, generation),
