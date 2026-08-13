@@ -26,6 +26,7 @@ class ReaderSessionImage extends StatelessWidget {
     this.onImageFailed,
     this.imageProviderOverride,
     this.remoteImageProviderOverride,
+    this.retryToken = 0,
   });
 
   final ReaderImageSessionBinding sessionBinding;
@@ -44,6 +45,7 @@ class ReaderSessionImage extends StatelessWidget {
   final ImageProvider? imageProviderOverride;
   @visibleForTesting
   final ImageProvider? remoteImageProviderOverride;
+  final int retryToken;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +67,7 @@ class ReaderSessionImage extends StatelessWidget {
         onLocalPathResolved: sessionBinding.promoteLocalPath,
         imageProviderOverride: imageProviderOverride,
         remoteImageProviderOverride: remoteImageProviderOverride,
+        retryToken: retryToken,
         showDelayedLoadingIndicator: true,
         loadingIndicatorColor: loadingIndicatorColor,
       ),

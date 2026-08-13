@@ -20,12 +20,14 @@ class ReaderContent {
     required this.ownerId,
     required this.items,
     this.initialIndex = 0,
+    this.sessionRevision = 0,
   });
 
   /// 用于区分连续图片所属实体（章节 id / 帖子楼层），驱动 extent 注册与复位。
   final String ownerId;
   final List<ContinuousImageItem> items;
   final int initialIndex;
+  final int sessionRevision;
 
   bool get isEmpty => items.isEmpty;
   int get length => items.length;
@@ -245,6 +247,16 @@ abstract class ReaderCapability {
 
   /// 退出阅读器时回调（漫画用于 flush 阅读进度；帖子图片可空实现）。
   Future<void> onExit() async {}
+
+  /// Optional business recovery that runs before a failed image is retried.
+  ///
+  /// The shared engine always continues with its normal forced image retry if
+  /// this hook fails. Capabilities can use it to refresh session state without
+  /// taking ownership of image loading.
+  Future<void> beforeImageRetry({
+    required ContinuousImageItem item,
+    required int index,
+  }) async {}
 
   /// 为某连续图片项构造缓存请求（供解码预热与图片加载）。
   ImageCacheRequest cacheRequestFor(ContinuousImageItem item);

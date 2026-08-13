@@ -131,6 +131,86 @@ class ComicEpisodeStore {
     });
   }
 
+  Future<void> replaceEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  }) async {
+    final normalizedUrls = imageUrls
+        .map((url) => url.trim())
+        .where((url) => url.isNotEmpty)
+        .toList(growable: false);
+    final db = await _dbFuture;
+    await db.transaction((txn) async {
+      final existingRows = await txn.query(
+        ComicLocalDb.episodeImagesTable,
+        where: 'episode_id = ?',
+        whereArgs: <Object>[episodeId],
+        orderBy: 'image_index ASC',
+      );
+      final existingByIndex = <int, Map<String, Object?>>{
+        for (final row in existingRows) row['image_index'] as int: row,
+      };
+      await txn.delete(
+        ComicLocalDb.episodeImagesTable,
+        where: 'episode_id = ?',
+        whereArgs: <Object>[episodeId],
+      );
+      for (var index = 0; index < normalizedUrls.length; index++) {
+        final imageUrl = normalizedUrls[index];
+        final existing = existingByIndex[index];
+        final sourceUnchanged =
+            (existing?['image_url'] as String?)?.trim() == imageUrl;
+        final preserveCacheMetadata =
+            sourceUnchanged && existing?['cache_status'] != 'failed';
+        final record = EpisodeImageRecord(
+          episodeId: episodeId,
+          imageUrl: imageUrl,
+          imageIndex: index,
+          stableCacheKey:
+              (existing?['stable_cache_key'] as String?) ??
+              buildEpisodeImageCacheKey(
+                episodeId: episodeId,
+                imageIndex: index,
+              ),
+          lastSourceUrl: preserveCacheMetadata
+              ? (existing?['last_source_url'] as String? ?? imageUrl)
+              : imageUrl,
+          localPath: preserveCacheMetadata
+              ? (existing?['local_path'] as String?)
+              : null,
+          width: preserveCacheMetadata ? (existing?['width'] as int?) : null,
+          height: preserveCacheMetadata ? (existing?['height'] as int?) : null,
+          bytes: preserveCacheMetadata ? (existing?['bytes'] as int? ?? 0) : 0,
+          mimeType: preserveCacheMetadata
+              ? (existing?['mime_type'] as String?)
+              : null,
+          lastAccessedAt: preserveCacheMetadata
+              ? (existing?['last_accessed_at'] as int?)
+              : null,
+          protected: preserveCacheMetadata
+              ? (existing?['protected'] as int? ?? 0) == 1
+              : false,
+          cacheLocalPath: preserveCacheMetadata
+              ? (existing?['cache_local_path'] as String?)
+              : null,
+          cacheStatus: preserveCacheMetadata
+              ? (existing?['cache_status'] as String? ?? 'none')
+              : 'none',
+        );
+        await txn.insert(ComicLocalDb.episodeImagesTable, record.toMap());
+      }
+      final comicId = extractComicIdFromEpisodeId(episodeId);
+      if (comicId != null) {
+        await _coverStore.promoteFirstEpisodeCoverIfNeededInTxn(
+          txn,
+          comicId: comicId,
+          episodeId: episodeId,
+          imageUrls: normalizedUrls,
+        );
+      }
+    });
+  }
+
   Future<void> updateEpisodeImageCacheStatus({
     required String episodeId,
     required String imageUrl,

@@ -203,6 +203,15 @@ abstract class ComicRepository implements CatalogUrlUpdater {
   Future<Set<String>> getKnownEpisodeTids({required String comicId});
 }
 
+/// Optional repository capability for atomically replacing a chapter image
+/// directory while preserving cache metadata for unchanged index/URL pairs.
+abstract interface class ComicEpisodeImageDirectoryReplacer {
+  Future<void> replaceEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  });
+}
+
 /// 用户目录覆盖值的可选持久化能力。
 ///
 /// 与解析发现的 [CatalogUrlUpdater] 分离，避免自动来源更新覆盖用户配置。

@@ -35,6 +35,7 @@ class LocalComicRepository
         ComicDuplicateMergeRepository,
         ComicCoverMergeRecovery,
         ComicEpisodeManagementRepository,
+        ComicEpisodeImageDirectoryReplacer,
         ComicEpisodeImageCacheMetadataWriter {
   LocalComicRepository(
     this._dbFuture, {
@@ -469,6 +470,17 @@ class LocalComicRepository
     required List<String> imageUrls,
   }) {
     return _episodeStore.saveEpisodeImages(
+      episodeId: episodeId,
+      imageUrls: imageUrls,
+    );
+  }
+
+  @override
+  Future<void> replaceEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  }) {
+    return _episodeStore.replaceEpisodeImages(
       episodeId: episodeId,
       imageUrls: imageUrls,
     );

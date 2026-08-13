@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1222,6 +1223,139 @@ void main() {
     // 真空时不应该有任何持久化写入（避免污染 DB）。
     expect(repository.savedImageUrlsByEpisode, isEmpty);
   });
+
+  test(
+    'image retry probes the current chapter once before direct retry',
+    () async {
+      final repository = _ReaderRepoForControllerTest();
+      final service = _ReaderServiceSpy();
+      final writer = _ReadingStateWriterSpy(repository);
+      final container = ProviderContainer(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(repository),
+          comicReadingStateWriterProvider.overrideWithValue(writer),
+          comicReaderServiceProvider.overrideWith((ref) async => service),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+      );
+      addTearDown(container.dispose);
+      const args = ComicReaderArgs(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:101',
+      );
+      await container.read(comicReaderControllerProvider(args).future);
+      final controller = container.read(
+        comicReaderControllerProvider(args).notifier,
+      );
+      service.fetchCompleter = Completer<ComicEpisodeImagesFetchResult>();
+
+      final first = controller.prepareImageRetry(
+        expectedEpisodeId: 'yamibo:100:101',
+      );
+      final second = controller.prepareImageRetry(
+        expectedEpisodeId: 'yamibo:100:101',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(service.fetchEpisodeImagesCalls, <String>['101']);
+      service.fetchCompleter!.complete(
+        const ComicEpisodeImagesFetched(<String>['https://img.test/new.jpg']),
+      );
+      await Future.wait(<Future<void>>[first, second]);
+      expect(repository.replaceEpisodeImagesCallCount, 0);
+    },
+  );
+
+  test('refresh replaces image URLs and preserves the current image', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(
+          _NoopComicDownloadService(),
+        ),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+    const args = ComicReaderArgs(
+      comicId: 'yamibo:100',
+      episodeId: 'yamibo:100:101',
+    );
+    await container.read(comicReaderControllerProvider(args).future);
+    final controller = container.read(
+      comicReaderControllerProvider(args).notifier,
+    );
+    await controller.jumpToImageIndex(2, scrollOffset: 48);
+    service.fetchResultBuilder = (_) =>
+        const ComicEpisodeImagesFetched(<String>[
+          'https://img.test/new-first.jpg',
+          'https://img.test/101-3.jpg',
+          'https://img.test/new-last.jpg',
+        ]);
+
+    final result = await controller.refreshCurrentEpisode();
+    final refreshed = container
+        .read(comicReaderControllerProvider(args))
+        .requireValue;
+
+    expect(result.status, ComicReaderEpisodeRefreshStatus.refreshed);
+    expect(service.fetchEpisodeImagesCalls.last, '101');
+    expect(repository.replaceEpisodeImagesCallCount, 1);
+    expect(refreshed.currentImageIndex, 1);
+    expect(refreshed.lastScrollOffset, 0);
+    expect(refreshed.imageSessionRevision, 1);
+    expect(refreshed.images[1].imageUrl, 'https://img.test/101-3.jpg');
+  });
+
+  test('empty refresh keeps the current chapter untouched', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy()
+      ..fetchResultBuilder = (_) => const ComicEpisodeImagesFetched(<String>[]);
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(
+          _NoopComicDownloadService(),
+        ),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+    const args = ComicReaderArgs(
+      comicId: 'yamibo:100',
+      episodeId: 'yamibo:100:101',
+    );
+    final before = await container.read(
+      comicReaderControllerProvider(args).future,
+    );
+    final controller = container.read(
+      comicReaderControllerProvider(args).notifier,
+    );
+
+    final result = await controller.refreshCurrentEpisode();
+    final after = container
+        .read(comicReaderControllerProvider(args))
+        .requireValue;
+
+    expect(result.status, ComicReaderEpisodeRefreshStatus.noImages);
+    expect(
+      after.images.map((image) => image.imageUrl),
+      before.images.map((image) => image.imageUrl),
+    );
+    expect(after.imageSessionRevision, before.imageSessionRevision);
+    expect(repository.replaceEpisodeImagesCallCount, 0);
+  });
 }
 
 class _NoopComicDownloadService implements ComicDownloadService {
@@ -1268,6 +1402,7 @@ class _ReaderServiceSpy implements ComicReaderService {
   final List<String> cachedImageUrls = <String>[];
   final List<List<String>> prefetchedBatches = <List<String>>[];
   final List<String> fetchEpisodeImagesCalls = <String>[];
+  Completer<ComicEpisodeImagesFetchResult>? fetchCompleter;
 
   /// 测试可注入的拉取结果——空时默认返回 `Fetched([])`，等价于"成功但首楼无图"。
   ComicEpisodeImagesFetchResult Function(String tid)? fetchResultBuilder;
@@ -1294,6 +1429,10 @@ class _ReaderServiceSpy implements ComicReaderService {
   @override
   Future<ComicEpisodeImagesFetchResult> fetchEpisodeImages(String tid) async {
     fetchEpisodeImagesCalls.add(tid);
+    final completer = fetchCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
     final builder = fetchResultBuilder;
     if (builder != null) {
       return builder(tid);
@@ -1521,6 +1660,7 @@ class _ReadingStateWriterSpy implements ComicReadingStateWriter {
 class _ReaderRepoForControllerTest
     implements
         ComicRepository,
+        ComicEpisodeImageDirectoryReplacer,
         ComicCoverCacheWriter,
         ComicCustomCoverAssetWriter,
         ComicEpisodeImageCacheMetadataWriter {
@@ -1550,6 +1690,7 @@ class _ReaderRepoForControllerTest
   /// 追踪每个 episode 通过 [saveEpisodeImages] 持久化的 URL，做断言用。
   final Map<String, List<String>> savedImageUrlsByEpisode =
       <String, List<String>>{};
+  int replaceEpisodeImagesCallCount = 0;
   String? lastCustomCoverLocalPath;
   int? lastActivatedCustomCoverRevision;
   double? lastCustomCoverFocusX;
@@ -1690,13 +1831,8 @@ class _ReaderRepoForControllerTest
   Future<List<ComicEpisodeImageItem>> getEpisodeImages({
     required String episodeId,
   }) async {
-    // 模拟"DB 起初无图，等 saveEpisodeImages 写入后再有图"——用来跑
-    // _ensureEpisodeImages 的 fetch+save 路径。
-    if (emptyEpisodeIds.contains(episodeId)) {
-      final saved = savedImageUrlsByEpisode[episodeId];
-      if (saved == null || saved.isEmpty) {
-        return const <ComicEpisodeImageItem>[];
-      }
+    final saved = savedImageUrlsByEpisode[episodeId];
+    if (saved != null) {
       return List<ComicEpisodeImageItem>.generate(saved.length, (index) {
         return ComicEpisodeImageItem(
           episodeId: episodeId,
@@ -1705,6 +1841,11 @@ class _ReaderRepoForControllerTest
           cacheStatus: 'none',
         );
       });
+    }
+    // 模拟"DB 起初无图，等 saveEpisodeImages 写入后再有图"——用来跑
+    // _ensureEpisodeImages 的 fetch+save 路径。
+    if (emptyEpisodeIds.contains(episodeId)) {
+      return const <ComicEpisodeImageItem>[];
     }
     if (singlePage) {
       return const <ComicEpisodeImageItem>[
@@ -1801,6 +1942,15 @@ class _ReaderRepoForControllerTest
     required String episodeId,
     required List<String> imageUrls,
   }) async {
+    savedImageUrlsByEpisode[episodeId] = List<String>.unmodifiable(imageUrls);
+  }
+
+  @override
+  Future<void> replaceEpisodeImages({
+    required String episodeId,
+    required List<String> imageUrls,
+  }) async {
+    replaceEpisodeImagesCallCount += 1;
     savedImageUrlsByEpisode[episodeId] = List<String>.unmodifiable(imageUrls);
   }
 

@@ -624,21 +624,21 @@ class ComicImageCacheResult {
 
 class NetworkComicReaderService implements ComicReaderService {
   NetworkComicReaderService({
-    required ThreadRepository threadRepository,
+    required ThreadRepository threadApiRepository,
     ImageCacheService? imageCacheService,
     BaseCacheManager? cacheManager,
     ImageRequestHeaderBuilder? headerBuilder,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
     ForumImageSourcePipeline imageSourcePipeline =
         const DefaultForumImageSourcePipeline(),
-  }) : _threadRepository = threadRepository,
+  }) : _threadApiRepository = threadApiRepository,
        _imageCacheService = imageCacheService,
        _cacheManager = cacheManager ?? DefaultCacheManager(),
        _headerBuilder = headerBuilder,
        _urlResolver = urlResolver,
        _imageSourcePipeline = imageSourcePipeline;
 
-  final ThreadRepository _threadRepository;
+  final ThreadRepository _threadApiRepository;
   final ImageCacheService? _imageCacheService;
   final BaseCacheManager _cacheManager;
   final ImageRequestHeaderBuilder? _headerBuilder;
@@ -647,7 +647,10 @@ class NetworkComicReaderService implements ComicReaderService {
 
   @override
   Future<ComicEpisodeImagesFetchResult> fetchEpisodeImages(String tid) async {
-    final result = await _threadRepository.getThreadDetail(tid: tid, page: 1);
+    final result = await _threadApiRepository.getThreadDetail(
+      tid: tid,
+      page: 1,
+    );
     return result.when(
       success: (data) {
         final firstPost = data.posts.where((post) => post.isFirst).firstOrNull;
@@ -777,11 +780,17 @@ class NetworkComicReaderService implements ComicReaderService {
   }
 }
 
+/// Comic chapter catalogs are a Discuz API contract. Keep this boundary
+/// separate from the HTML-first repository used to render thread pages.
+final comicEpisodeThreadRepositoryProvider = Provider<ThreadRepository>((ref) {
+  return ref.watch(threadJsonRepositoryProvider);
+});
+
 final comicReaderServiceProvider = FutureProvider<ComicReaderService>((
   ref,
 ) async {
   return NetworkComicReaderService(
-    threadRepository: ref.read(threadRepositoryProvider),
+    threadApiRepository: ref.read(comicEpisodeThreadRepositoryProvider),
     imageCacheService: ref.read(imageCacheServiceProvider),
     cacheManager: await ref.read(comicCacheManagerProvider.future),
     headerBuilder: ref.read(imageRequestHeaderBuilderProvider),

@@ -7,6 +7,7 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_reader_exit_result.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_unavailable.dart';
+import 'package:y300/features/comic/presentation/comic_presentation_models.dart';
 import 'package:y300/features/comic/presentation/comic_reader_capability.dart';
 import 'package:y300/features/comic/presentation/comic_text_resolver.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
@@ -22,7 +23,11 @@ import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
-enum _ComicReaderMoreAction { markReadToggle, setCurrentPageAsCover }
+enum _ComicReaderMoreAction {
+  refreshEpisode,
+  markReadToggle,
+  setCurrentPageAsCover,
+}
 
 /// 漫画阅读器页面。
 ///
@@ -138,7 +143,8 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
                 fit: StackFit.expand,
                 children: [
                   reader,
-                  if (viewState.isSwitchingEpisode)
+                  if (viewState.isSwitchingEpisode ||
+                      viewState.isRefreshingEpisode)
                     const Positioned.fill(child: _ComicReaderSwitchOverlay()),
                 ],
               );
@@ -228,6 +234,24 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
   ) async {
     final controller = _controller();
     switch (action) {
+      case _ComicReaderMoreAction.refreshEpisode:
+        final result = await controller.refreshCurrentEpisode();
+        if (!mounted) {
+          return;
+        }
+        final l10n = AppLocalizations.of(context);
+        final message = switch (result.status) {
+          ComicReaderEpisodeRefreshStatus.refreshed =>
+            l10n.comicReaderEpisodeRefreshed,
+          ComicReaderEpisodeRefreshStatus.noImages =>
+            l10n.comicReaderRefreshNoImages,
+          ComicReaderEpisodeRefreshStatus.failed =>
+            l10n.comicReaderRefreshFailed,
+          ComicReaderEpisodeRefreshStatus.stale => null,
+        };
+        if (message != null) {
+          showTransientSnackBar(context, message);
+        }
       case _ComicReaderMoreAction.markReadToggle:
         final notice = await controller.setCurrentEpisodeRead(
           !viewState.isCurrentEpisodeRead,
@@ -297,6 +321,12 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
       builder: (context) => ReaderActionSheet<_ComicReaderMoreAction>(
         title: l10n.comicMoreActions,
         items: [
+          ReaderActionSheetItem<_ComicReaderMoreAction>(
+            id: 'refresh-episode',
+            value: _ComicReaderMoreAction.refreshEpisode,
+            icon: Icons.refresh,
+            label: l10n.comicReaderRefreshEpisode,
+          ),
           ReaderActionSheetItem<_ComicReaderMoreAction>(
             id: 'mark-read-toggle',
             value: _ComicReaderMoreAction.markReadToggle,

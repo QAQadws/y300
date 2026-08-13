@@ -1544,6 +1544,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get comicMoreActions => '更多操作';
 
   @override
+  String get comicReaderRefreshEpisode => '刷新章节';
+
+  @override
+  String get comicReaderEpisodeRefreshed => '章节已刷新';
+
+  @override
+  String get comicReaderRefreshFailed => '刷新章节失败，已保留当前内容';
+
+  @override
+  String get comicReaderRefreshNoImages => '未解析到图片，已保留当前章节';
+
+  @override
   String get comicMore => '更多';
 
   @override
@@ -5817,6 +5829,18 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get comicMoreActions => '更多操作';
+
+  @override
+  String get comicReaderRefreshEpisode => '重新整理章節';
+
+  @override
+  String get comicReaderEpisodeRefreshed => '章節已重新整理';
+
+  @override
+  String get comicReaderRefreshFailed => '重新整理章節失敗，已保留目前內容';
+
+  @override
+  String get comicReaderRefreshNoImages => '未解析到圖片，已保留目前章節';
 
   @override
   String get comicMore => '更多';

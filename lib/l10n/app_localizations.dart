@@ -2488,6 +2488,30 @@ abstract class AppLocalizations {
   /// **'更多操作'**
   String get comicMoreActions;
 
+  /// No description provided for @comicReaderRefreshEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新章节'**
+  String get comicReaderRefreshEpisode;
+
+  /// No description provided for @comicReaderEpisodeRefreshed.
+  ///
+  /// In zh, this message translates to:
+  /// **'章节已刷新'**
+  String get comicReaderEpisodeRefreshed;
+
+  /// No description provided for @comicReaderRefreshFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新章节失败，已保留当前内容'**
+  String get comicReaderRefreshFailed;
+
+  /// No description provided for @comicReaderRefreshNoImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'未解析到图片，已保留当前章节'**
+  String get comicReaderRefreshNoImages;
+
   /// No description provided for @comicMore.
   ///
   /// In zh, this message translates to:

@@ -746,6 +746,18 @@ void main() {
       find.byKey(const Key('shared-reader-action-clear-cache')),
       findsNothing,
     );
+    final refreshAction = find.byKey(
+      const Key('shared-reader-action-refresh-episode'),
+    );
+    final markReadAction = find.byKey(
+      const Key('shared-reader-action-mark-read-toggle'),
+    );
+    expect(refreshAction, findsOneWidget);
+    expect(markReadAction, findsOneWidget);
+    expect(
+      tester.getTopLeft(refreshAction).dy,
+      lessThan(tester.getTopLeft(markReadAction).dy),
+    );
     await tester.tap(find.byKey(const Key('shared-reader-action-set-cover')));
     // 选区器打开后会显示加载中的图片（测试环境图片不会解析完成，故不能
     // pumpAndSettle——加载圈是常驻动画）。“确定”按钮始终可见，直接确认默认焦点。

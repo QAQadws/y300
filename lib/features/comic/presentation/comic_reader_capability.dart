@@ -86,6 +86,7 @@ class ComicReaderCapability extends ReaderCapability {
     return ReaderContent(
       ownerId: viewState.episodeId,
       initialIndex: viewState.currentImageIndex,
+      sessionRevision: viewState.imageSessionRevision,
       items: _adapter.mapImages(
         episodeId: viewState.episodeId,
         images: viewState.images,
@@ -271,6 +272,14 @@ class ComicReaderCapability extends ReaderCapability {
   Future<void> onExit() => controller.onExitReader();
 
   @override
+  Future<void> beforeImageRetry({
+    required ContinuousImageItem item,
+    required int index,
+  }) {
+    return controller.prepareImageRetry(expectedEpisodeId: viewState.episodeId);
+  }
+
+  @override
   ImageCacheRequest cacheRequestFor(ContinuousImageItem item) {
     final cacheKey = item.cacheKey.isNotEmpty
         ? item.cacheKey
@@ -364,6 +373,7 @@ class ComicReaderCapability extends ReaderCapability {
         onRetry: spec.onRetry,
         retryButtonKey: ValueKey<String>('comic-reader-retry-$imageUrl'),
       ),
+      retryToken: viewState.imageSessionRevision,
       headerBuilder: imageHeaderBuilder,
       loadingIndicatorColor: spec.loadingIndicatorColor,
       onImageResolved: (size) {

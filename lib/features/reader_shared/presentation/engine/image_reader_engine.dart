@@ -87,6 +87,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   final Set<int> _reportedVisibleImageIndexes = <int>{};
 
   String? _lastOwnerId;
+  int? _lastContentRevision;
   ReaderPositionState? _positionState;
   bool _exitFlushed = false;
 
@@ -99,6 +100,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   ReaderModePreference _diagnosticMode = ReaderModePreference.vertical;
   bool _positionRetryScheduled = false;
   String? _exportingIdentity;
+  final Set<String> _imageRetryInFlight = <String>{};
 
   // 连续图片高度/锚定基础设施（迁移自 ComicReaderPage）。
   static const ContinuousImageLayoutResolver _layoutResolver =
@@ -993,6 +995,45 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   ) {
     final current = _positionState;
     if (current != null && current.ownerId == content.ownerId) {
+      if (_lastContentRevision != content.sessionRevision) {
+        _lastContentRevision = content.sessionRevision;
+        _verticalPositionDriver.cancelActive(
+          ReaderVerticalSeekCancelReason.ownerChanged,
+        );
+        _extentRegistry.clearForOwner(content.ownerId);
+        _verticalItemAnchors.clear();
+        final initialIndex = content.initialIndex
+            .clamp(0, content.length - 1)
+            .toInt();
+        final refreshedPosition = ReaderPositionState(
+          ownerId: content.ownerId,
+          initialLogicalIndex: initialIndex,
+        );
+        _positionState = refreshedPosition;
+        _latestItems = const <ContinuousImageItem>[];
+        _pendingScrollCompensationDelta = 0;
+        _resetVerticalPageSpacingTracking();
+        _resolvedDimensionsByItemId.clear();
+        _reportedVisibleImageIndexes.clear();
+        _reportedTailSurfaceKeys.clear();
+        _reportedAdvanceSurfaceKeys.clear();
+        _reportedAdjacentPreloadKeys.clear();
+        _pagedHorizontalOverflowByIndex.clear();
+        _pagedPosition = ReaderSequencePosition.image(initialIndex);
+        _setZoomGate(false, paged: false);
+        _activePagedIndex.value = initialIndex;
+        _lastKnownIndex = initialIndex;
+        _isSliderCommitInFlight = false;
+        _pendingCommittedIndex = null;
+        _activeSeekGeneration = null;
+        _sliderPreviewIndex = null;
+        _sessionPreloadCoordinator.resetSession(
+          readerOwnerId: content.ownerId,
+          items: content.items,
+        );
+        _readerSessionGeneration += 1;
+        return refreshedPosition;
+      }
       return current;
     }
     final previous = _lastOwnerId;
@@ -1013,6 +1054,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     );
     _positionState = next;
     _lastOwnerId = content.ownerId;
+    _lastContentRevision = content.sessionRevision;
     _latestItems = const <ContinuousImageItem>[];
     _pendingScrollCompensationDelta = 0;
     _resetVerticalPageSpacingTracking();
@@ -2056,6 +2098,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         ownerId: _lastOwnerId ?? _capability.content.ownerId,
         items: items,
         initialIndex: _capability.content.initialIndex,
+        sessionRevision: _capability.content.sessionRevision,
       ),
       focusIndex: focusIndex,
       scrollDirection: scrollDirection,
@@ -2076,6 +2119,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         ownerId: _lastOwnerId ?? _capability.content.ownerId,
         items: items,
         initialIndex: _capability.content.initialIndex,
+        sessionRevision: _capability.content.sessionRevision,
       ),
       index: index,
       capability: _capability,
@@ -2086,22 +2130,53 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   Future<void> _retrySessionImage(int index) async {
     final items = _latestItems;
-    if (!mounted || items.isEmpty) {
+    final content = _capability.content;
+    if (!mounted || items.isEmpty || index < 0 || index >= items.length) {
       return;
     }
-    await _sessionPreloadCoordinator.prepareOne(
-      context: context,
-      content: ReaderContent(
-        ownerId: _lastOwnerId ?? _capability.content.ownerId,
-        items: items,
-        initialIndex: _capability.content.initialIndex,
-      ),
-      index: index,
-      capability: _capability,
-      precacheService: ref.read(forumImagePrecacheServiceProvider),
-      expectedDisplaySize: _expectedPreloadDisplaySize(),
-      force: true,
-    );
+    final item = items[index];
+    final ownerId = content.ownerId;
+    final revision = content.sessionRevision;
+    final generation = _readerSessionGeneration;
+    final retryIdentity = '$ownerId:$revision:${item.id}';
+    if (!_imageRetryInFlight.add(retryIdentity)) {
+      return;
+    }
+    try {
+      try {
+        await _capability.beforeImageRetry(item: item, index: index);
+      } catch (_) {
+        // Business recovery is best effort. Preserve the original direct
+        // image retry even when the chapter probe cannot be confirmed.
+      }
+      if (!mounted ||
+          _readerSessionGeneration != generation ||
+          _capability.content.ownerId != ownerId ||
+          _capability.content.sessionRevision != revision ||
+          index >= _latestItems.length) {
+        return;
+      }
+      final currentItem = _latestItems[index];
+      if (currentItem.id != item.id || currentItem.url != item.url) {
+        return;
+      }
+      await _sessionPreloadCoordinator.prepareOne(
+        context: context,
+        content: ReaderContent(
+          ownerId: ownerId,
+          items: _latestItems,
+          initialIndex: _capability.content.initialIndex,
+          sessionRevision: revision,
+        ),
+        index: index,
+        capability: _capability,
+        precacheService: ref.read(forumImagePrecacheServiceProvider),
+        expectedDisplaySize: _expectedPreloadDisplaySize(),
+        force: true,
+      );
+    } finally {
+      _imageRetryInFlight.remove(retryIdentity);
+    }
   }
 
   Size? _expectedPreloadDisplaySize() {
