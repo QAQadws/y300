@@ -76,13 +76,10 @@ void main() {
       await tester.pumpWidget(_buildTestApp(driver: driver));
 
       expect(
-        find.byKey(const Key('forum-webview-bootstrap-placeholder')),
+        find.byKey(const Key('forum-webview-bootstrap-blank')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const Key('forum-webview-bootstrap-placeholder-list')),
-        findsNothing,
-      );
+      expect(find.byType(ListView), findsNothing);
       expect(find.byKey(const Key('forum-webview-surface')), findsNothing);
       expect(driver.buildWidgetCallCount, 0);
 

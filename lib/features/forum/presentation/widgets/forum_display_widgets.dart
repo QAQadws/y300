@@ -11,7 +11,6 @@ import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
-import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
@@ -1490,7 +1489,6 @@ class _ThreadCardState extends State<_ThreadCard> {
                               ? thread.uid
                               : thread.author,
                           threadId: thread.tid,
-                          palette: palette,
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -1717,32 +1715,20 @@ class _Avatar extends StatelessWidget {
     required this.url,
     required this.ownerId,
     required this.threadId,
-    required this.palette,
   });
 
   final String? url;
   final String ownerId;
   final String threadId;
-  final ForumDisplayThemePalette palette;
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = url?.trim();
-    final useDefaultAvatar = isForumDefaultOrUnsupportedAvatarUrl(imageUrl);
-    return CircleAvatar(
+    return ForumCachedAvatar(
       key: Key('forum-thread-summary-avatar-$threadId'),
-      radius: 18,
-      backgroundColor: palette.avatarBackground,
-      foregroundColor: palette.avatarForeground,
-      child: ForumCachedAvatar(
-        imageUrl: imageUrl,
-        ownerId: ownerId,
-        ownerType: ImageCacheOwnerType.forumDisplay,
-        size: 36,
-        placeholder: useDefaultAvatar
-            ? forumDefaultAvatarImage(width: 36, height: 36)
-            : forumDefaultAvatarImage(width: 36, height: 36),
-      ),
+      imageUrl: url?.trim(),
+      ownerId: ownerId,
+      ownerType: ImageCacheOwnerType.forumDisplay,
+      size: 36,
     );
   }
 }

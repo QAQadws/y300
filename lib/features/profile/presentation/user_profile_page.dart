@@ -274,19 +274,19 @@ class _UserProfileHero extends StatelessWidget {
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircleAvatar(
-                radius: 36,
-                backgroundColor: palette.card,
-                child: ForumCachedAvatar(
-                  key: const Key('user-profile-avatar'),
-                  imageUrl: avatarUrl,
-                  ownerId: profile.uid.trim().isEmpty
-                      ? profile.username
-                      : profile.uid,
-                  ownerType: ImageCacheOwnerType.profile,
-                  size: 68,
-                  placeholder: Icon(Icons.person, color: palette.accent),
-                  headerBuilder: imageHeaderBuilder,
+              SizedBox.square(
+                dimension: 72,
+                child: Center(
+                  child: ForumCachedAvatar(
+                    key: const Key('user-profile-avatar'),
+                    imageUrl: avatarUrl,
+                    ownerId: profile.uid.trim().isEmpty
+                        ? profile.username
+                        : profile.uid,
+                    ownerType: ImageCacheOwnerType.profile,
+                    size: 68,
+                    headerBuilder: imageHeaderBuilder,
+                  ),
                 ),
               ),
               const SizedBox(height: 12),

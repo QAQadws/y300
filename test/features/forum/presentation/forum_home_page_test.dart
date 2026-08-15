@@ -26,6 +26,7 @@ import 'package:y300/features/forum/data/repositories/forum_favorite_repository.
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/models/forum_index_models.dart';
+import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
@@ -147,7 +148,11 @@ void main() {
 
       expect(find.byType(Scaffold), findsOneWidget);
       expect(find.byKey(const Key('forum-home-list')), findsNothing);
-      expect(find.byKey(const Key('forum-home-loading-body')), findsOneWidget);
+      expect(find.byKey(const Key('forum-home-blank-body')), findsOneWidget);
+      expect(
+        find.byKey(const Key('forum-home-refresh-progress')),
+        findsNothing,
+      );
 
       completer.complete(ApiSuccess(_loggedOutPayload()));
       await tester.pumpAndSettle();
@@ -709,7 +714,7 @@ void main() {
       expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
       expect(
         find.byKey(const Key('forum-home-refresh-progress')),
-        findsOneWidget,
+        findsNothing,
       );
 
       refreshCompleter.complete(ApiSuccess(_loggedOutPayload()));
@@ -726,46 +731,125 @@ void main() {
       ]);
     });
 
-    testWidgets('auth unknown keeps placeholder and delays repository load', (
+    testWidgets(
+      'auth and network pending still render cached home immediately',
+      (tester) async {
+        final authRepository = _PendingAuthRepository(
+          session: SessionInfo(
+            uid: '0',
+            username: '',
+            formhash: '',
+            isLoggedIn: false,
+          ),
+        );
+        final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+        final repository = _FakeForumHomeRepository(
+          () => refreshCompleter.future,
+          cachedEntry: ForumHomeCacheEntry(
+            payload: _loggedOutPayloadNoToday(),
+            updatedAt: DateTime(2026, 6, 29, 11),
+          ),
+        );
+        final container = ProviderContainer(
+          overrides: _overrides(
+            repository,
+            authRepository: authRepository,
+            requestProfileResolver: const _FakeForumHomeRequestProfileResolver(
+              DocumentRequestProfile.anonymous,
+            ),
+          ),
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const LocalizedTestApp(home: ForumHomePage()),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(Duration.zero);
+
+        expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+        expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
+        expect(find.byKey(const Key('forum-home-blank-body')), findsNothing);
+        expect(repository.cachedRequestProfiles, <DocumentRequestProfile>[
+          DocumentRequestProfile.anonymous,
+        ]);
+        expect(repository.cachePolicies, <CacheLoadPolicy>[
+          CacheLoadPolicy.networkFirst,
+        ]);
+        expect(
+          find.byKey(const Key('forum-home-refresh-progress')),
+          findsNothing,
+        );
+
+        authRepository.complete();
+        refreshCompleter.complete(ApiSuccess(_loggedOutPayload()));
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'background cache refresh keeps today subtree and applies updated value',
+      (tester) async {
+        final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+        final repository = _FakeForumHomeRepository(
+          () => refreshCompleter.future,
+          cachedEntry: ForumHomeCacheEntry(
+            payload: _loggedOutPayload(),
+            updatedAt: DateTime(2026, 6, 29, 11),
+          ),
+        );
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pump();
+        await tester.pump(Duration.zero);
+        await tester.pump();
+
+        final beforeElement = tester.element(
+          find.byKey(const ValueKey('forum-home-today-badge-filled')),
+        );
+        expect(find.text('2'), findsOneWidget);
+
+        refreshCompleter.complete(
+          ApiSuccess(_loggedOutPayloadWithTodayCount(8)),
+        );
+        await tester.pump();
+
+        final afterElement = tester.element(
+          find.byKey(const ValueKey('forum-home-today-badge-filled')),
+        );
+        expect(identical(beforeElement, afterElement), isTrue);
+        await tester.pumpAndSettle();
+        expect(find.text('8'), findsOneWidget);
+      },
+    );
+
+    testWidgets('background refresh failure keeps cached content visible', (
       tester,
     ) async {
-      final authRepository = _DeferredAuthRepository(
-        session: SessionInfo(
-          uid: '0',
-          username: '',
-          formhash: '',
-          isLoggedIn: false,
-        ),
-      );
       final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayload()),
-      );
-      final container = ProviderContainer(
-        overrides: _overrides(repository, authRepository: authRepository),
-      );
-      addTearDown(container.dispose);
-
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const LocalizedTestApp(home: ForumHomePage()),
+        () async => const ApiFailure<ForumHomePayload>(
+          ApiError(type: ApiErrorType.network, message: 'offline'),
+        ),
+        cachedEntry: ForumHomeCacheEntry(
+          payload: _loggedOutPayload(),
+          updatedAt: DateTime(2026, 6, 29, 11),
         ),
       );
-      await tester.pump();
 
-      expect(repository.cachePolicies, isEmpty);
-      expect(find.byKey(const Key('forum-home-loading-body')), findsOneWidget);
-
+      await tester.pumpWidget(_buildTestApp(repository));
       await tester.pumpAndSettle();
 
-      expect(repository.cachePolicies, <CacheLoadPolicy>[
-        CacheLoadPolicy.cacheFirst,
-      ]);
       expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+      expect(find.byKey(const Key('forum-home-blank-body')), findsNothing);
+      expect(find.byKey(const Key('forum-home-retry-button')), findsNothing);
     });
 
     testWidgets(
-      'login transition invalidates cached home and rebuilds with loading placeholder',
+      'login transition invalidates cached home and shows a blank body',
       (tester) async {
         final authRepository = _FakeAuthRepository();
         var requestCount = 0;
@@ -805,10 +889,7 @@ void main() {
         await container.read(authSessionControllerProvider.notifier).refresh();
         await tester.pump();
 
-        expect(
-          find.byKey(const Key('forum-home-loading-body')),
-          findsOneWidget,
-        );
+        expect(find.byKey(const Key('forum-home-blank-body')), findsOneWidget);
         expect(find.byKey(const Key('forum-home-list')), findsNothing);
 
         reloadCompleter.complete(ApiSuccess(_loggedInPayloadWithFavorites()));
@@ -828,7 +909,7 @@ void main() {
     );
 
     testWidgets(
-      'account switch invalidates cached home and rebuilds with loading placeholder',
+      'account switch invalidates cached home and shows a blank body',
       (tester) async {
         final authRepository = _FakeAuthRepository(
           session: _loggedInSession(uid: '10001', username: 'alice'),
@@ -872,10 +953,7 @@ void main() {
         await container.read(authSessionControllerProvider.notifier).refresh();
         await tester.pump();
 
-        expect(
-          find.byKey(const Key('forum-home-loading-body')),
-          findsOneWidget,
-        );
+        expect(find.byKey(const Key('forum-home-blank-body')), findsOneWidget);
         expect(find.byKey(const Key('forum-home-list')), findsNothing);
 
         reloadCompleter.complete(ApiSuccess(_loggedInPayloadWithFavorites()));
@@ -929,6 +1007,7 @@ List<riverpod_misc.Override> _overrides(
   DateTime Function()? nowProvider,
   ImageCacheService? imageCacheService,
   ForumImagePrecacheService? forumImagePrecacheService,
+  ForumHomeRequestProfileResolver? requestProfileResolver,
 }) {
   return [
     forumHomeRepositoryProvider.overrideWithValue(repository),
@@ -943,6 +1022,12 @@ List<riverpod_misc.Override> _overrides(
     ),
     imageRequestHeaderBuilderProvider.overrideWithValue(
       const _FakeImageRequestHeaderBuilder(),
+    ),
+    forumHomeRequestProfileResolverProvider.overrideWithValue(
+      requestProfileResolver ??
+          const _FakeForumHomeRequestProfileResolver(
+            DocumentRequestProfile.anonymous,
+          ),
     ),
     if (nowProvider != null)
       forumHomeNowProvider.overrideWithValue(nowProvider),
@@ -1193,11 +1278,21 @@ ForumHomePayload _loggedInPayloadWithChromeFavoriteDescriptions() {
 }
 
 class _FakeForumHomeRepository implements ForumHomeRepository {
-  _FakeForumHomeRepository(this._loader);
+  _FakeForumHomeRepository(this._loader, {this.cachedEntry});
 
   final Future<ApiResult<ForumHomePayload>> Function() _loader;
+  final ForumHomeCacheEntry? cachedEntry;
   final cachePolicies = <CacheLoadPolicy>[];
   final requestProfiles = <DocumentRequestProfile?>[];
+  final cachedRequestProfiles = <DocumentRequestProfile>[];
+
+  @override
+  Future<ForumHomeCacheEntry?> readCachedPayload({
+    required DocumentRequestProfile requestProfile,
+  }) async {
+    cachedRequestProfiles.add(requestProfile);
+    return cachedEntry;
+  }
 
   @override
   Future<ApiResult<ForumHomePayload>> getForumHomePayload({
@@ -1326,14 +1421,32 @@ class _FakeAuthRepository implements AuthRepository {
   }
 }
 
-class _DeferredAuthRepository extends _FakeAuthRepository {
-  _DeferredAuthRepository({required super.session});
+class _PendingAuthRepository extends _FakeAuthRepository {
+  _PendingAuthRepository({required super.session});
+
+  final Completer<ApiResult<SessionInfo>> _completer =
+      Completer<ApiResult<SessionInfo>>();
+
+  void complete() {
+    if (!_completer.isCompleted) {
+      _completer.complete(super.refreshSession());
+    }
+  }
 
   @override
-  Future<ApiResult<SessionInfo>> refreshSession() async {
-    await Future<void>.delayed(Duration.zero);
-    return super.refreshSession();
+  Future<ApiResult<SessionInfo>> refreshSession() {
+    return _completer.future;
   }
+}
+
+class _FakeForumHomeRequestProfileResolver
+    implements ForumHomeRequestProfileResolver {
+  const _FakeForumHomeRequestProfileResolver(this.profile);
+
+  final DocumentRequestProfile profile;
+
+  @override
+  Future<DocumentRequestProfile> resolve() async => profile;
 }
 
 class _RecordingNativePageCacheInvalidationService

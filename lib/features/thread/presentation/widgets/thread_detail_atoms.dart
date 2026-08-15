@@ -1,8 +1,7 @@
 part of 'thread_detail_widgets.dart';
 
-// Shared UI atoms and helpers for thread detail: avatar, pills, card/segment
-// decorations, author initials. Moved verbatim from thread_detail_widgets.dart
-// (Phase 5b file split); keys and logic unchanged.
+// Shared UI atoms and helpers for thread detail: avatar, pills and card/segment
+// decorations. Split from thread_detail_widgets.dart during Phase 5b.
 
 class ThreadAuthorAvatar extends StatelessWidget {
   const ThreadAuthorAvatar({
@@ -10,7 +9,6 @@ class ThreadAuthorAvatar extends StatelessWidget {
     required this.author,
     required this.authorId,
     required this.avatarUrl,
-    required this.palette,
     this.imageHeaderBuilder,
     this.onTap,
   });
@@ -18,44 +16,18 @@ class ThreadAuthorAvatar extends StatelessWidget {
   final String author;
   final String authorId;
   final String? avatarUrl;
-  final ThreadDetailNativePalette palette;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = avatarUrl?.trim();
-    final placeholder = ColoredBox(
-      color: palette.avatarBackground,
-      child: Center(
-        child: Text(
-          _authorInitial(author),
-          style: TextStyle(
-            color: palette.avatarForeground,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ),
-    );
-    final avatar = ClipOval(
-      child: SizedBox(
-        key: Key('thread-author-avatar-${_avatarOwnerId()}'),
-        width: 34,
-        height: 34,
-        child: ForumCachedAvatar(
-          imageUrl: imageUrl,
-          ownerId: _avatarOwnerId(),
-          ownerType: ImageCacheOwnerType.thread,
-          size: 34,
-          headerBuilder: imageHeaderBuilder,
-          placeholder: isForumDefaultOrUnsupportedAvatarUrl(imageUrl)
-              ? ColoredBox(
-                  color: palette.avatarBackground,
-                  child: forumDefaultAvatarImage(width: 34, height: 34),
-                )
-              : placeholder,
-        ),
-      ),
+    final avatar = ForumCachedAvatar(
+      key: Key('thread-author-avatar-${_avatarOwnerId()}'),
+      imageUrl: avatarUrl?.trim(),
+      ownerId: _avatarOwnerId(),
+      ownerType: ImageCacheOwnerType.thread,
+      size: 34,
+      headerBuilder: imageHeaderBuilder,
     );
     if (onTap == null) {
       return avatar;
@@ -188,12 +160,4 @@ BoxDecoration _cardSegmentDecoration({
         ? ForumNativeSurfaceShadows.card(palette.stateLayer)
         : null,
   );
-}
-
-String _authorInitial(String author) {
-  final text = author.trim();
-  if (text.isEmpty) {
-    return '?';
-  }
-  return text.characters.first.toUpperCase();
 }

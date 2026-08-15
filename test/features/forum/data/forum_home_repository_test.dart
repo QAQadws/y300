@@ -176,6 +176,79 @@ void main() {
     });
 
     test(
+      'readCachedPayload returns a stale snapshot without any network work',
+      () async {
+        final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
+        final snapshotCache =
+            _FakeParsedSnapshotCacheService<ForumHomePayload>()
+              ..updatedAt = DateTime(2026, 1, 1, 9)
+              ..staleAt = DateTime(2026, 1, 1, 9, 5)
+              ..expiresAt = DateTime(2026, 1, 2, 9);
+        final descriptor = const CacheKeyCanonicalizer().forumHomeSnapshot(
+          requestProfile: DocumentRequestProfile.anonymous,
+        );
+        snapshotCache.seed(descriptor, _cachedHomePayload());
+        final repository = _buildHtmlRepository(
+          adapter,
+          snapshotCacheService: snapshotCache,
+          now: () => DateTime(2026, 1, 1, 10),
+        );
+
+        final cached = await repository.readCachedPayload(
+          requestProfile: DocumentRequestProfile.anonymous,
+        );
+
+        expect(cached?.payload.homeSections.single.items.single.title, '缓存版块');
+        expect(cached?.updatedAt, DateTime(2026, 1, 1, 9));
+        expect(adapter.htmlRequestedUris, isEmpty);
+        expect(adapter.imageRequestedUris, isEmpty);
+      },
+    );
+
+    test(
+      'readCachedPayload parses cached HTML without probing carousel image',
+      () async {
+        final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
+        final documentCache = _FakeDocumentCacheService();
+        final descriptor = const CacheKeyCanonicalizer().forumHome(
+          requestProfile: DocumentRequestProfile.anonymous,
+        );
+        final updatedAt = DateTime(2026, 1, 1, 9);
+        documentCache.seed(
+          CachedDocument(
+            cacheKey: descriptor.cacheKey,
+            ownerType: descriptor.ownerType,
+            ownerId: descriptor.ownerId,
+            sourceUrl: descriptor.sourceUrl,
+            requestProfile: descriptor.requestProfile,
+            body: _mobileHomeHtml,
+            fetchedAt: updatedAt,
+            updatedAt: updatedAt,
+          ),
+        );
+        final repository = _buildHtmlRepository(
+          adapter,
+          documentCacheService: documentCache,
+          now: () => DateTime(2026, 1, 1, 10),
+        );
+
+        final cached = await repository.readCachedPayload(
+          requestProfile: DocumentRequestProfile.anonymous,
+        );
+
+        expect(cached?.payload.homeSections, hasLength(2));
+        expect(cached?.updatedAt, updatedAt);
+        expect(
+          cached?.payload.chromeData.carouselItems.single.aspectRatio,
+          isNull,
+        );
+        expect(documentCache.touchedKeys, isEmpty);
+        expect(adapter.htmlRequestedUris, isEmpty);
+        expect(adapter.imageRequestedUris, isEmpty);
+      },
+    );
+
+    test(
       'writes logged in home cache under logged in request profile',
       () async {
         final adapter = _ForumHomeHtmlTestAdapter();
@@ -657,6 +730,44 @@ SessionInfo _loggedOutSession() {
   return SessionInfo(uid: '0', username: '', formhash: '', isLoggedIn: false);
 }
 
+ForumHomePayload _cachedHomePayload() {
+  return ForumHomePayload(
+    forumIndex: ForumIndexData(
+      categories: <ForumCategory>[
+        ForumCategory(fid: 'cached-1', name: '缓存分类', forums: ['88']),
+      ],
+      forums: <ForumItem>[
+        ForumItem(
+          fid: '88',
+          name: '缓存版块',
+          threads: 0,
+          posts: 0,
+          todayPosts: 0,
+          description: '',
+          icon: '',
+          subForums: <ForumItem>[],
+        ),
+      ],
+    ),
+    isLoggedIn: false,
+    favoriteForums: const <FavoriteForum>[],
+    homeSections: const <ForumHomeSectionData>[
+      ForumHomeSectionData(
+        title: '缓存分类',
+        kind: ForumHomeSectionKind.regular,
+        items: <ForumHomeForumData>[
+          ForumHomeForumData(
+            fid: '88',
+            title: '缓存版块',
+            description: '',
+            todayPosts: null,
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
 ForumHomeHtmlRepository _buildHtmlRepository(
   _ForumHomeHtmlTestAdapter adapter, {
   DocumentCacheService? documentCacheService,
@@ -824,6 +935,9 @@ class _FakeParsedSnapshotCacheService<T> implements ParsedSnapshotCacheService {
   final _snapshots = <String, T>{};
   final putDescriptors = <SnapshotCacheDescriptor>[];
   final putValues = <T>[];
+  DateTime updatedAt = DateTime(2026, 1, 1);
+  DateTime staleAt = DateTime(2099, 1, 1);
+  DateTime expiresAt = DateTime(2099, 1, 2);
 
   void seed(SnapshotCacheDescriptor descriptor, T value) {
     _snapshots[descriptor.cacheKey] = value;
@@ -847,9 +961,9 @@ class _FakeParsedSnapshotCacheService<T> implements ParsedSnapshotCacheService {
       parserVersion: codec.parserVersion,
       value: value,
       createdAt: DateTime(2026, 1, 1),
-      updatedAt: DateTime(2026, 1, 1),
-      staleAt: DateTime(2099, 1, 1),
-      expiresAt: DateTime(2099, 1, 2),
+      updatedAt: updatedAt,
+      staleAt: staleAt,
+      expiresAt: expiresAt,
     );
   }
 

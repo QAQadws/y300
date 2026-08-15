@@ -69,7 +69,6 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
                   author: post.author,
                   authorId: post.authorId,
                   avatarUrl: post.avatarUrl,
-                  palette: palette,
                   imageHeaderBuilder: imageHeaderBuilder,
                   onTap: post.authorId.trim().isEmpty
                       ? null
@@ -655,7 +654,6 @@ class ThreadPostCard extends StatelessWidget {
                 author: post.author,
                 authorId: post.authorId,
                 avatarUrl: post.avatarUrl,
-                palette: resolvedPalette,
                 imageHeaderBuilder: resolvedImageHeaderBuilder,
                 onTap:
                     post.authorId.trim().isEmpty ||

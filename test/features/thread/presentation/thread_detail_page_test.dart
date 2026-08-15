@@ -82,8 +82,8 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
-import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
@@ -1681,7 +1681,7 @@ void main() {
       expect(find.text('帖子链接已复制'), findsOneWidget);
     });
 
-    testWidgets('default svg author avatar uses local noavatar asset', (
+    testWidgets('default svg author avatar uses the local default asset', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -1708,14 +1708,18 @@ void main() {
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pumpAndSettle();
 
+      final avatar = find.byKey(const Key('thread-author-avatar-p1'));
+      final image = tester.widget<CachedLibraryImage>(
+        find.descendant(of: avatar, matching: find.byType(CachedLibraryImage)),
+      );
+      expect(image.request, isNull);
       expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is Image &&
-              widget.image is AssetImage &&
-              (widget.image as AssetImage).assetName == forumDefaultAvatarAsset,
+        image.imageProviderOverride,
+        isA<AssetImage>().having(
+          (provider) => provider.assetName,
+          'assetName',
+          forumDefaultAvatarAsset,
         ),
-        findsOneWidget,
       );
     });
 
@@ -4596,7 +4600,7 @@ void main() {
       expect(webViewDriver.loadedUris, isEmpty);
     });
 
-    testWidgets('default comment avatar uses local noavatar asset', (
+    testWidgets('default comment avatar uses the local default asset', (
       tester,
     ) async {
       final repository = _FakeThreadRepository((tid, page) async {
@@ -4638,19 +4642,19 @@ void main() {
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pumpAndSettle();
 
-      final image = tester.widget<Image>(
-        find.descendant(
-          of: find.byKey(const Key('thread-comment-author-avatar-779')),
-          matching: find.byWidgetPredicate(
-            (widget) =>
-                widget is Image &&
-                widget.image is AssetImage &&
-                (widget.image as AssetImage).assetName ==
-                    forumDefaultAvatarAsset,
-          ),
+      final avatar = find.byKey(const Key('thread-comment-author-avatar-779'));
+      final image = tester.widget<CachedLibraryImage>(
+        find.descendant(of: avatar, matching: find.byType(CachedLibraryImage)),
+      );
+      expect(image.request, isNull);
+      expect(
+        image.imageProviderOverride,
+        isA<AssetImage>().having(
+          (provider) => provider.assetName,
+          'assetName',
+          forumDefaultAvatarAsset,
         ),
       );
-      expect((image.image as AssetImage).assetName, forumDefaultAvatarAsset);
     });
 
     testWidgets('comment avatar uses avatar cache request baseline', (

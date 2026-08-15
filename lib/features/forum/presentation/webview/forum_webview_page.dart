@@ -1036,7 +1036,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }) {
     if (_bootstrapConfig == null) {
       return ColoredBox(
-        key: const Key('forum-webview-bootstrap-placeholder'),
+        key: const Key('forum-webview-bootstrap-blank'),
         color: Theme.of(context).colorScheme.surface,
       );
     }

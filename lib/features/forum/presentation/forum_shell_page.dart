@@ -7,7 +7,6 @@ import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dar
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
-import 'package:y300/features/forum/presentation/widgets/forum_bootstrap_placeholder.dart';
 
 class ForumShellPage extends ConsumerWidget {
   const ForumShellPage({super.key, this.isActive = true});
@@ -25,8 +24,8 @@ class ForumShellPage extends ConsumerWidget {
     );
 
     return asyncMode.when(
-      loading: () => const _ForumShellLoadingView(),
-      error: (_, _) => const _ForumShellLoadingView(),
+      loading: () => const _ForumShellBlankView(),
+      error: (_, _) => ForumHomePage(isActive: isActive),
       data: (mode) {
         return switch (mode) {
           ForumShellMode.native => ForumHomePage(isActive: isActive),
@@ -49,18 +48,13 @@ class ForumShellPage extends ConsumerWidget {
   }
 }
 
-class _ForumShellLoadingView extends StatelessWidget {
-  const _ForumShellLoadingView();
+class _ForumShellBlankView extends StatelessWidget {
+  const _ForumShellBlankView();
 
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: SafeArea(
-        child: ForumBootstrapPlaceholder(
-          listKey: Key('forum-shell-bootstrap-placeholder-list'),
-          keyPrefix: 'forum-shell-bootstrap-placeholder',
-        ),
-      ),
+      body: SizedBox.expand(key: Key('forum-shell-blank-body')),
     );
   }
 }

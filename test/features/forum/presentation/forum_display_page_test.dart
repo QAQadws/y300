@@ -31,8 +31,8 @@ import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
-import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 void main() {
@@ -461,7 +461,9 @@ void main() {
       ]);
     });
 
-    testWidgets('default svg avatar uses local noavatar asset', (tester) async {
+    testWidgets('default svg avatar uses the local default avatar asset', (
+      tester,
+    ) async {
       final repository = _FakeForumDisplayRepository((_, page, query) async {
         return ApiSuccess(
           _displayData(
@@ -486,31 +488,20 @@ void main() {
       await tester.pumpWidget(_buildTestApp(repository));
       await tester.pumpAndSettle();
 
-      expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is Image &&
-              widget.image is AssetImage &&
-              (widget.image as AssetImage).assetName == forumDefaultAvatarAsset,
-        ),
-        findsOneWidget,
+      final avatar = find.byKey(const Key('forum-thread-summary-avatar-100'));
+      final image = tester.widget<CachedLibraryImage>(
+        find.descendant(of: avatar, matching: find.byType(CachedLibraryImage)),
       );
+      expect(image.request, isNull);
       expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is Image &&
-              widget.image is NetworkImage &&
-              (widget.image as NetworkImage).url.contains('noavatar.svg'),
+        image.imageProviderOverride,
+        isA<AssetImage>().having(
+          (provider) => provider.assetName,
+          'assetName',
+          forumDefaultAvatarAsset,
         ),
-        findsNothing,
       );
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('forum-thread-summary-avatar-100')),
-          matching: find.byType(CachedLibraryImage),
-        ),
-        findsNothing,
-      );
+      expect(image.fadeInDuration, const Duration(milliseconds: 300));
     });
 
     testWidgets(

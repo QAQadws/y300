@@ -253,7 +253,6 @@ class ThreadPostCommentRow extends StatelessWidget {
             ),
             comment: comment,
             imageHeaderBuilder: imageHeaderBuilder,
-            palette: palette,
           ),
         ),
         const SizedBox(width: 8),
@@ -350,53 +349,22 @@ class _ThreadCommentAvatar extends StatelessWidget {
     super.key,
     required this.comment,
     required this.imageHeaderBuilder,
-    required this.palette,
   });
 
   final ThreadPostCommentEntry comment;
   final ImageRequestHeaderBuilder? imageHeaderBuilder;
-  final ThreadDetailNativePalette palette;
 
   @override
   Widget build(BuildContext context) {
     const size = 24.0;
-    final imageUrl = comment.avatarUrl?.trim();
-    final fallback = _ThreadCommentDefaultAvatar(palette: palette, size: size);
-    return ClipOval(
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: isForumDefaultOrUnsupportedAvatarUrl(imageUrl)
-            ? fallback
-            : ForumCachedAvatar(
-                imageUrl: imageUrl,
-                ownerId: comment.authorId?.trim().isNotEmpty == true
-                    ? comment.authorId!
-                    : comment.author,
-                ownerType: ImageCacheOwnerType.thread,
-                size: size,
-                placeholder: fallback,
-                headerBuilder: imageHeaderBuilder,
-              ),
-      ),
-    );
-  }
-}
-
-class _ThreadCommentDefaultAvatar extends StatelessWidget {
-  const _ThreadCommentDefaultAvatar({
-    required this.palette,
-    required this.size,
-  });
-
-  final ThreadDetailNativePalette palette;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: palette.avatarBackground,
-      child: forumDefaultAvatarImage(width: size, height: size),
+    return ForumCachedAvatar(
+      imageUrl: comment.avatarUrl?.trim(),
+      ownerId: comment.authorId?.trim().isNotEmpty == true
+          ? comment.authorId!
+          : comment.author,
+      ownerType: ImageCacheOwnerType.thread,
+      size: size,
+      headerBuilder: imageHeaderBuilder,
     );
   }
 }

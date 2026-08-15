@@ -6,8 +6,10 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
+import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/forum_content_projection_providers.dart';
@@ -46,6 +48,7 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
   String? _lastResolvedAuthContextKey;
   bool _isHandlingAuthContextChange = false;
   bool _isSwitchingAuthContext = false;
+  int _authContextGeneration = 0;
 
   @override
   void initState() {
@@ -58,27 +61,9 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
         if (nextState == null) {
           return;
         }
-        final nextKey = _authContextKey(nextState);
-        final previousKey = _lastResolvedAuthContextKey;
-        _lastResolvedAuthContextKey = nextKey;
-        if (previousKey == null || previousKey == nextKey) {
-          return;
-        }
-        if (_isHandlingAuthContextChange) {
-          return;
-        }
-        setState(() {
-          _isSwitchingAuthContext = true;
-        });
-        _isHandlingAuthContextChange = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) {
-            _isHandlingAuthContextChange = false;
-            return;
-          }
-          unawaited(_handleAuthContextChanged());
-        });
+        unawaited(_reconcileAuthContext(nextState));
       },
+      fireImmediately: true,
     );
   }
 
@@ -113,13 +98,7 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final authState = ref.watch(authSessionControllerProvider);
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
-    final resolvedAuthState = authState.asData?.value;
-    final isAuthResolved = resolvedAuthState != null;
-    if (resolvedAuthState != null) {
-      _lastResolvedAuthContextKey ??= _authContextKey(resolvedAuthState);
-    }
 
     return Scaffold(
       appBar: AppBar(
@@ -158,21 +137,88 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
           ),
         ],
       ),
-      body: !isAuthResolved || _isSwitchingAuthContext
-          ? const _ForumHomeLoadingBody()
-          : _ResolvedForumHomeBody(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Offstage(
+            offstage: _isSwitchingAuthContext,
+            child: _ResolvedForumHomeBody(
               imageHeaderBuilder: imageHeaderBuilder,
               isActive: widget.isActive,
             ),
+          ),
+          if (_isSwitchingAuthContext) const _ForumHomeBlankBody(),
+        ],
+      ),
     );
   }
 
+  Future<void> _reconcileAuthContext(AuthSessionViewState authState) async {
+    final generation = ++_authContextGeneration;
+    final localProfile = await ref
+        .read(forumHomeRequestProfileResolverProvider)
+        .resolve();
+    if (!mounted || generation != _authContextGeneration) {
+      return;
+    }
+
+    final effectiveProfile = authState.isLoggedIn
+        ? DocumentRequestProfile.loggedIn
+        : localProfile;
+    final nextResolvedKey = authState.isLoggedIn
+        ? _authContextKey(authState)
+        : localProfile == DocumentRequestProfile.anonymous
+        ? 'anonymous'
+        : null;
+    final previousKey = _lastResolvedAuthContextKey;
+    final currentProfile = ref
+        .read(forumHomeControllerProvider)
+        .asData
+        ?.value
+        .requestProfile;
+
+    var shouldSwitch =
+        currentProfile != null && currentProfile != effectiveProfile;
+    if (previousKey == null) {
+      if (nextResolvedKey != null) {
+        _lastResolvedAuthContextKey = nextResolvedKey;
+      }
+    } else if (nextResolvedKey != null && previousKey != nextResolvedKey) {
+      _lastResolvedAuthContextKey = nextResolvedKey;
+      shouldSwitch = true;
+    }
+
+    // A failed profile probe is not proof of logout while a persisted auth
+    // cookie still exists. Keep the verified UID and cached logged-in page;
+    // an explicit logout clears the cookie and resolves to anonymous above.
+    if (!authState.isLoggedIn &&
+        localProfile == DocumentRequestProfile.loggedIn) {
+      shouldSwitch = currentProfile == DocumentRequestProfile.anonymous;
+    }
+    if (!shouldSwitch || _isHandlingAuthContextChange) {
+      return;
+    }
+    await _handleAuthContextChanged();
+  }
+
   Future<void> _handleAuthContextChanged() async {
+    if (!mounted || _isHandlingAuthContextChange) {
+      return;
+    }
+    _isHandlingAuthContextChange = true;
+    setState(() => _isSwitchingAuthContext = true);
     try {
       await ref
           .read(nativePageCacheInvalidationServiceProvider)
           .invalidateForumHome();
       ref.invalidate(forumHomeControllerProvider);
+      // Keep the old account's content hidden until the replacement profile
+      // has produced its own cache or network result.
+      try {
+        await ref.read(forumHomeControllerProvider.future);
+      } catch (_) {
+        // AsyncNotifier retains the failure for the normal error view.
+      }
     } finally {
       _isHandlingAuthContextChange = false;
       if (mounted) {
@@ -288,7 +334,7 @@ class _ResolvedForumHomeBody extends ConsumerWidget {
     final mode = ref.watch(appServerContentConversionModeProvider);
     final projectionAsync = ref.watch(forumHomeContentProjectionProvider);
     return state.when(
-      loading: () => const _ForumHomeLoadingBody(),
+      loading: () => const _ForumHomeBlankBody(),
       error: (error, _) => _ForumHomeErrorView(
         message: ForumTextResolver.homeLoadFailure(l10n, error),
         onRetry: () => ref
@@ -396,18 +442,6 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
               ],
             ),
           ),
-          if (widget.state.isRefreshing)
-            const Positioned(
-              top: 0,
-              left: 12,
-              right: 12,
-              child: IgnorePointer(
-                child: LinearProgressIndicator(
-                  key: Key('forum-home-refresh-progress'),
-                  minHeight: 2,
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -489,12 +523,12 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
   }
 }
 
-class _ForumHomeLoadingBody extends StatelessWidget {
-  const _ForumHomeLoadingBody();
+class _ForumHomeBlankBody extends StatelessWidget {
+  const _ForumHomeBlankBody();
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.expand(key: Key('forum-home-loading-body'));
+    return const SizedBox.expand(key: Key('forum-home-blank-body'));
   }
 }
 

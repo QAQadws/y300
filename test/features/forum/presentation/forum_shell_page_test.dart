@@ -58,7 +58,7 @@ void main() {
     expect(find.text('论坛首页'), findsOneWidget);
   });
 
-  testWidgets('ForumShellPage keeps placeholder before native mode resolves', (
+  testWidgets('ForumShellPage stays blank before native mode resolves', (
     tester,
   ) async {
     final driverRegistry = _FakeForumWebViewDriverRegistry();
@@ -85,10 +85,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(
-      find.byKey(const Key('forum-shell-bootstrap-placeholder-list')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('forum-shell-blank-body')), findsOneWidget);
+    expect(find.byType(ListView), findsNothing);
     expect(find.byKey(const Key('forum-webview-page')), findsNothing);
     expect(find.byKey(const Key('forum-home-list')), findsNothing);
 
@@ -96,6 +94,39 @@ void main() {
 
     expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
   });
+
+  testWidgets(
+    'ForumShellPage falls back to native mode when preference fails',
+    (tester) async {
+      final driverRegistry = _FakeForumWebViewDriverRegistry();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FailingForumModeSettingsRepository(),
+            ),
+            forumHomeRepositoryProvider.overrideWithValue(
+              _FakeForumHomeRepository(),
+            ),
+            nativePageCacheInvalidationServiceProvider.overrideWithValue(
+              _RecordingNativePageCacheInvalidationService(),
+            ),
+            forumWebViewDriverFactoryProvider.overrideWithValue(
+              driverRegistry.create,
+            ),
+            cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
+          ],
+          child: const LocalizedTestApp(home: ForumShellPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('forum-shell-blank-body')), findsNothing);
+      expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+      expect(find.byKey(const Key('forum-webview-page')), findsNothing);
+    },
+  );
 
   testWidgets('ForumShellPage forwards isActive to native forum home', (
     tester,
@@ -365,6 +396,13 @@ class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
 
 class _FakeForumHomeRepository implements ForumHomeRepository {
   @override
+  Future<ForumHomeCacheEntry?> readCachedPayload({
+    required DocumentRequestProfile requestProfile,
+  }) async {
+    return null;
+  }
+
+  @override
   Future<ApiResult<ForumHomePayload>> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,
@@ -419,6 +457,17 @@ class _DeferredForumModeSettingsRepository
   Future<ForumShellMode> loadMode() async {
     await Future<void>.delayed(Duration.zero);
     return mode;
+  }
+
+  @override
+  Future<void> saveMode(ForumShellMode mode) async {}
+}
+
+class _FailingForumModeSettingsRepository
+    implements ForumModeSettingsRepository {
+  @override
+  Future<ForumShellMode> loadMode() async {
+    throw StateError('mode unavailable');
   }
 
   @override

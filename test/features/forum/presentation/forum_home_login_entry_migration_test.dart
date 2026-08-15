@@ -35,6 +35,13 @@ void main() {
 
 class _FakeForumHomeRepository implements ForumHomeRepository {
   @override
+  Future<ForumHomeCacheEntry?> readCachedPayload({
+    required DocumentRequestProfile requestProfile,
+  }) async {
+    return null;
+  }
+
+  @override
   Future<ApiResult<ForumHomePayload>> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,

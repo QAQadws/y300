@@ -423,7 +423,6 @@ class _ProfileBlogListCard extends StatelessWidget {
                     imageUrl: item.avatarUrl,
                     ownerId: item.author,
                     radius: 17,
-                    palette: palette,
                     imageHeaderBuilder: imageHeaderBuilder,
                   ),
                   const SizedBox(width: 10),
@@ -637,7 +636,6 @@ class _BlogDetailCard extends StatelessWidget {
                 imageUrl: data.avatarUrl,
                 ownerId: data.author,
                 radius: 17,
-                palette: palette,
                 imageHeaderBuilder: imageHeaderBuilder,
               ),
               const SizedBox(width: 10),
@@ -714,7 +712,6 @@ class _CommentCard extends StatelessWidget {
                 imageUrl: comment.avatarUrl,
                 ownerId: comment.author,
                 radius: 15,
-                palette: palette,
                 imageHeaderBuilder: imageHeaderBuilder,
               ),
               const SizedBox(width: 9),
@@ -760,57 +757,24 @@ class _ProfileBlogAvatar extends StatelessWidget {
     required this.imageUrl,
     required this.ownerId,
     required this.radius,
-    required this.palette,
     required this.imageHeaderBuilder,
   });
 
   final String? imageUrl;
   final String ownerId;
   final double radius;
-  final _ProfileBlogPalette palette;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
 
   @override
   Widget build(BuildContext context) {
     final size = radius * 2;
-    final placeholder = _ProfileBlogAvatarPlaceholder(
-      palette: palette,
-      iconSize: radius + 1,
-    );
     final url = imageUrl?.trim();
-    return SizedBox(
-      width: size,
-      height: size,
-      child: ClipOval(
-        child: ForumCachedAvatar(
-          imageUrl: url,
-          ownerId: ownerId.trim().isEmpty ? (url ?? 'unknown') : ownerId,
-          ownerType: ImageCacheOwnerType.profile,
-          size: size,
-          placeholder: placeholder,
-          headerBuilder: imageHeaderBuilder,
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileBlogAvatarPlaceholder extends StatelessWidget {
-  const _ProfileBlogAvatarPlaceholder({
-    required this.palette,
-    required this.iconSize,
-  });
-
-  final _ProfileBlogPalette palette;
-  final double iconSize;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: palette.iconBackground,
-      child: Center(
-        child: Icon(Icons.person, color: palette.accent, size: iconSize),
-      ),
+    return ForumCachedAvatar(
+      imageUrl: url,
+      ownerId: ownerId.trim().isEmpty ? (url ?? 'unknown') : ownerId,
+      ownerType: ImageCacheOwnerType.profile,
+      size: size,
+      headerBuilder: imageHeaderBuilder,
     );
   }
 }

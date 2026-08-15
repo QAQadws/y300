@@ -63,7 +63,18 @@ class ForumHomePayload {
   final ForumHomeChromeData chromeData;
 }
 
+class ForumHomeCacheEntry {
+  const ForumHomeCacheEntry({required this.payload, required this.updatedAt});
+
+  final ForumHomePayload payload;
+  final DateTime updatedAt;
+}
+
 abstract class ForumHomeRepository {
+  Future<ForumHomeCacheEntry?> readCachedPayload({
+    required DocumentRequestProfile requestProfile,
+  });
+
   Future<ApiResult<ForumHomePayload>> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,
@@ -112,6 +123,52 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
   final DateTime Function() _now;
 
   @override
+  Future<ForumHomeCacheEntry?> readCachedPayload({
+    required DocumentRequestProfile requestProfile,
+  }) async {
+    final documentDescriptor = _cacheKeyCanonicalizer.forumHome(
+      requestProfile: requestProfile,
+    );
+    final snapshotDescriptor = _cacheKeyCanonicalizer.forumHomeSnapshot(
+      requestProfile: requestProfile,
+    );
+    final snapshot = await _getCachedSnapshot(snapshotDescriptor);
+    if (snapshot != null) {
+      return ForumHomeCacheEntry(
+        payload: snapshot.value,
+        updatedAt: snapshot.updatedAt,
+      );
+    }
+
+    final documentCache = _documentCacheService;
+    if (documentCache == null) {
+      return null;
+    }
+    final cachedDocument = await _safeGetCachedDocument(
+      documentCache,
+      documentDescriptor.cacheKey,
+    );
+    if (cachedDocument == null) {
+      return null;
+    }
+    try {
+      // Rehydrating the last successful page must stay disk/CPU-only. In
+      // particular, do not probe the carousel image before cached content can
+      // be shown; the background network refresh will resolve a fresh ratio.
+      final payload = await _parsePayload(
+        cachedDocument.body,
+        resolveCarouselAspectRatio: false,
+      );
+      return ForumHomeCacheEntry(
+        payload: payload,
+        updatedAt: cachedDocument.updatedAt,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
   Future<ApiResult<ForumHomePayload>> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,
@@ -126,9 +183,9 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       requestProfile: requestProfile,
     );
     if (cachePolicy == CacheLoadPolicy.cacheFirst) {
-      final snapshot = await _getFreshSnapshot(snapshotDescriptor);
-      if (snapshot != null) {
-        return ApiSuccess(snapshot);
+      final snapshot = await _getCachedSnapshot(snapshotDescriptor);
+      if (snapshot != null && snapshot.isFresh(_now())) {
+        return ApiSuccess(snapshot.value);
       }
     }
 
@@ -189,9 +246,14 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
         : DocumentRequestProfile.anonymous;
   }
 
-  Future<ForumHomePayload> _parsePayload(String html) async {
+  Future<ForumHomePayload> _parsePayload(
+    String html, {
+    bool resolveCarouselAspectRatio = true,
+  }) async {
     final htmlData = _parser.parse(html);
-    final resolved = await _withResolvedCarouselAspectRatio(htmlData);
+    final resolved = resolveCarouselAspectRatio
+        ? await _withResolvedCarouselAspectRatio(htmlData)
+        : htmlData;
     return _toPayload(resolved);
   }
 
@@ -211,7 +273,10 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       return null;
     }
     try {
-      final payload = await _parsePayload(document.body);
+      final payload = await _parsePayload(
+        document.body,
+        resolveCarouselAspectRatio: false,
+      );
       await _safeTouchCachedDocument(cache, document.cacheKey, _now());
       await _putSnapshot(descriptor: snapshotDescriptor, payload: payload);
       return payload;
@@ -220,7 +285,7 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     }
   }
 
-  Future<ForumHomePayload?> _getFreshSnapshot(
+  Future<CachedSnapshot<ForumHomePayload>?> _getCachedSnapshot(
     SnapshotCacheDescriptor descriptor,
   ) async {
     final cache = _snapshotCacheService;
@@ -228,11 +293,7 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       return null;
     }
     try {
-      final snapshot = await cache.get(descriptor, _snapshotCodec);
-      if (snapshot == null || !snapshot.isFresh(_now())) {
-        return null;
-      }
-      return snapshot.value;
+      return await cache.get(descriptor, _snapshotCodec);
     } catch (_) {
       return null;
     }
@@ -450,6 +511,13 @@ class DiscuzForumHomeRepository implements ForumHomeRepository {
   final Future<ApiResult<SessionInfo>> Function() _refreshSession;
   final Future<ApiResult<List<FavoriteForum>>> Function()? _loadFavoriteForums;
   final Future<ApiResult<ForumHomeChromeData>> Function()? _loadChrome;
+
+  @override
+  Future<ForumHomeCacheEntry?> readCachedPayload({
+    required DocumentRequestProfile requestProfile,
+  }) async {
+    return null;
+  }
 
   @override
   Future<ApiResult<ForumHomePayload>> getForumHomePayload({

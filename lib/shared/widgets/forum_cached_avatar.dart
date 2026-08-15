@@ -8,7 +8,8 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 class ForumCachedAvatar extends ConsumerWidget {
-  static const Duration fadeInDuration = Duration(milliseconds: 120);
+  static const Duration fadeInDuration = Duration(milliseconds: 300);
+  static const double placeholderDarkenAmount = 0.10;
 
   const ForumCachedAvatar({
     super.key,
@@ -16,9 +17,6 @@ class ForumCachedAvatar extends ConsumerWidget {
     required this.ownerId,
     required this.ownerType,
     required this.size,
-    this.fit = BoxFit.cover,
-    this.shape = BoxShape.circle,
-    this.placeholder,
     this.headerBuilder,
   });
 
@@ -26,51 +24,60 @@ class ForumCachedAvatar extends ConsumerWidget {
   final String ownerId;
   final ImageCacheOwnerType ownerType;
   final double size;
-  final BoxFit fit;
-  final BoxShape shape;
-  final Widget? placeholder;
   final ImageRequestHeaderBuilder? headerBuilder;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final fallback =
-        placeholder ??
-        forumDefaultAvatarImage(width: size, height: size, fit: fit);
+    final theme = Theme.of(context);
+    final fallback = ColoredBox(
+      key: const Key('forum-avatar-placeholder'),
+      color: placeholderColorFor(theme.scaffoldBackgroundColor),
+    );
     final url = imageUrl?.trim();
     final uri = _remoteUriOrNull(url);
-    final borderRadius = shape == BoxShape.circle
-        ? BorderRadius.circular(size / 2)
-        : BorderRadius.zero;
-    final child = isForumDefaultOrUnsupportedAvatarUrl(url) || uri == null
-        ? fallback
-        : CachedLibraryImage(
-            request: ref
-                .watch(forumImageRequestResolverProvider)
-                .resolveCacheRequest(
-                  ForumImageLoadSpec(
-                    kind: ForumImageKind.avatar,
-                    url: uri,
-                    ownerId: ownerId.trim().isEmpty ? url : ownerId.trim(),
-                    ownerType: ownerType,
-                    displayWidth: size,
-                    displayHeight: size,
-                    allowReaderOpen: false,
-                  ),
+    final isDefaultAvatar = isForumDefaultAvatarUrl(url);
+    final canLoadRemote =
+        !isForumDefaultOrUnsupportedAvatarUrl(url) && uri != null;
+    final request = canLoadRemote
+        ? ref
+              .watch(forumImageRequestResolverProvider)
+              .resolveCacheRequest(
+                ForumImageLoadSpec(
+                  kind: ForumImageKind.avatar,
+                  url: uri,
+                  ownerId: ownerId.trim().isEmpty ? url : ownerId.trim(),
+                  ownerType: ownerType,
+                  displayWidth: size,
+                  displayHeight: size,
+                  allowReaderOpen: false,
                 ),
-            fit: fit,
+              )
+        : null;
+    final child = isDefaultAvatar || request != null
+        ? CachedLibraryImage(
+            request: request,
+            imageProviderOverride: isDefaultAvatar
+                ? const AssetImage(forumDefaultAvatarAsset)
+                : null,
+            fit: BoxFit.cover,
             width: size,
             height: size,
             placeholder: fallback,
             errorPlaceholder: fallback,
             headerBuilder: headerBuilder,
             fadeInDuration: fadeInDuration,
-          );
+          )
+        : fallback;
     return SizedBox(
       key: const Key('forum-cached-avatar'),
       width: size,
       height: size,
-      child: ClipRRect(borderRadius: borderRadius, child: child),
+      child: ClipOval(child: child),
     );
+  }
+
+  static Color placeholderColorFor(Color backgroundColor) {
+    return Color.lerp(backgroundColor, Colors.black, placeholderDarkenAmount)!;
   }
 
   Uri? _remoteUriOrNull(String? url) {
