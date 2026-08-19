@@ -276,7 +276,11 @@ class ComicReaderCapability extends ReaderCapability {
     required ContinuousImageItem item,
     required int index,
   }) {
-    return controller.prepareImageRetry(expectedEpisodeId: viewState.episodeId);
+    return controller.prepareImageRetry(
+      expectedEpisodeId: viewState.episodeId,
+      imageIndex: index,
+      imageUrl: item.url,
+    );
   }
 
   @override
@@ -373,7 +377,10 @@ class ComicReaderCapability extends ReaderCapability {
         onRetry: spec.onRetry,
         retryButtonKey: ValueKey<String>('comic-reader-retry-$imageUrl'),
       ),
-      retryToken: viewState.imageSessionRevision,
+      retryToken: Object.hash(
+        viewState.imageSessionRevision,
+        image.retryRevision,
+      ),
       headerBuilder: imageHeaderBuilder,
       loadingIndicatorColor: spec.loadingIndicatorColor,
       onImageResolved: (size) {

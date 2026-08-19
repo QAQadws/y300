@@ -39,6 +39,14 @@ class ComicReaderArgs {
   int get hashCode => Object.hash(comicId, episodeId);
 }
 
+typedef _EpisodeRetryProbeKey = ({String episodeId, int generation});
+typedef _AutomaticImageRecoveryKey = ({
+  String episodeId,
+  int generation,
+  int imageIndex,
+  String imageUrl,
+});
+
 class ComicReaderImageState {
   const ComicReaderImageState({
     required this.imageUrl,
@@ -50,6 +58,7 @@ class ComicReaderImageState {
     this.width,
     this.height,
     this.failed = false,
+    this.retryRevision = 0,
   });
 
   final String imageUrl;
@@ -61,6 +70,7 @@ class ComicReaderImageState {
   final int? width;
   final int? height;
   final bool failed;
+  final int retryRevision;
 
   String? get effectiveLocalPath {
     final local = localPath?.trim();
@@ -83,6 +93,7 @@ class ComicReaderImageState {
     int? width,
     int? height,
     bool? failed,
+    int? retryRevision,
     bool clearLocalPath = false,
     bool clearCacheLocalPath = false,
   }) {
@@ -98,6 +109,7 @@ class ComicReaderImageState {
       width: width ?? this.width,
       height: height ?? this.height,
       failed: failed ?? this.failed,
+      retryRevision: retryRevision ?? this.retryRevision,
     );
   }
 }
@@ -275,8 +287,12 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   final Set<String> _completingEpisodeIds = <String>{};
   final Set<int> _visibleImageIndexes = <int>{};
   final Set<int> _resolvedImageIndexes = <int>{};
-  final Map<String, Future<void>> _episodeRetryProbeInFlight =
-      <String, Future<void>>{};
+  final Map<_EpisodeRetryProbeKey, Future<void>> _episodeRetryProbeInFlight =
+      <_EpisodeRetryProbeKey, Future<void>>{};
+  final Set<_AutomaticImageRecoveryKey> _automaticImageRecoveryAttempts =
+      <_AutomaticImageRecoveryKey>{};
+  final Set<_AutomaticImageRecoveryKey> _manualImageRetryRequests =
+      <_AutomaticImageRecoveryKey>{};
   late String _currentEpisodeId;
   int _episodeOperationGeneration = 0;
   DateTime? _openedAt;
@@ -316,6 +332,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     _currentEpisodeId = _args.episodeId;
     ref.onDispose(() {
       _episodeOperationGeneration += 1;
+      _clearAutomaticImageRecoveryTracking();
       _progressPersistDebounceTimer?.cancel();
     });
     return _loadState(episodeId: _currentEpisodeId);
@@ -545,7 +562,11 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
   /// The result is deliberately not persisted here: the request exists to
   /// let the shared gateway recover WAF/session state. Only the explicit
   /// refresh action is allowed to replace the chapter image directory.
-  Future<void> prepareImageRetry({required String expectedEpisodeId}) async {
+  Future<void> prepareImageRetry({
+    required String expectedEpisodeId,
+    int? imageIndex,
+    String? imageUrl,
+  }) async {
     final current = state.value;
     if (current == null ||
         current.episodeId != expectedEpisodeId ||
@@ -553,10 +574,54 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         current.isRefreshingEpisode) {
       return;
     }
-    final episodeId = current.episodeId;
-    final sourceTid = current.sourceTid;
     final generation = _episodeOperationGeneration;
-    final existing = _episodeRetryProbeInFlight[episodeId];
+    final recoveryKey = _automaticRecoveryKeyFor(
+      current: current,
+      generation: generation,
+      imageIndex: imageIndex,
+      imageUrl: imageUrl,
+    );
+    if (recoveryKey != null) {
+      _manualImageRetryRequests.add(recoveryKey);
+    }
+    await _requestEpisodeRetryProbe(
+      episodeId: current.episodeId,
+      sourceTid: current.sourceTid,
+      generation: generation,
+    );
+  }
+
+  _AutomaticImageRecoveryKey? _automaticRecoveryKeyFor({
+    required ComicReaderViewState current,
+    required int generation,
+    required int? imageIndex,
+    required String? imageUrl,
+  }) {
+    if (imageIndex == null ||
+        imageUrl == null ||
+        imageIndex < 0 ||
+        imageIndex >= current.images.length ||
+        current.images[imageIndex].imageUrl != imageUrl) {
+      return null;
+    }
+    return (
+      episodeId: current.episodeId,
+      generation: generation,
+      imageIndex: imageIndex,
+      imageUrl: imageUrl,
+    );
+  }
+
+  Future<void> _requestEpisodeRetryProbe({
+    required String episodeId,
+    required String sourceTid,
+    required int generation,
+  }) async {
+    if (!_ownsEpisodeOperation(episodeId: episodeId, generation: generation)) {
+      return;
+    }
+    final probeKey = (episodeId: episodeId, generation: generation);
+    final existing = _episodeRetryProbeInFlight[probeKey];
     if (existing != null) {
       await existing;
       return;
@@ -568,12 +633,12 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       sourceTid: sourceTid,
       generation: generation,
     );
-    _episodeRetryProbeInFlight[episodeId] = probe;
+    _episodeRetryProbeInFlight[probeKey] = probe;
     try {
       await probe;
     } finally {
-      if (identical(_episodeRetryProbeInFlight[episodeId], probe)) {
-        _episodeRetryProbeInFlight.remove(episodeId);
+      if (identical(_episodeRetryProbeInFlight[probeKey], probe)) {
+        _episodeRetryProbeInFlight.remove(probeKey);
       }
     }
   }
@@ -594,6 +659,35 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     }
   }
 
+  Future<void> _retryImageAfterAutomaticProbe({
+    required _AutomaticImageRecoveryKey recoveryKey,
+    required Future<void> probe,
+  }) async {
+    await probe;
+    if (_manualImageRetryRequests.contains(recoveryKey) ||
+        !_ownsEpisodeOperation(
+          episodeId: recoveryKey.episodeId,
+          generation: recoveryKey.generation,
+        )) {
+      return;
+    }
+    final latest = state.value;
+    if (latest == null ||
+        recoveryKey.imageIndex < 0 ||
+        recoveryKey.imageIndex >= latest.images.length) {
+      return;
+    }
+    final image = latest.images[recoveryKey.imageIndex];
+    if (image.imageUrl != recoveryKey.imageUrl || !image.failed) {
+      return;
+    }
+    final updatedImages = List<ComicReaderImageState>.of(latest.images);
+    updatedImages[recoveryKey.imageIndex] = image.copyWith(
+      retryRevision: image.retryRevision + 1,
+    );
+    state = AsyncData(latest.copyWith(images: updatedImages));
+  }
+
   Future<ComicReaderEpisodeRefreshResult> refreshCurrentEpisode() async {
     final current = state.value;
     if (current == null ||
@@ -607,6 +701,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     final previousImageUrl = current.currentImage?.imageUrl;
     final previousIndex = current.currentImageIndex;
     final generation = ++_episodeOperationGeneration;
+    _clearAutomaticImageRecoveryTracking();
     _cancelScheduledProgressPersistence();
     state = AsyncData(
       current.copyWith(isRefreshingEpisode: true, clearNotice: true),
@@ -726,6 +821,11 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
         _episodeOperationGeneration == generation;
   }
 
+  void _clearAutomaticImageRecoveryTracking() {
+    _automaticImageRecoveryAttempts.clear();
+    _manualImageRetryRequests.clear();
+  }
+
   void _finishEpisodeRefresh({
     required String episodeId,
     required int generation,
@@ -786,6 +886,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     }
 
     _episodeOperationGeneration += 1;
+    _clearAutomaticImageRecoveryTracking();
     state = AsyncData(
       current.copyWith(isSwitchingEpisode: true, clearNotice: true),
     );
@@ -937,6 +1038,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (image.imageUrl != imageUrl) {
       return;
     }
+    final recoveryKey = (
+      episodeId: current.episodeId,
+      generation: _episodeOperationGeneration,
+      imageIndex: clampedIndex,
+      imageUrl: imageUrl,
+    );
+    _automaticImageRecoveryAttempts.remove(recoveryKey);
+    _manualImageRetryRequests.remove(recoveryKey);
     _resolvedImageIndexes.add(clampedIndex);
     if (!_firstImageVisibleLogged) {
       _firstImageVisibleLogged = true;
@@ -1035,6 +1144,20 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     if (image.imageUrl != imageUrl) {
       return;
     }
+    final generation = _episodeOperationGeneration;
+    final recoveryKey = (
+      episodeId: current.episodeId,
+      generation: generation,
+      imageIndex: clampedIndex,
+      imageUrl: imageUrl,
+    );
+    final automaticProbe = _automaticImageRecoveryAttempts.add(recoveryKey)
+        ? _requestEpisodeRetryProbe(
+            episodeId: current.episodeId,
+            sourceTid: current.sourceTid,
+            generation: generation,
+          )
+        : null;
     await _repository.updateEpisodeImageCacheStatus(
       episodeId: current.episodeId,
       imageUrl: imageUrl,
@@ -1073,6 +1196,14 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       totalPages: latest.images.length,
       extra: <String, Object?>{'imageUrl': imageUrl},
     );
+    if (automaticProbe != null) {
+      unawaited(
+        _retryImageAfterAutomaticProbe(
+          recoveryKey: recoveryKey,
+          probe: automaticProbe,
+        ),
+      );
+    }
   }
 
   /// Flushes the latest progress when the reader is closed.

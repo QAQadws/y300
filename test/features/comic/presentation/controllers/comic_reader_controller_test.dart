@@ -513,6 +513,8 @@ void main() {
       );
 
       expect(writer.completedEpisodeIds, isEmpty);
+      expect(service.fetchEpisodeImagesCalls, <String>['101']);
+      expect(repository.replaceEpisodeImagesCallCount, 0);
       expect(
         repository.cacheStatusWrites,
         contains(
@@ -529,6 +531,7 @@ void main() {
         comicReaderControllerProvider(args).future,
       );
       expect(state.failedImageCount, greaterThanOrEqualTo(1));
+      expect(state.imageSessionRevision, 0);
     },
   );
 
@@ -1246,6 +1249,11 @@ void main() {
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
+      final subscription = container.listen(
+        comicReaderControllerProvider(args),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
       await container.read(comicReaderControllerProvider(args).future);
       final controller = container.read(
         comicReaderControllerProvider(args).notifier,
@@ -1268,6 +1276,241 @@ void main() {
       expect(repository.replaceEpisodeImagesCallCount, 0);
     },
   );
+
+  test(
+    'concurrent display failures share one automatic chapter probe',
+    () async {
+      final repository = _ReaderRepoForControllerTest();
+      final service = _ReaderServiceSpy();
+      final writer = _ReadingStateWriterSpy(repository);
+      final container = ProviderContainer(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(repository),
+          comicReadingStateWriterProvider.overrideWithValue(writer),
+          comicReaderServiceProvider.overrideWith((ref) async => service),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+      );
+      addTearDown(container.dispose);
+      const args = ComicReaderArgs(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:101',
+      );
+      final subscription = container.listen(
+        comicReaderControllerProvider(args),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      await container.read(comicReaderControllerProvider(args).future);
+      final controller = container.read(
+        comicReaderControllerProvider(args).notifier,
+      );
+      service.fetchCompleter = Completer<ComicEpisodeImagesFetchResult>();
+
+      final firstFailure = controller.onImageDisplayFailed(
+        imageIndex: 4,
+        imageUrl: 'https://img.test/101-5.jpg',
+      );
+      final secondFailure = controller.onImageDisplayFailed(
+        imageIndex: 3,
+        imageUrl: 'https://img.test/101-4.jpg',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(service.fetchEpisodeImagesCalls, <String>['101']);
+      service.fetchCompleter!.complete(
+        const ComicEpisodeImagesFetched(<String>['https://img.test/new.jpg']),
+      );
+      await Future.wait(<Future<void>>[firstFailure, secondFailure]);
+      await Future<void>.delayed(Duration.zero);
+      final state = container
+          .read(comicReaderControllerProvider(args))
+          .requireValue;
+      expect(state.images[3].retryRevision, 1);
+      expect(state.images[4].retryRevision, 1);
+      expect(repository.replaceEpisodeImagesCallCount, 0);
+
+      await controller.onImageDisplayFailed(
+        imageIndex: 4,
+        imageUrl: 'https://img.test/101-5.jpg',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(service.fetchEpisodeImagesCalls, <String>['101']);
+      expect(
+        container
+            .read(comicReaderControllerProvider(args))
+            .requireValue
+            .images[4]
+            .retryRevision,
+        1,
+      );
+    },
+  );
+
+  test('a later display failure can start a new automatic probe', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(
+          _NoopComicDownloadService(),
+        ),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+    const args = ComicReaderArgs(
+      comicId: 'yamibo:100',
+      episodeId: 'yamibo:100:101',
+    );
+    final subscription = container.listen(
+      comicReaderControllerProvider(args),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    await container.read(comicReaderControllerProvider(args).future);
+    final controller = container.read(
+      comicReaderControllerProvider(args).notifier,
+    );
+
+    await controller.onImageDisplayFailed(
+      imageIndex: 4,
+      imageUrl: 'https://img.test/101-5.jpg',
+    );
+    await Future<void>.delayed(Duration.zero);
+    await controller.onImageDisplayFailed(
+      imageIndex: 3,
+      imageUrl: 'https://img.test/101-4.jpg',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(service.fetchEpisodeImagesCalls, <String>['101', '101']);
+    final state = container
+        .read(comicReaderControllerProvider(args))
+        .requireValue;
+    expect(state.images[3].retryRevision, 1);
+    expect(state.images[4].retryRevision, 1);
+  });
+
+  test(
+    'manual retry joins a failed automatic probe and can probe again afterward',
+    () async {
+      final repository = _ReaderRepoForControllerTest();
+      final service = _ReaderServiceSpy();
+      final writer = _ReadingStateWriterSpy(repository);
+      final container = ProviderContainer(
+        overrides: [
+          comicRepositoryProvider.overrideWithValue(repository),
+          comicReadingStateWriterProvider.overrideWithValue(writer),
+          comicReaderServiceProvider.overrideWith((ref) async => service),
+          comicDownloadServiceProvider.overrideWithValue(
+            _NoopComicDownloadService(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+        ],
+      );
+      addTearDown(container.dispose);
+      const args = ComicReaderArgs(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:101',
+      );
+      final subscription = container.listen(
+        comicReaderControllerProvider(args),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      await container.read(comicReaderControllerProvider(args).future);
+      final controller = container.read(
+        comicReaderControllerProvider(args).notifier,
+      );
+      service.fetchCompleter = Completer<ComicEpisodeImagesFetchResult>();
+
+      final displayFailure = controller.onImageDisplayFailed(
+        imageIndex: 4,
+        imageUrl: 'https://img.test/101-5.jpg',
+      );
+      final joinedManualRetry = controller.prepareImageRetry(
+        expectedEpisodeId: 'yamibo:100:101',
+        imageIndex: 4,
+        imageUrl: 'https://img.test/101-5.jpg',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(service.fetchEpisodeImagesCalls, <String>['101']);
+      service.fetchCompleter!.completeError(StateError('probe failed'));
+      await Future.wait(<Future<void>>[displayFailure, joinedManualRetry]);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        container
+            .read(comicReaderControllerProvider(args))
+            .requireValue
+            .images[4]
+            .retryRevision,
+        0,
+      );
+
+      service.fetchCompleter = Completer<ComicEpisodeImagesFetchResult>();
+      final laterManualRetry = controller.prepareImageRetry(
+        expectedEpisodeId: 'yamibo:100:101',
+        imageIndex: 4,
+        imageUrl: 'https://img.test/101-5.jpg',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(service.fetchEpisodeImagesCalls, <String>['101', '101']);
+      service.fetchCompleter!.complete(
+        const ComicEpisodeImagesFetched(<String>['https://img.test/new.jpg']),
+      );
+      await laterManualRetry;
+    },
+  );
+
+  test('stale display failure does not start an automatic probe', () async {
+    final repository = _ReaderRepoForControllerTest();
+    final service = _ReaderServiceSpy();
+    final writer = _ReadingStateWriterSpy(repository);
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(writer),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(
+          _NoopComicDownloadService(),
+        ),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+    const args = ComicReaderArgs(
+      comicId: 'yamibo:100',
+      episodeId: 'yamibo:100:101',
+    );
+    final subscription = container.listen(
+      comicReaderControllerProvider(args),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    await container.read(comicReaderControllerProvider(args).future);
+    final controller = container.read(
+      comicReaderControllerProvider(args).notifier,
+    );
+
+    await controller.onImageDisplayFailed(
+      imageIndex: 4,
+      imageUrl: 'https://img.test/101-5.jpg',
+      expectedEpisodeId: 'yamibo:100:102',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(service.fetchEpisodeImagesCalls, isEmpty);
+    expect(repository.cacheStatusWrites, isEmpty);
+  });
 
   test('refresh replaces image URLs and preserves the current image', () async {
     final repository = _ReaderRepoForControllerTest();
