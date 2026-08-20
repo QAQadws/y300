@@ -73,12 +73,8 @@ class _WafChallengeBackgroundWebViewState
       initialUrlRequest: inapp.URLRequest(
         url: inapp.WebUri(widget.initialUri.toString()),
       ),
-      initialSettings: inapp.InAppWebViewSettings(
-        javaScriptEnabled: true,
+      initialSettings: buildWafChallengeBackgroundWebViewSettings(
         userAgent: _effectiveUserAgent,
-        thirdPartyCookiesEnabled: true,
-        clearCache: false,
-        transparentBackground: false,
       ),
       onWebViewCreated: (_) {
         _debugEvent('browser_created');
@@ -205,4 +201,29 @@ class _WafChallengeBackgroundWebViewState
       'elapsedMs=${_stopwatch.elapsedMilliseconds}',
     );
   }
+}
+
+@visibleForTesting
+inapp.InAppWebViewSettings buildWafChallengeBackgroundWebViewSettings({
+  required String userAgent,
+}) {
+  return inapp.InAppWebViewSettings(
+    javaScriptEnabled: true,
+    userAgent: userAgent,
+    thirdPartyCookiesEnabled: true,
+    clearCache: false,
+    transparentBackground: false,
+    // This browser never accepts input. Texture-layer composition keeps its
+    // lifecycle inside Flutter's compositor instead of switching the whole
+    // application surface when the Android platform view is attached.
+    useHybridComposition: false,
+    needInitialFocus: false,
+    verticalScrollBarEnabled: false,
+    horizontalScrollBarEnabled: false,
+    disableVerticalScroll: true,
+    disableHorizontalScroll: true,
+    supportZoom: false,
+    builtInZoomControls: false,
+    displayZoomControls: false,
+  );
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -47,14 +48,22 @@ class WafChallengeRecoveryHost extends ConsumerStatefulWidget {
 class _WafChallengeRecoveryHostState
     extends ConsumerState<WafChallengeRecoveryHost>
     with WidgetsBindingObserver {
+  static const Duration _surfaceRetirementDeadline = Duration(milliseconds: 80);
+
   WafChallengeRecoveryDetach? _detachLauncher;
+  late final ValueNotifier<_BackgroundRecoveryRun?> _runNotifier;
   _BackgroundRecoveryRun? _activeRun;
+  _BackgroundRecoveryRun? _retiringRun;
   bool _isForeground = true;
   int _nextGeneration = 0;
+  int _retirementGeneration = 0;
+  Timer? _surfaceRetirementTimer;
+  Completer<void>? _surfaceRetirementCompleter;
 
   @override
   void initState() {
     super.initState();
+    _runNotifier = ValueNotifier<_BackgroundRecoveryRun?>(null);
     WidgetsBinding.instance.addObserver(this);
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
     _isForeground =
@@ -68,7 +77,7 @@ class _WafChallengeRecoveryHostState
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _isForeground = state == AppLifecycleState.resumed;
     if (!_isForeground) {
-      _finishActive(WafChallengeRecoveryResult.unavailable);
+      _abortRecovery(WafChallengeRecoveryResult.unavailable);
     }
   }
 
@@ -77,41 +86,37 @@ class _WafChallengeRecoveryHostState
     _detachLauncher?.call();
     _detachLauncher = null;
     WidgetsBinding.instance.removeObserver(this);
-    _finishActive(
+    _abortRecovery(
       WafChallengeRecoveryResult.unavailable,
-      notifyListeners: false,
+      notifyBackground: false,
     );
+    _runNotifier.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final run = _activeRun;
     final backgroundBuilder = ref.watch(wafChallengeBackgroundBuilderProvider);
     return Stack(
       key: const Key('waf-challenge-recovery-host'),
       fit: StackFit.expand,
       children: <Widget>[
-        if (run != null)
-          Positioned.fill(
-            child: ExcludeSemantics(
-              child: IgnorePointer(
-                child: KeyedSubtree(
-                  key: ValueKey<int>(run.generation),
-                  child: backgroundBuilder(
-                    request: run.request,
-                    onCompleted: (result) => _finish(run, result),
-                  ),
-                ),
-              ),
+        Positioned.fill(
+          child: ValueListenableBuilder<_BackgroundRecoveryRun?>(
+            valueListenable: _runNotifier,
+            builder: (context, run, _) => _WafChallengeBackgroundSlot(
+              run: run,
+              backgroundBuilder: backgroundBuilder,
+              onCompleted: _finish,
             ),
           ),
-        if (run != null)
-          Positioned.fill(
-            key: const Key('waf-challenge-background-cover'),
-            child: ColoredBox(color: Theme.of(context).scaffoldBackgroundColor),
+        ),
+        Positioned.fill(
+          child: RepaintBoundary(
+            key: const Key('waf-challenge-foreground-content'),
+            child: widget.child,
           ),
-        widget.child,
+        ),
       ],
     );
   }
@@ -124,15 +129,16 @@ class _WafChallengeRecoveryHostState
         WafChallengeRecoveryResult.unavailable,
       );
     }
-    final activeRun = _activeRun;
-    if (activeRun != null) {
-      return activeRun.completion.future;
+    final existingRun = _activeRun ?? _retiringRun;
+    if (existingRun != null) {
+      return existingRun.completion.future;
     }
     final run = _BackgroundRecoveryRun(
       generation: ++_nextGeneration,
       request: request,
     );
-    setState(() => _activeRun = run);
+    _activeRun = run;
+    _runNotifier.value = run;
     return run.completion.future;
   }
 
@@ -140,24 +146,130 @@ class _WafChallengeRecoveryHostState
     if (!identical(_activeRun, run)) {
       return;
     }
-    _finishActive(result);
+    _activeRun = null;
+    _retiringRun = run;
+    _runNotifier.value = null;
+    final retirementGeneration = ++_retirementGeneration;
+    unawaited(
+      _completeAfterSurfaceRetirement(run, result, retirementGeneration),
+    );
   }
 
-  void _finishActive(
-    WafChallengeRecoveryResult result, {
-    bool notifyListeners = true,
-  }) {
-    final run = _activeRun;
-    if (run == null) {
+  Future<void> _completeAfterSurfaceRetirement(
+    _BackgroundRecoveryRun run,
+    WafChallengeRecoveryResult result,
+    int retirementGeneration,
+  ) async {
+    await _waitForSurfaceRetirement();
+    if (!mounted ||
+        retirementGeneration != _retirementGeneration ||
+        !identical(_retiringRun, run)) {
       return;
     }
-    _activeRun = null;
-    if (notifyListeners && mounted) {
-      setState(() {});
-    }
+    _retiringRun = null;
     if (!run.completion.isCompleted) {
       run.completion.complete(result);
     }
+  }
+
+  void _abortRecovery(
+    WafChallengeRecoveryResult result, {
+    bool notifyBackground = true,
+  }) {
+    final activeRun = _activeRun;
+    final retiringRun = _retiringRun;
+    _activeRun = null;
+    _retiringRun = null;
+    _retirementGeneration += 1;
+    _completeSurfaceRetirementWait();
+    if (notifyBackground) {
+      _runNotifier.value = null;
+    }
+    _completeRun(activeRun, result);
+    if (!identical(retiringRun, activeRun)) {
+      _completeRun(retiringRun, result);
+    }
+  }
+
+  void _completeRun(
+    _BackgroundRecoveryRun? run,
+    WafChallengeRecoveryResult result,
+  ) {
+    if (run == null || run.completion.isCompleted) {
+      return;
+    }
+    run.completion.complete(result);
+  }
+
+  Future<void> _waitForSurfaceRetirement() {
+    _completeSurfaceRetirementWait();
+    final completer = Completer<void>();
+    _surfaceRetirementCompleter = completer;
+    _surfaceRetirementTimer = Timer(
+      _surfaceRetirementDeadline,
+      _completeSurfaceRetirementWait,
+    );
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (identical(_surfaceRetirementCompleter, completer)) {
+        _completeSurfaceRetirementWait();
+      }
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
+    return completer.future;
+  }
+
+  void _completeSurfaceRetirementWait() {
+    _surfaceRetirementTimer?.cancel();
+    _surfaceRetirementTimer = null;
+    final completer = _surfaceRetirementCompleter;
+    _surfaceRetirementCompleter = null;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+}
+
+class _WafChallengeBackgroundSlot extends StatelessWidget {
+  const _WafChallengeBackgroundSlot({
+    required this.run,
+    required this.backgroundBuilder,
+    required this.onCompleted,
+  });
+
+  final _BackgroundRecoveryRun? run;
+  final WafChallengeBackgroundBuilder backgroundBuilder;
+  final void Function(
+    _BackgroundRecoveryRun run,
+    WafChallengeRecoveryResult result,
+  )
+  onCompleted;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentRun = run;
+    if (currentRun == null) {
+      return const SizedBox.expand(key: Key('waf-challenge-background-idle'));
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        ExcludeSemantics(
+          child: IgnorePointer(
+            child: KeyedSubtree(
+              key: ValueKey<int>(currentRun.generation),
+              child: backgroundBuilder(
+                request: currentRun.request,
+                onCompleted: (result) => onCompleted(currentRun, result),
+              ),
+            ),
+          ),
+        ),
+        ColoredBox(
+          key: const Key('waf-challenge-background-cover'),
+          color: Theme.of(context).scaffoldBackgroundColor,
+        ),
+      ],
+    );
   }
 }
 
