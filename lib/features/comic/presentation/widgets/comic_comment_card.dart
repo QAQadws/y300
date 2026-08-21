@@ -5,6 +5,7 @@ import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 
 /// A read-only reply surface built from the parser-mode post card.
 ///
@@ -65,6 +66,7 @@ class _ComicCommentCardState extends State<ComicCommentCard> {
       imageHeaderBuilder: widget.imageHeaderBuilder,
       palette: ThreadDetailNativePalette.resolve(Theme.of(context)),
       interactionPolicy: const ThreadPostCardInteractionPolicy.readOnly(),
+      avatarFallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
       renderContext: renderContext,
     );
   }

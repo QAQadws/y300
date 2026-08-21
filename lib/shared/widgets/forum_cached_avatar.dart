@@ -8,6 +8,8 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
+enum ForumAvatarFallbackPolicy { neutralSurface, localDefaultAvatar }
+
 class ForumCachedAvatar extends ConsumerWidget {
   static const Duration fadeInDuration = ForumMediaLoadingStyle.fadeInDuration;
 
@@ -18,6 +20,7 @@ class ForumCachedAvatar extends ConsumerWidget {
     required this.ownerType,
     required this.size,
     this.headerBuilder,
+    this.fallbackPolicy = ForumAvatarFallbackPolicy.neutralSurface,
   });
 
   final String? imageUrl;
@@ -25,6 +28,7 @@ class ForumCachedAvatar extends ConsumerWidget {
   final ImageCacheOwnerType ownerType;
   final double size;
   final ImageRequestHeaderBuilder? headerBuilder;
+  final ForumAvatarFallbackPolicy fallbackPolicy;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,6 +39,11 @@ class ForumCachedAvatar extends ConsumerWidget {
         theme.scaffoldBackgroundColor,
       ),
     );
+    final localDefaultAvatar = _buildLocalDefaultAvatar(fallback);
+    final unavailableAvatar =
+        fallbackPolicy == ForumAvatarFallbackPolicy.localDefaultAvatar
+        ? localDefaultAvatar
+        : fallback;
     final url = imageUrl?.trim();
     final uri = _remoteUriOrNull(url);
     final isDefaultAvatar = isForumDefaultAvatarUrl(url);
@@ -55,21 +64,20 @@ class ForumCachedAvatar extends ConsumerWidget {
                 ),
               )
         : null;
-    final child = isDefaultAvatar || request != null
+    final child = isDefaultAvatar
+        ? localDefaultAvatar
+        : request != null
         ? CachedLibraryImage(
             request: request,
-            imageProviderOverride: isDefaultAvatar
-                ? const AssetImage(forumDefaultAvatarAsset)
-                : null,
             fit: BoxFit.cover,
             width: size,
             height: size,
             placeholder: fallback,
-            errorPlaceholder: fallback,
+            errorPlaceholder: unavailableAvatar,
             headerBuilder: headerBuilder,
             fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
           )
-        : fallback;
+        : unavailableAvatar;
     return SizedBox(
       key: const Key('forum-cached-avatar'),
       width: size,
@@ -80,6 +88,19 @@ class ForumCachedAvatar extends ConsumerWidget {
 
   static Color placeholderColorFor(Color backgroundColor) {
     return ForumMediaLoadingStyle.placeholderColorFor(backgroundColor);
+  }
+
+  Widget _buildLocalDefaultAvatar(Widget placeholder) {
+    return CachedLibraryImage(
+      request: null,
+      imageProviderOverride: const AssetImage(forumDefaultAvatarAsset),
+      fit: BoxFit.cover,
+      width: size,
+      height: size,
+      placeholder: placeholder,
+      errorPlaceholder: placeholder,
+      fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
+    );
   }
 
   Uri? _remoteUriOrNull(String? url) {

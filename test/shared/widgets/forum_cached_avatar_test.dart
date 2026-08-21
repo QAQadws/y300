@@ -80,6 +80,70 @@ void main() {
     expect(image.fadeInDuration, const Duration(milliseconds: 300));
   });
 
+  testWidgets('can use the local default avatar for an unavailable source', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        const ForumCachedAvatar(
+          imageUrl: '',
+          ownerId: '2',
+          ownerType: ImageCacheOwnerType.profile,
+          size: 32,
+          fallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
+        ),
+      ),
+    );
+
+    final image = tester.widget<CachedLibraryImage>(
+      find.byType(CachedLibraryImage),
+    );
+    expect(image.request, isNull);
+    expect(
+      image.imageProviderOverride,
+      isA<AssetImage>().having(
+        (provider) => provider.assetName,
+        'assetName',
+        forumDefaultAvatarAsset,
+      ),
+    );
+    expect(image.placeholder, isA<ColoredBox>());
+    expect(image.fadeInDuration, ForumCachedAvatar.fadeInDuration);
+  });
+
+  testWidgets('can fall back to the local default after a network failure', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        const ForumCachedAvatar(
+          imageUrl:
+              'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/42_avatar_middle.jpg',
+          ownerId: '42',
+          ownerType: ImageCacheOwnerType.thread,
+          size: 34,
+          fallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
+        ),
+      ),
+    );
+
+    final remote = tester.widget<CachedLibraryImage>(
+      find.byType(CachedLibraryImage),
+    );
+    final localDefault = remote.errorPlaceholder as CachedLibraryImage;
+    expect(localDefault.request, isNull);
+    expect(
+      localDefault.imageProviderOverride,
+      isA<AssetImage>().having(
+        (provider) => provider.assetName,
+        'assetName',
+        forumDefaultAvatarAsset,
+      ),
+    );
+    expect(localDefault.placeholder, isA<ColoredBox>());
+    expect(localDefault.fadeInDuration, ForumCachedAvatar.fadeInDuration);
+  });
+
   testWidgets(
     'slightly darkens the active theme background without decoration',
     (tester) async {

@@ -559,6 +559,7 @@ class ThreadPostCard extends StatelessWidget {
     this.onOpenCommentAuthorProfile,
     this.onOpenPostActions,
     this.interactionPolicy = const ThreadPostCardInteractionPolicy.full(),
+    this.avatarFallbackPolicy = ForumAvatarFallbackPolicy.neutralSurface,
     this.renderContext,
   });
 
@@ -580,6 +581,7 @@ class ThreadPostCard extends StatelessWidget {
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)?
   onOpenPostActions;
   final ThreadPostCardInteractionPolicy interactionPolicy;
+  final ForumAvatarFallbackPolicy avatarFallbackPolicy;
   final ThreadPostRenderContext? renderContext;
 
   @override
@@ -655,6 +657,7 @@ class ThreadPostCard extends StatelessWidget {
                 authorId: post.authorId,
                 avatarUrl: post.avatarUrl,
                 imageHeaderBuilder: resolvedImageHeaderBuilder,
+                avatarFallbackPolicy: avatarFallbackPolicy,
                 onTap:
                     post.authorId.trim().isEmpty ||
                         authorProfileCallback == null

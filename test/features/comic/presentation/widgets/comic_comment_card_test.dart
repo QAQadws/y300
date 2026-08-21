@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -13,6 +14,8 @@ import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 void main() {
   testWidgets('renders comment metadata and shared HTML body', (tester) async {
@@ -42,9 +45,70 @@ void main() {
       find.byType(ForumHtmlWidgetPostRenderer),
     );
     expect(renderer.html, contains('评论正文'));
-    expect(find.byType(CachedLibraryImage), findsNothing);
+    final avatar = tester.widget<CachedLibraryImage>(
+      find.descendant(
+        of: find.byKey(const Key('thread-author-avatar-p5')),
+        matching: find.byType(CachedLibraryImage),
+      ),
+    );
+    expect(avatar.request, isNull);
+    expect(
+      avatar.imageProviderOverride,
+      isA<AssetImage>().having(
+        (provider) => provider.assetName,
+        'assetName',
+        forumDefaultAvatarAsset,
+      ),
+    );
+    expect(avatar.fadeInDuration, ForumCachedAvatar.fadeInDuration);
     expect(find.byType(ThreadPostCommentSection), findsNothing);
     expect(find.byType(ThreadPostRatingSection), findsNothing);
+  });
+
+  testWidgets('uses the shared cached avatar contract for remote authors', (
+    tester,
+  ) async {
+    const headers = _StaticImageRequestHeaderBuilder();
+    await tester.pumpWidget(
+      _host(
+        ComicCommentCard(
+          projection: ComicCommentItemProjection.raw(
+            _comment(
+              avatarUrl:
+                  'https://bbs.yamibo.com/uc_server/data/avatar/000/42/20/14_avatar_middle.jpg',
+            ),
+          ),
+          sourceTid: '573279',
+          imageHeaderBuilder: headers,
+        ),
+        imageCacheService: _NoopImageCacheService(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final avatar = tester.widget<CachedLibraryImage>(
+      find.descendant(
+        of: find.byKey(const Key('thread-author-avatar-p5')),
+        matching: find.byType(CachedLibraryImage),
+      ),
+    );
+    expect(avatar.request?.role, ImageCacheRole.avatar);
+    expect(avatar.request?.ownerType, ImageCacheOwnerType.thread);
+    expect(avatar.request?.ownerId, '422014');
+    expect(avatar.headerBuilder, same(headers));
+    expect(avatar.fadeInDuration, ForumCachedAvatar.fadeInDuration);
+
+    final localDefault = avatar.errorPlaceholder as CachedLibraryImage;
+    expect(
+      localDefault.imageProviderOverride,
+      isA<AssetImage>().having(
+        (provider) => provider.assetName,
+        'assetName',
+        forumDefaultAvatarAsset,
+      ),
+    );
+    expect(localDefault.fadeInDuration, ForumCachedAvatar.fadeInDuration);
   });
 
   testWidgets('passes ordinary images and emoticons to threadInline renderer', (
@@ -143,6 +207,7 @@ ComicCommentItem _comment({
   String dateline = '刚刚',
   int floorNumber = 5,
   String rawMessage = '<p>正文</p>',
+  String? avatarUrl,
 }) {
   return ComicCommentItem(
     pid: 'p5',
@@ -151,7 +216,7 @@ ComicCommentItem _comment({
     dateline: dateline,
     floorNumber: floorNumber,
     rawMessage: rawMessage,
-    avatarUrl: null,
+    avatarUrl: avatarUrl,
   );
 }
 
@@ -175,6 +240,15 @@ Widget _host(
       home: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   );
+}
+
+class _StaticImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
+  const _StaticImageRequestHeaderBuilder();
+
+  @override
+  Future<Map<String, String>> buildHeaders(String imageUrl) async {
+    return const <String, String>{'Referer': 'https://bbs.yamibo.com/'};
+  }
 }
 
 final class _FixedPreferencesRepository
