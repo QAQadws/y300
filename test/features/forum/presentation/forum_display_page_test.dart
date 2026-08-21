@@ -10,8 +10,11 @@ import 'package:y300/app/localization/app_server_content_conversion_provider.dar
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
@@ -1132,9 +1135,21 @@ void main() {
       expect(headImage.request?.role, ImageCacheRole.forumHeadImage);
       expect(headImage.request?.ownerId, 'forum:2');
       expect(
+        headImage.remoteDisplayPolicy,
+        CachedImageRemoteDisplayPolicy.afterCacheWrite,
+      );
+      expect(headImage.fadeInDuration, ForumCachedAvatar.fadeInDuration);
+      expect(
         headImage.request?.effectiveRetentionClass,
         ImageRetentionClass.sticky,
       );
+      expect(
+        tester
+            .getSize(find.byKey(const Key('forum-display-head-image')))
+            .height,
+        72,
+      );
+      expect(find.byIcon(Icons.image_not_supported_outlined), findsNothing);
       expect(find.text('全部'), findsOneWidget);
       expect(find.text('最新'), findsOneWidget);
       expect(
@@ -1200,6 +1215,46 @@ void main() {
       final threadBadgeDecoration = _decorationAroundText(tester, '投票');
       expect(threadBadgeDecoration.boxShadow, isNotNull);
       expect(threadBadgeDecoration.boxShadow, isNotEmpty);
+    });
+
+    testWidgets('restores the last known head image aspect ratio by forum', (
+      tester,
+    ) async {
+      final repository = _FakeForumDisplayRepository((_, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: page,
+            total: 1,
+            headImageUrl: 'https://bbs.yamibo.com/new-head.png',
+            threads: const <ForumThreadSummary>[],
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          extraOverrides: [
+            forumImageDimensionIndexProvider.overrideWithValue(
+              _FixedForumImageDimensionIndex(
+                const ForumImageDimensions(
+                  width: 1200,
+                  height: 300,
+                  source: ForumImageDimensionSource.cacheMetadata,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      final size = tester.getSize(
+        find.byKey(const Key('forum-display-head-image')),
+      );
+      expect(size.height, closeTo(size.width / 4, 0.01));
+      expect(find.byIcon(Icons.image_not_supported_outlined), findsNothing);
     });
 
     testWidgets('app bar gives the thread count all remaining width', (
@@ -1853,6 +1908,30 @@ class _ProjectionTestConverter implements TextConverter {
 
   @override
   Future<String> convertHtml(String html) async => html;
+}
+
+class _FixedForumImageDimensionIndex implements ForumImageDimensionIndex {
+  const _FixedForumImageDimensionIndex(this.dimensions);
+
+  final ForumImageDimensions? dimensions;
+
+  @override
+  Future<ForumImageDimensions?> getBySpec(ForumImageLoadSpec spec) async {
+    return dimensions;
+  }
+
+  @override
+  Future<ForumImageDimensions?> getLastKnownBySpec(
+    ForumImageLoadSpec spec,
+  ) async {
+    return dimensions;
+  }
+
+  @override
+  Future<void> recordDecodedDimensions({
+    required ForumImageLoadSpec spec,
+    required Size size,
+  }) async {}
 }
 
 class _NoopImageCacheService implements ImageCacheService {

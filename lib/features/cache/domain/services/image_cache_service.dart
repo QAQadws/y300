@@ -31,6 +31,18 @@ abstract class ImageCacheService {
   }
 }
 
+/// Optional cache capability for recovering layout hints by business owner.
+/// Keeping it separate avoids expanding every image-cache test double and
+/// consumer that only needs the basic download/cache contract.
+abstract interface class ImageCacheOwnerDimensionLookup {
+  Future<Size?> getLastKnownDimensions({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+    required ImageCacheRole role,
+    String? preferredCacheKey,
+  });
+}
+
 abstract class ImageCacheDimensionRecorder {
   Future<void> recordResolvedDimensions({
     required String cacheKey,

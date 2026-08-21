@@ -8,6 +8,8 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 abstract interface class ForumImageDimensionIndex {
   Future<ForumImageDimensions?> getBySpec(ForumImageLoadSpec spec);
 
+  Future<ForumImageDimensions?> getLastKnownBySpec(ForumImageLoadSpec spec);
+
   Future<void> recordDecodedDimensions({
     required ForumImageLoadSpec spec,
     required Size size,
@@ -38,6 +40,32 @@ class CacheRecordForumImageDimensionIndex implements ForumImageDimensionIndex {
     return ForumImageDimensions.fromCacheMetadata(
       width: result.width,
       height: result.height,
+    );
+  }
+
+  @override
+  Future<ForumImageDimensions?> getLastKnownBySpec(
+    ForumImageLoadSpec spec,
+  ) async {
+    final request = _imageRequestResolver.resolveCacheRequest(spec);
+    if (request == null) {
+      return null;
+    }
+    final cacheService = _imageCacheService;
+    if (cacheService is! ImageCacheOwnerDimensionLookup) {
+      return getBySpec(spec);
+    }
+    final lookup = cacheService as ImageCacheOwnerDimensionLookup;
+    final size = await lookup.getLastKnownDimensions(
+      ownerType: request.ownerType,
+      ownerId: request.ownerId,
+      role: request.role,
+      preferredCacheKey: request.cacheKey,
+    );
+    return ForumImageDimensions.fromValues(
+      width: size?.width,
+      height: size?.height,
+      source: ForumImageDimensionSource.cacheMetadata,
     );
   }
 

@@ -6,10 +6,10 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
 class ForumCachedAvatar extends ConsumerWidget {
-  static const Duration fadeInDuration = Duration(milliseconds: 300);
-  static const double placeholderDarkenAmount = 0.10;
+  static const Duration fadeInDuration = ForumMediaLoadingStyle.fadeInDuration;
 
   const ForumCachedAvatar({
     super.key,
@@ -31,7 +31,9 @@ class ForumCachedAvatar extends ConsumerWidget {
     final theme = Theme.of(context);
     final fallback = ColoredBox(
       key: const Key('forum-avatar-placeholder'),
-      color: placeholderColorFor(theme.scaffoldBackgroundColor),
+      color: ForumMediaLoadingStyle.placeholderColorFor(
+        theme.scaffoldBackgroundColor,
+      ),
     );
     final url = imageUrl?.trim();
     final uri = _remoteUriOrNull(url);
@@ -65,7 +67,7 @@ class ForumCachedAvatar extends ConsumerWidget {
             placeholder: fallback,
             errorPlaceholder: fallback,
             headerBuilder: headerBuilder,
-            fadeInDuration: fadeInDuration,
+            fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
           )
         : fallback;
     return SizedBox(
@@ -77,7 +79,7 @@ class ForumCachedAvatar extends ConsumerWidget {
   }
 
   static Color placeholderColorFor(Color backgroundColor) {
-    return Color.lerp(backgroundColor, Colors.black, placeholderDarkenAmount)!;
+    return ForumMediaLoadingStyle.placeholderColorFor(backgroundColor);
   }
 
   Uri? _remoteUriOrNull(String? url) {

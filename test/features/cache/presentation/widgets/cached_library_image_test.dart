@@ -263,6 +263,96 @@ void main() {
   });
 
   testWidgets(
+    'afterCacheWrite waits for one cache write before showing local image',
+    (tester) async {
+      final localFile = _createTempPng(tester);
+      final image = await tester.runAsync(
+        () => createTestImage(width: 4, height: 3, cache: false),
+      );
+      final testImage = image!;
+      addTearDown(testImage.dispose);
+      final cacheService = _ControlledImageCacheService();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(cacheService),
+          ],
+          child: LocalizedTestApp(
+            home: CachedLibraryImage(
+              request: _request('thread-image'),
+              fit: BoxFit.cover,
+              placeholder: const SizedBox(key: Key('placeholder')),
+              remoteImageProviderOverride: _SynchronousImageProvider(testImage),
+              remoteDisplayPolicy:
+                  CachedImageRemoteDisplayPolicy.afterCacheWrite,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      cacheService.completeGetCached('thread-image', null);
+      await tester.pump();
+      await tester.pump();
+
+      expect(cacheService.ensureStarted('thread-image'), isTrue);
+      expect(find.byType(Image), findsNothing);
+
+      cacheService.completeEnsure(
+        'thread-image',
+        CachedImageResult(
+          success: true,
+          cacheKey: 'thread-image',
+          localPath: localFile.path,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(cacheService.getCachedCount('thread-image'), 1);
+      expect(find.byType(Image), findsOneWidget);
+      expect(
+        _underlyingProvider(tester.widget<Image>(find.byType(Image)).image),
+        isA<FileImage>(),
+      );
+    },
+  );
+
+  testWidgets('afterCacheWrite failure settles on the error placeholder', (
+    tester,
+  ) async {
+    final cacheService = _ControlledImageCacheService();
+    var failedCount = 0;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: LocalizedTestApp(
+          home: CachedLibraryImage(
+            request: _request('thread-image'),
+            fit: BoxFit.cover,
+            placeholder: const SizedBox(key: Key('placeholder')),
+            errorPlaceholder: const SizedBox(key: Key('error-placeholder')),
+            remoteDisplayPolicy: CachedImageRemoteDisplayPolicy.afterCacheWrite,
+            onImageFailed: () => failedCount += 1,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    cacheService.completeGetCached('thread-image', null);
+    await tester.pump();
+    await tester.pump();
+    cacheService.completeEnsure('thread-image', CachedImageResult.failed);
+    await tester.pump();
+    await tester.pump();
+
+    expect(failedCount, 1);
+    expect(find.byKey(const Key('error-placeholder')), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+  });
+
+  testWidgets(
     'keeps displayed remote image instead of switching to local file mid-frame',
     (tester) async {
       final image = await tester.runAsync(

@@ -69,6 +69,9 @@ final class ForumDisplayContentProjection {
           .map((entry) => '${entry.key}=${entry.value}')
           .join('&'),
       forumContentTextHash(source.title),
+      source.headImageUrl,
+      source.headImageDimensions?.width,
+      source.headImageDimensions?.height,
       source.threads.length,
     ];
     for (final item in source.primaryFilters) {

@@ -435,6 +435,72 @@ void main() {
     },
   );
 
+  test(
+    'last known dimensions prefer current key then newest matching owner',
+    () async {
+      final repository = _MemoryImageCacheRepository()
+        ..records['current-head'] = CachedImageRecord(
+          cacheKey: 'current-head',
+          ownerType: ImageCacheOwnerType.forum.dbValue,
+          ownerId: 'forum:30',
+          role: ImageCacheRole.forumHeadImage.dbValue,
+          bytes: 1,
+          width: 1200,
+          height: 300,
+          protected: false,
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+        )
+        ..records['newer-head'] = CachedImageRecord(
+          cacheKey: 'newer-head',
+          ownerType: ImageCacheOwnerType.forum.dbValue,
+          ownerId: 'forum:30',
+          role: ImageCacheRole.forumHeadImage.dbValue,
+          bytes: 1,
+          width: 1600,
+          height: 500,
+          protected: false,
+          createdAt: DateTime(2026, 1, 2),
+          updatedAt: DateTime(2026, 1, 2),
+        )
+        ..records['other-forum'] = CachedImageRecord(
+          cacheKey: 'other-forum',
+          ownerType: ImageCacheOwnerType.forum.dbValue,
+          ownerId: 'forum:33',
+          role: ImageCacheRole.forumHeadImage.dbValue,
+          bytes: 1,
+          width: 999,
+          height: 111,
+          protected: false,
+          createdAt: DateTime(2026, 1, 3),
+          updatedAt: DateTime(2026, 1, 3),
+        );
+      final service = DefaultImageCacheService(
+        repository: repository,
+        cacheManagerFuture: Future<BaseCacheManager>.value(
+          _UnusedCacheManager(),
+        ),
+        directoryResolver: const ImageCacheDirectoryResolver(),
+      );
+
+      final current = await service.getLastKnownDimensions(
+        ownerType: ImageCacheOwnerType.forum,
+        ownerId: 'forum:30',
+        role: ImageCacheRole.forumHeadImage,
+        preferredCacheKey: 'current-head',
+      );
+      final latest = await service.getLastKnownDimensions(
+        ownerType: ImageCacheOwnerType.forum,
+        ownerId: 'forum:30',
+        role: ImageCacheRole.forumHeadImage,
+        preferredCacheKey: 'missing-head',
+      );
+
+      expect(current, const Size(1200, 300));
+      expect(latest, const Size(1600, 500));
+    },
+  );
+
   test('clearUnprotected spares sticky long-term cache', () async {
     final repository = _MemoryImageCacheRepository()
       ..records['thread-1'] = CachedImageRecord(

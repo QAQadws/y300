@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
@@ -11,6 +12,7 @@ import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
@@ -90,6 +92,7 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
                 url: state.headImageUrl!.trim(),
                 label: widget.projection.displayTitle,
                 palette: palette,
+                initialDimensions: state.headImageDimensions,
               ),
             ),
           if (displayPrimaryFilters.isNotEmpty || displayTypeFilters.isNotEmpty)
@@ -570,65 +573,143 @@ class ForumDisplayErrorView extends StatelessWidget {
   }
 }
 
-class _ForumHeadImage extends ConsumerWidget {
+class _ForumHeadImage extends ConsumerStatefulWidget {
   const _ForumHeadImage({
     super.key,
     required this.fid,
     required this.url,
     required this.label,
     required this.palette,
+    required this.initialDimensions,
   });
 
   final String fid;
   final String url;
   final String label;
   final ForumDisplayThemePalette palette;
+  final ForumImageDimensions? initialDimensions;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ForumHeadImage> createState() => _ForumHeadImageState();
+}
+
+class _ForumHeadImageState extends ConsumerState<_ForumHeadImage> {
+  static const double _fallbackHeight = 72;
+
+  ForumImageDimensions? _dimensions;
+  bool _resolvedCurrentSource = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _dimensions = _validDimensions(widget.initialDimensions);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ForumHeadImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final sourceChanged =
+        oldWidget.fid != widget.fid || oldWidget.url != widget.url;
+    if (sourceChanged) {
+      _resolvedCurrentSource = false;
+      _dimensions = _validDimensions(widget.initialDimensions);
+      return;
+    }
+    if (!_resolvedCurrentSource &&
+        oldWidget.initialDimensions != widget.initialDimensions) {
+      _dimensions = _validDimensions(widget.initialDimensions);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final spec = const ForumChromeImageAdapter().headImage(
-      fid: fid,
-      imageUrl: url,
+      fid: widget.fid,
+      imageUrl: widget.url,
     );
     final request = spec == null
         ? null
         : ref
               .watch(forumImageRequestResolverProvider)
               .resolveCacheRequest(spec);
-    return ColoredBox(
-      key: const Key('forum-display-head-image'),
-      color: palette.panel,
-      child: CachedLibraryImage(
-        request: request,
-        width: double.infinity,
-        placeholder: _ForumHeadImageErrorPlaceholder(palette: palette),
-        errorPlaceholder: _ForumHeadImageErrorPlaceholder(palette: palette),
-        headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
-        fit: BoxFit.fitWidth,
+    final theme = Theme.of(context);
+    final placeholder = ColoredBox(
+      key: const Key('forum-head-image-placeholder'),
+      color: ForumMediaLoadingStyle.placeholderColorFor(
+        theme.scaffoldBackgroundColor,
+      ),
+    );
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : ForumMediaLoadingStyle.fadeInDuration;
+    final sourceIdentity = '${widget.fid}\u0000${widget.url}';
+    return Semantics(
+      image: true,
+      label: widget.label,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availableWidth = constraints.hasBoundedWidth
+              ? constraints.maxWidth
+              : MediaQuery.sizeOf(context).width;
+          final dimensions = _validDimensions(_dimensions);
+          final targetHeight = dimensions == null
+              ? _fallbackHeight
+              : availableWidth / dimensions.aspectRatio;
+          return ColoredBox(
+            key: const Key('forum-display-head-image'),
+            color: widget.palette.panel,
+            child: AnimatedSize(
+              duration: duration,
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: double.infinity,
+                height: targetHeight,
+                child: ClipRect(
+                  child: CachedLibraryImage(
+                    request: request,
+                    width: double.infinity,
+                    height: targetHeight,
+                    decodeDisplaySize: Size(availableWidth, targetHeight),
+                    placeholder: placeholder,
+                    errorPlaceholder: placeholder,
+                    headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+                    fit: BoxFit.fitWidth,
+                    fadeInDuration: duration,
+                    remoteDisplayPolicy:
+                        CachedImageRemoteDisplayPolicy.afterCacheWrite,
+                    onImageResolved: (size) =>
+                        _handleImageResolved(size, sourceIdentity),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
-}
 
-class _ForumHeadImageErrorPlaceholder extends StatelessWidget {
-  const _ForumHeadImageErrorPlaceholder({required this.palette});
-
-  final ForumDisplayThemePalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 72,
-      child: ColoredBox(
-        color: palette.disabled,
-        child: Center(
-          child: Icon(
-            Icons.image_not_supported_outlined,
-            color: palette.softText,
-          ),
-        ),
-      ),
+  void _handleImageResolved(Size size, String sourceIdentity) {
+    if (sourceIdentity != '${widget.fid}\u0000${widget.url}') {
+      return;
+    }
+    final dimensions = ForumImageDimensions.fromValues(
+      width: size.width,
+      height: size.height,
+      source: ForumImageDimensionSource.decodedImage,
     );
+    if (!mounted || dimensions == null || dimensions == _dimensions) {
+      return;
+    }
+    setState(() {
+      _resolvedCurrentSource = true;
+      _dimensions = dimensions;
+    });
+  }
+
+  ForumImageDimensions? _validDimensions(ForumImageDimensions? dimensions) {
+    return dimensions?.isValid == true ? dimensions : null;
   }
 }
 

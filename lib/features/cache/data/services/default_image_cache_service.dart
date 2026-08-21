@@ -46,6 +46,7 @@ class CacheManagerImageFileDownloader implements ImageFileDownloader {
 class DefaultImageCacheService
     implements
         ImageCacheService,
+        ImageCacheOwnerDimensionLookup,
         ImageCacheDimensionRecorder,
         CacheBudgetParticipant {
   DefaultImageCacheService({
@@ -240,6 +241,82 @@ class DefaultImageCacheService
       width: record.width,
       height: record.height,
     );
+  }
+
+  @override
+  Future<Size?> getLastKnownDimensions({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+    required ImageCacheRole role,
+    String? preferredCacheKey,
+  }) async {
+    final normalizedOwnerId = ownerId.trim();
+    if (normalizedOwnerId.isEmpty) {
+      return null;
+    }
+    final preferredKey = preferredCacheKey?.trim();
+    if (preferredKey != null && preferredKey.isNotEmpty) {
+      final preferred = await _repository.getByKey(preferredKey);
+      final preferredSize = _dimensionsForRecord(
+        preferred,
+        ownerType: ownerType,
+        ownerId: normalizedOwnerId,
+        role: role,
+      );
+      if (preferredSize != null) {
+        return preferredSize;
+      }
+    }
+
+    final records =
+        <CachedImageRecord>[
+          ...await _repository.listByOwner(
+            ownerType: ownerType.dbValue,
+            ownerId: normalizedOwnerId,
+          ),
+        ]..sort((left, right) {
+          final updated = left.updatedAt.compareTo(right.updatedAt);
+          if (updated != 0) {
+            return updated;
+          }
+          final created = left.createdAt.compareTo(right.createdAt);
+          if (created != 0) {
+            return created;
+          }
+          return left.cacheKey.compareTo(right.cacheKey);
+        });
+    for (final record in records.reversed) {
+      final size = _dimensionsForRecord(
+        record,
+        ownerType: ownerType,
+        ownerId: normalizedOwnerId,
+        role: role,
+      );
+      if (size != null) {
+        return size;
+      }
+    }
+    return null;
+  }
+
+  Size? _dimensionsForRecord(
+    CachedImageRecord? record, {
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+    required ImageCacheRole role,
+  }) {
+    if (record == null ||
+        record.ownerType != ownerType.dbValue ||
+        record.ownerId != ownerId ||
+        record.role != role.dbValue) {
+      return null;
+    }
+    final width = record.width;
+    final height = record.height;
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return null;
+    }
+    return Size(width.toDouble(), height.toDouble());
   }
 
   @override

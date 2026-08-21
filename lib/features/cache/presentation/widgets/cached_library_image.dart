@@ -9,6 +9,8 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/delayed_image_loading_overlay.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 
+enum CachedImageRemoteDisplayPolicy { eager, afterCacheWrite }
+
 /// Binds an explicit cache request to [LibraryCachedImage].
 ///
 /// Business layers still own cache-key and role decisions.  This widget only
@@ -35,6 +37,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     this.loadingIndicatorDelay = const Duration(milliseconds: 300),
     this.loadingIndicatorColor,
     this.fadeInDuration = Duration.zero,
+    this.remoteDisplayPolicy = CachedImageRemoteDisplayPolicy.eager,
     this.retryToken = 0,
   });
 
@@ -62,6 +65,10 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   /// business surface can opt in without changing shared image behavior.
   final Duration fadeInDuration;
 
+  /// Controls whether a cache miss may display a direct network image while
+  /// the persistent cache write is still running.
+  final CachedImageRemoteDisplayPolicy remoteDisplayPolicy;
+
   /// 重试代次。自增会重跑一次"缓存查询 → ensureCached → 远端兜底"整条流程，
   /// 并透传给 [LibraryCachedImage] 重建解码；失败可能出在其中任一段。
   final int retryToken;
@@ -74,6 +81,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   String? _localPath;
   bool _allowRemoteFallback = false;
   bool _displayedRemoteImage = false;
+  bool _cacheWriteFailed = false;
   bool _displaySettled = false;
   bool _settledRebuildScheduled = false;
   int _generation = 0;
@@ -97,6 +105,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     if (oldWidget.request?.cacheKey != widget.request?.cacheKey ||
         oldWidget.request?.sourceUrl != widget.request?.sourceUrl ||
         oldWidget.preferredLocalPath != widget.preferredLocalPath ||
+        oldWidget.remoteDisplayPolicy != widget.remoteDisplayPolicy ||
         oldWidget.retryToken != widget.retryToken) {
       _restartCacheFlow();
     }
@@ -114,25 +123,28 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       color: widget.loadingIndicatorColor,
       isLoadActive: (loadIdentity) =>
           mounted && loadIdentity == _generation && !_displaySettled,
-      child: LibraryCachedImage(
-        localPath: _localPath,
-        imageUrl: _allowRemoteFallback ? request?.sourceUrl : null,
-        imageProviderOverride: widget.imageProviderOverride,
-        remoteImageProviderOverride: widget.remoteImageProviderOverride,
-        fit: widget.fit,
-        width: widget.width,
-        height: widget.height,
-        decodeDisplaySize: widget.decodeDisplaySize,
-        placeholder: widget.placeholder,
-        errorPlaceholder: widget.errorPlaceholder,
-        headerBuilder: widget.headerBuilder,
-        fadeInDuration: widget.fadeInDuration,
-        retryToken: widget.retryToken,
-        onImageResolved: (size) =>
-            _handleImageResolved(request, size, generation),
-        onRemoteImageResolved: () => _handleRemoteImageResolved(generation),
-        onImageFailed: () => _handleImageFailed(generation),
-      ),
+      child: _cacheWriteFailed
+          ? widget.errorPlaceholder ?? widget.placeholder
+          : LibraryCachedImage(
+              localPath: _localPath,
+              imageUrl: _allowRemoteFallback ? request?.sourceUrl : null,
+              imageProviderOverride: widget.imageProviderOverride,
+              remoteImageProviderOverride: widget.remoteImageProviderOverride,
+              fit: widget.fit,
+              width: widget.width,
+              height: widget.height,
+              decodeDisplaySize: widget.decodeDisplaySize,
+              placeholder: widget.placeholder,
+              errorPlaceholder: widget.errorPlaceholder,
+              headerBuilder: widget.headerBuilder,
+              fadeInDuration: widget.fadeInDuration,
+              retryToken: widget.retryToken,
+              onImageResolved: (size) =>
+                  _handleImageResolved(request, size, generation),
+              onRemoteImageResolved: () =>
+                  _handleRemoteImageResolved(generation),
+              onImageFailed: () => _handleImageFailed(generation),
+            ),
     );
   }
 
@@ -209,6 +221,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     _localPath = null;
     _allowRemoteFallback = false;
     _displayedRemoteImage = false;
+    _cacheWriteFailed = false;
     _displaySettled = !_hasDisplaySource;
     _settledRebuildScheduled = false;
     if (widget.imageProviderOverride != null) {
@@ -225,7 +238,11 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       return;
     }
     if (request.cacheKey.trim().isEmpty) {
-      _allowRemoteFallback = true;
+      if (widget.remoteDisplayPolicy == CachedImageRemoteDisplayPolicy.eager) {
+        _allowRemoteFallback = true;
+      } else {
+        _scheduleCacheFailure(_generation);
+      }
       return;
     }
     unawaited(_resolveCachedImage(request, _generation));
@@ -253,12 +270,24 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       return;
     }
 
-    setState(() {
-      _allowRemoteFallback = true;
-    });
+    if (widget.remoteDisplayPolicy == CachedImageRemoteDisplayPolicy.eager) {
+      setState(() {
+        _allowRemoteFallback = true;
+      });
+    }
 
     final result = await service.ensureCached(request);
-    if (!_isActive(generation) || !_hasUsableLocalPath(result)) {
+    if (!_isActive(generation)) {
+      return;
+    }
+    if (!_hasUsableLocalPath(result)) {
+      if (widget.remoteDisplayPolicy ==
+          CachedImageRemoteDisplayPolicy.afterCacheWrite) {
+        setState(() {
+          _cacheWriteFailed = true;
+        });
+        _handleImageFailed(generation);
+      }
       return;
     }
     widget.onLocalPathResolved?.call(result.localPath!.trim());
@@ -268,6 +297,17 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     setState(() {
       _localPath = result.localPath;
       _allowRemoteFallback = false;
+    });
+  }
+
+  void _scheduleCacheFailure(int generation) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isActive(generation)) {
+        setState(() {
+          _cacheWriteFailed = true;
+        });
+        _handleImageFailed(generation);
+      }
     });
   }
 

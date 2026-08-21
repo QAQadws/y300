@@ -138,6 +138,33 @@ void main() {
       expect(cacheService.getCachedKeys, isEmpty);
     });
 
+    test(
+      'reads the latest dimensions owned by the same forum surface',
+      () async {
+        final cacheService = _RecordingImageCacheService()
+          ..lastKnownDimensions = const Size(1440, 360);
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+        );
+        final spec = ForumImageLoadSpec(
+          kind: ForumImageKind.forumHeadImage,
+          url: Uri.parse('https://bbs.yamibo.com/head-new.jpg'),
+          ownerType: ImageCacheOwnerType.forum,
+          ownerId: 'forum:30',
+        );
+
+        final dimensions = await index.getLastKnownBySpec(spec);
+
+        expect(dimensions?.size, const Size(1440, 360));
+        expect(dimensions?.source, ForumImageDimensionSource.cacheMetadata);
+        expect(cacheService.lastKnownOwnerType, ImageCacheOwnerType.forum);
+        expect(cacheService.lastKnownOwnerId, 'forum:30');
+        expect(cacheService.lastKnownRole, ImageCacheRole.forumHeadImage);
+        expect(cacheService.lastKnownPreferredCacheKey, isNotEmpty);
+      },
+    );
+
     test('recording decoded dimensions failure does not escape', () async {
       final index = CacheRecordForumImageDimensionIndex(
         imageCacheService: _ThrowingDimensionImageCacheService(),
@@ -287,9 +314,15 @@ void main() {
   });
 }
 
-class _RecordingImageCacheService implements ImageCacheService {
+class _RecordingImageCacheService
+    implements ImageCacheService, ImageCacheOwnerDimensionLookup {
   final cachedResults = <String, CachedImageResult>{};
   final getCachedKeys = <String>[];
+  Size? lastKnownDimensions;
+  ImageCacheOwnerType? lastKnownOwnerType;
+  String? lastKnownOwnerId;
+  ImageCacheRole? lastKnownRole;
+  String? lastKnownPreferredCacheKey;
 
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
@@ -300,6 +333,20 @@ class _RecordingImageCacheService implements ImageCacheService {
   Future<CachedImageResult?> getCached(String cacheKey) async {
     getCachedKeys.add(cacheKey);
     return cachedResults[cacheKey];
+  }
+
+  @override
+  Future<Size?> getLastKnownDimensions({
+    required ImageCacheOwnerType ownerType,
+    required String ownerId,
+    required ImageCacheRole role,
+    String? preferredCacheKey,
+  }) async {
+    lastKnownOwnerType = ownerType;
+    lastKnownOwnerId = ownerId;
+    lastKnownRole = role;
+    lastKnownPreferredCacheKey = preferredCacheKey;
+    return lastKnownDimensions;
   }
 
   @override

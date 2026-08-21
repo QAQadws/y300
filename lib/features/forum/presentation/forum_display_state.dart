@@ -1,3 +1,4 @@
+import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 
 enum ForumDisplayFailureCode { loadFailed }
@@ -20,6 +21,7 @@ class ForumDisplayPageState {
     required this.threads,
     required this.query,
     this.headImageUrl,
+    this.headImageDimensions,
     this.forumIconUrl,
     this.todayPosts = 0,
     this.totalThreads = 0,
@@ -46,6 +48,7 @@ class ForumDisplayPageState {
   final List<ForumThreadSummary> threads;
   final ForumDisplayQuery query;
   final String? headImageUrl;
+  final ForumImageDimensions? headImageDimensions;
   final String? forumIconUrl;
   final int todayPosts;
   final int totalThreads;
@@ -78,6 +81,7 @@ class ForumDisplayPageState {
       threads: const <ForumThreadSummary>[],
       query: ForumDisplayQuery.initial(fid: fid),
       headImageUrl: null,
+      headImageDimensions: null,
       forumIconUrl: null,
       todayPosts: 0,
       totalThreads: 0,
@@ -105,6 +109,7 @@ class ForumDisplayPageState {
     List<ForumThreadSummary>? threads,
     ForumDisplayQuery? query,
     String? headImageUrl,
+    ForumImageDimensions? headImageDimensions,
     String? forumIconUrl,
     int? todayPosts,
     int? totalThreads,
@@ -131,6 +136,7 @@ class ForumDisplayPageState {
       threads: threads ?? this.threads,
       query: query ?? this.query,
       headImageUrl: headImageUrl ?? this.headImageUrl,
+      headImageDimensions: headImageDimensions ?? this.headImageDimensions,
       forumIconUrl: forumIconUrl ?? this.forumIconUrl,
       todayPosts: todayPosts ?? this.todayPosts,
       totalThreads: totalThreads ?? this.totalThreads,

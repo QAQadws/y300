@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/forum/data/repositories/forum_display_repository.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/services/forum_chrome_image_adapter.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
@@ -143,8 +146,13 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
     if (result case ApiSuccess<ForumDisplayData>(:final data)) {
       final mappedThreads = await _attachSourceTagNames(data);
       final effectiveQuery = query.copyWithPage(data.currentPage);
+      final effectiveFid = data.fid.isNotEmpty ? data.fid : query.fid;
+      final headImageDimensions = await _readHeadImageDimensions(
+        fid: effectiveFid,
+        imageUrl: data.headImageUrl,
+      );
       return ForumDisplayPageState(
-        fid: data.fid.isNotEmpty ? data.fid : query.fid,
+        fid: effectiveFid,
         title: data.forumName.isNotEmpty ? data.forumName : _args.title,
         currentPage: data.currentPage,
         hasMore: data.hasMore,
@@ -153,6 +161,7 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
         threads: mappedThreads,
         query: effectiveQuery,
         headImageUrl: data.headImageUrl,
+        headImageDimensions: headImageDimensions,
         forumIconUrl: data.forumIconUrl,
         todayPosts: data.todayPosts,
         totalThreads: data.totalThreads,
@@ -231,6 +240,32 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
     try {
       return await ref.read(forumTagLookupProvider.future);
     } catch (_) {
+      return null;
+    }
+  }
+
+  Future<ForumImageDimensions?> _readHeadImageDimensions({
+    required String fid,
+    required String? imageUrl,
+  }) async {
+    final url = imageUrl?.trim();
+    if (url == null || url.isEmpty) {
+      return null;
+    }
+    final spec = const ForumChromeImageAdapter().headImage(
+      fid: fid,
+      imageUrl: url,
+    );
+    if (spec == null) {
+      return null;
+    }
+    try {
+      return await ref
+          .read(forumImageDimensionIndexProvider)
+          .getLastKnownBySpec(spec);
+    } catch (_) {
+      // Layout metadata is an optional local hint and must never prevent the
+      // forum page from publishing otherwise valid network data.
       return null;
     }
   }
