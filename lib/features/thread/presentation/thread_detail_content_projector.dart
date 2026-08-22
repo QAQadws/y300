@@ -3,7 +3,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/pla
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_diagnostics.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/presentation/thread_content_projection_executor.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
@@ -119,6 +119,9 @@ final class ThreadDetailContentProjector {
       source.fid,
       source.typeid,
       source.currentPage,
+      source.capabilities?.paginationPrecision,
+      source.readMetadata?.origin,
+      source.readMetadata?.freshness,
       for (final entry
           in source.queryParameters.entries.toList()..sort(
             (left, right) => left.key.compareTo(right.key),
@@ -128,6 +131,14 @@ final class ThreadDetailContentProjector {
       _textHash(source.typeName),
       _textHash(source.sourceTagName),
     ];
+    final capabilityEntries =
+        source.capabilities?.values.values.entries.toList()
+          ?..sort((left, right) => left.key.index.compareTo(right.key.index));
+    for (final entry in capabilityEntries ?? const []) {
+      parts
+        ..add(entry.key)
+        ..add(entry.value);
+    }
     for (final post in source.posts) {
       parts.addAll(_postRevisionParts(post));
     }

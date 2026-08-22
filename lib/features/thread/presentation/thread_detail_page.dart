@@ -30,7 +30,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/pla
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
@@ -220,39 +220,41 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
           ),
         ),
         actions: [
-          IconButton(
-            key: const Key('thread-detail-favorite-button'),
-            tooltip: state.isThreadFavorited
-                ? l10n.threadDetailUnfavorite
-                : l10n.threadDetailFavorite,
-            onPressed:
-                asyncState.value == null ||
-                    state.isThreadFavoriteActionLoading ||
-                    state.isThreadFavorited
-                ? null
-                : controller.favoriteThread,
-            icon: state.isThreadFavoriteActionLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(
-                    state.isThreadFavorited
-                        ? Icons.star
-                        : Icons.star_border_outlined,
-                  ),
-          ),
-          IconButton(
-            key: const Key('thread-detail-appbar-reply-button'),
-            tooltip: l10n.threadDetailReplyPost,
-            onPressed: asyncState.value == null
-                ? null
-                : () {
-                    _openThreadReplyComposer(args, state);
-                  },
-            icon: const Icon(Icons.reply),
-          ),
+          if (state.supports(ThreadDetailCapability.favoriteEntry))
+            IconButton(
+              key: const Key('thread-detail-favorite-button'),
+              tooltip: state.isThreadFavorited
+                  ? l10n.threadDetailUnfavorite
+                  : l10n.threadDetailFavorite,
+              onPressed:
+                  asyncState.value == null ||
+                      state.isThreadFavoriteActionLoading ||
+                      state.isThreadFavorited
+                  ? null
+                  : controller.favoriteThread,
+              icon: state.isThreadFavoriteActionLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      state.isThreadFavorited
+                          ? Icons.star
+                          : Icons.star_border_outlined,
+                    ),
+            ),
+          if (state.supports(ThreadDetailCapability.replyAction))
+            IconButton(
+              key: const Key('thread-detail-appbar-reply-button'),
+              tooltip: l10n.threadDetailReplyPost,
+              onPressed: asyncState.value == null
+                  ? null
+                  : () {
+                      _openThreadReplyComposer(args, state);
+                    },
+              icon: const Icon(Icons.reply),
+            ),
           _ThreadDetailMoreMenu(
             state: state,
             onOnlyAuthor: controller.openOnlyAuthor,
@@ -812,12 +814,15 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     ThreadPost displayPost,
     ThreadPostBodyRenderPlan plan,
   ) async {
-    final editTarget = _resolvePostEditTarget(sourcePost, state);
+    final editTarget = state.supports(ThreadDetailCapability.editAction)
+        ? _resolvePostEditTarget(sourcePost, state)
+        : null;
     final action = await showModalBottomSheet<_ThreadPostAction>(
       context: context,
       builder: (context) => _ThreadPostActionSheet(
         post: sourcePost,
         editUri: editTarget?.editUri,
+        capabilities: state.capabilities,
       ),
     );
     if (!mounted || action == null) {
@@ -1254,18 +1259,20 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
       key: const Key('thread-detail-more-menu'),
       tooltip: l10n.threadDetailMore,
       itemBuilder: (context) => [
-        AppPopupMenuItem<String>(
-          value: state.isOnlyAuthorView ? 'all-posts' : 'only-author',
-          label: state.isOnlyAuthorView
-              ? l10n.threadDetailAllPosts
-              : l10n.threadDetailOnlyAuthor,
-        ),
-        AppPopupMenuItem<String>(
-          value: state.isReverseOrderView ? 'normal-order' : 'reverse-order',
-          label: state.isReverseOrderView
-              ? l10n.threadDetailNormalOrder
-              : l10n.threadDetailReverseOrder,
-        ),
+        if (state.supports(ThreadDetailCapability.alternateViews)) ...[
+          AppPopupMenuItem<String>(
+            value: state.isOnlyAuthorView ? 'all-posts' : 'only-author',
+            label: state.isOnlyAuthorView
+                ? l10n.threadDetailAllPosts
+                : l10n.threadDetailOnlyAuthor,
+          ),
+          AppPopupMenuItem<String>(
+            value: state.isReverseOrderView ? 'normal-order' : 'reverse-order',
+            label: state.isReverseOrderView
+                ? l10n.threadDetailNormalOrder
+                : l10n.threadDetailReverseOrder,
+          ),
+        ],
         AppPopupMenuItem<String>(
           key: Key('thread-detail-display-settings-menu-item'),
           value: 'display-settings',
@@ -1314,10 +1321,19 @@ enum _ThreadPostAction {
 }
 
 class _ThreadPostActionSheet extends StatelessWidget {
-  const _ThreadPostActionSheet({required this.post, required this.editUri});
+  const _ThreadPostActionSheet({
+    required this.post,
+    required this.editUri,
+    required this.capabilities,
+  });
 
   final ThreadPost post;
   final Uri? editUri;
+  final ThreadDetailReadCapabilities? capabilities;
+
+  bool _supports(ThreadDetailCapability capability) {
+    return capabilities?.supports(capability) ?? false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1339,14 +1355,17 @@ class _ThreadPostActionSheet extends StatelessWidget {
                   onTap: () =>
                       Navigator.of(context).pop(_ThreadPostAction.edit),
                 ),
-              ListTile(
-                key: const Key('thread-post-reply-action'),
-                dense: true,
-                leading: const Icon(Icons.reply_outlined),
-                title: Text(l10n.threadDetailReply),
-                onTap: () => Navigator.of(context).pop(_ThreadPostAction.reply),
-              ),
-              if (post.rateUrl?.trim().isNotEmpty == true)
+              if (_supports(ThreadDetailCapability.replyAction))
+                ListTile(
+                  key: const Key('thread-post-reply-action'),
+                  dense: true,
+                  leading: const Icon(Icons.reply_outlined),
+                  title: Text(l10n.threadDetailReply),
+                  onTap: () =>
+                      Navigator.of(context).pop(_ThreadPostAction.reply),
+                ),
+              if (_supports(ThreadDetailCapability.ratingAction) &&
+                  post.rateUrl?.trim().isNotEmpty == true)
                 ListTile(
                   key: const Key('thread-post-rate-action'),
                   dense: true,
@@ -1355,7 +1374,8 @@ class _ThreadPostActionSheet extends StatelessWidget {
                   onTap: () =>
                       Navigator.of(context).pop(_ThreadPostAction.rate),
                 ),
-              if (post.commentUrl?.trim().isNotEmpty == true)
+              if (_supports(ThreadDetailCapability.commentAction) &&
+                  post.commentUrl?.trim().isNotEmpty == true)
                 ListTile(
                   key: const Key('thread-post-comment-action'),
                   dense: true,

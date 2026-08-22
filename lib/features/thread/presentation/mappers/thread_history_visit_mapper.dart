@@ -1,6 +1,6 @@
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 

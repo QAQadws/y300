@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/forum/data/repositories/forum_display_repository.dart';
-import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/models/forum_display_models.dart';
 import 'package:y300/features/forum/domain/services/forum_chrome_image_adapter.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
@@ -143,7 +143,12 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
       query,
       cachePolicy: cachePolicy,
     );
-    if (result case ApiSuccess<ForumDisplayData>(:final data)) {
+    if (result
+        case DataReadSuccess<ForumDisplayData, ForumDisplayReadCapabilities>(
+          :final data,
+          :final capabilities,
+          :final metadata,
+        )) {
       final mappedThreads = await _attachSourceTagNames(data);
       final effectiveQuery = query.copyWithPage(data.currentPage);
       final effectiveFid = data.fid.isNotEmpty ? data.fid : query.fid;
@@ -166,18 +171,39 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
         todayPosts: data.todayPosts,
         totalThreads: data.totalThreads,
         rank: data.rank,
-        primaryFilters: data.primaryFilters,
-        typeFilters: data.typeFilters,
-        subForums: data.subForums,
-        topEntries: data.topEntries,
+        primaryFilters: capabilities.supports(ForumDisplayCapability.filters)
+            ? data.primaryFilters
+            : const <ForumDisplayFilterItem>[],
+        typeFilters: capabilities.supports(ForumDisplayCapability.filters)
+            ? data.typeFilters
+            : const <ForumDisplayFilterItem>[],
+        subForums: capabilities.supports(ForumDisplayCapability.subForums)
+            ? data.subForums
+            : const <ForumDisplaySubForum>[],
+        topEntries: capabilities.supports(ForumDisplayCapability.topEntries)
+            ? data.topEntries
+            : const <ForumDisplayTopEntry>[],
         previousPageUrl: data.previousPageUrl,
         nextPageUrl: data.nextPageUrl,
-        lastPage: data.lastPage,
-        favoriteAction: data.favoriteAction,
+        lastPage: capabilities.supports(ForumDisplayCapability.exactPagination)
+            ? data.lastPage
+            : null,
+        favoriteAction:
+            capabilities.supports(ForumDisplayCapability.favoriteState)
+            ? data.favoriteAction
+            : ForumDisplayFavoriteAction.unknown,
+        capabilities: capabilities,
+        readMetadata: metadata,
       );
     }
 
-    final error = (result as ApiFailure<ForumDisplayData>).error;
+    final failure =
+        (result
+                as DataReadFailure<
+                  ForumDisplayData,
+                  ForumDisplayReadCapabilities
+                >)
+            .diagnosticMessage;
     return ForumDisplayPageState(
       fid: query.fid,
       title: _args.title,
@@ -189,9 +215,9 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
       query: query,
       failure: ForumDisplayFailure(
         code: ForumDisplayFailureCode.loadFailed,
-        detail: error.message,
+        detail: failure,
       ),
-      errorMessage: error.message,
+      errorMessage: failure,
     );
   }
 

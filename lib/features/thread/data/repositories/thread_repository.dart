@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -9,37 +11,64 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/mappers/thread_detail_api_mapper.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/data/services/thread_detail_html_diagnostics.dart';
 import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/data/services/thread_detail_snapshot_codec.dart';
 
-abstract class ThreadRepository {
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({
-    required String tid,
-    int page = 1,
-    Map<String, String> queryParameters = const <String, String>{},
-  });
-}
+export 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 
 class ApiThreadRepository implements ThreadRepository {
-  ApiThreadRepository(this._apiClient);
+  ApiThreadRepository(
+    this._apiClient, {
+    this.apiVersion = '4',
+    ThreadDetailApiMapper mapper = const ThreadDetailApiMapper(),
+  }) : _mapper = mapper;
 
   final ApiClient _apiClient;
+  final String apiVersion;
+  final ThreadDetailApiMapper _mapper;
 
   @override
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+  ThreadDetailSourceCapabilities get capabilities => _apiCapabilities;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
     required String tid,
     int page = 1,
-    Map<String, String> queryParameters = const <String, String>{},
-  }) {
-    return _apiClient.getParsed<ThreadDetailData>(
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    if (!query.isEmpty) {
+      return unsupportedDataReadFailure(
+        code: 'thread_detail_query_unsupported',
+        diagnosticMessage:
+            'The configured thread source cannot honor alternate-view parameters.',
+      );
+    }
+    final result = await _apiClient.getParsed<ThreadDetailData>(
       module: 'viewthread',
-      queryParameters: {...queryParameters, 'tid': tid, 'page': page},
+      queryParameters: <String, dynamic>{
+        'version': apiVersion,
+        'tid': tid,
+        'page': page,
+      },
       parser: (response) =>
-          ThreadDetailData.fromVariables(response.variables, page: page),
+          _mapper.mapVariables(response.variables, page: page),
     );
+    return switch (result) {
+      ApiSuccess<ThreadDetailData>(:final data) => _validatedSuccess(
+        data,
+        requestedTid: tid,
+        capabilities: capabilities.toReadCapabilities(),
+      ),
+      ApiFailure<ThreadDetailData>(:final error) => dataReadFailureFromApiError(
+        error,
+      ),
+    };
   }
 }
 
@@ -84,11 +113,16 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
   final DateTime Function() _now;
 
   @override
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+  ThreadDetailSourceCapabilities get capabilities => _htmlCapabilities;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
     required String tid,
     int page = 1,
-    Map<String, String> queryParameters = const <String, String>{},
+    ThreadDetailQuery query = const ThreadDetailQuery(),
   }) async {
+    final queryParameters = query.toRequestParameters();
     final documentDescriptor = _cacheKeyCanonicalizer.threadDetail(
       tid: tid,
       page: page,
@@ -106,7 +140,15 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
         'tid=$tid page=$page query=${_formatQuery(queryParameters)} '
             '${_formatThreadData(snapshot)}',
       );
-      return ApiSuccess(snapshot);
+      return _validatedSuccess(
+        snapshot,
+        requestedTid: tid,
+        capabilities: _htmlReadCapabilitiesFor(snapshot),
+        metadata: const DataReadMetadata(
+          origin: DataReadOrigin.freshSnapshot,
+          freshness: DataReadFreshness.freshCache,
+        ),
+      );
     }
     _logNative(
       'load_start',
@@ -146,16 +188,26 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
           'cached_document_fallback_success',
           'tid=$tid page=$page ${_formatThreadData(cached)}',
         );
-        return ApiSuccess(cached);
+        return _validatedSuccess(
+          cached,
+          requestedTid: tid,
+          capabilities: _htmlReadCapabilitiesFor(cached),
+          metadata: const DataReadMetadata(
+            origin: DataReadOrigin.cachedDocumentFallback,
+            freshness: DataReadFreshness.staleOrUnknown,
+          ),
+        );
       }
-      return ApiFailure(
-        ApiError(
-          type: error.type,
-          message: '帖子详情 HTML 加载失败: ${error.message}',
-          code: error.code,
-          statusCode: error.statusCode,
-          raw: error.raw,
-        ),
+      final failure =
+          dataReadFailureFromApiError<
+            ThreadDetailData,
+            ThreadDetailReadCapabilities
+          >(error);
+      return DataReadFailure(
+        kind: failure.kind,
+        code: failure.code,
+        statusCode: failure.statusCode,
+        diagnosticMessage: '帖子详情 HTML 加载失败: ${error.message}',
       );
     }
 
@@ -176,7 +228,11 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
       );
       await _putDocument(descriptor: documentDescriptor, html: html);
       await _putSnapshot(descriptor: snapshotDescriptor, data: data);
-      return ApiSuccess(data);
+      return _validatedSuccess(
+        data,
+        requestedTid: tid,
+        capabilities: _htmlReadCapabilitiesFor(data),
+      );
     } catch (error, stackTrace) {
       final diagnosticFields = htmlDiagnostic?.toLogFields() ?? 'no-html-probe';
       _logNative(
@@ -184,12 +240,9 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
         'tid=$tid page=$page error=${_oneLine(error.toString())} '
             '$diagnosticFields stack=${_stackHead(stackTrace)}',
       );
-      return ApiFailure(
-        ApiError(
-          type: ApiErrorType.parse,
-          message: '帖子详情 HTML 解析失败: $error；诊断: $diagnosticFields',
-          raw: error,
-        ),
+      return DataReadFailure(
+        kind: DataReadFailureKind.parse,
+        diagnosticMessage: '帖子详情 HTML 解析失败: $error；诊断: $diagnosticFields',
       );
     }
   }
@@ -435,3 +488,102 @@ final threadJsonRepositoryProvider = Provider<ThreadRepository>((ref) {
 final threadPostLocatorProvider = Provider<ThreadPostLocator>((ref) {
   return HtmlThreadPostLocator(gateway: ref.watch(yamiboHttpGatewayProvider));
 });
+
+ThreadDetailReadCapabilities _htmlReadCapabilitiesFor(ThreadDetailData data) {
+  final hasExactPagination = data.lastPage != null && data.lastPage! > 0;
+  return ThreadDetailReadCapabilities(
+    values: _htmlCapabilities.values.withSupport(
+      ThreadDetailCapability.exactPagination,
+      hasExactPagination
+          ? DataCapabilitySupport.supported
+          : DataCapabilitySupport.unsupported,
+    ),
+    paginationPrecision: hasExactPagination
+        ? PaginationPrecision.exact
+        : (data.previousPageUrl != null || data.nextPageUrl != null)
+        ? PaginationPrecision.directional
+        : PaginationPrecision.heuristic,
+  );
+}
+
+DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>
+_validatedSuccess(
+  ThreadDetailData data, {
+  required String requestedTid,
+  required ThreadDetailReadCapabilities capabilities,
+  DataReadMetadata metadata = const DataReadMetadata.network(),
+}) {
+  final normalizedRequestedTid = requestedTid.trim();
+  final normalizedTid = data.tid.trim();
+  final postIds = <String>{};
+  final valid =
+      normalizedTid.isNotEmpty &&
+      normalizedRequestedTid.isNotEmpty &&
+      normalizedTid == normalizedRequestedTid &&
+      data.posts.isNotEmpty &&
+      data.posts.every((post) {
+        final pid = post.pid.trim();
+        return pid.isNotEmpty && postIds.add(pid);
+      });
+  if (!valid) {
+    return const DataReadFailure(
+      kind: DataReadFailureKind.parse,
+      code: 'thread_detail_identity_invalid',
+      diagnosticMessage:
+          'Thread data did not provide stable identity and unique renderable posts.',
+    );
+  }
+  return DataReadSuccess(
+    data: data,
+    capabilities: capabilities,
+    metadata: metadata,
+  );
+}
+
+final _htmlCapabilities = ThreadDetailSourceCapabilities(
+  values: DataCapabilitySet<ThreadDetailCapability>.from(
+    supported: ThreadDetailCapability.values
+        .where(
+          (capability) =>
+              capability != ThreadDetailCapability.attachmentMetadata,
+        )
+        .toList(growable: false),
+    unsupported: const <ThreadDetailCapability>[
+      ThreadDetailCapability.attachmentMetadata,
+    ],
+  ),
+  paginationPrecision: PaginationPrecision.exact,
+);
+
+final _apiCapabilities = ThreadDetailSourceCapabilities(
+  values: DataCapabilitySet<ThreadDetailCapability>.from(
+    supported: const <ThreadDetailCapability>[
+      ThreadDetailCapability.threadIdentity,
+      ThreadDetailCapability.forumIdentity,
+      ThreadDetailCapability.orderedPosts,
+      ThreadDetailCapability.firstPostIdentity,
+      ThreadDetailCapability.renderableBody,
+      ThreadDetailCapability.avatars,
+      ThreadDetailCapability.attachmentMetadata,
+      ThreadDetailCapability.directionalPagination,
+    ],
+    unsupported: const <ThreadDetailCapability>[
+      ThreadDetailCapability.forumPresentation,
+      ThreadDetailCapability.losslessBody,
+      ThreadDetailCapability.exactPagination,
+      ThreadDetailCapability.alternateViews,
+      ThreadDetailCapability.threadNavigation,
+      ThreadDetailCapability.replyAction,
+      ThreadDetailCapability.editAction,
+      ThreadDetailCapability.ratingSummary,
+      ThreadDetailCapability.ratingAction,
+      ThreadDetailCapability.comments,
+      ThreadDetailCapability.commentAction,
+      ThreadDetailCapability.pollContent,
+      ThreadDetailCapability.pollVoteAction,
+      ThreadDetailCapability.tagLinks,
+      ThreadDetailCapability.favoriteEntry,
+    ],
+  ),
+  paginationPrecision: PaginationPrecision.directional,
+);

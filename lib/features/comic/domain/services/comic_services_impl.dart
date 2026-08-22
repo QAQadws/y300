@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
@@ -10,8 +11,11 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_parser_service.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
+import 'package:y300/features/comic/data/repositories/discuz_api_comic_episode_catalog_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_episode_image_catalog.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
+import 'package:y300/features/comic/domain/repositories/comic_episode_catalog_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
@@ -33,7 +37,7 @@ import 'package:y300/features/favorites/data/services/favorite_first_sync_reques
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
@@ -491,9 +495,11 @@ final comicEpisodeDiscoveryServiceProvider =
         imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
       );
       return ComicEpisodeDiscoveryService(
-        fetchThreadDetail: (tid) => ref
-            .read(threadJsonRepositoryProvider)
-            .getThreadDetail(tid: tid, page: 1),
+        fetchThreadDetail: (tid) async => apiResultFromDataRead(
+          await ref
+              .read(threadJsonRepositoryProvider)
+              .getThreadDetail(tid: tid, page: 1),
+        ),
         opPostParser: opPostParser,
         catalogHtmlFetcher: YamiboCatalogHtmlFetcher(
           htmlClient: ref.watch(yamiboHtmlClientProvider),
@@ -510,9 +516,11 @@ final comicEpisodeDiscoveryServiceProvider =
 final comicIncrementalEpisodeDiscoveryProvider =
     Provider<ComicIncrementalEpisodeDiscovery>((ref) {
       return ComicIncrementalEpisodeDiscovery(
-        fetchThreadDetail: (tid) => ref
-            .read(threadJsonRepositoryProvider)
-            .getThreadDetail(tid: tid, page: 1),
+        fetchThreadDetail: (tid) async => apiResultFromDataRead(
+          await ref
+              .read(threadJsonRepositoryProvider)
+              .getThreadDetail(tid: tid, page: 1),
+        ),
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
           imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
@@ -563,7 +571,7 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
             .read(threadJsonRepositoryProvider)
             .getThreadDetail(tid: tid, page: 1);
         return result.when(
-          success: (data) => ThreadSeed(subject: data.subject),
+          success: (data, _, _) => ThreadSeed(subject: data.subject),
           failure: (_) => null,
         );
       },
@@ -624,80 +632,63 @@ class ComicImageCacheResult {
 
 class NetworkComicReaderService implements ComicReaderService {
   NetworkComicReaderService({
-    required ThreadRepository threadApiRepository,
+    required ComicEpisodeCatalogRepository episodeCatalogRepository,
     ImageCacheService? imageCacheService,
     BaseCacheManager? cacheManager,
     ImageRequestHeaderBuilder? headerBuilder,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
-    ForumImageSourcePipeline imageSourcePipeline =
-        const DefaultForumImageSourcePipeline(),
-  }) : _threadApiRepository = threadApiRepository,
+  }) : _episodeCatalogRepository = episodeCatalogRepository,
        _imageCacheService = imageCacheService,
        _cacheManager = cacheManager ?? DefaultCacheManager(),
        _headerBuilder = headerBuilder,
-       _urlResolver = urlResolver,
-       _imageSourcePipeline = imageSourcePipeline;
+       _urlResolver = urlResolver;
 
-  final ThreadRepository _threadApiRepository;
+  final ComicEpisodeCatalogRepository _episodeCatalogRepository;
   final ImageCacheService? _imageCacheService;
   final BaseCacheManager _cacheManager;
   final ImageRequestHeaderBuilder? _headerBuilder;
   final SiteUrlResolver _urlResolver;
-  final ForumImageSourcePipeline _imageSourcePipeline;
 
   @override
   Future<ComicEpisodeImagesFetchResult> fetchEpisodeImages(String tid) async {
-    final result = await _threadApiRepository.getThreadDetail(
-      tid: tid,
-      page: 1,
+    final result = await _episodeCatalogRepository.loadCatalog(
+      ComicEpisodeCatalogRequest(sourceTid: tid),
     );
     return result.when(
-      success: (data) {
-        final firstPost = data.posts.where((post) => post.isFirst).firstOrNull;
-        if (firstPost == null) {
-          // 首楼没识别出来通常是 Discuz 解析口径异常，不是真的没图——
-          // 当作 parse 失败上抛，UI 才会给出"页面结构异常"的明确提示。
-          return const ComicEpisodeImagesFetchFailed(
-            reason: ComicEpisodeImagesFetchFailureReason.parse,
-            message: '首楼帖未识别',
-          );
-        }
-        final imageUrls = _imageSourcePipeline
-            .collectFromPost(firstPost)
-            .map((source) => source.normalizedUrl)
-            .toList(growable: false);
-        return ComicEpisodeImagesFetched(imageUrls);
-      },
-      failure: (error) => ComicEpisodeImagesFetchFailed(
-        reason: _mapApiErrorTypeToFetchFailureReason(error.type),
-        message: error.message,
+      success: (catalog, _, _) => ComicEpisodeImagesFetched(
+        catalog.images.map((image) => image.url).toList(growable: false),
+      ),
+      failure: (failure) => ComicEpisodeImagesFetchFailed(
+        reason: _mapDataReadFailureReason(failure.kind),
+        message: failure.diagnosticMessage,
       ),
     );
   }
 
-  // ignore: deprecated_member_use_from_same_package
   @Deprecated(
     'Use fetchEpisodeImages to distinguish transient failures from empty content.',
   )
   @override
-  // ignore: deprecated_member_use_from_same_package
   Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
     return (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
   }
 
-  /// 把核心网络层的 `ApiErrorType` 翻译到域内 reason，避免 comic domain
-  /// 直接依赖 `lib/core/network/api_result.dart`。映射保持稳定的纯函数。
-  ComicEpisodeImagesFetchFailureReason _mapApiErrorTypeToFetchFailureReason(
-    ApiErrorType type,
+  ComicEpisodeImagesFetchFailureReason _mapDataReadFailureReason(
+    DataReadFailureKind type,
   ) {
     return switch (type) {
-      ApiErrorType.network ||
-      ApiErrorType.timeout => ComicEpisodeImagesFetchFailureReason.network,
-      ApiErrorType.unauthorized => ComicEpisodeImagesFetchFailureReason.auth,
-      ApiErrorType.server => ComicEpisodeImagesFetchFailureReason.server,
-      ApiErrorType.parse => ComicEpisodeImagesFetchFailureReason.parse,
-      ApiErrorType.business ||
-      ApiErrorType.unknown => ComicEpisodeImagesFetchFailureReason.unknown,
+      DataReadFailureKind.network ||
+      DataReadFailureKind.timeout ||
+      DataReadFailureKind.cancelled =>
+        ComicEpisodeImagesFetchFailureReason.network,
+      DataReadFailureKind.unauthorized =>
+        ComicEpisodeImagesFetchFailureReason.auth,
+      DataReadFailureKind.server => ComicEpisodeImagesFetchFailureReason.server,
+      DataReadFailureKind.parse => ComicEpisodeImagesFetchFailureReason.parse,
+      DataReadFailureKind.business ||
+      DataReadFailureKind.unsupported ||
+      DataReadFailureKind.unknown =>
+        ComicEpisodeImagesFetchFailureReason.unknown,
     };
   }
 
@@ -786,15 +777,22 @@ final comicEpisodeThreadRepositoryProvider = Provider<ThreadRepository>((ref) {
   return ref.watch(threadJsonRepositoryProvider);
 });
 
+final comicEpisodeCatalogRepositoryProvider =
+    Provider<ComicEpisodeCatalogRepository>((ref) {
+      return DiscuzApiComicEpisodeCatalogRepository(
+        threadRepository: ref.watch(comicEpisodeThreadRepositoryProvider),
+        imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
+      );
+    });
+
 final comicReaderServiceProvider = FutureProvider<ComicReaderService>((
   ref,
 ) async {
   return NetworkComicReaderService(
-    threadApiRepository: ref.read(comicEpisodeThreadRepositoryProvider),
+    episodeCatalogRepository: ref.read(comicEpisodeCatalogRepositoryProvider),
     imageCacheService: ref.read(imageCacheServiceProvider),
     cacheManager: await ref.read(comicCacheManagerProvider.future),
     headerBuilder: ref.read(imageRequestHeaderBuilderProvider),
-    imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
   );
 });
 
@@ -807,7 +805,7 @@ final comicFirstEpisodeCoverServiceProvider =
           final readerService = await ref.read(
             comicReaderServiceProvider.future,
           );
-          return readerService.fetchEpisodeImagesByTid(tid);
+          return (await readerService.fetchEpisodeImages(tid)).imageUrlsOrEmpty;
         },
       );
     });
@@ -992,8 +990,4 @@ class HtmlComicParserService implements ComicParserService {
     ).firstMatch(plainText);
     return authorMatch?.group(2);
   }
-}
-
-extension _FirstOrNullExt<E> on Iterable<E> {
-  E? get firstOrNull => isEmpty ? null : first;
 }

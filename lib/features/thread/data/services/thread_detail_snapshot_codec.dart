@@ -1,7 +1,7 @@
 import 'package:y300/core/utils/parse_utils.dart';
 import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 class ThreadDetailSnapshotCodec implements SnapshotCodec<ThreadDetailData> {
   const ThreadDetailSnapshotCodec();

@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/novel/data/services/novel_source_metadata_recovery_gateway.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
 
 void main() {
   test(
-    'legacy metadata recovery explicitly requests version 4 page one',
+    'metadata recovery requests page one through configured v4 repository',
     () async {
       final repository = _RecordingThreadRepository(_detail());
       final gateway = ThreadRepositoryNovelSourceMetadataRecoveryGateway(
@@ -18,9 +18,7 @@ void main() {
       expect(detail.tid, '521519');
       expect(repository.tid, '521519');
       expect(repository.page, 1);
-      expect(repository.queryParameters, const <String, String>{
-        'version': '4',
-      });
+      expect(repository.query, const ThreadDetailQuery());
     },
   );
 }
@@ -31,18 +29,27 @@ class _RecordingThreadRepository implements ThreadRepository {
   final ThreadDetailData detail;
   String? tid;
   int? page;
-  Map<String, String>? queryParameters;
+  ThreadDetailQuery? query;
 
   @override
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
     required String tid,
     int page = 1,
-    Map<String, String> queryParameters = const <String, String>{},
+    ThreadDetailQuery query = const ThreadDetailQuery(),
   }) async {
     this.tid = tid;
     this.page = page;
-    this.queryParameters = queryParameters;
-    return ApiSuccess<ThreadDetailData>(detail);
+    this.query = query;
+    return DataReadSuccess(
+      data: detail,
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
+    );
   }
 }
 

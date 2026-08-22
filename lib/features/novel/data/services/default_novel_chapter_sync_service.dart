@@ -12,7 +12,7 @@ import 'package:y300/features/novel/domain/services/novel_author_post_episode_bu
 import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.dart';
 import 'package:y300/features/novel/domain/services/novel_sync_request_governor.dart';
 import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 typedef NovelChapterSyncClock = DateTime Function();
 typedef NovelChapterSyncRunIdFactory =

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -2367,13 +2368,18 @@ class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
 
 class _FakeThreadRepository implements ThreadRepository {
   @override
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
     required String tid,
     int page = 1,
-    Map<String, String> queryParameters = const <String, String>{},
+    ThreadDetailQuery query = const ThreadDetailQuery(),
   }) async {
-    return ApiSuccess<ThreadDetailData>(
-      ThreadDetailData(
+    return DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>(
+      data: ThreadDetailData(
         tid: tid,
         fid: '33',
         subject: '测试主题',
@@ -2395,6 +2401,8 @@ class _FakeThreadRepository implements ThreadRepository {
           ),
         ],
       ),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
     );
   }
 }

@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
@@ -718,13 +718,18 @@ class _FakeNovelChapterSourceRouteResolver
 
 class _FakeThreadRepository implements ThreadRepository {
   @override
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
     required String tid,
     int page = 1,
-    Map<String, String> queryParameters = const <String, String>{},
+    ThreadDetailQuery query = const ThreadDetailQuery(),
   }) async {
-    return ApiSuccess<ThreadDetailData>(
-      ThreadDetailData(
+    return DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>(
+      data: ThreadDetailData(
         tid: tid,
         fid: '49',
         subject: '来源帖子',
@@ -745,6 +750,8 @@ class _FakeThreadRepository implements ThreadRepository {
           ),
         ],
       ),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
     );
   }
 }

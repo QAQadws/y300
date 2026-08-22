@@ -1,4 +1,4 @@
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 /// One JSON `viewthread` page used by consumers that only need top-level posts.
 ///

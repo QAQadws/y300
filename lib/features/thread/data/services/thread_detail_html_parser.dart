@@ -1,7 +1,7 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 class ThreadDetailHtmlParser {
   const ThreadDetailHtmlParser({

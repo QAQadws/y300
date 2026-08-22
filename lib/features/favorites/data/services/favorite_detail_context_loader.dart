@@ -3,7 +3,7 @@ import 'package:y300/features/favorites/data/services/favorite_first_sync_reques
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_detail_context.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 typedef FavoriteThreadDetailLoader =

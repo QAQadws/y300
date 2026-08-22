@@ -8,7 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
-import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/repositories/forum_display_repository.dart';
 import 'package:y300/features/forum/data/services/forum_favorite_action_service.dart';
 import 'package:y300/features/forum/presentation/forum_content_projection_providers.dart';
 import 'package:y300/features/forum/presentation/forum_display_content_projection.dart';
@@ -76,7 +77,9 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     }
     final theme = Theme.of(context);
     final palette = ForumDisplayThemePalette.resolve(theme);
-    final searchFid = _searchFidFor(state);
+    final searchFid = state.supports(ForumDisplayCapability.searchEntry)
+        ? _searchFidFor(state)
+        : null;
     final mode = ref.watch(appServerContentConversionModeProvider);
     final projection = _projectionOrRaw(
       state,
@@ -170,7 +173,10 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
         label: l10n.forumRefreshPage,
       ),
     ];
-    if (_isFavoriteMutationLoading || isLoading) {
+    if (!state.supports(ForumDisplayCapability.favoriteState)) {
+      // Unsupported and unknown capabilities fail closed without suggesting
+      // that an empty server field is a transient loading state.
+    } else if (_isFavoriteMutationLoading || isLoading) {
       items.add(
         AppPopupMenuItem<String>(
           key: const Key('forum-display-favorite-loading-action'),
@@ -210,13 +216,15 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
           break;
       }
     }
-    items.add(
-      AppPopupMenuItem<String>(
-        key: const Key('forum-display-compose-action'),
-        value: _createThreadAction,
-        label: l10n.forumDisplayCreateThread,
-      ),
-    );
+    if (state.supports(ForumDisplayCapability.postingEntry)) {
+      items.add(
+        AppPopupMenuItem<String>(
+          key: const Key('forum-display-compose-action'),
+          value: _createThreadAction,
+          label: l10n.forumDisplayCreateThread,
+        ),
+      );
+    }
     return items;
   }
 

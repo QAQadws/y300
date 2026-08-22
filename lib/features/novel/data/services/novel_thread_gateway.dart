@@ -2,7 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/mappers/thread_detail_api_mapper.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 class ApiNovelThreadGateway implements NovelThreadGateway {
   const ApiNovelThreadGateway(this._apiClient);
@@ -39,8 +40,10 @@ class ApiNovelThreadGateway implements NovelThreadGateway {
         'ppp': postsPerPage,
         'authorid': normalizedAuthorId,
       },
-      parser: (response) =>
-          ThreadDetailData.fromVariables(response.variables, page: page),
+      parser: (response) => const ThreadDetailApiMapper().mapVariables(
+        response.variables,
+        page: page,
+      ),
     );
     final data = result.dataOrNull;
     if (!result.isSuccess || data == null) {

@@ -69,7 +69,7 @@ void main() {
       final result = await repository.getThreadDetail(
         tid: '572529',
         page: 3,
-        queryParameters: const <String, String>{'ordertype': '1'},
+        query: const ThreadDetailQuery(reverseOrder: true),
       );
 
       expect(result.isSuccess, isTrue);

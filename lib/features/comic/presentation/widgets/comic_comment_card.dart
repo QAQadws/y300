@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';

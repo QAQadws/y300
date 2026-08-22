@@ -1,7 +1,7 @@
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/services/novel_first_post_catalog_extractor.dart';
 import 'package:y300/features/novel/domain/services/novel_intro_section_extractor.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
 
 abstract interface class NovelSourceMetadataParser {

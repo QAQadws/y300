@@ -1,5 +1,7 @@
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
-import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/repositories/forum_display_repository.dart';
 
 enum ForumDisplayFailureCode { loadFailed }
 
@@ -34,6 +36,8 @@ class ForumDisplayPageState {
     this.nextPageUrl,
     this.lastPage,
     this.favoriteAction = ForumDisplayFavoriteAction.unknown,
+    this.capabilities,
+    this.readMetadata,
     this.failure,
     @Deprecated('Use failure and presentation localization instead.')
     this.errorMessage,
@@ -61,11 +65,17 @@ class ForumDisplayPageState {
   final String? nextPageUrl;
   final int? lastPage;
   final ForumDisplayFavoriteAction favoriteAction;
+  final ForumDisplayReadCapabilities? capabilities;
+  final DataReadMetadata? readMetadata;
 
   final ForumDisplayFailure? failure;
 
   @Deprecated('Use failure and presentation localization instead.')
   final String? errorMessage;
+
+  bool supports(ForumDisplayCapability capability) {
+    return capabilities?.supports(capability) ?? false;
+  }
 
   factory ForumDisplayPageState.initial({
     required String fid,
@@ -94,6 +104,8 @@ class ForumDisplayPageState {
       nextPageUrl: null,
       lastPage: null,
       favoriteAction: ForumDisplayFavoriteAction.unknown,
+      capabilities: null,
+      readMetadata: null,
       failure: null,
       errorMessage: null,
     );
@@ -122,6 +134,8 @@ class ForumDisplayPageState {
     String? nextPageUrl,
     int? lastPage,
     ForumDisplayFavoriteAction? favoriteAction,
+    ForumDisplayReadCapabilities? capabilities,
+    DataReadMetadata? readMetadata,
     ForumDisplayFailure? failure,
     String? errorMessage,
     bool clearError = false,
@@ -149,6 +163,8 @@ class ForumDisplayPageState {
       nextPageUrl: nextPageUrl ?? this.nextPageUrl,
       lastPage: lastPage ?? this.lastPage,
       favoriteAction: favoriteAction ?? this.favoriteAction,
+      capabilities: capabilities ?? this.capabilities,
+      readMetadata: readMetadata ?? this.readMetadata,
       failure: clearError ? null : (failure ?? this.failure),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );

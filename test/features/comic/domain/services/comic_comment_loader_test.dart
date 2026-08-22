@@ -3,6 +3,7 @@ import 'package:y300/core/network/api_result.dart';
 import '../../data/comic_comment_fixtures.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
+import 'package:y300/features/thread/data/mappers/thread_detail_api_mapper.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/models/thread_reply_page.dart';
 import 'package:y300/features/thread/data/repositories/thread_reply_page_repository.dart';
@@ -279,7 +280,7 @@ void main() {
 }
 
 ThreadReplyPage _fixturePage(int page) {
-  final data = ThreadDetailData.fromVariables(
+  final data = const ThreadDetailApiMapper().mapVariables(
     comicCommentPageVariables(page: page),
     page: page,
   );

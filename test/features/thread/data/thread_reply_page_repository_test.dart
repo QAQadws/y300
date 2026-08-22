@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_reply_page_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
@@ -59,18 +59,28 @@ class _FakeThreadRepository implements ThreadRepository {
   final List<String> requested = <String>[];
 
   @override
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
     required String tid,
     int page = 1,
-    Map<String, String> queryParameters = const <String, String>{},
+    ThreadDetailQuery query = const ThreadDetailQuery(),
   }) async {
     requested.add('$tid:$page');
     final value = data;
     if (value == null) {
-      return const ApiFailure<ThreadDetailData>(
-        ApiError(type: ApiErrorType.server, message: 'missing'),
+      return const DataReadFailure(
+        kind: DataReadFailureKind.server,
+        diagnosticMessage: 'missing',
       );
     }
-    return ApiSuccess(value);
+    return DataReadSuccess(
+      data: value,
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
+    );
   }
 }

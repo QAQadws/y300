@@ -12,7 +12,7 @@ import 'package:y300/features/comic/domain/services/comic_recursive_thread_reque
 import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 

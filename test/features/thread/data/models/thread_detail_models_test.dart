@@ -1,11 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/thread/data/mappers/thread_detail_api_mapper.dart';
 import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/services/thread_detail_snapshot_codec.dart';
 
 void main() {
-  group('ThreadDetailData.fromVariables', () {
+  group('ThreadDetailApiMapper', () {
     test('parses typeid from thread payload', () {
-      final data = ThreadDetailData.fromVariables(<String, dynamic>{
+      final data = const ThreadDetailApiMapper().mapVariables(<String, dynamic>{
         'fid': '30',
         'ppp': '20',
         'thread': <String, dynamic>{
@@ -24,7 +25,7 @@ void main() {
     });
 
     test('falls back to variables typeid when thread typeid is absent', () {
-      final data = ThreadDetailData.fromVariables(<String, dynamic>{
+      final data = const ThreadDetailApiMapper().mapVariables(<String, dynamic>{
         'fid': '49',
         'typeid': '293',
         'thread': <String, dynamic>{'tid': '101', 'subject': '测试小说'},
@@ -35,7 +36,7 @@ void main() {
     });
 
     test('keeps raw attachment metadata from postlist', () {
-      final data = ThreadDetailData.fromVariables(<String, dynamic>{
+      final data = const ThreadDetailApiMapper().mapVariables(<String, dynamic>{
         'fid': '30',
         'thread': <String, dynamic>{
           'tid': '476706',

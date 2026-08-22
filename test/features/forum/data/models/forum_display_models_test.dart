@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/forum/data/mappers/forum_display_api_mapper.dart';
 import 'package:y300/features/forum/data/services/forum_display_snapshot_codec.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
 
@@ -36,7 +37,7 @@ void main() {
     });
   });
 
-  group('ForumDisplayData.fromVariables', () {
+  group('ForumDisplayApiMapper', () {
     test('parses forum_threadlist and tpp from forumdisplay response', () {
       final variables = <String, dynamic>{
         'forum': <String, dynamic>{
@@ -59,7 +60,10 @@ void main() {
         ],
       };
 
-      final data = ForumDisplayData.fromVariables(variables, page: 99);
+      final data = const ForumDisplayApiMapper().mapVariables(
+        variables,
+        page: 99,
+      );
 
       expect(data.fid, '5');
       expect(data.forumName, '动漫区');
@@ -92,7 +96,10 @@ void main() {
         ],
       };
 
-      final data = ForumDisplayData.fromVariables(variables, page: 2);
+      final data = const ForumDisplayApiMapper().mapVariables(
+        variables,
+        page: 2,
+      );
 
       expect(data.currentPage, 2);
       expect(data.perPage, 10);

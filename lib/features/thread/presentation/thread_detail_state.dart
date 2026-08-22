@@ -1,4 +1,6 @@
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
@@ -87,6 +89,8 @@ class ThreadDetailPageState {
     required this.replyText,
     required this.isReplySubmitting,
     required this.replyHint,
+    this.capabilities,
+    this.readMetadata,
     this.errorMessage,
     this.loadFailure,
     this.threadFavoriteNotice,
@@ -130,6 +134,8 @@ class ThreadDetailPageState {
   final String replyText;
   final bool isReplySubmitting;
   final String? replyHint;
+  final ThreadDetailReadCapabilities? capabilities;
+  final DataReadMetadata? readMetadata;
   final String? errorMessage;
   final ThreadActionFailure? loadFailure;
   final ThreadActionNotice? threadFavoriteNotice;
@@ -140,6 +146,10 @@ class ThreadDetailPageState {
       (queryParameters['authorid']?.trim().isNotEmpty ?? false);
 
   bool get isReverseOrderView => queryParameters['ordertype']?.trim() == '1';
+
+  bool supports(ThreadDetailCapability capability) {
+    return capabilities?.supports(capability) ?? false;
+  }
 
   factory ThreadDetailPageState.initial({
     required String tid,
@@ -181,6 +191,8 @@ class ThreadDetailPageState {
       replyText: '',
       isReplySubmitting: false,
       replyHint: null,
+      capabilities: null,
+      readMetadata: null,
       errorMessage: null,
       loadFailure: null,
       threadFavoriteNotice: null,
@@ -226,6 +238,8 @@ class ThreadDetailPageState {
     String? replyText,
     bool? isReplySubmitting,
     String? replyHint,
+    ThreadDetailReadCapabilities? capabilities,
+    DataReadMetadata? readMetadata,
     String? errorMessage,
     ThreadActionFailure? loadFailure,
     ThreadActionNotice? threadFavoriteNotice,
@@ -304,6 +318,8 @@ class ThreadDetailPageState {
       replyText: replyText ?? this.replyText,
       isReplySubmitting: isReplySubmitting ?? this.isReplySubmitting,
       replyHint: clearReplyHint ? null : (replyHint ?? this.replyHint),
+      capabilities: capabilities ?? this.capabilities,
+      readMetadata: readMetadata ?? this.readMetadata,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       loadFailure: clearLoadFailure ? null : (loadFailure ?? this.loadFailure),
       threadFavoriteNotice: clearThreadFavoriteNotice

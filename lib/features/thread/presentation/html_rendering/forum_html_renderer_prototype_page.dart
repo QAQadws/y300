@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_fragment_extractor.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_render_input.dart';

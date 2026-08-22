@@ -1,7 +1,7 @@
 import 'package:y300/core/network/api_result.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
-import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/models/forum_display_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 

@@ -2,7 +2,7 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
 import 'package:y300/features/comic/domain/models/comic_post_parsing_models.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
 /// Parse consecutive OP posts from floor-1.

@@ -4,7 +4,7 @@ import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_pa
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_eligibility_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 

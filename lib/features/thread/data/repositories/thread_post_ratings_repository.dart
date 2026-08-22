@@ -7,7 +7,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 final class ThreadPostRatingDetails {
   const ThreadPostRatingDetails({

@@ -3,7 +3,7 @@ import 'package:y300/features/novel/domain/services/novel_author_post_chapter_el
 import 'package:y300/features/novel/domain/services/novel_chapter_title_candidate_extractor.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_title_policy.dart';
 import 'package:y300/features/novel/domain/services/novel_post_attach_html_resolver.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 

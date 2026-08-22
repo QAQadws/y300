@@ -12,7 +12,7 @@ import 'package:y300/features/favorites/domain/services/library_post_ingest_task
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 enum FavoriteSyncProgressPhase {
   idle,

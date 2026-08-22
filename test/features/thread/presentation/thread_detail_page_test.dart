@@ -13,6 +13,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -5756,25 +5758,38 @@ class _FakeThreadRepository implements ThreadRepository {
   final List<Map<String, String>> queryHistory = <Map<String, String>>[];
 
   @override
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
     required String tid,
     int page = 1,
-    Map<String, String> queryParameters = const <String, String>{},
-  }) {
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    final queryParameters = query.toRequestParameters();
     queryHistory.add(Map<String, String>.from(queryParameters));
     final loader = _loader;
+    final ApiResult<ThreadDetailData> result;
     if (loader
         is Future<ApiResult<ThreadDetailData>> Function(
           String,
           int,
           Map<String, String>,
         )) {
-      return loader(tid, page, queryParameters);
+      result = await loader(tid, page, queryParameters);
+    } else {
+      result =
+          await (loader
+              as Future<ApiResult<ThreadDetailData>> Function(String, int))(
+            tid,
+            page,
+          );
     }
-    return (loader
-        as Future<ApiResult<ThreadDetailData>> Function(String, int))(
-      tid,
-      page,
+    return dataReadResultFromApiResult(
+      result,
+      capabilities: capabilities.toReadCapabilities(),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/thread/data/models/thread_reply_page.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
@@ -38,10 +39,10 @@ class ApiThreadReplyPageRepository implements ThreadReplyPageRepository {
     }
 
     final result = await _repository.getThreadDetail(tid: tid, page: page);
-    return result.when(
+    return apiResultFromDataRead(result).when(
       success: (data) =>
           ApiSuccess<ThreadReplyPage>(ThreadReplyPage.fromThreadDetail(data)),
-      failure: ApiFailure.new,
+      failure: (error) => ApiFailure<ThreadReplyPage>(error),
     );
   }
 }

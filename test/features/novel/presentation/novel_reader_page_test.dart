@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
-import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -1943,13 +1943,18 @@ class _NoopImageCacheService implements ImageCacheService {
 
 class _FakeThreadRepository implements ThreadRepository {
   @override
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
     required String tid,
     int page = 1,
-    Map<String, String> queryParameters = const <String, String>{},
+    ThreadDetailQuery query = const ThreadDetailQuery(),
   }) async {
-    return ApiSuccess(
-      ThreadDetailData(
+    return DataReadSuccess(
+      data: ThreadDetailData(
         tid: tid,
         fid: '49',
         subject: '测试小说',
@@ -1960,6 +1965,8 @@ class _FakeThreadRepository implements ThreadRepository {
         perPage: 20,
         posts: const <ThreadPost>[],
       ),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
     );
   }
 }

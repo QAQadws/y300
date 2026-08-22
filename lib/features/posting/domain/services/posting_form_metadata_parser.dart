@@ -11,7 +11,7 @@ import 'package:y300/features/posting/domain/models/posting_models.dart';
 ///   或 0/1 整数。
 ///
 /// 这里写在独立 service 而不是模型里，方便后续把 forumdisplay 共用解析（比如
-/// `ForumDisplayJsonMapper`）和发帖 metadata 解析独立演进。
+/// `ForumDisplayApiMapper`）和发帖 metadata 解析独立演进。
 class PostingFormMetadataParser {
   const PostingFormMetadataParser();
 

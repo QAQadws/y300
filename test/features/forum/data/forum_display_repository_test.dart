@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
@@ -16,6 +19,8 @@ import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.d
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_display_repository.dart';
 import 'package:y300/features/forum/data/models/forum_display_models.dart';
+
+import '../../../support/data_source_contracts/data_read_contract_scenarios.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -172,6 +177,14 @@ void main() {
       expect(result.isSuccess, isTrue);
       expect(result.dataOrNull!.forumName, '中文百合漫画区');
       expect(result.dataOrNull!.threads.single.tid, '572604');
+      final success =
+          result
+              as DataReadSuccess<
+                ForumDisplayData,
+                ForumDisplayReadCapabilities
+              >;
+      expect(success.metadata.origin, DataReadOrigin.cachedDocumentFallback);
+      expect(success.metadata.freshness, DataReadFreshness.staleOrUnknown);
       expect(documentCache.touchedKeys, <String>[descriptor.cacheKey]);
       expect(documentCache.touchedAt[descriptor.cacheKey], now);
     },
@@ -213,6 +226,14 @@ void main() {
 
       expect(result.isSuccess, isTrue);
       expect(result.dataOrNull!.forumName, '缓存版块');
+      final success =
+          result
+              as DataReadSuccess<
+                ForumDisplayData,
+                ForumDisplayReadCapabilities
+              >;
+      expect(success.metadata.origin, DataReadOrigin.freshSnapshot);
+      expect(success.metadata.freshness, DataReadFreshness.freshCache);
       expect(adapter.requestedUris, isEmpty);
     },
   );
@@ -346,6 +367,96 @@ void main() {
       expect(documentCache.touchedKeys, isEmpty);
     },
   );
+
+  test('Discuz API rejects unsupported filters before network', () async {
+    final adapter = _ForumDisplayApiTestAdapter();
+    final repository = _buildApiRepository(adapter);
+
+    final result = await repository.getForumDisplayByQuery(
+      const ForumDisplayQuery(
+        fid: '30',
+        parameters: <String, String>{'typeid': '69'},
+      ),
+    );
+
+    expectSourceNeutralFailure(result, kind: DataReadFailureKind.unsupported);
+    expect(adapter.requestCount, 0);
+  });
+
+  test(
+    'Discuz API reports network provenance for an explicit empty page',
+    () async {
+      final adapter = _ForumDisplayApiTestAdapter();
+      final repository = _buildApiRepository(adapter);
+
+      final result = await repository.getForumDisplay(fid: '30');
+
+      expectSuccessfulReadContract(
+        result,
+        hasKnownIdentity: (capabilities) =>
+            capabilities.supports(ForumDisplayCapability.forumIdentity),
+      );
+      expect(result.dataOrNull!.threads, isEmpty);
+      final success =
+          result
+              as DataReadSuccess<
+                ForumDisplayData,
+                ForumDisplayReadCapabilities
+              >;
+      expect(success.metadata.origin, DataReadOrigin.network);
+      expect(
+        success.capabilities.supports(
+          ForumDisplayCapability.richThreadSummaries,
+        ),
+        isFalse,
+      );
+    },
+  );
+}
+
+DiscuzForumDisplayRepository _buildApiRepository(
+  _ForumDisplayApiTestAdapter adapter,
+) {
+  final dio = Dio(
+    BaseOptions(
+      baseUrl: 'https://bbs.yamibo.com/api/mobile/index.php',
+      validateStatus: (status) =>
+          status != null && status >= 200 && status < 400,
+    ),
+  )..httpClientAdapter = adapter;
+  return DiscuzForumDisplayRepository(
+    ApiClient(
+      cookieStore: CookieStore(),
+      logger: Logger(level: Level.off),
+      dio: dio,
+      enableLog: false,
+    ),
+  );
+}
+
+final class _ForumDisplayApiTestAdapter implements HttpClientAdapter {
+  int requestCount = 0;
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requestCount += 1;
+    return ResponseBody.fromString(
+      await File(
+        'test/fixtures/data_source_contracts/forum_display_empty_v4.json',
+      ).readAsString(),
+      200,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>['application/json'],
+      },
+    );
+  }
 }
 
 ForumDisplayHtmlRepository _buildRepository(

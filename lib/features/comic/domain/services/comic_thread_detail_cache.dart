@@ -1,4 +1,4 @@
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 /// 单次刷新内复用的 thread detail 缓存。
 ///

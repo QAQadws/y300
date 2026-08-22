@@ -1,7 +1,7 @@
 import 'package:y300/core/utils/parse_utils.dart';
 import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/models/forum_display_models.dart';
 
 class ForumDisplaySnapshotCodec implements SnapshotCodec<ForumDisplayData> {
   const ForumDisplaySnapshotCodec();

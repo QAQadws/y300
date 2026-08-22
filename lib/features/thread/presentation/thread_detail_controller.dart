@@ -3,13 +3,14 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/thread/data/providers/thread_favorite_providers.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
@@ -107,11 +108,17 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     final result = await _readRepository().getThreadDetail(
       tid: _args.tid,
       page: current.currentPage + 1,
-      queryParameters: current.queryParameters,
+      query: ThreadDetailQuery.fromLegacyParameters(current.queryParameters),
     );
 
     state = result.when(
-      success: (data) {
+      success: (data, capabilities, metadata) {
+        final effectiveCapabilities = current.capabilities == null
+            ? capabilities
+            : current.capabilities!.intersect(capabilities);
+        final effectiveMetadata = current.readMetadata == null
+            ? metadata
+            : current.readMetadata!.merge(metadata);
         final merged = _preparePostsForView(<ThreadPost>[
           ...current.posts,
           ...data.posts,
@@ -125,33 +132,67 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
             views: data.views,
             replies: data.replies,
             currentPage: data.currentPage,
-            lastPage: data.lastPage,
+            lastPage:
+                effectiveCapabilities.supports(
+                  ThreadDetailCapability.exactPagination,
+                )
+                ? data.lastPage
+                : null,
             previousPageUrl: data.previousPageUrl,
             nextPageUrl: data.nextPageUrl,
-            reverseOrderUrl: data.reverseOrderUrl,
-            onlyAuthorUrl: data.onlyAuthorUrl,
-            favoriteUrl: data.favoriteUrl,
+            reverseOrderUrl:
+                effectiveCapabilities.supports(
+                  ThreadDetailCapability.alternateViews,
+                )
+                ? data.reverseOrderUrl
+                : null,
+            onlyAuthorUrl:
+                effectiveCapabilities.supports(
+                  ThreadDetailCapability.alternateViews,
+                )
+                ? data.onlyAuthorUrl
+                : null,
+            favoriteUrl:
+                effectiveCapabilities.supports(
+                  ThreadDetailCapability.favoriteEntry,
+                )
+                ? data.favoriteUrl
+                : null,
             shareUrl: data.shareUrl,
             homeUrl: data.homeUrl,
             desktopUrl: data.desktopUrl,
             hasMore: data.hasMore,
             isLoadingMore: false,
             posts: merged,
+            capabilities: effectiveCapabilities,
+            readMetadata: effectiveMetadata,
+            clearLastPage: !effectiveCapabilities.supports(
+              ThreadDetailCapability.exactPagination,
+            ),
+            clearReverseOrderUrl: !effectiveCapabilities.supports(
+              ThreadDetailCapability.alternateViews,
+            ),
+            clearOnlyAuthorUrl: !effectiveCapabilities.supports(
+              ThreadDetailCapability.alternateViews,
+            ),
+            clearFavoriteUrl: !effectiveCapabilities.supports(
+              ThreadDetailCapability.favoriteEntry,
+            ),
             clearError: true,
           ),
         );
       },
-      failure: (error) {
+      failure: (failure) {
         return AsyncData(
           current.copyWith(
             isLoadingMore: false,
-            errorMessage: error.message,
+            errorMessage: failure.diagnosticMessage,
             loadFailure: ThreadActionFailure(
-              code: error.type == ApiErrorType.unauthorized
+              code: failure.kind == DataReadFailureKind.unauthorized
                   ? ThreadUiErrorCode.loginRequired
                   : ThreadUiErrorCode.pageLoadFailed,
-              detail: error.message,
-              message: error.message,
+              detail: failure.diagnosticMessage,
+              message: failure.diagnosticMessage,
             ),
           ),
         );
@@ -188,7 +229,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> openOnlyAuthor() async {
     final current = state.value;
-    if (current == null) {
+    if (current == null ||
+        !current.supports(ThreadDetailCapability.alternateViews)) {
       return;
     }
     final authorId =
@@ -209,7 +251,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> openAllPosts() async {
     final current = state.value;
-    if (current == null || !current.isOnlyAuthorView) {
+    if (current == null ||
+        !current.supports(ThreadDetailCapability.alternateViews) ||
+        !current.isOnlyAuthorView) {
       return;
     }
     await _replaceWithPage(
@@ -223,7 +267,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> openReverseOrder() async {
     final current = state.value;
-    if (current == null) {
+    if (current == null ||
+        !current.supports(ThreadDetailCapability.alternateViews)) {
       return;
     }
     await _replaceWithPage(
@@ -238,7 +283,9 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> openNormalOrder() async {
     final current = state.value;
-    if (current == null || !current.isReverseOrderView) {
+    if (current == null ||
+        !current.supports(ThreadDetailCapability.alternateViews) ||
+        !current.isReverseOrderView) {
       return;
     }
     await _replaceWithPage(
@@ -258,6 +305,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
   Future<void> favoriteThread() async {
     final current = state.value;
     if (current == null ||
+        !current.supports(ThreadDetailCapability.favoriteEntry) ||
         current.isThreadFavoriteActionLoading ||
         current.isThreadFavorited) {
       return;
@@ -356,7 +404,10 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> submitPollVote(ThreadPoll poll) async {
     final current = state.value;
-    if (current == null || current.isPollVoteSubmitting || !poll.canVote) {
+    if (current == null ||
+        !current.supports(ThreadDetailCapability.pollVoteAction) ||
+        current.isPollVoteSubmitting ||
+        !poll.canVote) {
       return;
     }
     final selected = current.selectedPollOptionIds.toList(growable: false);
@@ -441,6 +492,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     final pid = post.pid.trim();
     final viewAllUrl = post.ratingSummary?.viewAllUrl?.trim();
     if (current == null ||
+        !current.supports(ThreadDetailCapability.ratingSummary) ||
         pid.isEmpty ||
         viewAllUrl == null ||
         viewAllUrl.isEmpty) {
@@ -742,10 +794,15 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     final result = await _readRepository().getThreadDetail(
       tid: _args.tid,
       page: page,
-      queryParameters: queryParameters,
+      query: ThreadDetailQuery.fromLegacyParameters(queryParameters),
     );
 
-    if (result case ApiSuccess<ThreadDetailData>(:final data)) {
+    if (result
+        case DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>(
+          :final data,
+          :final capabilities,
+          :final metadata,
+        )) {
       _logNative(
         'controller_repository_success',
         'tid=${_args.tid} requestedPage=$page parsedPage=${data.currentPage} '
@@ -826,12 +883,24 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           views: data.views,
           replies: data.replies,
           currentPage: data.currentPage,
-          lastPage: data.lastPage,
+          lastPage:
+              capabilities.supports(ThreadDetailCapability.exactPagination)
+              ? data.lastPage
+              : null,
           previousPageUrl: data.previousPageUrl,
           nextPageUrl: data.nextPageUrl,
-          reverseOrderUrl: data.reverseOrderUrl,
-          onlyAuthorUrl: data.onlyAuthorUrl,
-          favoriteUrl: data.favoriteUrl,
+          reverseOrderUrl:
+              capabilities.supports(ThreadDetailCapability.alternateViews)
+              ? data.reverseOrderUrl
+              : null,
+          onlyAuthorUrl:
+              capabilities.supports(ThreadDetailCapability.alternateViews)
+              ? data.onlyAuthorUrl
+              : null,
+          favoriteUrl:
+              capabilities.supports(ThreadDetailCapability.favoriteEntry)
+              ? data.favoriteUrl
+              : null,
           shareUrl: data.shareUrl,
           homeUrl: data.homeUrl,
           desktopUrl: data.desktopUrl,
@@ -849,6 +918,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           replyText: '',
           isReplySubmitting: false,
           replyHint: null,
+          capabilities: capabilities,
+          readMetadata: metadata,
         );
         _logNative(
           'controller_success',
@@ -884,27 +955,29 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       }
     }
 
-    final error = (result as ApiFailure<ThreadDetailData>).error;
+    final failure =
+        result
+            as DataReadFailure<ThreadDetailData, ThreadDetailReadCapabilities>;
     _logNative(
       'controller_failure',
       'tid=${_args.tid} page=$page previous=${previous.length} '
-          'type=${error.type.name} status=${error.statusCode ?? '-'} '
-          'message=${_oneLine(error.message)}',
+          'type=${failure.kind.name} status=${failure.statusCode ?? '-'} '
+          'message=${_oneLine(failure.diagnosticMessage)}',
     );
     return _failureState(
       page: page,
       previous: previous,
       queryParameters: queryParameters,
-      message: error.message,
+      message: failure.diagnosticMessage,
       failure: ThreadActionFailure(
-        code: error.type == ApiErrorType.unauthorized
+        code: failure.kind == DataReadFailureKind.unauthorized
             ? ThreadUiErrorCode.loginRequired
             : (failureCode ??
                   (page == 1
                       ? ThreadUiErrorCode.loadFailed
                       : ThreadUiErrorCode.pageLoadFailed)),
-        detail: error.message,
-        message: error.message,
+        detail: failure.diagnosticMessage,
+        message: failure.diagnosticMessage,
       ),
     );
   }

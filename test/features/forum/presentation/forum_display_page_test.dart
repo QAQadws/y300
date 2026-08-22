@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
@@ -1811,23 +1813,21 @@ class _FakeForumDisplayRepository implements ForumDisplayRepository {
   final cachePolicies = <CacheLoadPolicy>[];
 
   @override
-  Future<ApiResult<ForumDisplayData>> getForumDisplay({
-    required String fid,
-    int page = 1,
-    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
-  }) {
-    cachePolicies.add(cachePolicy);
-    return _loader(fid, page, null);
-  }
+  ForumDisplaySourceCapabilities get capabilities =>
+      ForumDisplaySourceCapabilities.full;
 
   @override
-  Future<ApiResult<ForumDisplayData>> getForumDisplayByQuery(
+  Future<DataReadResult<ForumDisplayData, ForumDisplayReadCapabilities>>
+  getForumDisplayByQuery(
     ForumDisplayQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
-  }) {
+  }) async {
     lastQuery = query;
     cachePolicies.add(cachePolicy);
-    return _loader(query.fid, query.page, query);
+    return dataReadResultFromApiResult(
+      await _loader(query.fid, query.page, query),
+      capabilities: capabilities.toReadCapabilities(),
+    );
   }
 }
 
@@ -1985,13 +1985,18 @@ class _NoopImageCacheService implements ImageCacheService {
 
 class _FakeThreadRepository implements ThreadRepository {
   @override
-  Future<ApiResult<ThreadDetailData>> getThreadDetail({
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
     required String tid,
     int page = 1,
-    Map<String, String> queryParameters = const <String, String>{},
+    ThreadDetailQuery query = const ThreadDetailQuery(),
   }) async {
-    return ApiSuccess(
-      ThreadDetailData(
+    return DataReadSuccess(
+      data: ThreadDetailData(
         tid: tid,
         fid: '2',
         forumName: '公告区',
@@ -2013,6 +2018,8 @@ class _FakeThreadRepository implements ThreadRepository {
           ),
         ],
       ),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
     );
   }
 }

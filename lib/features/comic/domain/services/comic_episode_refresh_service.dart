@@ -1,7 +1,7 @@
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 abstract class ComicEpisodeRefreshService {
   Future<List<ComicEpisodeLink>> fetchEpisodeLinks(

@@ -1,4 +1,4 @@
-import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_content_projection_support.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
@@ -73,7 +73,18 @@ final class ForumDisplayContentProjection {
       source.headImageDimensions?.width,
       source.headImageDimensions?.height,
       source.threads.length,
+      source.capabilities?.paginationPrecision,
+      source.readMetadata?.origin,
+      source.readMetadata?.freshness,
     ];
+    final capabilityEntries =
+        source.capabilities?.values.values.entries.toList()
+          ?..sort((left, right) => left.key.index.compareTo(right.key.index));
+    for (final entry in capabilityEntries ?? const []) {
+      parts
+        ..add(entry.key)
+        ..add(entry.value);
+    }
     for (final item in source.primaryFilters) {
       parts
         ..add(item.url)

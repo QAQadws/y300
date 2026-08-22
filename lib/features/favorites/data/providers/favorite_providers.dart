@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/providers/favorite_ingest_providers.dart';
@@ -32,9 +33,11 @@ final localFavoriteRepositoryProvider = Provider<LocalFavoriteRepository>((
 final favoriteDetailContextLoaderProvider =
     Provider<FavoriteDetailContextLoader>((ref) {
       return DefaultFavoriteDetailContextLoader(
-        loadThreadDetail: (tid) => ref
-            .read(threadJsonRepositoryProvider)
-            .getThreadDetail(tid: tid, page: 1),
+        loadThreadDetail: (tid) async => apiResultFromDataRead(
+          await ref
+              .read(threadJsonRepositoryProvider)
+              .getThreadDetail(tid: tid, page: 1),
+        ),
         loadTagLookup: () => ref.read(forumTagLookupProvider.future),
         classifier: ref.watch(threadContentClassifierProvider),
       );

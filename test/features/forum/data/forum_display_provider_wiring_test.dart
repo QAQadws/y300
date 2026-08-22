@@ -1,0 +1,39 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:logger/logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/features/forum/data/repositories/forum_display_repository.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
+  test('production forum display provider remains HTML-first', () {
+    final gateway = YamiboHttpGateway(
+      cookieStore: CookieStore(),
+      logger: Logger(level: Level.off),
+      dio: Dio(BaseOptions(baseUrl: 'https://bbs.yamibo.com')),
+      enableLog: false,
+    );
+    final container = ProviderContainer(
+      overrides: [
+        yamiboHtmlClientProvider.overrideWithValue(
+          YamiboHtmlClient(gateway: gateway),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final repository = container.read(forumDisplayRepositoryProvider);
+
+    expect(repository, isA<ForumDisplayHtmlRepository>());
+  });
+}

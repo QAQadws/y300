@@ -1,4 +1,4 @@
-import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/models/forum_display_models.dart';
 import 'package:y300/features/forum/presentation/forum_content_projection_support.dart';
 import 'package:y300/features/forum/presentation/forum_display_content_projection.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';

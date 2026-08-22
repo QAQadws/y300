@@ -1,7 +1,7 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/models/forum_display_models.dart';
 
 class ForumDisplayHtmlParser {
   const ForumDisplayHtmlParser({

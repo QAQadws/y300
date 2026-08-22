@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -12,20 +14,11 @@ import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/forum/data/services/forum_display_html_parser.dart';
 import 'package:y300/features/forum/data/services/forum_display_snapshot_codec.dart';
-import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/data/mappers/forum_display_api_mapper.dart';
+import 'package:y300/features/forum/domain/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/repositories/forum_display_repository.dart';
 
-abstract class ForumDisplayRepository {
-  Future<ApiResult<ForumDisplayData>> getForumDisplay({
-    required String fid,
-    int page,
-    CacheLoadPolicy cachePolicy,
-  });
-
-  Future<ApiResult<ForumDisplayData>> getForumDisplayByQuery(
-    ForumDisplayQuery query, {
-    CacheLoadPolicy cachePolicy,
-  });
-}
+export 'package:y300/features/forum/domain/repositories/forum_display_repository.dart';
 
 class ForumDisplayHtmlRepository implements ForumDisplayRepository {
   ForumDisplayHtmlRepository({
@@ -62,19 +55,11 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
   final DateTime Function() _now;
 
   @override
-  Future<ApiResult<ForumDisplayData>> getForumDisplay({
-    required String fid,
-    int page = 1,
-    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
-  }) {
-    return getForumDisplayByQuery(
-      ForumDisplayQuery.initial(fid: fid).copyWithPage(page),
-      cachePolicy: cachePolicy,
-    );
-  }
+  ForumDisplaySourceCapabilities get capabilities => _htmlCapabilities;
 
   @override
-  Future<ApiResult<ForumDisplayData>> getForumDisplayByQuery(
+  Future<DataReadResult<ForumDisplayData, ForumDisplayReadCapabilities>>
+  getForumDisplayByQuery(
     ForumDisplayQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
@@ -95,7 +80,14 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
     if (cachePolicy == CacheLoadPolicy.cacheFirst) {
       final snapshot = await _getFreshSnapshot(snapshotDescriptor);
       if (snapshot != null) {
-        return ApiSuccess(snapshot);
+        return DataReadSuccess(
+          data: snapshot,
+          capabilities: _htmlReadCapabilitiesFor(snapshot),
+          metadata: const DataReadMetadata(
+            origin: DataReadOrigin.freshSnapshot,
+            freshness: DataReadFreshness.freshCache,
+          ),
+        );
       }
     }
 
@@ -116,16 +108,25 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
         query: query,
       );
       if (cached != null) {
-        return ApiSuccess(cached);
+        return DataReadSuccess(
+          data: cached,
+          capabilities: _htmlReadCapabilitiesFor(cached),
+          metadata: const DataReadMetadata(
+            origin: DataReadOrigin.cachedDocumentFallback,
+            freshness: DataReadFreshness.staleOrUnknown,
+          ),
+        );
       }
-      return ApiFailure(
-        ApiError(
-          type: error.type,
-          message: '帖子列表 HTML 加载失败: ${error.message}',
-          code: error.code,
-          statusCode: error.statusCode,
-          raw: error.raw,
-        ),
+      final failure =
+          dataReadFailureFromApiError<
+            ForumDisplayData,
+            ForumDisplayReadCapabilities
+          >(error);
+      return DataReadFailure(
+        kind: failure.kind,
+        code: failure.code,
+        statusCode: failure.statusCode,
+        diagnosticMessage: '帖子列表 HTML 加载失败: ${error.message}',
       );
     }
 
@@ -138,14 +139,15 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
       );
       await _putDocument(descriptor: documentDescriptor, html: html);
       await _putSnapshot(descriptor: snapshotDescriptor, data: data);
-      return ApiSuccess(data);
+      return DataReadSuccess(
+        data: data,
+        capabilities: _htmlReadCapabilitiesFor(data),
+        metadata: const DataReadMetadata.network(),
+      );
     } catch (error) {
-      return ApiFailure(
-        ApiError(
-          type: ApiErrorType.parse,
-          message: '帖子列表 HTML 解析失败: $error',
-          raw: error,
-        ),
+      return DataReadFailure(
+        kind: DataReadFailureKind.parse,
+        diagnosticMessage: '帖子列表 HTML 解析失败: $error',
       );
     }
   }
@@ -279,34 +281,106 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
   }
 }
 
+ForumDisplayReadCapabilities _htmlReadCapabilitiesFor(ForumDisplayData data) {
+  final hasExactPagination = data.lastPage != null && data.lastPage! > 0;
+  return ForumDisplayReadCapabilities(
+    values: _htmlCapabilities.values.withSupport(
+      ForumDisplayCapability.exactPagination,
+      hasExactPagination
+          ? DataCapabilitySupport.supported
+          : DataCapabilitySupport.unsupported,
+    ),
+    paginationPrecision: hasExactPagination
+        ? PaginationPrecision.exact
+        : (data.previousPageUrl != null || data.nextPageUrl != null)
+        ? PaginationPrecision.directional
+        : PaginationPrecision.heuristic,
+  );
+}
+
 /// Discuz forumdisplay 实现，负责帖子列表分页拉取。
 class DiscuzForumDisplayRepository implements ForumDisplayRepository {
-  DiscuzForumDisplayRepository(this._apiClient);
+  DiscuzForumDisplayRepository(
+    this._apiClient, {
+    ForumDisplayApiMapper mapper = const ForumDisplayApiMapper(),
+  }) : _mapper = mapper;
 
   final ApiClient _apiClient;
+  final ForumDisplayApiMapper _mapper;
 
   @override
-  Future<ApiResult<ForumDisplayData>> getForumDisplay({
-    required String fid,
-    int page = 1,
-    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
-  }) {
-    return _apiClient.getParsed<ForumDisplayData>(
-      module: 'forumdisplay',
-      queryParameters: {'fid': fid, 'page': page},
-      parser: (response) =>
-          ForumDisplayData.fromVariables(response.variables, page: page),
-    );
-  }
+  ForumDisplaySourceCapabilities get capabilities => _apiCapabilities;
 
   @override
-  Future<ApiResult<ForumDisplayData>> getForumDisplayByQuery(
+  Future<DataReadResult<ForumDisplayData, ForumDisplayReadCapabilities>>
+  getForumDisplayByQuery(
     ForumDisplayQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
-  }) {
-    return getForumDisplay(fid: query.fid, page: query.page);
+  }) async {
+    if (_hasUnsupportedQuery(query)) {
+      return unsupportedDataReadFailure(
+        code: 'forum_display_query_unsupported',
+        diagnosticMessage:
+            'The configured forum source cannot honor this filter or ordering query.',
+      );
+    }
+    final result = await _apiClient.getParsed<ForumDisplayData>(
+      module: 'forumdisplay',
+      queryParameters: {'fid': query.fid, 'page': query.page},
+      parser: (response) =>
+          _mapper.mapVariables(response.variables, page: query.page),
+    );
+    return switch (result) {
+      ApiSuccess<ForumDisplayData>(:final data) => DataReadSuccess(
+        data: data,
+        capabilities: capabilities.toReadCapabilities(),
+        metadata: const DataReadMetadata.network(),
+      ),
+      ApiFailure<ForumDisplayData>(:final error) => dataReadFailureFromApiError(
+        error,
+      ),
+    };
+  }
+
+  bool _hasUnsupportedQuery(ForumDisplayQuery query) {
+    final parameters = query.parameters;
+    return parameters.entries.any((entry) {
+      return entry.key != 'fid' && entry.key != 'page';
+    });
   }
 }
+
+final _htmlCapabilities = ForumDisplaySourceCapabilities(
+  values: DataCapabilitySet<ForumDisplayCapability>.supported(
+    ForumDisplayCapability.values,
+  ),
+  paginationPrecision: PaginationPrecision.exact,
+);
+
+final _apiCapabilities = ForumDisplaySourceCapabilities(
+  values: DataCapabilitySet<ForumDisplayCapability>.from(
+    supported: const <ForumDisplayCapability>[
+      ForumDisplayCapability.forumIdentity,
+      ForumDisplayCapability.orderedThreadSummaries,
+      ForumDisplayCapability.directionalPagination,
+    ],
+    unsupported: const <ForumDisplayCapability>[
+      ForumDisplayCapability.richThreadSummaries,
+      ForumDisplayCapability.threadTypeQuery,
+      ForumDisplayCapability.lastPostOrdering,
+      ForumDisplayCapability.opaqueQueryParameters,
+      ForumDisplayCapability.forumChrome,
+      ForumDisplayCapability.filters,
+      ForumDisplayCapability.subForums,
+      ForumDisplayCapability.topEntries,
+      ForumDisplayCapability.postingEntry,
+      ForumDisplayCapability.searchEntry,
+      ForumDisplayCapability.favoriteState,
+      ForumDisplayCapability.exactPagination,
+    ],
+  ),
+  paginationPrecision: PaginationPrecision.totalBased,
+);
 
 final forumDisplayRepositoryProvider = Provider<ForumDisplayRepository>((ref) {
   return ForumDisplayHtmlRepository(
