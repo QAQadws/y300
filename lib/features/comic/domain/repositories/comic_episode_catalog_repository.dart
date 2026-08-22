@@ -2,12 +2,11 @@ import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/comic/domain/models/comic_episode_image_catalog.dart';
 
 enum ComicEpisodeCatalogCapability {
+  stableSourceIdentity,
   reliableFirstPostIdentity,
   reliableImageOrder,
   imageOrigin,
   attachmentId,
-  protectedRequestContext,
-  atomicRefresh,
 }
 
 final class ComicEpisodeCatalogSourceCapabilities {
@@ -39,5 +38,6 @@ abstract interface class ComicEpisodeCatalogRepository {
 
   Future<
     DataReadResult<ComicEpisodeImageCatalog, ComicEpisodeCatalogCapabilities>
-  > loadCatalog(ComicEpisodeCatalogRequest request);
+  >
+  loadCatalog(ComicEpisodeCatalogRequest request);
 }

@@ -15,6 +15,26 @@ enum DataCapabilitySupport { supported, unsupported, unknown }
 
 enum PaginationPrecision { exact, directional, totalBased, heuristic, unknown }
 
+extension PaginationPrecisionMerge on PaginationPrecision {
+  /// Keeps the least precise guarantee when independently read pages merge.
+  PaginationPrecision intersect(PaginationPrecision other) {
+    if (this == other) {
+      return this;
+    }
+    return _rank(this) >= _rank(other) ? this : other;
+  }
+
+  static int _rank(PaginationPrecision value) {
+    return switch (value) {
+      PaginationPrecision.exact => 0,
+      PaginationPrecision.directional => 1,
+      PaginationPrecision.totalBased => 2,
+      PaginationPrecision.heuristic => 3,
+      PaginationPrecision.unknown => 4,
+    };
+  }
+}
+
 enum DataReadFailureKind {
   network,
   timeout,
@@ -146,9 +166,6 @@ sealed class DataReadResult<T, C> {
     final DataReadFailure<T, C> failure => failure,
   };
 
-  @Deprecated('Use failureOrNull for source-neutral read failures.')
-  DataReadFailure<T, C>? get errorOrNull => failureOrNull;
-
   R when<R>({
     required R Function(T data, C capabilities, DataReadMetadata metadata)
     success,
@@ -159,7 +176,8 @@ sealed class DataReadResult<T, C> {
         :final data,
         :final capabilities,
         :final metadata,
-      ) => success(data, capabilities, metadata),
+      ) =>
+        success(data, capabilities, metadata),
       final DataReadFailure<T, C> value => failure(value),
     };
   }
@@ -190,6 +208,13 @@ final class DataReadFailure<T, C> extends DataReadResult<T, C> {
   final int? statusCode;
   final String diagnosticMessage;
 
-  @Deprecated('Use diagnosticMessage.')
-  String get message => diagnosticMessage;
+  /// Retypes a source-neutral failure without introducing transport payloads.
+  DataReadFailure<R, D> retype<R, D>() {
+    return DataReadFailure<R, D>(
+      kind: kind,
+      code: code,
+      statusCode: statusCode,
+      diagnosticMessage: diagnosticMessage,
+    );
+  }
 }

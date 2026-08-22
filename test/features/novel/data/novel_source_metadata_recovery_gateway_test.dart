@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/novel/data/services/novel_source_metadata_recovery_gateway.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 
 void main() {
   test(

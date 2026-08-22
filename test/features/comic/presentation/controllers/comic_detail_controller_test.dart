@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/comic/data/providers/comic_refresh_outcome_providers.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
@@ -9,11 +10,10 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_detail_controller.dart';
 import 'package:y300/features/comic/presentation/comic_presentation_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 void main() {
   group('ComicDetailController', () {
@@ -174,8 +174,8 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     return outcome;
   }
@@ -205,8 +205,8 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     return outcome;
   }
@@ -227,8 +227,8 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     throw StateError('refresh failed');
   }
@@ -256,8 +256,8 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     throw StateError('refresh failed');
   }

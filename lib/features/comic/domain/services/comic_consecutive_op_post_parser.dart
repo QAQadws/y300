@@ -1,9 +1,8 @@
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
 import 'package:y300/features/comic/domain/models/comic_post_parsing_models.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
 /// Parse consecutive OP posts from floor-1.
 ///
@@ -12,21 +11,16 @@ import 'package:y300/features/thread/domain/services/forum_image_source_pipeline
 /// 2. Merge only consecutive posts authored by the OP.
 /// 3. Stop when first non-OP post appears.
 class ComicConsecutiveOpPostParser {
-  ComicConsecutiveOpPostParser({
-    required ComicPostParsingEngine engine,
-    ForumImageSourcePipeline imageSourcePipeline =
-        const DefaultForumImageSourcePipeline(),
-  }) : _engine = engine,
-       _imageSourcePipeline = imageSourcePipeline;
+  ComicConsecutiveOpPostParser({required ComicPostParsingEngine engine})
+    : _engine = engine;
 
   final ComicPostParsingEngine _engine;
-  final ForumImageSourcePipeline _imageSourcePipeline;
 
   ParsedComicPost parse({
     required String tid,
     required String fid,
     required String subject,
-    required List<ThreadPost> posts,
+    required List<ComicThreadDiscoveryPost> posts,
   }) {
     final first = _findFirstFloor(posts);
     if (first == null) {
@@ -34,11 +28,12 @@ class ComicConsecutiveOpPostParser {
     }
 
     final opAuthorId = first.authorId;
-    final consecutive = <ThreadPost>[first];
-    final sorted = posts.toList()..sort((a, b) => a.number.compareTo(b.number));
+    final consecutive = <ComicThreadDiscoveryPost>[first];
+    final sorted = posts.toList()
+      ..sort((a, b) => a.floorNumber.compareTo(b.floorNumber));
 
     for (final post in sorted) {
-      if (post.number <= 1) {
+      if (post.floorNumber <= 1) {
         continue;
       }
       if (post.authorId != opAuthorId) {
@@ -59,8 +54,8 @@ class ComicConsecutiveOpPostParser {
         fid: fid,
         subject: subject,
         authorUid: post.authorId,
-        isFirst: post.number == 1 || post.isFirst,
-        messageHtml: post.message,
+        isFirst: post.floorNumber == 1 || post.isFirst,
+        messageHtml: post.messageHtml,
         messageText: '',
       );
       final result = _engine.parse(messageHtml: context.messageHtml);
@@ -90,19 +85,20 @@ class ComicConsecutiveOpPostParser {
     );
   }
 
-  ThreadPost? _findFirstFloor(List<ThreadPost> posts) {
+  ComicThreadDiscoveryPost? _findFirstFloor(
+    List<ComicThreadDiscoveryPost> posts,
+  ) {
     for (final post in posts) {
-      if (post.isFirst || post.number == 1) {
+      if (post.isFirst || post.floorNumber == 1) {
         return post;
       }
     }
     return null;
   }
 
-  List<String> _extractImages(ThreadPost post) {
-    return _imageSourcePipeline
-        .collectFromPost(post)
-        .map((source) => source.normalizedUrl)
+  List<String> _extractImages(ComicThreadDiscoveryPost post) {
+    return post.imageReferences
+        .map((source) => source.url)
         .toList(growable: false);
   }
 

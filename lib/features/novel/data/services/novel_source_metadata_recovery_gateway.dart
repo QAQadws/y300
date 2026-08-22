@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 
 class ThreadRepositoryNovelSourceMetadataRecoveryGateway
     implements NovelSourceMetadataRecoveryGateway {

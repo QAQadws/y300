@@ -3,6 +3,9 @@ import 'dart:io' as io;
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_ingest_service.dart';
@@ -16,7 +19,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
@@ -38,7 +41,8 @@ import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 const _longRunningTagName = '長篇連載';
@@ -1732,8 +1736,8 @@ class _BackfillRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     return _catalogOutcome;
   }
@@ -1772,8 +1776,8 @@ class _BackfillRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     return _searchOutcome ??
         const ComicEpisodeRefreshOutcome(
@@ -1790,8 +1794,8 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     throw StateError('refresh failed');
   }
@@ -1827,8 +1831,8 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     throw StateError('refresh failed');
   }
@@ -1858,7 +1862,7 @@ class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
     required ComicEpisodeRefreshRequest request,
     required String title,
     required ComicSearchRefreshOrigin origin,
-    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
   }) async {
     enqueuedRequests.add(request);
     enqueuedTitles.add(title);
@@ -1888,7 +1892,7 @@ class _RecordingCoverPromoter implements ComicFirstEpisodeCoverPromoter {
   @override
   Future<bool> promoteIfPossible({
     required String comicId,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryCache? threadCache,
     FavoriteFirstSyncRequestGovernor? governor,
   }) async {
     return true;
@@ -2405,13 +2409,38 @@ ForumTagLookup _lookup({String comicTagName = '韩国漫画'}) {
 }
 
 FavoriteDetailContextLoader _contextLoader({
-  FavoriteThreadDetailLoader? loadThreadDetail,
+  Future<ApiResult<ThreadDetailData>> Function(String tid)? loadThreadDetail,
   FavoriteTagLookupLoader? loadTagLookup,
 }) {
+  final loader =
+      loadThreadDetail ?? ((tid) async => ApiSuccess(_detailForTid(tid)));
   return DefaultFavoriteDetailContextLoader(
-    loadThreadDetail:
-        loadThreadDetail ?? ((tid) async => ApiSuccess(_detailForTid(tid))),
+    threadRepository: _FavoriteTestThreadRepository(loader),
     loadTagLookup: loadTagLookup ?? (() async => _lookup()),
     classifier: const ThreadContentClassifier(),
   );
+}
+
+final class _FavoriteTestThreadRepository implements ThreadRepository {
+  const _FavoriteTestThreadRepository(this.loader);
+
+  final Future<ApiResult<ThreadDetailData>> Function(String tid) loader;
+
+  @override
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
+    required String tid,
+    int page = 1,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    return dataReadResultFromApiResult(
+      await loader(tid),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
+    );
+  }
 }

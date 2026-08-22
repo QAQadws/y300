@@ -1,12 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import '../../data/comic_comment_fixtures.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 import 'package:y300/features/thread/data/mappers/thread_detail_api_mapper.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/data/models/thread_reply_page.dart';
-import 'package:y300/features/thread/data/repositories/thread_reply_page_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_reply_page.dart';
+import 'package:y300/features/thread/domain/repositories/thread_reply_page_repository.dart';
 
 void main() {
   test(
@@ -15,9 +14,9 @@ void main() {
       final page1 = _fixturePage(1);
       final page2 = _fixturePage(2);
       final repository = _FakeReplyPageRepository(
-        <int, ApiResult<ThreadReplyPage>>{
-          1: ApiSuccess(page1),
-          2: ApiSuccess(page2),
+        <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+          1: _success(page1),
+          2: _success(page2),
         },
       );
       final loader = DefaultComicCommentLoader(repository: repository);
@@ -56,12 +55,12 @@ void main() {
       page: sourcePage2.page,
       perPage: sourcePage2.perPage,
       replyCount: sourcePage2.replyCount,
-      posts: <ThreadPost>[sourcePage2.posts.first, page1.posts[1]],
+      posts: <ThreadReplyEntry>[sourcePage2.posts.first, page1.posts[1]],
     );
     final repository = _FakeReplyPageRepository(
-      <int, ApiResult<ThreadReplyPage>>{
-        1: ApiSuccess(page1),
-        2: ApiSuccess(page2),
+      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+        1: _success(page1),
+        2: _success(page2),
       },
     );
 
@@ -78,13 +77,12 @@ void main() {
   });
 
   test('returns partial failure when a later page cannot be loaded', () async {
-    final repository =
-        _FakeReplyPageRepository(<int, ApiResult<ThreadReplyPage>>{
-          1: ApiSuccess(_fixturePage(1)),
-          2: const ApiFailure<ThreadReplyPage>(
-            ApiError(type: ApiErrorType.timeout, message: 'timeout'),
-          ),
-        });
+    final repository = _FakeReplyPageRepository(
+      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+        1: _success(_fixturePage(1)),
+        2: _failure(DataReadFailureKind.timeout),
+      },
+    );
 
     final result = await DefaultComicCommentLoader(
       repository: repository,
@@ -99,9 +97,9 @@ void main() {
 
   test('coalesces concurrent loads for the same source thread', () async {
     final repository = _FakeReplyPageRepository(
-      <int, ApiResult<ThreadReplyPage>>{
-        1: ApiSuccess(_fixturePage(1)),
-        2: ApiSuccess(_fixturePage(2)),
+      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+        1: _success(_fixturePage(1)),
+        2: _success(_fixturePage(2)),
       },
       delay: const Duration(milliseconds: 10),
     );
@@ -121,7 +119,9 @@ void main() {
     'cancellation stops waiting while the shared request continues',
     () async {
       final repository = _FakeReplyPageRepository(
-        <int, ApiResult<ThreadReplyPage>>{1: ApiSuccess(_fixturePage(1))},
+        <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+          1: _success(_fixturePage(1)),
+        },
         delay: const Duration(milliseconds: 30),
       );
       final loader = DefaultComicCommentLoader(repository: repository);
@@ -146,13 +146,13 @@ void main() {
       page: 1,
       perPage: 20,
       replyCount: 0,
-      posts: <ThreadPost>[
-        ThreadPost(
+      posts: const <ThreadReplyEntry>[
+        ThreadReplyEntry(
           pid: '41519747',
-          author: 'owner',
           authorId: '365616',
-          message: 'first',
-          number: 1,
+          authorName: 'owner',
+          rawMessage: 'first',
+          floorNumber: 1,
           isFirst: true,
           dateline: 'today',
         ),
@@ -160,9 +160,11 @@ void main() {
     );
 
     final result = await DefaultComicCommentLoader(
-      repository: _FakeReplyPageRepository(<int, ApiResult<ThreadReplyPage>>{
-        1: ApiSuccess(page),
-      }),
+      repository: _FakeReplyPageRepository(
+        <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+          1: _success(page),
+        },
+      ),
     ).loadAll(sourceTid: '570140');
 
     expect(result.status, ComicCommentLoadStatus.empty);
@@ -171,7 +173,7 @@ void main() {
 
   test('rejects an invalid source tid without a network request', () async {
     final repository = _FakeReplyPageRepository(
-      <int, ApiResult<ThreadReplyPage>>{},
+      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{},
     );
 
     final result = await DefaultComicCommentLoader(
@@ -185,7 +187,9 @@ void main() {
 
   test('reports truncation when the page safety limit is reached', () async {
     final repository = _FakeReplyPageRepository(
-      <int, ApiResult<ThreadReplyPage>>{1: ApiSuccess(_fixturePage(1))},
+      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+        1: _success(_fixturePage(1)),
+      },
     );
 
     final result = await DefaultComicCommentLoader(
@@ -201,9 +205,9 @@ void main() {
   test('reuses complete results within the short memory TTL', () async {
     var now = DateTime(2026, 7, 19, 12);
     final repository = _FakeReplyPageRepository(
-      <int, ApiResult<ThreadReplyPage>>{
-        1: ApiSuccess(_fixturePage(1)),
-        2: ApiSuccess(_fixturePage(2)),
+      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+        1: _success(_fixturePage(1)),
+        2: _success(_fixturePage(2)),
       },
     );
     final loader = DefaultComicCommentLoader(
@@ -228,9 +232,9 @@ void main() {
 
   test('invalidate removes a complete result before the next load', () async {
     final repository = _FakeReplyPageRepository(
-      <int, ApiResult<ThreadReplyPage>>{
-        1: ApiSuccess(_fixturePage(1)),
-        2: ApiSuccess(_fixturePage(2)),
+      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+        1: _success(_fixturePage(1)),
+        2: _success(_fixturePage(2)),
       },
     );
     final loader = DefaultComicCommentLoader(repository: repository);
@@ -249,10 +253,8 @@ void main() {
 
   test('maps rate limiting to a stable error code', () async {
     final repository = _FakeReplyPageRepository(
-      <int, ApiResult<ThreadReplyPage>>{
-        1: const ApiFailure<ThreadReplyPage>(
-          ApiError(type: ApiErrorType.server, statusCode: 429, message: 'busy'),
-        ),
+      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+        1: _failure(DataReadFailureKind.server, statusCode: 429),
       },
     );
 
@@ -261,12 +263,14 @@ void main() {
     ).loadAll(sourceTid: '570140');
 
     expect(result.errorCode, ComicCommentLoadErrorCode.rateLimited);
-    expect(result.diagnosticDetail, ApiErrorType.server.name);
+    expect(result.diagnosticDetail, DataReadFailureKind.server.name);
   });
 
   test('times out a slow page without blocking the reader forever', () async {
     final repository = _FakeReplyPageRepository(
-      <int, ApiResult<ThreadReplyPage>>{1: ApiSuccess(_fixturePage(1))},
+      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
+        1: _success(_fixturePage(1)),
+      },
       delay: const Duration(milliseconds: 20),
     );
 
@@ -284,28 +288,79 @@ ThreadReplyPage _fixturePage(int page) {
     comicCommentPageVariables(page: page),
     page: page,
   );
-  return ThreadReplyPage.fromThreadDetail(data);
+  return ThreadReplyPage(
+    tid: data.tid,
+    page: data.currentPage,
+    perPage: data.perPage,
+    replyCount: data.replies,
+    lastPage: data.lastPage,
+    hasNext: data.hasMore,
+    posts: data.posts
+        .map(
+          (post) => ThreadReplyEntry(
+            pid: post.pid,
+            authorId: post.authorId,
+            authorName: post.author,
+            dateline: post.dateline,
+            floorNumber: post.number,
+            isFirst: post.isFirst,
+            rawMessage: post.message,
+          ),
+        )
+        .toList(growable: false),
+  );
+}
+
+final _replyCapabilities = ThreadReplyPageReadCapabilities(
+  DataCapabilitySet<ThreadReplyPageCapability>({
+    ThreadReplyPageCapability.stableThreadIdentity:
+        DataCapabilitySupport.supported,
+    ThreadReplyPageCapability.orderedReplies: DataCapabilitySupport.supported,
+    ThreadReplyPageCapability.stablePostIdentity:
+        DataCapabilitySupport.supported,
+    ThreadReplyPageCapability.pagination: DataCapabilitySupport.supported,
+  }),
+);
+
+DataReadSuccess<ThreadReplyPage, ThreadReplyPageReadCapabilities> _success(
+  ThreadReplyPage page,
+) {
+  return DataReadSuccess(
+    data: page,
+    capabilities: _replyCapabilities,
+    metadata: const DataReadMetadata.network(),
+  );
+}
+
+DataReadFailure<ThreadReplyPage, ThreadReplyPageReadCapabilities> _failure(
+  DataReadFailureKind kind, {
+  int? statusCode,
+}) {
+  return DataReadFailure(
+    kind: kind,
+    statusCode: statusCode,
+    diagnosticMessage: kind.name,
+  );
 }
 
 class _FakeReplyPageRepository implements ThreadReplyPageRepository {
   _FakeReplyPageRepository(this.responses, {this.delay = Duration.zero});
 
-  final Map<int, ApiResult<ThreadReplyPage>> responses;
+  final Map<
+    int,
+    DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>
+  >
+  responses;
   final Duration delay;
   final List<String> calls = <String>[];
 
   @override
-  Future<ApiResult<ThreadReplyPage>> getReplyPage({
-    required String tid,
-    required int page,
-  }) async {
+  Future<DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>
+  loadPage({required String tid, required int page}) async {
     calls.add('$tid:$page');
     if (delay > Duration.zero) {
       await Future<void>.delayed(delay);
     }
-    return responses[page] ??
-        const ApiFailure<ThreadReplyPage>(
-          ApiError(type: ApiErrorType.server, message: 'missing'),
-        );
+    return responses[page] ?? _failure(DataReadFailureKind.server);
   }
 }

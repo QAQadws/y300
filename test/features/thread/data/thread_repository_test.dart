@@ -11,8 +11,11 @@ import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
+
+import '../../../support/data_source_contracts/thread_repository_contract_suite.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +23,14 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
+
+  runThreadRepositoryContractSuite(
+    () => ThreadRepositoryContractDriver(
+      name: 'mobile HTML',
+      createRepository: () => _buildRepository(_ThreadDetailHtmlTestAdapter()),
+      tid: '572529',
+    ),
+  );
 
   test('ThreadDetailHtmlRepository requests mobile viewthread HTML', () async {
     final adapter = _ThreadDetailHtmlTestAdapter();
@@ -49,8 +60,11 @@ void main() {
       final result = await repository.getThreadDetail(tid: '572529');
 
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.statusCode, 503);
-      expect(result.errorOrNull?.message, contains('帖子详情 HTML 加载失败'));
+      expect(result.failureOrNull?.statusCode, 503);
+      expect(
+        result.failureOrNull?.diagnosticMessage,
+        contains('帖子详情 HTML 加载失败'),
+      );
     },
   );
 
@@ -205,13 +219,16 @@ void main() {
       final result = await repository.getThreadDetail(tid: '572529');
 
       expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, contains('未解析到任何楼层'));
-      expect(result.errorOrNull?.message, contains('bodyLength='));
+      expect(result.failureOrNull?.diagnosticMessage, contains('未解析到任何楼层'));
+      expect(result.failureOrNull?.diagnosticMessage, contains('bodyLength='));
       expect(
-        result.errorOrNull?.message,
+        result.failureOrNull?.diagnosticMessage,
         contains('template=mobile-thread-shell'),
       );
-      expect(result.errorOrNull?.message, contains('mobilePosts=0'));
+      expect(
+        result.failureOrNull?.diagnosticMessage,
+        contains('mobilePosts=0'),
+      );
       expect(
         debugLogs.any(
           (line) =>

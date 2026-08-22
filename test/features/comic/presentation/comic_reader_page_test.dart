@@ -1201,11 +1201,6 @@ class _ReaderFakeService implements ComicReaderService {
   }
 
   @override
-  // ignore: deprecated_member_use
-  Future<List<String>> fetchEpisodeImagesByTid(String tid) async =>
-      (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
-
-  @override
   Future<void> prefetchImages({required List<String> imageUrls}) async {}
 }
 

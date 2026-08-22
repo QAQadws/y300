@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/comic/data/repositories/comic_search_refresh_queue_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 class ComicSearchRefreshRetryPolicy {
   const ComicSearchRefreshRetryPolicy({
@@ -33,7 +33,7 @@ abstract class ComicSearchRefreshQueueEnqueuer {
     // 跨入队边界保留，省掉 _discoverCurrentOnly + _searchFallback 在
     // 队列任务内对源 tid 的两次重复 viewthread。
     // 不持久化——冷启动只是回退到原行为，不影响正确性。
-    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
   });
 }
 
@@ -87,11 +87,11 @@ class ComicSearchRefreshQueueService
   Timer? _wakeTimer;
   Future<void>? _pumpFuture;
 
-  // 跨入队边界透传 ThreadDetailData。键是 queue entry id；任务跑完
+  // 跨入队边界透传窄化的 discovery document。键是 queue entry id；任务跑完
   // （成功或彻底失败）就清掉。app 重启时丢失没关系——任务会照常跑，
   // 只是少一次缓存命中。
-  final Map<int, ThreadDetailData> _preloadedRootDetails =
-      <int, ThreadDetailData>{};
+  final Map<int, ComicThreadDiscoveryDocument> _preloadedRootDetails =
+      <int, ComicThreadDiscoveryDocument>{};
 
   @override
   ValueListenable<ComicSearchRefreshQueueSnapshot> get snapshot => _snapshot;
@@ -101,7 +101,7 @@ class ComicSearchRefreshQueueService
     required ComicEpisodeRefreshRequest request,
     required String title,
     required ComicSearchRefreshOrigin origin,
-    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
   }) async {
     final comicId = request.comicId?.trim();
     if (comicId == null || comicId.isEmpty) {

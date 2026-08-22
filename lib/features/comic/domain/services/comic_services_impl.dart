@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -12,10 +11,13 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_parser_service.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/data/repositories/discuz_api_comic_episode_catalog_repository.dart';
+import 'package:y300/features/comic/data/repositories/thread_repository_comic_thread_discovery_adapter.dart';
 import 'package:y300/features/comic/domain/models/comic_episode_image_catalog.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
 import 'package:y300/features/comic/domain/repositories/comic_episode_catalog_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
@@ -31,13 +33,13 @@ import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_r
 import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolver.dart';
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/services/discuz_search_service.dart';
-import 'package:y300/features/thread/data/repositories/thread_repository.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
@@ -108,7 +110,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   ) async {
     // 当前帖的连续跳转链接常只覆盖“上一话/历史话”，不能作为完整章节表。
     // 因此仅在目录解析成功时直接信任；否则继续走搜索补全，并按 tid 合并。
-    final threadCache = ComicThreadDetailCache();
+    final threadCache = ComicThreadDiscoveryCache();
     final current = await _discoverCatalogFirst(
       request,
       executionContext: null,
@@ -142,10 +144,10 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
-    final cache = threadCache ?? ComicThreadDetailCache();
+    final cache = threadCache ?? ComicThreadDiscoveryCache();
     final current = await _discoverCatalogFirst(
       request,
       executionContext: executionContext,
@@ -184,10 +186,10 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
-    final cache = threadCache ?? ComicThreadDetailCache();
+    final cache = threadCache ?? ComicThreadDiscoveryCache();
     final current = await _discoverCurrentOnly(
       request,
       executionContext: executionContext,
@@ -230,8 +232,8 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<EpisodeDiscoveryResult> _discoverCatalogFirst(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) {
     return _discoveryService.discoverFromTidWithPreference(
       tid: request.sourceTid,
@@ -245,8 +247,8 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<EpisodeDiscoveryResult> _discoverCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) {
     return _discoveryService.discoverFromTidWithPreference(
       tid: request.sourceTid,
@@ -262,10 +264,10 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     ComicEpisodeRefreshRequest request, {
     required EpisodeDiscoveryResult current,
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
-    final cache = threadCache ?? ComicThreadDetailCache();
+    final cache = threadCache ?? ComicThreadDiscoveryCache();
     final searchResult = await _searchFallbackFromCurrentTid(
       request,
       executionContext: executionContext,
@@ -317,8 +319,8 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<_SearchFallbackResult> _searchFallbackFromCurrentTid(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     final thread = await _fetchThreadDetail(
       request.sourceTid,
@@ -423,13 +425,13 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ThreadSeed?> _fetchThreadDetail(
     String tid, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     if (preloadedRootDetail != null && preloadedRootDetail.tid == tid) {
       return ThreadSeed(subject: preloadedRootDetail.subject);
     }
-    // 搜索回退里只用到 subject，所以即使缓存里只有 ThreadDetailData，
+    // 搜索回退里只用到 subject，discovery cache 已覆盖该需求，
     // 也能完整覆盖需求——避免跟 _discoverCurrentOnly 在 100ms 内重复
     // 拉同一个 tid。
     final cached = threadCache?.get(tid);
@@ -490,16 +492,9 @@ class _SearchFallbackResult {
 final comicEpisodeDiscoveryServiceProvider =
     Provider<ComicEpisodeDiscoveryService>((ref) {
       final engine = ComicPostParsingEngine();
-      final opPostParser = ComicConsecutiveOpPostParser(
-        engine: engine,
-        imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
-      );
+      final opPostParser = ComicConsecutiveOpPostParser(engine: engine);
       return ComicEpisodeDiscoveryService(
-        fetchThreadDetail: (tid) async => apiResultFromDataRead(
-          await ref
-              .read(threadJsonRepositoryProvider)
-              .getThreadDetail(tid: tid, page: 1),
-        ),
+        repository: ref.watch(comicThreadDiscoveryRepositoryProvider),
         opPostParser: opPostParser,
         catalogHtmlFetcher: YamiboCatalogHtmlFetcher(
           htmlClient: ref.watch(yamiboHtmlClientProvider),
@@ -516,14 +511,9 @@ final comicEpisodeDiscoveryServiceProvider =
 final comicIncrementalEpisodeDiscoveryProvider =
     Provider<ComicIncrementalEpisodeDiscovery>((ref) {
       return ComicIncrementalEpisodeDiscovery(
-        fetchThreadDetail: (tid) async => apiResultFromDataRead(
-          await ref
-              .read(threadJsonRepositoryProvider)
-              .getThreadDetail(tid: tid, page: 1),
-        ),
+        repository: ref.watch(comicThreadDiscoveryRepositoryProvider),
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
-          imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
         ),
         eligibilityPolicy: ref.watch(
           comicRecursiveThreadEligibilityPolicyProvider,
@@ -568,8 +558,8 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
       episodeLinkMerger: ref.watch(comicEpisodeLinkMergerProvider),
       threadSeedFetcher: (tid) async {
         final result = await ref
-            .read(threadJsonRepositoryProvider)
-            .getThreadDetail(tid: tid, page: 1);
+            .read(comicThreadDiscoveryRepositoryProvider)
+            .load(ComicThreadDiscoveryRequest(sourceTid: tid));
         return result.when(
           success: (data, _, _) => ThreadSeed(subject: data.subject),
           failure: (_) => null,
@@ -581,20 +571,7 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
 
 abstract class ComicReaderService {
   /// 拉取单话首楼图片，区分"成功（含真无图）"和各类失败原因。
-  /// 这是新接口；旧的 [fetchEpisodeImagesByTid] 改为默认实现转发到这里，
-  /// 保持向后兼容直至所有调用方迁移完毕。
   Future<ComicEpisodeImagesFetchResult> fetchEpisodeImages(String tid);
-
-  /// 旧版便捷方法：失败和真空都返回空列表。
-  ///
-  /// 调用方失去了区分网络抖动与"首楼真无图"的能力，新代码请直接用
-  /// [fetchEpisodeImages]。子类不需要重写本方法，默认实现已经基于新接口。
-  @Deprecated(
-    'Use fetchEpisodeImages to distinguish transient failures from empty content.',
-  )
-  Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
-    return (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
-  }
 
   Future<ComicImageCacheResult> cacheImage({
     required String imageUrl,
@@ -663,14 +640,6 @@ class NetworkComicReaderService implements ComicReaderService {
         message: failure.diagnosticMessage,
       ),
     );
-  }
-
-  @Deprecated(
-    'Use fetchEpisodeImages to distinguish transient failures from empty content.',
-  )
-  @override
-  Future<List<String>> fetchEpisodeImagesByTid(String tid) async {
-    return (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
   }
 
   ComicEpisodeImagesFetchFailureReason _mapDataReadFailureReason(
@@ -785,6 +754,13 @@ final comicEpisodeCatalogRepositoryProvider =
       );
     });
 
+final comicThreadDiscoveryRepositoryProvider =
+    Provider<ComicThreadDiscoveryRepository>((ref) {
+      return ThreadRepositoryComicThreadDiscoveryAdapter(
+        threadRepository: ref.watch(comicEpisodeThreadRepositoryProvider),
+      );
+    });
+
 final comicReaderServiceProvider = FutureProvider<ComicReaderService>((
   ref,
 ) async {
@@ -800,12 +776,11 @@ final comicFirstEpisodeCoverServiceProvider =
     Provider<ComicFirstEpisodeCoverService>((ref) {
       return ComicFirstEpisodeCoverService(
         repository: ref.watch(comicRepositoryProvider),
-        imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
-        fetchEpisodeImagesByTid: (tid) async {
+        fetchEpisodeImages: (tid) async {
           final readerService = await ref.read(
             comicReaderServiceProvider.future,
           );
-          return (await readerService.fetchEpisodeImages(tid)).imageUrlsOrEmpty;
+          return readerService.fetchEpisodeImages(tid);
         },
       );
     });

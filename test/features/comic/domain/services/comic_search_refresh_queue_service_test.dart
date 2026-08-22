@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/comic/data/mappers/comic_thread_discovery_document_mapper.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_search_refresh_queue_repository.dart';
@@ -7,10 +9,10 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -179,7 +181,9 @@ void main() {
           request: _request(),
           title: '测试漫画',
           origin: ComicSearchRefreshOrigin.favoriteSync,
-          preloadedRootDetail: detail,
+          preloadedRootDetail: const ComicThreadDiscoveryDocumentMapper().map(
+            detail,
+          ),
         );
         await service.drainForTest();
 
@@ -235,7 +239,9 @@ void main() {
           request: _request(),
           title: '测试漫画',
           origin: ComicSearchRefreshOrigin.favoriteSync,
-          preloadedRootDetail: detail,
+          preloadedRootDetail: const ComicThreadDiscoveryDocumentMapper().map(
+            detail,
+          ),
         );
         await service.drainForTest();
 
@@ -303,15 +309,15 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
     : _outcome = outcome;
 
   final ComicEpisodeRefreshOutcome _outcome;
-  final List<ThreadDetailData?> receivedPreloadedRootDetails =
-      <ThreadDetailData?>[];
+  final List<ComicThreadDiscoveryDocument?> receivedPreloadedRootDetails =
+      <ComicThreadDiscoveryDocument?>[];
 
   @override
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
@@ -353,8 +359,8 @@ class _FakeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     receivedPreloadedRootDetails.add(preloadedRootDetail);
     return _outcome;
@@ -381,8 +387,8 @@ class _ThrowingRefreshService extends _FakeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     throw StateError('boom');
   }

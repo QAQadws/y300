@@ -1,13 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
@@ -17,8 +14,6 @@ import 'package:y300/features/forum/data/services/forum_display_snapshot_codec.d
 import 'package:y300/features/forum/data/mappers/forum_display_api_mapper.dart';
 import 'package:y300/features/forum/domain/models/forum_display_models.dart';
 import 'package:y300/features/forum/domain/repositories/forum_display_repository.dart';
-
-export 'package:y300/features/forum/domain/repositories/forum_display_repository.dart';
 
 class ForumDisplayHtmlRepository implements ForumDisplayRepository {
   ForumDisplayHtmlRepository({
@@ -80,7 +75,8 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
     if (cachePolicy == CacheLoadPolicy.cacheFirst) {
       final snapshot = await _getFreshSnapshot(snapshotDescriptor);
       if (snapshot != null) {
-        return DataReadSuccess(
+        return _validatedForumDisplayResult(
+          requestedFid: query.fid,
           data: snapshot,
           capabilities: _htmlReadCapabilitiesFor(snapshot),
           metadata: const DataReadMetadata(
@@ -108,7 +104,8 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
         query: query,
       );
       if (cached != null) {
-        return DataReadSuccess(
+        return _validatedForumDisplayResult(
+          requestedFid: query.fid,
           data: cached,
           capabilities: _htmlReadCapabilitiesFor(cached),
           metadata: const DataReadMetadata(
@@ -139,7 +136,8 @@ class ForumDisplayHtmlRepository implements ForumDisplayRepository {
       );
       await _putDocument(descriptor: documentDescriptor, html: html);
       await _putSnapshot(descriptor: snapshotDescriptor, data: data);
-      return DataReadSuccess(
+      return _validatedForumDisplayResult(
+        requestedFid: query.fid,
         data: data,
         capabilities: _htmlReadCapabilitiesFor(data),
         metadata: const DataReadMetadata.network(),
@@ -331,7 +329,8 @@ class DiscuzForumDisplayRepository implements ForumDisplayRepository {
           _mapper.mapVariables(response.variables, page: query.page),
     );
     return switch (result) {
-      ApiSuccess<ForumDisplayData>(:final data) => DataReadSuccess(
+      ApiSuccess<ForumDisplayData>(:final data) => _validatedForumDisplayResult(
+        requestedFid: query.fid,
         data: data,
         capabilities: capabilities.toReadCapabilities(),
         metadata: const DataReadMetadata.network(),
@@ -348,6 +347,40 @@ class DiscuzForumDisplayRepository implements ForumDisplayRepository {
       return entry.key != 'fid' && entry.key != 'page';
     });
   }
+}
+
+DataReadResult<ForumDisplayData, ForumDisplayReadCapabilities>
+_validatedForumDisplayResult({
+  required String requestedFid,
+  required ForumDisplayData data,
+  required ForumDisplayReadCapabilities capabilities,
+  required DataReadMetadata metadata,
+}) {
+  final normalizedFid = requestedFid.trim();
+  if (normalizedFid.isEmpty || data.fid.trim() != normalizedFid) {
+    return const DataReadFailure(
+      kind: DataReadFailureKind.parse,
+      code: 'forum_display_identity_mismatch',
+      diagnosticMessage: 'Forum display identity does not match the request.',
+    );
+  }
+  final tids = <String>{};
+  for (final thread in data.threads) {
+    final tid = thread.tid.trim();
+    if (tid.isEmpty || !tids.add(tid)) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.parse,
+        code: 'forum_display_thread_identity_invalid',
+        diagnosticMessage:
+            'Forum display contains an invalid or duplicate thread identity.',
+      );
+    }
+  }
+  return DataReadSuccess(
+    data: data,
+    capabilities: capabilities,
+    metadata: metadata,
+  );
 }
 
 final _htmlCapabilities = ForumDisplaySourceCapabilities(
@@ -381,12 +414,3 @@ final _apiCapabilities = ForumDisplaySourceCapabilities(
   ),
   paginationPrecision: PaginationPrecision.totalBased,
 );
-
-final forumDisplayRepositoryProvider = Provider<ForumDisplayRepository>((ref) {
-  return ForumDisplayHtmlRepository(
-    htmlClient: ref.watch(yamiboHtmlClientProvider),
-    sessionStore: ref.watch(yamiboSessionStoreProvider),
-    documentCacheService: ref.watch(documentCacheServiceProvider),
-    snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
-  );
-});

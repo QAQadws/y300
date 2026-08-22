@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
 import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_download_queue.dart';
@@ -16,14 +19,13 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
@@ -345,10 +347,7 @@ void main() {
     expect(header.customCoverLocalPath, isNull);
     expect(header.coverAsset?.assetId, 'comic/comic:1/custom');
     expect(header.coverAsset?.kind, LibraryCoverAssetKind.custom);
-    expect(
-      header.coverAsset?.sourceUrl,
-      'https://img.test/custom-cover.jpg',
-    );
+    expect(header.coverAsset?.sourceUrl, 'https://img.test/custom-cover.jpg');
     expect(repository.lastCoverImageUrl, isNull);
     expect(repository.lastCoverLocalPath, isNull);
     expect(repository.lastCustomCoverLocalPath, isNull);
@@ -865,8 +864,8 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     catalogOnlyCalls++;
     lastRequest = request;
@@ -889,8 +888,8 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     searchAndCurrentOnlyCalls++;
     lastRequest = request;
@@ -959,7 +958,7 @@ class _RecordingSearchQueue implements ComicSearchRefreshQueueEnqueuer {
     required ComicEpisodeRefreshRequest request,
     required String title,
     required ComicSearchRefreshOrigin origin,
-    ThreadDetailData? preloadedRootDetail,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
   }) async {
     enqueuedRequests.add(request);
     enqueuedTitles.add(title);
@@ -1552,7 +1551,7 @@ class _RecordingComicDownloadQueue implements ComicDownloadQueue {
 class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
   _FakeDiscoveryService({this.threadResult})
     : super(
-        fetchThreadDetail: (_) async => throw UnimplementedError(),
+        repository: const _UnusedComicThreadDiscoveryRepository(),
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
         ),
@@ -1577,7 +1576,7 @@ class _FakeCatalogHtmlFetcher implements CatalogHtmlFetcher {
 class _FakeIncrementalDiscovery extends ComicIncrementalEpisodeDiscovery {
   _FakeIncrementalDiscovery({this.directResult = const <ComicEpisodeLink>[]})
     : super(
-        fetchThreadDetail: (_) async => throw UnimplementedError(),
+        repository: const _UnusedComicThreadDiscoveryRepository(),
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
         ),
@@ -1599,5 +1598,29 @@ class _FakeIncrementalDiscovery extends ComicIncrementalEpisodeDiscovery {
     required Set<String> knownTids,
   }) async {
     return const <ComicEpisodeLink>[];
+  }
+}
+
+final class _UnusedComicThreadDiscoveryRepository
+    implements ComicThreadDiscoveryRepository {
+  const _UnusedComicThreadDiscoveryRepository();
+
+  @override
+  ComicThreadDiscoverySourceCapabilities get capabilities =>
+      ComicThreadDiscoverySourceCapabilities(
+        DataCapabilitySet<ComicThreadDiscoveryCapability>.from(
+          unsupported: ComicThreadDiscoveryCapability.values,
+        ),
+      );
+
+  @override
+  Future<
+    DataReadResult<
+      ComicThreadDiscoveryDocument,
+      ComicThreadDiscoveryCapabilities
+    >
+  >
+  load(ComicThreadDiscoveryRequest request) {
+    throw UnimplementedError();
   }
 }

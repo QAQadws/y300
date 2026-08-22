@@ -17,12 +17,15 @@ final class DiscuzApiComicEpisodeCatalogRepository
 
   @override
   ComicEpisodeCatalogSourceCapabilities get capabilities =>
-      _sourceCapabilities;
+      ComicEpisodeCatalogSourceCapabilities(
+        _mapCapabilities(_threadRepository.capabilities.values),
+      );
 
   @override
   Future<
     DataReadResult<ComicEpisodeImageCatalog, ComicEpisodeCatalogCapabilities>
-  > loadCatalog(ComicEpisodeCatalogRequest request) async {
+  >
+  loadCatalog(ComicEpisodeCatalogRequest request) async {
     final sourceTid = request.sourceTid.trim();
     if (sourceTid.isEmpty) {
       return const DataReadFailure(
@@ -36,7 +39,31 @@ final class DiscuzApiComicEpisodeCatalogRepository
       page: 1,
     );
     return result.when(
-      success: (data, _, metadata) {
+      success: (data, threadCapabilities, metadata) {
+        if (!threadCapabilities.supports(
+              ThreadDetailCapability.threadIdentity,
+            ) ||
+            !threadCapabilities.supports(
+              ThreadDetailCapability.firstPostIdentity,
+            ) ||
+            !threadCapabilities.supports(ThreadDetailCapability.orderedPosts) ||
+            !threadCapabilities.supports(
+              ThreadDetailCapability.renderableBody,
+            )) {
+          return const DataReadFailure(
+            kind: DataReadFailureKind.unsupported,
+            code: 'comic_episode_catalog_capability_unsupported',
+            diagnosticMessage:
+                'The thread source cannot provide a reliable episode catalog.',
+          );
+        }
+        if (data.tid.trim() != sourceTid) {
+          return const DataReadFailure(
+            kind: DataReadFailureKind.parse,
+            code: 'comic_episode_source_identity_mismatch',
+            diagnosticMessage: 'The episode source identity does not match.',
+          );
+        }
         final firstPosts = data.posts.where(
           (post) => post.isFirst || post.number == 1,
         );
@@ -48,7 +75,9 @@ final class DiscuzApiComicEpisodeCatalogRepository
           );
         }
         try {
-          final sources = _imageSourcePipeline.collectFromPost(firstPosts.first);
+          final sources = _imageSourcePipeline.collectFromPost(
+            firstPosts.first,
+          );
           final images = sources
               .map(
                 (source) => ComicEpisodeImageReference(
@@ -67,7 +96,9 @@ final class DiscuzApiComicEpisodeCatalogRepository
               sourceTid: sourceTid,
               images: images,
             ),
-            capabilities: capabilities.toReadCapabilities(),
+            capabilities: ComicEpisodeCatalogCapabilities(
+              _mapCapabilities(threadCapabilities.values),
+            ),
             metadata: metadata,
           );
         } catch (error) {
@@ -78,18 +109,30 @@ final class DiscuzApiComicEpisodeCatalogRepository
           );
         }
       },
-      failure: (failure) => DataReadFailure(
-        kind: failure.kind,
-        code: failure.code,
-        statusCode: failure.statusCode,
-        diagnosticMessage: failure.diagnosticMessage,
-      ),
+      failure: (failure) => failure.retype(),
+    );
+  }
+
+  DataCapabilitySet<ComicEpisodeCatalogCapability> _mapCapabilities(
+    DataCapabilitySet<ThreadDetailCapability> source,
+  ) {
+    return DataCapabilitySet<ComicEpisodeCatalogCapability>(
+      <ComicEpisodeCatalogCapability, DataCapabilitySupport>{
+        ComicEpisodeCatalogCapability.stableSourceIdentity: source.supportOf(
+          ThreadDetailCapability.threadIdentity,
+        ),
+        ComicEpisodeCatalogCapability.reliableFirstPostIdentity: source
+            .supportOf(ThreadDetailCapability.firstPostIdentity),
+        ComicEpisodeCatalogCapability.reliableImageOrder: source.supportOf(
+          ThreadDetailCapability.orderedPosts,
+        ),
+        ComicEpisodeCatalogCapability.imageOrigin: source.supportOf(
+          ThreadDetailCapability.renderableBody,
+        ),
+        ComicEpisodeCatalogCapability.attachmentId: source.supportOf(
+          ThreadDetailCapability.attachmentMetadata,
+        ),
+      },
     );
   }
 }
-
-final _sourceCapabilities = ComicEpisodeCatalogSourceCapabilities(
-  DataCapabilitySet<ComicEpisodeCatalogCapability>.supported(
-    ComicEpisodeCatalogCapability.values,
-  ),
-);

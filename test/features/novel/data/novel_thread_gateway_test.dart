@@ -9,7 +9,7 @@ import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/features/novel/data/services/novel_thread_gateway.dart';
 import 'package:y300/features/thread/data/mappers/thread_detail_api_mapper.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 import '../test_support/novel_phase0_api_fixtures.dart';
 

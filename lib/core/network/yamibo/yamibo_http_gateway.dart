@@ -665,6 +665,16 @@ class YamiboHttpGateway {
     final responseData = error.response?.data;
     final rawError = responseData ?? error.error;
 
+    if (error.type == DioExceptionType.cancel) {
+      return ApiError(
+        type: ApiErrorType.network,
+        message: '请求已取消',
+        code: 'request_cancelled',
+        statusCode: statusCode,
+        raw: rawError,
+      );
+    }
+
     if (error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.receiveTimeout ||
         error.type == DioExceptionType.sendTimeout) {

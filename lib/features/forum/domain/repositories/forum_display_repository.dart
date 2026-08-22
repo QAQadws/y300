@@ -61,42 +61,21 @@ final class ForumDisplayReadCapabilities {
     return values.supports(capability);
   }
 
-  ForumDisplayReadCapabilities intersect(
-    ForumDisplayReadCapabilities other,
-  ) {
+  ForumDisplayReadCapabilities intersect(ForumDisplayReadCapabilities other) {
     return ForumDisplayReadCapabilities(
       values: values.intersect(other.values),
-      paginationPrecision: _weakerPagination(
-        paginationPrecision,
+      paginationPrecision: paginationPrecision.intersect(
         other.paginationPrecision,
       ),
     );
-  }
-
-  static PaginationPrecision _weakerPagination(
-    PaginationPrecision left,
-    PaginationPrecision right,
-  ) {
-    if (left == right) {
-      return left;
-    }
-    const rank = <PaginationPrecision, int>{
-      PaginationPrecision.exact: 0,
-      PaginationPrecision.directional: 1,
-      PaginationPrecision.totalBased: 2,
-      PaginationPrecision.heuristic: 3,
-      PaginationPrecision.unknown: 4,
-    };
-    return rank[left]! >= rank[right]! ? left : right;
   }
 }
 
 abstract interface class ForumDisplayRepository {
   ForumDisplaySourceCapabilities get capabilities;
 
-  Future<
-    DataReadResult<ForumDisplayData, ForumDisplayReadCapabilities>
-  > getForumDisplayByQuery(
+  Future<DataReadResult<ForumDisplayData, ForumDisplayReadCapabilities>>
+  getForumDisplayByQuery(
     ForumDisplayQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   });

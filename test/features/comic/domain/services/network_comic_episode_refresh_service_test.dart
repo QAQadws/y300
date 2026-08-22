@@ -1,5 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/features/comic/data/mappers/comic_thread_discovery_document_mapper.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_link_merger.dart';
@@ -9,10 +13,9 @@ import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolv
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 
@@ -949,11 +952,13 @@ void main() {
 
         final outcome = await service.fetchCatalogOnly(
           const ComicEpisodeRefreshRequest(sourceTid: '100'),
-          preloadedRootDetail: _threadDetail(
-            tid: '100',
-            subject: '测试漫画 第1话',
-            message:
-                '<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301">上一话</a>',
+          preloadedRootDetail: const ComicThreadDiscoveryDocumentMapper().map(
+            _threadDetail(
+              tid: '100',
+              subject: '测试漫画 第1话',
+              message:
+                  '<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301">上一话</a>',
+            ),
           ),
         );
 
@@ -1004,11 +1009,13 @@ void main() {
 
         final outcome = await service.fetchSearchAndCurrentOnly(
           const ComicEpisodeRefreshRequest(sourceTid: '100'),
-          preloadedRootDetail: _threadDetail(
-            tid: '100',
-            subject: '测试漫画 第2话',
-            message:
-                '<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301">上一话</a>',
+          preloadedRootDetail: const ComicThreadDiscoveryDocumentMapper().map(
+            _threadDetail(
+              tid: '100',
+              subject: '测试漫画 第2话',
+              message:
+                  '<a href="https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301">上一话</a>',
+            ),
           ),
         );
 
@@ -1446,9 +1453,7 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
     this.byCatalogUrl = const <String, List<ComicEpisodeLink>>{},
     this.directLinksByTid = const <String, List<ComicEpisodeLink>>{},
   }) : super(
-         fetchThreadDetail: (_) async => const ApiFailure<ThreadDetailData>(
-           ApiError(type: ApiErrorType.business, message: 'unused'),
-         ),
+         repository: const _UnusedComicThreadDiscoveryRepository(),
          opPostParser: ComicConsecutiveOpPostParser(
            engine: ComicPostParsingEngine(),
          ),
@@ -1481,8 +1486,8 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
     required bool preferCatalogFirst,
     bool allowCatalogFallback = true,
     FavoriteFirstSyncRequestGovernor? governor,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     if (preloadedRootDetail != null && preloadedRootDetail.tid == tid) {
       preloadedTids.add(tid);
@@ -1507,6 +1512,30 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
   }) async {
     requestedCatalogUrls.add(catalogUrl);
     return byCatalogUrl[catalogUrl] ?? const <ComicEpisodeLink>[];
+  }
+}
+
+final class _UnusedComicThreadDiscoveryRepository
+    implements ComicThreadDiscoveryRepository {
+  const _UnusedComicThreadDiscoveryRepository();
+
+  @override
+  ComicThreadDiscoverySourceCapabilities get capabilities =>
+      ComicThreadDiscoverySourceCapabilities(
+        DataCapabilitySet<ComicThreadDiscoveryCapability>.from(
+          unsupported: ComicThreadDiscoveryCapability.values,
+        ),
+      );
+
+  @override
+  Future<
+    DataReadResult<
+      ComicThreadDiscoveryDocument,
+      ComicThreadDiscoveryCapabilities
+    >
+  >
+  load(ComicThreadDiscoveryRequest request) {
+    throw UnimplementedError();
   }
 }
 

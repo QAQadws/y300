@@ -90,10 +90,7 @@ final class ThreadDetailQuery {
     ),
   );
 
-  static bool _mapsEqual(
-    Map<String, String> left,
-    Map<String, String> right,
-  ) {
+  static bool _mapsEqual(Map<String, String> left, Map<String, String> right) {
     if (left.length != right.length) {
       return false;
     }
@@ -145,28 +142,10 @@ final class ThreadDetailReadCapabilities {
   ThreadDetailReadCapabilities intersect(ThreadDetailReadCapabilities other) {
     return ThreadDetailReadCapabilities(
       values: values.intersect(other.values),
-      paginationPrecision: _weakerPagination(
-        paginationPrecision,
+      paginationPrecision: paginationPrecision.intersect(
         other.paginationPrecision,
       ),
     );
-  }
-
-  static PaginationPrecision _weakerPagination(
-    PaginationPrecision left,
-    PaginationPrecision right,
-  ) {
-    if (left == right) {
-      return left;
-    }
-    const rank = <PaginationPrecision, int>{
-      PaginationPrecision.exact: 0,
-      PaginationPrecision.directional: 1,
-      PaginationPrecision.totalBased: 2,
-      PaginationPrecision.heuristic: 3,
-      PaginationPrecision.unknown: 4,
-    };
-    return rank[left]! >= rank[right]! ? left : right;
   }
 }
 

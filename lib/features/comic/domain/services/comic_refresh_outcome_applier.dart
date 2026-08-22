@@ -2,7 +2,7 @@ import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
@@ -35,7 +35,7 @@ class ComicRefreshApplyRequest {
 
   /// 本次刷新内 discovery 阶段已抓取并解析过的 thread detail 缓存。
   /// 封面提升优先复用其中第一话的解析结果，避免再发一次 viewthread。
-  final ComicThreadDetailCache? threadCache;
+  final ComicThreadDiscoveryCache? threadCache;
 
   /// 当封面提升必须发起新 viewthread 时使用的 governor，保证不越过 cooldown。
   final FavoriteFirstSyncRequestGovernor? governor;

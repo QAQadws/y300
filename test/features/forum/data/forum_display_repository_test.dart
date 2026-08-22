@@ -18,9 +18,11 @@ import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_display_repository.dart';
-import 'package:y300/features/forum/data/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/models/forum_display_models.dart';
+import 'package:y300/features/forum/domain/repositories/forum_display_repository.dart';
 
 import '../../../support/data_source_contracts/data_read_contract_scenarios.dart';
+import '../../../support/data_source_contracts/forum_display_repository_contract_suite.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +30,23 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
+
+  runForumDisplayRepositoryContractSuite(
+    () => ForumDisplayRepositoryContractDriver(
+      name: 'mobile HTML',
+      createRepository: () => _buildRepository(_ForumDisplayHtmlTestAdapter()),
+      fid: '30',
+    ),
+  );
+
+  runForumDisplayRepositoryContractSuite(
+    () => ForumDisplayRepositoryContractDriver(
+      name: 'Discuz API',
+      createRepository: () =>
+          _buildApiRepository(_ForumDisplayApiTestAdapter()),
+      fid: '30',
+    ),
+  );
 
   test(
     'ForumDisplayHtmlRepository requests mobile forumdisplay HTML',
@@ -87,8 +106,8 @@ void main() {
     final result = await repository.getForumDisplay(fid: '30');
 
     expect(result.isFailure, isTrue);
-    expect(result.errorOrNull?.statusCode, 503);
-    expect(result.errorOrNull?.message, contains('帖子列表 HTML 加载失败'));
+    expect(result.failureOrNull?.statusCode, 503);
+    expect(result.failureOrNull?.diagnosticMessage, contains('帖子列表 HTML 加载失败'));
   });
 
   test(

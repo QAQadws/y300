@@ -1,4 +1,4 @@
-import 'package:y300/features/thread/data/models/thread_reply_page.dart';
+import 'package:y300/features/thread/domain/models/thread_reply_page.dart';
 
 enum ComicCommentLoadStatus {
   success,
@@ -126,10 +126,10 @@ class ComicCommentLoadResult {
           () => mapPost(
             pid,
             post.authorId.trim(),
-            post.author.trim(),
+            post.authorName.trim(),
             post.dateline.trim(),
-            post.number,
-            post.message,
+            post.floorNumber,
+            post.rawMessage,
           ),
         );
       }
@@ -165,7 +165,7 @@ class ComicCommentLoadResult {
     // floor-one identity as a narrow fallback, never the author ID.
     for (final page in pages.where((page) => page.page == 1)) {
       for (final post in page.posts) {
-        if (post.number == 1 && post.pid.trim().isNotEmpty) {
+        if (post.floorNumber == 1 && post.pid.trim().isNotEmpty) {
           return post.pid.trim();
         }
       }

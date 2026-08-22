@@ -1,7 +1,7 @@
 import 'package:y300/features/comic/domain/models/comic_models.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 abstract class ComicEpisodeRefreshService {
   Future<List<ComicEpisodeLink>> fetchEpisodeLinks(
@@ -19,8 +19,8 @@ abstract class ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   });
 
   /// Runs strategy 2 and strategy 3 for callers that already decided catalog
@@ -28,8 +28,8 @@ abstract class ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   });
 
   /// Catalog 快速路径：直接解析持久化的 catalogUrl HTML。
@@ -67,7 +67,7 @@ class ComicEpisodeRefreshOutcome {
 
   /// 本次刷新内 discovery 过程已抓取并解析过的 thread detail 缓存。
   /// 调用方（如封面提升）可优先复用，避免对已访问 tid 再发起 viewthread。
-  final ComicThreadDetailCache? threadCache;
+  final ComicThreadDiscoveryCache? threadCache;
 
   bool get hasLinks => links.isNotEmpty;
 }

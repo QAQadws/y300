@@ -1,16 +1,17 @@
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 
-typedef ComicEpisodeImageFetcher = Future<List<String>> Function(String tid);
+typedef ComicEpisodeImageFetcher =
+    Future<ComicEpisodeImagesFetchResult> Function(String tid);
 
 abstract class ComicFirstEpisodeCoverPromoter {
   Future<bool> promoteIfPossible({
     required String comicId,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryCache? threadCache,
     FavoriteFirstSyncRequestGovernor? governor,
   });
 }
@@ -21,21 +22,17 @@ abstract class ComicFirstEpisodeCoverPromoter {
 class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
   ComicFirstEpisodeCoverService({
     required ComicRepository repository,
-    ComicEpisodeImageFetcher? fetchEpisodeImagesByTid,
-    ForumImageSourcePipeline? imageSourcePipeline,
+    ComicEpisodeImageFetcher? fetchEpisodeImages,
   }) : _repository = repository,
-       _fetchEpisodeImagesByTid = fetchEpisodeImagesByTid,
-       _imageSourcePipeline =
-           imageSourcePipeline ?? const DefaultForumImageSourcePipeline();
+       _fetchEpisodeImages = fetchEpisodeImages;
 
   final ComicRepository _repository;
-  final ComicEpisodeImageFetcher? _fetchEpisodeImagesByTid;
-  final ForumImageSourcePipeline _imageSourcePipeline;
+  final ComicEpisodeImageFetcher? _fetchEpisodeImages;
 
   @override
   Future<bool> promoteIfPossible({
     required String comicId,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryCache? threadCache,
     FavoriteFirstSyncRequestGovernor? governor,
   }) async {
     final detail = await _repository.getComicDetail(comicId: comicId);
@@ -74,13 +71,18 @@ class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
     }
 
     // 2) discovery 没碰过这一话；走 governor 拉取（首同步内不会越过 cooldown）。
-    final fetcher = _fetchEpisodeImagesByTid;
+    final fetcher = _fetchEpisodeImages;
     if (fetcher == null) {
       return false;
     }
-    final fetched = _dedupeNonEmpty(
-      await _runFetch(governor, () => fetcher(episode.sourceTid)),
+    final fetchResult = await _runFetch(
+      governor,
+      () => fetcher(episode.sourceTid),
     );
+    final fetched = switch (fetchResult) {
+      ComicEpisodeImagesFetched(:final imageUrls) => _dedupeNonEmpty(imageUrls),
+      ComicEpisodeImagesFetchFailed() => const <String>[],
+    };
     if (fetched.isEmpty) {
       return false;
     }
@@ -94,9 +96,9 @@ class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
     return true;
   }
 
-  Future<List<String>> _runFetch(
+  Future<ComicEpisodeImagesFetchResult> _runFetch(
     FavoriteFirstSyncRequestGovernor? governor,
-    Future<List<String>> Function() action,
+    Future<ComicEpisodeImagesFetchResult> Function() action,
   ) {
     if (governor == null) {
       return action();
@@ -107,16 +109,15 @@ class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
     );
   }
 
-  List<String> _extractFirstPostImages(ThreadDetailData detail) {
+  List<String> _extractFirstPostImages(ComicThreadDiscoveryDocument detail) {
     final firstPost = detail.posts
-        .where((post) => post.isFirst || post.number == 1)
+        .where((post) => post.isFirst || post.floorNumber == 1)
         .firstOrNull;
     if (firstPost == null) {
       return const <String>[];
     }
-    return _imageSourcePipeline
-        .collectFromPost(firstPost)
-        .map((source) => source.normalizedUrl)
+    return firstPost.imageReferences
+        .map((source) => source.url)
         .toList(growable: false);
   }
 

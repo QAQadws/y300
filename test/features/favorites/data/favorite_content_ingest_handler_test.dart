@@ -8,7 +8,7 @@ import 'package:y300/features/favorites/domain/models/favorite_detail_context.da
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/data/services/novel_favorite_ingest_service.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {

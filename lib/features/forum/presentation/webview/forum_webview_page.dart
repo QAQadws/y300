@@ -41,7 +41,7 @@ import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
-import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';

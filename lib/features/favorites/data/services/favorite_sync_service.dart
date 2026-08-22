@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
@@ -13,6 +14,7 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 
 enum FavoriteSyncProgressPhase {
   idle,
@@ -385,7 +387,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
     final failedTids = <String>[];
     var detailLoadedCount = 0;
-    ThreadDetailData? preloadedDetail;
+    DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>?
+    preloadedDetail;
     var record = await _localRepository.getActiveThreadByTid(tid);
     if (record == null) {
       // favthread may return before the favorite list endpoint exposes the new
@@ -396,7 +399,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         if (preloadedDetail != null) {
           upsertedCount += await _upsertRecentlyFavoritedThreadFromDetail(
             tid: tid,
-            detail: preloadedDetail,
+            detail: preloadedDetail.data,
             remoteCount: firstPage.totalCount,
           );
           record = await _localRepository.getActiveThreadByTid(tid);
@@ -560,7 +563,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     return page.items.any((item) => item.tid.trim() == tid);
   }
 
-  Future<ThreadDetailData?> _loadTargetDetailOrNull(
+  Future<DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>?>
+  _loadTargetDetailOrNull(
     String tid, {
     required FavoriteSyncExecutionContext context,
   }) async {
@@ -568,10 +572,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       tid,
       executionContext: context,
     );
-    if (result is ApiFailure<ThreadDetailData>) {
-      return null;
-    }
-    return result.dataOrNull;
+    return result
+            is DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>
+        ? result
+        : null;
   }
 
   Future<int> _upsertRecentlyFavoritedThreadFromDetail({
@@ -685,7 +689,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required FavoriteSyncExecutionContext context,
     required bool mergeIngestedComics,
     bool forceComicSearchOnCatalogMiss = false,
-    ThreadDetailData? preloadedDetail,
+    DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>?
+    preloadedDetail,
   }) async {
     final result = await _detailContextLoader.load(
       record,
@@ -693,7 +698,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       executionContext: context,
     );
     return result.when(
-      success: (resolution) async {
+      success: (resolution, _, _) async {
         if (resolution is InvalidFavoriteDetail) {
           await _localRepository.markThreadDetailInvalid(
             tid: resolution.record.tid,

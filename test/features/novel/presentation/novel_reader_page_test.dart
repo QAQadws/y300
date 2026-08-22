@@ -36,8 +36,9 @@ import 'package:y300/features/novel/presentation/services/novel_reader_document_
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 void main() {

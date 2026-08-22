@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -19,7 +20,7 @@ import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
@@ -30,7 +31,6 @@ import 'package:y300/features/library_shared/data/repositories/library_state_rep
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
 
 void main() {
   testWidgets(
@@ -358,11 +358,6 @@ class _FakeComicReaderService implements ComicReaderService {
       const ComicEpisodeImagesFetched(<String>[]);
 
   @override
-  // ignore: deprecated_member_use
-  Future<List<String>> fetchEpisodeImagesByTid(String tid) async =>
-      (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
-
-  @override
   Future<void> prefetchImages({required List<String> imageUrls}) async {}
 }
 
@@ -438,8 +433,8 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchCatalogOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,
@@ -451,8 +446,8 @@ class _FakeComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   Future<ComicEpisodeRefreshOutcome> fetchSearchAndCurrentOnly(
     ComicEpisodeRefreshRequest request, {
     FavoriteSyncExecutionContext? executionContext,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
     return const ComicEpisodeRefreshOutcome(
       source: ComicEpisodeRefreshSource.empty,

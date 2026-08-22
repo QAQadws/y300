@@ -1,10 +1,11 @@
+import 'package:y300/features/comic/data/mappers/comic_thread_discovery_document_mapper.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analysis.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
@@ -66,6 +67,8 @@ class ComicFavoriteAutoRefreshCoordinator {
     required ComicTitleAnalyzer titleAnalyzer,
     CatalogUrlUpdater? catalogUrlUpdater,
     ComicDetailLoader? comicDetailLoader,
+    ComicThreadDiscoveryDocumentMapper discoveryMapper =
+        const ComicThreadDiscoveryDocumentMapper(),
   }) : _refreshService = refreshService,
        _searchQueue = searchQueue,
        _refreshOutcomeApplier = refreshOutcomeApplier,
@@ -73,7 +76,8 @@ class ComicFavoriteAutoRefreshCoordinator {
        _catalogMissPolicy = catalogMissPolicy,
        _titleAnalyzer = titleAnalyzer,
        _catalogUrlUpdater = catalogUrlUpdater,
-       _comicDetailLoader = comicDetailLoader;
+       _comicDetailLoader = comicDetailLoader,
+       _discoveryMapper = discoveryMapper;
 
   final ComicEpisodeRefreshService _refreshService;
   final ComicSearchRefreshQueueEnqueuer _searchQueue;
@@ -83,6 +87,7 @@ class ComicFavoriteAutoRefreshCoordinator {
   final ComicTitleAnalyzer _titleAnalyzer;
   final CatalogUrlUpdater? _catalogUrlUpdater;
   final ComicDetailLoader? _comicDetailLoader;
+  final ComicThreadDiscoveryDocumentMapper _discoveryMapper;
 
   Future<ComicFavoriteAutoRefreshResult> refreshAfterFavoriteIngest({
     required String comicId,
@@ -124,6 +129,9 @@ class ComicFavoriteAutoRefreshCoordinator {
     FavoriteSyncExecutionContext? executionContext,
     ThreadDetailData? preloadedRootDetail,
   }) async {
+    final preloadedDiscovery = preloadedRootDetail == null
+        ? null
+        : _discoveryMapper.map(preloadedRootDetail);
     final storedDetail = await _comicDetailLoader?.call(comicId);
     final customCatalogUrl = _normalized(storedDetail?.customCatalogUrl);
     final sourceCatalogUrl = _normalized(storedDetail?.catalogUrl);
@@ -173,13 +181,13 @@ class ComicFavoriteAutoRefreshCoordinator {
     }
 
     // catalog 快速路径失败 -> 回退到 fetchCatalogOnly
-    // 共享一个 ComicThreadDetailCache，让封面提升能复用 discovery 已抓取
+    // 共享一个 ComicThreadDiscoveryCache，让封面提升能复用 discovery 已抓取
     // 的第一话 thread 详情，省掉一次 viewthread。
-    final sharedCache = ComicThreadDetailCache();
+    final sharedCache = ComicThreadDiscoveryCache();
     final catalog = await _refreshService.fetchCatalogOnly(
       request,
       executionContext: executionContext,
-      preloadedRootDetail: preloadedRootDetail,
+      preloadedRootDetail: preloadedDiscovery,
       threadCache: sharedCache,
     );
     if (catalog.catalogMatched && catalog.hasLinks) {
@@ -247,7 +255,7 @@ class ComicFavoriteAutoRefreshCoordinator {
       origin: ComicSearchRefreshOrigin.favoriteSync,
       // 把已抓到的 root detail 透传给队列任务，跨入队边界保留缓存——
       // 避免队列任务再为同一 sourceTid 发起 viewthread。
-      preloadedRootDetail: preloadedRootDetail,
+      preloadedRootDetail: preloadedDiscovery,
     );
     _shelfRefreshBus.notify(
       modules: const <LibraryModuleKey>{

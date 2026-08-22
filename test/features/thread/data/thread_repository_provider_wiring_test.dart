@@ -14,9 +14,12 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/data/repositories/discuz_api_comic_episode_catalog_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 
 import '../../../support/data_source_contracts/data_read_contract_scenarios.dart';
+import '../../../support/data_source_contracts/thread_repository_contract_suite.dart';
 
 /// 回归防护：收藏同步、漫画发现与漫画章节目录必须走 JSON
 ///（[ApiThreadRepository]），帖子阅读页才走 HTML-first
@@ -27,6 +30,15 @@ import '../../../support/data_source_contracts/data_read_contract_scenarios.dart
 /// 修复方式是新增 [threadJsonRepositoryProvider] 让同步/发现回到 JSON。
 /// 本测试锁定这一分工，防止再次被 HTML 数据源顶替。
 void main() {
+  runThreadRepositoryContractSuite(
+    () => ThreadRepositoryContractDriver(
+      name: 'Discuz v4 API',
+      createRepository: () =>
+          _buildApiThreadRepository(_ApiThreadTestAdapter()),
+      tid: '100',
+    ),
+  );
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
@@ -150,6 +162,24 @@ void main() {
 
     expectSourceNeutralFailure(result, kind: DataReadFailureKind.parse);
   });
+}
+
+ApiThreadRepository _buildApiThreadRepository(_ApiThreadTestAdapter adapter) {
+  final dio = Dio(
+    BaseOptions(
+      baseUrl: 'https://bbs.yamibo.com/api/mobile/index.php',
+      validateStatus: (status) =>
+          status != null && status >= 200 && status < 400,
+    ),
+  )..httpClientAdapter = adapter;
+  return ApiThreadRepository(
+    ApiClient(
+      cookieStore: CookieStore(),
+      logger: Logger(level: Level.off),
+      dio: dio,
+      enableLog: false,
+    ),
+  );
 }
 
 final class _ApiThreadTestAdapter implements HttpClientAdapter {

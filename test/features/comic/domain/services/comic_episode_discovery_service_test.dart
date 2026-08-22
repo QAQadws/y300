@@ -1,12 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/comic/data/mappers/comic_thread_discovery_document_mapper.dart';
+import 'package:y300/features/comic/data/repositories/thread_repository_comic_thread_discovery_adapter.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 
 void main() {
   group('ComicEpisodeDiscoveryService', () {
@@ -14,7 +20,7 @@ void main() {
       'uses direct strategy when current post already has enough episodes',
       () async {
         final service = ComicEpisodeDiscoveryService(
-          fetchThreadDetail: _fakeThreadFetcher(
+          repository: _fakeThreadFetcher(
             detailsByTid: {
               '100': _thread(
                 tid: '100',
@@ -48,7 +54,7 @@ void main() {
       () async {
         final requestedTids = <String>[];
         final service = ComicEpisodeDiscoveryService(
-          fetchThreadDetail: (tid) async {
+          repository: _discoveryRepository((tid) async {
             requestedTids.add(tid);
             if (tid != '2000') {
               return const ApiFailure<ThreadDetailData>(
@@ -66,7 +72,7 @@ void main() {
 ''',
               ),
             );
-          },
+          }),
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
@@ -89,7 +95,7 @@ void main() {
       'does not apply candidate eligibility rules to the root thread',
       () async {
         final service = ComicEpisodeDiscoveryService(
-          fetchThreadDetail: _fakeThreadFetcher(
+          repository: _fakeThreadFetcher(
             detailsByTid: <String, ThreadDetailData>{
               '2050': _thread(
                 tid: '2050',
@@ -137,7 +143,7 @@ void main() {
           '2103': _thread(tid: '2103', subject: '测试漫画 第3话', message: ''),
         };
         final service = ComicEpisodeDiscoveryService(
-          fetchThreadDetail: (tid) async {
+          repository: _discoveryRepository((tid) async {
             requestedTids.add(tid);
             final detail = details[tid];
             return detail == null
@@ -145,7 +151,7 @@ void main() {
                     ApiError(type: ApiErrorType.network, message: 'offline'),
                   )
                 : ApiSuccess<ThreadDetailData>(detail);
-          },
+          }),
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
@@ -183,7 +189,7 @@ void main() {
           '297': _thread(tid: '297', subject: '测试漫画 序章', message: ''),
         };
         final service = ComicEpisodeDiscoveryService(
-          fetchThreadDetail: (tid) async {
+          repository: _discoveryRepository((tid) async {
             requestedTids.add(tid);
             final detail = details[tid];
             return detail == null
@@ -191,7 +197,7 @@ void main() {
                     ApiError(type: ApiErrorType.business, message: 'not found'),
                   )
                 : ApiSuccess<ThreadDetailData>(detail);
-          },
+          }),
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
@@ -243,7 +249,7 @@ void main() {
           '297': _thread(tid: '297', subject: '测试漫画 第8话', message: ''),
         };
         final service = ComicEpisodeDiscoveryService(
-          fetchThreadDetail: (tid) async {
+          repository: _discoveryRepository((tid) async {
             requestedTids.add(tid);
             final detail = details[tid];
             return detail == null
@@ -251,7 +257,7 @@ void main() {
                     ApiError(type: ApiErrorType.business, message: 'not found'),
                   )
                 : ApiSuccess<ThreadDetailData>(detail);
-          },
+          }),
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
@@ -278,11 +284,17 @@ void main() {
         subject: '测试漫画 第3话',
         message: '<a href="thread-309-1-1.html">上一话</a>',
       );
-      final cache = ComicThreadDetailCache()
-        ..store(_thread(tid: '309', subject: '测试漫画 第2话', message: ''));
+      final cache = ComicThreadDiscoveryCache()
+        ..store(
+          _discoveryDocument(
+            _thread(tid: '309', subject: '测试漫画 第2话', message: ''),
+          ),
+        );
       final recursiveGovernor = _RecordingRecursiveRequestGovernor();
       final service = ComicEpisodeDiscoveryService(
-        fetchThreadDetail: (_) async => throw StateError('unexpected request'),
+        repository: _discoveryRepository(
+          (_) async => throw StateError('unexpected request'),
+        ),
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
         ),
@@ -293,7 +305,7 @@ void main() {
       final result = await service.discoverFromTidWithPreference(
         tid: root.tid,
         preferCatalogFirst: false,
-        preloadedRootDetail: root,
+        preloadedRootDetail: _discoveryDocument(root),
         threadCache: cache,
       );
 
@@ -306,7 +318,7 @@ void main() {
       final recursiveGovernor = _RecordingRecursiveRequestGovernor();
       final favoriteGovernor = _RecordingFavoriteRequestGovernor();
       final service = ComicEpisodeDiscoveryService(
-        fetchThreadDetail: _fakeThreadFetcher(
+        repository: _fakeThreadFetcher(
           detailsByTid: <String, ThreadDetailData>{
             '320': _thread(
               tid: '320',
@@ -341,7 +353,7 @@ void main() {
       'uses catalog strategy when direct and recursive are insufficient',
       () async {
         final service = ComicEpisodeDiscoveryService(
-          fetchThreadDetail: _fakeThreadFetcher(
+          repository: _fakeThreadFetcher(
             detailsByTid: {
               '500': _thread(
                 tid: '500',
@@ -374,7 +386,7 @@ void main() {
 
     test('uses catalog strategy for Yamibo elevator tag links', () async {
       final service = ComicEpisodeDiscoveryService(
-        fetchThreadDetail: _fakeThreadFetcher(
+        repository: _fakeThreadFetcher(
           detailsByTid: {
             '476059': _thread(
               tid: '476059',
@@ -414,7 +426,7 @@ void main() {
 
     test('catalog strategy follows type=thread pages until total pages', () async {
       final service = ComicEpisodeDiscoveryService(
-        fetchThreadDetail: _fakeThreadFetcher(
+        repository: _fakeThreadFetcher(
           detailsByTid: {
             '700': _thread(
               tid: '700',
@@ -464,7 +476,7 @@ void main() {
       'recursive fallback ignores plain text thread urls outside anchors',
       () async {
         final service = ComicEpisodeDiscoveryService(
-          fetchThreadDetail: _fakeThreadFetcher(
+          repository: _fakeThreadFetcher(
             detailsByTid: {
               '900': _thread(
                 tid: '900',
@@ -492,12 +504,12 @@ void main() {
       () async {
         var threadFetchCount = 0;
         final service = ComicEpisodeDiscoveryService(
-          fetchThreadDetail: (tid) async {
+          repository: _discoveryRepository((tid) async {
             threadFetchCount++;
             return const ApiFailure<ThreadDetailData>(
               ApiError(type: ApiErrorType.business, message: 'unused'),
             );
-          },
+          }),
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
@@ -531,7 +543,7 @@ void main() {
       'discoverFromCatalogUrl returns empty when catalog has no episodes',
       () async {
         final service = ComicEpisodeDiscoveryService(
-          fetchThreadDetail: _fakeThreadFetcher(
+          repository: _fakeThreadFetcher(
             detailsByTid: <String, ThreadDetailData>{},
           ),
           opPostParser: ComicConsecutiveOpPostParser(
@@ -551,7 +563,7 @@ void main() {
     test('rejects a persisted non-tag catalog url before fetching', () async {
       final fetcher = _FakeCatalogHtmlFetcher(<String, String>{});
       final service = ComicEpisodeDiscoveryService(
-        fetchThreadDetail: _fakeThreadFetcher(
+        repository: _fakeThreadFetcher(
           detailsByTid: <String, ThreadDetailData>{},
         ),
         opPostParser: ComicConsecutiveOpPostParser(
@@ -601,10 +613,10 @@ ThreadDetailData _thread({
   );
 }
 
-Future<ApiResult<ThreadDetailData>> Function(String tid) _fakeThreadFetcher({
+ComicThreadDiscoveryRepository _fakeThreadFetcher({
   required Map<String, ThreadDetailData> detailsByTid,
 }) {
-  return (tid) async {
+  return _discoveryRepository((tid) async {
     final detail = detailsByTid[tid];
     if (detail == null) {
       return const ApiFailure<ThreadDetailData>(
@@ -612,7 +624,52 @@ Future<ApiResult<ThreadDetailData>> Function(String tid) _fakeThreadFetcher({
       );
     }
     return ApiSuccess<ThreadDetailData>(detail);
-  };
+  });
+}
+
+ComicThreadDiscoveryRepository _discoveryRepository(
+  Future<ApiResult<ThreadDetailData>> Function(String tid) loader,
+) {
+  return ThreadRepositoryComicThreadDiscoveryAdapter(
+    threadRepository: _FixtureThreadRepository(loader),
+  );
+}
+
+ComicThreadDiscoveryDocument _discoveryDocument(ThreadDetailData detail) {
+  return const ComicThreadDiscoveryDocumentMapper().map(detail);
+}
+
+final class _FixtureThreadRepository implements ThreadRepository {
+  const _FixtureThreadRepository(this._loader);
+
+  final Future<ApiResult<ThreadDetailData>> Function(String tid) _loader;
+
+  @override
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
+    required String tid,
+    int page = 1,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    final result = await _loader(tid);
+    return switch (result) {
+      ApiSuccess<ThreadDetailData>(:final data) => DataReadSuccess(
+        data: data,
+        capabilities: capabilities.toReadCapabilities(),
+        metadata: const DataReadMetadata.network(),
+      ),
+      ApiFailure<ThreadDetailData>(:final error) => DataReadFailure(
+        kind: DataReadFailureKind.business,
+        code: error.code,
+        statusCode: error.statusCode,
+        diagnosticMessage: error.message,
+      ),
+    };
+  }
 }
 
 class _FakeCatalogHtmlFetcher implements CatalogHtmlFetcher {

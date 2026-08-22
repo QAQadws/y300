@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/services/novel_episode_discovery_service.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 void main() {
   test('NovelEpisodeDiscoveryService builds chapter plan from OP posts', () {

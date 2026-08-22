@@ -186,48 +186,51 @@ void main() {
     },
   );
 
-  test('offline package reads cover through the dedicated cover store', () async {
-    final temp = await io.Directory.systemTemp.createTemp(
-      'y300-comic-download-cover-limit-test-',
-    );
-    addTearDown(() async {
-      if (await temp.exists()) {
-        await temp.delete(recursive: true);
-      }
-    });
-    final cover = io.File(p.join(temp.path, 'source-cover.jpg'))
-      ..writeAsBytesSync(<int>[7, 8, 9]);
-    final image1 = io.File(p.join(temp.path, 'source-1.jpg'))
-      ..writeAsBytesSync(<int>[1, 2, 3]);
-    final image2 = io.File(p.join(temp.path, 'source-2.png'))
-      ..writeAsBytesSync(<int>[4, 5, 6]);
-    final governor = _RecordingGovernor();
-    final coverStore = _CoverStoreFake(cover);
-    final service = DefaultComicDownloadService(
-      repository: _ComicDownloadRepositoryFake(
-        coverImageUrl: 'https://img.test/cover.jpg',
-      ),
-      readerServiceFuture: Future<ComicReaderService>.value(
-        _ComicReaderServiceFake(<String, String>{
-          'https://img.test/1.jpg': image1.path,
-          'https://img.test/2.png': image2.path,
-        }),
-      ),
-      storageService: DefaultDownloadStorageService(
-        locationRepository: _FakeStorageLocationRepository(temp.path),
-      ),
-      imageRequestGovernor: governor,
-      coverStore: coverStore,
-    );
+  test(
+    'offline package reads cover through the dedicated cover store',
+    () async {
+      final temp = await io.Directory.systemTemp.createTemp(
+        'y300-comic-download-cover-limit-test-',
+      );
+      addTearDown(() async {
+        if (await temp.exists()) {
+          await temp.delete(recursive: true);
+        }
+      });
+      final cover = io.File(p.join(temp.path, 'source-cover.jpg'))
+        ..writeAsBytesSync(<int>[7, 8, 9]);
+      final image1 = io.File(p.join(temp.path, 'source-1.jpg'))
+        ..writeAsBytesSync(<int>[1, 2, 3]);
+      final image2 = io.File(p.join(temp.path, 'source-2.png'))
+        ..writeAsBytesSync(<int>[4, 5, 6]);
+      final governor = _RecordingGovernor();
+      final coverStore = _CoverStoreFake(cover);
+      final service = DefaultComicDownloadService(
+        repository: _ComicDownloadRepositoryFake(
+          coverImageUrl: 'https://img.test/cover.jpg',
+        ),
+        readerServiceFuture: Future<ComicReaderService>.value(
+          _ComicReaderServiceFake(<String, String>{
+            'https://img.test/1.jpg': image1.path,
+            'https://img.test/2.png': image2.path,
+          }),
+        ),
+        storageService: DefaultDownloadStorageService(
+          locationRepository: _FakeStorageLocationRepository(temp.path),
+        ),
+        imageRequestGovernor: governor,
+        coverStore: coverStore,
+      );
 
-    await service.downloadEpisode(
-      comicId: 'yamibo:100',
-      episodeId: 'yamibo:100:101',
-    );
+      await service.downloadEpisode(
+        comicId: 'yamibo:100',
+        episodeId: 'yamibo:100:101',
+      );
 
-    expect(governor.waitCount, 2);
-    expect(coverStore.ensureCalls, 1);
-  });
+      expect(governor.waitCount, 2);
+      expect(coverStore.ensureCalls, 1);
+    },
+  );
 
   test(
     'concurrent reader extraction shares one immutable generation',
@@ -435,11 +438,6 @@ class _ComicReaderServiceFake implements ComicReaderService {
   @override
   Future<ComicEpisodeImagesFetchResult> fetchEpisodeImages(String tid) async =>
       const ComicEpisodeImagesFetched(<String>[]);
-
-  @override
-  // ignore: deprecated_member_use
-  Future<List<String>> fetchEpisodeImagesByTid(String tid) async =>
-      (await fetchEpisodeImages(tid)).imageUrlsOrEmpty;
 
   @override
   Future<void> prefetchImages({required List<String> imageUrls}) async {}

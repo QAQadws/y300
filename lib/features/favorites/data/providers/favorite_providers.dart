@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/providers/favorite_ingest_providers.dart';
@@ -19,7 +18,7 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
-import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 export 'package:y300/features/favorites/data/use_cases/unfavorite_use_case_providers.dart';
@@ -33,11 +32,7 @@ final localFavoriteRepositoryProvider = Provider<LocalFavoriteRepository>((
 final favoriteDetailContextLoaderProvider =
     Provider<FavoriteDetailContextLoader>((ref) {
       return DefaultFavoriteDetailContextLoader(
-        loadThreadDetail: (tid) async => apiResultFromDataRead(
-          await ref
-              .read(threadJsonRepositoryProvider)
-              .getThreadDetail(tid: tid, page: 1),
-        ),
+        threadRepository: ref.read(threadJsonRepositoryProvider),
         loadTagLookup: () => ref.read(forumTagLookupProvider.future),
         classifier: ref.watch(threadContentClassifierProvider),
       );

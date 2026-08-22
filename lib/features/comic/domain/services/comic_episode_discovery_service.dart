@@ -1,18 +1,18 @@
 import 'dart:collection';
 
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
 import 'package:y300/features/comic/domain/services/catalog_thread_html_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_eligibility_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
-import 'package:y300/features/comic/domain/services/comic_thread_detail_cache.dart';
+import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 
@@ -92,7 +92,7 @@ typedef DioCatalogHtmlFetcher = YamiboCatalogHtmlFetcher;
 
 class ComicEpisodeDiscoveryService {
   ComicEpisodeDiscoveryService({
-    required ThreadDetailFetcher fetchThreadDetail,
+    required ComicThreadDiscoveryRepository repository,
     required ComicConsecutiveOpPostParser opPostParser,
     required CatalogHtmlFetcher catalogHtmlFetcher,
     CatalogThreadHtmlParser? catalogThreadHtmlParser,
@@ -103,7 +103,7 @@ class ComicEpisodeDiscoveryService {
         const DefaultComicRecursiveThreadEligibilityPolicy(),
     ComicRecursiveThreadRequestGovernor? recursiveRequestGovernor,
     EpisodeDiscoveryConfig config = const EpisodeDiscoveryConfig(),
-  }) : _fetchThreadDetail = fetchThreadDetail,
+  }) : _repository = repository,
        _opPostParser = opPostParser,
        _catalogHtmlFetcher = catalogHtmlFetcher,
        _tagPageParsing = tagPageParsing ?? const YamiboTagPageParsing(),
@@ -129,7 +129,7 @@ class ComicEpisodeDiscoveryService {
     caseSensitive: false,
   );
 
-  final ThreadDetailFetcher _fetchThreadDetail;
+  final ComicThreadDiscoveryRepository _repository;
   final ComicConsecutiveOpPostParser _opPostParser;
   final CatalogHtmlFetcher _catalogHtmlFetcher;
   final YamiboTagPageParsing _tagPageParsing;
@@ -161,10 +161,10 @@ class ComicEpisodeDiscoveryService {
     // same catalog fallback run twice. The default keeps legacy discovery.
     bool allowCatalogFallback = true,
     FavoriteFirstSyncRequestGovernor? governor,
-    ThreadDetailData? preloadedRootDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedRootDetail,
+    ComicThreadDiscoveryCache? threadCache,
   }) async {
-    final activeThreadCache = threadCache ?? ComicThreadDetailCache();
+    final activeThreadCache = threadCache ?? ComicThreadDiscoveryCache();
     final root = await _fetchAndParse(
       tid,
       governor: governor,
@@ -259,7 +259,7 @@ class ComicEpisodeDiscoveryService {
     if (candidateCount == 0 || candidateCount > 2) {
       return false;
     }
-    final subjectEpisodeNo = _tryParseSubjectEpisodeNo(root.detail.subject);
+    final subjectEpisodeNo = _tryParseSubjectEpisodeNo(root.document.subject);
     if (subjectEpisodeNo == null) {
       return true;
     }
@@ -279,7 +279,7 @@ class ComicEpisodeDiscoveryService {
     required _ComicRecursiveCandidateValidationSession candidateSession,
   }) async {
     final queue = Queue<String>();
-    final scheduled = <String>{root.detail.tid};
+    final scheduled = <String>{root.document.tid};
     final merged = <String, ComicEpisodeLink>{};
     final preferredLinks = <String, ComicEpisodeLink>{};
     var depth = 0;
@@ -423,8 +423,8 @@ class ComicEpisodeDiscoveryService {
   Future<_ParsedThreadRoot?> _fetchAndParse(
     String tid, {
     FavoriteFirstSyncRequestGovernor? governor,
-    ThreadDetailData? preloadedDetail,
-    ComicThreadDetailCache? threadCache,
+    ComicThreadDiscoveryDocument? preloadedDetail,
+    ComicThreadDiscoveryCache? threadCache,
     bool isRecursiveRequest = false,
   }) async {
     if (preloadedDetail != null && preloadedDetail.tid == tid) {
@@ -436,7 +436,7 @@ class ComicEpisodeDiscoveryService {
         posts: preloadedDetail.posts,
       );
       return _ParsedThreadRoot(
-        detail: preloadedDetail,
+        document: preloadedDetail,
         parsed: parsed,
         recursiveTidCandidates: _collectRecursiveTidCandidates(
           tid: preloadedDetail.tid,
@@ -454,7 +454,7 @@ class ComicEpisodeDiscoveryService {
         posts: cached.posts,
       );
       return _ParsedThreadRoot(
-        detail: cached,
+        document: cached,
         parsed: parsed,
         recursiveTidCandidates: _collectRecursiveTidCandidates(
           tid: cached.tid,
@@ -466,10 +466,11 @@ class ComicEpisodeDiscoveryService {
     final result = await _runThreadRequest(
       governor: governor,
       isRecursiveRequest: isRecursiveRequest,
-      action: () => _fetchThreadDetail(tid),
+      action: () =>
+          _repository.load(ComicThreadDiscoveryRequest(sourceTid: tid)),
     );
     return result.when(
-      success: (data) {
+      success: (data, _, _) {
         threadCache?.store(data);
         final parsed = _opPostParser.parse(
           tid: data.tid,
@@ -478,7 +479,7 @@ class ComicEpisodeDiscoveryService {
           posts: data.posts,
         );
         return _ParsedThreadRoot(
-          detail: data,
+          document: data,
           parsed: parsed,
           recursiveTidCandidates: _collectRecursiveTidCandidates(
             tid: data.tid,
@@ -494,7 +495,7 @@ class ComicEpisodeDiscoveryService {
   List<String> _collectRecursiveTidCandidates({
     required String tid,
     required List<ComicEpisodeLink> episodeLinks,
-    required List<ThreadPost> posts,
+    required List<ComicThreadDiscoveryPost> posts,
   }) {
     final candidates = <String>{};
     for (final link in episodeLinks) {
@@ -509,7 +510,7 @@ class ComicEpisodeDiscoveryService {
     // so plain text, scripts, and quoted raw URLs are not promoted accidentally.
     for (final post in posts) {
       for (final candidateTid in _domExtractor.extractThreadTids(
-        post.message,
+        post.messageHtml,
       )) {
         if (candidateTid != tid) {
           candidates.add(candidateTid);
@@ -572,9 +573,6 @@ class ComicEpisodeDiscoveryService {
   }
 }
 
-typedef ThreadDetailFetcher =
-    Future<ApiResult<ThreadDetailData>> Function(String tid);
-
 /// 帖子解析结果（public），用于增量发现。
 ///
 /// 由 [ComicEpisodeDiscoveryService.fetchAndParseThread] 返回，
@@ -593,12 +591,12 @@ class ParsedThreadResult {
 
 class _ParsedThreadRoot {
   const _ParsedThreadRoot({
-    required this.detail,
+    required this.document,
     required this.parsed,
     required this.recursiveTidCandidates,
   });
 
-  final ThreadDetailData detail;
+  final ComicThreadDiscoveryDocument document;
   final ParsedComicPost parsed;
   final List<String> recursiveTidCandidates;
 }
@@ -639,7 +637,10 @@ class _ComicRecursiveCandidateValidationSession {
         status: _CandidateValidationStatus.failed,
       );
     }
-    if (!_policy.allows(fid: parsed.detail.fid, typeid: parsed.detail.typeid)) {
+    if (!_policy.allows(
+      fid: parsed.document.fid,
+      typeid: parsed.document.typeId,
+    )) {
       return const _CandidateValidationResolution(
         status: _CandidateValidationStatus.rejected,
       );

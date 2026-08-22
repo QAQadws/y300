@@ -1,6 +1,25 @@
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+
+enum FavoriteDetailCapability {
+  stableThreadIdentity,
+  forumClassification,
+  orderedPosts,
+  renderableBody,
+  attachmentMetadata,
+}
+
+final class FavoriteDetailReadCapabilities {
+  const FavoriteDetailReadCapabilities(this.values);
+
+  final DataCapabilitySet<FavoriteDetailCapability> values;
+
+  bool supports(FavoriteDetailCapability capability) {
+    return values.supports(capability);
+  }
+}
 
 class FavoriteDetailContext {
   const FavoriteDetailContext({

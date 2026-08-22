@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 
 void main() {
@@ -42,7 +43,7 @@ void main() {
         );
         final service = ComicFirstEpisodeCoverService(
           repository: repository,
-          fetchEpisodeImagesByTid: (_) async {
+          fetchEpisodeImages: (_) async {
             throw StateError('existing images should not fetch again');
           },
         );
@@ -74,14 +75,14 @@ void main() {
         );
         final service = ComicFirstEpisodeCoverService(
           repository: repository,
-          fetchEpisodeImagesByTid: (tid) async {
+          fetchEpisodeImages: (tid) async {
             expect(tid, '100');
-            return const <String>[
+            return const ComicEpisodeImagesFetched(<String>[
               'https://img.test/first.jpg',
               'https://img.test/first.jpg',
               '   ',
               'https://img.test/second.jpg',
-            ];
+            ]);
           },
         );
 
@@ -113,9 +114,9 @@ void main() {
       );
       final service = ComicFirstEpisodeCoverService(
         repository: repository,
-        fetchEpisodeImagesByTid: (_) async => const <String>[
-          'https://img.test/first.jpg',
-        ],
+        fetchEpisodeImages: (_) async => const ComicEpisodeImagesFetched(
+          <String>['https://img.test/first.jpg'],
+        ),
       );
 
       final promoted = await service.promoteIfPossible(comicId: 'comic:1');

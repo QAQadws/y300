@@ -1,13 +1,10 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
@@ -16,10 +13,7 @@ import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/data/services/thread_detail_html_diagnostics.dart';
 import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
-import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/data/services/thread_detail_snapshot_codec.dart';
-
-export 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 
 class ApiThreadRepository implements ThreadRepository {
   ApiThreadRepository(
@@ -468,26 +462,6 @@ class ThreadDetailHtmlRepository implements ThreadRepository {
     return _oneLine(text.split('\n').first);
   }
 }
-
-/// 阅读页专用：HTML-first 渲染需要完整 DOM，走移动端 HTML 数据源。
-final threadRepositoryProvider = Provider<ThreadRepository>((ref) {
-  return ThreadDetailHtmlRepository(
-    htmlClient: ref.watch(yamiboHtmlClientProvider),
-    documentCacheService: ref.watch(documentCacheServiceProvider),
-    snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
-  );
-});
-
-/// 收藏同步 / 漫画发现专用：走 JSON viewthread，带 typeid 等结构化字段。
-/// HTML 正文 == JSON message，但 JSON 更轻且无需复杂 DOM 解析。
-/// 阅读页仍用 [threadRepositoryProvider]（HTML-first）。
-final threadJsonRepositoryProvider = Provider<ThreadRepository>((ref) {
-  return ApiThreadRepository(ref.watch(apiClientProvider));
-});
-
-final threadPostLocatorProvider = Provider<ThreadPostLocator>((ref) {
-  return HtmlThreadPostLocator(gateway: ref.watch(yamiboHttpGatewayProvider));
-});
 
 ThreadDetailReadCapabilities _htmlReadCapabilitiesFor(ThreadDetailData data) {
   final hasExactPagination = data.lastPage != null && data.lastPage! > 0;

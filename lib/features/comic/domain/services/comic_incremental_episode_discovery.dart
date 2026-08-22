@@ -1,10 +1,11 @@
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_eligibility_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 
@@ -16,7 +17,7 @@ import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dar
 /// - recursive 模式沿帖子内"上一话"超链接回溯，遇到已知 tid 立即终止
 class ComicIncrementalEpisodeDiscovery {
   ComicIncrementalEpisodeDiscovery({
-    required ThreadDetailFetcher fetchThreadDetail,
+    required ComicThreadDiscoveryRepository repository,
     required ComicConsecutiveOpPostParser opPostParser,
     ForumPostDomExtractor? domExtractor,
     ForumThreadUrlParser? urlParser,
@@ -25,7 +26,7 @@ class ComicIncrementalEpisodeDiscovery {
     ComicRecursiveThreadRequestGovernor? recursiveRequestGovernor,
     int maxRecursiveDepth = 50,
     int maxConsecutiveFailures = 3,
-  }) : _fetchThreadDetail = fetchThreadDetail,
+  }) : _repository = repository,
        _opPostParser = opPostParser,
        _domExtractor =
            domExtractor ??
@@ -40,7 +41,7 @@ class ComicIncrementalEpisodeDiscovery {
        _maxRecursiveDepth = maxRecursiveDepth,
        _maxConsecutiveFailures = maxConsecutiveFailures;
 
-  final ThreadDetailFetcher _fetchThreadDetail;
+  final ComicThreadDiscoveryRepository _repository;
   final ComicConsecutiveOpPostParser _opPostParser;
   final ForumPostDomExtractor _domExtractor;
   final ForumThreadUrlParser _urlParser;
@@ -98,7 +99,9 @@ class ComicIncrementalEpisodeDiscovery {
       if (knownTids.contains(currentTid)) break;
 
       final result = await _recursiveRequestGovernor.schedule(
-        () => _fetchThreadDetail(currentTid),
+        () => _repository.load(
+          ComicThreadDiscoveryRequest(sourceTid: currentTid),
+        ),
       );
       depth++;
       final detail = result.dataOrNull;
@@ -108,7 +111,7 @@ class ComicIncrementalEpisodeDiscovery {
       }
       consecutiveFailures = 0;
 
-      if (!_eligibilityPolicy.allows(fid: detail.fid, typeid: detail.typeid)) {
+      if (!_eligibilityPolicy.allows(fid: detail.fid, typeid: detail.typeId)) {
         break;
       }
 
@@ -135,7 +138,7 @@ class ComicIncrementalEpisodeDiscovery {
   /// 复用 [ComicEpisodeDiscoveryService._collectRecursiveTidCandidates] 的
   /// 逻辑模式：先从解析出的 episodeLinks 收集，再从 DOM fallback 收集。
   String? _extractNextRecursiveTid(
-    ThreadDetailData detail,
+    ComicThreadDiscoveryDocument detail,
     Set<String> visited,
   ) {
     final parsed = _opPostParser.parse(
@@ -157,7 +160,7 @@ class ComicIncrementalEpisodeDiscovery {
     // DOM fallback：帖子正文中的 anchor 链接
     for (final post in detail.posts) {
       for (final candidateTid in _domExtractor.extractThreadTids(
-        post.message,
+        post.messageHtml,
       )) {
         if (candidateTid != detail.tid) {
           candidates.add(candidateTid);

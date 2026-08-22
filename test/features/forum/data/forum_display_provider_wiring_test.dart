@@ -8,6 +8,7 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/forum/data/repositories/forum_display_repository.dart';
+import 'package:y300/features/forum/data/providers/forum_display_repository_providers.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

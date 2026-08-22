@@ -44,8 +44,9 @@ import 'package:y300/features/tags/data/repositories/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 

@@ -46,7 +46,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_progress_
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
-import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 
 final novelTitleSanitizerProvider = Provider<NovelTitleSanitizer>((ref) {
   return const DefaultNovelTitleSanitizer();

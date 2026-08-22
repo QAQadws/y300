@@ -33,8 +33,9 @@ import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.d
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
-import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 void main() {

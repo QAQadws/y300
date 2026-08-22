@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/core/network/api_result.dart';
 
 enum _Capability { identity, richContent, action }
 
@@ -71,5 +73,52 @@ void main() {
     expect(result.isFailure, isTrue);
     expect(result.dataOrNull, isNull);
     expect(result.diagnosticMessage, 'Expected a stable identity.');
+  });
+
+  test('pagination precision intersection keeps the weaker guarantee', () {
+    expect(
+      PaginationPrecision.exact.intersect(PaginationPrecision.directional),
+      PaginationPrecision.directional,
+    );
+    expect(
+      PaginationPrecision.totalBased.intersect(PaginationPrecision.heuristic),
+      PaginationPrecision.heuristic,
+    );
+    expect(
+      PaginationPrecision.exact.intersect(PaginationPrecision.unknown),
+      PaginationPrecision.unknown,
+    );
+  });
+
+  test('failure retyping preserves source-neutral diagnostics', () {
+    const source = DataReadFailure<int, DataCapabilitySet<_Capability>>(
+      kind: DataReadFailureKind.timeout,
+      code: 'read_timeout',
+      statusCode: 504,
+      diagnosticMessage: 'The source did not respond in time.',
+    );
+
+    final redirected = source.retype<String, _Capability>();
+
+    expect(redirected.kind, DataReadFailureKind.timeout);
+    expect(redirected.code, 'read_timeout');
+    expect(redirected.statusCode, 504);
+    expect(redirected.diagnosticMessage, 'The source did not respond in time.');
+  });
+
+  test('stable cancellation code maps without changing ApiError type', () {
+    const legacyError = ApiError(
+      type: ApiErrorType.network,
+      code: 'request_cancelled',
+      message: 'Request cancelled.',
+    );
+
+    final failure = dataReadFailureFromApiError<String, _Capability>(
+      legacyError,
+    );
+
+    expect(legacyError.type, ApiErrorType.network);
+    expect(failure.kind, DataReadFailureKind.cancelled);
+    expect(failure.code, 'request_cancelled');
   });
 }

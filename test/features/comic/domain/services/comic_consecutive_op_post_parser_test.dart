@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/comic/data/mappers/comic_thread_discovery_document_mapper.dart';
+import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 void main() {
   group('ComicConsecutiveOpPostParser', () {
@@ -47,7 +49,7 @@ void main() {
           tid: '500000',
           fid: '30',
           subject: 'subject',
-          posts: posts,
+          posts: _projectPosts(posts),
         );
 
         expect(result.episodeLinks.length, 2);
@@ -83,7 +85,7 @@ void main() {
         tid: '500000',
         fid: '30',
         subject: 'subject',
-        posts: posts,
+        posts: _projectPosts(posts),
       );
 
       expect(result.imageUrls, <String>[
@@ -122,7 +124,7 @@ void main() {
         tid: '500000',
         fid: '30',
         subject: 'subject',
-        posts: posts,
+        posts: _projectPosts(posts),
       );
 
       expect(result.imageUrls, <String>[
@@ -131,4 +133,23 @@ void main() {
       ]);
     });
   });
+}
+
+List<ComicThreadDiscoveryPost> _projectPosts(List<ThreadPost> posts) {
+  return const ComicThreadDiscoveryDocumentMapper()
+      .map(
+        ThreadDetailData(
+          tid: '500000',
+          fid: '30',
+          typeid: '',
+          subject: 'subject',
+          author: 'op',
+          replies: posts.length - 1,
+          views: 0,
+          currentPage: 1,
+          perPage: 20,
+          posts: posts,
+        ),
+      )
+      .posts;
 }

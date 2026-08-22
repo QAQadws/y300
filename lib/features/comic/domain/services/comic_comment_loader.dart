@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_diagnostics.dart';
-import 'package:y300/features/thread/data/models/thread_reply_page.dart';
-import 'package:y300/features/thread/data/repositories/thread_reply_page_repository.dart';
+import 'package:y300/features/thread/domain/models/thread_reply_page.dart';
+import 'package:y300/features/thread/domain/repositories/thread_reply_page_repository.dart';
 import 'package:y300/features/thread/domain/services/forum_avatar_url_builder.dart';
 
 abstract interface class ComicCommentLoader {
@@ -145,11 +145,11 @@ class DefaultComicCommentLoader
       final firstResult = await _getPage(sourceTid, 1);
       final firstPage = firstResult.dataOrNull;
       if (firstPage == null) {
-        final error = firstResult.errorOrNull;
+        final error = firstResult.failureOrNull;
         return _failure(
           sourceTid: sourceTid,
           errorCode: _errorCode(error, firstPage: true),
-          diagnosticDetail: error?.type.name,
+          diagnosticDetail: error?.kind.name,
           startedAt: startedAt,
           page: 1,
         );
@@ -234,9 +234,10 @@ class DefaultComicCommentLoader
     }
   }
 
-  Future<ApiResult<ThreadReplyPage>> _getPage(String sourceTid, int page) {
+  Future<DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>
+  _getPage(String sourceTid, int page) {
     return _repository
-        .getReplyPage(tid: sourceTid, page: page)
+        .loadPage(tid: sourceTid, page: page)
         .timeout(pageRequestTimeout);
   }
 
@@ -263,7 +264,7 @@ class DefaultComicCommentLoader
           final result = await _getPage(sourceTid, pageNumber);
           final page = result.dataOrNull;
           if (page == null) {
-            failures.add(_errorCode(result.errorOrNull));
+            failures.add(_errorCode(result.failureOrNull));
             continue;
           }
           if (page.page != pageNumber ||
@@ -358,15 +359,16 @@ class DefaultComicCommentLoader
   }
 
   ComicCommentLoadErrorCode _errorCode(
-    ApiError? error, {
+    DataReadFailure<ThreadReplyPage, ThreadReplyPageReadCapabilities>? error, {
     bool firstPage = false,
   }) {
     if (error?.statusCode == 429) {
       return ComicCommentLoadErrorCode.rateLimited;
     }
-    return switch (error?.type) {
-      ApiErrorType.timeout => ComicCommentLoadErrorCode.pageTimeout,
-      ApiErrorType.unauthorized => ComicCommentLoadErrorCode.unauthorized,
+    return switch (error?.kind) {
+      DataReadFailureKind.timeout => ComicCommentLoadErrorCode.pageTimeout,
+      DataReadFailureKind.unauthorized =>
+        ComicCommentLoadErrorCode.unauthorized,
       _ =>
         firstPage
             ? ComicCommentLoadErrorCode.firstPageUnavailable

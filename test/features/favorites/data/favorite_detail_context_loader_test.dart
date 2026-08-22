@@ -1,26 +1,36 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_detail_context.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
-import 'package:y300/features/thread/data/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
   group('DefaultFavoriteDetailContextLoader', () {
     test('loads detail, resolves tag, and classifies content kind', () async {
       final loader = DefaultFavoriteDetailContextLoader(
-        loadThreadDetail: (tid) async =>
-            ApiSuccess(_detail(tid: tid, fid: '30', typeid: '398')),
+        threadRepository: _FakeThreadRepository(
+          (tid) async => _success(_detail(tid: tid, fid: '30', typeid: '398')),
+        ),
         loadTagLookup: () async => _lookup(comicTagName: '韩国漫画'),
         classifier: const ThreadContentClassifier(),
       );
 
       final result = await loader.load(_record(tid: '100'));
 
-      expect(result, isA<ApiSuccess<FavoriteDetailResolution>>());
+      expect(
+        result,
+        isA<
+          DataReadSuccess<
+            FavoriteDetailResolution,
+            FavoriteDetailReadCapabilities
+          >
+        >(),
+      );
       final context = (result.dataOrNull! as ResolvedFavoriteDetail).context;
       expect(context.detail.tid, '100');
       expect(context.tagName, '韩国漫画');
@@ -31,17 +41,17 @@ void main() {
       var detailLoadCount = 0;
       final preloadedDetail = _detail(tid: '100', fid: '49', typeid: '293');
       final loader = DefaultFavoriteDetailContextLoader(
-        loadThreadDetail: (tid) async {
+        threadRepository: _FakeThreadRepository((tid) async {
           detailLoadCount++;
-          return ApiSuccess(_detail(tid: tid, fid: '1'));
-        },
+          return _success(_detail(tid: tid, fid: '1'));
+        }),
         loadTagLookup: () async => _lookup(),
         classifier: const ThreadContentClassifier(),
       );
 
       final result = await loader.load(
         _record(tid: '100'),
-        preloadedDetail: preloadedDetail,
+        preloadedDetail: _success(preloadedDetail),
       );
 
       expect(detailLoadCount, 0);
@@ -54,8 +64,9 @@ void main() {
       'classifies non comic and non novel boards as forum content',
       () async {
         final loader = DefaultFavoriteDetailContextLoader(
-          loadThreadDetail: (tid) async =>
-              ApiSuccess(_detail(tid: tid, fid: '1')),
+          threadRepository: _FakeThreadRepository(
+            (tid) async => _success(_detail(tid: tid, fid: '1')),
+          ),
           loadTagLookup: () async => _lookup(),
           classifier: const ThreadContentClassifier(),
         );
@@ -70,15 +81,16 @@ void main() {
 
     test('keeps context when tag lookup fails', () async {
       final loader = DefaultFavoriteDetailContextLoader(
-        loadThreadDetail: (tid) async =>
-            ApiSuccess(_detail(tid: tid, fid: '30', typeid: '398')),
+        threadRepository: _FakeThreadRepository(
+          (tid) async => _success(_detail(tid: tid, fid: '30', typeid: '398')),
+        ),
         loadTagLookup: () => throw StateError('tag unavailable'),
         classifier: const ThreadContentClassifier(),
       );
 
       final result = await loader.load(_record(tid: '100'));
 
-      expect(result, isA<ApiSuccess<FavoriteDetailResolution>>());
+      expect(result.isSuccess, isTrue);
       final context = (result.dataOrNull! as ResolvedFavoriteDetail).context;
       expect(context.tagName, isNull);
       expect(context.kind, ThreadContentKind.comic);
@@ -87,18 +99,21 @@ void main() {
     test(
       'passes through detail loader failure as context load failure',
       () async {
-        const error = ApiError(type: ApiErrorType.network, message: 'boom');
         final loader = DefaultFavoriteDetailContextLoader(
-          loadThreadDetail: (tid) async =>
-              const ApiFailure<ThreadDetailData>(error),
+          threadRepository: _FakeThreadRepository(
+            (tid) async => const DataReadFailure(
+              kind: DataReadFailureKind.network,
+              diagnosticMessage: 'boom',
+            ),
+          ),
           loadTagLookup: () async => _lookup(),
           classifier: const ThreadContentClassifier(),
         );
 
         final result = await loader.load(_record(tid: '100'));
 
-        expect(result, isA<ApiFailure<FavoriteDetailResolution>>());
-        expect(result.errorOrNull?.message, 'boom');
+        expect(result.isFailure, isTrue);
+        expect(result.failureOrNull?.diagnosticMessage, 'boom');
       },
     );
 
@@ -107,8 +122,10 @@ void main() {
       () async {
         var tagLookupCount = 0;
         final loader = DefaultFavoriteDetailContextLoader(
-          loadThreadDetail: (tid) async => ApiSuccess(
-            _detail(tid: tid, fid: '30', typeid: '398', hasPosts: false),
+          threadRepository: _FakeThreadRepository(
+            (tid) async => _success(
+              _detail(tid: tid, fid: '30', typeid: '398', hasPosts: false),
+            ),
           ),
           loadTagLookup: () async {
             tagLookupCount++;
@@ -203,4 +220,36 @@ ForumTagLookup _lookup({String comicTagName = '韩国漫画'}) {
       ],
     ),
   ]);
+}
+
+DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities> _success(
+  ThreadDetailData detail,
+) {
+  return DataReadSuccess(
+    data: detail,
+    capabilities: ThreadDetailSourceCapabilities.full.toReadCapabilities(),
+    metadata: const DataReadMetadata.network(),
+  );
+}
+
+final class _FakeThreadRepository implements ThreadRepository {
+  const _FakeThreadRepository(this.loader);
+
+  final Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  Function(String tid)
+  loader;
+
+  @override
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
+    required String tid,
+    int page = 1,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) {
+    return loader(tid);
+  }
 }
