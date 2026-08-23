@@ -7,8 +7,10 @@ import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
+import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
+
+import '../../../support/forum_home_test_support.dart';
 
 void main() {
   testWidgets(
@@ -42,45 +44,30 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
   }
 
   @override
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+  Future<ForumHomeReadResult> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,
   }) async {
-    return ApiSuccess(
+    return forumHomeReadSuccess(
       ForumHomePayload(
-        forumIndex: ForumIndexData(
-          categories: [
-            ForumCategory(fid: '1', name: '综合区', forums: const ['2']),
-          ],
-          forums: [
-            ForumItem(
-              fid: '2',
-              name: '公告区',
-              threads: 1,
-              posts: 1,
-              todayPosts: 0,
-              description: '',
-              icon: '',
-              subForums: [],
+        directory: const ForumDirectoryData(
+          sections: [
+            ForumDirectorySection(
+              identity: '1',
+              title: '综合区',
+              forums: [
+                ForumDirectoryForum(
+                  fid: '2',
+                  title: '公告区',
+                  description: '',
+                  todayPosts: null,
+                ),
+              ],
             ),
           ],
         ),
         isLoggedIn: false,
         favoriteForums: const [],
-        homeSections: const [
-          ForumHomeSectionData(
-            title: '综合区',
-            kind: ForumHomeSectionKind.regular,
-            items: [
-              ForumHomeForumData(
-                fid: '2',
-                title: '公告区',
-                description: '',
-                todayPosts: null,
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

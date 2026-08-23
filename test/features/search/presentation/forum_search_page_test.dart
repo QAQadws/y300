@@ -14,7 +14,7 @@ import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_pr
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
+import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
@@ -22,6 +22,8 @@ import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/search/presentation/widgets/forum_search_result_card.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';
+
+import '../../../support/forum_home_test_support.dart';
 
 void main() {
   testWidgets('ForumSearchPage builds dark theme chrome', (tester) async {
@@ -759,45 +761,30 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
   }
 
   @override
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+  Future<ForumHomeReadResult> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,
   }) async {
-    return ApiSuccess(
+    return forumHomeReadSuccess(
       ForumHomePayload(
-        forumIndex: ForumIndexData(
-          categories: [
-            ForumCategory(fid: '1', name: '综合区', forums: ['2']),
-          ],
-          forums: [
-            ForumItem(
-              fid: '2',
-              name: '公告区',
-              threads: 1,
-              posts: 1,
-              todayPosts: 0,
-              description: '',
-              icon: '',
-              subForums: const [],
+        directory: const ForumDirectoryData(
+          sections: [
+            ForumDirectorySection(
+              identity: '1',
+              title: '综合区',
+              forums: [
+                ForumDirectoryForum(
+                  fid: '2',
+                  title: '公告区',
+                  description: '',
+                  todayPosts: null,
+                ),
+              ],
             ),
           ],
         ),
         isLoggedIn: false,
         favoriteForums: const [],
-        homeSections: const [
-          ForumHomeSectionData(
-            title: '综合区',
-            kind: ForumHomeSectionKind.regular,
-            items: [
-              ForumHomeForumData(
-                fid: '2',
-                title: '公告区',
-                description: '',
-                todayPosts: null,
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

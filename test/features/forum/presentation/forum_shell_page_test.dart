@@ -14,11 +14,13 @@ import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
+import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/forum_shell_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
+
+import '../../../support/forum_home_test_support.dart';
 
 void main() {
   test('forumWebViewDriverProvider keeps its factory override boundary', () {
@@ -403,45 +405,30 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
   }
 
   @override
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+  Future<ForumHomeReadResult> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,
   }) async {
-    return ApiSuccess(
+    return forumHomeReadSuccess(
       ForumHomePayload(
-        forumIndex: ForumIndexData(
-          categories: [
-            ForumCategory(fid: '1', name: '综合区', forums: ['2']),
-          ],
-          forums: [
-            ForumItem(
-              fid: '2',
-              name: '公告区',
-              threads: 12,
-              posts: 34,
-              todayPosts: 2,
-              description: '站点公告与维护信息',
-              icon: '',
-              subForums: const [],
+        directory: const ForumDirectoryData(
+          sections: [
+            ForumDirectorySection(
+              identity: '1',
+              title: '综合区',
+              forums: [
+                ForumDirectoryForum(
+                  fid: '2',
+                  title: '公告区',
+                  description: '站点公告与维护信息',
+                  todayPosts: 2,
+                ),
+              ],
             ),
           ],
         ),
         isLoggedIn: true,
         favoriteForums: const <FavoriteForum>[],
-        homeSections: const [
-          ForumHomeSectionData(
-            title: '综合区',
-            kind: ForumHomeSectionKind.regular,
-            items: [
-              ForumHomeForumData(
-                fid: '2',
-                title: '公告区',
-                description: '站点公告与维护信息',
-                todayPosts: 2,
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

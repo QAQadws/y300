@@ -47,9 +47,17 @@ class LocalParsedSnapshotCacheService
       return null;
     }
     final row = rows.first;
+    final rowCodecVersion = row['codec_version'] as int? ?? -1;
+    final rowParserVersion = row['parser_version'] as int? ?? -1;
+    final canDecodeVersion = codec is SnapshotCodecVersionCompatibility
+        ? (codec as SnapshotCodecVersionCompatibility).canDecodeVersion(
+            codecVersion: rowCodecVersion,
+            parserVersion: rowParserVersion,
+          )
+        : rowCodecVersion == codec.codecVersion &&
+              rowParserVersion == codec.parserVersion;
     if ((row['snapshot_type'] as String? ?? '') != codec.snapshotType ||
-        (row['codec_version'] as int? ?? -1) != codec.codecVersion ||
-        (row['parser_version'] as int? ?? -1) != codec.parserVersion) {
+        !canDecodeVersion) {
       return null;
     }
     final now = _now();

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -25,8 +26,9 @@ import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
+import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
+import 'package:y300/features/forum/domain/repositories/forum_directory_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
@@ -37,13 +39,15 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 
+import '../../../support/forum_home_test_support.dart';
+
 void main() {
   group('ForumHomePage', () {
     testWidgets('more menu exposes refresh and unfavorite actions', (
       tester,
     ) async {
       final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayload()),
+        () async => forumHomeReadSuccess(_loggedOutPayload()),
       );
 
       await tester.pumpWidget(_buildTestApp(repository));
@@ -66,7 +70,7 @@ void main() {
 
     testWidgets('more menu refresh forces a network request', (tester) async {
       final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayload()),
+        () async => forumHomeReadSuccess(_loggedOutPayload()),
       );
 
       await tester.pumpWidget(_buildTestApp(repository));
@@ -84,7 +88,7 @@ void main() {
 
     testWidgets('more menu opens the shared unfavorite picker', (tester) async {
       final homeRepository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayload()),
+        () async => forumHomeReadSuccess(_loggedOutPayload()),
       );
       final favoriteRepository = _FakeForumFavoriteRepository(
         favoriteForums: <FavoriteForum>[
@@ -141,7 +145,7 @@ void main() {
     testWidgets('stays buildable before data returns and then renders list', (
       tester,
     ) async {
-      final completer = Completer<ApiResult<ForumHomePayload>>();
+      final completer = Completer<ForumHomeReadResult>();
       final repository = _FakeForumHomeRepository(() => completer.future);
 
       await tester.pumpWidget(_buildTestApp(repository));
@@ -154,7 +158,7 @@ void main() {
         findsNothing,
       );
 
-      completer.complete(ApiSuccess(_loggedOutPayload()));
+      completer.complete(forumHomeReadSuccess(_loggedOutPayload()));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
@@ -166,7 +170,7 @@ void main() {
       'renders carousel, grouped sections, forum rows, and today counts',
       (tester) async {
         final repository = _FakeForumHomeRepository(
-          () async => ApiSuccess(_loggedOutPayloadWithCarousel()),
+          () async => forumHomeReadSuccess(_loggedOutPayloadWithCarousel()),
         );
 
         await tester.pumpWidget(_buildTestApp(repository));
@@ -192,7 +196,7 @@ void main() {
     ) async {
       final cacheService = _RecordingImageCacheService();
       final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayloadWithCarousel()),
+        () async => forumHomeReadSuccess(_loggedOutPayloadWithCarousel()),
       );
 
       await tester.pumpWidget(
@@ -287,7 +291,7 @@ void main() {
 
     testWidgets('renders forum list when carousel is empty', (tester) async {
       final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayload()),
+        () async => forumHomeReadSuccess(_loggedOutPayload()),
       );
 
       await tester.pumpWidget(_buildTestApp(repository));
@@ -301,12 +305,12 @@ void main() {
       tester,
     ) async {
       var requestCount = 0;
-      final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+      final refreshCompleter = Completer<ForumHomeReadResult>();
       final repository = _FakeForumHomeRepository(() {
         requestCount += 1;
         if (requestCount == 1) {
-          return Future<ApiResult<ForumHomePayload>>.value(
-            ApiSuccess(_loggedOutPayloadNoToday()),
+          return Future<ForumHomeReadResult>.value(
+            forumHomeReadSuccess(_loggedOutPayloadNoToday()),
           );
         }
         return refreshCompleter.future;
@@ -323,7 +327,7 @@ void main() {
       final refreshFuture = refreshIndicator.onRefresh();
       await tester.pump();
 
-      refreshCompleter.complete(ApiSuccess(_loggedOutPayload()));
+      refreshCompleter.complete(forumHomeReadSuccess(_loggedOutPayload()));
       await refreshFuture;
       await tester.pumpAndSettle();
 
@@ -332,15 +336,47 @@ void main() {
     });
 
     testWidgets(
+      'hides directory fields when their capabilities are unsupported',
+      (tester) async {
+        final capabilities = ForumDirectoryReadCapabilities(
+          values: DataCapabilitySet<ForumDirectoryCapability>.from(
+            supported: const <ForumDirectoryCapability>[
+              ForumDirectoryCapability.stableSectionIdentity,
+              ForumDirectoryCapability.orderedSections,
+              ForumDirectoryCapability.stableForumIdentity,
+              ForumDirectoryCapability.orderedForums,
+            ],
+            unsupported: const <ForumDirectoryCapability>[
+              ForumDirectoryCapability.forumDescription,
+              ForumDirectoryCapability.todayPostCount,
+            ],
+          ),
+        );
+        final repository = _FakeForumHomeRepository(
+          () async => forumHomeReadSuccess(
+            _loggedOutPayload(todayPosts: 9, description: '不应显示'),
+            capabilities: capabilities,
+          ),
+        );
+
+        await tester.pumpWidget(_buildTestApp(repository));
+        await tester.pumpAndSettle();
+
+        expect(find.text('不应显示'), findsNothing);
+        expect(find.text('今日'), findsNothing);
+      },
+    );
+
+    testWidgets(
       'today badge disappears when refreshed data removes today count',
       (tester) async {
         var requestCount = 0;
-        final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+        final refreshCompleter = Completer<ForumHomeReadResult>();
         final repository = _FakeForumHomeRepository(() {
           requestCount += 1;
           if (requestCount == 1) {
-            return Future<ApiResult<ForumHomePayload>>.value(
-              ApiSuccess(_loggedOutPayload()),
+            return Future<ForumHomeReadResult>.value(
+              forumHomeReadSuccess(_loggedOutPayload()),
             );
           }
           return refreshCompleter.future;
@@ -357,7 +393,9 @@ void main() {
         final refreshFuture = refreshIndicator.onRefresh();
         await tester.pump();
 
-        refreshCompleter.complete(ApiSuccess(_loggedOutPayloadNoToday()));
+        refreshCompleter.complete(
+          forumHomeReadSuccess(_loggedOutPayloadNoToday()),
+        );
         await refreshFuture;
         await tester.pumpAndSettle();
 
@@ -369,12 +407,12 @@ void main() {
       tester,
     ) async {
       var requestCount = 0;
-      final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+      final refreshCompleter = Completer<ForumHomeReadResult>();
       final repository = _FakeForumHomeRepository(() {
         requestCount += 1;
         if (requestCount == 1) {
-          return Future<ApiResult<ForumHomePayload>>.value(
-            ApiSuccess(_loggedOutPayload()),
+          return Future<ForumHomeReadResult>.value(
+            forumHomeReadSuccess(_loggedOutPayload()),
           );
         }
         return refreshCompleter.future;
@@ -395,7 +433,9 @@ void main() {
       final refreshFuture = refreshIndicator.onRefresh();
       await tester.pump();
 
-      refreshCompleter.complete(ApiSuccess(_loggedOutPayloadWithTodayCount(8)));
+      refreshCompleter.complete(
+        forumHomeReadSuccess(_loggedOutPayloadWithTodayCount(8)),
+      );
       await refreshFuture;
       await tester.pump();
 
@@ -410,7 +450,7 @@ void main() {
       'manual content mode projects server text without reloading home',
       (tester) async {
         final repository = _FakeForumHomeRepository(
-          () async => ApiSuccess(_loggedOutPayload()),
+          () async => forumHomeReadSuccess(_loggedOutPayload()),
         );
 
         await tester.pumpWidget(
@@ -435,7 +475,7 @@ void main() {
         expect(find.text('T:公告区'), findsOneWidget);
         expect(find.text('T:站点公告与维护信息'), findsOneWidget);
         expect(
-          find.byKey(const Key('forum-section-toggle-regular:2')),
+          find.byKey(const Key('forum-section-toggle-regular:1')),
           findsOneWidget,
         );
         expect(repository.cachePolicies, <CacheLoadPolicy>[
@@ -448,7 +488,7 @@ void main() {
       'silent refresh triggers when page becomes active after threshold',
       (tester) async {
         final repository = _FakeForumHomeRepository(
-          () async => ApiSuccess(_loggedOutPayload()),
+          () async => forumHomeReadSuccess(_loggedOutPayload()),
         );
         final fakeNow = _MutableNow(DateTime(2026, 6, 29, 12, 0, 0));
 
@@ -477,7 +517,7 @@ void main() {
       'renders favorite forum section when logged in payload has favorites',
       (tester) async {
         final repository = _FakeForumHomeRepository(
-          () async => ApiSuccess(_loggedInPayloadWithFavorites()),
+          () async => forumHomeReadSuccess(_loggedInPayloadWithFavorites()),
         );
 
         await tester.pumpWidget(_buildTestApp(repository));
@@ -494,8 +534,9 @@ void main() {
       'favorite forums use forum index description when favorite description is empty',
       (tester) async {
         final repository = _FakeForumHomeRepository(
-          () async =>
-              ApiSuccess(_loggedInPayloadWithEmptyFavoriteDescription()),
+          () async => forumHomeReadSuccess(
+            _loggedInPayloadWithEmptyFavoriteDescription(),
+          ),
         );
 
         await tester.pumpWidget(_buildTestApp(repository));
@@ -516,8 +557,9 @@ void main() {
       'favorite forums use home html descriptions before forum index fallback',
       (tester) async {
         final repository = _FakeForumHomeRepository(
-          () async =>
-              ApiSuccess(_loggedInPayloadWithChromeFavoriteDescriptions()),
+          () async => forumHomeReadSuccess(
+            _loggedInPayloadWithChromeFavoriteDescriptions(),
+          ),
         );
 
         await tester.pumpWidget(_buildTestApp(repository));
@@ -533,7 +575,7 @@ void main() {
       'section header toggles forum rows with minus and plus indicators',
       (tester) async {
         final repository = _FakeForumHomeRepository(
-          () async => ApiSuccess(_loggedInPayloadWithFavorites()),
+          () async => forumHomeReadSuccess(_loggedInPayloadWithFavorites()),
         );
 
         await tester.pumpWidget(_buildTestApp(repository));
@@ -591,7 +633,7 @@ void main() {
     ) async {
       final observer = _CountingNavigatorObserver();
       final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayload()),
+        () async => forumHomeReadSuccess(_loggedOutPayload()),
       );
 
       await tester.pumpWidget(
@@ -610,7 +652,7 @@ void main() {
     ) async {
       final observer = _CountingNavigatorObserver();
       final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedOutPayloadWithCarousel()),
+        () async => forumHomeReadSuccess(_loggedOutPayloadWithCarousel()),
       );
 
       await tester.pumpWidget(
@@ -629,7 +671,7 @@ void main() {
       (tester) async {
         final launcher = _FakeForumWebViewExternalLauncher();
         final repository = _FakeForumHomeRepository(
-          () async => ApiSuccess(
+          () async => forumHomeReadSuccess(
             _loggedOutPayload(
               carouselItems: const [
                 ForumHomeCarouselItem(
@@ -658,7 +700,7 @@ void main() {
       tester,
     ) async {
       final repository = _FakeForumHomeRepository(
-        () async => ApiSuccess(_loggedInPayloadWithFavorites()),
+        () async => forumHomeReadSuccess(_loggedInPayloadWithFavorites()),
       );
 
       await tester.pumpWidget(
@@ -686,12 +728,12 @@ void main() {
       tester,
     ) async {
       var requestCount = 0;
-      final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+      final refreshCompleter = Completer<ForumHomeReadResult>();
       final repository = _FakeForumHomeRepository(() {
         requestCount += 1;
         if (requestCount == 1) {
-          return Future<ApiResult<ForumHomePayload>>.value(
-            ApiSuccess(_loggedOutPayload()),
+          return Future<ForumHomeReadResult>.value(
+            forumHomeReadSuccess(_loggedOutPayload()),
           );
         }
         return refreshCompleter.future;
@@ -717,7 +759,7 @@ void main() {
         findsNothing,
       );
 
-      refreshCompleter.complete(ApiSuccess(_loggedOutPayload()));
+      refreshCompleter.complete(forumHomeReadSuccess(_loggedOutPayload()));
       await refreshFuture;
       await tester.pumpAndSettle();
 
@@ -742,11 +784,16 @@ void main() {
             isLoggedIn: false,
           ),
         );
-        final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+        final refreshCompleter = Completer<ForumHomeReadResult>();
         final repository = _FakeForumHomeRepository(
           () => refreshCompleter.future,
           cachedEntry: ForumHomeCacheEntry(
             payload: _loggedOutPayloadNoToday(),
+            capabilities: forumHomeTestCapabilities,
+            metadata: const DataReadMetadata(
+              origin: DataReadOrigin.freshSnapshot,
+              freshness: DataReadFreshness.freshCache,
+            ),
             updatedAt: DateTime(2026, 6, 29, 11),
           ),
         );
@@ -786,7 +833,7 @@ void main() {
         );
 
         authRepository.complete();
-        refreshCompleter.complete(ApiSuccess(_loggedOutPayload()));
+        refreshCompleter.complete(forumHomeReadSuccess(_loggedOutPayload()));
         await tester.pumpAndSettle();
       },
     );
@@ -794,11 +841,16 @@ void main() {
     testWidgets(
       'background cache refresh keeps today subtree and applies updated value',
       (tester) async {
-        final refreshCompleter = Completer<ApiResult<ForumHomePayload>>();
+        final refreshCompleter = Completer<ForumHomeReadResult>();
         final repository = _FakeForumHomeRepository(
           () => refreshCompleter.future,
           cachedEntry: ForumHomeCacheEntry(
             payload: _loggedOutPayload(),
+            capabilities: forumHomeTestCapabilities,
+            metadata: const DataReadMetadata(
+              origin: DataReadOrigin.freshSnapshot,
+              freshness: DataReadFreshness.freshCache,
+            ),
             updatedAt: DateTime(2026, 6, 29, 11),
           ),
         );
@@ -814,7 +866,7 @@ void main() {
         expect(find.text('2'), findsOneWidget);
 
         refreshCompleter.complete(
-          ApiSuccess(_loggedOutPayloadWithTodayCount(8)),
+          forumHomeReadSuccess(_loggedOutPayloadWithTodayCount(8)),
         );
         await tester.pump();
 
@@ -831,11 +883,17 @@ void main() {
       tester,
     ) async {
       final repository = _FakeForumHomeRepository(
-        () async => const ApiFailure<ForumHomePayload>(
-          ApiError(type: ApiErrorType.network, message: 'offline'),
+        () async => const DataReadFailure(
+          kind: DataReadFailureKind.network,
+          diagnosticMessage: 'offline',
         ),
         cachedEntry: ForumHomeCacheEntry(
           payload: _loggedOutPayload(),
+          capabilities: forumHomeTestCapabilities,
+          metadata: const DataReadMetadata(
+            origin: DataReadOrigin.freshSnapshot,
+            freshness: DataReadFreshness.freshCache,
+          ),
           updatedAt: DateTime(2026, 6, 29, 11),
         ),
       );
@@ -853,12 +911,12 @@ void main() {
       (tester) async {
         final authRepository = _FakeAuthRepository();
         var requestCount = 0;
-        final reloadCompleter = Completer<ApiResult<ForumHomePayload>>();
+        final reloadCompleter = Completer<ForumHomeReadResult>();
         final repository = _FakeForumHomeRepository(() {
           requestCount += 1;
           if (requestCount == 1) {
-            return Future<ApiResult<ForumHomePayload>>.value(
-              ApiSuccess(_loggedOutPayload()),
+            return Future<ForumHomeReadResult>.value(
+              forumHomeReadSuccess(_loggedOutPayload()),
             );
           }
           return reloadCompleter.future;
@@ -892,7 +950,9 @@ void main() {
         expect(find.byKey(const Key('forum-home-blank-body')), findsOneWidget);
         expect(find.byKey(const Key('forum-home-list')), findsNothing);
 
-        reloadCompleter.complete(ApiSuccess(_loggedInPayloadWithFavorites()));
+        reloadCompleter.complete(
+          forumHomeReadSuccess(_loggedInPayloadWithFavorites()),
+        );
         await tester.pumpAndSettle();
 
         expect(repository.cachePolicies, <CacheLoadPolicy>[
@@ -915,12 +975,12 @@ void main() {
           session: _loggedInSession(uid: '10001', username: 'alice'),
         );
         var requestCount = 0;
-        final reloadCompleter = Completer<ApiResult<ForumHomePayload>>();
+        final reloadCompleter = Completer<ForumHomeReadResult>();
         final repository = _FakeForumHomeRepository(() {
           requestCount += 1;
           if (requestCount == 1) {
-            return Future<ApiResult<ForumHomePayload>>.value(
-              ApiSuccess(_loggedInPayloadWithFavorites()),
+            return Future<ForumHomeReadResult>.value(
+              forumHomeReadSuccess(_loggedInPayloadWithFavorites()),
             );
           }
           return reloadCompleter.future;
@@ -956,7 +1016,9 @@ void main() {
         expect(find.byKey(const Key('forum-home-blank-body')), findsOneWidget);
         expect(find.byKey(const Key('forum-home-list')), findsNothing);
 
-        reloadCompleter.complete(ApiSuccess(_loggedInPayloadWithFavorites()));
+        reloadCompleter.complete(
+          forumHomeReadSuccess(_loggedInPayloadWithFavorites()),
+        );
         await tester.pumpAndSettle();
 
         expect(repository.cachePolicies, <CacheLoadPolicy>[
@@ -1036,21 +1098,23 @@ List<riverpod_misc.Override> _overrides(
   ];
 }
 
-ForumIndexData _sampleForumIndexData() {
-  return ForumIndexData(
-    categories: [
-      ForumCategory(fid: '1', name: '综合区', forums: ['2']),
-    ],
-    forums: [
-      ForumItem(
-        fid: '2',
-        name: '公告区',
-        threads: 12,
-        posts: 34,
-        todayPosts: 2,
-        description: '站点公告与维护信息',
-        icon: '',
-        subForums: const [],
+ForumDirectoryData _sampleDirectory({
+  int? todayPosts = 2,
+  String description = '站点公告与维护信息',
+}) {
+  return ForumDirectoryData(
+    sections: [
+      ForumDirectorySection(
+        identity: '1',
+        title: '综合区',
+        forums: [
+          ForumDirectoryForum(
+            fid: '2',
+            title: '公告区',
+            description: description,
+            todayPosts: todayPosts,
+          ),
+        ],
       ),
     ],
   );
@@ -1058,9 +1122,14 @@ ForumIndexData _sampleForumIndexData() {
 
 ForumHomePayload _loggedOutPayload({
   List<ForumHomeCarouselItem> carouselItems = const <ForumHomeCarouselItem>[],
+  int? todayPosts = 2,
+  String description = '站点公告与维护信息',
 }) {
   return ForumHomePayload(
-    forumIndex: _sampleForumIndexData(),
+    directory: _sampleDirectory(
+      todayPosts: todayPosts,
+      description: description,
+    ),
     isLoggedIn: false,
     favoriteForums: const [],
     chromeData: ForumHomeChromeData(carouselItems: carouselItems),
@@ -1069,61 +1138,15 @@ ForumHomePayload _loggedOutPayload({
 
 ForumHomePayload _loggedOutPayloadNoToday() {
   return ForumHomePayload(
-    forumIndex: ForumIndexData(
-      categories: [
-        ForumCategory(fid: '1', name: '综合区', forums: ['2']),
-      ],
-      forums: [
-        ForumItem(
-          fid: '2',
-          name: '公告区',
-          threads: 12,
-          posts: 34,
-          todayPosts: 0,
-          description: '站点公告与维护信息',
-          icon: '',
-          subForums: const [],
-        ),
-      ],
-    ),
+    directory: _sampleDirectory(todayPosts: null),
     isLoggedIn: false,
     favoriteForums: const [],
-    homeSections: const [
-      ForumHomeSectionData(
-        title: '综合区',
-        kind: ForumHomeSectionKind.regular,
-        items: [
-          ForumHomeForumData(
-            fid: '2',
-            title: '公告区',
-            description: '站点公告与维护信息',
-            todayPosts: null,
-          ),
-        ],
-      ),
-    ],
   );
 }
 
 ForumHomePayload _loggedOutPayloadWithTodayCount(int todayPosts) {
   return ForumHomePayload(
-    forumIndex: ForumIndexData(
-      categories: [
-        ForumCategory(fid: '1', name: '综合区', forums: ['2']),
-      ],
-      forums: [
-        ForumItem(
-          fid: '2',
-          name: '公告区',
-          threads: 10,
-          posts: 20,
-          todayPosts: todayPosts,
-          description: '站务公告',
-          icon: '',
-          subForums: const [],
-        ),
-      ],
-    ),
+    directory: _sampleDirectory(todayPosts: todayPosts, description: '站务公告'),
     isLoggedIn: false,
     favoriteForums: [
       FavoriteForum(
@@ -1146,20 +1169,6 @@ ForumHomePayload _loggedOutPayloadWithTodayCount(int todayPosts) {
         ),
       ],
     ),
-    homeSections: [
-      ForumHomeSectionData(
-        title: '综合区',
-        kind: ForumHomeSectionKind.regular,
-        items: [
-          ForumHomeForumData(
-            fid: '2',
-            title: '公告区',
-            description: '站务公告',
-            todayPosts: todayPosts,
-          ),
-        ],
-      ),
-    ],
   );
 }
 
@@ -1176,7 +1185,7 @@ ForumHomePayload _loggedOutPayloadWithCarousel() {
 
 ForumHomePayload _loggedInPayloadWithFavorites() {
   return ForumHomePayload(
-    forumIndex: _sampleForumIndexData(),
+    directory: _sampleDirectory(),
     isLoggedIn: true,
     favoriteForums: [
       FavoriteForum(
@@ -1203,7 +1212,7 @@ ForumHomePayload _loggedInPayloadWithFavorites() {
 
 ForumHomePayload _loggedInPayloadWithEmptyFavoriteDescription() {
   return ForumHomePayload(
-    forumIndex: _sampleForumIndexData(),
+    directory: _sampleDirectory(),
     isLoggedIn: true,
     favoriteForums: [
       FavoriteForum(
@@ -1221,7 +1230,7 @@ ForumHomePayload _loggedInPayloadWithEmptyFavoriteDescription() {
 
 ForumHomePayload _loggedInPayloadWithChromeFavoriteDescriptions() {
   return ForumHomePayload(
-    forumIndex: _sampleForumIndexData(),
+    directory: _sampleDirectory(),
     isLoggedIn: true,
     favoriteForums: [
       FavoriteForum(
@@ -1280,7 +1289,7 @@ ForumHomePayload _loggedInPayloadWithChromeFavoriteDescriptions() {
 class _FakeForumHomeRepository implements ForumHomeRepository {
   _FakeForumHomeRepository(this._loader, {this.cachedEntry});
 
-  final Future<ApiResult<ForumHomePayload>> Function() _loader;
+  final Future<ForumHomeReadResult> Function() _loader;
   final ForumHomeCacheEntry? cachedEntry;
   final cachePolicies = <CacheLoadPolicy>[];
   final requestProfiles = <DocumentRequestProfile?>[];
@@ -1295,7 +1304,7 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
   }
 
   @override
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+  Future<ForumHomeReadResult> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,
   }) {

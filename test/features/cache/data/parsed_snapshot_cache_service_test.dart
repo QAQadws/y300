@@ -91,6 +91,45 @@ void main() {
     },
   );
 
+  test(
+    'LocalParsedSnapshotCacheService lets a codec decode an explicit legacy version',
+    () async {
+      const dbName = 'parsed_snapshot_cache_legacy_version_test.db';
+      await deleteDatabase(dbName);
+      final db = await ComicLocalDb.open(databaseName: dbName);
+      final service = LocalParsedSnapshotCacheService(Future.value(db));
+      addTearDown(() async {
+        await db.close();
+        await deleteDatabase(dbName);
+      });
+      const descriptor = SnapshotCacheDescriptor(
+        cacheKey: 'snapshot|forum|home',
+        ownerType: CacheOwnerType.forum,
+        ownerId: 'home',
+        snapshotType: 'test.snapshot',
+      );
+      const legacyCodec = _StringSnapshotCodec(codecVersionValue: 1);
+      await service.put(
+        descriptor,
+        'legacy',
+        legacyCodec,
+        policy: const SnapshotCachePolicy(
+          freshFor: Duration(minutes: 5),
+          keepStaleFor: Duration(days: 1),
+        ),
+      );
+
+      final snapshot = await service.get(
+        descriptor,
+        const _StringSnapshotCodec(codecVersionValue: 2, legacyCodecVersion: 1),
+      );
+
+      expect(snapshot?.value, 'legacy');
+      expect(snapshot?.codecVersion, 1);
+      expect(snapshot?.parserVersion, 1);
+    },
+  );
+
   test('LocalParsedSnapshotCacheService rejects expired snapshot', () async {
     const dbName = 'parsed_snapshot_cache_expired_test.db';
     await deleteDatabase(dbName);
@@ -353,19 +392,36 @@ class _RecordingMutationReporter implements CacheMutationReporter {
   }
 }
 
-class _StringSnapshotCodec implements SnapshotCodec<String> {
-  const _StringSnapshotCodec({this.parserVersionValue = 1});
+class _StringSnapshotCodec
+    implements SnapshotCodec<String>, SnapshotCodecVersionCompatibility {
+  const _StringSnapshotCodec({
+    this.codecVersionValue = 1,
+    this.parserVersionValue = 1,
+    this.legacyCodecVersion,
+  });
 
+  final int codecVersionValue;
   final int parserVersionValue;
+  final int? legacyCodecVersion;
 
   @override
   String get snapshotType => 'test.snapshot';
 
   @override
-  int get codecVersion => 1;
+  int get codecVersion => codecVersionValue;
 
   @override
   int get parserVersion => parserVersionValue;
+
+  @override
+  bool canDecodeVersion({
+    required int codecVersion,
+    required int parserVersion,
+  }) {
+    return codecVersion == codecVersionValue &&
+            parserVersion == parserVersionValue ||
+        codecVersion == legacyCodecVersion && parserVersion == 1;
+  }
 
   @override
   Object? encode(String value) => <String, Object?>{'value': value};

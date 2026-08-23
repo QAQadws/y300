@@ -38,6 +38,16 @@ abstract class SnapshotCodec<T> {
   T decode(Object? json);
 }
 
+/// Optional compatibility port for codecs with an explicit legacy decoder.
+/// New writes always continue to use [SnapshotCodec.codecVersion] and
+/// [SnapshotCodec.parserVersion].
+abstract interface class SnapshotCodecVersionCompatibility {
+  bool canDecodeVersion({
+    required int codecVersion,
+    required int parserVersion,
+  });
+}
+
 class CachedSnapshot<T> {
   const CachedSnapshot({
     required this.cacheKey,

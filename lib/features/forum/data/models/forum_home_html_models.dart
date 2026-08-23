@@ -4,10 +4,12 @@ class ForumHomeHtmlData {
   const ForumHomeHtmlData({
     this.carouselItems = const <ForumHomeCarouselItem>[],
     this.sections = const <ForumHomeHtmlSection>[],
+    this.hasForumList = false,
   });
 
   final List<ForumHomeCarouselItem> carouselItems;
   final List<ForumHomeHtmlSection> sections;
+  final bool hasForumList;
 
   bool get hasFavoriteSection {
     return sections.any((section) => section.isFavoriteSection);
@@ -16,12 +18,14 @@ class ForumHomeHtmlData {
 
 class ForumHomeHtmlSection {
   const ForumHomeHtmlSection({
+    required this.identity,
     required this.title,
     required this.items,
     required this.isFavoriteSection,
     this.isInitiallyCollapsed = false,
   });
 
+  final String identity;
   final String title;
   final List<ForumHomeHtmlForumItem> items;
   final bool isFavoriteSection;

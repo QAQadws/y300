@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
@@ -14,59 +14,38 @@ import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/services/forum_home_html_parser.dart';
 import 'package:y300/features/forum/data/services/forum_home_snapshot_codec.dart';
+import 'package:y300/features/forum/data/services/forum_directory_validator.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/models/forum_home_html_models.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
-
-enum ForumHomeSectionKind { regular, favorite }
-
-class ForumHomeForumData {
-  const ForumHomeForumData({
-    required this.fid,
-    required this.title,
-    required this.description,
-    required this.todayPosts,
-  });
-
-  final String fid;
-  final String title;
-  final String description;
-  final int? todayPosts;
-}
-
-class ForumHomeSectionData {
-  const ForumHomeSectionData({
-    required this.title,
-    required this.kind,
-    required this.items,
-  });
-
-  final String title;
-  final ForumHomeSectionKind kind;
-  final List<ForumHomeForumData> items;
-}
+import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
+import 'package:y300/features/forum/domain/repositories/forum_directory_repository.dart';
 
 /// 论坛首页聚合结果：把论坛首页基础数据与登录态相关扩展信息统一返回。
 class ForumHomePayload {
   ForumHomePayload({
-    required this.forumIndex,
+    required this.directory,
     required this.isLoggedIn,
     required this.favoriteForums,
-    this.homeSections = const <ForumHomeSectionData>[],
     this.chromeData = ForumHomeChromeData.empty,
   });
 
-  final ForumIndexData forumIndex;
+  final ForumDirectoryData directory;
   final bool isLoggedIn;
   final List<FavoriteForum> favoriteForums;
-  final List<ForumHomeSectionData> homeSections;
   final ForumHomeChromeData chromeData;
 }
 
 class ForumHomeCacheEntry {
-  const ForumHomeCacheEntry({required this.payload, required this.updatedAt});
+  const ForumHomeCacheEntry({
+    required this.payload,
+    required this.capabilities,
+    required this.metadata,
+    required this.updatedAt,
+  });
 
   final ForumHomePayload payload;
+  final ForumDirectoryReadCapabilities capabilities;
+  final DataReadMetadata metadata;
   final DateTime updatedAt;
 }
 
@@ -75,7 +54,8 @@ abstract class ForumHomeRepository {
     required DocumentRequestProfile requestProfile,
   });
 
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+  Future<DataReadResult<ForumHomePayload, ForumDirectoryReadCapabilities>>
+  getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,
   });
@@ -83,9 +63,9 @@ abstract class ForumHomeRepository {
 
 /// HTML-first 论坛首页仓库。
 ///
-/// N-2 起原生首页初始渲染只依赖移动端首页 HTML；旧 API 聚合仓库继续保留，
-/// 但不再作为 provider 默认实现。
-class ForumHomeHtmlRepository implements ForumHomeRepository {
+/// 原生首页初始渲染只依赖移动端首页 HTML；版块目录 contract 复用同一读取链路。
+class ForumHomeHtmlRepository
+    implements ForumHomeRepository, ForumDirectoryRepository {
   ForumHomeHtmlRepository({
     required YamiboHtmlClient htmlClient,
     required ForumHomeCarouselImageProbe imageProbe,
@@ -123,6 +103,31 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
   final DateTime Function() _now;
 
   @override
+  ForumDirectorySourceCapabilities get capabilities =>
+      _htmlDirectoryCapabilities;
+
+  @override
+  Future<DataReadResult<ForumDirectoryData, ForumDirectoryReadCapabilities>>
+  load(
+    ForumDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
+    final result = await _readHomePayload(
+      cachePolicy: cachePolicy,
+      resolveCarouselAspectRatio: false,
+      persistSnapshot: false,
+    );
+    return result.when(
+      success: (payload, capabilities, metadata) => DataReadSuccess(
+        data: payload.directory,
+        capabilities: capabilities,
+        metadata: metadata,
+      ),
+      failure: (failure) => failure.retype(),
+    );
+  }
+
+  @override
   Future<ForumHomeCacheEntry?> readCachedPayload({
     required DocumentRequestProfile requestProfile,
   }) async {
@@ -134,8 +139,22 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     );
     final snapshot = await _getCachedSnapshot(snapshotDescriptor);
     if (snapshot != null) {
+      final payload = _withRequestProfile(
+        snapshot.value,
+        requestProfile: requestProfile,
+      );
+      if (validateForumDirectory(payload.directory) != null) {
+        return null;
+      }
       return ForumHomeCacheEntry(
-        payload: snapshot.value,
+        payload: payload,
+        capabilities: _htmlReadCapabilitiesFor(),
+        metadata: DataReadMetadata(
+          origin: DataReadOrigin.freshSnapshot,
+          freshness: snapshot.isFresh(_now())
+              ? DataReadFreshness.freshCache
+              : DataReadFreshness.staleOrUnknown,
+        ),
         updatedAt: snapshot.updatedAt,
       );
     }
@@ -157,10 +176,20 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       // be shown; the background network refresh will resolve a fresh ratio.
       final payload = await _parsePayload(
         cachedDocument.body,
+        requestProfile: requestProfile,
         resolveCarouselAspectRatio: false,
       );
+      final validation = validateForumDirectory(payload.directory);
+      if (validation != null) {
+        return null;
+      }
       return ForumHomeCacheEntry(
         payload: payload,
+        capabilities: _htmlReadCapabilitiesFor(),
+        metadata: const DataReadMetadata(
+          origin: DataReadOrigin.cachedDocumentFallback,
+          freshness: DataReadFreshness.staleOrUnknown,
+        ),
         updatedAt: cachedDocument.updatedAt,
       );
     } catch (_) {
@@ -169,9 +198,25 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
   }
 
   @override
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
+  Future<DataReadResult<ForumHomePayload, ForumDirectoryReadCapabilities>>
+  getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,
+  }) async {
+    return _readHomePayload(
+      cachePolicy: cachePolicy,
+      requestProfileOverride: requestProfileOverride,
+      resolveCarouselAspectRatio: true,
+      persistSnapshot: true,
+    );
+  }
+
+  Future<DataReadResult<ForumHomePayload, ForumDirectoryReadCapabilities>>
+  _readHomePayload({
+    required CacheLoadPolicy cachePolicy,
+    DocumentRequestProfile? requestProfileOverride,
+    required bool resolveCarouselAspectRatio,
+    required bool persistSnapshot,
   }) async {
     final requestProfile = _resolveRequestProfile(
       requestProfileOverride: requestProfileOverride,
@@ -185,7 +230,21 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     if (cachePolicy == CacheLoadPolicy.cacheFirst) {
       final snapshot = await _getCachedSnapshot(snapshotDescriptor);
       if (snapshot != null && snapshot.isFresh(_now())) {
-        return ApiSuccess(snapshot.value);
+        final payload = _withRequestProfile(
+          snapshot.value,
+          requestProfile: requestProfile,
+        );
+        final validation = validateForumDirectory(payload.directory);
+        if (validation == null) {
+          return DataReadSuccess(
+            data: payload,
+            capabilities: _htmlReadCapabilitiesFor(),
+            metadata: const DataReadMetadata(
+              origin: DataReadOrigin.freshSnapshot,
+              freshness: DataReadFreshness.freshCache,
+            ),
+          );
+        }
       }
     }
 
@@ -202,34 +261,52 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       final cached = await _parseCachedDocument(
         documentDescriptor: documentDescriptor,
         snapshotDescriptor: snapshotDescriptor,
+        requestProfile: requestProfile,
+        persistSnapshot: persistSnapshot,
       );
       if (cached != null) {
-        return ApiSuccess(cached);
+        return DataReadSuccess(
+          data: cached,
+          capabilities: _htmlReadCapabilitiesFor(),
+          metadata: const DataReadMetadata(
+            origin: DataReadOrigin.cachedDocumentFallback,
+            freshness: DataReadFreshness.staleOrUnknown,
+          ),
+        );
       }
-      return ApiFailure(
-        ApiError(
-          type: error.type,
-          message: '论坛首页 HTML 加载失败: ${error.message}',
-          code: error.code,
-          statusCode: error.statusCode,
-          raw: error.raw,
-        ),
+      return DataReadFailure(
+        kind: _failureKindFor(error),
+        code: error.code,
+        statusCode: error.statusCode,
+        diagnosticMessage: '论坛首页 HTML 加载失败: ${error.message}',
       );
     }
 
     try {
       final html = htmlResult.dataOrNull ?? '';
-      final payload = await _parsePayload(html);
+      final payload = await _parsePayload(
+        html,
+        requestProfile: requestProfile,
+        resolveCarouselAspectRatio: resolveCarouselAspectRatio,
+      );
+      final validation = validateForumDirectory(payload.directory);
+      if (validation != null) {
+        throw FormatException(validation);
+      }
       await _putDocument(descriptor: documentDescriptor, html: html);
-      await _putSnapshot(descriptor: snapshotDescriptor, payload: payload);
-      return ApiSuccess(payload);
+      if (persistSnapshot) {
+        await _putSnapshot(descriptor: snapshotDescriptor, payload: payload);
+      }
+      final capabilities = _htmlReadCapabilitiesFor();
+      return DataReadSuccess(
+        data: payload,
+        capabilities: capabilities,
+        metadata: const DataReadMetadata.network(),
+      );
     } catch (error) {
-      return ApiFailure(
-        ApiError(
-          type: ApiErrorType.parse,
-          message: '论坛首页 HTML 解析失败: $error',
-          raw: error,
-        ),
+      return DataReadFailure(
+        kind: DataReadFailureKind.parse,
+        diagnosticMessage: '论坛首页 HTML 解析失败: $error',
       );
     }
   }
@@ -248,18 +325,24 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
 
   Future<ForumHomePayload> _parsePayload(
     String html, {
+    required DocumentRequestProfile requestProfile,
     bool resolveCarouselAspectRatio = true,
   }) async {
     final htmlData = _parser.parse(html);
+    if (!htmlData.hasForumList) {
+      throw const FormatException('论坛首页缺少版块目录根节点');
+    }
     final resolved = resolveCarouselAspectRatio
         ? await _withResolvedCarouselAspectRatio(htmlData)
         : htmlData;
-    return _toPayload(resolved);
+    return _toPayload(resolved, requestProfile: requestProfile);
   }
 
   Future<ForumHomePayload?> _parseCachedDocument({
     required DocumentCacheDescriptor documentDescriptor,
     required SnapshotCacheDescriptor snapshotDescriptor,
+    required DocumentRequestProfile requestProfile,
+    required bool persistSnapshot,
   }) async {
     final cache = _documentCacheService;
     if (cache == null) {
@@ -275,10 +358,13 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     try {
       final payload = await _parsePayload(
         document.body,
+        requestProfile: requestProfile,
         resolveCarouselAspectRatio: false,
       );
       await _safeTouchCachedDocument(cache, document.cacheKey, _now());
-      await _putSnapshot(descriptor: snapshotDescriptor, payload: payload);
+      if (persistSnapshot) {
+        await _putSnapshot(descriptor: snapshotDescriptor, payload: payload);
+      }
       return payload;
     } catch (_) {
       return null;
@@ -391,25 +477,17 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
         ...data.carouselItems.skip(1),
       ],
       sections: data.sections,
+      hasForumList: data.hasForumList,
     );
   }
 
-  ForumHomePayload _toPayload(ForumHomeHtmlData data) {
+  ForumHomePayload _toPayload(
+    ForumHomeHtmlData data, {
+    required DocumentRequestProfile requestProfile,
+  }) {
     final regularSections = data.sections
         .where((section) => !section.isFavoriteSection)
         .toList(growable: false);
-    final regularForums = [
-      for (final section in regularSections)
-        for (final item in section.items) _toForumItem(item),
-    ];
-    final categories = [
-      for (var index = 0; index < regularSections.length; index++)
-        ForumCategory(
-          fid: 'html-${index + 1}',
-          name: regularSections[index].title,
-          forums: [for (final item in regularSections[index].items) item.fid],
-        ),
-    ];
 
     final favoriteItems = [
       for (final section in data.sections)
@@ -418,24 +496,27 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     ];
 
     return ForumHomePayload(
-      forumIndex: ForumIndexData(categories: categories, forums: regularForums),
-      isLoggedIn: favoriteItems.isNotEmpty,
+      directory: ForumDirectoryData(
+        sections: [
+          for (final section in regularSections)
+            ForumDirectorySection(
+              identity: section.identity,
+              title: section.title,
+              forums: [
+                for (final item in section.items)
+                  ForumDirectoryForum(
+                    fid: item.fid,
+                    title: item.title,
+                    description: item.description,
+                    todayPosts: item.todayPosts,
+                  ),
+              ],
+            ),
+        ],
+      ),
+      isLoggedIn: requestProfile == DocumentRequestProfile.loggedIn,
       favoriteForums: [
         for (final item in favoriteItems) _toFavoriteForum(item),
-      ],
-      homeSections: [
-        if (favoriteItems.isNotEmpty)
-          ForumHomeSectionData(
-            title: '我收藏的版块',
-            kind: ForumHomeSectionKind.favorite,
-            items: [for (final item in favoriteItems) _toHomeForumData(item)],
-          ),
-        for (final section in regularSections)
-          ForumHomeSectionData(
-            title: section.title,
-            kind: ForumHomeSectionKind.regular,
-            items: [for (final item in section.items) _toHomeForumData(item)],
-          ),
       ],
       chromeData: ForumHomeChromeData(
         carouselItems: data.carouselItems,
@@ -446,16 +527,19 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
     );
   }
 
-  ForumItem _toForumItem(ForumHomeHtmlForumItem item) {
-    return ForumItem(
-      fid: item.fid,
-      name: item.title,
-      threads: 0,
-      posts: 0,
-      todayPosts: item.todayPosts ?? 0,
-      description: item.description,
-      icon: item.iconUrl ?? '',
-      subForums: const <ForumItem>[],
+  ForumHomePayload _withRequestProfile(
+    ForumHomePayload payload, {
+    required DocumentRequestProfile requestProfile,
+  }) {
+    final isLoggedIn = requestProfile == DocumentRequestProfile.loggedIn;
+    if (payload.isLoggedIn == isLoggedIn) {
+      return payload;
+    }
+    return ForumHomePayload(
+      directory: payload.directory,
+      isLoggedIn: isLoggedIn,
+      favoriteForums: payload.favoriteForums,
+      chromeData: payload.chromeData,
     );
   }
 
@@ -479,196 +563,11 @@ class ForumHomeHtmlRepository implements ForumHomeRepository {
       todayPosts: item.todayPosts,
     );
   }
-
-  ForumHomeForumData _toHomeForumData(ForumHomeHtmlForumItem item) {
-    return ForumHomeForumData(
-      fid: item.fid,
-      title: item.title,
-      description: item.description,
-      todayPosts: item.todayPosts,
-    );
-  }
 }
 
-/// Discuz 论坛首页聚合仓库。
-///
-/// 约定：
-/// 1) forumindex 是首页主数据，失败则整体失败。
-/// 2) profile 仅用于判断登录态。
-/// 3) 版块收藏只是论坛首页的快捷入口，线程收藏仍统一走收藏 Tab。
-class DiscuzForumHomeRepository implements ForumHomeRepository {
-  DiscuzForumHomeRepository({
-    required Future<ApiResult<ForumIndexData>> Function() loadForumIndex,
-    required Future<ApiResult<SessionInfo>> Function() refreshSession,
-    Future<ApiResult<List<FavoriteForum>>> Function()? loadFavoriteForums,
-    Future<ApiResult<ForumHomeChromeData>> Function()? loadChrome,
-  }) : _loadForumIndex = loadForumIndex,
-       _refreshSession = refreshSession,
-       _loadFavoriteForums = loadFavoriteForums,
-       _loadChrome = loadChrome;
-
-  final Future<ApiResult<ForumIndexData>> Function() _loadForumIndex;
-  final Future<ApiResult<SessionInfo>> Function() _refreshSession;
-  final Future<ApiResult<List<FavoriteForum>>> Function()? _loadFavoriteForums;
-  final Future<ApiResult<ForumHomeChromeData>> Function()? _loadChrome;
-
-  @override
-  Future<ForumHomeCacheEntry?> readCachedPayload({
-    required DocumentRequestProfile requestProfile,
-  }) async {
-    return null;
-  }
-
-  @override
-  Future<ApiResult<ForumHomePayload>> getForumHomePayload({
-    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
-    DocumentRequestProfile? requestProfileOverride,
-  }) async {
-    final forumResult = await _loadForumIndex();
-    if (forumResult.isFailure) {
-      return ApiFailure<ForumHomePayload>(forumResult.errorOrNull!);
-    }
-
-    final forumIndex = forumResult.dataOrNull!;
-    final sessionResult = await _refreshSession();
-
-    final isLoggedIn = sessionResult.when(
-      success: (session) => session.isLoggedIn,
-      failure: (_) => false,
-    );
-    final favoriteForums = isLoggedIn
-        ? await _safeLoadFavoriteForums()
-        : const <FavoriteForum>[];
-    final chromeData = await _safeLoadChrome();
-
-    return ApiSuccess(
-      ForumHomePayload(
-        forumIndex: forumIndex,
-        isLoggedIn: isLoggedIn,
-        favoriteForums: favoriteForums,
-        homeSections: _buildLegacyHomeSections(
-          forumIndex: forumIndex,
-          favoriteForums: favoriteForums,
-          chromeData: chromeData,
-        ),
-        chromeData: chromeData,
-      ),
-    );
-  }
-
-  Future<List<FavoriteForum>> _safeLoadFavoriteForums() async {
-    final loader = _loadFavoriteForums;
-    if (loader == null) {
-      return const <FavoriteForum>[];
-    }
-    final result = await loader();
-    return result.when(
-      success: (forums) => forums,
-      failure: (_) => const <FavoriteForum>[],
-    );
-  }
-
-  Future<ForumHomeChromeData> _safeLoadChrome() async {
-    final loader = _loadChrome;
-    if (loader == null) {
-      return ForumHomeChromeData.empty;
-    }
-    final result = await loader();
-    return result.when(
-      success: (chrome) => chrome,
-      failure: (_) => ForumHomeChromeData.empty,
-    );
-  }
-
-  List<ForumHomeSectionData> _buildLegacyHomeSections({
-    required ForumIndexData forumIndex,
-    required List<FavoriteForum> favoriteForums,
-    required ForumHomeChromeData chromeData,
-  }) {
-    final sections = <ForumHomeSectionData>[];
-    if (favoriteForums.isNotEmpty) {
-      final chromeForumByFid = {
-        for (final item in chromeData.favoriteForums) item.fid: item,
-      };
-      sections.add(
-        ForumHomeSectionData(
-          title: '我收藏的版块',
-          kind: ForumHomeSectionKind.favorite,
-          items: [
-            for (final forum in favoriteForums)
-              ForumHomeForumData(
-                fid: forum.fid,
-                title: forum.title,
-                description: forum.description,
-                todayPosts: forum.todayPosts > 0
-                    ? forum.todayPosts
-                    : chromeForumByFid[forum.fid]?.todayPosts,
-              ),
-          ],
-        ),
-      );
-    }
-
-    final forumByFid = <String, ForumItem>{
-      for (final item in forumIndex.forums) item.fid: item,
-    };
-    for (final category in forumIndex.categories) {
-      final items = <ForumHomeForumData>[];
-      for (final fid in category.forums) {
-        final forum = forumByFid[fid];
-        if (forum == null) {
-          continue;
-        }
-        items.add(
-          ForumHomeForumData(
-            fid: forum.fid,
-            title: forum.name,
-            description: forum.description,
-            todayPosts: forum.todayPosts > 0 ? forum.todayPosts : null,
-          ),
-        );
-      }
-      if (items.isEmpty) {
-        continue;
-      }
-      sections.add(
-        ForumHomeSectionData(
-          title: category.name,
-          kind: ForumHomeSectionKind.regular,
-          items: items,
-        ),
-      );
-    }
-
-    final categorizedFids = {
-      for (final category in forumIndex.categories) ...category.forums,
-    };
-    final uncategorized = forumIndex.forums
-        .where((forum) => !categorizedFids.contains(forum.fid))
-        .map(
-          (forum) => ForumHomeForumData(
-            fid: forum.fid,
-            title: forum.name,
-            description: forum.description,
-            todayPosts: forum.todayPosts > 0 ? forum.todayPosts : null,
-          ),
-        )
-        .toList(growable: false);
-    if (uncategorized.isNotEmpty) {
-      sections.add(
-        ForumHomeSectionData(
-          title: '未分类',
-          kind: ForumHomeSectionKind.regular,
-          items: uncategorized,
-        ),
-      );
-    }
-
-    return sections;
-  }
-}
-
-final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
+final forumHomeHtmlRepositoryProvider = Provider<ForumHomeHtmlRepository>((
+  ref,
+) {
   return ForumHomeHtmlRepository(
     htmlClient: ref.watch(yamiboHtmlClientProvider),
     imageProbe: ForumHomeCarouselImageProbe(
@@ -680,3 +579,48 @@ final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
   );
 });
+
+final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
+  return ref.watch(forumHomeHtmlRepositoryProvider);
+});
+
+final forumDirectoryRepositoryProvider = Provider<ForumDirectoryRepository>((
+  ref,
+) {
+  return ref.watch(forumHomeHtmlRepositoryProvider);
+});
+
+DataReadFailureKind _failureKindFor(ApiError error) {
+  if (error.code == 'request_cancelled') {
+    return DataReadFailureKind.cancelled;
+  }
+  return switch (error.type) {
+    ApiErrorType.network => DataReadFailureKind.network,
+    ApiErrorType.timeout => DataReadFailureKind.timeout,
+    ApiErrorType.unauthorized => DataReadFailureKind.unauthorized,
+    ApiErrorType.server => DataReadFailureKind.server,
+    ApiErrorType.parse => DataReadFailureKind.parse,
+    ApiErrorType.business => DataReadFailureKind.business,
+    ApiErrorType.unknown => DataReadFailureKind.unknown,
+  };
+}
+
+final _htmlDirectoryCapabilities = ForumDirectorySourceCapabilities(
+  values: DataCapabilitySet<ForumDirectoryCapability>.from(
+    supported: const <ForumDirectoryCapability>[
+      ForumDirectoryCapability.stableSectionIdentity,
+      ForumDirectoryCapability.orderedSections,
+      ForumDirectoryCapability.stableForumIdentity,
+      ForumDirectoryCapability.orderedForums,
+      ForumDirectoryCapability.forumDescription,
+      ForumDirectoryCapability.todayPostCount,
+    ],
+    unsupported: const <ForumDirectoryCapability>[
+      ForumDirectoryCapability.nestedForums,
+    ],
+  ),
+);
+
+ForumDirectoryReadCapabilities _htmlReadCapabilitiesFor() {
+  return _htmlDirectoryCapabilities.toReadCapabilities();
+}

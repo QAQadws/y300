@@ -1,5 +1,7 @@
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
+import 'package:y300/features/forum/domain/repositories/forum_directory_repository.dart';
 
 enum ForumSectionType { regular, favorite, uncategorized }
 
@@ -80,6 +82,8 @@ class ForumHomePageState {
     required this.requestProfile,
     required this.isRefreshing,
     required this.lastUpdatedAt,
+    this.capabilities,
+    this.readMetadata,
     this.refreshNotice,
     @Deprecated('Use refreshNotice and presentation localization instead.')
     this.refreshHint,
@@ -89,17 +93,25 @@ class ForumHomePageState {
   final DocumentRequestProfile requestProfile;
   final bool isRefreshing;
   final DateTime lastUpdatedAt;
+  final ForumDirectoryReadCapabilities? capabilities;
+  final DataReadMetadata? readMetadata;
 
   final ForumHomeNotice? refreshNotice;
 
   @Deprecated('Use refreshNotice and presentation localization instead.')
   final String? refreshHint;
 
+  bool supports(ForumDirectoryCapability capability) {
+    return capabilities?.supports(capability) ?? false;
+  }
+
   ForumHomePageState copyWith({
     ForumHomeViewData? viewData,
     DocumentRequestProfile? requestProfile,
     bool? isRefreshing,
     DateTime? lastUpdatedAt,
+    ForumDirectoryReadCapabilities? capabilities,
+    DataReadMetadata? readMetadata,
     ForumHomeNotice? refreshNotice,
     String? refreshHint,
     bool clearHint = false,
@@ -109,6 +121,8 @@ class ForumHomePageState {
       requestProfile: requestProfile ?? this.requestProfile,
       isRefreshing: isRefreshing ?? this.isRefreshing,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      capabilities: capabilities ?? this.capabilities,
+      readMetadata: readMetadata ?? this.readMetadata,
       refreshNotice: clearHint ? null : (refreshNotice ?? this.refreshNotice),
       refreshHint: clearHint ? null : (refreshHint ?? this.refreshHint),
     );

@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
+import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
+import 'package:y300/features/forum/domain/repositories/forum_directory_repository.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 
 final forumHomeNowProvider = Provider<DateTime Function()>(
@@ -51,6 +53,8 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
     );
     return _stateFromPayload(
       cached.payload,
+      capabilities: cached.capabilities,
+      metadata: cached.metadata,
       requestProfile: requestProfile,
       isRefreshing: true,
       lastUpdatedAt: cached.updatedAt,
@@ -122,31 +126,37 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
     );
 
     return result.when(
-      success: (payload) => _stateFromPayload(
+      success: (payload, capabilities, metadata) => _stateFromPayload(
         payload,
+        capabilities: capabilities,
+        metadata: metadata,
         requestProfile: requestProfile,
         isRefreshing: false,
         lastUpdatedAt: now,
       ),
-      failure: (error) => throw ForumHomeException(error.message),
+      failure: (error) => throw ForumHomeException(error.diagnosticMessage),
     );
   }
 
   ForumHomePageState _stateFromPayload(
     ForumHomePayload payload, {
+    required ForumDirectoryReadCapabilities capabilities,
+    required DataReadMetadata metadata,
     required DocumentRequestProfile requestProfile,
     required bool isRefreshing,
     required DateTime lastUpdatedAt,
   }) {
     return ForumHomePageState(
       viewData: ForumHomeViewData(
-        sections: _mapSections(payload),
+        sections: _mapSections(payload, capabilities),
         isLoggedIn: payload.isLoggedIn,
         carouselItems: payload.chromeData.carouselItems,
       ),
       requestProfile: requestProfile,
       isRefreshing: isRefreshing,
       lastUpdatedAt: lastUpdatedAt,
+      capabilities: capabilities,
+      readMetadata: metadata,
     );
   }
 
@@ -213,45 +223,54 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
     }
   }
 
-  List<ForumSection> _mapSections(ForumHomePayload payload) {
-    if (payload.homeSections.isEmpty) {
-      return _mapLegacySections(payload);
-    }
+  List<ForumSection> _mapSections(
+    ForumHomePayload payload,
+    ForumDirectoryReadCapabilities capabilities,
+  ) {
     final identities = <String>{};
     final sections = <ForumSection>[];
-    for (final section in payload.homeSections) {
-      final type = section.kind == ForumHomeSectionKind.favorite
-          ? ForumSectionType.favorite
-          : ForumSectionType.regular;
-      final items = [
-        for (final item in section.items)
-          ForumHomeForumDisplayItem(
-            fid: item.fid,
-            title: item.title,
-            description: item.description,
-            todayPosts: item.todayPosts,
-          ),
-      ];
-      sections.add(
-        ForumSection(
-          sourceIdentity: _uniqueSectionIdentity(
-            type: type,
-            items: items,
-            used: identities,
-          ),
-          title: section.title,
-          type: type,
-          items: items,
+    final chromeForumByFid = {
+      for (final forum in payload.chromeData.favoriteForums) forum.fid: forum,
+    };
+    final directoryForumByFid = <String, ForumDirectoryForum>{};
+    void indexDirectoryForum(ForumDirectoryForum forum) {
+      directoryForumByFid[forum.fid] = forum;
+      forum.children.forEach(indexDirectoryForum);
+    }
+
+    for (final section in payload.directory.sections) {
+      section.forums.forEach(indexDirectoryForum);
+    }
+    final favoriteItems = <ForumHomeForumDisplayItem>[];
+    final favoriteFids = <String>{};
+    for (final forum
+        in payload.isLoggedIn
+            ? payload.favoriteForums
+            : const <FavoriteForum>[]) {
+      if (forum.fid.trim().isEmpty || !favoriteFids.add(forum.fid)) {
+        continue;
+      }
+      final chromeForum = chromeForumByFid[forum.fid];
+      final directoryForum = directoryForumByFid[forum.fid];
+      favoriteItems.add(
+        ForumHomeForumDisplayItem(
+          fid: forum.fid,
+          title: forum.title.trim().isNotEmpty
+              ? forum.title
+              : chromeForum?.title.trim().isNotEmpty == true
+              ? chromeForum!.title
+              : directoryForum?.title ?? '',
+          description: forum.description.trim().isNotEmpty
+              ? forum.description
+              : chromeForum?.description.trim().isNotEmpty == true
+              ? chromeForum!.description
+              : directoryForum?.description ?? '',
+          todayPosts: forum.todayPosts > 0
+              ? forum.todayPosts
+              : chromeForum?.todayPosts ?? directoryForum?.todayPosts,
         ),
       );
     }
-    return sections;
-  }
-
-  List<ForumSection> _mapLegacySections(ForumHomePayload payload) {
-    final sections = <ForumSection>[];
-    final identities = <String>{};
-    final favoriteItems = _mapLegacyFavoriteItems(payload);
     if (favoriteItems.isNotEmpty) {
       sections.add(
         ForumSection(
@@ -266,133 +285,59 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
         ),
       );
     }
-    sections.addAll(_mapLegacyRegularSections(payload.forumIndex, identities));
-    return sections;
-  }
-
-  List<ForumHomeForumDisplayItem> _mapLegacyFavoriteItems(
-    ForumHomePayload payload,
-  ) {
-    final forumByFid = <String, ForumItem>{
-      for (final forum in payload.forumIndex.forums) forum.fid: forum,
-    };
-    final chromeForumByFid = {
-      for (final forum in payload.chromeData.favoriteForums) forum.fid: forum,
-    };
-    final seen = <String>{};
-    final output = <ForumHomeForumDisplayItem>[];
-    for (final forum in payload.favoriteForums) {
-      if (!_shouldKeepFavoriteForum(forum, seen)) {
-        continue;
-      }
-      final chromeForum = chromeForumByFid[forum.fid];
-      final homeForum = forumByFid[forum.fid];
-      output.add(
-        ForumHomeForumDisplayItem(
-          fid: forum.fid,
-          title: forum.title.trim().isNotEmpty
-              ? forum.title
-              : chromeForum?.title.trim().isNotEmpty == true
-              ? chromeForum!.title
-              : homeForum?.name ?? forum.title,
-          description: forum.description.trim().isNotEmpty
-              ? forum.description
-              : chromeForum?.description.trim().isNotEmpty == true
-              ? chromeForum!.description
-              : homeForum?.description ?? '',
-          todayPosts: forum.todayPosts > 0
-              ? forum.todayPosts
-              : chromeForum?.todayPosts ?? _legacyTodayPosts(homeForum),
-        ),
-      );
-    }
-    return output;
-  }
-
-  bool _shouldKeepFavoriteForum(FavoriteForum forum, Set<String> seen) {
-    return forum.fid.trim().isNotEmpty && seen.add(forum.fid);
-  }
-
-  List<ForumSection> _mapLegacyRegularSections(
-    ForumIndexData data,
-    Set<String> identities,
-  ) {
-    final forumByFid = <String, ForumItem>{
-      for (final item in data.forums) item.fid: item,
-    };
-
-    final sections = <ForumSection>[];
-    for (final category in data.categories) {
+    for (final section in payload.directory.sections) {
+      final type = section.kind == ForumDirectorySectionKind.uncategorized
+          ? ForumSectionType.uncategorized
+          : ForumSectionType.regular;
       final items = <ForumHomeForumDisplayItem>[];
-      for (final fid in category.forums) {
-        final mapped = forumByFid[fid];
-        if (mapped != null) {
-          items.add(
-            ForumHomeForumDisplayItem(
-              fid: mapped.fid,
-              title: mapped.name,
-              description: mapped.description,
-              todayPosts: _legacyTodayPosts(mapped),
-            ),
-          );
-        }
+      for (final forum in section.forums) {
+        items.add(
+          ForumHomeForumDisplayItem(
+            fid: forum.fid,
+            title: forum.title,
+            description:
+                capabilities.supports(ForumDirectoryCapability.forumDescription)
+                ? forum.description
+                : '',
+            todayPosts:
+                capabilities.supports(ForumDirectoryCapability.todayPostCount)
+                ? forum.todayPosts
+                : null,
+          ),
+        );
       }
 
       if (items.isNotEmpty) {
         sections.add(
           ForumSection(
-            sourceIdentity: _uniqueSectionIdentity(
-              type: ForumSectionType.regular,
-              items: items,
+            sourceIdentity: _uniqueSectionIdentityFromSource(
+              section.identity,
+              type: type,
               used: identities,
             ),
-            title: category.name,
+            title: section.title,
             items: items,
-            type: ForumSectionType.regular,
+            type: type,
           ),
         );
       }
     }
-
-    final categorizedFids = sections
-        .expand((section) => section.items)
-        .map((item) => item.fid)
-        .toSet();
-
-    final uncategorized = data.forums
-        .where((forum) => !categorizedFids.contains(forum.fid))
-        .toList();
-
-    if (uncategorized.isNotEmpty) {
-      final items = [
-        for (final forum in uncategorized)
-          ForumHomeForumDisplayItem(
-            fid: forum.fid,
-            title: forum.name,
-            description: forum.description,
-            todayPosts: _legacyTodayPosts(forum),
-          ),
-      ];
-      sections.add(
-        ForumSection(
-          sourceIdentity: _uniqueSectionIdentity(
-            type: ForumSectionType.uncategorized,
-            items: items,
-            used: identities,
-          ),
-          title: '',
-          type: ForumSectionType.uncategorized,
-          items: items,
-        ),
-      );
-    }
-
     return sections;
   }
 
-  int? _legacyTodayPosts(ForumItem? forum) {
-    final todayPosts = forum?.todayPosts ?? 0;
-    return todayPosts > 0 ? todayPosts : null;
+  String _uniqueSectionIdentityFromSource(
+    String sourceIdentity, {
+    required ForumSectionType type,
+    required Set<String> used,
+  }) {
+    final base = '${type.name}:${sourceIdentity.trim()}';
+    var identity = base;
+    var occurrence = 2;
+    while (!used.add(identity)) {
+      identity = '$base:$occurrence';
+      occurrence += 1;
+    }
+    return identity;
   }
 
   String _uniqueSectionIdentity({

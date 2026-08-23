@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -21,14 +21,10 @@ import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
-import 'package:y300/features/favorites/data/repositories/favorite_repository.dart';
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
-import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
-import 'package:y300/features/forum/data/repositories/forum_repository.dart';
+import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -48,18 +44,16 @@ void main() {
 
         expect(result.isSuccess, isTrue);
         final payload = result.dataOrNull!;
-        expect(payload.isLoggedIn, isTrue);
+        expect(payload.isLoggedIn, isFalse);
         expect(payload.favoriteForums.map((forum) => forum.fid), ['33']);
-        expect(payload.homeSections, hasLength(2));
-        expect(payload.homeSections.first.kind, ForumHomeSectionKind.favorite);
-        expect(payload.homeSections.first.items.single.todayPosts, 88);
-        expect(payload.forumIndex.categories.map((category) => category.name), [
+        expect(payload.directory.sections, hasLength(1));
+        expect(payload.directory.sections.map((section) => section.title), [
           '庙堂',
         ]);
-        expect(payload.forumIndex.forums.map((forum) => forum.fid), [
-          '16',
-          '370',
-        ]);
+        expect(
+          payload.directory.sections.single.forums.map((forum) => forum.fid),
+          ['16', '370'],
+        );
         expect(payload.chromeData.carouselItems, hasLength(1));
         expect(
           payload.chromeData.carouselItems.single.targetUrl,
@@ -105,7 +99,7 @@ void main() {
       expect(document.fetchedAt, now);
       expect(snapshotCache.putValues, hasLength(1));
       expect(
-        snapshotCache.putValues.single.forumIndex.forums.map(
+        snapshotCache.putValues.single.directory.sections.single.forums.map(
           (forum) => forum.fid,
         ),
         <String>['16', '370'],
@@ -126,39 +120,24 @@ void main() {
       snapshotCache.seed(
         descriptor,
         ForumHomePayload(
-          forumIndex: ForumIndexData(
-            categories: <ForumCategory>[
-              ForumCategory(fid: 'cached-1', name: '缓存分类', forums: ['88']),
-            ],
-            forums: <ForumItem>[
-              ForumItem(
-                fid: '88',
-                name: '缓存版块',
-                threads: 0,
-                posts: 0,
-                todayPosts: 0,
-                description: '',
-                icon: '',
-                subForums: <ForumItem>[],
+          directory: const ForumDirectoryData(
+            sections: [
+              ForumDirectorySection(
+                identity: 'cached-1',
+                title: '缓存分类',
+                forums: [
+                  ForumDirectoryForum(
+                    fid: '88',
+                    title: '缓存版块',
+                    description: '',
+                    todayPosts: null,
+                  ),
+                ],
               ),
             ],
           ),
           isLoggedIn: false,
           favoriteForums: const <FavoriteForum>[],
-          homeSections: const <ForumHomeSectionData>[
-            ForumHomeSectionData(
-              title: '缓存分类',
-              kind: ForumHomeSectionKind.regular,
-              items: [
-                ForumHomeForumData(
-                  fid: '88',
-                  title: '缓存版块',
-                  description: '',
-                  todayPosts: null,
-                ),
-              ],
-            ),
-          ],
         ),
       );
       final repository = _buildHtmlRepository(
@@ -169,11 +148,102 @@ void main() {
       final result = await repository.getForumHomePayload();
 
       expect(result.isSuccess, isTrue);
-      expect(result.dataOrNull!.forumIndex.forums.single.name, '缓存版块');
-      expect(result.dataOrNull!.homeSections.single.items.single.title, '缓存版块');
+      expect(
+        result.dataOrNull!.directory.sections.single.forums.single.title,
+        '缓存版块',
+      );
       expect(adapter.htmlRequestedUris, isEmpty);
       expect(adapter.imageRequestedUris, isEmpty);
     });
+
+    test(
+      'directory load reuses fresh snapshot and preserves read metadata',
+      () async {
+        final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
+        final snapshotCache =
+            _FakeParsedSnapshotCacheService<ForumHomePayload>();
+        final descriptor = const CacheKeyCanonicalizer().forumHomeSnapshot(
+          requestProfile: DocumentRequestProfile.anonymous,
+        );
+        snapshotCache.seed(descriptor, _cachedHomePayload());
+        final repository = _buildHtmlRepository(
+          adapter,
+          snapshotCacheService: snapshotCache,
+        );
+
+        final result = await repository.load(const ForumDirectoryQuery());
+
+        expect(result.isSuccess, isTrue);
+        final metadata = result.when(
+          success: (_, _, value) => value,
+          failure: (_) => throw StateError('expected success'),
+        );
+        expect(metadata.origin, DataReadOrigin.freshSnapshot);
+        expect(metadata.freshness, DataReadFreshness.freshCache);
+        expect(result.dataOrNull!.sections.single.forums.single.fid, '88');
+        expect(adapter.htmlRequestedUris, isEmpty);
+        expect(adapter.imageRequestedUris, isEmpty);
+      },
+    );
+
+    test('fresh snapshot login state follows the request profile', () async {
+      final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
+      final snapshotCache = _FakeParsedSnapshotCacheService<ForumHomePayload>();
+      final descriptor = const CacheKeyCanonicalizer().forumHomeSnapshot(
+        requestProfile: DocumentRequestProfile.loggedIn,
+      );
+      snapshotCache.seed(descriptor, _cachedHomePayload());
+      final repository = _buildHtmlRepository(
+        adapter,
+        snapshotCacheService: snapshotCache,
+      );
+
+      final result = await repository.getForumHomePayload(
+        requestProfileOverride: DocumentRequestProfile.loggedIn,
+      );
+
+      expect(result.dataOrNull?.isLoggedIn, isTrue);
+      expect(adapter.htmlRequestedUris, isEmpty);
+    });
+
+    test(
+      'directory load uses stale document fallback with stale provenance',
+      () async {
+        final adapter = _ForumHomeHtmlTestAdapter(failMobileIndex: true);
+        final documentCache = _FakeDocumentCacheService();
+        final descriptor = const CacheKeyCanonicalizer().forumHome(
+          requestProfile: DocumentRequestProfile.anonymous,
+        );
+        documentCache.seed(
+          CachedDocument(
+            cacheKey: descriptor.cacheKey,
+            ownerType: descriptor.ownerType,
+            ownerId: descriptor.ownerId,
+            sourceUrl: descriptor.sourceUrl,
+            requestProfile: descriptor.requestProfile,
+            body: _mobileHomeHtml,
+            fetchedAt: DateTime(2026, 1, 1, 9),
+            updatedAt: DateTime(2026, 1, 1, 9),
+          ),
+        );
+        final repository = _buildHtmlRepository(
+          adapter,
+          documentCacheService: documentCache,
+        );
+
+        final result = await repository.load(const ForumDirectoryQuery());
+
+        expect(result.isSuccess, isTrue);
+        final metadata = result.when(
+          success: (_, _, value) => value,
+          failure: (_) => throw StateError('expected success'),
+        );
+        expect(metadata.origin, DataReadOrigin.cachedDocumentFallback);
+        expect(metadata.freshness, DataReadFreshness.staleOrUnknown);
+        expect(result.dataOrNull!.sections.single.forums, hasLength(2));
+        expect(adapter.imageRequestedUris, isEmpty);
+      },
+    );
 
     test(
       'readCachedPayload returns a stale snapshot without any network work',
@@ -198,7 +268,10 @@ void main() {
           requestProfile: DocumentRequestProfile.anonymous,
         );
 
-        expect(cached?.payload.homeSections.single.items.single.title, '缓存版块');
+        expect(
+          cached?.payload.directory.sections.single.forums.single.title,
+          '缓存版块',
+        );
         expect(cached?.updatedAt, DateTime(2026, 1, 1, 9));
         expect(adapter.htmlRequestedUris, isEmpty);
         expect(adapter.imageRequestedUris, isEmpty);
@@ -236,7 +309,7 @@ void main() {
           requestProfile: DocumentRequestProfile.anonymous,
         );
 
-        expect(cached?.payload.homeSections, hasLength(2));
+        expect(cached?.payload.directory.sections, hasLength(1));
         expect(cached?.updatedAt, updatedAt);
         expect(
           cached?.payload.chromeData.carouselItems.single.aspectRatio,
@@ -340,23 +413,7 @@ void main() {
         snapshotCache.seed(
           descriptor,
           ForumHomePayload(
-            forumIndex: ForumIndexData(
-              categories: <ForumCategory>[
-                ForumCategory(fid: 'cached-1', name: '缓存分类', forums: ['88']),
-              ],
-              forums: <ForumItem>[
-                ForumItem(
-                  fid: '88',
-                  name: '缓存版块',
-                  threads: 0,
-                  posts: 0,
-                  todayPosts: 0,
-                  description: '',
-                  icon: '',
-                  subForums: <ForumItem>[],
-                ),
-              ],
-            ),
+            directory: _cachedHomePayload().directory,
             isLoggedIn: false,
             favoriteForums: const <FavoriteForum>[],
           ),
@@ -371,10 +428,12 @@ void main() {
         );
 
         expect(result.isSuccess, isTrue);
-        expect(result.dataOrNull!.forumIndex.forums.map((forum) => forum.fid), [
-          '16',
-          '370',
-        ]);
+        expect(
+          result.dataOrNull!.directory.sections.single.forums.map(
+            (forum) => forum.fid,
+          ),
+          ['16', '370'],
+        );
         expect(adapter.htmlRequestedUris, <String>[
           'https://bbs.yamibo.com/index.php?mobile=2',
         ]);
@@ -408,10 +467,12 @@ void main() {
       final result = await repository.getForumHomePayload();
 
       expect(result.isSuccess, isTrue);
-      expect(result.dataOrNull!.forumIndex.forums.map((forum) => forum.fid), [
-        '16',
-        '370',
-      ]);
+      expect(
+        result.dataOrNull!.directory.sections.single.forums.map(
+          (forum) => forum.fid,
+        ),
+        ['16', '370'],
+      );
       expect(documentCache.touchedKeys, <String>[descriptor.cacheKey]);
       expect(documentCache.touchedAt[descriptor.cacheKey], now);
     });
@@ -506,7 +567,7 @@ void main() {
         final result = await repository.getForumHomePayload();
 
         expect(result.isFailure, isTrue);
-        expect(result.errorOrNull?.statusCode, 503);
+        expect(result.failureOrNull?.statusCode, 503);
         expect(adapter.htmlRequestedUris, <String>[
           'https://bbs.yamibo.com/index.php?mobile=2',
         ]);
@@ -519,14 +580,8 @@ void main() {
       () async {
         final adapter = _ForumHomeHtmlTestAdapter();
         final gateway = _buildGateway(adapter);
-        final forumRepository = _CountingForumRepository();
-        final authRepository = _CountingAuthRepository();
-        final favoriteRepository = _CountingFavoriteRepository();
         final container = ProviderContainer(
           overrides: [
-            forumRepositoryProvider.overrideWithValue(forumRepository),
-            authRepositoryProvider.overrideWithValue(authRepository),
-            favoriteRepositoryProvider.overrideWithValue(favoriteRepository),
             yamiboHtmlClientProvider.overrideWithValue(
               YamiboHtmlClient(gateway: gateway),
             ),
@@ -551,220 +606,40 @@ void main() {
             .getForumHomePayload();
 
         expect(result.isSuccess, isTrue);
-        expect(forumRepository.getForumIndexCalls, 0);
-        expect(authRepository.refreshSessionCalls, 0);
-        expect(favoriteRepository.getFavoriteForumsCalls, 0);
+        final homeRepository = container.read(forumHomeRepositoryProvider);
+        final directoryRepository = container.read(
+          forumDirectoryRepositoryProvider,
+        );
+        expect(homeRepository, isA<ForumHomeHtmlRepository>());
+        expect(directoryRepository, same(homeRepository));
         expect(adapter.htmlRequestedUris, <String>[
           'https://bbs.yamibo.com/index.php?mobile=2',
         ]);
       },
     );
   });
-
-  group('DiscuzForumHomeRepository', () {
-    test('returns failure when forumindex request fails', () async {
-      final repository = DiscuzForumHomeRepository(
-        loadForumIndex: () async => const ApiFailure(
-          ApiError(type: ApiErrorType.server, message: 'boom'),
-        ),
-        refreshSession: () async => ApiSuccess(_loggedOutSession()),
-      );
-
-      final result = await repository.getForumHomePayload();
-
-      expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.message, 'boom');
-    });
-
-    test('degrades to logged-out payload when session refresh fails', () async {
-      final repository = DiscuzForumHomeRepository(
-        loadForumIndex: () async => ApiSuccess(_sampleForumIndexData()),
-        refreshSession: () async => const ApiFailure(
-          ApiError(type: ApiErrorType.network, message: 'offline'),
-        ),
-      );
-
-      final result = await repository.getForumHomePayload();
-
-      expect(result.isSuccess, isTrue);
-      final payload = result.dataOrNull!;
-      expect(payload.isLoggedIn, isFalse);
-      expect(payload.favoriteForums, isEmpty);
-    });
-
-    test('loads favorite forum payload after login', () async {
-      final repository = DiscuzForumHomeRepository(
-        loadForumIndex: () async => ApiSuccess(_sampleForumIndexData()),
-        refreshSession: () async => ApiSuccess(_loggedInSession()),
-        loadFavoriteForums: () async => ApiSuccess(<FavoriteForum>[
-          FavoriteForum(
-            favid: '1',
-            fid: '30',
-            title: '我收藏的版块',
-            description: '',
-            threads: 1,
-            posts: 2,
-            todayPosts: 0,
-          ),
-        ]),
-      );
-
-      final result = await repository.getForumHomePayload();
-
-      expect(result.isSuccess, isTrue);
-      final payload = result.dataOrNull!;
-      expect(payload.isLoggedIn, isTrue);
-      expect(payload.favoriteForums.single.fid, '30');
-      expect(payload.homeSections.first.items.single.todayPosts, isNull);
-    });
-
-    test(
-      'legacy repo maps zero today count to missing badge in regular sections',
-      () async {
-        final repository = DiscuzForumHomeRepository(
-          loadForumIndex: () async => ApiSuccess(
-            ForumIndexData(
-              categories: [
-                ForumCategory(fid: '1', name: '综合区', forums: ['2']),
-              ],
-              forums: [
-                ForumItem(
-                  fid: '2',
-                  name: '公告区',
-                  threads: 12,
-                  posts: 34,
-                  todayPosts: 0,
-                  description: '站点公告与维护信息',
-                  icon: '',
-                  subForums: const [],
-                ),
-              ],
-            ),
-          ),
-          refreshSession: () async => ApiSuccess(_loggedOutSession()),
-        );
-
-        final result = await repository.getForumHomePayload();
-
-        expect(result.isSuccess, isTrue);
-        expect(
-          result.dataOrNull!.homeSections.single.items.single.todayPosts,
-          isNull,
-        );
-      },
-    );
-
-    test('includes home chrome payload when chrome loader succeeds', () async {
-      final repository = DiscuzForumHomeRepository(
-        loadForumIndex: () async => ApiSuccess(_sampleForumIndexData()),
-        refreshSession: () async => ApiSuccess(_loggedOutSession()),
-        loadChrome: () async => const ApiSuccess(
-          ForumHomeChromeData(
-            carouselItems: [
-              ForumHomeCarouselItem(
-                imageUrl: 'https://bbs.yamibo.com/banner.jpg',
-                targetUrl: 'https://bbs.yamibo.com/thread-1-1-1.html',
-              ),
-            ],
-          ),
-        ),
-      );
-
-      final result = await repository.getForumHomePayload();
-
-      expect(result.isSuccess, isTrue);
-      expect(result.dataOrNull!.chromeData.carouselItems, hasLength(1));
-      expect(
-        result.dataOrNull!.chromeData.carouselItems.single.targetUrl,
-        'https://bbs.yamibo.com/thread-1-1-1.html',
-      );
-    });
-
-    test('degrades to empty chrome when chrome loader fails', () async {
-      final repository = DiscuzForumHomeRepository(
-        loadForumIndex: () async => ApiSuccess(_sampleForumIndexData()),
-        refreshSession: () async => ApiSuccess(_loggedOutSession()),
-        loadChrome: () async => const ApiFailure(
-          ApiError(type: ApiErrorType.network, message: 'offline'),
-        ),
-      );
-
-      final result = await repository.getForumHomePayload();
-
-      expect(result.isSuccess, isTrue);
-      expect(result.dataOrNull!.chromeData.carouselItems, isEmpty);
-    });
-  });
-}
-
-ForumIndexData _sampleForumIndexData() {
-  return ForumIndexData(
-    categories: [
-      ForumCategory(fid: '1', name: '综合区', forums: ['2']),
-    ],
-    forums: [
-      ForumItem(
-        fid: '2',
-        name: '公告区',
-        threads: 12,
-        posts: 34,
-        todayPosts: 2,
-        description: '站点公告与维护信息',
-        icon: '',
-        subForums: const [],
-      ),
-    ],
-  );
-}
-
-SessionInfo _loggedInSession() {
-  return SessionInfo(
-    uid: '597454',
-    username: 'tester',
-    formhash: '14502ecf',
-    isLoggedIn: true,
-  );
-}
-
-SessionInfo _loggedOutSession() {
-  return SessionInfo(uid: '0', username: '', formhash: '', isLoggedIn: false);
 }
 
 ForumHomePayload _cachedHomePayload() {
   return ForumHomePayload(
-    forumIndex: ForumIndexData(
-      categories: <ForumCategory>[
-        ForumCategory(fid: 'cached-1', name: '缓存分类', forums: ['88']),
-      ],
-      forums: <ForumItem>[
-        ForumItem(
-          fid: '88',
-          name: '缓存版块',
-          threads: 0,
-          posts: 0,
-          todayPosts: 0,
-          description: '',
-          icon: '',
-          subForums: <ForumItem>[],
+    directory: const ForumDirectoryData(
+      sections: [
+        ForumDirectorySection(
+          identity: 'cached-1',
+          title: '缓存分类',
+          forums: [
+            ForumDirectoryForum(
+              fid: '88',
+              title: '缓存版块',
+              description: '',
+              todayPosts: null,
+            ),
+          ],
         ),
       ],
     ),
     isLoggedIn: false,
     favoriteForums: const <FavoriteForum>[],
-    homeSections: const <ForumHomeSectionData>[
-      ForumHomeSectionData(
-        title: '缓存分类',
-        kind: ForumHomeSectionKind.regular,
-        items: <ForumHomeForumData>[
-          ForumHomeForumData(
-            fid: '88',
-            title: '缓存版块',
-            description: '',
-            todayPosts: null,
-          ),
-        ],
-      ),
-    ],
   );
 }
 
@@ -871,63 +746,6 @@ class _StaticImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
       'Accept': DiscuzImageRequestHeaderBuilder.imageAcceptHeader,
       'Referer': 'https://bbs.yamibo.com/',
     };
-  }
-}
-
-class _CountingForumRepository implements ForumRepository {
-  int getForumIndexCalls = 0;
-
-  @override
-  Future<ApiResult<ForumIndexData>> getForumIndex() async {
-    getForumIndexCalls++;
-    throw StateError('forumindex must not be called by HTML-first home');
-  }
-}
-
-class _CountingAuthRepository implements AuthRepository {
-  int refreshSessionCalls = 0;
-
-  @override
-  Future<ApiResult<SessionInfo>> refreshSession() async {
-    refreshSessionCalls++;
-    throw StateError('profile must not be called by HTML-first home');
-  }
-
-  @override
-  Future<ApiResult<SessionInfo>> login({
-    required String username,
-    required String password,
-    String questionId = '0',
-    String answer = '',
-  }) async {
-    throw StateError('login is not part of this test');
-  }
-
-  @override
-  Future<void> logout() async {
-    throw StateError('logout is not part of this test');
-  }
-
-  @override
-  Future<ApiResult<bool>> verifyAuthByForumIndex() async {
-    throw StateError('verifyAuthByForumIndex is not part of this test');
-  }
-}
-
-class _CountingFavoriteRepository implements FavoriteRepository {
-  int getFavoriteForumsCalls = 0;
-
-  @override
-  Future<ApiResult<List<FavoriteForum>>> getFavoriteForums() async {
-    getFavoriteForumsCalls++;
-    throw StateError('myfavforum must not be called by HTML-first home');
-  }
-
-  @override
-  Future<ApiResult<FavoriteThreadsPage>> getFavoriteThreads({
-    required int page,
-  }) async {
-    throw StateError('favorite threads are not part of this test');
   }
 }
 

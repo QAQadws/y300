@@ -20,6 +20,7 @@ class ForumHomeHtmlParser {
       sections: List<ForumHomeHtmlSection>.unmodifiable(
         _parseSections(document),
       ),
+      hasForumList: document.querySelector('.forumlist') != null,
     );
   }
 
@@ -72,6 +73,7 @@ class ForumHomeHtmlParser {
       }
       sections.add(
         ForumHomeHtmlSection(
+          identity: _sectionIdentity(header, sectionElement),
           title: title,
           items: List<ForumHomeHtmlForumItem>.unmodifiable(items),
           isFavoriteSection: _isFavoriteSection(sectionElement),
@@ -80,6 +82,14 @@ class ForumHomeHtmlParser {
       );
     }
     return sections;
+  }
+
+  String _sectionIdentity(html_dom.Element header, html_dom.Element section) {
+    final target = header.attributes['href']?.trim() ?? '';
+    if (target.startsWith('#') && target.length > 1) {
+      return target.substring(1);
+    }
+    return section.id.trim();
   }
 
   html_dom.Element? _querySelectorSafely(
@@ -98,12 +108,11 @@ class ForumHomeHtmlParser {
 
   List<ForumHomeHtmlForumItem> _parseSectionItems(html_dom.Element section) {
     final output = <ForumHomeHtmlForumItem>[];
-    final seen = <String>{};
     for (final anchor in section.querySelectorAll('a.murl')) {
       final listItem = anchor.parent;
       final url = _resolve(anchor.attributes['href']);
       final fid = _extractFid(url);
-      if (url == null || fid == null || fid.isEmpty || !seen.add(fid)) {
+      if (url == null || fid == null || fid.isEmpty) {
         continue;
       }
 

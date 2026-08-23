@@ -4,30 +4,39 @@ import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.d
 import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
-import 'package:y300/features/forum/data/models/forum_index_models.dart';
+import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
 
-class ForumHomeSnapshotCodec implements SnapshotCodec<ForumHomePayload> {
+class ForumHomeSnapshotCodec
+    implements
+        SnapshotCodec<ForumHomePayload>,
+        SnapshotCodecVersionCompatibility {
   const ForumHomeSnapshotCodec();
 
   @override
   String get snapshotType => CacheKeyCanonicalizer.forumHomeSnapshotType;
 
   @override
-  int get codecVersion => 2;
+  int get codecVersion => 3;
 
   @override
-  int get parserVersion => 2;
+  int get parserVersion => 3;
+
+  @override
+  bool canDecodeVersion({
+    required int codecVersion,
+    required int parserVersion,
+  }) {
+    return codecVersion == 3 && parserVersion == 3 ||
+        codecVersion == 2 && parserVersion == 2;
+  }
 
   @override
   Object? encode(ForumHomePayload value) {
     return <String, Object?>{
       'isLoggedIn': value.isLoggedIn,
-      'forumIndex': _encodeForumIndex(value.forumIndex),
+      'directory': _encodeDirectory(value.directory),
       'favoriteForums': value.favoriteForums
           .map(_encodeFavoriteForum)
-          .toList(growable: false),
-      'homeSections': value.homeSections
-          .map(_encodeHomeSection)
           .toList(growable: false),
       'chromeData': _encodeChromeData(value.chromeData),
     };
@@ -37,83 +46,177 @@ class ForumHomeSnapshotCodec implements SnapshotCodec<ForumHomePayload> {
   ForumHomePayload decode(Object? json) {
     final map = ParseUtils.asMap(json);
     return ForumHomePayload(
-      forumIndex: _decodeForumIndex(map['forumIndex']),
+      directory: map.containsKey('directory')
+          ? _decodeDirectory(map['directory'])
+          : _decodeLegacyDirectory(map),
       isLoggedIn: ParseUtils.asBool(map['isLoggedIn']),
       favoriteForums: ParseUtils.asList(map['favoriteForums'])
           .map((item) => _decodeFavoriteForum(ParseUtils.asMap(item)))
-          .toList(growable: false),
-      homeSections: ParseUtils.asList(map['homeSections'])
-          .map((item) => _decodeHomeSection(ParseUtils.asMap(item)))
           .toList(growable: false),
       chromeData: _decodeChromeData(map['chromeData']),
     );
   }
 
-  Map<String, Object?> _encodeForumIndex(ForumIndexData value) {
+  Map<String, Object?> _encodeDirectory(ForumDirectoryData value) {
     return <String, Object?>{
-      'categories': value.categories
-          .map(_encodeForumCategory)
+      'sections': value.sections
+          .map(_encodeDirectorySection)
           .toList(growable: false),
-      'forums': value.forums.map(_encodeForumItem).toList(growable: false),
     };
   }
 
-  ForumIndexData _decodeForumIndex(Object? value) {
+  ForumDirectoryData _decodeDirectory(Object? value) {
     final map = ParseUtils.asMap(value);
-    return ForumIndexData(
-      categories: ParseUtils.asList(map['categories'])
-          .map((item) => _decodeForumCategory(ParseUtils.asMap(item)))
+    return ForumDirectoryData(
+      sections: ParseUtils.asList(map['sections'])
+          .map((item) => _decodeDirectorySection(ParseUtils.asMap(item)))
           .toList(growable: false),
+    );
+  }
+
+  Map<String, Object?> _encodeDirectorySection(ForumDirectorySection value) {
+    return <String, Object?>{
+      'identity': value.identity,
+      'title': value.title,
+      'kind': value.kind.name,
+      'forums': value.forums.map(_encodeDirectoryForum).toList(growable: false),
+    };
+  }
+
+  ForumDirectorySection _decodeDirectorySection(Map<String, dynamic> map) {
+    return ForumDirectorySection(
+      identity: ParseUtils.asString(map['identity']),
+      title: ParseUtils.asString(map['title']),
+      kind: ForumDirectorySectionKind.values.firstWhere(
+        (kind) => kind.name == ParseUtils.asString(map['kind']),
+        orElse: () => ForumDirectorySectionKind.regular,
+      ),
       forums: ParseUtils.asList(map['forums'])
-          .map((item) => _decodeForumItem(ParseUtils.asMap(item)))
+          .map((item) => _decodeDirectoryForum(ParseUtils.asMap(item)))
           .toList(growable: false),
     );
   }
 
-  Map<String, Object?> _encodeForumCategory(ForumCategory value) {
+  Map<String, Object?> _encodeDirectoryForum(ForumDirectoryForum value) {
     return <String, Object?>{
       'fid': value.fid,
-      'name': value.name,
-      'forums': value.forums,
-    };
-  }
-
-  ForumCategory _decodeForumCategory(Map<String, dynamic> map) {
-    return ForumCategory(
-      fid: ParseUtils.asString(map['fid']),
-      name: ParseUtils.asString(map['name']),
-      forums: ParseUtils.asList(
-        map['forums'],
-      ).map((value) => value.toString()).toList(growable: false),
-    );
-  }
-
-  Map<String, Object?> _encodeForumItem(ForumItem value) {
-    return <String, Object?>{
-      'fid': value.fid,
-      'name': value.name,
-      'threads': value.threads,
-      'posts': value.posts,
-      'todayPosts': value.todayPosts,
+      'title': value.title,
       'description': value.description,
-      'icon': value.icon,
-      'subForums': value.subForums
-          .map(_encodeForumItem)
+      'todayPosts': value.todayPosts,
+      'children': value.children
+          .map(_encodeDirectoryForum)
           .toList(growable: false),
     };
   }
 
-  ForumItem _decodeForumItem(Map<String, dynamic> map) {
-    return ForumItem(
+  ForumDirectoryForum _decodeDirectoryForum(Map<String, dynamic> map) {
+    return ForumDirectoryForum(
       fid: ParseUtils.asString(map['fid']),
-      name: ParseUtils.asString(map['name']),
-      threads: ParseUtils.asInt(map['threads']),
-      posts: ParseUtils.asInt(map['posts']),
-      todayPosts: ParseUtils.asInt(map['todayPosts']),
+      title: ParseUtils.asString(map['title']),
       description: ParseUtils.asString(map['description']),
-      icon: ParseUtils.asString(map['icon']),
-      subForums: ParseUtils.asList(map['subForums'])
-          .map((item) => _decodeForumItem(ParseUtils.asMap(item)))
+      todayPosts: _nullableInt(map['todayPosts']),
+      children: ParseUtils.asList(map['children'])
+          .map((item) => _decodeDirectoryForum(ParseUtils.asMap(item)))
+          .toList(growable: false),
+    );
+  }
+
+  ForumDirectoryData _decodeLegacyForumIndex(Object? value) {
+    final map = ParseUtils.asMap(value);
+    final forums = ParseUtils.asList(map['forums'])
+        .map((item) => _decodeLegacyForum(ParseUtils.asMap(item)))
+        .toList(growable: false);
+    final forumById = <String, ForumDirectoryForum>{
+      for (final forum in forums) forum.fid: forum,
+    };
+    final sections = <ForumDirectorySection>[];
+    final categorized = <String>{};
+    for (final categoryValue in ParseUtils.asList(map['categories'])) {
+      final category = ParseUtils.asMap(categoryValue);
+      final forumItems = <ForumDirectoryForum>[];
+      for (final rawFid in ParseUtils.asList(category['forums'])) {
+        final forum = forumById[rawFid.toString()];
+        if (forum != null) {
+          categorized.add(forum.fid);
+          forumItems.add(forum);
+        }
+      }
+      if (forumItems.isNotEmpty) {
+        sections.add(
+          ForumDirectorySection(
+            identity: ParseUtils.asString(category['fid']),
+            title: ParseUtils.asString(category['name']),
+            forums: forumItems,
+          ),
+        );
+      }
+    }
+    final uncategorized = forums
+        .where((forum) => !categorized.contains(forum.fid))
+        .toList(growable: false);
+    if (uncategorized.isNotEmpty) {
+      sections.add(
+        ForumDirectorySection(
+          identity: 'legacy-uncategorized',
+          title: '',
+          forums: uncategorized,
+          kind: ForumDirectorySectionKind.uncategorized,
+        ),
+      );
+    }
+    return ForumDirectoryData(sections: sections);
+  }
+
+  ForumDirectoryData _decodeLegacyDirectory(Map<String, dynamic> map) {
+    final legacySections = ParseUtils.asList(map['homeSections']);
+    final regularSections = legacySections
+        .map(ParseUtils.asMap)
+        .where((section) => ParseUtils.asString(section['kind']) != 'favorite')
+        .toList(growable: false);
+    if (regularSections.isEmpty) {
+      return _decodeLegacyForumIndex(map['forumIndex']);
+    }
+
+    final index = ParseUtils.asMap(map['forumIndex']);
+    final identityByTitle = <String, String>{
+      for (final value in ParseUtils.asList(index['categories']))
+        ParseUtils.asString(ParseUtils.asMap(value)['name']):
+            ParseUtils.asString(ParseUtils.asMap(value)['fid']),
+    };
+    return ForumDirectoryData(
+      sections: [
+        for (var index = 0; index < regularSections.length; index++)
+          ForumDirectorySection(
+            identity:
+                identityByTitle[ParseUtils.asString(
+                  regularSections[index]['title'],
+                )] ??
+                'legacy-section-${index + 1}',
+            title: ParseUtils.asString(regularSections[index]['title']),
+            forums: ParseUtils.asList(regularSections[index]['items'])
+                .map(ParseUtils.asMap)
+                .map(
+                  (forum) => ForumDirectoryForum(
+                    fid: ParseUtils.asString(forum['fid']),
+                    title: ParseUtils.asString(forum['title']),
+                    description: ParseUtils.asString(forum['description']),
+                    todayPosts: _nullableInt(forum['todayPosts']),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+      ],
+    );
+  }
+
+  ForumDirectoryForum _decodeLegacyForum(Map<String, dynamic> map) {
+    return ForumDirectoryForum(
+      fid: ParseUtils.asString(map['fid']),
+      title: ParseUtils.asString(map['name']),
+      description: ParseUtils.asString(map['description']),
+      todayPosts: _nullableInt(map['todayPosts']),
+      children: ParseUtils.asList(map['subForums'])
+          .map((item) => _decodeLegacyForum(ParseUtils.asMap(item)))
           .toList(growable: false),
     );
   }
@@ -196,49 +299,6 @@ class ForumHomeSnapshotCodec implements SnapshotCodec<ForumHomePayload> {
       title: ParseUtils.asString(map['title']),
       description: ParseUtils.asString(map['description']),
       todayPosts: _nullableInt(map['todayPosts']),
-    );
-  }
-
-  Map<String, Object?> _encodeHomeSection(ForumHomeSectionData value) {
-    return <String, Object?>{
-      'title': value.title,
-      'kind': value.kind.name,
-      'items': value.items.map(_encodeHomeForum).toList(growable: false),
-    };
-  }
-
-  ForumHomeSectionData _decodeHomeSection(Map<String, dynamic> map) {
-    return ForumHomeSectionData(
-      title: ParseUtils.asString(map['title']),
-      kind: _decodeSectionKind(ParseUtils.asString(map['kind'])),
-      items: ParseUtils.asList(map['items'])
-          .map((item) => _decodeHomeForum(ParseUtils.asMap(item)))
-          .toList(growable: false),
-    );
-  }
-
-  Map<String, Object?> _encodeHomeForum(ForumHomeForumData value) {
-    return <String, Object?>{
-      'fid': value.fid,
-      'title': value.title,
-      'description': value.description,
-      'todayPosts': value.todayPosts,
-    };
-  }
-
-  ForumHomeForumData _decodeHomeForum(Map<String, dynamic> map) {
-    return ForumHomeForumData(
-      fid: ParseUtils.asString(map['fid']),
-      title: ParseUtils.asString(map['title']),
-      description: ParseUtils.asString(map['description']),
-      todayPosts: _nullableInt(map['todayPosts']),
-    );
-  }
-
-  ForumHomeSectionKind _decodeSectionKind(String raw) {
-    return ForumHomeSectionKind.values.firstWhere(
-      (value) => value.name == raw,
-      orElse: () => ForumHomeSectionKind.regular,
     );
   }
 
