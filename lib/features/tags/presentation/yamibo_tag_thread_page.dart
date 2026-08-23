@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
-import 'package:y300/features/tags/domain/models/yamibo_tag_thread_page.dart';
+import 'package:y300/features/tags/domain/models/forum_tag_directory_models.dart';
+import 'package:y300/features/tags/domain/repositories/forum_tag_directory_repository.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -10,14 +11,24 @@ import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
 
 class YamiboTagThreadPage extends ConsumerWidget {
-  const YamiboTagThreadPage({super.key, required this.url, this.title = ''});
+  const YamiboTagThreadPage({
+    super.key,
+    required this.tagId,
+    this.page = 1,
+    this.title = '',
+  });
 
-  final String url;
+  final String tagId;
+  final int page;
   final String title;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final args = YamiboTagThreadPageArgs(url: url, title: title);
+    final args = YamiboTagThreadPageArgs(
+      tagId: tagId,
+      page: page,
+      title: title,
+    );
     final asyncState = ref.watch(yamiboTagThreadPageControllerProvider(args));
     final controller = ref.read(
       yamiboTagThreadPageControllerProvider(args).notifier,
@@ -32,8 +43,8 @@ class YamiboTagThreadPage extends ConsumerWidget {
       backgroundColor: palette.background,
       appBar: AppBar(
         title: Text(
-          data?.tagName.trim().isNotEmpty == true
-              ? data!.tagName
+          data?.tag.name?.trim().isNotEmpty == true
+              ? data!.tag.name!
               : (state.title.trim().isNotEmpty
                     ? state.title
                     : l10n.tagTitleFallback),
@@ -66,20 +77,21 @@ class YamiboTagThreadPage extends ConsumerWidget {
                       ),
                       palette: palette,
                     ),
-                  if (data.threads.isEmpty)
+                  if (data.topics.isEmpty)
                     _EmptyTagThreadList(palette: palette)
                   else
-                    for (final thread in data.threads)
+                    for (final thread in data.topics)
                       _TagThreadCard(
                         thread: thread,
+                        capabilities: state.capabilities,
                         palette: palette,
                         onTap: () => _openThread(context, thread),
                       ),
                   _TagPager(
                     data: data,
+                    capabilities: state.capabilities,
                     isLoading: state.isLoadingPage,
                     palette: palette,
-                    onOpenUrl: controller.loadUrl,
                     onSelectPage: controller.loadPage,
                   ),
                 ],
@@ -88,11 +100,11 @@ class YamiboTagThreadPage extends ConsumerWidget {
     );
   }
 
-  void _openThread(BuildContext context, YamiboTagThreadItem thread) {
+  void _openThread(BuildContext context, ForumTagTopicSummary thread) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) =>
-            ThreadDetailPage(tid: thread.tid, subject: thread.subject),
+            ThreadDetailPage(tid: thread.tid, subject: thread.title),
       ),
     );
   }
@@ -101,16 +113,14 @@ class YamiboTagThreadPage extends ConsumerWidget {
 class _TagHeaderCard extends StatelessWidget {
   const _TagHeaderCard({required this.data, required this.palette});
 
-  final YamiboTagThreadPageData data;
+  final ForumTagDirectoryData data;
   final ForumDisplayThemePalette palette;
 
   @override
   Widget build(BuildContext context) {
-    final page = data.pagination.currentPage;
     final total = data.pagination.totalPages;
-    final pageLabel = page == null
-        ? AppLocalizations.of(context).tagRelatedThreads(data.threads.length)
-        : total == null
+    final page = data.pagination.currentPage;
+    final pageLabel = total == null
         ? AppLocalizations.of(context).commonPage(page)
         : AppLocalizations.of(context).commonPageOf(page, total);
     return DecoratedBox(
@@ -128,7 +138,8 @@ class _TagHeaderCard extends StatelessWidget {
               const SizedBox(width: 7),
               Expanded(
                 child: Text(
-                  data.tagName,
+                  data.tag.name ??
+                      AppLocalizations.of(context).tagTitleFallback,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -165,11 +176,13 @@ class _TagHeaderCard extends StatelessWidget {
 class _TagThreadCard extends StatefulWidget {
   const _TagThreadCard({
     required this.thread,
+    required this.capabilities,
     required this.palette,
     required this.onTap,
   });
 
-  final YamiboTagThreadItem thread;
+  final ForumTagTopicSummary thread;
+  final ForumTagDirectoryReadCapabilities? capabilities;
   final ForumDisplayThemePalette palette;
   final VoidCallback onTap;
 
@@ -183,12 +196,18 @@ class _TagThreadCardState extends State<_TagThreadCard> {
   @override
   Widget build(BuildContext context) {
     final thread = widget.thread;
+    final capabilities = widget.capabilities;
     final palette = widget.palette;
     final textTheme = Theme.of(context).textTheme;
     final lastPostLine = <String>[
-      if (thread.lastPosterName?.trim().isNotEmpty == true)
+      if (capabilities?.supports(ForumTagDirectoryCapability.topicLastPost) ==
+              true &&
+          thread.lastPosterName?.trim().isNotEmpty == true)
         thread.lastPosterName!,
-      if (thread.lastPostAt?.trim().isNotEmpty == true) thread.lastPostAt!,
+      if (capabilities?.supports(ForumTagDirectoryCapability.topicLastPost) ==
+              true &&
+          thread.lastPostAt?.trim().isNotEmpty == true)
+        thread.lastPostAt!,
     ].join(' · ');
 
     return Padding(
@@ -234,7 +253,7 @@ class _TagThreadCardState extends State<_TagThreadCard> {
                       children: [
                         Expanded(
                           child: Text(
-                            thread.subject,
+                            thread.title,
                             key: Key('yamibo-tag-thread-title-${thread.tid}'),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -245,7 +264,12 @@ class _TagThreadCardState extends State<_TagThreadCard> {
                             ),
                           ),
                         ),
-                        if (thread.hasImageAttachment) ...[
+                        if (capabilities?.supports(
+                                  ForumTagDirectoryCapability
+                                      .topicAttachmentFlags,
+                                ) ==
+                                true &&
+                            thread.hasImageAttachment == true) ...[
                           const SizedBox(width: 8),
                           Icon(
                             Icons.image_outlined,
@@ -260,7 +284,11 @@ class _TagThreadCardState extends State<_TagThreadCard> {
                     ),
                     if (_hasAuthorMetadata(thread)) ...[
                       const SizedBox(height: 6),
-                      _TagAuthorMetadata(thread: thread, palette: palette),
+                      _TagAuthorMetadata(
+                        thread: thread,
+                        capabilities: capabilities,
+                        palette: palette,
+                      ),
                     ],
                     if (lastPostLine.isNotEmpty) ...[
                       const SizedBox(height: 7),
@@ -277,7 +305,11 @@ class _TagThreadCardState extends State<_TagThreadCard> {
                     ],
                     if (_hasFooterMetadata(thread)) ...[
                       const SizedBox(height: 9),
-                      _TagThreadFooter(thread: thread, palette: palette),
+                      _TagThreadFooter(
+                        thread: thread,
+                        capabilities: capabilities,
+                        palette: palette,
+                      ),
                     ],
                   ],
                 ),
@@ -289,28 +321,63 @@ class _TagThreadCardState extends State<_TagThreadCard> {
     );
   }
 
-  bool _hasAuthorMetadata(YamiboTagThreadItem thread) {
-    return thread.authorName?.trim().isNotEmpty == true ||
-        thread.createdAt?.trim().isNotEmpty == true;
+  bool _hasAuthorMetadata(ForumTagTopicSummary thread) {
+    final canAuthor =
+        widget.capabilities?.supports(
+          ForumTagDirectoryCapability.topicAuthor,
+        ) ==
+        true;
+    final canCreatedAt =
+        widget.capabilities?.supports(
+          ForumTagDirectoryCapability.topicCreationTime,
+        ) ==
+        true;
+    return (canAuthor && thread.authorName?.trim().isNotEmpty == true) ||
+        (canCreatedAt && thread.createdAt?.trim().isNotEmpty == true);
   }
 
-  bool _hasFooterMetadata(YamiboTagThreadItem thread) {
-    return thread.replyCount != null ||
-        thread.viewCount != null ||
-        thread.forumName?.trim().isNotEmpty == true;
+  bool _hasFooterMetadata(ForumTagTopicSummary thread) {
+    final canForum =
+        widget.capabilities?.supports(ForumTagDirectoryCapability.topicForum) ==
+        true;
+    final canReplies =
+        widget.capabilities?.supports(
+          ForumTagDirectoryCapability.topicReplyCount,
+        ) ==
+        true;
+    final canViews =
+        widget.capabilities?.supports(
+          ForumTagDirectoryCapability.topicViewCount,
+        ) ==
+        true;
+    return (canReplies && thread.replyCount != null) ||
+        (canViews && thread.viewCount != null) ||
+        (canForum && thread.forumName?.trim().isNotEmpty == true);
   }
 }
 
 class _TagAuthorMetadata extends StatelessWidget {
-  const _TagAuthorMetadata({required this.thread, required this.palette});
+  const _TagAuthorMetadata({
+    required this.thread,
+    required this.capabilities,
+    required this.palette,
+  });
 
-  final YamiboTagThreadItem thread;
+  final ForumTagTopicSummary thread;
+  final ForumTagDirectoryReadCapabilities? capabilities;
   final ForumDisplayThemePalette palette;
 
   @override
   Widget build(BuildContext context) {
-    final author = thread.authorName?.trim();
-    final createdAt = thread.createdAt?.trim();
+    final author =
+        capabilities?.supports(ForumTagDirectoryCapability.topicAuthor) == true
+        ? thread.authorName?.trim()
+        : null;
+    final createdAt =
+        capabilities?.supports(ForumTagDirectoryCapability.topicCreationTime) ==
+            true
+        ? thread.createdAt?.trim()
+        : null;
     final baseStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
       color: palette.softText,
       fontWeight: FontWeight.w500,
@@ -341,15 +408,23 @@ class _TagAuthorMetadata extends StatelessWidget {
 }
 
 class _TagThreadFooter extends StatelessWidget {
-  const _TagThreadFooter({required this.thread, required this.palette});
+  const _TagThreadFooter({
+    required this.thread,
+    required this.capabilities,
+    required this.palette,
+  });
 
-  final YamiboTagThreadItem thread;
+  final ForumTagTopicSummary thread;
+  final ForumTagDirectoryReadCapabilities? capabilities;
   final ForumDisplayThemePalette palette;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final forumName = thread.forumName?.trim();
+    final forumName =
+        capabilities?.supports(ForumTagDirectoryCapability.topicForum) == true
+        ? thread.forumName?.trim()
+        : null;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -358,7 +433,11 @@ class _TagThreadFooter extends StatelessWidget {
             spacing: 6,
             runSpacing: 4,
             children: [
-              if (thread.replyCount != null)
+              if (capabilities?.supports(
+                        ForumTagDirectoryCapability.topicReplyCount,
+                      ) ==
+                      true &&
+                  thread.replyCount != null)
                 _TagMetric(
                   key: Key('yamibo-tag-thread-replies-${thread.tid}'),
                   icon: Icons.chat_bubble_outline,
@@ -366,7 +445,11 @@ class _TagThreadFooter extends StatelessWidget {
                   semanticsLabel: l10n.tagReplies(thread.replyCount!),
                   palette: palette,
                 ),
-              if (thread.viewCount != null)
+              if (capabilities?.supports(
+                        ForumTagDirectoryCapability.topicViewCount,
+                      ) ==
+                      true &&
+                  thread.viewCount != null)
                 _TagMetric(
                   key: Key('yamibo-tag-thread-views-${thread.tid}'),
                   icon: Icons.visibility_outlined,
@@ -477,27 +560,30 @@ class _TagForumChip extends StatelessWidget {
 class _TagPager extends StatelessWidget {
   const _TagPager({
     required this.data,
+    required this.capabilities,
     required this.isLoading,
     required this.palette,
-    required this.onOpenUrl,
     required this.onSelectPage,
   });
 
-  final YamiboTagThreadPageData data;
+  final ForumTagDirectoryData data;
+  final ForumTagDirectoryReadCapabilities? capabilities;
   final bool isLoading;
   final ForumDisplayThemePalette palette;
-  final ValueChanged<String> onOpenUrl;
   final ValueChanged<int> onSelectPage;
 
   @override
   Widget build(BuildContext context) {
-    final previous = data.pagination.previousPageUrl;
-    final next = data.pagination.nextPageUrl ?? data.moreUrl;
-    final currentPage = data.pagination.currentPage ?? 1;
+    final currentPage = data.pagination.currentPage;
     final lastPage = data.pagination.totalPages;
-    final canLoadPrevious = previous != null || currentPage > 1;
-    final hasMore =
-        next != null || (lastPage != null && currentPage < lastPage);
+    final supportsDirection =
+        capabilities?.supports(
+          ForumTagDirectoryCapability.directionalPagination,
+        ) ==
+        true;
+    final canLoadPrevious =
+        supportsDirection && data.pagination.hasPrevious == true;
+    final hasMore = supportsDirection && data.pagination.hasNext == true;
     final hasPageChoices = lastPage != null && lastPage > 1;
     if (!canLoadPrevious && !hasMore && !hasPageChoices && !isLoading) {
       return const SizedBox(height: 8);
@@ -514,9 +600,7 @@ class _TagPager extends StatelessWidget {
             key: const Key('yamibo-tag-previous-page-button'),
             onPressed: !canLoadPrevious || isLoading
                 ? null
-                : () => previous != null
-                      ? onOpenUrl(previous)
-                      : onSelectPage(currentPage - 1),
+                : () => onSelectPage(currentPage - 1),
             style: _tagPageButtonStyle(context, palette),
             child: Text(AppLocalizations.of(context).commonPreviousPage),
           ),
@@ -546,11 +630,7 @@ class _TagPager extends StatelessWidget {
           else
             TextButton(
               key: const Key('yamibo-tag-next-page-button'),
-              onPressed: !hasMore
-                  ? null
-                  : () => next != null
-                        ? onOpenUrl(next)
-                        : onSelectPage(currentPage + 1),
+              onPressed: !hasMore ? null : () => onSelectPage(currentPage + 1),
               style: _tagPageButtonStyle(context, palette),
               child: Text(AppLocalizations.of(context).commonNextPage),
             ),

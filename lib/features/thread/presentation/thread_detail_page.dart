@@ -1082,10 +1082,18 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         _openThreadPost(destination);
         return;
       case YamiboForumLinkKind.tagThreadPage:
+        final tagId = destination.tagId;
+        if (tagId == null || tagId.isEmpty) {
+          _copyUrl(
+            AppLocalizations.of(context).threadDetailExternalLink,
+            destination.uri.toString(),
+          );
+          return;
+        }
         Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) =>
-                YamiboTagThreadPage(url: destination.uri.toString()),
+                YamiboTagThreadPage(tagId: tagId, page: destination.page ?? 1),
           ),
         );
         return;

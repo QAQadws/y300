@@ -22,6 +22,7 @@ import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
@@ -56,11 +57,10 @@ import 'package:y300/features/reply/data/repositories/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/repositories/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
-import 'package:y300/features/tags/data/repositories/yamibo_tag_thread_page_repository.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
-import 'package:y300/features/tags/domain/models/yamibo_tag_thread_page.dart';
-import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
+import 'package:y300/features/tags/domain/models/forum_tag_directory_models.dart';
+import 'package:y300/features/tags/domain/repositories/forum_tag_directory_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/providers/thread_favorite_providers.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
@@ -2576,10 +2576,10 @@ void main() {
           ),
         );
       });
-      final tagRepository = _FakeYamiboTagThreadPageRepository();
+      final tagRepository = _FakeForumTagDirectoryRepository();
 
       await tester.pumpWidget(
-        _buildTestApp(repository, tagThreadPageRepository: tagRepository),
+        _buildTestApp(repository, tagDirectoryRepository: tagRepository),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
@@ -2590,7 +2590,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      expect(tagRepository.requestedUrls.single, contains('id=20674'));
+      expect(tagRepository.requestedQueries.single.tagId, '20674');
       expect(find.byKey(const Key('yamibo-tag-thread-page')), findsOneWidget);
     });
 
@@ -4854,7 +4854,7 @@ Widget _buildTestApp(
   ThreadPostRatingsRepository? postRatingsRepository,
   ThreadPostCommentRepository? postCommentRepository,
   ThreadPollVoteRepository? pollVoteRepository,
-  YamiboTagThreadPageRepository? tagThreadPageRepository,
+  ForumTagDirectoryRepository? tagDirectoryRepository,
   ThreadPostLocator? threadPostLocator,
   NativePageCacheInvalidationService? pageCacheInvalidationService,
   ImageCacheService? imageCacheService,
@@ -4879,7 +4879,7 @@ Widget _buildTestApp(
         postRatingsRepository: postRatingsRepository,
         postCommentRepository: postCommentRepository,
         pollVoteRepository: pollVoteRepository,
-        tagThreadPageRepository: tagThreadPageRepository,
+        tagDirectoryRepository: tagDirectoryRepository,
         threadPostLocator: threadPostLocator,
         pageCacheInvalidationService: pageCacheInvalidationService,
         imageCacheService: imageCacheService,
@@ -4908,7 +4908,7 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   ThreadPostRatingsRepository? postRatingsRepository,
   ThreadPostCommentRepository? postCommentRepository,
   ThreadPollVoteRepository? pollVoteRepository,
-  YamiboTagThreadPageRepository? tagThreadPageRepository,
+  ForumTagDirectoryRepository? tagDirectoryRepository,
   ThreadPostLocator? threadPostLocator,
   NativePageCacheInvalidationService? pageCacheInvalidationService,
   ImageCacheService? imageCacheService,
@@ -4975,8 +4975,8 @@ List<riverpod_misc.Override> _threadDetailOverrides(
       const _FakeForumFavoriteRepository(),
     ),
     forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
-    yamiboTagThreadPageRepositoryProvider.overrideWithValue(
-      tagThreadPageRepository ?? _FakeYamiboTagThreadPageRepository(),
+    forumTagDirectoryRepositoryProvider.overrideWithValue(
+      tagDirectoryRepository ?? _FakeForumTagDirectoryRepository(),
     ),
     composerDraftRepositoryProvider.overrideWithValue(
       _MemoryComposerDraftRepository(),
@@ -5313,31 +5313,60 @@ class _FakeForumTagRepository implements ForumTagRepository {
   }
 }
 
-class _FakeYamiboTagThreadPageRepository
-    implements YamiboTagThreadPageRepository {
-  final List<String> requestedUrls = <String>[];
+class _FakeForumTagDirectoryRepository implements ForumTagDirectoryRepository {
+  final List<ForumTagDirectoryQuery> requestedQueries =
+      <ForumTagDirectoryQuery>[];
 
   @override
-  Future<ApiResult<YamiboTagThreadPageData>> load(String url) async {
-    requestedUrls.add(url);
-    return const ApiSuccess<YamiboTagThreadPageData>(
-      YamiboTagThreadPageData(
-        url:
-            'https://bbs.yamibo.com/misc.php?mod=tag&id=20674&type=thread&page=1',
-        tagId: '20674',
-        tagName: '狱门抚子在此',
-        pagination: YamiboTagPagePagination(currentPage: 1, totalPages: 1),
-        threads: <YamiboTagThreadItem>[
-          YamiboTagThreadItem(
+  ForumTagDirectorySourceCapabilities get capabilities =>
+      ForumTagDirectorySourceCapabilities(
+        values: DataCapabilitySet<ForumTagDirectoryCapability>.from(
+          supported: const <ForumTagDirectoryCapability>[
+            ForumTagDirectoryCapability.stableTagIdentity,
+            ForumTagDirectoryCapability.orderedTopics,
+            ForumTagDirectoryCapability.stableTopicIdentity,
+            ForumTagDirectoryCapability.topicTitle,
+            ForumTagDirectoryCapability.tagName,
+            ForumTagDirectoryCapability.topicForum,
+            ForumTagDirectoryCapability.topicReplyCount,
+            ForumTagDirectoryCapability.topicViewCount,
+            ForumTagDirectoryCapability.directionalPagination,
+            ForumTagDirectoryCapability.totalPageCount,
+          ],
+        ),
+        paginationPrecision: PaginationPrecision.exact,
+      );
+
+  @override
+  Future<
+    DataReadResult<ForumTagDirectoryData, ForumTagDirectoryReadCapabilities>
+  >
+  load(
+    ForumTagDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
+    requestedQueries.add(query);
+    return DataReadSuccess(
+      data: ForumTagDirectoryData(
+        tag: const ForumTagIdentity(id: '20674', name: '狱门抚子在此'),
+        topics: const <ForumTagTopicSummary>[
+          ForumTagTopicSummary(
             tid: '549277',
-            threadUrl: 'https://bbs.yamibo.com/thread-549277-1-1.html',
-            subject: '狱门抚子在此 00',
+            title: '狱门抚子在此 00',
             forumName: '中文百合漫画区',
             replyCount: 24,
             viewCount: 6111,
           ),
         ],
+        pagination: const ForumTagPagination(
+          currentPage: 1,
+          totalPages: 1,
+          hasPrevious: false,
+          hasNext: false,
+        ),
       ),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
     );
   }
 }
