@@ -2,15 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
-import 'package:y300/features/search/data/services/discuz_search_service.dart';
-import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
+import 'package:y300/features/search/data/services/forum_search_legacy_bridge.dart';
+import 'package:y300/features/search/domain/repositories/forum_search_repository.dart';
 import 'package:y300/features/search/presentation/search_text_resolver.dart';
 import 'package:y300/features/search/presentation/widgets/forum_search_result_card.dart';
+import 'package:y300/features/search/domain/models/forum_search_models.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';
@@ -18,10 +22,27 @@ import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 class ForumSearchPage extends ConsumerStatefulWidget {
   const ForumSearchPage({
     super.key,
-    this.context = const DiscuzSearchContext.forum(),
-  });
+    this.scope = ForumSearchScope.allForums,
+    this.forumId,
+    @Deprecated('Use scope and forumId.') DiscuzSearchContext? context,
+  }) : _legacyContext = context;
 
-  final DiscuzSearchContext context;
+  final ForumSearchScope scope;
+  final String? forumId;
+
+  /// Kept for route/test source compatibility; it is converted at the page
+  /// boundary and never enters the search domain contract.
+  final DiscuzSearchContext? _legacyContext;
+
+  /// Compatibility view for existing route tests and callers. New code should
+  /// use [scope] and [forumId].
+  @Deprecated('Use scope and forumId.')
+  DiscuzSearchContext get context =>
+      _legacyContext ??
+      (scope == ForumSearchScope.currentForum &&
+              forumId?.trim().isNotEmpty == true
+          ? DiscuzSearchContext.curForum(srhfid: forumId!.trim())
+          : const DiscuzSearchContext.forum());
 
   @override
   ConsumerState<ForumSearchPage> createState() => _ForumSearchPageState();
@@ -37,10 +58,17 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
   bool _loadingMore = false;
   SearchNotice? _notice;
   SearchNotice? _loadMoreNotice;
-  String? _nextPageUrl;
-  List<DiscuzSearchResultItem> _items = const <DiscuzSearchResultItem>[];
-  final Set<String> _requestedPageUrls = <String>{};
+  ForumSearchData? _data;
+  ForumSearchReadCapabilities? _capabilities;
+  DataReadMetadata? _metadata;
+  final Set<ForumSearchPageIdentity> _requestedPages =
+      <ForumSearchPageIdentity>{};
   int _queryRevision = 0;
+
+  List<ForumSearchTopicSummary> get _items =>
+      _data?.topics ?? const <ForumSearchTopicSummary>[];
+
+  ForumSearchPageIdentity? get _nextPage => _data?.pagination.nextPage;
 
   @override
   void initState() {
@@ -64,73 +92,109 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
     if (keyword.isEmpty || _loading) {
       return;
     }
-    final service = ref.read(discuzSearchServiceProvider);
-    final waitingNotice = _searchWaitingNotice(service);
+    final query = _buildQuery(keyword);
+    final previous = _data;
+    final refreshing = previous != null && _sameQuery(previous.query, query);
+    final coordinator = ref.read(forumSearchPageCoordinatorProvider);
+    final waitingNotice = _searchWaitingNotice(coordinator);
     if (waitingNotice != null) {
-      setState(() {
-        _notice = waitingNotice;
-      });
+      setState(() => _notice = waitingNotice);
       return;
     }
     final revision = ++_queryRevision;
-    _requestedPageUrls.clear();
+    _requestedPages.clear();
     setState(() {
       _loading = true;
       _loadingMore = false;
       _notice = null;
       _loadMoreNotice = null;
-      _nextPageUrl = null;
+      if (!refreshing) {
+        _data = null;
+        _capabilities = null;
+        _metadata = null;
+      }
     });
-    try {
-      final result = await service.searchForum(
-        keyword: keyword,
-        context: widget.context,
-        enforceRateLimit: true,
-      );
-      if (!mounted || revision != _queryRevision) {
-        return;
-      }
-      setState(() {
-        _loading = false;
-        if (result.rateLimited) {
-          final seconds = result.retryAfter.inSeconds <= 0
-              ? 1
-              : result.retryAfter.inSeconds;
-          _notice = SearchRateLimitedNotice(seconds);
-          _items = const <DiscuzSearchResultItem>[];
-          _nextPageUrl = null;
-        } else {
-          _notice = result.items.isEmpty ? const SearchNoResultsNotice() : null;
-          _items = result.items;
-          _nextPageUrl = _unvisitedPageUrl(result.nextPageUrl);
-        }
-      });
-      _scheduleAutoLoadMoreCheck(revision);
-    } catch (error) {
-      if (!mounted || revision != _queryRevision) {
-        return;
-      }
-      setState(() {
-        _loading = false;
-        _notice = SearchFailedNotice(error);
-        _loadMoreNotice = null;
-        _items = const <DiscuzSearchResultItem>[];
-        _nextPageUrl = null;
-      });
+    final execution = await coordinator.search(
+      query,
+      enforceRateLimit: true,
+      cachePolicy: refreshing
+          ? CacheLoadPolicy.networkFirst
+          : CacheLoadPolicy.cacheFirst,
+    );
+    if (!mounted || revision != _queryRevision) {
+      return;
     }
+    setState(() {
+      _loading = false;
+      if (execution.isRateLimited) {
+        final seconds = execution.retryAfter!.inSeconds <= 0
+            ? 1
+            : execution.retryAfter!.inSeconds;
+        _notice = SearchRateLimitedNotice(seconds);
+        if (!refreshing) {
+          _data = null;
+          _capabilities = null;
+          _metadata = null;
+        }
+        return;
+      }
+      final result = execution.readResult!;
+      result.when(
+        success: (data, capabilities, metadata) {
+          _data = data;
+          _capabilities = capabilities;
+          _metadata = metadata;
+          _notice = data.topics.isEmpty ? const SearchNoResultsNotice() : null;
+        },
+        failure: (failure) {
+          _notice = SearchFailedNotice(failure);
+          if (!refreshing) {
+            _data = null;
+            _capabilities = null;
+            _metadata = null;
+          }
+        },
+      );
+    });
+    _scheduleAutoLoadMoreCheck(revision);
   }
 
-  SearchNotice? _searchWaitingNotice(ForumSearchService service) {
+  ForumSearchQuery _buildQuery(String keyword) {
+    final legacyContext = widget._legacyContext;
+    if (legacyContext != null) {
+      return ForumSearchQuery(
+        keyword: keyword,
+        scope: legacyContext.scope == DiscuzSearchScope.curForum
+            ? ForumSearchScope.currentForum
+            : ForumSearchScope.allForums,
+        forumId: legacyContext.srhfid,
+      );
+    }
+    return ForumSearchQuery(
+      keyword: keyword,
+      scope: widget.scope,
+      forumId: widget.forumId,
+    );
+  }
+
+  bool _sameQuery(ForumSearchQuery left, ForumSearchQuery right) {
+    return left.normalizedKeyword == right.normalizedKeyword &&
+        left.scope == right.scope &&
+        left.normalizedForumId == right.normalizedForumId;
+  }
+
+  SearchNotice? _searchWaitingNotice(ForumSearchCoordinator coordinator) {
     final comicQueue = ref.read(comicSearchRefreshQueueSnapshotProvider).value;
     final comicQueueNotice = _comicQueueWaitingNotice(comicQueue);
     if (comicQueueNotice != null) {
       return comicQueueNotice;
     }
-    final Object serviceObject = service;
-    if (serviceObject is! ForumSearchQueueStateReader) {
+    if (coordinator is! ForumSearchReadQueueStateReader) {
       return null;
     }
-    return _schedulerWaitingNotice(serviceObject.snapshot.value);
+    return _schedulerWaitingNotice(
+      (coordinator as ForumSearchReadQueueStateReader).snapshot.value,
+    );
   }
 
   SearchNotice? _comicQueueWaitingNotice(
@@ -149,7 +213,9 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
     );
   }
 
-  SearchNotice? _schedulerWaitingNotice(ForumSearchSchedulerSnapshot snapshot) {
+  SearchNotice? _schedulerWaitingNotice(
+    ForumSearchReadSchedulerSnapshot snapshot,
+  ) {
     if (!snapshot.active) {
       return null;
     }
@@ -160,64 +226,73 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
   }
 
   Future<void> _loadMore({bool automatic = false}) async {
-    final nextPageUrl = _nextPageUrl;
-    if (_loading ||
-        _loadingMore ||
-        nextPageUrl == null ||
-        nextPageUrl.trim().isEmpty) {
+    final nextPage = _nextPage;
+    if (_loading || _loadingMore || nextPage == null) {
       return;
     }
-    final normalizedPageUrl = nextPageUrl.trim();
-    if (automatic && _requestedPageUrls.contains(normalizedPageUrl)) {
+    if (automatic && _requestedPages.contains(nextPage)) {
       return;
     }
-    _requestedPageUrls.add(normalizedPageUrl);
+    _requestedPages.add(nextPage);
     final revision = _queryRevision;
     setState(() {
       _loadingMore = true;
       _loadMoreNotice = null;
     });
-    try {
-      final service = ref.read(discuzSearchServiceProvider);
-      final result = await service.fetchNextPage(
-        nextPageUrl: normalizedPageUrl,
-        context: widget.context,
+    final coordinator = ref.read(forumSearchPageCoordinatorProvider);
+    final execution = await coordinator.loadNextPage(
+      _buildQuery(_controller.text),
+      nextPage,
+    );
+    if (!mounted || revision != _queryRevision) {
+      return;
+    }
+    setState(() {
+      _loadingMore = false;
+      if (execution.isRateLimited) {
+        _loadMoreNotice = SearchLoadMoreFailedNotice(execution.retryAfter!);
+        return;
+      }
+      final result = execution.readResult!;
+      result.when(
+        success: (data, capabilities, metadata) {
+          final existingIds = _items.map((item) => item.tid).toSet();
+          if (data.topics.any((item) => existingIds.contains(item.tid))) {
+            _loadMoreNotice = const SearchLoadMoreFailedNotice(
+              DataReadFailure<ForumSearchData, ForumSearchReadCapabilities>(
+                kind: DataReadFailureKind.parse,
+                code: 'forum_search_duplicate_topic_identity',
+                diagnosticMessage: 'Forum search topic identity is duplicated.',
+              ),
+            );
+            return;
+          }
+          final previous = _data!;
+          _data = ForumSearchData(
+            query: previous.query,
+            topics: <ForumSearchTopicSummary>[
+              ...previous.topics,
+              ...data.topics,
+            ],
+            pagination: data.pagination,
+          );
+          _capabilities = _capabilities!.intersect(capabilities);
+          _metadata = _metadata!.merge(metadata);
+        },
+        failure: (failure) {
+          _loadMoreNotice = SearchLoadMoreFailedNotice(failure);
+        },
       );
-      if (!mounted || revision != _queryRevision) {
-        return;
-      }
-      setState(() {
-        _loadingMore = false;
-        _items = <DiscuzSearchResultItem>[..._items, ...result.items];
-        _nextPageUrl = _unvisitedPageUrl(result.nextPageUrl);
-      });
-      _scheduleAutoLoadMoreCheck(revision);
-    } catch (error) {
-      if (!mounted || revision != _queryRevision) {
-        return;
-      }
-      setState(() {
-        _loadingMore = false;
-        _loadMoreNotice = SearchLoadMoreFailedNotice(error);
-      });
-    }
+    });
+    _scheduleAutoLoadMoreCheck(revision);
   }
 
-  String? _unvisitedPageUrl(String? value) {
-    final normalized = value?.trim() ?? '';
-    if (normalized.isEmpty || _requestedPageUrls.contains(normalized)) {
-      return null;
-    }
-    return normalized;
-  }
-
-  void _handleScroll() {
-    _tryAutoLoadMore();
-  }
+  void _handleScroll() => _tryAutoLoadMore();
 
   void _tryAutoLoadMore({int? revision}) {
     if ((revision != null && revision != _queryRevision) ||
-        !_scrollController.hasClients) {
+        !_scrollController.hasClients ||
+        _nextPage == null) {
       return;
     }
     if (_scrollController.position.extentAfter > _autoLoadMoreThreshold) {
@@ -237,12 +312,11 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
 
   void _handleQueryChanged(String value) {
     _queryRevision += 1;
-    _requestedPageUrls.clear();
+    _requestedPages.clear();
     if (!_loading &&
         !_loadingMore &&
         _notice == null &&
-        _loadMoreNotice == null &&
-        _nextPageUrl == null) {
+        _loadMoreNotice == null) {
       return;
     }
     setState(() {
@@ -250,19 +324,23 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
       _loadingMore = false;
       _notice = null;
       _loadMoreNotice = null;
-      _nextPageUrl = null;
+      _data = null;
+      _capabilities = null;
+      _metadata = null;
     });
   }
 
   void _clearSearch() {
-    _requestedPageUrls.clear();
+    _queryRevision += 1;
+    _requestedPages.clear();
     setState(() {
       _loading = false;
       _loadingMore = false;
       _notice = null;
       _loadMoreNotice = null;
-      _nextPageUrl = null;
-      _items = const <DiscuzSearchResultItem>[];
+      _data = null;
+      _capabilities = null;
+      _metadata = null;
     });
   }
 
@@ -369,6 +447,7 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
                 return ForumSearchResultCard(
                   key: Key('forum-search-result-${item.tid}'),
                   item: item,
+                  capabilities: _capabilities,
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(

@@ -4,6 +4,7 @@ import 'package:y300/features/comic/domain/services/comic_episode_link_merger.da
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/domain/models/forum_search_models.dart';
 
 void main() {
   group('DefaultComicEpisodeLinkMerger', () {
@@ -131,6 +132,23 @@ void main() {
       ]);
 
       expect(links, hasLength(1));
+      expect(links.single.url, contains('tid=101'));
+      expect(links.single.episodeTitle, '第1话');
+    });
+
+    test('fromSearchTopicCandidates builds thread URLs at the boundary', () {
+      final links = merger.fromSearchTopicCandidates(
+        const <ComicSearchTopicCandidate>[
+          ComicSearchTopicCandidate(
+            item: ForumSearchTopicSummary(tid: '101', title: '测试漫画 第1话'),
+            score: 1,
+            searchIndex: 0,
+          ),
+        ],
+        threadUrlBuilder: (tid) =>
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid',
+      );
+
       expect(links.single.url, contains('tid=101'));
       expect(links.single.episodeTitle, '第1话');
     });

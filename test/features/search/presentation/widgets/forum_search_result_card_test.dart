@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/domain/models/forum_search_models.dart';
 import 'package:y300/features/search/presentation/widgets/forum_search_result_card.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
@@ -23,13 +23,12 @@ void main() {
           body: SizedBox(
             width: 360,
             child: ForumSearchResultCard(
-              item: const DiscuzSearchResultItem(
+              item: const ForumSearchTopicSummary(
                 tid: '571160',
                 title: '搜索结果标题',
-                url: 'thread-571160-1-1.html',
-                fid: '30',
-                author: '测试作者',
-                timeText: '2026-08-11',
+                forumId: '30',
+                authorName: '测试作者',
+                publishedAtText: '2026-08-11',
               ),
               onTap: () => tapped = true,
             ),
@@ -74,7 +73,7 @@ void main() {
   testWidgets('omits missing metadata without empty separators', (
     tester,
   ) async {
-    Future<void> pumpItem(DiscuzSearchResultItem item) {
+    Future<void> pumpItem(ForumSearchTopicSummary item) {
       return tester.pumpWidget(
         LocalizedTestApp(
           home: Scaffold(
@@ -88,25 +87,17 @@ void main() {
     }
 
     await pumpItem(
-      const DiscuzSearchResultItem(
+      const ForumSearchTopicSummary(
         tid: '1',
         title: '仅作者',
-        url: 'thread-1-1-1.html',
-        fid: '30',
-        author: '作者',
+        forumId: '30',
+        authorName: '作者',
       ),
     );
     expect(find.text('作者'), findsOneWidget);
     expect(find.textContaining('·'), findsNothing);
 
-    await pumpItem(
-      const DiscuzSearchResultItem(
-        tid: '2',
-        title: '无元信息',
-        url: 'thread-2-1-1.html',
-        fid: '30',
-      ),
-    );
+    await pumpItem(const ForumSearchTopicSummary(tid: '2', title: '无元信息'));
     expect(
       find.byKey(const Key('forum-search-result-metadata-2')),
       findsNothing,
@@ -131,13 +122,12 @@ void main() {
             body: SizedBox(
               width: 280,
               child: ForumSearchResultCard(
-                item: const DiscuzSearchResultItem(
+                item: const ForumSearchTopicSummary(
                   tid: '571160',
                   title: '这是一个很长的搜索结果标题用于验证窄屏布局',
-                  url: 'thread-571160-1-1.html',
-                  fid: '30',
-                  author: '这是一个非常长的作者名称',
-                  timeText: '2026-08-11 10:33',
+                  forumId: '30',
+                  authorName: '这是一个非常长的作者名称',
+                  publishedAtText: '2026-08-11 10:33',
                 ),
                 onTap: () {},
               ),

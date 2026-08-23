@@ -16,7 +16,15 @@ abstract class ComicEpisodeLinkMerger {
   );
 }
 
-class DefaultComicEpisodeLinkMerger implements ComicEpisodeLinkMerger {
+abstract interface class ComicSearchTopicLinkMerger {
+  List<ComicEpisodeLink> fromSearchTopicCandidates(
+    List<ComicSearchTopicCandidate> candidates, {
+    required String Function(String tid) threadUrlBuilder,
+  });
+}
+
+class DefaultComicEpisodeLinkMerger
+    implements ComicEpisodeLinkMerger, ComicSearchTopicLinkMerger {
   const DefaultComicEpisodeLinkMerger({
     required ComicSubjectParser subjectParser,
   }) : _subjectParser = subjectParser;
@@ -87,6 +95,42 @@ class DefaultComicEpisodeLinkMerger implements ComicEpisodeLinkMerger {
       if (link != null) {
         links.add(link);
       }
+    }
+    return merge(const <ComicEpisodeLink>[], links);
+  }
+
+  @override
+  List<ComicEpisodeLink> fromSearchTopicCandidates(
+    List<ComicSearchTopicCandidate> candidates, {
+    required String Function(String tid) threadUrlBuilder,
+  }) {
+    final sortedCandidates = candidates.toList()
+      ..sort((a, b) {
+        final episodeOrder = _compareEpisodeOrder(a.item.title, b.item.title);
+        if (episodeOrder != 0) {
+          return episodeOrder;
+        }
+        final tidOrder = _compareTid(a.item.tid, b.item.tid);
+        if (tidOrder != 0) {
+          return tidOrder;
+        }
+        return a.searchIndex.compareTo(b.searchIndex);
+      });
+
+    final links = <ComicEpisodeLink>[];
+    for (final candidate in sortedCandidates) {
+      final metadata = _subjectParser.parse(candidate.item.title);
+      final episodeLabel = metadata.episodeLabel?.trim();
+      if (episodeLabel == null || episodeLabel.isEmpty) {
+        continue;
+      }
+      links.add(
+        ComicEpisodeLink(
+          url: threadUrlBuilder(candidate.item.tid),
+          rawText: candidate.item.title,
+          episodeTitle: episodeLabel,
+        ),
+      );
     }
     return merge(const <ComicEpisodeLink>[], links);
   }

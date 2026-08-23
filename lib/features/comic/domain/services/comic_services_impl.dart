@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
@@ -38,6 +39,8 @@ import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.d
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/services/discuz_search_service.dart';
+import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
+import 'package:y300/features/search/domain/models/forum_search_models.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
@@ -77,7 +80,7 @@ final comicSubjectParserProvider = Provider<ComicSubjectParser>((ref) {
 class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
   NetworkComicEpisodeRefreshService({
     required ComicEpisodeDiscoveryService discoveryService,
-    required ForumSearchService searchService,
+    required Object searchService,
     required ComicRefreshKeywordResolver keywordResolver,
     required ComicSearchCandidateRanker candidateRanker,
     required ComicEpisodeLinkMerger episodeLinkMerger,
@@ -90,7 +93,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
        _threadSeedFetcher = threadSeedFetcher;
 
   final ComicEpisodeDiscoveryService _discoveryService;
-  final ForumSearchService _searchService;
+  final Object _searchService;
   final ComicRefreshKeywordResolver _keywordResolver;
   final ComicSearchCandidateRanker _candidateRanker;
   final ComicEpisodeLinkMerger _episodeLinkMerger;
@@ -343,13 +346,9 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       // 搜索本身由 ForumSearchScheduler 持有 ~10.5s 节流 + 等待队列；这里
       // 不再叠加 favorite governor 槽，让搜索请求只受调度器约束，并通过队列
       // 进度向通知栏汇报。
-      final search = await _searchService.searchForum(
-        keyword: keyword.value,
-        context: const DiscuzSearchContext.curForum(srhfid: '30'),
-        enforceRateLimit: true,
-      );
+      final search = await _searchForComic(keyword.value);
       usedSearch = true;
-      if (search.rateLimited || search.items.isEmpty) {
+      if (search.rateLimited || search.topics.isEmpty) {
         _logRefresh(
           request,
           'keyword=${keyword.value} candidates=0 rateLimited=${search.rateLimited}',
@@ -363,24 +362,26 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         continue;
       }
 
-      final candidates = _candidateRanker.rank(
+      final legacyCandidates = <ComicSearchCandidate>[];
+      final topicCandidates = _rankSearchTopics(
         threadSubject: thread.subject,
         keyword: keyword,
-        items: search.items,
+        execution: search,
+        legacyCandidates: legacyCandidates,
       );
       _logRefresh(
         request,
-        'keyword=${keyword.value} candidates=${candidates.length} '
-        'top=${candidates.take(3).map((item) => '${item.item.tid}:${item.score.toStringAsFixed(2)}').join(',')}',
+        'keyword=${keyword.value} candidates=${topicCandidates.length} '
+        'top=${topicCandidates.take(3).map((item) => '${item.item.tid}:${item.score.toStringAsFixed(2)}').join(',')}',
       );
-      if (candidates.isEmpty) {
+      if (topicCandidates.isEmpty) {
         continue;
       }
 
       var collectedLinks = const <ComicEpisodeLink>[];
       String? collectedCatalogUrl;
       final sourceTid = request.sourceTid.trim();
-      final candidateBatch = candidates
+      final candidateBatch = topicCandidates
           .where((item) => item.item.tid.trim() != sourceTid)
           .take(_candidateRanker.discoveryTopK)
           .toList(growable: false);
@@ -399,8 +400,9 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
           );
         }
       }
-      final searchCandidateLinks = _episodeLinkMerger.fromSearchCandidates(
-        candidates,
+      final searchCandidateLinks = _mergeSearchTopics(
+        topicCandidates,
+        legacyCandidates,
       );
       final mergedSearchLinks = _episodeLinkMerger.merge(
         collectedLinks,
@@ -420,6 +422,119 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       links: const <ComicEpisodeLink>[],
       usedSearch: usedSearch,
     );
+  }
+
+  Future<_ComicSearchExecution> _searchForComic(String keyword) async {
+    final searchService = _searchService;
+    if (searchService is ForumSearchCoordinator) {
+      final execution = await searchService.search(
+        ForumSearchQuery(
+          keyword: keyword,
+          scope: ForumSearchScope.currentForum,
+          forumId: '30',
+        ),
+        enforceRateLimit: true,
+      );
+      if (execution.isRateLimited) {
+        return const _ComicSearchExecution.rateLimited();
+      }
+      final result = execution.readResult!;
+      return result.when(
+        success: (data, _, _) => _ComicSearchExecution(topics: data.topics),
+        failure: (failure) => throw StateError(
+          'Forum search failed: ${failure.code ?? failure.kind.name}',
+        ),
+      );
+    }
+    if (searchService is ForumSearchService) {
+      final result = await searchService.searchForum(
+        keyword: keyword,
+        context: const DiscuzSearchContext.curForum(srhfid: '30'),
+        enforceRateLimit: true,
+      );
+      return _ComicSearchExecution(
+        rateLimited: result.rateLimited,
+        topics: result.items
+            .map(
+              (item) => ForumSearchTopicSummary(
+                tid: item.tid,
+                title: item.title,
+                forumId: item.fid.trim().isEmpty ? null : item.fid,
+                authorName: item.author,
+                publishedAtText: item.timeText,
+              ),
+            )
+            .toList(growable: false),
+        legacyItems: result.items,
+      );
+    }
+    throw StateError('Unsupported forum search service.');
+  }
+
+  String _buildThreadUrl(String tid) {
+    return Uri.parse('${AppConfig.siteBaseUrl}/forum.php')
+        .replace(
+          queryParameters: <String, String>{'mod': 'viewthread', 'tid': tid},
+        )
+        .toString();
+  }
+
+  List<ComicSearchTopicCandidate> _rankSearchTopics({
+    required String threadSubject,
+    required ComicRefreshKeyword keyword,
+    required _ComicSearchExecution execution,
+    required List<ComicSearchCandidate> legacyCandidates,
+  }) {
+    final topicRanker = _candidateRanker;
+    if (topicRanker is ComicSearchTopicCandidateRanker) {
+      return (topicRanker as ComicSearchTopicCandidateRanker).rankTopics(
+        threadSubject: threadSubject,
+        keyword: keyword,
+        items: execution.topics,
+      );
+    }
+    final legacyItems = execution.legacyItems;
+    if (legacyItems == null) {
+      throw StateError('Search candidate ranker does not support topics.');
+    }
+    final ranked = topicRanker.rank(
+      threadSubject: threadSubject,
+      keyword: keyword,
+      items: legacyItems,
+    );
+    legacyCandidates.addAll(ranked);
+    return ranked
+        .map(
+          (candidate) => ComicSearchTopicCandidate(
+            item: ForumSearchTopicSummary(
+              tid: candidate.item.tid,
+              title: candidate.item.title,
+              forumId: candidate.item.fid.trim().isEmpty
+                  ? null
+                  : candidate.item.fid,
+              authorName: candidate.item.author,
+              publishedAtText: candidate.item.timeText,
+            ),
+            score: candidate.score,
+            searchIndex: candidate.searchIndex,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  List<ComicEpisodeLink> _mergeSearchTopics(
+    List<ComicSearchTopicCandidate> topicCandidates,
+    List<ComicSearchCandidate> legacyCandidates,
+  ) {
+    final topicMerger = _episodeLinkMerger;
+    if (topicMerger is ComicSearchTopicLinkMerger) {
+      return (topicMerger as ComicSearchTopicLinkMerger)
+          .fromSearchTopicCandidates(
+            topicCandidates,
+            threadUrlBuilder: _buildThreadUrl,
+          );
+    }
+    return topicMerger.fromSearchCandidates(legacyCandidates);
   }
 
   Future<ThreadSeed?> _fetchThreadDetail(
@@ -489,6 +604,23 @@ class _SearchFallbackResult {
   final String? catalogUrl;
 }
 
+final class _ComicSearchExecution {
+  const _ComicSearchExecution({
+    this.topics = const <ForumSearchTopicSummary>[],
+    this.rateLimited = false,
+    this.legacyItems,
+  });
+
+  const _ComicSearchExecution.rateLimited()
+    : topics = const <ForumSearchTopicSummary>[],
+      rateLimited = true,
+      legacyItems = null;
+
+  final List<ForumSearchTopicSummary> topics;
+  final bool rateLimited;
+  final List<DiscuzSearchResultItem>? legacyItems;
+}
+
 final comicEpisodeDiscoveryServiceProvider =
     Provider<ComicEpisodeDiscoveryService>((ref) {
       final engine = ComicPostParsingEngine();
@@ -552,7 +684,7 @@ final comicEpisodeRefreshServiceProvider = Provider<ComicEpisodeRefreshService>(
   (ref) {
     return NetworkComicEpisodeRefreshService(
       discoveryService: ref.read(comicEpisodeDiscoveryServiceProvider),
-      searchService: ref.read(discuzSearchServiceProvider),
+      searchService: ref.read(forumSearchCoordinatorProvider),
       keywordResolver: ref.watch(comicRefreshKeywordResolverProvider),
       candidateRanker: ref.watch(comicSearchCandidateRankerProvider),
       episodeLinkMerger: ref.watch(comicEpisodeLinkMergerProvider),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/domain/models/forum_search_models.dart';
+import 'package:y300/features/search/domain/repositories/forum_search_repository.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
@@ -9,10 +10,12 @@ class ForumSearchResultCard extends StatefulWidget {
     super.key,
     required this.item,
     required this.onTap,
+    this.capabilities,
   });
 
-  final DiscuzSearchResultItem item;
+  final ForumSearchTopicSummary item;
   final VoidCallback onTap;
+  final ForumSearchReadCapabilities? capabilities;
 
   @override
   State<ForumSearchResultCard> createState() => _ForumSearchResultCardState();
@@ -120,11 +123,20 @@ class _ForumSearchResultCardState extends State<ForumSearchResultCard> {
     );
   }
 
-  String? _metadataText(DiscuzSearchResultItem item) {
+  String? _metadataText(ForumSearchTopicSummary item) {
     final values = <String>[
-      if (item.author?.trim().isNotEmpty == true) item.author!.trim(),
-      if (item.timeText?.trim().isNotEmpty == true) item.timeText!.trim(),
+      if (_supports(ForumSearchCapability.topicAuthor) &&
+          item.authorName?.trim().isNotEmpty == true)
+        item.authorName!.trim(),
+      if (_supports(ForumSearchCapability.topicPublishedAt) &&
+          item.publishedAtText?.trim().isNotEmpty == true)
+        item.publishedAtText!.trim(),
     ];
     return values.isEmpty ? null : values.join(' · ');
+  }
+
+  bool _supports(ForumSearchCapability capability) {
+    final readCapabilities = widget.capabilities;
+    return readCapabilities == null || readCapabilities.supports(capability);
   }
 }

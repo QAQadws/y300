@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolver.dart';
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/domain/models/forum_search_models.dart';
 
 void main() {
   group('DefaultComicSearchCandidateRanker', () {
@@ -108,6 +109,24 @@ void main() {
       const ranker = DefaultComicSearchCandidateRanker();
 
       expect(ranker.discoveryTopK, 3);
+    });
+
+    test('ranks source-neutral topic summaries without URL fields', () {
+      const ranker = DefaultComicSearchCandidateRanker();
+      final candidates = ranker.rankTopics(
+        threadSubject: '测试漫画 第1话',
+        keyword: const ComicRefreshKeyword(
+          source: ComicRefreshKeywordSource.customTitle,
+          value: '测试漫画',
+        ),
+        items: const <ForumSearchTopicSummary>[
+          ForumSearchTopicSummary(tid: '101', title: '测试漫画 第2话'),
+          ForumSearchTopicSummary(tid: '102', title: '无关主题'),
+        ],
+      );
+
+      expect(candidates, hasLength(1));
+      expect(candidates.single.item.tid, '101');
     });
   });
 }

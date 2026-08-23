@@ -7,7 +7,7 @@ import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
 import 'package:y300/features/auth/domain/services/formhash_provider.dart';
-import 'package:y300/features/search/data/services/discuz_search_html_parser.dart';
+import 'package:y300/features/search/data/services/discuz_legacy_search_html_parser.dart';
 import 'package:y300/features/search/data/services/forum_search_service.dart';
 import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
@@ -20,16 +20,16 @@ class DiscuzSearchService implements ForumSearchService {
     required FormhashProvider formhashProvider,
     required SearchRateLimiter rateLimiter,
     required YamiboHttpGateway gateway,
-    DiscuzSearchHtmlParser? htmlParser,
+    DiscuzLegacySearchHtmlParser? htmlParser,
   }) : _formhashProvider = formhashProvider,
        _rateLimiter = rateLimiter,
        _gateway = gateway,
-       _htmlParser = htmlParser ?? DiscuzSearchHtmlParser();
+       _htmlParser = htmlParser ?? DiscuzLegacySearchHtmlParser();
 
   final FormhashProvider _formhashProvider;
   final SearchRateLimiter _rateLimiter;
   final YamiboHttpGateway _gateway;
-  final DiscuzSearchHtmlParser _htmlParser;
+  final DiscuzLegacySearchHtmlParser _htmlParser;
   // 搜索上下文中的 formhash 与登录会话绑定；保留 service 级缓存，避免自动
   // 分页期间重复进入认证 provider。
   String? _cachedFormhash;
@@ -238,14 +238,14 @@ class DiscuzSearchService implements ForumSearchService {
   }
 }
 
-final searchRateLimiterProvider = Provider<SearchRateLimiter>((ref) {
+final legacySearchRateLimiterProvider = Provider<SearchRateLimiter>((ref) {
   return SearchRateLimiter();
 });
 
 final rawDiscuzSearchServiceProvider = Provider<ForumSearchService>((ref) {
   return DiscuzSearchService(
     formhashProvider: ref.read(formhashProvider),
-    rateLimiter: ref.read(searchRateLimiterProvider),
+    rateLimiter: ref.read(legacySearchRateLimiterProvider),
     gateway: ref.read(yamiboHttpGatewayProvider),
   );
 });
@@ -259,5 +259,28 @@ final forumSearchSchedulerProvider = Provider<ForumSearchScheduler>((ref) {
 });
 
 final discuzSearchServiceProvider = Provider<ForumSearchService>((ref) {
-  return ref.watch(forumSearchSchedulerProvider);
+  return const DefaultForumSearchServiceMarker();
 });
+
+/// Marker used by the page bridge to distinguish the production contract
+/// wiring from test-only legacy overrides.
+final class DefaultForumSearchServiceMarker implements ForumSearchService {
+  const DefaultForumSearchServiceMarker();
+
+  @override
+  Future<DiscuzSearchResponse> searchForum({
+    required String keyword,
+    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
+    bool enforceRateLimit = true,
+  }) {
+    throw StateError('Use forumSearchCoordinatorProvider in production.');
+  }
+
+  @override
+  Future<DiscuzSearchResponse> fetchNextPage({
+    required String nextPageUrl,
+    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
+  }) {
+    throw StateError('Use forumSearchCoordinatorProvider in production.');
+  }
+}

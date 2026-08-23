@@ -22,7 +22,7 @@ import 'package:y300/features/forum/presentation/widgets/forum_display_widgets.d
 import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/domain/models/forum_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
@@ -420,7 +420,7 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) =>
-            ForumSearchPage(context: DiscuzSearchContext.curForum(srhfid: fid)),
+            ForumSearchPage(scope: ForumSearchScope.currentForum, forumId: fid),
       ),
     );
   }
