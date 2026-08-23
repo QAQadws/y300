@@ -7,6 +7,7 @@ import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_ingest_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
@@ -24,11 +25,11 @@ import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.d
 import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/favorites/data/repositories/favorite_repository.dart';
+import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/services/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
 import 'package:y300/features/favorites/domain/services/library_post_ingest_task_runner.dart';
@@ -51,11 +52,11 @@ void main() {
   test(
     'first sync fetches all pages and ingests comic and novel details',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 3,
-          items: <FavoriteThread>[
+          items: <FavoriteThreadReference>[
             _favoriteThread(tid: '100', title: '漫画'),
             _favoriteThread(tid: '200', title: '小说'),
           ],
@@ -63,7 +64,9 @@ void main() {
         2: _page(
           page: 2,
           totalCount: 3,
-          items: <FavoriteThread>[_favoriteThread(tid: '300', title: '普通帖')],
+          items: <FavoriteThreadReference>[
+            _favoriteThread(tid: '300', title: '普通帖'),
+          ],
         ),
       });
       final local = _MemoryLocalFavoriteRepository();
@@ -92,11 +95,13 @@ void main() {
   test(
     'first sync classifies empty postlist as a completed invalid detail',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '404', title: '失效收藏')],
+          items: <FavoriteThreadReference>[
+            _favoriteThread(tid: '404', title: '失效收藏'),
+          ],
         ),
       });
       final local = _MemoryLocalFavoriteRepository();
@@ -130,11 +135,11 @@ void main() {
   test(
     'incremental sync persists invalid detail without retrying it',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 2,
-          items: <FavoriteThread>[
+          items: <FavoriteThreadReference>[
             _favoriteThread(tid: '404', title: '新增失效收藏'),
             _favoriteThread(tid: '999', title: '旧收藏'),
           ],
@@ -182,11 +187,11 @@ void main() {
   );
 
   test('recently added sync accepts an empty postlist as invalid', () async {
-    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
       1: _page(
         page: 1,
         totalCount: 2,
-        items: <FavoriteThread>[
+        items: <FavoriteThreadReference>[
           _favoriteThread(tid: '404', title: '刚收藏的失效帖'),
           _favoriteThread(tid: '999', title: '旧收藏'),
         ],
@@ -228,11 +233,13 @@ void main() {
   test(
     'first sync creates and uses bootstrap governor when snapshot is null',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
+          items: <FavoriteThreadReference>[
+            _favoriteThread(tid: '100', title: '漫画'),
+          ],
         ),
       });
       final governor = _RecordingGovernor();
@@ -257,11 +264,13 @@ void main() {
   );
 
   test('incremental sync is also governed when snapshot exists', () async {
-    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
       1: _page(
         page: 1,
         totalCount: 1,
-        items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
+        items: <FavoriteThreadReference>[
+          _favoriteThread(tid: '100', title: '漫画'),
+        ],
       ),
     });
     final local = _MemoryLocalFavoriteRepository(
@@ -302,11 +311,13 @@ void main() {
   test(
     'syncRecentlyAddedThread is governed (paced) even when snapshot is null',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
+          items: <FavoriteThreadReference>[
+            _favoriteThread(tid: '100', title: '漫画'),
+          ],
         ),
       });
       final governor = _RecordingGovernor();
@@ -333,13 +344,17 @@ void main() {
   test(
     'concurrent first sync joins single inflight run and governor',
     () async {
-      final remote = _DelayedFavoriteRepository(<int, FavoriteThreadsPage>{
-        1: _page(
-          page: 1,
-          totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
-        ),
-      });
+      final remote = _DelayedFavoriteRepository(
+        <int, FavoriteThreadDirectoryData>{
+          1: _page(
+            page: 1,
+            totalCount: 1,
+            items: <FavoriteThreadReference>[
+              _favoriteThread(tid: '100', title: '漫画'),
+            ],
+          ),
+        },
+      );
       var governorCreated = 0;
       final governor = _RecordingGovernor();
       final service = _service(
@@ -373,11 +388,13 @@ void main() {
   );
 
   test('sync starts a new run after previous inflight settles', () async {
-    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
       1: _page(
         page: 1,
         totalCount: 1,
-        items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
+        items: <FavoriteThreadReference>[
+          _favoriteThread(tid: '100', title: '漫画'),
+        ],
       ),
     });
     final service = _service(
@@ -426,11 +443,13 @@ void main() {
   test(
     'count decrease does full diff and removes disappeared module shelf items',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '100', title: '保留')],
+          items: <FavoriteThreadReference>[
+            _favoriteThread(tid: '100', title: '保留'),
+          ],
         ),
       });
       final local = _MemoryLocalFavoriteRepository(
@@ -478,8 +497,12 @@ void main() {
   test(
     'removes disappeared shelf items via content ingest registry handlers',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
-        1: _page(page: 1, totalCount: 0, items: const <FavoriteThread>[]),
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
+        1: _page(
+          page: 1,
+          totalCount: 0,
+          items: const <FavoriteThreadReference>[],
+        ),
       });
       final local = _MemoryLocalFavoriteRepository(
         snapshot: FavoriteSyncSnapshot(
@@ -529,11 +552,13 @@ void main() {
   );
 
   test('writes handler returned work id back to local favorite meta', () async {
-    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
       1: _page(
         page: 1,
         totalCount: 1,
-        items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
+        items: <FavoriteThreadReference>[
+          _favoriteThread(tid: '100', title: '漫画'),
+        ],
       ),
     });
     final local = _MemoryLocalFavoriteRepository();
@@ -569,11 +594,11 @@ void main() {
   test(
     'detail failure does not block following missing records in same sync',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 2,
-          items: <FavoriteThread>[
+          items: <FavoriteThreadReference>[
             _favoriteThread(tid: '100', title: '坏记录'),
             _favoriteThread(tid: '200', title: '小说'),
           ],
@@ -612,11 +637,13 @@ void main() {
   test(
     'novel metadata ingest failure remains missing and retries next sync',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '200', title: '小说')],
+          items: <FavoriteThreadReference>[
+            _favoriteThread(tid: '200', title: '小说'),
+          ],
         ),
       });
       final local = _MemoryLocalFavoriteRepository();
@@ -640,11 +667,11 @@ void main() {
   );
 
   test('emits list and detail progress during first full sync', () async {
-    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
       1: _page(
         page: 1,
         totalCount: 3,
-        items: <FavoriteThread>[
+        items: <FavoriteThreadReference>[
           _favoriteThread(tid: '100', title: '漫画'),
           _favoriteThread(tid: '200', title: '小说'),
         ],
@@ -652,7 +679,9 @@ void main() {
       2: _page(
         page: 2,
         totalCount: 3,
-        items: <FavoriteThread>[_favoriteThread(tid: '300', title: '普通帖')],
+        items: <FavoriteThreadReference>[
+          _favoriteThread(tid: '300', title: '普通帖'),
+        ],
       ),
     });
     final service = _service(
@@ -704,11 +733,13 @@ void main() {
   });
 
   test('novel metadata ingest notifies novel and favorite shelves', () async {
-    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
       1: _page(
         page: 1,
         totalCount: 1,
-        items: <FavoriteThread>[_favoriteThread(tid: '200', title: '小说')],
+        items: <FavoriteThreadReference>[
+          _favoriteThread(tid: '200', title: '小说'),
+        ],
       ),
     });
     final novelIngest = _FakeNovelIngestService();
@@ -756,11 +787,11 @@ void main() {
   test(
     'first sync queues catalog miss search when comic tag is long-running',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 1,
-          items: <FavoriteThread>[
+          items: <FavoriteThreadReference>[
             _favoriteThread(tid: '100', title: '[Fav] Long Comic EP 02'),
           ],
         ),
@@ -835,11 +866,11 @@ void main() {
   test(
     'first sync skips catalog miss search for non long-running comic tag',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 1,
-          items: <FavoriteThread>[
+          items: <FavoriteThreadReference>[
             _favoriteThread(tid: '100', title: '[Fav] Short Comic EP 02'),
           ],
         ),
@@ -879,11 +910,13 @@ void main() {
   test(
     'comic auto refresh failure still marks favorite detail loaded',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
+          items: <FavoriteThreadReference>[
+            _favoriteThread(tid: '100', title: '漫画'),
+          ],
         ),
       });
       final bus = LibraryShelfRefreshBus();
@@ -949,7 +982,7 @@ void main() {
       );
       final service = _service(
         remoteRepository: _FakeFavoriteRepository(
-          const <int, FavoriteThreadsPage>{},
+          const <int, FavoriteThreadDirectoryData>{},
         ),
         localRepository: local,
         detailContextLoader: _contextLoader(
@@ -1007,7 +1040,7 @@ void main() {
       );
       final service = _service(
         remoteRepository: _FakeFavoriteRepository(
-          const <int, FavoriteThreadsPage>{},
+          const <int, FavoriteThreadDirectoryData>{},
         ),
         localRepository: local,
         detailContextLoader: _contextLoader(
@@ -1044,7 +1077,7 @@ void main() {
       );
       final service = _service(
         remoteRepository: _FakeFavoriteRepository(
-          const <int, FavoriteThreadsPage>{},
+          const <int, FavoriteThreadDirectoryData>{},
         ),
         localRepository: local,
         detailContextLoader: _contextLoader(
@@ -1084,7 +1117,7 @@ void main() {
       );
       final service = _service(
         remoteRepository: _FakeFavoriteRepository(
-          const <int, FavoriteThreadsPage>{},
+          const <int, FavoriteThreadDirectoryData>{},
         ),
         localRepository: local,
         detailContextLoader: _contextLoader(
@@ -1103,11 +1136,13 @@ void main() {
   );
 
   test('writes favorites snapshot to download storage after sync', () async {
-    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
       1: _page(
         page: 1,
         totalCount: 1,
-        items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
+        items: <FavoriteThreadReference>[
+          _favoriteThread(tid: '100', title: '漫画'),
+        ],
       ),
     });
     final storage = _FavoriteSnapshotStorageSpy();
@@ -1132,11 +1167,13 @@ void main() {
   test(
     'first full sync runs comic duplicate merge once after details load',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '100', title: '漫画')],
+          items: <FavoriteThreadReference>[
+            _favoriteThread(tid: '100', title: '漫画'),
+          ],
         ),
       });
       final duplicateRepository = _FakeDuplicateMergeRepository(
@@ -1183,11 +1220,11 @@ void main() {
   );
 
   test('incremental comic detail stores merged target work id', () async {
-    final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
       1: _page(
         page: 1,
         totalCount: 2,
-        items: <FavoriteThread>[
+        items: <FavoriteThreadReference>[
           _favoriteThread(tid: '100', title: '新增漫画'),
           _favoriteThread(tid: '999', title: '旧收藏'),
         ],
@@ -1241,11 +1278,11 @@ void main() {
   test(
     'incremental comic detail keeps ingested work id when duplicate merge fails',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 2,
-          items: <FavoriteThread>[
+          items: <FavoriteThreadReference>[
             _favoriteThread(tid: '100', title: '新增漫画'),
             _favoriteThread(tid: '999', title: '旧收藏'),
           ],
@@ -1291,11 +1328,11 @@ void main() {
   test(
     'recently added comic sync refreshes target thread and queues search on catalog miss',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 2,
-          items: <FavoriteThread>[
+          items: <FavoriteThreadReference>[
             _favoriteThread(tid: '100', title: '新收藏漫画'),
             _favoriteThread(tid: '999', title: '旧收藏'),
           ],
@@ -1369,11 +1406,13 @@ void main() {
   test(
     'recently added sync seeds target from detail when favorite list lags',
     () async {
-      final remote = _FakeFavoriteRepository(<int, FavoriteThreadsPage>{
+      final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
         1: _page(
           page: 1,
           totalCount: 1,
-          items: <FavoriteThread>[_favoriteThread(tid: '999', title: '旧收藏')],
+          items: <FavoriteThreadReference>[
+            _favoriteThread(tid: '999', title: '旧收藏'),
+          ],
         ),
       });
       final local = _MemoryLocalFavoriteRepository(
@@ -1432,15 +1471,101 @@ void main() {
       expect(detailLoadCount, 1);
       expect(result.detailLoadedCount, 1);
       expect(local.records['100']?.title, '主题100');
+      expect(local.records['100']?.remoteFavoriteId, isNull);
+      expect(local.records['100']?.favoritedAt, isNull);
       expect(local.records['100']?.contentKind, ThreadContentKind.comic);
       expect(local.records['100']?.detailLoadedAt, isNotNull);
       expect(queue.enqueuedRequests.single.comicId, 'yamibo:100');
     },
   );
+
+  test('capability insufficiency fails before thread cache mutation', () async {
+    final remote = _InsufficientCapabilityFavoriteRepository(
+      <int, FavoriteThreadDirectoryData>{
+        1: _page(
+          page: 1,
+          totalCount: 1,
+          items: <FavoriteThreadReference>[
+            _favoriteThread(tid: '100', title: '主题'),
+          ],
+        ),
+      },
+    );
+    final local = _MemoryLocalFavoriteRepository();
+    final service = _service(remoteRepository: remote, localRepository: local);
+
+    await expectLater(service.sync(), throwsStateError);
+
+    expect(local.upsertCallCount, 0);
+    expect(local.markRemovedCallCount, 0);
+    expect(local.records, isEmpty);
+  });
+
+  test('cross-page duplicate tid fails before thread cache mutation', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
+      1: _page(
+        page: 1,
+        totalCount: 3,
+        items: <FavoriteThreadReference>[
+          _favoriteThread(tid: '100', title: '主题一'),
+          _favoriteThread(tid: '200', title: '主题二'),
+        ],
+      ),
+      2: _page(
+        page: 2,
+        totalCount: 3,
+        items: <FavoriteThreadReference>[
+          _favoriteThread(tid: '200', title: '重复主题'),
+        ],
+      ),
+    });
+    final local = _MemoryLocalFavoriteRepository();
+    final service = _service(remoteRepository: remote, localRepository: local);
+
+    await expectLater(service.sync(), throwsStateError);
+
+    expect(local.upsertCallCount, 0);
+    expect(local.markRemovedCallCount, 0);
+    expect(local.records, isEmpty);
+  });
+
+  test('pagination drift fails before thread cache mutation', () async {
+    final remote = _FakeFavoriteRepository(<int, FavoriteThreadDirectoryData>{
+      1: _page(
+        page: 1,
+        totalCount: 3,
+        items: <FavoriteThreadReference>[
+          _favoriteThread(tid: '100', title: '主题一'),
+          _favoriteThread(tid: '200', title: '主题二'),
+        ],
+      ),
+      2: FavoriteThreadDirectoryData(
+        items: <FavoriteThreadReference>[
+          _favoriteThread(tid: '300', title: '主题三'),
+        ],
+        pagination: const FavoriteThreadPagination(
+          currentPage: 2,
+          pageSize: 3,
+          totalItems: 3,
+          totalPages: 1,
+          hasPrevious: true,
+          hasNext: false,
+        ),
+      ),
+    });
+    final local = _MemoryLocalFavoriteRepository();
+    final service = _service(remoteRepository: remote, localRepository: local);
+
+    await expectLater(service.sync(), throwsStateError);
+
+    expect(local.upsertCallCount, 0);
+    expect(local.markRemovedCallCount, 0);
+    expect(local.records, isEmpty);
+  });
 }
 
 NetworkFavoriteSyncService _service({
-  required FavoriteRepository remoteRepository,
+  required FavoriteThreadDirectoryRepository remoteRepository,
   required LocalFavoriteRepository localRepository,
   FavoriteDetailContextLoader? detailContextLoader,
   ComicFavoriteIngestService? comicIngestService,
@@ -1545,26 +1670,39 @@ class _FavoriteSnapshotStorageSpy implements DownloadStorageService {
       throw UnimplementedError();
 }
 
-class _FakeFavoriteRepository implements FavoriteRepository {
+class _FakeFavoriteRepository implements FavoriteThreadDirectoryRepository {
   _FakeFavoriteRepository(this.pages);
 
-  final Map<int, FavoriteThreadsPage> pages;
+  final Map<int, FavoriteThreadDirectoryData> pages;
   final List<int> requestedPages = <int>[];
 
   @override
-  Future<ApiResult<FavoriteThreadsPage>> getFavoriteThreads({
-    required int page,
-  }) async {
-    requestedPages.add(page);
-    return ApiSuccess(
-      pages[page] ??
-          _page(page: page, totalCount: 0, items: const <FavoriteThread>[]),
-    );
-  }
+  FavoriteThreadDirectorySourceCapabilities get capabilities =>
+      _testDirectorySourceCapabilities;
 
   @override
-  Future<ApiResult<List<FavoriteForum>>> getFavoriteForums() async {
-    return const ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[]);
+  Future<
+    DataReadResult<
+      FavoriteThreadDirectoryData,
+      FavoriteThreadDirectoryReadCapabilities
+    >
+  >
+  load(
+    FavoriteThreadDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
+    requestedPages.add(query.page);
+    return DataReadSuccess(
+      data:
+          pages[query.page] ??
+          _page(
+            page: query.page,
+            totalCount: 0,
+            items: const <FavoriteThreadReference>[],
+          ),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
+    );
   }
 }
 
@@ -1583,40 +1721,86 @@ class _DelayedFavoriteRepository extends _FakeFavoriteRepository {
   }
 
   @override
-  Future<ApiResult<FavoriteThreadsPage>> getFavoriteThreads({
-    required int page,
+  Future<
+    DataReadResult<
+      FavoriteThreadDirectoryData,
+      FavoriteThreadDirectoryReadCapabilities
+    >
+  >
+  load(
+    FavoriteThreadDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    requestedPages.add(page);
+    requestedPages.add(query.page);
     if (!_firstRequestStarted.isCompleted) {
       _firstRequestStarted.complete();
     }
     await _releaseGate.future;
-    return ApiSuccess(
-      pages[page] ??
-          _page(page: page, totalCount: 0, items: const <FavoriteThread>[]),
+    return DataReadSuccess(
+      data:
+          pages[query.page] ??
+          _page(
+            page: query.page,
+            totalCount: 0,
+            items: const <FavoriteThreadReference>[],
+          ),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
     );
   }
 }
 
-class _FailingFavoriteRepository implements FavoriteRepository {
+class _InsufficientCapabilityFavoriteRepository
+    extends _FakeFavoriteRepository {
+  _InsufficientCapabilityFavoriteRepository(super.pages);
+
+  @override
+  FavoriteThreadDirectorySourceCapabilities get capabilities =>
+      FavoriteThreadDirectorySourceCapabilities(
+        values: DataCapabilitySet<FavoriteThreadDirectoryCapability>.supported(
+          FavoriteThreadDirectoryCapability.values.where(
+            (capability) =>
+                capability != FavoriteThreadDirectoryCapability.totalItemCount,
+          ),
+        ),
+        paginationPrecision: PaginationPrecision.exact,
+      );
+}
+
+class _FailingFavoriteRepository implements FavoriteThreadDirectoryRepository {
   const _FailingFavoriteRepository(this.message);
 
   final String message;
 
   @override
-  Future<ApiResult<FavoriteThreadsPage>> getFavoriteThreads({
-    required int page,
-  }) async {
-    return ApiFailure<FavoriteThreadsPage>(
-      ApiError(type: ApiErrorType.network, message: message),
-    );
-  }
+  FavoriteThreadDirectorySourceCapabilities get capabilities =>
+      _testDirectorySourceCapabilities;
 
   @override
-  Future<ApiResult<List<FavoriteForum>>> getFavoriteForums() async {
-    return const ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[]);
+  Future<
+    DataReadResult<
+      FavoriteThreadDirectoryData,
+      FavoriteThreadDirectoryReadCapabilities
+    >
+  >
+  load(
+    FavoriteThreadDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
+    return DataReadFailure(
+      kind: DataReadFailureKind.network,
+      diagnosticMessage: message,
+    );
   }
 }
+
+final _testDirectorySourceCapabilities =
+    FavoriteThreadDirectorySourceCapabilities(
+      values: DataCapabilitySet<FavoriteThreadDirectoryCapability>.supported(
+        FavoriteThreadDirectoryCapability.values,
+      ),
+      paginationPrecision: PaginationPrecision.exact,
+    );
 
 class _FakeComicIngestService implements ComicFavoriteIngestService {
   final List<String> upsertedTids = <String>[];
@@ -1993,6 +2177,8 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   bool _comicBackfillCompleted = false;
   final Map<String, FavoriteThreadCacheRecord> records;
   final List<String> syncFailureMessages = <String>[];
+  int upsertCallCount = 0;
+  int markRemovedCallCount = 0;
 
   @override
   Future<int> countActiveThreads() async =>
@@ -2185,21 +2371,33 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<List<FavoriteThreadCacheRecord>> markRemovedTids(
     Set<String> activeRemoteTids,
   ) async {
+    markRemovedCallCount += 1;
     final removed = records.values
         .where(
           (record) => record.isActive && !activeRemoteTids.contains(record.tid),
         )
         .toList(growable: false);
     for (final record in removed) {
-      records[record.tid] = _cacheRecord(
+      records[record.tid] = FavoriteThreadCacheRecord(
         tid: record.tid,
+        remoteFavoriteId: record.remoteFavoriteId,
         title: record.title,
+        description: record.description,
+        authorName: record.authorName,
+        replyCount: record.replyCount,
+        favoritedAt: record.favoritedAt,
+        remoteOrder: record.remoteOrder,
+        sourceFid: record.sourceFid,
+        sourceTypeid: record.sourceTypeid,
+        sourceTagName: record.sourceTagName,
         contentKind: record.contentKind,
         workId: record.workId,
-        sourceTagName: record.sourceTagName,
         detailLoadedAt: record.detailLoadedAt,
         detailState: record.detailState,
+        firstSeenAt: record.firstSeenAt,
+        lastSeenAt: record.lastSeenAt,
         removedAt: DateTime(2026, 1, 2),
+        customCategoryId: record.customCategoryId,
       );
     }
     return removed;
@@ -2238,70 +2436,122 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
     required String? workId,
   }) async {
     final old = records[tid]!;
-    records[tid] = _cacheRecord(
+    records[tid] = FavoriteThreadCacheRecord(
       tid: tid,
+      remoteFavoriteId: old.remoteFavoriteId,
       title: old.title,
+      description: old.description,
+      authorName: old.authorName,
+      replyCount: old.replyCount,
+      favoritedAt: old.favoritedAt,
+      remoteOrder: old.remoteOrder,
+      sourceFid: fid,
+      sourceTypeid: typeid,
+      sourceTagName: tagName,
       contentKind: contentKind,
       workId: workId,
-      sourceTagName: tagName,
       detailLoadedAt: DateTime(2026, 1, 1),
       detailState: FavoriteDetailState.resolved,
+      firstSeenAt: old.firstSeenAt,
+      lastSeenAt: old.lastSeenAt,
+      removedAt: old.removedAt,
+      customCategoryId: old.customCategoryId,
     );
   }
 
   @override
   Future<void> markThreadDetailInvalid({required String tid}) async {
     final old = records[tid]!;
-    records[tid] = _cacheRecord(
+    records[tid] = FavoriteThreadCacheRecord(
       tid: tid,
+      remoteFavoriteId: old.remoteFavoriteId,
       title: old.title,
+      description: old.description,
+      authorName: old.authorName,
+      replyCount: old.replyCount,
+      favoritedAt: old.favoritedAt,
+      remoteOrder: old.remoteOrder,
+      sourceFid: old.sourceFid,
+      sourceTypeid: old.sourceTypeid,
+      sourceTagName: old.sourceTagName,
       contentKind: ThreadContentKind.unknown,
+      workId: old.workId,
       detailLoadedAt: DateTime(2026, 1, 1),
       detailState: FavoriteDetailState.invalid,
+      firstSeenAt: old.firstSeenAt,
+      lastSeenAt: old.lastSeenAt,
+      removedAt: old.removedAt,
+      customCategoryId: old.customCategoryId,
     );
   }
 
   @override
-  Future<int> upsertRemotePage({
-    required FavoriteThreadsPage page,
-    required int pageStartOrder,
-  }) async {
-    for (final item in page.items) {
-      records[item.tid] =
-          records[item.tid] ??
-          _cacheRecord(
-            tid: item.tid,
-            title: item.title,
-            contentKind: ThreadContentKind.forum,
-          );
+  Future<int> upsertRemoteThreads(List<FavoriteThreadCacheUpsert> items) async {
+    upsertCallCount += 1;
+    final now = DateTime(2026, 1, 1);
+    for (final item in items) {
+      final old = records[item.tid];
+      records[item.tid] = FavoriteThreadCacheRecord(
+        tid: item.tid,
+        remoteFavoriteId: item.remoteFavoriteId,
+        title: item.title,
+        description: item.description,
+        authorName: item.authorName,
+        replyCount: item.replyCount,
+        favoritedAt: item.favoritedAt,
+        remoteOrder: item.remoteOrder,
+        sourceFid: old?.sourceFid,
+        sourceTypeid: old?.sourceTypeid,
+        sourceTagName: old?.sourceTagName,
+        contentKind: old?.contentKind ?? ThreadContentKind.unknown,
+        workId: old?.workId,
+        detailLoadedAt: old?.detailLoadedAt,
+        detailState: old?.detailState ?? FavoriteDetailState.pending,
+        firstSeenAt: old?.firstSeenAt ?? now,
+        lastSeenAt: now,
+        removedAt: null,
+        customCategoryId: old?.customCategoryId,
+      );
     }
-    return page.items.length;
+    return items.length;
   }
 }
 
-FavoriteThreadsPage _page({
+FavoriteThreadDirectoryData _page({
   required int page,
   required int totalCount,
-  required List<FavoriteThread> items,
+  required List<FavoriteThreadReference> items,
 }) {
-  return FavoriteThreadsPage(
-    page: page,
-    perPage: 2,
-    totalCount: totalCount,
+  const pageSize = 2;
+  final totalPages = totalCount == 0 ? 1 : (totalCount / pageSize).ceil();
+  return FavoriteThreadDirectoryData(
     items: items,
+    pagination: FavoriteThreadPagination(
+      currentPage: page,
+      pageSize: pageSize,
+      totalItems: totalCount,
+      totalPages: totalPages,
+      hasPrevious: page > 1,
+      hasNext: page < totalPages,
+    ),
   );
 }
 
-FavoriteThread _favoriteThread({required String tid, required String title}) {
-  return FavoriteThread(
-    favid: 'fav-$tid',
+FavoriteThreadReference _favoriteThread({
+  required String tid,
+  required String title,
+}) {
+  return FavoriteThreadReference(
     tid: tid,
     title: title,
+    remoteFavoriteId: 'fav-$tid',
     description: '',
-    author: '作者',
-    replies: 0,
-    url: 'thread-$tid-1-1.html',
-    dateline: 1767225600,
+    authorName: '作者',
+    replyCount: 0,
+    favoritedAt: DateTime.fromMillisecondsSinceEpoch(
+      1767225600 * Duration.millisecondsPerSecond,
+      isUtc: true,
+    ),
   );
 }
 
@@ -2319,9 +2569,9 @@ FavoriteThreadCacheRecord _cacheRecord({
 }) {
   return FavoriteThreadCacheRecord(
     tid: tid,
-    favid: 'fav-$tid',
+    remoteFavoriteId: 'fav-$tid',
     title: title,
-    replies: 0,
+    replyCount: 0,
     sourceFid: sourceFid,
     sourceTypeid: sourceTypeid,
     sourceTagName: sourceTagName,

@@ -23,7 +23,6 @@ import 'package:y300/features/favorites/data/services/favorite_first_sync_reques
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
@@ -1775,10 +1774,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<void> markThreadDetailInvalid({required String tid}) async {}
 
   @override
-  Future<int> upsertRemotePage({
-    required FavoriteThreadsPage page,
-    required int pageStartOrder,
-  }) async => 0;
+  Future<int> upsertRemoteThreads(
+    List<FavoriteThreadCacheUpsert> items,
+  ) async => 0;
 }
 
 class _FakeLibraryStateRepository implements LibraryStateRepository {

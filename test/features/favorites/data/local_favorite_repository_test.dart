@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -32,19 +31,11 @@ void main() {
     test(
       'loads visible system categories and keeps default free from comic and novel',
       () async {
-        await repository.upsertRemotePage(
-          page: FavoriteThreadsPage(
-            page: 1,
-            perPage: 20,
-            totalCount: 3,
-            items: <FavoriteThread>[
-              _thread(tid: '100', title: '漫画'),
-              _thread(tid: '200', title: '小说'),
-              _thread(tid: '300', title: '论坛'),
-            ],
-          ),
-          pageStartOrder: 0,
-        );
+        await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+          _thread(tid: '100', title: '漫画'),
+          _thread(tid: '200', title: '小说'),
+          _thread(tid: '300', title: '论坛'),
+        ]);
         await repository.updateThreadDetailMeta(
           tid: '100',
           fid: '30',
@@ -96,15 +87,9 @@ void main() {
     );
 
     test('custom category overrides system category', () async {
-      await repository.upsertRemotePage(
-        page: FavoriteThreadsPage(
-          page: 1,
-          perPage: 20,
-          totalCount: 1,
-          items: <FavoriteThread>[_thread(tid: '100', title: '漫画')],
-        ),
-        pageStartOrder: 0,
-      );
+      await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+        _thread(tid: '100', title: '漫画'),
+      ]);
       await repository.updateThreadDetailMeta(
         tid: '100',
         fid: '30',
@@ -128,19 +113,11 @@ void main() {
     test(
       'invalid system category appears on demand and preserves custom assignment',
       () async {
-        await repository.upsertRemotePage(
-          page: FavoriteThreadsPage(
-            page: 1,
-            perPage: 20,
-            totalCount: 3,
-            items: <FavoriteThread>[
-              _thread(tid: '100', title: '自定义分类中的无效帖'),
-              _thread(tid: '200', title: '无效帖'),
-              _thread(tid: '300', title: '普通帖'),
-            ],
-          ),
-          pageStartOrder: 0,
-        );
+        await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+          _thread(tid: '100', title: '自定义分类中的无效帖'),
+          _thread(tid: '200', title: '无效帖'),
+          _thread(tid: '300', title: '普通帖'),
+        ]);
         final customId = await repository.createCategory(name: '保留分类');
         await repository.moveThreadToCategory(
           tid: '100',
@@ -207,18 +184,10 @@ void main() {
     );
 
     test('markRemovedTids returns removed active records', () async {
-      await repository.upsertRemotePage(
-        page: FavoriteThreadsPage(
-          page: 1,
-          perPage: 20,
-          totalCount: 2,
-          items: <FavoriteThread>[
-            _thread(tid: '100', title: '保留'),
-            _thread(tid: '200', title: '移除'),
-          ],
-        ),
-        pageStartOrder: 0,
-      );
+      await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+        _thread(tid: '100', title: '保留'),
+        _thread(tid: '200', title: '移除'),
+      ]);
 
       final removed = await repository.markRemovedTids(const <String>{'100'});
       final active = await repository.getActiveTids();
@@ -230,20 +199,12 @@ void main() {
     test(
       'markRemovedByWorkId marks only matching active rows removed',
       () async {
-        await repository.upsertRemotePage(
-          page: FavoriteThreadsPage(
-            page: 1,
-            perPage: 20,
-            totalCount: 4,
-            items: <FavoriteThread>[
-              _thread(tid: '100', title: '漫画一'),
-              _thread(tid: '101', title: '漫画二'),
-              _thread(tid: '102', title: '漫画三'),
-              _thread(tid: '200', title: '小说一'),
-            ],
-          ),
-          pageStartOrder: 0,
-        );
+        await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+          _thread(tid: '100', title: '漫画一'),
+          _thread(tid: '101', title: '漫画二'),
+          _thread(tid: '102', title: '漫画三'),
+          _thread(tid: '200', title: '小说一'),
+        ]);
         await repository.updateThreadDetailMeta(
           tid: '100',
           fid: '30',
@@ -292,20 +253,12 @@ void main() {
     );
 
     test('markRemovedByTids marks only target active tids removed', () async {
-      await repository.upsertRemotePage(
-        page: FavoriteThreadsPage(
-          page: 1,
-          perPage: 20,
-          totalCount: 4,
-          items: <FavoriteThread>[
-            _thread(tid: '100', title: '漫画一'),
-            _thread(tid: '101', title: '漫画二'),
-            _thread(tid: '102', title: '漫画三'),
-            _thread(tid: '200', title: '小说一'),
-          ],
-        ),
-        pageStartOrder: 0,
-      );
+      await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+        _thread(tid: '100', title: '漫画一'),
+        _thread(tid: '101', title: '漫画二'),
+        _thread(tid: '102', title: '漫画三'),
+        _thread(tid: '200', title: '小说一'),
+      ]);
       await repository.updateThreadDetailMeta(
         tid: '100',
         fid: '30',
@@ -364,19 +317,11 @@ void main() {
     test(
       'countMissingDetailRecords ignores loaded and removed favorites',
       () async {
-        await repository.upsertRemotePage(
-          page: FavoriteThreadsPage(
-            page: 1,
-            perPage: 20,
-            totalCount: 3,
-            items: <FavoriteThread>[
-              _thread(tid: '100', title: '已解析'),
-              _thread(tid: '200', title: '待解析'),
-              _thread(tid: '300', title: '已移除'),
-            ],
-          ),
-          pageStartOrder: 0,
-        );
+        await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+          _thread(tid: '100', title: '已解析'),
+          _thread(tid: '200', title: '待解析'),
+          _thread(tid: '300', title: '已移除'),
+        ]);
         await repository.updateThreadDetailMeta(
           tid: '100',
           fid: '30',
@@ -395,19 +340,11 @@ void main() {
       'comic auto refresh backfill selects active comics with empty or current-only episodes',
       () async {
         final db = await ComicLocalDb.open(databaseName: dbName);
-        await repository.upsertRemotePage(
-          page: FavoriteThreadsPage(
-            page: 1,
-            perPage: 20,
-            totalCount: 3,
-            items: <FavoriteThread>[
-              _thread(tid: '100', title: '空章节漫画'),
-              _thread(tid: '200', title: '当前帖漫画'),
-              _thread(tid: '300', title: '已补全漫画'),
-            ],
-          ),
-          pageStartOrder: 0,
-        );
+        await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+          _thread(tid: '100', title: '空章节漫画'),
+          _thread(tid: '200', title: '当前帖漫画'),
+          _thread(tid: '300', title: '已补全漫画'),
+        ]);
         for (final tid in <String>['100', '200', '300']) {
           await repository.updateThreadDetailMeta(
             tid: tid,
@@ -491,18 +428,10 @@ void main() {
         'custom_cover_local_path': '/cache/novel-custom.jpg',
         'updated_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
       });
-      await repository.upsertRemotePage(
-        page: FavoriteThreadsPage(
-          page: 1,
-          perPage: 20,
-          totalCount: 2,
-          items: <FavoriteThread>[
-            _thread(tid: '100', title: '漫画'),
-            _thread(tid: '200', title: '小说'),
-          ],
-        ),
-        pageStartOrder: 0,
-      );
+      await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+        _thread(tid: '100', title: '漫画'),
+        _thread(tid: '200', title: '小说'),
+      ]);
       await repository.updateThreadDetailMeta(
         tid: '100',
         fid: '30',
@@ -582,15 +511,9 @@ void main() {
           'created_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
           'updated_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
         });
-        await repository.upsertRemotePage(
-          page: FavoriteThreadsPage(
-            page: 1,
-            perPage: 20,
-            totalCount: 1,
-            items: <FavoriteThread>[_thread(tid: '100', title: '收藏漫画')],
-          ),
-          pageStartOrder: 0,
-        );
+        await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+          _thread(tid: '100', title: '收藏漫画'),
+        ]);
         await repository.updateThreadDetailMeta(
           tid: '100',
           fid: '30',
@@ -644,15 +567,20 @@ void main() {
   });
 }
 
-FavoriteThread _thread({required String tid, required String title}) {
-  return FavoriteThread(
-    favid: 'fav-$tid',
+FavoriteThreadCacheUpsert _thread({
+  required String tid,
+  required String title,
+}) {
+  return FavoriteThreadCacheUpsert(
+    remoteFavoriteId: 'fav-$tid',
     tid: tid,
     title: title,
     description: '',
-    author: '作者',
-    replies: 0,
-    url: 'thread-$tid-1-1.html',
-    dateline: 1767225600,
+    authorName: '作者',
+    replyCount: 0,
+    favoritedAt: DateTime.fromMillisecondsSinceEpoch(
+      1767225600 * Duration.millisecondsPerSecond,
+      isUtc: true,
+    ),
   );
 }

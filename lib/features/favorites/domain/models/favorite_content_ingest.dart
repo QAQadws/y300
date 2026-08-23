@@ -121,7 +121,7 @@ class FavoriteContentIngestRequest {
   final FavoriteIngestOptions options;
 
   DateTime get favoriteAddedAt =>
-      context.record.dateline ?? context.record.firstSeenAt;
+      context.record.favoritedAt ?? context.record.firstSeenAt;
 }
 
 class FavoriteContentIngestResult {

@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/favorites/data/repositories/favorite_directory_repositories.dart';
+import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
+import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,6 +34,7 @@ final forumWebViewCompletionTargetProvider =
 class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
   late ForumWebViewNavigator _navigator;
   late ForumFavoriteRepository _favoriteRepository;
+  late FavoriteForumDirectoryRepository _favoriteDirectoryRepository;
   ForumWebViewState? _lastKnownState;
   dynamic _keepAliveLink;
   int _pendingAsyncOperations = 0;
@@ -41,6 +45,9 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     _disposed = false;
     _navigator = ref.read(forumWebViewNavigatorProvider);
     _favoriteRepository = ref.read(forumFavoriteRepositoryProvider);
+    _favoriteDirectoryRepository = ref.read(
+      favoriteForumDirectoryRepositoryProvider,
+    );
     ref.onDispose(() {
       _disposed = true;
       _keepAliveLink?.close();
@@ -62,7 +69,9 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
       boardName: null,
       pageTitle: null,
       canGoBack: false,
-      favoriteForums: const <FavoriteForum>[],
+      favoriteForums: const <FavoriteForumEntry>[],
+      favoriteForumCapabilities: null,
+      favoriteForumMetadata: null,
       currentFavoriteForum: null,
       isFavoriteMutationLoading: false,
       threadDetailMenu: null,
@@ -229,32 +238,44 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     );
   }
 
-  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
+  Future<
+    DataReadResult<
+      FavoriteForumDirectoryData,
+      FavoriteForumDirectoryReadCapabilities
+    >
+  >
+  loadFavoriteForums() async {
     return _runKeptAlive(() async {
-      final result = await _favoriteRepository.loadFavoriteForums();
+      final result = await _favoriteDirectoryRepository.load(
+        const FavoriteForumDirectoryQuery(),
+      );
       if (_disposed) {
         return result;
       }
-      return result.when(
-        success: (forums) {
-          final deduped = _dedupeFavoriteForums(forums);
-          final current = _currentState;
-          final currentFavoriteForum = _matchCurrentFavoriteForum(
-            pageKind: current.pageKind,
-            fid: current.fid,
-            favoriteForums: deduped,
-          );
-          _setState(
-            current.copyWith(
-              favoriteForums: deduped,
-              currentFavoriteForum: currentFavoriteForum,
-              clearCurrentFavoriteForum: currentFavoriteForum == null,
-            ),
-          );
-          return ApiSuccess<List<FavoriteForum>>(deduped);
-        },
-        failure: ApiFailure.new,
-      );
+      if (result
+          case final DataReadSuccess<
+                FavoriteForumDirectoryData,
+                FavoriteForumDirectoryReadCapabilities
+              >
+              success) {
+        final forums = success.data.items;
+        final current = _currentState;
+        final currentFavoriteForum = _matchCurrentFavoriteForum(
+          pageKind: current.pageKind,
+          fid: current.fid,
+          favoriteForums: forums,
+        );
+        _setState(
+          current.copyWith(
+            favoriteForums: forums,
+            favoriteForumCapabilities: success.capabilities,
+            favoriteForumMetadata: success.metadata,
+            currentFavoriteForum: currentFavoriteForum,
+            clearCurrentFavoriteForum: currentFavoriteForum == null,
+          ),
+        );
+      }
+      return result;
     });
   }
 
@@ -285,11 +306,23 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
         ApiError(type: ApiErrorType.business, message: '当前版块尚未收藏'),
       );
     }
+    final capabilities = _currentState.favoriteForumCapabilities;
+    final remoteFavoriteId = currentFavoriteForum.remoteFavoriteId?.trim();
+    if (capabilities == null ||
+        !capabilities.supports(
+          FavoriteForumDirectoryCapability.stableRemoteFavoriteIdentity,
+        ) ||
+        remoteFavoriteId == null ||
+        remoteFavoriteId.isEmpty) {
+      return const ApiFailure<ForumFavoriteMutationResult>(
+        ApiError(type: ApiErrorType.business, message: '找不到当前版块的收藏标识'),
+      );
+    }
 
     return _runKeptAlive(() async {
       _setFavoriteMutationLoading(true);
       final result = await _favoriteRepository.unfavoriteForum(
-        favid: currentFavoriteForum.favid,
+        favid: remoteFavoriteId,
       );
       if (result.isSuccess) {
         await loadFavoriteForums();
@@ -302,9 +335,27 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
   Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForumByFavid({
     required String favid,
   }) async {
+    final remoteFavoriteId = favid.trim();
+    final current = _currentState;
+    final canUnfavorite =
+        remoteFavoriteId.isNotEmpty &&
+        current.favoriteForumCapabilities?.supports(
+              FavoriteForumDirectoryCapability.stableRemoteFavoriteIdentity,
+            ) ==
+            true &&
+        current.favoriteForums.any(
+          (forum) => forum.remoteFavoriteId?.trim() == remoteFavoriteId,
+        );
+    if (!canUnfavorite) {
+      return const ApiFailure<ForumFavoriteMutationResult>(
+        ApiError(type: ApiErrorType.business, message: '找不到当前版块的收藏标识'),
+      );
+    }
     return _runKeptAlive(() async {
       _setFavoriteMutationLoading(true);
-      final result = await _favoriteRepository.unfavoriteForum(favid: favid);
+      final result = await _favoriteRepository.unfavoriteForum(
+        favid: remoteFavoriteId,
+      );
       if (result.isSuccess) {
         await loadFavoriteForums();
       }
@@ -420,23 +471,10 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     return trimmed;
   }
 
-  List<FavoriteForum> _dedupeFavoriteForums(List<FavoriteForum> source) {
-    final seen = <String>{};
-    final output = <FavoriteForum>[];
-    for (final forum in source) {
-      final fid = forum.fid.trim();
-      if (fid.isEmpty || !seen.add(fid)) {
-        continue;
-      }
-      output.add(forum);
-    }
-    return output;
-  }
-
-  FavoriteForum? _matchCurrentFavoriteForum({
+  FavoriteForumEntry? _matchCurrentFavoriteForum({
     required ForumWebViewPageKind pageKind,
     required String? fid,
-    required List<FavoriteForum> favoriteForums,
+    required List<FavoriteForumEntry> favoriteForums,
   }) {
     if (pageKind != ForumWebViewPageKind.forumDisplay || fid == null) {
       return null;

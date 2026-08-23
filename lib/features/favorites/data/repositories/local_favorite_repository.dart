@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -38,10 +37,7 @@ abstract class LocalFavoriteRepository {
 
   Future<void> markSyncFailure(String message);
 
-  Future<int> upsertRemotePage({
-    required FavoriteThreadsPage page,
-    required int pageStartOrder,
-  });
+  Future<int> upsertRemoteThreads(List<FavoriteThreadCacheUpsert> items);
 
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({
     int limit = 20,
@@ -297,17 +293,13 @@ class SqfliteLocalFavoriteRepository
   }
 
   @override
-  Future<int> upsertRemotePage({
-    required FavoriteThreadsPage page,
-    required int pageStartOrder,
-  }) async {
+  Future<int> upsertRemoteThreads(List<FavoriteThreadCacheUpsert> items) async {
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
     var changed = 0;
 
     await db.transaction((txn) async {
-      for (var index = 0; index < page.items.length; index++) {
-        final item = page.items[index];
+      for (final item in items) {
         final tid = item.tid.trim();
         if (tid.isEmpty) {
           continue;
@@ -324,14 +316,17 @@ class SqfliteLocalFavoriteRepository
 
         final values = <String, Object?>{
           'tid': tid,
-          'favid': _normalizeNullable(item.favid),
+          'favid': _normalizeNullable(item.remoteFavoriteId),
           'title': _nonEmpty(item.title, fallback: '未命名收藏'),
           'description': _normalizeNullable(item.description),
-          'author': _normalizeNullable(item.author),
-          'replies': item.replies,
-          'url': _normalizeNullable(item.url),
-          'dateline': item.dateline == 0 ? null : item.dateline,
-          'remote_order': pageStartOrder + index,
+          'author': _normalizeNullable(item.authorName),
+          'replies': item.replyCount,
+          'url': null,
+          'dateline': item.favoritedAt?.millisecondsSinceEpoch == null
+              ? null
+              : item.favoritedAt!.millisecondsSinceEpoch ~/
+                    Duration.millisecondsPerSecond,
+          'remote_order': item.remoteOrder,
           'first_seen_at': firstSeenAt,
           'last_seen_at': now,
           'removed_at': null,
@@ -1122,14 +1117,14 @@ class SqfliteLocalFavoriteRepository
       ''',
       <Object>['favorite', record.shelfWorkId],
     );
-    final addedAt = record.dateline ?? record.firstSeenAt;
-    final totalCount = max(1, record.replies + 1);
+    final addedAt = record.favoritedAt ?? record.firstSeenAt;
+    final totalCount = max(1, record.replyCount + 1);
     final cover = await _loadModuleCover(db, record);
     return LibraryWorkItem(
       workId: record.shelfWorkId,
       categoryId: record.resolvedCategoryId,
       title: record.title,
-      secondaryName: record.author,
+      secondaryName: record.authorName,
       coverImageUrl: cover.coverImageUrl,
       customCoverImageUrl: cover.customCoverImageUrl,
       coverLocalPath: cover.coverLocalPath,
@@ -1154,7 +1149,7 @@ class SqfliteLocalFavoriteRepository
       totalChapterCount: totalCount,
       readChapterCount: 0,
       addedAt: addedAt,
-      workUpdatedAt: record.dateline,
+      workUpdatedAt: record.favoritedAt,
       lastFetchedAt: record.detailLoadedAt,
       hasTags: tagRows.isNotEmpty,
     );
@@ -1372,13 +1367,12 @@ class SqfliteLocalFavoriteRepository
   FavoriteThreadCacheRecord _recordFromRow(Map<String, Object?> row) {
     return FavoriteThreadCacheRecord(
       tid: row['tid'] as String,
-      favid: row['favid'] as String?,
+      remoteFavoriteId: row['favid'] as String?,
       title: row['title'] as String,
       description: row['description'] as String?,
-      author: row['author'] as String?,
-      replies: row['replies'] as int? ?? 0,
-      url: row['url'] as String?,
-      dateline: _toDatelineDate(row['dateline']),
+      authorName: row['author'] as String?,
+      replyCount: row['replies'] as int? ?? 0,
+      favoritedAt: _toDatelineDate(row['dateline']),
       remoteOrder: row['remote_order'] as int?,
       sourceFid: row['source_fid'] as String?,
       sourceTypeid: row['source_typeid'] as String?,

@@ -10,13 +10,10 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 /// 一个收藏帖在关联模型中的最小引用。
 class FavoriteThreadRef {
-  const FavoriteThreadRef({required this.tid, this.favid, this.categoryId});
+  const FavoriteThreadRef({required this.tid, this.categoryId});
 
   /// 取消收藏的唯一键。
   final String tid;
-
-  /// 收藏列表辅助元数据；删除逻辑不依赖它。
-  final String? favid;
 
   /// 该收藏帖当前所属的收藏分类（可空）。
   final String? categoryId;

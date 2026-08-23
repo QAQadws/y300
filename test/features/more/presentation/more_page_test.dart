@@ -15,7 +15,6 @@ import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_unused_image_management_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
@@ -1012,11 +1011,6 @@ class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
     return const ApiSuccess<ForumFavoriteMutationResult>(
       ForumFavoriteMutationResult(message: '收藏成功'),
     );
-  }
-
-  @override
-  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
-    return const ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[]);
   }
 
   @override

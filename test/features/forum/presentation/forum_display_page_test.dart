@@ -19,7 +19,9 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/favorites/data/repositories/favorite_directory_repositories.dart';
+import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
+import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/providers/forum_display_repository_providers.dart';
 import 'package:y300/features/forum/domain/models/forum_display_models.dart';
@@ -166,7 +168,7 @@ void main() {
         );
       });
       final favoriteRepository = _FakeForumFavoriteRepository(
-        favoriteForums: <FavoriteForum>[
+        favoriteForums: <FavoriteForumEntry>[
           _favoriteForum(fid: '2', favid: 'fav-2', title: '公告区'),
         ],
       );
@@ -1623,6 +1625,10 @@ Widget _buildTestApp(
     imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
     if (favoriteRepository != null)
       forumFavoriteRepositoryProvider.overrideWithValue(favoriteRepository),
+    if (favoriteRepository is FavoriteForumDirectoryRepository)
+      favoriteForumDirectoryRepositoryProvider.overrideWithValue(
+        favoriteRepository as FavoriteForumDirectoryRepository,
+      ),
     if (threadRepository != null)
       threadRepositoryProvider.overrideWithValue(threadRepository),
     ...extraOverrides,
@@ -1833,35 +1839,53 @@ class _FakeForumDisplayRepository implements ForumDisplayRepository {
   }
 }
 
-FavoriteForum _favoriteForum({
+FavoriteForumEntry _favoriteForum({
   required String fid,
   required String favid,
   required String title,
 }) {
-  return FavoriteForum(
-    favid: favid,
+  return FavoriteForumEntry(
     fid: fid,
     title: title,
+    remoteFavoriteId: favid,
     description: '',
-    threads: 0,
-    posts: 0,
-    todayPosts: 0,
+    threadCount: 0,
+    postCount: 0,
+    todayPostCount: 0,
   );
 }
 
-class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
-  _FakeForumFavoriteRepository({List<FavoriteForum>? favoriteForums})
-    : favoriteForums = favoriteForums ?? <FavoriteForum>[];
+class _FakeForumFavoriteRepository
+    implements ForumFavoriteRepository, FavoriteForumDirectoryRepository {
+  _FakeForumFavoriteRepository({List<FavoriteForumEntry>? favoriteForums})
+    : favoriteForums = favoriteForums ?? <FavoriteForumEntry>[];
 
-  final List<FavoriteForum> favoriteForums;
+  final List<FavoriteForumEntry> favoriteForums;
   final favoriteFids = <String>[];
   final unfavoriteFavids = <String>[];
   int loadCallCount = 0;
 
   @override
-  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
+  FavoriteForumDirectorySourceCapabilities get capabilities =>
+      _favoriteForumDirectoryCapabilities;
+
+  @override
+  Future<
+    DataReadResult<
+      FavoriteForumDirectoryData,
+      FavoriteForumDirectoryReadCapabilities
+    >
+  >
+  load(
+    FavoriteForumDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
     loadCallCount += 1;
-    return ApiSuccess<List<FavoriteForum>>(favoriteForums);
+    return DataReadSuccess(
+      data: FavoriteForumDirectoryData(items: favoriteForums),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
+    );
   }
 
   @override
@@ -1884,6 +1908,13 @@ class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
     );
   }
 }
+
+final _favoriteForumDirectoryCapabilities =
+    FavoriteForumDirectorySourceCapabilities(
+      values: DataCapabilitySet<FavoriteForumDirectoryCapability>.supported(
+        FavoriteForumDirectoryCapability.values,
+      ),
+    );
 
 class _ProjectionPrefixBatchConversionService
     implements PlainTextBatchConversionService {

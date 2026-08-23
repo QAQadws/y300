@@ -4,14 +4,10 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/discuz_response.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/utils/parse_utils.dart';
-import 'package:y300/features/favorites/data/repositories/favorite_repository.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/profile/data/repositories/profile_repository.dart';
 
 abstract class ForumFavoriteRepository {
-  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums();
-
   Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
     required String fid,
   });
@@ -25,20 +21,11 @@ class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
   DefaultForumFavoriteRepository({
     required ApiClient apiClient,
     required ProfileRepository profileRepository,
-    required FavoriteRepository favoriteRepository,
   }) : _apiClient = apiClient,
-       _profileRepository = profileRepository,
-       _favoriteRepository = favoriteRepository;
+       _profileRepository = profileRepository;
 
   final ApiClient _apiClient;
   final ProfileRepository _profileRepository;
-  final FavoriteRepository _favoriteRepository;
-
-  @override
-  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() {
-    return _favoriteRepository.getFavoriteForums();
-  }
-
   @override
   Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
     required String fid,
@@ -241,6 +228,5 @@ final forumFavoriteRepositoryProvider = Provider<ForumFavoriteRepository>((
   return DefaultForumFavoriteRepository(
     apiClient: ref.watch(apiClientProvider),
     profileRepository: ref.watch(profileRepositoryProvider),
-    favoriteRepository: ref.watch(favoriteRepositoryProvider),
   );
 });

@@ -1,5 +1,9 @@
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:y300/features/favorites/data/repositories/favorite_directory_repositories.dart';
+import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
+import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,7 +99,7 @@ void main() {
     'forum display completion refreshes favorite forums and matches current forum',
     () async {
       final favoriteRepository = _FakeForumFavoriteRepository(
-        favoriteForums: <FavoriteForum>[
+        favoriteForums: <FavoriteForumEntry>[
           _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
           _favoriteForum(fid: '66', favid: 'fav-66', title: '讨论区'),
         ],
@@ -384,7 +388,7 @@ void main() {
 
   test('favoriteCurrentForum refreshes favorite state after success', () async {
     final favoriteRepository = _FakeForumFavoriteRepository(
-      favoriteForums: const <FavoriteForum>[],
+      favoriteForums: const <FavoriteForumEntry>[],
       onFavorite: (fid) =>
           _favoriteForum(fid: fid, favid: 'fav-$fid', title: '版块$fid'),
     );
@@ -409,7 +413,7 @@ void main() {
     'unfavoriteCurrentForum refreshes favorite state after success',
     () async {
       final favoriteRepository = _FakeForumFavoriteRepository(
-        favoriteForums: <FavoriteForum>[
+        favoriteForums: <FavoriteForumEntry>[
           _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
         ],
       );
@@ -441,7 +445,7 @@ void main() {
 
   test('unfavoriteForumByFavid refreshes cached favorite forums', () async {
     final favoriteRepository = _FakeForumFavoriteRepository(
-      favoriteForums: <FavoriteForum>[
+      favoriteForums: <FavoriteForumEntry>[
         _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
         _favoriteForum(fid: '66', favid: 'fav-66', title: '讨论区'),
       ],
@@ -460,19 +464,51 @@ void main() {
     final state = await container.read(forumWebViewControllerProvider.future);
     expect(state.favoriteForums.map((item) => item.fid), <String>['66']);
   });
+
+  test(
+    'unfavoriteForumByFavid fails closed without identity capability',
+    () async {
+      final favoriteRepository = _FakeForumFavoriteRepository(
+        favoriteForums: <FavoriteForumEntry>[
+          _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
+        ],
+        sourceCapabilities: _unsupportedRemoteIdentityCapabilities,
+      );
+      final container = _createContainer(
+        favoriteRepository: favoriteRepository,
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(
+        forumWebViewControllerProvider.notifier,
+      );
+      final preload = await controller.loadFavoriteForums();
+      expect(preload.isSuccess, isTrue);
+
+      final result = await controller.unfavoriteForumByFavid(favid: 'fav-55');
+
+      expect(result, isA<ApiFailure<ForumFavoriteMutationResult>>());
+      expect(favoriteRepository.unfavoriteCalls, isEmpty);
+    },
+  );
 }
 
 ProviderContainer _createContainer({
   ForumTagRepository? repository,
-  ForumFavoriteRepository? favoriteRepository,
+  _FakeForumFavoriteRepository? favoriteRepository,
 }) {
+  final resolvedFavoriteRepository =
+      favoriteRepository ?? _FakeForumFavoriteRepository();
   final container = ProviderContainer(
     overrides: [
       forumTagRepositoryProvider.overrideWithValue(
         repository ?? _FakeForumTagRepository(_defaultBoards),
       ),
       forumFavoriteRepositoryProvider.overrideWithValue(
-        favoriteRepository ?? _FakeForumFavoriteRepository(),
+        resolvedFavoriteRepository,
+      ),
+      favoriteForumDirectoryRepositoryProvider.overrideWithValue(
+        resolvedFavoriteRepository,
       ),
     ],
   );
@@ -495,32 +531,36 @@ class _FakeForumTagRepository implements ForumTagRepository {
   }
 }
 
-FavoriteForum _favoriteForum({
+FavoriteForumEntry _favoriteForum({
   required String fid,
   required String favid,
   required String title,
 }) {
-  return FavoriteForum(
-    favid: favid,
+  return FavoriteForumEntry(
     fid: fid,
     title: title,
+    remoteFavoriteId: favid,
     description: '',
-    threads: 0,
-    posts: 0,
-    todayPosts: 0,
+    threadCount: 0,
+    postCount: 0,
+    todayPostCount: 0,
   );
 }
 
-class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
+class _FakeForumFavoriteRepository
+    implements ForumFavoriteRepository, FavoriteForumDirectoryRepository {
   _FakeForumFavoriteRepository({
-    List<FavoriteForum>? favoriteForums,
+    List<FavoriteForumEntry>? favoriteForums,
     this.onFavorite,
-  }) : favoriteForums = List<FavoriteForum>.from(
-         favoriteForums ?? const <FavoriteForum>[],
-       );
+    FavoriteForumDirectorySourceCapabilities? sourceCapabilities,
+  }) : favoriteForums = List<FavoriteForumEntry>.from(
+         favoriteForums ?? const <FavoriteForumEntry>[],
+       ),
+       _capabilities = sourceCapabilities ?? _sourceCapabilities;
 
-  List<FavoriteForum> favoriteForums;
-  final FavoriteForum Function(String fid)? onFavorite;
+  List<FavoriteForumEntry> favoriteForums;
+  final FavoriteForumEntry Function(String fid)? onFavorite;
+  final FavoriteForumDirectorySourceCapabilities _capabilities;
 
   final List<String> favoriteCalls = <String>[];
   final List<String> unfavoriteCalls = <String>[];
@@ -538,7 +578,7 @@ class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
       final forum =
           onFavorite?.call(fid) ??
           _favoriteForum(fid: fid, favid: 'fav-$fid', title: '版块$fid');
-      favoriteForums = <FavoriteForum>[
+      favoriteForums = <FavoriteForumEntry>[
         ...favoriteForums.where((item) => item.fid != forum.fid),
         forum,
       ];
@@ -547,10 +587,26 @@ class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
   }
 
   @override
-  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
+  FavoriteForumDirectorySourceCapabilities get capabilities => _capabilities;
+
+  @override
+  Future<
+    DataReadResult<
+      FavoriteForumDirectoryData,
+      FavoriteForumDirectoryReadCapabilities
+    >
+  >
+  load(
+    FavoriteForumDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
     loadCallCount += 1;
-    return ApiSuccess<List<FavoriteForum>>(
-      List<FavoriteForum>.from(favoriteForums),
+    return DataReadSuccess(
+      data: FavoriteForumDirectoryData(
+        items: List<FavoriteForumEntry>.from(favoriteForums),
+      ),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
     );
   }
 
@@ -564,9 +620,29 @@ class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
     );
     if (result.isSuccess) {
       favoriteForums = favoriteForums
-          .where((item) => item.favid != favid)
+          .where((item) => item.remoteFavoriteId != favid)
           .toList();
     }
     return result;
   }
 }
+
+final _sourceCapabilities = FavoriteForumDirectorySourceCapabilities(
+  values: DataCapabilitySet<FavoriteForumDirectoryCapability>.supported(
+    FavoriteForumDirectoryCapability.values,
+  ),
+);
+
+final _unsupportedRemoteIdentityCapabilities =
+    FavoriteForumDirectorySourceCapabilities(
+      values: DataCapabilitySet<FavoriteForumDirectoryCapability>.from(
+        supported: FavoriteForumDirectoryCapability.values.where(
+          (capability) =>
+              capability !=
+              FavoriteForumDirectoryCapability.stableRemoteFavoriteIdentity,
+        ),
+        unsupported: const <FavoriteForumDirectoryCapability>[
+          FavoriteForumDirectoryCapability.stableRemoteFavoriteIdentity,
+        ],
+      ),
+    );

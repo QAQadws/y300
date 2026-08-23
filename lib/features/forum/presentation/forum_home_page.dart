@@ -7,6 +7,8 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
+import 'package:y300/features/favorites/data/repositories/favorite_directory_repositories.dart';
+import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
@@ -246,14 +248,19 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
   }
 
   Future<void> _openFavoriteForumPicker(BuildContext context) {
-    final repository = ref.read(forumFavoriteRepositoryProvider);
+    final directoryRepository = ref.read(
+      favoriteForumDirectoryRepositoryProvider,
+    );
+    final mutationRepository = ref.read(forumFavoriteRepositoryProvider);
     final messenger = ScaffoldMessenger.of(context);
     final l10n = AppLocalizations.of(context);
     return showModalBottomSheet<void>(
       context: context,
       builder: (_) => ForumFavoriteForumPicker(
-        loadFavoriteForums: repository.loadFavoriteForums,
-        onUnfavorite: (forum) => repository.unfavoriteForum(favid: forum.favid),
+        loadFavoriteForums: () =>
+            directoryRepository.load(const FavoriteForumDirectoryQuery()),
+        onUnfavorite: (forum) =>
+            mutationRepository.unfavoriteForum(favid: forum.remoteFavoriteId!),
         onSuccess: (_, _) async {
           if (!mounted || !messenger.mounted) {
             return;

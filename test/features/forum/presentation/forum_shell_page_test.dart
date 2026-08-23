@@ -11,7 +11,6 @@ import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
@@ -428,7 +427,7 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
           ],
         ),
         isLoggedIn: true,
-        favoriteForums: const <FavoriteForum>[],
+        favoriteForums: const <ForumHomeFavoriteForum>[],
       ),
     );
   }

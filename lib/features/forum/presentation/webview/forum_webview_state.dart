@@ -1,4 +1,6 @@
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
+import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 
 class ForumWebViewState {
@@ -12,6 +14,8 @@ class ForumWebViewState {
     required this.pageTitle,
     required this.canGoBack,
     required this.favoriteForums,
+    required this.favoriteForumCapabilities,
+    required this.favoriteForumMetadata,
     required this.currentFavoriteForum,
     required this.isFavoriteMutationLoading,
     required this.threadDetailMenu,
@@ -27,8 +31,10 @@ class ForumWebViewState {
   final String? boardName;
   final String? pageTitle;
   final bool canGoBack;
-  final List<FavoriteForum> favoriteForums;
-  final FavoriteForum? currentFavoriteForum;
+  final List<FavoriteForumEntry> favoriteForums;
+  final FavoriteForumDirectoryReadCapabilities? favoriteForumCapabilities;
+  final DataReadMetadata? favoriteForumMetadata;
+  final FavoriteForumEntry? currentFavoriteForum;
   final bool isFavoriteMutationLoading;
   final ForumThreadDetailMenuState? threadDetailMenu;
   final bool isLoading;
@@ -48,8 +54,10 @@ class ForumWebViewState {
     String? pageTitle,
     bool clearPageTitle = false,
     bool? canGoBack,
-    List<FavoriteForum>? favoriteForums,
-    FavoriteForum? currentFavoriteForum,
+    List<FavoriteForumEntry>? favoriteForums,
+    FavoriteForumDirectoryReadCapabilities? favoriteForumCapabilities,
+    DataReadMetadata? favoriteForumMetadata,
+    FavoriteForumEntry? currentFavoriteForum,
     bool clearCurrentFavoriteForum = false,
     bool? isFavoriteMutationLoading,
     ForumThreadDetailMenuState? threadDetailMenu,
@@ -67,6 +75,10 @@ class ForumWebViewState {
       pageTitle: clearPageTitle ? null : (pageTitle ?? this.pageTitle),
       canGoBack: canGoBack ?? this.canGoBack,
       favoriteForums: favoriteForums ?? this.favoriteForums,
+      favoriteForumCapabilities:
+          favoriteForumCapabilities ?? this.favoriteForumCapabilities,
+      favoriteForumMetadata:
+          favoriteForumMetadata ?? this.favoriteForumMetadata,
       currentFavoriteForum: clearCurrentFavoriteForum
           ? null
           : (currentFavoriteForum ?? this.currentFavoriteForum),

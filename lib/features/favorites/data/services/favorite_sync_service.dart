@@ -1,20 +1,26 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/favorites/data/repositories/favorite_repository.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
 import 'package:y300/features/favorites/domain/models/favorite_detail_context.dart';
+import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
+import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/favorites/domain/services/library_post_ingest_task_runner.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
+
+typedef _FavoriteDirectoryRead =
+    DataReadSuccess<
+      FavoriteThreadDirectoryData,
+      FavoriteThreadDirectoryReadCapabilities
+    >;
 
 enum FavoriteSyncProgressPhase {
   idle,
@@ -78,7 +84,7 @@ abstract class FavoriteSyncService {
 
 class NetworkFavoriteSyncService implements FavoriteSyncService {
   NetworkFavoriteSyncService({
-    required FavoriteRepository remoteRepository,
+    required FavoriteThreadDirectoryRepository remoteRepository,
     required LocalFavoriteRepository localRepository,
     required FavoriteDetailContextLoader detailContextLoader,
     required FavoriteContentIngestRegistry contentIngestRegistry,
@@ -98,7 +104,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
        _governorFactory =
            governorFactory ?? (() => DefaultFavoriteFirstSyncRequestGovernor());
 
-  final FavoriteRepository _remoteRepository;
+  final FavoriteThreadDirectoryRepository _remoteRepository;
   final LocalFavoriteRepository _localRepository;
   final FavoriteDetailContextLoader _detailContextLoader;
   final FavoriteContentIngestRegistry _contentIngestRegistry;
@@ -214,11 +220,22 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       context: context,
       page: 1,
     );
-    if (firstPageResult is ApiFailure<FavoriteThreadsPage>) {
-      throw _FavoriteSyncFailure(firstPageResult.error.message);
+    if (firstPageResult
+        case final DataReadFailure<
+              FavoriteThreadDirectoryData,
+              FavoriteThreadDirectoryReadCapabilities
+            >
+            failure) {
+      throw _FavoriteSyncFailure(failure.diagnosticMessage);
     }
 
-    final firstPage = firstPageResult.dataOrNull!;
+    final firstRead =
+        firstPageResult
+            as DataReadSuccess<
+              FavoriteThreadDirectoryData,
+              FavoriteThreadDirectoryReadCapabilities
+            >;
+    final firstPage = firstRead.data;
     _emitProgress(
       FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.fetchingList,
@@ -234,18 +251,20 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       snapshot: snapshot,
     );
 
-    final pages = <FavoriteThreadsPage>[firstPage];
+    final reads = <_FavoriteDirectoryRead>[firstRead];
     if (mode == FavoriteSyncMode.fullDiff) {
-      pages.addAll(await _fetchRemainingPages(firstPage, context: context));
+      reads.addAll(await _fetchRemainingPages(firstRead, context: context));
     } else {
-      pages.addAll(
+      reads.addAll(
         await _fetchIncrementalPages(
-          firstPage: firstPage,
+          firstPage: firstRead,
           activeBefore: activeBefore,
           context: context,
         ),
       );
     }
+    final readSet = _validateReadSet(reads, mode: mode);
+    final pages = reads.map((read) => read.data).toList(growable: false);
 
     var upsertedCount = 0;
     final remoteTids = <String>{};
@@ -263,10 +282,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
             .map((item) => item.tid.trim())
             .where((tid) => tid.isNotEmpty),
       );
-      final pageStartOrder = (page.page - 1) * page.perPage;
-      upsertedCount += await _localRepository.upsertRemotePage(
-        page: page,
-        pageStartOrder: pageStartOrder,
+      upsertedCount += await _localRepository.upsertRemoteThreads(
+        _cacheUpsertsFor(page),
       );
     }
 
@@ -296,13 +313,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     );
     await _localRepository.finishSync(
       mode: mode,
-      remoteCount: firstPage.totalCount,
+      remoteCount: readSet.totalItems,
       status: detailResult.failedTids.isEmpty ? 'ok' : 'partial',
       message: detailResult.failedTids.isEmpty
           ? null
           : _buildPartialFailureMessage(detailResult.errors),
     );
-    await _writeFavoritesSnapshot(remoteCount: firstPage.totalCount);
+    await _writeFavoritesSnapshot(remoteCount: readSet.totalItems);
     _notifyFavoriteShelfChanged(
       reason: 'favorite_sync_completed',
       upsertedCount: upsertedCount,
@@ -312,12 +329,14 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
     return FavoriteSyncResult(
       mode: mode,
-      remoteCount: firstPage.totalCount,
+      remoteCount: readSet.totalItems,
       fetchedPages: pages.length,
       upsertedCount: upsertedCount,
       removedRecords: removedRecords,
       detailLoadedCount: detailResult.loadedCount,
       failedDetailTids: detailResult.failedTids,
+      directoryCapabilities: readSet.capabilities,
+      directoryMetadata: readSet.metadata,
     );
   }
 
@@ -335,39 +354,56 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       context: context,
       page: 1,
     );
-    if (firstPageResult is ApiFailure<FavoriteThreadsPage>) {
-      throw _FavoriteSyncFailure(firstPageResult.error.message);
+    if (firstPageResult
+        case final DataReadFailure<
+              FavoriteThreadDirectoryData,
+              FavoriteThreadDirectoryReadCapabilities
+            >
+            failure) {
+      throw _FavoriteSyncFailure(failure.diagnosticMessage);
     }
 
-    final firstPage = firstPageResult.dataOrNull!;
+    final firstRead =
+        firstPageResult
+            as DataReadSuccess<
+              FavoriteThreadDirectoryData,
+              FavoriteThreadDirectoryReadCapabilities
+            >;
     final activeBefore = await _localRepository.getActiveTids();
-    final pages = <FavoriteThreadsPage>[firstPage];
-    var current = firstPage;
-    var foundTid = _pageContainsTid(current, tid);
+    final reads = <_FavoriteDirectoryRead>[firstRead];
+    var current = firstRead;
+    var foundTid = _pageContainsTid(current.data, tid);
     // A newly favorited thread is normally on page one. Keep a bounded
     // incremental scan for remote ordering drift without turning one button tap
     // into an unconditional full favorite sync.
     while (!foundTid &&
-        current.hasMore &&
-        !_pageAllKnown(current, activeBefore)) {
-      final nextPageNumber = current.page + 1;
+        current.data.pagination.hasNext == true &&
+        !_pageAllKnown(current.data, activeBefore)) {
+      final nextPageNumber = current.data.pagination.currentPage + 1;
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.fetchingList,
-          current: pages.length,
+          current: reads.length,
         ),
       );
       final result = await _runFavoriteListRequest(
         context: context,
         page: nextPageNumber,
       );
-      if (result is ApiFailure<FavoriteThreadsPage>) {
-        throw _FavoriteSyncFailure(result.error.message);
+      if (result
+          case final DataReadFailure<
+                FavoriteThreadDirectoryData,
+                FavoriteThreadDirectoryReadCapabilities
+              >
+              failure) {
+        throw _FavoriteSyncFailure(failure.diagnosticMessage);
       }
-      current = result.dataOrNull!;
-      pages.add(current);
-      foundTid = _pageContainsTid(current, tid);
+      current = result as _FavoriteDirectoryRead;
+      reads.add(current);
+      foundTid = _pageContainsTid(current.data, tid);
     }
+    final readSet = _validateReadSet(reads, mode: FavoriteSyncMode.incremental);
+    final pages = reads.map((read) => read.data).toList(growable: false);
 
     var upsertedCount = 0;
     for (var index = 0; index < pages.length; index++) {
@@ -379,9 +415,8 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           total: pages.length,
         ),
       );
-      upsertedCount += await _localRepository.upsertRemotePage(
-        page: page,
-        pageStartOrder: (page.page - 1) * page.perPage,
+      upsertedCount += await _localRepository.upsertRemoteThreads(
+        _cacheUpsertsFor(page),
       );
     }
 
@@ -400,7 +435,6 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
           upsertedCount += await _upsertRecentlyFavoritedThreadFromDetail(
             tid: tid,
             detail: preloadedDetail.data,
-            remoteCount: firstPage.totalCount,
           );
           record = await _localRepository.getActiveThreadByTid(tid);
         }
@@ -439,11 +473,11 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
     await _localRepository.finishSync(
       mode: FavoriteSyncMode.incremental,
-      remoteCount: firstPage.totalCount,
+      remoteCount: readSet.totalItems,
       status: failedTids.isEmpty ? 'ok' : 'partial',
       message: failedTids.isEmpty ? null : '新增收藏详情补全失败：${failedTids.join(',')}',
     );
-    await _writeFavoritesSnapshot(remoteCount: firstPage.totalCount);
+    await _writeFavoritesSnapshot(remoteCount: readSet.totalItems);
     _notifyFavoriteShelfChanged(
       reason: 'thread_favorite_recent_sync_completed',
       upsertedCount: upsertedCount,
@@ -452,17 +486,19 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
     return FavoriteSyncResult(
       mode: FavoriteSyncMode.incremental,
-      remoteCount: firstPage.totalCount,
+      remoteCount: readSet.totalItems,
       fetchedPages: pages.length,
       upsertedCount: upsertedCount,
       removedRecords: const <FavoriteThreadCacheRecord>[],
       detailLoadedCount: detailLoadedCount,
       failedDetailTids: failedTids,
+      directoryCapabilities: readSet.capabilities,
+      directoryMetadata: readSet.metadata,
     );
   }
 
   FavoriteSyncMode _resolveSyncMode({
-    required FavoriteThreadsPage firstPage,
+    required FavoriteThreadDirectoryData firstPage,
     required Set<String> activeBefore,
     required FavoriteSyncSnapshot? snapshot,
   }) {
@@ -470,7 +506,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       return FavoriteSyncMode.fullDiff;
     }
 
-    if (firstPage.totalCount < snapshot.localActiveCount) {
+    final totalItems = firstPage.pagination.totalItems;
+    if (totalItems == null) {
+      throw const _FavoriteSyncFailure(
+        'Favorite directory does not provide an exact total count.',
+      );
+    }
+    if (totalItems < snapshot.localActiveCount) {
       return FavoriteSyncMode.fullDiff;
     }
 
@@ -478,22 +520,27 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         .map((item) => item.tid.trim())
         .where((tid) => tid.isNotEmpty);
     final pageOneAllKnown = pageOneTids.every(activeBefore.contains);
-    if (firstPage.totalCount == snapshot.localActiveCount && !pageOneAllKnown) {
+    if (totalItems == snapshot.localActiveCount && !pageOneAllKnown) {
       return FavoriteSyncMode.fullDiff;
     }
 
     return FavoriteSyncMode.incremental;
   }
 
-  Future<List<FavoriteThreadsPage>> _fetchRemainingPages(
-    FavoriteThreadsPage firstPage, {
+  Future<List<_FavoriteDirectoryRead>> _fetchRemainingPages(
+    _FavoriteDirectoryRead firstPage, {
     required FavoriteSyncExecutionContext context,
   }) async {
-    final pages = <FavoriteThreadsPage>[];
+    final pages = <_FavoriteDirectoryRead>[];
     var current = firstPage;
-    final estimatedTotal = _estimatedPageCount(firstPage);
-    while (current.hasMore) {
-      final nextPageNumber = current.page + 1;
+    final estimatedTotal = _estimatedPageCount(firstPage.data);
+    while (current.data.pagination.hasNext == true) {
+      if (pages.length + 1 >= estimatedTotal) {
+        throw const _FavoriteSyncFailure(
+          'Favorite directory pagination exceeds its exact total pages.',
+        );
+      }
+      final nextPageNumber = current.data.pagination.currentPage + 1;
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.fetchingList,
@@ -505,10 +552,15 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         context: context,
         page: nextPageNumber,
       );
-      if (result is ApiFailure<FavoriteThreadsPage>) {
-        throw _FavoriteSyncFailure(result.error.message);
+      if (result
+          case final DataReadFailure<
+                FavoriteThreadDirectoryData,
+                FavoriteThreadDirectoryReadCapabilities
+              >
+              failure) {
+        throw _FavoriteSyncFailure(failure.diagnosticMessage);
       }
-      current = result.dataOrNull!;
+      current = result as _FavoriteDirectoryRead;
       pages.add(current);
       _emitProgress(
         FavoriteSyncProgress(
@@ -521,15 +573,16 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     return pages;
   }
 
-  Future<List<FavoriteThreadsPage>> _fetchIncrementalPages({
-    required FavoriteThreadsPage firstPage,
+  Future<List<_FavoriteDirectoryRead>> _fetchIncrementalPages({
+    required _FavoriteDirectoryRead firstPage,
     required Set<String> activeBefore,
     required FavoriteSyncExecutionContext context,
   }) async {
-    final pages = <FavoriteThreadsPage>[];
+    final pages = <_FavoriteDirectoryRead>[];
     var current = firstPage;
-    while (current.hasMore && !_pageAllKnown(current, activeBefore)) {
-      final nextPageNumber = current.page + 1;
+    while (current.data.pagination.hasNext == true &&
+        !_pageAllKnown(current.data, activeBefore)) {
+      final nextPageNumber = current.data.pagination.currentPage + 1;
       _emitProgress(
         FavoriteSyncProgress(
           phase: FavoriteSyncProgressPhase.fetchingList,
@@ -540,16 +593,24 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         context: context,
         page: nextPageNumber,
       );
-      if (result is ApiFailure<FavoriteThreadsPage>) {
-        throw _FavoriteSyncFailure(result.error.message);
+      if (result
+          case final DataReadFailure<
+                FavoriteThreadDirectoryData,
+                FavoriteThreadDirectoryReadCapabilities
+              >
+              failure) {
+        throw _FavoriteSyncFailure(failure.diagnosticMessage);
       }
-      current = result.dataOrNull!;
+      current = result as _FavoriteDirectoryRead;
       pages.add(current);
     }
     return pages;
   }
 
-  bool _pageAllKnown(FavoriteThreadsPage page, Set<String> activeBefore) {
+  bool _pageAllKnown(
+    FavoriteThreadDirectoryData page,
+    Set<String> activeBefore,
+  ) {
     if (page.items.isEmpty) {
       return true;
     }
@@ -559,7 +620,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         .every(activeBefore.contains);
   }
 
-  bool _pageContainsTid(FavoriteThreadsPage page, String tid) {
+  bool _pageContainsTid(FavoriteThreadDirectoryData page, String tid) {
     return page.items.any((item) => item.tid.trim() == tid);
   }
 
@@ -581,36 +642,24 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   Future<int> _upsertRecentlyFavoritedThreadFromDetail({
     required String tid,
     required ThreadDetailData detail,
-    required int remoteCount,
   }) {
     final normalizedTid = tid.trim();
     if (normalizedTid.isEmpty) {
       return Future<int>.value(0);
     }
-    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final title = detail.subject.trim().isEmpty
-        ? normalizedTid
-        : detail.subject;
-    return _localRepository.upsertRemotePage(
-      page: FavoriteThreadsPage(
-        page: 1,
-        perPage: 1,
-        totalCount: remoteCount > 0 ? remoteCount : 1,
-        items: <FavoriteThread>[
-          FavoriteThread(
-            favid: '',
-            tid: normalizedTid,
-            title: title,
-            description: '',
-            author: detail.author,
-            replies: detail.replies,
-            url: 'thread-$normalizedTid-1-1.html',
-            dateline: nowSeconds,
-          ),
-        ],
+    final title = detail.subject.trim();
+    if (title.isEmpty) {
+      return Future<int>.value(0);
+    }
+    return _localRepository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+      FavoriteThreadCacheUpsert(
+        tid: normalizedTid,
+        title: title,
+        authorName: detail.author.trim().isEmpty ? null : detail.author.trim(),
+        replyCount: detail.replies,
+        remoteOrder: 0,
       ),
-      pageStartOrder: 0,
-    );
+    ]);
   }
 
   Future<_DetailFillResult> _fillMissingDetails({
@@ -850,28 +899,158 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     return '部分收藏详情补全失败：$details';
   }
 
-  int _estimatedPageCount(FavoriteThreadsPage page) {
-    if (page.perPage <= 0 || page.totalCount <= 0) {
-      return page.page;
+  _FavoriteDirectoryReadSet _validateReadSet(
+    List<_FavoriteDirectoryRead> reads, {
+    required FavoriteSyncMode mode,
+  }) {
+    if (reads.isEmpty) {
+      throw const _FavoriteSyncFailure('Favorite directory read set is empty.');
     }
-    return (page.totalCount / page.perPage).ceil();
+
+    const requiredCapabilities = <FavoriteThreadDirectoryCapability>[
+      FavoriteThreadDirectoryCapability.stableThreadIdentity,
+      FavoriteThreadDirectoryCapability.orderedThreads,
+      FavoriteThreadDirectoryCapability.threadTitle,
+      FavoriteThreadDirectoryCapability.threadReplyCount,
+      FavoriteThreadDirectoryCapability.directionalPagination,
+      FavoriteThreadDirectoryCapability.pageSize,
+      FavoriteThreadDirectoryCapability.totalItemCount,
+      FavoriteThreadDirectoryCapability.totalPageCount,
+    ];
+    var combinedCapabilities = reads.first.capabilities;
+    var combinedMetadata = reads.first.metadata;
+    final firstPagination = reads.first.data.pagination;
+    final pageSize = firstPagination.pageSize;
+    final totalItems = firstPagination.totalItems;
+    final totalPages = firstPagination.totalPages;
+    if (pageSize == null ||
+        pageSize <= 0 ||
+        totalItems == null ||
+        totalItems < 0 ||
+        totalPages == null ||
+        totalPages < 1) {
+      throw const _FavoriteSyncFailure(
+        'Favorite directory pagination is incomplete.',
+      );
+    }
+
+    final threadIds = <String>{};
+    final remoteFavoriteIds = <String>{};
+    for (var index = 0; index < reads.length; index++) {
+      final read = reads[index];
+      if (index > 0) {
+        combinedCapabilities = combinedCapabilities.intersect(
+          read.capabilities,
+        );
+        combinedMetadata = combinedMetadata.merge(read.metadata);
+      }
+      if (read.capabilities.paginationPrecision != PaginationPrecision.exact ||
+          !requiredCapabilities.every(read.capabilities.supports)) {
+        throw const _FavoriteSyncFailure(
+          'Favorite directory capabilities are insufficient for sync.',
+        );
+      }
+
+      final page = read.data;
+      final pagination = page.pagination;
+      if (pagination.currentPage != index + 1 ||
+          pagination.pageSize != pageSize ||
+          pagination.totalItems != totalItems ||
+          pagination.totalPages != totalPages ||
+          pagination.hasPrevious != (pagination.currentPage > 1) ||
+          pagination.hasNext != (pagination.currentPage < totalPages)) {
+        throw const _FavoriteSyncFailure(
+          'Favorite directory pages are inconsistent.',
+        );
+      }
+      for (final item in page.items) {
+        final tid = item.tid.trim();
+        if (tid.isEmpty ||
+            item.title.trim().isEmpty ||
+            item.replyCount == null ||
+            item.replyCount! < 0 ||
+            !threadIds.add(tid)) {
+          throw const _FavoriteSyncFailure(
+            'Favorite directory contains invalid thread data.',
+          );
+        }
+        final remoteFavoriteId = item.remoteFavoriteId?.trim();
+        if (remoteFavoriteId != null &&
+            remoteFavoriteId.isNotEmpty &&
+            !remoteFavoriteIds.add(remoteFavoriteId)) {
+          throw const _FavoriteSyncFailure(
+            'Favorite directory contains duplicate remote identity.',
+          );
+        }
+      }
+    }
+
+    if (mode == FavoriteSyncMode.fullDiff &&
+        (reads.last.data.pagination.hasNext != false ||
+            reads.length != totalPages ||
+            threadIds.length != totalItems)) {
+      throw const _FavoriteSyncFailure(
+        'Favorite directory full read is incomplete.',
+      );
+    }
+    return _FavoriteDirectoryReadSet(
+      capabilities: combinedCapabilities,
+      metadata: combinedMetadata,
+      totalItems: totalItems,
+    );
+  }
+
+  List<FavoriteThreadCacheUpsert> _cacheUpsertsFor(
+    FavoriteThreadDirectoryData page,
+  ) {
+    final pageSize = page.pagination.pageSize!;
+    final pageStartOrder = (page.pagination.currentPage - 1) * pageSize;
+    return <FavoriteThreadCacheUpsert>[
+      for (var index = 0; index < page.items.length; index++)
+        FavoriteThreadCacheUpsert(
+          tid: page.items[index].tid,
+          title: page.items[index].title,
+          replyCount: page.items[index].replyCount!,
+          remoteFavoriteId: page.items[index].remoteFavoriteId,
+          description: page.items[index].description,
+          authorName: page.items[index].authorName,
+          favoritedAt: page.items[index].favoritedAt,
+          remoteOrder: pageStartOrder + index,
+        ),
+    ];
+  }
+
+  int _estimatedPageCount(FavoriteThreadDirectoryData page) {
+    return page.pagination.totalPages ?? page.pagination.currentPage;
   }
 
   void _emitProgress(FavoriteSyncProgress progress) {
     _progress.value = progress;
   }
 
-  Future<ApiResult<FavoriteThreadsPage>> _runFavoriteListRequest({
+  Future<
+    DataReadResult<
+      FavoriteThreadDirectoryData,
+      FavoriteThreadDirectoryReadCapabilities
+    >
+  >
+  _runFavoriteListRequest({
     required FavoriteSyncExecutionContext context,
     required int page,
   }) {
     final governor = context.governor;
     if (governor == null) {
-      return _remoteRepository.getFavoriteThreads(page: page);
+      return _remoteRepository.load(
+        FavoriteThreadDirectoryQuery(page: page),
+        cachePolicy: CacheLoadPolicy.networkFirst,
+      );
     }
     return governor.run(
       kind: FavoriteFirstSyncRequestKind.favoriteListPage,
-      action: () => _remoteRepository.getFavoriteThreads(page: page),
+      action: () => _remoteRepository.load(
+        FavoriteThreadDirectoryQuery(page: page),
+        cachePolicy: CacheLoadPolicy.networkFirst,
+      ),
     );
   }
 
@@ -924,18 +1103,19 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   Map<String, Object?> _favoriteSnapshotRow(FavoriteThreadCacheRecord record) {
     return <String, Object?>{
       'tid': record.tid,
-      'favid': record.favid,
+      'favid': record.remoteFavoriteId,
       'title': record.title,
-      'author': record.author,
+      'author': record.authorName,
       'fid': record.sourceFid,
       'typeid': record.sourceTypeid,
       'tagName': record.sourceTagName,
       'contentKind': favoriteContentKindToDb(record.contentKind),
       'workId': record.workId,
       'removed': record.removedAt != null,
-      'dateline': record.dateline?.millisecondsSinceEpoch == null
+      'dateline': record.favoritedAt?.millisecondsSinceEpoch == null
           ? null
-          : record.dateline!.millisecondsSinceEpoch ~/ 1000,
+          : record.favoritedAt!.millisecondsSinceEpoch ~/
+                Duration.millisecondsPerSecond,
     };
   }
 }
@@ -956,4 +1136,16 @@ class _DetailFillResult {
   final int loadedCount;
   final List<String> failedTids;
   final Map<String, String> errors;
+}
+
+class _FavoriteDirectoryReadSet {
+  const _FavoriteDirectoryReadSet({
+    required this.capabilities,
+    required this.metadata,
+    required this.totalItems,
+  });
+
+  final FavoriteThreadDirectoryReadCapabilities capabilities;
+  final DataReadMetadata metadata;
+  final int totalItems;
 }

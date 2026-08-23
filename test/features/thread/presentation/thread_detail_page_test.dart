@@ -27,7 +27,6 @@ import 'package:y300/features/cache/domain/services/forum_image_precache_service
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
@@ -5487,11 +5486,6 @@ class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
     return const ApiSuccess<ForumFavoriteMutationResult>(
       ForumFavoriteMutationResult(message: '收藏成功'),
     );
-  }
-
-  @override
-  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
-    return const ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[]);
   }
 
   @override

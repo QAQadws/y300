@@ -149,9 +149,9 @@ void main() {
 FavoriteThreadCacheRecord _record({required String tid}) {
   return FavoriteThreadCacheRecord(
     tid: tid,
-    favid: 'fav-$tid',
+    remoteFavoriteId: 'fav-$tid',
     title: '收藏$tid',
-    replies: 0,
+    replyCount: 0,
     contentKind: ThreadContentKind.unknown,
     firstSeenAt: DateTime(2026, 1, 1),
     lastSeenAt: DateTime(2026, 1, 1),

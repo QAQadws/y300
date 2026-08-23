@@ -86,6 +86,8 @@ ForumWebViewState _webViewState({
     pageTitle: null,
     canGoBack: false,
     favoriteForums: const [],
+    favoriteForumCapabilities: null,
+    favoriteForumMetadata: null,
     currentFavoriteForum: null,
     isFavoriteMutationLoading: false,
     threadDetailMenu: null,

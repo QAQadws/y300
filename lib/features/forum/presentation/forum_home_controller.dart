@@ -5,7 +5,6 @@ import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
 import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
@@ -246,7 +245,7 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
     for (final forum
         in payload.isLoggedIn
             ? payload.favoriteForums
-            : const <FavoriteForum>[]) {
+            : const <ForumHomeFavoriteForum>[]) {
       if (forum.fid.trim().isEmpty || !favoriteFids.add(forum.fid)) {
         continue;
       }
@@ -265,9 +264,10 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
               : chromeForum?.description.trim().isNotEmpty == true
               ? chromeForum!.description
               : directoryForum?.description ?? '',
-          todayPosts: forum.todayPosts > 0
-              ? forum.todayPosts
-              : chromeForum?.todayPosts ?? directoryForum?.todayPosts,
+          todayPosts:
+              forum.todayPosts ??
+              chromeForum?.todayPosts ??
+              directoryForum?.todayPosts,
         ),
       );
     }

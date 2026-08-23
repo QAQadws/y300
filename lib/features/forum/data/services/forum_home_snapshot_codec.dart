@@ -1,7 +1,6 @@
 import 'package:y300/core/utils/parse_utils.dart';
 import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
@@ -16,17 +15,18 @@ class ForumHomeSnapshotCodec
   String get snapshotType => CacheKeyCanonicalizer.forumHomeSnapshotType;
 
   @override
-  int get codecVersion => 3;
+  int get codecVersion => 4;
 
   @override
-  int get parserVersion => 3;
+  int get parserVersion => 4;
 
   @override
   bool canDecodeVersion({
     required int codecVersion,
     required int parserVersion,
   }) {
-    return codecVersion == 3 && parserVersion == 3 ||
+    return codecVersion == 4 && parserVersion == 4 ||
+        codecVersion == 3 && parserVersion == 3 ||
         codecVersion == 2 && parserVersion == 2;
   }
 
@@ -221,27 +221,21 @@ class ForumHomeSnapshotCodec
     );
   }
 
-  Map<String, Object?> _encodeFavoriteForum(FavoriteForum value) {
+  Map<String, Object?> _encodeFavoriteForum(ForumHomeFavoriteForum value) {
     return <String, Object?>{
-      'favid': value.favid,
       'fid': value.fid,
       'title': value.title,
       'description': value.description,
-      'threads': value.threads,
-      'posts': value.posts,
       'todayPosts': value.todayPosts,
     };
   }
 
-  FavoriteForum _decodeFavoriteForum(Map<String, dynamic> map) {
-    return FavoriteForum(
-      favid: ParseUtils.asString(map['favid']),
+  ForumHomeFavoriteForum _decodeFavoriteForum(Map<String, dynamic> map) {
+    return ForumHomeFavoriteForum(
       fid: ParseUtils.asString(map['fid']),
       title: ParseUtils.asString(map['title']),
       description: ParseUtils.asString(map['description']),
-      threads: ParseUtils.asInt(map['threads']),
-      posts: ParseUtils.asInt(map['posts']),
-      todayPosts: ParseUtils.asInt(map['todayPosts']),
+      todayPosts: _nullableInt(map['todayPosts']),
     );
   }
 

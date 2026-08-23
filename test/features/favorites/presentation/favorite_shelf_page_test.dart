@@ -14,7 +14,6 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/services/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
@@ -870,10 +869,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<void> markThreadDetailInvalid({required String tid}) async {}
 
   @override
-  Future<int> upsertRemotePage({
-    required FavoriteThreadsPage page,
-    required int pageStartOrder,
-  }) async => page.items.length;
+  Future<int> upsertRemoteThreads(
+    List<FavoriteThreadCacheUpsert> items,
+  ) async => items.length;
 }
 
 List<LibraryCategory> _multiCategoryFavoriteCategories() {

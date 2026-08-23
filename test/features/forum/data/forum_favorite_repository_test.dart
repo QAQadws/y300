@@ -8,8 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/features/favorites/data/repositories/favorite_repository.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/profile/data/models/profile_models.dart';
 import 'package:y300/features/profile/data/repositories/profile_repository.dart';
@@ -131,39 +129,12 @@ void main() {
         expect(result.dataOrNull?.alreadyApplied, isTrue);
       },
     );
-
-    test('loadFavoriteForums delegates to FavoriteRepository', () async {
-      final favoriteRepository = _FakeFavoriteRepository(
-        result: ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[
-          FavoriteForum(
-            favid: 'fav-55',
-            fid: '55',
-            title: '综合区',
-            description: '',
-            threads: 0,
-            posts: 0,
-            todayPosts: 0,
-          ),
-        ]),
-      );
-      final repository = _buildRepository(
-        adapter: _ForumFavoriteTestAdapter(responseJson: <String, dynamic>{}),
-        favoriteRepository: favoriteRepository,
-      );
-
-      final result = await repository.loadFavoriteForums();
-
-      expect(result.isSuccess, isTrue);
-      expect(favoriteRepository.loadCalls, 1);
-      expect(result.dataOrNull?.single.fid, '55');
-    });
   });
 }
 
 DefaultForumFavoriteRepository _buildRepository({
   required _ForumFavoriteTestAdapter adapter,
   ProfileRepository? profileRepository,
-  FavoriteRepository? favoriteRepository,
 }) {
   final dio = Dio()..httpClientAdapter = adapter;
   return DefaultForumFavoriteRepository(
@@ -176,7 +147,6 @@ DefaultForumFavoriteRepository _buildRepository({
     profileRepository:
         profileRepository ??
         _FakeProfileRepository.success(formhash: 'fe182126'),
-    favoriteRepository: favoriteRepository ?? _FakeFavoriteRepository(),
   );
 }
 
@@ -199,30 +169,6 @@ class _FakeProfileRepository implements ProfileRepository {
 
   @override
   Future<ApiResult<ProfileData>> getProfile() async => _result;
-}
-
-class _FakeFavoriteRepository implements FavoriteRepository {
-  _FakeFavoriteRepository({ApiResult<List<FavoriteForum>>? result})
-    : result =
-          result ?? const ApiSuccess<List<FavoriteForum>>(<FavoriteForum>[]);
-
-  final ApiResult<List<FavoriteForum>> result;
-  int loadCalls = 0;
-
-  @override
-  Future<ApiResult<List<FavoriteForum>>> getFavoriteForums() async {
-    loadCalls += 1;
-    return result;
-  }
-
-  @override
-  Future<ApiResult<FavoriteThreadsPage>> getFavoriteThreads({
-    required int page,
-  }) async {
-    return const ApiFailure<FavoriteThreadsPage>(
-      ApiError(type: ApiErrorType.unknown, message: 'not implemented'),
-    );
-  }
 }
 
 class _ForumFavoriteTestAdapter implements HttpClientAdapter {

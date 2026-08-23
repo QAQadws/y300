@@ -220,10 +220,10 @@ FavoriteContentIngestRequest _request({
     context: FavoriteDetailContext(
       record: FavoriteThreadCacheRecord(
         tid: tid,
-        favid: 'fav-$tid',
+        remoteFavoriteId: 'fav-$tid',
         title: '收藏$tid',
-        replies: 0,
-        dateline: dateline,
+        replyCount: 0,
+        favoritedAt: dateline,
         sourceTagName: tagName,
         contentKind: kind,
         firstSeenAt: DateTime(2026, 1, 1),

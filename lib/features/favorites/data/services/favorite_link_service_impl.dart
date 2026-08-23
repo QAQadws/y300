@@ -36,7 +36,6 @@ class DefaultFavoriteLinkService implements FavoriteLinkService {
           .map(
             (record) => FavoriteThreadRef(
               tid: record.tid,
-              favid: record.favid,
               categoryId: record.customCategoryId,
             ),
           )

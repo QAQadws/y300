@@ -22,7 +22,9 @@ import 'package:y300/features/cache/domain/services/native_page_cache_invalidati
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/favorites/data/repositories/favorite_directory_repositories.dart';
+import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
+import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
@@ -91,8 +93,12 @@ void main() {
         () async => forumHomeReadSuccess(_loggedOutPayload()),
       );
       final favoriteRepository = _FakeForumFavoriteRepository(
-        favoriteForums: <FavoriteForum>[
-          _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
+        favoriteForums: <FavoriteForumEntry>[
+          _favoriteDirectoryForum(
+            fid: '55',
+            remoteFavoriteId: 'fav-55',
+            title: '综合区',
+          ),
         ],
       );
 
@@ -101,6 +107,9 @@ void main() {
           homeRepository,
           extraOverrides: [
             forumFavoriteRepositoryProvider.overrideWithValue(
+              favoriteRepository,
+            ),
+            favoriteForumDirectoryRepositoryProvider.overrideWithValue(
               favoriteRepository,
             ),
           ],
@@ -547,6 +556,13 @@ void main() {
           find.descendant(
             of: find.byKey(const Key('forum-favorite-card-2')),
             matching: find.text('站点公告与维护信息'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('forum-favorite-card-2')),
+            matching: find.text('0'),
           ),
           findsOneWidget,
         );
@@ -1149,13 +1165,10 @@ ForumHomePayload _loggedOutPayloadWithTodayCount(int todayPosts) {
     directory: _sampleDirectory(todayPosts: todayPosts, description: '站务公告'),
     isLoggedIn: false,
     favoriteForums: [
-      FavoriteForum(
-        favid: '10',
+      ForumHomeFavoriteForum(
         fid: '2',
         title: '公告区',
         description: '站务公告',
-        threads: 10,
-        posts: 20,
         todayPosts: todayPosts,
       ),
     ],
@@ -1188,22 +1201,16 @@ ForumHomePayload _loggedInPayloadWithFavorites() {
     directory: _sampleDirectory(),
     isLoggedIn: true,
     favoriteForums: [
-      FavoriteForum(
-        favid: '1',
+      ForumHomeFavoriteForum(
         fid: '2',
         title: '百合会综合讨论区',
         description: '常逛版块',
-        threads: 12,
-        posts: 34,
         todayPosts: 1,
       ),
-      FavoriteForum(
-        favid: '2',
+      ForumHomeFavoriteForum(
         fid: '55',
         title: '漫画交流区',
         description: '',
-        threads: 56,
-        posts: 78,
         todayPosts: 2,
       ),
     ],
@@ -1215,13 +1222,10 @@ ForumHomePayload _loggedInPayloadWithEmptyFavoriteDescription() {
     directory: _sampleDirectory(),
     isLoggedIn: true,
     favoriteForums: [
-      FavoriteForum(
-        favid: '1',
+      ForumHomeFavoriteForum(
         fid: '2',
         title: '公告区',
         description: '',
-        threads: 12,
-        posts: 34,
         todayPosts: 0,
       ),
     ],
@@ -1233,31 +1237,22 @@ ForumHomePayload _loggedInPayloadWithChromeFavoriteDescriptions() {
     directory: _sampleDirectory(),
     isLoggedIn: true,
     favoriteForums: [
-      FavoriteForum(
-        favid: '1',
+      ForumHomeFavoriteForum(
         fid: '33',
         title: '海域區',
         description: '',
-        threads: 12,
-        posts: 34,
         todayPosts: 0,
       ),
-      FavoriteForum(
-        favid: '2',
+      ForumHomeFavoriteForum(
         fid: '30',
         title: '中文百合漫画区',
         description: '',
-        threads: 56,
-        posts: 78,
         todayPosts: 0,
       ),
-      FavoriteForum(
-        favid: '3',
+      ForumHomeFavoriteForum(
         fid: '55',
         title: '轻小说/译文区',
         description: '',
-        threads: 90,
-        posts: 123,
         todayPosts: 0,
       ),
     ],
@@ -1314,34 +1309,52 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
   }
 }
 
-FavoriteForum _favoriteForum({
+FavoriteForumEntry _favoriteDirectoryForum({
   required String fid,
-  required String favid,
+  required String remoteFavoriteId,
   required String title,
 }) {
-  return FavoriteForum(
-    favid: favid,
+  return FavoriteForumEntry(
     fid: fid,
     title: title,
+    remoteFavoriteId: remoteFavoriteId,
     description: '',
-    threads: 0,
-    posts: 0,
-    todayPosts: 0,
+    threadCount: 0,
+    postCount: 0,
+    todayPostCount: 0,
   );
 }
 
-class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
+class _FakeForumFavoriteRepository
+    implements ForumFavoriteRepository, FavoriteForumDirectoryRepository {
   _FakeForumFavoriteRepository({required this.favoriteForums});
 
-  final List<FavoriteForum> favoriteForums;
+  final List<FavoriteForumEntry> favoriteForums;
   final favoriteFids = <String>[];
   final unfavoriteFavids = <String>[];
   int loadCallCount = 0;
 
   @override
-  Future<ApiResult<List<FavoriteForum>>> loadFavoriteForums() async {
+  FavoriteForumDirectorySourceCapabilities get capabilities =>
+      _favoriteForumSourceCapabilities;
+
+  @override
+  Future<
+    DataReadResult<
+      FavoriteForumDirectoryData,
+      FavoriteForumDirectoryReadCapabilities
+    >
+  >
+  load(
+    FavoriteForumDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
     loadCallCount += 1;
-    return ApiSuccess<List<FavoriteForum>>(favoriteForums);
+    return DataReadSuccess(
+      data: FavoriteForumDirectoryData(items: favoriteForums),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
+    );
   }
 
   @override
@@ -1364,6 +1377,13 @@ class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
     );
   }
 }
+
+final _favoriteForumSourceCapabilities =
+    FavoriteForumDirectorySourceCapabilities(
+      values: DataCapabilitySet<FavoriteForumDirectoryCapability>.supported(
+        FavoriteForumDirectoryCapability.values,
+      ),
+    );
 
 class _MutableNow {
   _MutableNow(this.value);

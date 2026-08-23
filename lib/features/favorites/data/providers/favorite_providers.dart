@@ -5,7 +5,7 @@ import 'package:y300/features/favorites/data/providers/favorite_ingest_providers
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/use_cases/favorite_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/favorites/data/services/favorite_link_service_impl.dart';
-import 'package:y300/features/favorites/data/repositories/favorite_repository.dart';
+import 'package:y300/features/favorites/data/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/favorites/data/services/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
@@ -40,7 +40,7 @@ final favoriteDetailContextLoaderProvider =
 
 final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
   return NetworkFavoriteSyncService(
-    remoteRepository: ref.watch(favoriteRepositoryProvider),
+    remoteRepository: ref.watch(favoriteThreadDirectoryRepositoryProvider),
     localRepository: ref.watch(localFavoriteRepositoryProvider),
     detailContextLoader: ref.watch(favoriteDetailContextLoaderProvider),
     contentIngestRegistry: ref.watch(favoriteContentIngestRegistryProvider),

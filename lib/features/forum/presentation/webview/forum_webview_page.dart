@@ -6,7 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/forum/data/services/forum_webview_redirect_resolver.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
+import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
@@ -128,7 +129,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           boardName: null,
           pageTitle: null,
           canGoBack: false,
-          favoriteForums: const <FavoriteForum>[],
+          favoriteForums: const <FavoriteForumEntry>[],
+          favoriteForumCapabilities: null,
+          favoriteForumMetadata: null,
           currentFavoriteForum: null,
           isFavoriteMutationLoading: false,
           threadDetailMenu: null,
@@ -723,13 +726,24 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         ),
       ];
     }
+    final currentFavoriteForum = state.currentFavoriteForum;
+    final canUnfavorite =
+        currentFavoriteForum != null &&
+        state.favoriteForumCapabilities?.supports(
+              FavoriteForumDirectoryCapability.stableRemoteFavoriteIdentity,
+            ) ==
+            true &&
+        currentFavoriteForum.remoteFavoriteId?.trim().isNotEmpty == true;
+    if (currentFavoriteForum != null && !canUnfavorite) {
+      return const <PopupMenuEntry<String>>[];
+    }
     return <PopupMenuEntry<String>>[
       AppPopupMenuItem<String>(
         key: const Key('forum-webview-forum-favorite-action'),
-        value: state.currentFavoriteForum == null
+        value: currentFavoriteForum == null
             ? _forumFavoriteAction
             : _forumUnfavoriteAction,
-        label: state.currentFavoriteForum == null
+        label: currentFavoriteForum == null
             ? l10n.forumFavoriteForum
             : l10n.forumUnfavoriteForum,
       ),
@@ -1213,7 +1227,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         return ForumFavoriteForumPicker(
           loadFavoriteForums: controller.loadFavoriteForums,
           onUnfavorite: (forum) =>
-              controller.unfavoriteForumByFavid(favid: forum.favid),
+              controller.unfavoriteForumByFavid(favid: forum.remoteFavoriteId!),
           onSuccess: (_, _) async {
             if (!mounted || !messenger.mounted) {
               return;

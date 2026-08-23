@@ -10,7 +10,6 @@ import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/services/forum_home_html_parser.dart';
 import 'package:y300/features/forum/data/services/forum_home_snapshot_codec.dart';
@@ -31,8 +30,22 @@ class ForumHomePayload {
 
   final ForumDirectoryData directory;
   final bool isLoggedIn;
-  final List<FavoriteForum> favoriteForums;
+  final List<ForumHomeFavoriteForum> favoriteForums;
   final ForumHomeChromeData chromeData;
+}
+
+class ForumHomeFavoriteForum {
+  const ForumHomeFavoriteForum({
+    required this.fid,
+    required this.title,
+    required this.description,
+    required this.todayPosts,
+  });
+
+  final String fid;
+  final String title;
+  final String description;
+  final int? todayPosts;
 }
 
 class ForumHomeCacheEntry {
@@ -543,15 +556,12 @@ class ForumHomeHtmlRepository
     );
   }
 
-  FavoriteForum _toFavoriteForum(ForumHomeHtmlForumItem item) {
-    return FavoriteForum(
-      favid: 'html-${item.fid}',
+  ForumHomeFavoriteForum _toFavoriteForum(ForumHomeHtmlForumItem item) {
+    return ForumHomeFavoriteForum(
       fid: item.fid,
       title: item.title,
       description: item.description,
-      threads: 0,
-      posts: 0,
-      todayPosts: item.todayPosts ?? 0,
+      todayPosts: item.todayPosts,
     );
   }
 

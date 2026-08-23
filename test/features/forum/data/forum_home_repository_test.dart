@@ -21,7 +21,6 @@ import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
@@ -137,7 +136,7 @@ void main() {
             ],
           ),
           isLoggedIn: false,
-          favoriteForums: const <FavoriteForum>[],
+          favoriteForums: const <ForumHomeFavoriteForum>[],
         ),
       );
       final repository = _buildHtmlRepository(
@@ -415,7 +414,7 @@ void main() {
           ForumHomePayload(
             directory: _cachedHomePayload().directory,
             isLoggedIn: false,
-            favoriteForums: const <FavoriteForum>[],
+            favoriteForums: const <ForumHomeFavoriteForum>[],
           ),
         );
         final repository = _buildHtmlRepository(
@@ -639,7 +638,7 @@ ForumHomePayload _cachedHomePayload() {
       ],
     ),
     isLoggedIn: false,
-    favoriteForums: const <FavoriteForum>[],
+    favoriteForums: const <ForumHomeFavoriteForum>[],
   );
 }
 

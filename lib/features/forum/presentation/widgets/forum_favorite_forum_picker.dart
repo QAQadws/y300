@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
+import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
+import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -16,13 +18,20 @@ class ForumFavoriteForumPicker extends StatefulWidget {
     this.onSuccess,
   });
 
-  final Future<ApiResult<List<FavoriteForum>>> Function() loadFavoriteForums;
+  final Future<
+    DataReadResult<
+      FavoriteForumDirectoryData,
+      FavoriteForumDirectoryReadCapabilities
+    >
+  >
+  Function()
+  loadFavoriteForums;
   final Future<ApiResult<ForumFavoriteMutationResult>> Function(
-    FavoriteForum forum,
+    FavoriteForumEntry forum,
   )
   onUnfavorite;
   final FutureOr<void> Function(
-    FavoriteForum forum,
+    FavoriteForumEntry forum,
     ForumFavoriteMutationResult result,
   )?
   onSuccess;
@@ -33,8 +42,14 @@ class ForumFavoriteForumPicker extends StatefulWidget {
 }
 
 class _ForumFavoriteForumPickerState extends State<ForumFavoriteForumPicker> {
-  late Future<ApiResult<List<FavoriteForum>>> _future;
-  String? _submittingFavid;
+  late Future<
+    DataReadResult<
+      FavoriteForumDirectoryData,
+      FavoriteForumDirectoryReadCapabilities
+    >
+  >
+  _future;
+  String? _submittingRemoteFavoriteId;
 
   @override
   void initState() {
@@ -48,71 +63,88 @@ class _ForumFavoriteForumPickerState extends State<ForumFavoriteForumPicker> {
       key: const Key('forum-favorite-forum-picker'),
       color: Theme.of(context).colorScheme.surface,
       child: SafeArea(
-        child: FutureBuilder<ApiResult<List<FavoriteForum>>>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const _ForumFavoriteForumPickerFrame(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-
-            final result = snapshot.data;
-            if (result == null) {
-              return _ForumFavoriteForumPickerErrorView(
-                message: ForumTextResolver.favoriteForumsLoadFailure(
-                  AppLocalizations.of(context),
-                  null,
-                ),
-                onRetry: _reload,
-              );
-            }
-
-            return result.when(
-              success: (forums) {
-                if (forums.isEmpty) {
-                  return _ForumFavoriteForumPickerFrame(
-                    body: _ForumFavoriteForumPickerEmptyView(
-                      message: AppLocalizations.of(
-                        context,
-                      ).forumNoFavoriteForums,
-                    ),
+        child:
+            FutureBuilder<
+              DataReadResult<
+                FavoriteForumDirectoryData,
+                FavoriteForumDirectoryReadCapabilities
+              >
+            >(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const _ForumFavoriteForumPickerFrame(
+                    body: Center(child: CircularProgressIndicator()),
                   );
                 }
-                return _ForumFavoriteForumPickerFrame(
-                  itemCount: forums.length,
-                  body: ListView.separated(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    itemCount: forums.length,
-                    separatorBuilder: (context, _) => Divider(
-                      height: 1,
-                      indent: 20,
-                      endIndent: 20,
-                      color: Theme.of(context).colorScheme.outlineVariant,
+
+                final result = snapshot.data;
+                if (result == null) {
+                  return _ForumFavoriteForumPickerErrorView(
+                    message: ForumTextResolver.favoriteForumsLoadFailure(
+                      AppLocalizations.of(context),
+                      null,
                     ),
-                    itemBuilder: (context, index) {
-                      final forum = forums[index];
-                      final isSubmitting = _submittingFavid == forum.favid;
-                      return _ForumFavoriteForumRow(
-                        forum: forum,
-                        isSubmitting: isSubmitting,
-                        enabled: _submittingFavid == null,
-                        onTap: () => _handleUnfavorite(forum),
+                    onRetry: _reload,
+                  );
+                }
+
+                return result.when(
+                  success: (data, capabilities, _) {
+                    final forums = data.items;
+                    if (forums.isEmpty) {
+                      return _ForumFavoriteForumPickerFrame(
+                        body: _ForumFavoriteForumPickerEmptyView(
+                          message: AppLocalizations.of(
+                            context,
+                          ).forumNoFavoriteForums,
+                        ),
                       );
-                    },
+                    }
+                    return _ForumFavoriteForumPickerFrame(
+                      itemCount: forums.length,
+                      body: ListView.separated(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        itemCount: forums.length,
+                        separatorBuilder: (context, _) => Divider(
+                          height: 1,
+                          indent: 20,
+                          endIndent: 20,
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                        itemBuilder: (context, index) {
+                          final forum = forums[index];
+                          final remoteFavoriteId = forum.remoteFavoriteId;
+                          final canUnfavorite =
+                              capabilities.supports(
+                                FavoriteForumDirectoryCapability
+                                    .stableRemoteFavoriteIdentity,
+                              ) &&
+                              remoteFavoriteId?.trim().isNotEmpty == true;
+                          final isSubmitting =
+                              _submittingRemoteFavoriteId == remoteFavoriteId;
+                          return _ForumFavoriteForumRow(
+                            forum: forum,
+                            isSubmitting: isSubmitting,
+                            enabled:
+                                canUnfavorite &&
+                                _submittingRemoteFavoriteId == null,
+                            onTap: () => _handleUnfavorite(forum),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                  failure: (failure) => _ForumFavoriteForumPickerErrorView(
+                    message: ForumTextResolver.favoriteForumsLoadFailure(
+                      AppLocalizations.of(context),
+                      failure.diagnosticMessage,
+                    ),
+                    onRetry: _reload,
                   ),
                 );
               },
-              failure: (error) => _ForumFavoriteForumPickerErrorView(
-                message: ForumTextResolver.favoriteForumsLoadFailure(
-                  AppLocalizations.of(context),
-                  error.message,
-                ),
-                onRetry: _reload,
-              ),
-            );
-          },
-        ),
+            ),
       ),
     );
   }
@@ -123,9 +155,13 @@ class _ForumFavoriteForumPickerState extends State<ForumFavoriteForumPicker> {
     });
   }
 
-  Future<void> _handleUnfavorite(FavoriteForum forum) async {
+  Future<void> _handleUnfavorite(FavoriteForumEntry forum) async {
+    final remoteFavoriteId = forum.remoteFavoriteId?.trim();
+    if (remoteFavoriteId == null || remoteFavoriteId.isEmpty) {
+      return;
+    }
     setState(() {
-      _submittingFavid = forum.favid;
+      _submittingRemoteFavoriteId = remoteFavoriteId;
     });
     final result = await widget.onUnfavorite(forum);
     if (!mounted) {
@@ -150,7 +186,7 @@ class _ForumFavoriteForumPickerState extends State<ForumFavoriteForumPicker> {
         ),
       );
     setState(() {
-      _submittingFavid = null;
+      _submittingRemoteFavoriteId = null;
     });
   }
 }
@@ -209,7 +245,7 @@ class _ForumFavoriteForumRow extends StatelessWidget {
     required this.onTap,
   });
 
-  final FavoriteForum forum;
+  final FavoriteForumEntry forum;
   final bool isSubmitting;
   final bool enabled;
   final VoidCallback onTap;
@@ -221,10 +257,12 @@ class _ForumFavoriteForumRow extends StatelessWidget {
     final title = forum.title.trim().isEmpty
         ? '#${forum.fid.trim()}'
         : forum.title.trim();
-    final description = forum.description.trim();
+    final description = forum.description?.trim() ?? '';
 
     return ListTile(
-      key: Key('forum-favorite-forum-item-${forum.favid}'),
+      key: Key(
+        'forum-favorite-forum-item-${forum.remoteFavoriteId ?? forum.fid}',
+      ),
       enabled: enabled,
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
       title: Text(
@@ -248,7 +286,10 @@ class _ForumFavoriteForumRow extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : IconButton(
-              key: Key('forum-favorite-forum-remove-${forum.favid}'),
+              key: Key(
+                'forum-favorite-forum-remove-'
+                '${forum.remoteFavoriteId ?? forum.fid}',
+              ),
               onPressed: enabled ? onTap : null,
               tooltip: l10n.forumUnfavoriteForum,
               icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),

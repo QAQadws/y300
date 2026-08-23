@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
-import 'package:y300/features/favorites/data/models/favorite_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
 import 'package:y300/features/library_shared/data/providers/work_purge_providers.dart';
@@ -83,10 +82,9 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   Future<void> markSyncFailure(String message) async {}
 
   @override
-  Future<int> upsertRemotePage({
-    required FavoriteThreadsPage page,
-    required int pageStartOrder,
-  }) async => page.items.length;
+  Future<int> upsertRemoteThreads(
+    List<FavoriteThreadCacheUpsert> items,
+  ) async => items.length;
 
   @override
   Future<List<FavoriteThreadCacheRecord>> getMissingDetailRecords({

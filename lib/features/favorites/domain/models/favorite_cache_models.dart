@@ -1,3 +1,5 @@
+import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 const String favoriteSyncKey = 'myfavthread';
@@ -41,6 +43,8 @@ class FavoriteSyncResult {
     required this.removedRecords,
     required this.detailLoadedCount,
     required this.failedDetailTids,
+    this.directoryCapabilities,
+    this.directoryMetadata,
   });
 
   final FavoriteSyncMode mode;
@@ -50,18 +54,41 @@ class FavoriteSyncResult {
   final List<FavoriteThreadCacheRecord> removedRecords;
   final int detailLoadedCount;
   final List<String> failedDetailTids;
+  final FavoriteThreadDirectoryReadCapabilities? directoryCapabilities;
+  final DataReadMetadata? directoryMetadata;
+}
+
+class FavoriteThreadCacheUpsert {
+  const FavoriteThreadCacheUpsert({
+    required this.tid,
+    required this.title,
+    required this.replyCount,
+    this.remoteFavoriteId,
+    this.description,
+    this.authorName,
+    this.favoritedAt,
+    this.remoteOrder,
+  });
+
+  final String tid;
+  final String title;
+  final int replyCount;
+  final String? remoteFavoriteId;
+  final String? description;
+  final String? authorName;
+  final DateTime? favoritedAt;
+  final int? remoteOrder;
 }
 
 class FavoriteThreadCacheRecord {
   const FavoriteThreadCacheRecord({
     required this.tid,
-    this.favid,
+    this.remoteFavoriteId,
     required this.title,
     this.description,
-    this.author,
-    required this.replies,
-    this.url,
-    this.dateline,
+    this.authorName,
+    required this.replyCount,
+    this.favoritedAt,
     this.remoteOrder,
     this.sourceFid,
     this.sourceTypeid,
@@ -77,13 +104,12 @@ class FavoriteThreadCacheRecord {
   });
 
   final String tid;
-  final String? favid;
+  final String? remoteFavoriteId;
   final String title;
   final String? description;
-  final String? author;
-  final int replies;
-  final String? url;
-  final DateTime? dateline;
+  final String? authorName;
+  final int replyCount;
+  final DateTime? favoritedAt;
   final int? remoteOrder;
   final String? sourceFid;
   final String? sourceTypeid;
