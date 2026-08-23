@@ -74,6 +74,73 @@ void main() {
   });
 
   test(
+    'current-forum search binds POST and redirect to the requested forum',
+    () async {
+      final adapter = _SearchRepositoryAdapter(
+        postLocation:
+            'search.php?mod=curforum&srhfid=42&searchid=778&searchsubmit=yes',
+        initialHtml: _pageHtml(tid: '100', forumId: '42'),
+      );
+      final repository = _buildRepository(adapter);
+
+      final result = await repository.load(
+        const ForumSearchQuery(
+          keyword: '漫画',
+          scope: ForumSearchScope.currentForum,
+          forumId: '42',
+        ),
+      );
+
+      expect(result.failureOrNull, isNull);
+      expect(result.dataOrNull!.topics.single.forumId, '42');
+      expect(adapter.requestCount, 2);
+      expect(adapter.requests.first.uri.queryParameters['mod'], 'curforum');
+      expect(adapter.requests.first.uri.queryParameters['srhfid'], '42');
+      expect(adapter.postBodies.single, containsPair('srhfid', '42'));
+    },
+  );
+
+  test('redirect for another forum fails before the result GET', () async {
+    final adapter = _SearchRepositoryAdapter(
+      postLocation:
+          'search.php?mod=curforum&srhfid=99&searchid=778&searchsubmit=yes',
+    );
+    final repository = _buildRepository(adapter);
+
+    final result = await repository.load(
+      const ForumSearchQuery(
+        keyword: '漫画',
+        scope: ForumSearchScope.currentForum,
+        forumId: '42',
+      ),
+    );
+
+    expect(result.failureOrNull?.kind, DataReadFailureKind.parse);
+    expect(adapter.requestCount, 1);
+  });
+
+  test(
+    'invalid redirect page or duplicate context fails before the result GET',
+    () async {
+      for (final location in <String>[
+        'search.php?mod=forum&searchid=778&page=2',
+        'search.php?mod=forum&searchid=778&searchid=779',
+        'search.php?mod=forum&searchid=778&page=',
+      ]) {
+        final adapter = _SearchRepositoryAdapter(postLocation: location);
+        final repository = _buildRepository(adapter);
+
+        final result = await repository.load(
+          const ForumSearchQuery(keyword: '漫画'),
+        );
+
+        expect(result.failureOrNull?.kind, DataReadFailureKind.parse);
+        expect(adapter.requestCount, 1);
+      }
+    },
+  );
+
+  test(
     'continuation is opaque and cannot be reused for another query',
     () async {
       final adapter = _SearchRepositoryAdapter(
@@ -126,7 +193,7 @@ DiscuzForumSearchRepository _buildRepository(_SearchRepositoryAdapter adapter) {
   );
 }
 
-String _pageHtml({required String tid, int? nextPage}) {
+String _pageHtml({required String tid, String forumId = '30', int? nextPage}) {
   return '''
 <ul class="threadlist">
   <li class="list">
@@ -134,7 +201,7 @@ String _pageHtml({required String tid, int? nextPage}) {
       <div class="threadlist_tit"><em>主题 $tid</em></div>
     </a>
     <div class="threadlist_foot">
-      <a href="forum.php?mod=forumdisplay&amp;fid=30&amp;mobile=2">漫画区</a>
+      <a href="forum.php?mod=forumdisplay&amp;fid=$forumId&amp;mobile=2">漫画区</a>
     </div>
   </li>
 </ul>
@@ -151,11 +218,18 @@ class _FakeFormhashProvider implements FormhashProvider {
 }
 
 class _SearchRepositoryAdapter implements HttpClientAdapter {
-  _SearchRepositoryAdapter({this.initialHtml, this.nextPageHtml});
+  _SearchRepositoryAdapter({
+    this.initialHtml,
+    this.nextPageHtml,
+    this.postLocation,
+  });
 
   final String? initialHtml;
   final String? nextPageHtml;
+  final String? postLocation;
   int requestCount = 0;
+  final List<RequestOptions> requests = <RequestOptions>[];
+  final List<Object?> postBodies = <Object?>[];
 
   @override
   void close({bool force = false}) {}
@@ -167,14 +241,17 @@ class _SearchRepositoryAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     requestCount += 1;
+    requests.add(options);
     final uri = options.uri;
     if (options.method == 'POST') {
+      postBodies.add(options.data);
       return ResponseBody.fromString(
         '',
         302,
         headers: <String, List<String>>{
           'location': <String>[
-            'search.php?mod=forum&searchid=777&searchsubmit=yes',
+            postLocation ??
+                'search.php?mod=forum&searchid=777&searchsubmit=yes',
           ],
         },
       );

@@ -844,7 +844,7 @@ void main() {
       await service.sync();
 
       // 旧路径在 bootstrapInitial 下走内联搜索；新路径下所有 catalog 未命中
-      // 都走持久化等待队列，由 ForumSearchScheduler 控制节奏，并通过队列快照
+      // 都走持久化等待队列，由 ForumSearchReadScheduler 控制节奏，并通过队列快照
       // 驱动通知栏。
       expect(queue.enqueuedRequests, hasLength(1));
       expect(

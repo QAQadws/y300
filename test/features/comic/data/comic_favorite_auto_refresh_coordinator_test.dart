@@ -441,7 +441,7 @@ void main() {
       () async {
         // 之前 bootstrapInitial 会内联跑 search，这条路径已被废弃：
         // 现在所有 catalog 未命中都进入 ComicSearchRefreshQueueService，
-        // 由 ForumSearchScheduler 控制节奏并向通知栏汇报"《xxx》正在等待漫画搜索"。
+        // 由 ForumSearchReadScheduler 控制节奏并向通知栏汇报"《xxx》正在等待漫画搜索"。
         final governor = _RecordingGovernor();
         final refreshService = _FakeRefreshService(
           catalogOutcome: const ComicEpisodeRefreshOutcome(

@@ -158,7 +158,7 @@ final class DiscuzSearchHtmlParser {
   Uri _parseThreadUri(String? rawHref) {
     final uri = _resolveSameSite(rawHref);
     if (uri == null ||
-        !uri.path.toLowerCase().endsWith('/forum.php') ||
+        uri.path.toLowerCase() != '/forum.php' ||
         uri.queryParameters['mod']?.toLowerCase() != 'viewthread') {
       throw const DiscuzSearchHtmlParseException('search_topic_link_invalid');
     }
@@ -168,7 +168,7 @@ final class DiscuzSearchHtmlParser {
   Uri _parseForumUri(String? rawHref) {
     final uri = _resolveSameSite(rawHref);
     if (uri == null ||
-        !uri.path.toLowerCase().endsWith('/forum.php') ||
+        uri.path.toLowerCase() != '/forum.php' ||
         uri.queryParameters['mod']?.toLowerCase() != 'forumdisplay') {
       throw const DiscuzSearchHtmlParseException('search_forum_link_invalid');
     }
@@ -186,7 +186,7 @@ final class DiscuzSearchHtmlParser {
       return null;
     }
     final uri = _resolveSameSite(anchor.attributes['href']);
-    if (uri == null || !uri.path.toLowerCase().endsWith('/search.php')) {
+    if (uri == null || uri.path.toLowerCase() != '/search.php') {
       throw const DiscuzSearchHtmlParseException('search_next_link_invalid');
     }
     final searchIdValues =
@@ -216,7 +216,7 @@ final class DiscuzSearchHtmlParser {
     final origin = Uri.parse('${AppConfig.siteBaseUrl}/');
     if (uri.scheme.toLowerCase() != origin.scheme ||
         uri.host.toLowerCase() != origin.host.toLowerCase() ||
-        !uri.path.toLowerCase().endsWith('/search.php')) {
+        uri.path.toLowerCase() != '/search.php') {
       throw const DiscuzSearchHtmlParseException('search_context_invalid');
     }
     final searchContextValues =
@@ -228,14 +228,11 @@ final class DiscuzSearchHtmlParser {
       throw const DiscuzSearchHtmlParseException('search_context_missing');
     }
     final pageValues = uri.queryParametersAll['page'] ?? const <String>[];
-    final pageText = pageValues.length > 1
-        ? null
-        : pageValues.isEmpty
-        ? null
-        : pageValues.single.trim();
-    final page = pageText == null || pageText.isEmpty
+    final page = pageValues.isEmpty
         ? 1
-        : int.tryParse(pageText);
+        : pageValues.length == 1
+        ? int.tryParse(pageValues.single.trim())
+        : null;
     if (page == null || page < 1 || page != requestedPage) {
       throw const DiscuzSearchHtmlParseException('search_page_invalid');
     }
@@ -249,18 +246,22 @@ final class DiscuzSearchHtmlParser {
   }
 
   bool _matchesScope(Uri uri, ForumSearchQuery query) {
-    final mod = uri.queryParameters['mod']?.toLowerCase();
+    final modValues = uri.queryParametersAll['mod'] ?? const <String>[];
+    if (modValues.length != 1) {
+      return false;
+    }
+    final mod = modValues.single.trim().toLowerCase();
     final forumIds = uri.queryParametersAll['srhfid'] ?? const <String>[];
     if (forumIds.length > 1) {
       return false;
     }
     return switch (query.scope) {
-      ForumSearchScope.allForums => mod == 'forum',
-      ForumSearchScope.currentForum => mod == 'curforum' || mod == 'forum',
-        } &&
-        (query.scope != ForumSearchScope.currentForum ||
-            uri.queryParameters['srhfid'] == null ||
-            uri.queryParameters['srhfid'] == query.normalizedForumId);
+      ForumSearchScope.allForums => mod == 'forum' && forumIds.isEmpty,
+      ForumSearchScope.currentForum =>
+        mod == 'curforum' &&
+            forumIds.length == 1 &&
+            forumIds.single == query.normalizedForumId,
+    };
   }
 
   Uri? _resolveSameSite(String? rawHref) {

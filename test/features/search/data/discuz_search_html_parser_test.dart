@@ -55,6 +55,27 @@ void main() {
     expect(result.nextPageUri, isNull);
   });
 
+  test('DiscuzSearchHtmlParser rejects duplicate scope parameters', () {
+    expect(
+      () => const DiscuzSearchHtmlParser().parse(
+        html: '<ul class="threadlist"></ul>',
+        pageUri: Uri.parse(
+          'https://bbs.yamibo.com/search.php?mod=forum&mod=curforum&searchid=15063',
+        ),
+        query: const ForumSearchQuery(keyword: 'duplicate'),
+        requestedPage: 1,
+        expectedSearchContextId: '15063',
+      ),
+      throwsA(
+        isA<DiscuzSearchHtmlParseException>().having(
+          (error) => error.code,
+          'code',
+          'search_scope_invalid',
+        ),
+      ),
+    );
+  });
+
   test('DiscuzSearchHtmlParser fails when the required root is missing', () {
     expect(
       () => const DiscuzSearchHtmlParser().parse(

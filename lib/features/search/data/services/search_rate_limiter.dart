@@ -1,6 +1,16 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/config/technical_storage_keys.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
+
+final class SearchRateLimitResult {
+  const SearchRateLimitResult.allowed()
+    : isAllowed = true,
+      retryAfter = Duration.zero;
+
+  const SearchRateLimitResult.blocked(this.retryAfter) : isAllowed = false;
+
+  final bool isAllowed;
+  final Duration retryAfter;
+}
 
 class SearchRateLimiter {
   SearchRateLimiter({

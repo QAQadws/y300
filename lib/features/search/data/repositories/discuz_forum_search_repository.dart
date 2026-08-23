@@ -96,8 +96,20 @@ final class DiscuzForumSearchRepository implements ForumSearchRepository {
         diagnosticMessage: 'Forum search context redirect is invalid.',
       );
     }
-    final searchContextId = resultUri.queryParameters['searchid']?.trim() ?? '';
-    if (searchContextId.isEmpty || !_matchesScope(resultUri, normalized)) {
+    final searchContextValues =
+        resultUri.queryParametersAll['searchid'] ?? const <String>[];
+    final searchContextId = searchContextValues.length == 1
+        ? searchContextValues.single.trim()
+        : '';
+    final pageValues = resultUri.queryParametersAll['page'] ?? const <String>[];
+    final initialPage = pageValues.isEmpty
+        ? 1
+        : pageValues.length == 1
+        ? int.tryParse(pageValues.single.trim())
+        : null;
+    if (searchContextId.isEmpty ||
+        initialPage != 1 ||
+        !_matchesScope(resultUri, normalized)) {
       return const DataReadFailure(
         kind: DataReadFailureKind.parse,
         code: 'forum_search_context_invalid',
@@ -336,14 +348,22 @@ final class DiscuzForumSearchRepository implements ForumSearchRepository {
   }
 
   bool _matchesScope(Uri uri, ForumSearchQuery query) {
-    final mod = uri.queryParameters['mod']?.toLowerCase();
+    final modValues = uri.queryParametersAll['mod'] ?? const <String>[];
+    if (modValues.length != 1) {
+      return false;
+    }
+    final mod = modValues.single.trim().toLowerCase();
+    final forumIds = uri.queryParametersAll['srhfid'] ?? const <String>[];
+    if (forumIds.length > 1) {
+      return false;
+    }
     return switch (query.scope) {
-          ForumSearchScope.allForums => mod == 'forum',
-          ForumSearchScope.currentForum => mod == 'curforum' || mod == 'forum',
-        } &&
-        (query.scope != ForumSearchScope.currentForum ||
-            uri.queryParameters['srhfid'] == null ||
-            uri.queryParameters['srhfid'] == query.normalizedForumId);
+      ForumSearchScope.allForums => mod == 'forum' && forumIds.isEmpty,
+      ForumSearchScope.currentForum =>
+        mod == 'curforum' &&
+            forumIds.length == 1 &&
+            forumIds.single == query.normalizedForumId,
+    };
   }
 
   Uri _submitUri(ForumSearchQuery query) {
@@ -382,7 +402,7 @@ final class DiscuzForumSearchRepository implements ForumSearchRepository {
     final resolved = parsed.hasScheme ? parsed : origin.resolveUri(parsed);
     if (resolved.scheme.toLowerCase() != origin.scheme ||
         resolved.host.toLowerCase() != origin.host.toLowerCase() ||
-        !resolved.path.toLowerCase().endsWith('/search.php')) {
+        resolved.path.toLowerCase() != '/search.php') {
       return null;
     }
     return resolved;

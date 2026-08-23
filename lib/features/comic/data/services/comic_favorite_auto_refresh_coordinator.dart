@@ -246,7 +246,7 @@ class ComicFavoriteAutoRefreshCoordinator {
     }
 
     // catalog 未命中：始终走持久化的搜索等待队列。
-    // 队列内部由 ForumSearchScheduler 控制 ~10.5s 节奏，并通过队列快照向
+    // 队列内部由 ForumSearchReadScheduler 控制 ~10.5s 节奏，并通过队列快照向
     // 通知栏汇报"《xxx》正在等待漫画搜索"——这是一直存在的能力，曾被
     // bootstrapInitial 内联搜索路径绕过，这里恢复成始终入队。
     final queued = await _searchQueue.enqueue(

@@ -3,8 +3,6 @@ import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_link_merger.dart';
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
 
 void main() {
   group('DefaultComicEpisodeLinkMerger', () {
@@ -49,106 +47,27 @@ void main() {
       expect(merged.single.rawText, '补全标题');
     });
 
-    test('fromSearchCandidates keeps every explicit episode candidate', () {
-      final links = merger.fromSearchCandidates(const <ComicSearchCandidate>[
-        ComicSearchCandidate(
-          item: DiscuzSearchResultItem(
-            tid: '100',
-            title: '测试漫画 第80话',
-            url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
-            fid: '30',
-          ),
-          score: 1,
-          searchIndex: 0,
-        ),
-        ComicSearchCandidate(
-          item: DiscuzSearchResultItem(
-            tid: '502780',
-            title: '[百合會]测试漫画第82话上',
-            url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=502780',
-            fid: '30',
-          ),
-          score: 0.9,
-          searchIndex: 1,
-        ),
-        ComicSearchCandidate(
-          item: DiscuzSearchResultItem(
-            tid: '503102',
-            title: '[百合會]测试漫画第82话下',
-            url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=503102',
-            fid: '30',
-          ),
-          score: 0.9,
-          searchIndex: 2,
-        ),
-        ComicSearchCandidate(
-          item: DiscuzSearchResultItem(
-            tid: '502128',
-            title: '[百合會]测试漫画第81话',
-            url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=502128',
-            fid: '30',
-          ),
-          score: 0.9,
-          searchIndex: 3,
-        ),
-      ]);
-
-      expect(links.map((link) => link.url).toList(), <String>[
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=502128',
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=502780',
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=503102',
-      ]);
-      expect(links.map((link) => link.episodeTitle).toList(), <String>[
-        '第80话',
-        '第81话',
-        '第82话上',
-        '第82话下',
-      ]);
-    });
-
-    test('fromSearchCandidates rejects non-episode work entries', () {
-      final links = merger.fromSearchCandidates(const <ComicSearchCandidate>[
-        ComicSearchCandidate(
-          item: DiscuzSearchResultItem(
-            tid: '100',
-            title: '测试漫画 目录合集',
-            url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
-            fid: '30',
-          ),
-          score: 1,
-          searchIndex: 0,
-        ),
-        ComicSearchCandidate(
-          item: DiscuzSearchResultItem(
+    test('builds thread urls at the application boundary', () {
+      final links = merger.fromSearchCandidates(
+        const <ComicSearchCandidate>[
+          ComicSearchCandidate(
             tid: '101',
             title: '测试漫画 第1话',
-            url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101',
-            fid: '30',
-          ),
-          score: 1,
-          searchIndex: 1,
-        ),
-      ]);
-
-      expect(links, hasLength(1));
-      expect(links.single.url, contains('tid=101'));
-      expect(links.single.episodeTitle, '第1话');
-    });
-
-    test('fromSearchTopicCandidates builds thread URLs at the boundary', () {
-      final links = merger.fromSearchTopicCandidates(
-        const <ComicSearchTopicCandidate>[
-          ComicSearchTopicCandidate(
-            item: ForumSearchTopicSummary(tid: '101', title: '测试漫画 第1话'),
             score: 1,
             searchIndex: 0,
+          ),
+          ComicSearchCandidate(
+            tid: '102',
+            title: '测试漫画 目录合集',
+            score: 1,
+            searchIndex: 1,
           ),
         ],
         threadUrlBuilder: (tid) =>
             'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid',
       );
 
+      expect(links, hasLength(1));
       expect(links.single.url, contains('tid=101'));
       expect(links.single.episodeTitle, '第1话');
     });

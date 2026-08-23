@@ -12,19 +12,12 @@ abstract class ComicEpisodeLinkMerger {
   List<ComicEpisodeLink> sort(List<ComicEpisodeLink> links);
 
   List<ComicEpisodeLink> fromSearchCandidates(
-    List<ComicSearchCandidate> candidates,
-  );
-}
-
-abstract interface class ComicSearchTopicLinkMerger {
-  List<ComicEpisodeLink> fromSearchTopicCandidates(
-    List<ComicSearchTopicCandidate> candidates, {
+    List<ComicSearchCandidate> candidates, {
     required String Function(String tid) threadUrlBuilder,
   });
 }
 
-class DefaultComicEpisodeLinkMerger
-    implements ComicEpisodeLinkMerger, ComicSearchTopicLinkMerger {
+class DefaultComicEpisodeLinkMerger implements ComicEpisodeLinkMerger {
   const DefaultComicEpisodeLinkMerger({
     required ComicSubjectParser subjectParser,
   }) : _subjectParser = subjectParser;
@@ -74,43 +67,16 @@ class DefaultComicEpisodeLinkMerger
 
   @override
   List<ComicEpisodeLink> fromSearchCandidates(
-    List<ComicSearchCandidate> candidates,
-  ) {
-    final sortedCandidates = candidates.toList()
-      ..sort((a, b) {
-        final episodeOrder = _compareEpisodeOrder(a.item.title, b.item.title);
-        if (episodeOrder != 0) {
-          return episodeOrder;
-        }
-        final tidOrder = _compareTid(a.item.tid, b.item.tid);
-        if (tidOrder != 0) {
-          return tidOrder;
-        }
-        return a.searchIndex.compareTo(b.searchIndex);
-      });
-
-    final links = <ComicEpisodeLink>[];
-    for (final candidate in sortedCandidates) {
-      final link = _episodeLinkFromSearchItem(candidate);
-      if (link != null) {
-        links.add(link);
-      }
-    }
-    return merge(const <ComicEpisodeLink>[], links);
-  }
-
-  @override
-  List<ComicEpisodeLink> fromSearchTopicCandidates(
-    List<ComicSearchTopicCandidate> candidates, {
+    List<ComicSearchCandidate> candidates, {
     required String Function(String tid) threadUrlBuilder,
   }) {
     final sortedCandidates = candidates.toList()
       ..sort((a, b) {
-        final episodeOrder = _compareEpisodeOrder(a.item.title, b.item.title);
+        final episodeOrder = _compareEpisodeOrder(a.title, b.title);
         if (episodeOrder != 0) {
           return episodeOrder;
         }
-        final tidOrder = _compareTid(a.item.tid, b.item.tid);
+        final tidOrder = _compareTid(a.tid, b.tid);
         if (tidOrder != 0) {
           return tidOrder;
         }
@@ -119,34 +85,24 @@ class DefaultComicEpisodeLinkMerger
 
     final links = <ComicEpisodeLink>[];
     for (final candidate in sortedCandidates) {
-      final metadata = _subjectParser.parse(candidate.item.title);
+      final metadata = _subjectParser.parse(candidate.title);
       final episodeLabel = metadata.episodeLabel?.trim();
       if (episodeLabel == null || episodeLabel.isEmpty) {
         continue;
       }
+      final tid = candidate.tid.trim();
+      if (tid.isEmpty) {
+        continue;
+      }
       links.add(
         ComicEpisodeLink(
-          url: threadUrlBuilder(candidate.item.tid),
-          rawText: candidate.item.title,
+          url: threadUrlBuilder(tid),
+          rawText: candidate.title,
           episodeTitle: episodeLabel,
         ),
       );
     }
     return merge(const <ComicEpisodeLink>[], links);
-  }
-
-  ComicEpisodeLink? _episodeLinkFromSearchItem(ComicSearchCandidate candidate) {
-    final item = candidate.item;
-    final metadata = _subjectParser.parse(item.title);
-    final episodeLabel = metadata.episodeLabel?.trim();
-    if (episodeLabel == null || episodeLabel.isEmpty) {
-      return null;
-    }
-    return ComicEpisodeLink(
-      url: item.url.trim(),
-      rawText: item.title,
-      episodeTitle: episodeLabel,
-    );
   }
 
   int _compareEpisodeOrder(String a, String b) {

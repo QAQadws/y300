@@ -34,7 +34,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/pla
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:y300/features/search/domain/models/forum_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
@@ -1541,8 +1541,8 @@ void main() {
       final searchPage = tester.widget<ForumSearchPage>(
         find.byType(ForumSearchPage),
       );
-      expect(searchPage.context.scope, DiscuzSearchScope.curForum);
-      expect(searchPage.context.srhfid, '30');
+      expect(searchPage.scope, ForumSearchScope.currentForum);
+      expect(searchPage.forumId, '30');
     });
 
     testWidgets('opens search with non-30 forum fid', (tester) async {
@@ -1577,8 +1577,8 @@ void main() {
       final searchPage = tester.widget<ForumSearchPage>(
         find.byType(ForumSearchPage),
       );
-      expect(searchPage.context.scope, DiscuzSearchScope.curForum);
-      expect(searchPage.context.srhfid, '33');
+      expect(searchPage.scope, ForumSearchScope.currentForum);
+      expect(searchPage.forumId, '33');
     });
 
     testWidgets('hides search action when forum fid is empty', (tester) async {

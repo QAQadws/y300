@@ -8,9 +8,7 @@ import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_pr
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
-import 'package:y300/features/search/data/services/forum_search_legacy_bridge.dart';
 import 'package:y300/features/search/domain/repositories/forum_search_repository.dart';
 import 'package:y300/features/search/presentation/search_text_resolver.dart';
 import 'package:y300/features/search/presentation/widgets/forum_search_result_card.dart';
@@ -24,25 +22,10 @@ class ForumSearchPage extends ConsumerStatefulWidget {
     super.key,
     this.scope = ForumSearchScope.allForums,
     this.forumId,
-    @Deprecated('Use scope and forumId.') DiscuzSearchContext? context,
-  }) : _legacyContext = context;
+  });
 
   final ForumSearchScope scope;
   final String? forumId;
-
-  /// Kept for route/test source compatibility; it is converted at the page
-  /// boundary and never enters the search domain contract.
-  final DiscuzSearchContext? _legacyContext;
-
-  /// Compatibility view for existing route tests and callers. New code should
-  /// use [scope] and [forumId].
-  @Deprecated('Use scope and forumId.')
-  DiscuzSearchContext get context =>
-      _legacyContext ??
-      (scope == ForumSearchScope.currentForum &&
-              forumId?.trim().isNotEmpty == true
-          ? DiscuzSearchContext.curForum(srhfid: forumId!.trim())
-          : const DiscuzSearchContext.forum());
 
   @override
   ConsumerState<ForumSearchPage> createState() => _ForumSearchPageState();
@@ -95,7 +78,7 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
     final query = _buildQuery(keyword);
     final previous = _data;
     final refreshing = previous != null && _sameQuery(previous.query, query);
-    final coordinator = ref.read(forumSearchPageCoordinatorProvider);
+    final coordinator = ref.read(forumSearchCoordinatorProvider);
     final waitingNotice = _searchWaitingNotice(coordinator);
     if (waitingNotice != null) {
       setState(() => _notice = waitingNotice);
@@ -160,16 +143,6 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
   }
 
   ForumSearchQuery _buildQuery(String keyword) {
-    final legacyContext = widget._legacyContext;
-    if (legacyContext != null) {
-      return ForumSearchQuery(
-        keyword: keyword,
-        scope: legacyContext.scope == DiscuzSearchScope.curForum
-            ? ForumSearchScope.currentForum
-            : ForumSearchScope.allForums,
-        forumId: legacyContext.srhfid,
-      );
-    }
     return ForumSearchQuery(
       keyword: keyword,
       scope: widget.scope,
@@ -239,7 +212,7 @@ class _ForumSearchPageState extends ConsumerState<ForumSearchPage> {
       _loadingMore = true;
       _loadMoreNotice = null;
     });
-    final coordinator = ref.read(forumSearchPageCoordinatorProvider);
+    final coordinator = ref.read(forumSearchCoordinatorProvider);
     final execution = await coordinator.loadNextPage(
       _buildQuery(_controller.text),
       nextPage,

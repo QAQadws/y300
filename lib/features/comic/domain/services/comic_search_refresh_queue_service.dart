@@ -7,7 +7,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
+import 'package:y300/features/search/data/services/search_rate_limiter.dart';
 
 class ComicSearchRefreshRetryPolicy {
   const ComicSearchRefreshRetryPolicy({
@@ -45,8 +45,8 @@ abstract class ComicSearchRefreshQueueStateReader {
 /// search/current-only fallback.
 ///
 /// The worker deliberately knows nothing about favorite/detail pages.  It
-/// persists queue state, delegates actual search throttling to
-/// [ForumSearchScheduler] through [ComicEpisodeRefreshService], and delegates
+/// persists queue state, delegates actual search throttling to the forum search
+/// coordinator through [ComicEpisodeRefreshService], and delegates
 /// local merge/cover/refresh application to [ComicRefreshOutcomeApplier].
 class ComicSearchRefreshQueueService
     implements
@@ -56,7 +56,7 @@ class ComicSearchRefreshQueueService
     required ComicSearchRefreshQueueRepository queueRepository,
     required ComicEpisodeRefreshService refreshService,
     required ComicRefreshOutcomeApplier refreshOutcomeApplier,
-    this.cadence = ForumSearchScheduler.defaultInterval,
+    this.cadence = SearchRateLimiter.defaultCooldown,
     ComicSearchRefreshRetryPolicy retryPolicy =
         const ComicSearchRefreshRetryPolicy(),
     DateTime Function()? nowProvider,

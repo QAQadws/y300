@@ -15,9 +15,12 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
+import 'package:y300/features/search/domain/models/forum_search_models.dart';
+import 'package:y300/features/search/domain/repositories/forum_search_repository.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/search/data/services/discuz_search_service.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import '../../../../support/search/search_response_fixtures.dart';
 
 void main() {
   group('NetworkComicEpisodeRefreshService', () {
@@ -32,22 +35,22 @@ void main() {
           '303': const <ComicEpisodeLink>[],
         },
       );
-      final searchService = _FakeDiscuzSearchService(
-        response: DiscuzSearchResponse(
-          items: const <DiscuzSearchResultItem>[
-            DiscuzSearchResultItem(
+      final searchCoordinator = _FakeForumSearchCoordinator(
+        response: SearchTestResponse(
+          items: const <SearchTestTopic>[
+            SearchTestTopic(
               tid: '301',
               title: '百合情结 第14话',
               url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
               fid: '30',
             ),
-            DiscuzSearchResultItem(
+            SearchTestTopic(
               tid: '302',
               title: '百合情结 特典',
               url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302',
               fid: '30',
             ),
-            DiscuzSearchResultItem(
+            SearchTestTopic(
               tid: '303',
               title: '百合情结 番外',
               url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303',
@@ -59,7 +62,7 @@ void main() {
       );
       final service = _buildService(
         discoveryService: discovery,
-        searchService: searchService,
+        searchCoordinator: searchCoordinator,
         subjectParser: const RuleBasedComicSubjectParser(),
         threadSeedFetcher: (tid) async {
           return ThreadSeed(
@@ -72,7 +75,7 @@ void main() {
 
       expect(links, isNotEmpty);
       expect(links.first.url, contains('9001'));
-      expect(searchService.calledKeywords, contains('百合情结'));
+      expect(searchCoordinator.calledKeywords, contains('百合情结'));
       expect(discovery.requestedTids, containsAll(<String>['301']));
     });
 
@@ -87,24 +90,24 @@ void main() {
             '502128': const <ComicEpisodeLink>[],
           },
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: DiscuzSearchResponse(
-            items: const <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: SearchTestResponse(
+            items: const <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '503102',
                 title: '[百合會][サンデーうぇぶり][古鉢るか]はなにあらし(好事多磨)第82話下',
                 url:
                     'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=503102',
                 fid: '30',
               ),
-              DiscuzSearchResultItem(
+              SearchTestTopic(
                 tid: '502780',
                 title: '[百合會][サンデーうぇぶり][古鉢るか]はなにあらし(好事多磨)第82話上',
                 url:
                     'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=502780',
                 fid: '30',
               ),
-              DiscuzSearchResultItem(
+              SearchTestTopic(
                 tid: '502128',
                 title: '[百合會][サンデーうぇぶり][古鉢るか]はなにあらし(好事多磨)第81話',
                 url:
@@ -117,7 +120,7 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           threadSeedFetcher: (tid) async {
             return const ThreadSeed(
@@ -159,16 +162,16 @@ void main() {
           '100': const <ComicEpisodeLink>[],
         },
       );
-      final searchService = _FakeDiscuzSearchService(
-        response: const DiscuzSearchResponse(
-          items: <DiscuzSearchResultItem>[],
+      final searchCoordinator = _FakeForumSearchCoordinator(
+        response: const SearchTestResponse(
+          items: <SearchTestTopic>[],
           rateLimited: true,
           retryAfter: Duration(seconds: 6),
         ),
       );
       final service = _buildService(
         discoveryService: discovery,
-        searchService: searchService,
+        searchCoordinator: searchCoordinator,
         subjectParser: const RuleBasedComicSubjectParser(),
         threadSeedFetcher: (tid) async {
           return ThreadSeed(
@@ -191,10 +194,10 @@ void main() {
           ],
         },
       );
-      final searchService = _FakeDiscuzSearchService(
-        response: const DiscuzSearchResponse(
-          items: <DiscuzSearchResultItem>[
-            DiscuzSearchResultItem(
+      final searchCoordinator = _FakeForumSearchCoordinator(
+        response: const SearchTestResponse(
+          items: <SearchTestTopic>[
+            SearchTestTopic(
               tid: '401',
               title: '完全不同的作品 第1话',
               url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=401',
@@ -206,7 +209,7 @@ void main() {
       );
       final service = _buildService(
         discoveryService: discovery,
-        searchService: searchService,
+        searchCoordinator: searchCoordinator,
         subjectParser: const RuleBasedComicSubjectParser(),
         threadSeedFetcher: (tid) async {
           return const ThreadSeed(subject: '百合情结 第4话');
@@ -230,15 +233,15 @@ void main() {
             ],
           },
         );
-        final searchService = _SequencedDiscuzSearchService(
-          responses: <DiscuzSearchResponse>[
-            const DiscuzSearchResponse(
-              items: <DiscuzSearchResultItem>[],
+        final searchCoordinator = _SequencedForumSearchCoordinator(
+          responses: <SearchTestResponse>[
+            const SearchTestResponse(
+              items: <SearchTestTopic>[],
               rateLimited: false,
             ),
-            const DiscuzSearchResponse(
-              items: <DiscuzSearchResultItem>[
-                DiscuzSearchResultItem(
+            const SearchTestResponse(
+              items: <SearchTestTopic>[
+                SearchTestTopic(
                   tid: '501',
                   title: '来源标题 第1话',
                   url:
@@ -252,7 +255,7 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           featureFlags: ComicReaderFeatureFlags.defaults.copyWith(
             readerRefreshMultiKeywordEnabled: true,
@@ -270,7 +273,7 @@ void main() {
           ),
         );
 
-        expect(searchService.calledKeywords, <String>['错误关键词', '来源标题']);
+        expect(searchCoordinator.calledKeywords, <String>['错误关键词', '来源标题']);
         expect(links.map((link) => link.url), <String>[
           'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=501',
         ]);
@@ -286,15 +289,15 @@ void main() {
           ],
         },
       );
-      final searchService = _SequencedDiscuzSearchService(
-        responses: <DiscuzSearchResponse>[
-          const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[],
+      final searchCoordinator = _SequencedForumSearchCoordinator(
+        responses: <SearchTestResponse>[
+          const SearchTestResponse(
+            items: <SearchTestTopic>[],
             rateLimited: false,
           ),
-          const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+          const SearchTestResponse(
+            items: <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '501',
                 title: '来源标题 第1话',
                 url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=501',
@@ -307,7 +310,7 @@ void main() {
       );
       final service = _buildService(
         discoveryService: discovery,
-        searchService: searchService,
+        searchCoordinator: searchCoordinator,
         subjectParser: const RuleBasedComicSubjectParser(),
         threadSeedFetcher: (tid) async {
           return const ThreadSeed(subject: '来源标题 第1话');
@@ -322,7 +325,7 @@ void main() {
         ),
       );
 
-      expect(searchService.calledKeywords, <String>['错误关键词']);
+      expect(searchCoordinator.calledKeywords, <String>['错误关键词']);
       expect(links, isEmpty);
       expect(discovery.requestedTids, <String>['100']);
     });
@@ -334,16 +337,16 @@ void main() {
           '601': const <ComicEpisodeLink>[],
         },
       );
-      final searchService = _FakeDiscuzSearchService(
-        response: const DiscuzSearchResponse(
-          items: <DiscuzSearchResultItem>[
-            DiscuzSearchResultItem(
+      final searchCoordinator = _FakeForumSearchCoordinator(
+        response: const SearchTestResponse(
+          items: <SearchTestTopic>[
+            SearchTestTopic(
               tid: '100',
               title: '测试漫画 第1话',
               url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
               fid: '30',
             ),
-            DiscuzSearchResultItem(
+            SearchTestTopic(
               tid: '601',
               title: '测试漫画 第2话',
               url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=601',
@@ -355,7 +358,7 @@ void main() {
       );
       final service = _buildService(
         discoveryService: discovery,
-        searchService: searchService,
+        searchCoordinator: searchCoordinator,
         subjectParser: const RuleBasedComicSubjectParser(),
         threadSeedFetcher: (tid) async {
           return const ThreadSeed(subject: '测试漫画 第1话');
@@ -385,22 +388,22 @@ void main() {
             '568759': const <ComicEpisodeLink>[],
           },
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '571256',
                 title: '[汉化工房九九组][相崎うたう]可爱会毁灭一切 03话',
                 url: 'https://bbs.yamibo.com/thread-571256-1-1.html',
                 fid: '30',
               ),
-              DiscuzSearchResultItem(
+              SearchTestTopic(
                 tid: '570088',
                 title: '[汉化工房九九组][相崎うたう]可爱会毁灭一切 02话',
                 url: 'https://bbs.yamibo.com/thread-570088-1-1.html',
                 fid: '30',
               ),
-              DiscuzSearchResultItem(
+              SearchTestTopic(
                 tid: '568759',
                 title: '[汉化工房九九组][相崎うたう]可爱会毁灭一切 01话',
                 url: 'https://bbs.yamibo.com/thread-568759-1-1.html',
@@ -412,7 +415,7 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           threadSeedFetcher: (_) async {
             return const ThreadSeed(subject: '[汉化工房九九组][相崎うたう]可爱会毁灭一切 03话');
@@ -445,22 +448,22 @@ void main() {
             ],
           },
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '571256',
                 title: '可爱会毁灭一切 03话',
                 url: 'https://bbs.yamibo.com/thread-571256-1-1.html',
                 fid: '30',
               ),
-              DiscuzSearchResultItem(
+              SearchTestTopic(
                 tid: '570088',
                 title: '可爱会毁灭一切 02话',
                 url: 'https://bbs.yamibo.com/thread-570088-1-1.html',
                 fid: '30',
               ),
-              DiscuzSearchResultItem(
+              SearchTestTopic(
                 tid: '568759',
                 title: '可爱会毁灭一切 01话',
                 url: 'https://bbs.yamibo.com/thread-568759-1-1.html',
@@ -472,7 +475,7 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           threadSeedFetcher: (_) async {
             return const ThreadSeed(subject: '可爱会毁灭一切 01话');
@@ -504,16 +507,16 @@ void main() {
             '305': const <ComicEpisodeLink>[],
           },
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '304',
                 title: '测试漫画 第4话',
                 url: 'https://bbs.yamibo.com/thread-304-1-1.html',
                 fid: '30',
               ),
-              DiscuzSearchResultItem(
+              SearchTestTopic(
                 tid: '305',
                 title: '测试漫画 第5话',
                 url: 'https://bbs.yamibo.com/thread-305-1-1.html',
@@ -525,7 +528,7 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           threadSeedFetcher: (_) async {
             return const ThreadSeed(subject: '测试漫画 第3话');
@@ -555,10 +558,10 @@ void main() {
             ],
           },
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: DiscuzSearchResponse(
-            items: const <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: SearchTestResponse(
+            items: const <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '301',
                 title: '百合情结 第15话',
                 url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
@@ -570,7 +573,7 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           threadSeedFetcher: (tid) async {
             return ThreadSeed(
@@ -583,7 +586,7 @@ void main() {
 
         final links = await service.fetchEpisodeLinksFromTid('100');
 
-        expect(searchService.calledKeywords, contains('百合情结'));
+        expect(searchCoordinator.calledKeywords, contains('百合情结'));
         expect(discovery.requestedTids, containsAll(<String>['100', '301']));
         expect(links.map((link) => link.url), <String>[
           'thread-90-1-1.html',
@@ -600,15 +603,15 @@ void main() {
           '100': const <ComicEpisodeLink>[],
         },
       );
-      final searchService = _FakeDiscuzSearchService(
-        response: const DiscuzSearchResponse(
-          items: <DiscuzSearchResultItem>[],
+      final searchCoordinator = _FakeForumSearchCoordinator(
+        response: const SearchTestResponse(
+          items: <SearchTestTopic>[],
           rateLimited: false,
         ),
       );
       final service = _buildService(
         discoveryService: discovery,
-        searchService: searchService,
+        searchCoordinator: searchCoordinator,
         subjectParser: const RuleBasedComicSubjectParser(),
         threadSeedFetcher: (_) async {
           return const ThreadSeed(subject: '[汉化组]漫画标题 Vol.2');
@@ -617,7 +620,7 @@ void main() {
 
       await service.fetchEpisodeLinksFromTid('100');
 
-      expect(searchService.calledKeywords, <String>['漫画标题']);
+      expect(searchCoordinator.calledKeywords, <String>['漫画标题']);
     });
 
     test(
@@ -633,16 +636,16 @@ void main() {
             ],
           },
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: DiscuzSearchResponse(
-            items: const <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: SearchTestResponse(
+            items: const <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '100',
                 title: '百合情结 第14话',
                 url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
                 fid: '30',
               ),
-              DiscuzSearchResultItem(
+              SearchTestTopic(
                 tid: '301',
                 title: '百合情结 第15话',
                 url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
@@ -654,7 +657,7 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           threadSeedFetcher: (tid) async {
             return ThreadSeed(
@@ -687,10 +690,10 @@ void main() {
             ],
           },
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '301',
                 title: '[Scan] Parsed Display Comic EP 03',
                 url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
@@ -702,7 +705,7 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           threadSeedFetcher: (_) async {
             return const ThreadSeed(subject: '[Scan] Current Thread EP 01');
@@ -717,7 +720,9 @@ void main() {
         );
 
         expect(links, isNotEmpty);
-        expect(searchService.calledKeywords, <String>['Parsed Display Comic']);
+        expect(searchCoordinator.calledKeywords, <String>[
+          'Parsed Display Comic',
+        ]);
         expect(discovery.requestedTids, <String>['100', '301']);
       },
     );
@@ -731,10 +736,10 @@ void main() {
           ],
         },
       );
-      final searchService = _FakeDiscuzSearchService(
-        response: DiscuzSearchResponse(
-          items: const <DiscuzSearchResultItem>[
-            DiscuzSearchResultItem(
+      final searchCoordinator = _FakeForumSearchCoordinator(
+        response: SearchTestResponse(
+          items: const <SearchTestTopic>[
+            SearchTestTopic(
               tid: '301',
               title: '真正标题 第1话',
               url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
@@ -746,7 +751,7 @@ void main() {
       );
       final service = _buildService(
         discoveryService: discovery,
-        searchService: searchService,
+        searchCoordinator: searchCoordinator,
         subjectParser: const RuleBasedComicSubjectParser(),
         threadSeedFetcher: (tid) async {
           return const ThreadSeed(subject: '【错误组】错误标题 第1话');
@@ -765,7 +770,7 @@ void main() {
       );
 
       expect(links, isNotEmpty);
-      expect(searchService.calledKeywords, <String>['真正标题']);
+      expect(searchCoordinator.calledKeywords, <String>['真正标题']);
       expect(discovery.requestedTids, <String>['100', '301']);
     });
 
@@ -775,15 +780,15 @@ void main() {
           '100': const <ComicEpisodeLink>[],
         },
       );
-      final searchService = _FakeDiscuzSearchService(
-        response: const DiscuzSearchResponse(
-          items: <DiscuzSearchResultItem>[],
+      final searchCoordinator = _FakeForumSearchCoordinator(
+        response: const SearchTestResponse(
+          items: <SearchTestTopic>[],
           rateLimited: false,
         ),
       );
       final service = _buildService(
         discoveryService: discovery,
-        searchService: searchService,
+        searchCoordinator: searchCoordinator,
         subjectParser: const RuleBasedComicSubjectParser(),
         threadSeedFetcher: (tid) async {
           return const ThreadSeed(subject: '来源标题 第1话');
@@ -800,7 +805,7 @@ void main() {
         ),
       );
 
-      expect(searchService.calledKeywords, <String>['自定义标题']);
+      expect(searchCoordinator.calledKeywords, <String>['自定义标题']);
     });
 
     test('catalog-only returns catalog outcome without searching', () async {
@@ -814,15 +819,15 @@ void main() {
           '100': EpisodeDiscoveryStrategy.catalog,
         },
       );
-      final searchService = _FakeDiscuzSearchService(
-        response: const DiscuzSearchResponse(
-          items: <DiscuzSearchResultItem>[],
+      final searchCoordinator = _FakeForumSearchCoordinator(
+        response: const SearchTestResponse(
+          items: <SearchTestTopic>[],
           rateLimited: false,
         ),
       );
       final service = _buildService(
         discoveryService: discovery,
-        searchService: searchService,
+        searchCoordinator: searchCoordinator,
         subjectParser: const RuleBasedComicSubjectParser(),
       );
 
@@ -833,7 +838,7 @@ void main() {
       expect(outcome.source, ComicEpisodeRefreshSource.catalog);
       expect(outcome.catalogMatched, isTrue);
       expect(outcome.links, hasLength(1));
-      expect(searchService.calledKeywords, isEmpty);
+      expect(searchCoordinator.calledKeywords, isEmpty);
     });
 
     test('catalog-only miss does not trigger search fallback', () async {
@@ -844,10 +849,10 @@ void main() {
           ],
         },
       );
-      final searchService = _FakeDiscuzSearchService(
-        response: const DiscuzSearchResponse(
-          items: <DiscuzSearchResultItem>[
-            DiscuzSearchResultItem(
+      final searchCoordinator = _FakeForumSearchCoordinator(
+        response: const SearchTestResponse(
+          items: <SearchTestTopic>[
+            SearchTestTopic(
               tid: '301',
               title: '测试漫画 第2话',
               url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
@@ -859,7 +864,7 @@ void main() {
       );
       final service = _buildService(
         discoveryService: discovery,
-        searchService: searchService,
+        searchCoordinator: searchCoordinator,
         subjectParser: const RuleBasedComicSubjectParser(),
       );
 
@@ -870,7 +875,7 @@ void main() {
       expect(outcome.source, ComicEpisodeRefreshSource.empty);
       expect(outcome.links, isEmpty);
       expect(outcome.catalogMatched, isFalse);
-      expect(searchService.calledKeywords, isEmpty);
+      expect(searchCoordinator.calledKeywords, isEmpty);
     });
 
     test(
@@ -886,10 +891,10 @@ void main() {
             ],
           },
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '301',
                 title: '测试漫画 第1话',
                 url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
@@ -901,7 +906,7 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           threadSeedFetcher: (_) async {
             return const ThreadSeed(subject: '测试漫画 第2话');
@@ -942,9 +947,9 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: _FakeDiscuzSearchService(
-            response: const DiscuzSearchResponse(
-              items: <DiscuzSearchResultItem>[],
+          searchCoordinator: _FakeForumSearchCoordinator(
+            response: const SearchTestResponse(
+              items: <SearchTestTopic>[],
               rateLimited: false,
             ),
           ),
@@ -983,10 +988,10 @@ void main() {
             ],
           },
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '301',
                 title: '测试漫画 第1话',
                 url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
@@ -999,7 +1004,7 @@ void main() {
         var threadSeedFetchCount = 0;
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           threadSeedFetcher: (_) async {
             threadSeedFetchCount++;
@@ -1022,7 +1027,7 @@ void main() {
         expect(outcome.source, ComicEpisodeRefreshSource.search);
         expect(outcome.links, isNotEmpty);
         expect(threadSeedFetchCount, 0);
-        expect(searchService.calledKeywords, <String>['测试漫画']);
+        expect(searchCoordinator.calledKeywords, <String>['测试漫画']);
         expect(discovery.requestedTids, <String>['301']);
         expect(discovery.preloadedTids, <String>['100']);
       },
@@ -1043,9 +1048,9 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: _FakeDiscuzSearchService(
-            response: const DiscuzSearchResponse(
-              items: <DiscuzSearchResultItem>[],
+          searchCoordinator: _FakeForumSearchCoordinator(
+            response: const SearchTestResponse(
+              items: <SearchTestTopic>[],
               rateLimited: false,
             ),
           ),
@@ -1073,10 +1078,10 @@ void main() {
             ],
           },
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[
-              DiscuzSearchResultItem(
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[
+              SearchTestTopic(
                 tid: '301',
                 title: '[Scan] Parsed Display Comic EP 03',
                 url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
@@ -1088,7 +1093,7 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           subjectParser: const RuleBasedComicSubjectParser(),
           threadSeedFetcher: (_) async {
             return const ThreadSeed(subject: '[Scan] Current Thread EP 01');
@@ -1105,7 +1110,9 @@ void main() {
         expect(outcome.source, ComicEpisodeRefreshSource.search);
         expect(outcome.usedSearch, isTrue);
         expect(outcome.links, isNotEmpty);
-        expect(searchService.calledKeywords, <String>['Parsed Display Comic']);
+        expect(searchCoordinator.calledKeywords, <String>[
+          'Parsed Display Comic',
+        ]);
       },
     );
 
@@ -1121,9 +1128,9 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: _FakeDiscuzSearchService(
-            response: const DiscuzSearchResponse(
-              items: <DiscuzSearchResultItem>[],
+          searchCoordinator: _FakeForumSearchCoordinator(
+            response: const SearchTestResponse(
+              items: <SearchTestTopic>[],
               rateLimited: false,
             ),
           ),
@@ -1156,9 +1163,9 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: _FakeDiscuzSearchService(
-            response: const DiscuzSearchResponse(
-              items: <DiscuzSearchResultItem>[],
+          searchCoordinator: _FakeForumSearchCoordinator(
+            response: const SearchTestResponse(
+              items: <SearchTestTopic>[],
               rateLimited: false,
             ),
           ),
@@ -1196,9 +1203,9 @@ void main() {
       final linkMerger = _RecordingEpisodeLinkMerger();
       final service = _buildService(
         discoveryService: discovery,
-        searchService: _FakeDiscuzSearchService(
-          response: const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[],
+        searchCoordinator: _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[],
             rateLimited: false,
           ),
         ),
@@ -1222,7 +1229,7 @@ void main() {
     test(
       'catalog miss delegates fallback to resolver ranker and merger',
       () async {
-        const searchItem = DiscuzSearchResultItem(
+        const searchItem = SearchTestTopic(
           tid: '301',
           title: '测试漫画 第2话',
           url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
@@ -1247,20 +1254,25 @@ void main() {
           ],
         );
         final candidateRanker = _RecordingCandidateRanker(
-          candidates: const <ComicSearchCandidate>[
-            ComicSearchCandidate(item: searchItem, score: 1, searchIndex: 0),
+          candidates: <ComicSearchCandidate>[
+            ComicSearchCandidate(
+              tid: searchItem.tid,
+              title: searchItem.title,
+              score: 1,
+              searchIndex: 0,
+            ),
           ],
         );
         final linkMerger = _RecordingEpisodeLinkMerger();
-        final searchService = _FakeDiscuzSearchService(
-          response: const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[searchItem],
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[searchItem],
             rateLimited: false,
           ),
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           keywordResolver: keywordResolver,
           candidateRanker: candidateRanker,
           episodeLinkMerger: linkMerger,
@@ -1277,7 +1289,7 @@ void main() {
         );
 
         expect(outcome.source, ComicEpisodeRefreshSource.search);
-        expect(searchService.calledKeywords, <String>['测试漫画']);
+        expect(searchCoordinator.calledKeywords, <String>['测试漫画']);
         expect(keywordResolver.callCount, 1);
         expect(keywordResolver.lastRequest?.sourceTid, '100');
         expect(keywordResolver.lastSubject, '测试漫画 第1话');
@@ -1299,7 +1311,7 @@ void main() {
       () async {
         const candidateCatalogUrl =
             'https://bbs.yamibo.com/misc.php?mod=tag&id=18235';
-        const searchItem = DiscuzSearchResultItem(
+        const searchItem = SearchTestTopic(
           tid: '301',
           title: '测试漫画 第2话',
           url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301',
@@ -1315,15 +1327,15 @@ void main() {
           },
           catalogUrlByTid: const <String, String>{'301': candidateCatalogUrl},
         );
-        final searchService = _FakeDiscuzSearchService(
-          response: const DiscuzSearchResponse(
-            items: <DiscuzSearchResultItem>[searchItem],
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[searchItem],
             rateLimited: false,
           ),
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: searchService,
+          searchCoordinator: searchCoordinator,
           threadSeedFetcher: (_) async {
             return const ThreadSeed(subject: '测试漫画 第1话');
           },
@@ -1356,9 +1368,9 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: _FakeDiscuzSearchService(
-            response: const DiscuzSearchResponse(
-              items: <DiscuzSearchResultItem>[],
+          searchCoordinator: _FakeForumSearchCoordinator(
+            response: const SearchTestResponse(
+              items: <SearchTestTopic>[],
               rateLimited: false,
             ),
           ),
@@ -1392,9 +1404,9 @@ void main() {
         );
         final service = _buildService(
           discoveryService: discovery,
-          searchService: _FakeDiscuzSearchService(
-            response: const DiscuzSearchResponse(
-              items: <DiscuzSearchResultItem>[],
+          searchCoordinator: _FakeForumSearchCoordinator(
+            response: const SearchTestResponse(
+              items: <SearchTestTopic>[],
               rateLimited: false,
             ),
           ),
@@ -1418,7 +1430,7 @@ void main() {
 
 NetworkComicEpisodeRefreshService _buildService({
   required ComicEpisodeDiscoveryService discoveryService,
-  required ForumSearchService searchService,
+  required ForumSearchCoordinator searchCoordinator,
   ComicSubjectParser subjectParser = const RuleBasedComicSubjectParser(),
   ComicReaderFeatureFlags featureFlags = ComicReaderFeatureFlags.defaults,
   ThreadSeedFetcher? threadSeedFetcher,
@@ -1429,7 +1441,7 @@ NetworkComicEpisodeRefreshService _buildService({
   final resolvedSubjectParser = subjectParser;
   return NetworkComicEpisodeRefreshService(
     discoveryService: discoveryService,
-    searchService: searchService,
+    searchService: searchCoordinator,
     keywordResolver:
         keywordResolver ??
         DefaultComicRefreshKeywordResolver(
@@ -1546,31 +1558,64 @@ class _NoopCatalogHtmlFetcher implements CatalogHtmlFetcher {
   }
 }
 
-class _FakeDiscuzSearchService implements ForumSearchService {
-  _FakeDiscuzSearchService({required DiscuzSearchResponse response})
+class _FakeForumSearchCoordinator implements ForumSearchCoordinator {
+  _FakeForumSearchCoordinator({required SearchTestResponse response})
     : _response = response;
 
-  final DiscuzSearchResponse _response;
+  final SearchTestResponse _response;
   final List<String> calledKeywords = <String>[];
 
   @override
-  Future<DiscuzSearchResponse> searchForum({
-    required String keyword,
-    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
+  Future<ForumSearchExecution> search(
+    ForumSearchQuery query, {
     bool enforceRateLimit = true,
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    calledKeywords.add(keyword);
-    return _response;
+    calledKeywords.add(query.normalizedKeyword);
+    return _execution(query);
   }
 
   @override
-  Future<DiscuzSearchResponse> fetchNextPage({
-    required String nextPageUrl,
-    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
-  }) async {
-    return const DiscuzSearchResponse(
-      items: <DiscuzSearchResultItem>[],
-      rateLimited: false,
+  Future<ForumSearchExecution> loadNextPage(
+    ForumSearchQuery query,
+    ForumSearchPageIdentity page,
+  ) async {
+    return _execution(query, currentPage: page.page);
+  }
+
+  ForumSearchExecution _execution(
+    ForumSearchQuery query, {
+    int currentPage = 1,
+  }) {
+    if (_response.rateLimited) {
+      return ForumSearchExecution.rateLimited(_response.retryAfter);
+    }
+    final data = ForumSearchData(
+      query: query.normalized(),
+      topics: _response.items
+          .map(
+            (item) => ForumSearchTopicSummary(
+              tid: item.tid,
+              title: item.title,
+              forumId: item.fid.isEmpty ? null : item.fid,
+              authorName: item.author,
+              publishedAtText: item.timeText,
+            ),
+          )
+          .toList(growable: false),
+      pagination: ForumSearchPagination(currentPage: currentPage),
+    );
+    return ForumSearchExecution.read(
+      DataReadSuccess(
+        data: data,
+        capabilities: ForumSearchReadCapabilities(
+          values: DataCapabilitySet<ForumSearchCapability>.supported(
+            ForumSearchCapability.values,
+          ),
+          paginationPrecision: PaginationPrecision.unknown,
+        ),
+        metadata: const DataReadMetadata.network(),
+      ),
     );
   }
 }
@@ -1604,34 +1649,47 @@ ThreadDetailData _threadDetail({
   );
 }
 
-class _SequencedDiscuzSearchService implements ForumSearchService {
-  _SequencedDiscuzSearchService({required List<DiscuzSearchResponse> responses})
-    : _responses = responses;
+class _SequencedForumSearchCoordinator implements ForumSearchCoordinator {
+  _SequencedForumSearchCoordinator({
+    required List<SearchTestResponse> responses,
+  }) : _responses = responses;
 
-  final List<DiscuzSearchResponse> _responses;
+  final List<SearchTestResponse> _responses;
   final List<String> calledKeywords = <String>[];
   int _index = 0;
 
   @override
-  Future<DiscuzSearchResponse> searchForum({
-    required String keyword,
-    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
+  Future<ForumSearchExecution> search(
+    ForumSearchQuery query, {
     bool enforceRateLimit = true,
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    calledKeywords.add(keyword);
+    calledKeywords.add(query.normalizedKeyword);
     final response = _responses[_index.clamp(0, _responses.length - 1).toInt()];
     _index++;
-    return response;
+    return _FakeForumSearchCoordinator(response: response)._execution(query);
   }
 
   @override
-  Future<DiscuzSearchResponse> fetchNextPage({
-    required String nextPageUrl,
-    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
-  }) async {
-    return const DiscuzSearchResponse(
-      items: <DiscuzSearchResultItem>[],
-      rateLimited: false,
+  Future<ForumSearchExecution> loadNextPage(
+    ForumSearchQuery query,
+    ForumSearchPageIdentity page,
+  ) async {
+    return ForumSearchExecution.read(
+      DataReadSuccess(
+        data: ForumSearchData(
+          query: query.normalized(),
+          topics: const <ForumSearchTopicSummary>[],
+          pagination: ForumSearchPagination(currentPage: page.page),
+        ),
+        capabilities: ForumSearchReadCapabilities(
+          values: DataCapabilitySet<ForumSearchCapability>.supported(
+            ForumSearchCapability.values,
+          ),
+          paginationPrecision: PaginationPrecision.unknown,
+        ),
+        metadata: const DataReadMetadata.network(),
+      ),
     );
   }
 }
@@ -1669,13 +1727,13 @@ class _RecordingCandidateRanker implements ComicSearchCandidateRanker {
   int callCount = 0;
   String? lastThreadSubject;
   ComicRefreshKeyword? lastKeyword;
-  List<DiscuzSearchResultItem> lastItems = const <DiscuzSearchResultItem>[];
+  List<ForumSearchTopicSummary> lastItems = const <ForumSearchTopicSummary>[];
 
   @override
   List<ComicSearchCandidate> rank({
     required String threadSubject,
     required ComicRefreshKeyword keyword,
-    required List<DiscuzSearchResultItem> items,
+    required List<ForumSearchTopicSummary> items,
   }) {
     callCount++;
     lastThreadSubject = threadSubject;
@@ -1698,10 +1756,14 @@ class _RecordingEpisodeLinkMerger implements ComicEpisodeLinkMerger {
 
   @override
   List<ComicEpisodeLink> fromSearchCandidates(
-    List<ComicSearchCandidate> candidates,
-  ) {
+    List<ComicSearchCandidate> candidates, {
+    required String Function(String tid) threadUrlBuilder,
+  }) {
     fromSearchCandidatesCallCount++;
-    return _delegate.fromSearchCandidates(candidates);
+    return _delegate.fromSearchCandidates(
+      candidates,
+      threadUrlBuilder: threadUrlBuilder,
+    );
   }
 
   @override

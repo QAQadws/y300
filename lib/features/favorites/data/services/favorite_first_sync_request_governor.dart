@@ -22,7 +22,7 @@ enum FavoriteFirstSyncRequestKind {
   favoriteThreadDetail,
   comicThreadDetail,
   comicCatalogHtml,
-  // 注意：漫画论坛搜索由 ForumSearchScheduler（~10.5s 节奏）独立管控，
+  // 注意：漫画论坛搜索由 ForumSearchReadScheduler（~10.5s 节奏）独立管控，
   // 不再走 favorite first-sync governor 的槽。这里删掉旧的 comicForumSearch
   // 枚举项以避免误用。
   novelSeedDetail,

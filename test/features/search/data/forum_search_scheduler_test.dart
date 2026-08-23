@@ -1,90 +1,125 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
-import 'package:y300/features/search/data/services/forum_search_service.dart';
-import 'package:y300/features/search/data/models/discuz_search_models.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
+import 'package:y300/features/search/data/services/search_rate_limiter.dart';
+import 'package:y300/features/search/domain/models/forum_search_models.dart';
+import 'package:y300/features/search/domain/repositories/forum_search_repository.dart';
 
 void main() {
-  group('ForumSearchScheduler', () {
-    test(
-      'serializes scheduled searches with at least 10.5 seconds between starts',
-      () async {
-        var now = DateTime(2026, 5, 16, 12, 0, 0);
-        final delays = <Duration>[];
-        final raw = _RecordingForumSearchService(nowProvider: () => now);
-        final scheduler = ForumSearchScheduler(
-          rawService: raw,
-          nowProvider: () => now,
-          delay: (duration) async {
-            delays.add(duration);
-            now = now.add(duration);
-          },
-        );
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-        final first = scheduler.searchForum(keyword: 'alpha');
-        final second = scheduler.searchForum(keyword: 'beta');
-        await Future.wait(<Future<DiscuzSearchResponse>>[first, second]);
-
-        expect(raw.startedKeywords, <String>['alpha', 'beta']);
-        expect(
-          raw.startedAt[1].difference(raw.startedAt[0]),
-          ForumSearchScheduler.defaultInterval,
-        );
-        expect(delays, <Duration>[ForumSearchScheduler.defaultInterval]);
-      },
-    );
-
-    test('bypasses scheduler when enforceRateLimit is false', () async {
+  group('ForumSearchReadScheduler', () {
+    test('serializes scheduled searches with the configured cadence', () async {
       var now = DateTime(2026, 5, 16, 12, 0, 0);
       final delays = <Duration>[];
-      final raw = _RecordingForumSearchService(nowProvider: () => now);
-      final scheduler = ForumSearchScheduler(
-        rawService: raw,
+      final repository = _RecordingForumSearchRepository(
+        nowProvider: () => now,
+      );
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final preferences = await SharedPreferences.getInstance();
+      final scheduler = ForumSearchReadScheduler(
+        repository: repository,
+        rateLimiter: SearchRateLimiter(sharedPreferences: preferences),
         nowProvider: () => now,
         delay: (duration) async {
           delays.add(duration);
           now = now.add(duration);
         },
       );
+      addTearDown(scheduler.dispose);
 
-      await scheduler.searchForum(keyword: 'alpha', enforceRateLimit: false);
-      await scheduler.searchForum(keyword: 'beta', enforceRateLimit: false);
+      final first = scheduler.search(
+        const ForumSearchQuery(keyword: 'alpha'),
+        enforceRateLimit: false,
+      );
+      final second = scheduler.search(
+        const ForumSearchQuery(keyword: 'beta'),
+        enforceRateLimit: false,
+      );
+      await Future.wait(<Future<ForumSearchExecution>>[first, second]);
 
-      expect(raw.startedKeywords, <String>['alpha', 'beta']);
-      expect(delays, isEmpty);
+      expect(repository.startedKeywords, <String>['alpha', 'beta']);
+      expect(
+        repository.startedAt[1].difference(repository.startedAt[0]),
+        SearchRateLimiter.defaultCooldown,
+      );
+      expect(delays, <Duration>[SearchRateLimiter.defaultCooldown]);
     });
+
+    test(
+      'loadNextPage delegates the opaque page identity to the repository',
+      () async {
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final preferences = await SharedPreferences.getInstance();
+        final repository = _RecordingForumSearchRepository();
+        final scheduler = ForumSearchReadScheduler(
+          repository: repository,
+          rateLimiter: SearchRateLimiter(sharedPreferences: preferences),
+        );
+        addTearDown(scheduler.dispose);
+
+        final result = await scheduler.loadNextPage(
+          const ForumSearchQuery(keyword: 'alpha'),
+          const ForumSearchPageIdentity(token: 'page-2', page: 2),
+        );
+
+        expect(result.readResult?.isSuccess, isTrue);
+        expect(repository.nextPageCalls, 1);
+      },
+    );
   });
 }
 
-class _RecordingForumSearchService implements ForumSearchService {
-  _RecordingForumSearchService({required DateTime Function() nowProvider})
-    : _nowProvider = nowProvider;
+final class _RecordingForumSearchRepository implements ForumSearchRepository {
+  _RecordingForumSearchRepository({DateTime Function()? nowProvider})
+    : _nowProvider = nowProvider ?? DateTime.now;
 
   final DateTime Function() _nowProvider;
   final List<String> startedKeywords = <String>[];
   final List<DateTime> startedAt = <DateTime>[];
+  int nextPageCalls = 0;
 
   @override
-  Future<DiscuzSearchResponse> searchForum({
-    required String keyword,
-    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
-    bool enforceRateLimit = true,
+  Future<DataReadResult<ForumSearchData, ForumSearchReadCapabilities>> load(
+    ForumSearchQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    startedKeywords.add(keyword);
+    startedKeywords.add(query.normalizedKeyword);
     startedAt.add(_nowProvider());
-    return const DiscuzSearchResponse(
-      items: <DiscuzSearchResultItem>[],
-      rateLimited: false,
-    );
+    return _success(query, currentPage: 1);
   }
 
   @override
-  Future<DiscuzSearchResponse> fetchNextPage({
-    required String nextPageUrl,
-    DiscuzSearchContext context = const DiscuzSearchContext.forum(),
+  Future<DataReadResult<ForumSearchData, ForumSearchReadCapabilities>>
+  loadNextPage(
+    ForumSearchQuery query,
+    ForumSearchPageIdentity page, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    return const DiscuzSearchResponse(
-      items: <DiscuzSearchResultItem>[],
-      rateLimited: false,
+    nextPageCalls++;
+    return _success(query, currentPage: page.page);
+  }
+
+  DataReadSuccess<ForumSearchData, ForumSearchReadCapabilities> _success(
+    ForumSearchQuery query, {
+    required int currentPage,
+  }) {
+    final data = ForumSearchData(
+      query: query.normalized(),
+      topics: const <ForumSearchTopicSummary>[],
+      pagination: ForumSearchPagination(currentPage: currentPage),
+    );
+    return DataReadSuccess(
+      data: data,
+      capabilities: ForumSearchReadCapabilities(
+        values: DataCapabilitySet<ForumSearchCapability>.supported(
+          ForumSearchCapability.values,
+        ),
+        paginationPrecision: PaginationPrecision.unknown,
+      ),
+      metadata: const DataReadMetadata.network(),
     );
   }
 }
