@@ -8,9 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
-import 'package:y300/features/profile/data/models/profile_models.dart';
-import 'package:y300/features/profile/data/repositories/profile_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -80,7 +79,7 @@ void main() {
       );
       final repository = _buildRepository(
         adapter: adapter,
-        profileRepository: _FakeProfileRepository.success(formhash: '  '),
+        formhashProvider: _FakeFormhashProvider(formhash: '  '),
       );
 
       final result = await repository.favoriteForum(fid: '55');
@@ -134,7 +133,7 @@ void main() {
 
 DefaultForumFavoriteRepository _buildRepository({
   required _ForumFavoriteTestAdapter adapter,
-  ProfileRepository? profileRepository,
+  FormhashProvider? formhashProvider,
 }) {
   final dio = Dio()..httpClientAdapter = adapter;
   return DefaultForumFavoriteRepository(
@@ -144,31 +143,21 @@ DefaultForumFavoriteRepository _buildRepository({
       dio: dio,
       enableLog: false,
     ),
-    profileRepository:
-        profileRepository ??
-        _FakeProfileRepository.success(formhash: 'fe182126'),
+    formhashProvider:
+        formhashProvider ?? _FakeFormhashProvider(formhash: 'fe182126'),
   );
 }
 
-class _FakeProfileRepository implements ProfileRepository {
-  _FakeProfileRepository.success({required String formhash})
-    : _result = ApiSuccess<ProfileData>(
-        ProfileData(
-          uid: '1',
-          username: 'tester',
-          avatar: '',
-          groupId: '10',
-          credits: 0,
-          posts: 0,
-          threads: 0,
-          formhash: formhash,
-        ),
-      );
+class _FakeFormhashProvider implements FormhashProvider {
+  _FakeFormhashProvider({required this.formhash});
 
-  final ApiResult<ProfileData> _result;
+  final String formhash;
 
   @override
-  Future<ApiResult<ProfileData>> getProfile() async => _result;
+  Future<ApiResult<String>> loadFormhash({bool preferProfile = false}) async {
+    expect(preferProfile, isTrue);
+    return ApiSuccess<String>(formhash);
+  }
 }
 
 class _ForumFavoriteTestAdapter implements HttpClientAdapter {

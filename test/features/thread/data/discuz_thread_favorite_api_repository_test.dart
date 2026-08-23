@@ -8,8 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
-import 'package:y300/features/profile/data/models/profile_models.dart';
-import 'package:y300/features/profile/data/repositories/profile_repository.dart';
+import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 import 'package:y300/features/thread/data/repositories/discuz_thread_favorite_api_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 
@@ -78,15 +77,34 @@ void main() {
       expect(result.isFailure, isTrue);
       expect(adapter.called, isFalse);
     });
+
+    test('returns failure before request when formhash is empty', () async {
+      final adapter = _ThreadFavoriteTestAdapter(
+        responseJson: <String, dynamic>{},
+      );
+      final repository = _buildRepository(
+        adapter: adapter,
+        formhashProvider: _FakeFormhashProvider(formhash: ' '),
+      );
+
+      final result = await repository.favoriteThread(
+        request: const ThreadFavoriteRequest(tid: '570617'),
+      );
+
+      expect(result.errorOrNull?.code, 'formhash_invalid');
+      expect(adapter.called, isFalse);
+    });
   });
 }
 
 DiscuzThreadFavoriteApiRepository _buildRepository({
   required _ThreadFavoriteTestAdapter adapter,
+  FormhashProvider? formhashProvider,
 }) {
   final dio = Dio()..httpClientAdapter = adapter;
   return DiscuzThreadFavoriteApiRepository(
-    profileRepository: _FakeProfileRepository.success(formhash: 'fe182126'),
+    formhashProvider:
+        formhashProvider ?? _FakeFormhashProvider(formhash: 'fe182126'),
     gateway: YamiboHttpGateway(
       cookieStore: CookieStore(),
       logger: Logger(level: Level.off),
@@ -96,25 +114,16 @@ DiscuzThreadFavoriteApiRepository _buildRepository({
   );
 }
 
-class _FakeProfileRepository implements ProfileRepository {
-  _FakeProfileRepository.success({required String formhash})
-    : _result = ApiSuccess<ProfileData>(
-        ProfileData(
-          uid: '1',
-          username: 'tester',
-          avatar: '',
-          groupId: '10',
-          credits: 0,
-          posts: 0,
-          threads: 0,
-          formhash: formhash,
-        ),
-      );
+class _FakeFormhashProvider implements FormhashProvider {
+  _FakeFormhashProvider({required this.formhash});
 
-  final ApiResult<ProfileData> _result;
+  final String formhash;
 
   @override
-  Future<ApiResult<ProfileData>> getProfile() async => _result;
+  Future<ApiResult<String>> loadFormhash({bool preferProfile = false}) async {
+    expect(preferProfile, isTrue);
+    return ApiSuccess<String>(formhash);
+  }
 }
 
 class _ThreadFavoriteTestAdapter implements HttpClientAdapter {

@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_draft_providers.dart';
 import 'package:y300/features/composer_shared/data/repositories/discuz_composer_unused_image_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_attachment_remote_data_source.dart';

@@ -4,8 +4,9 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/discuz_response.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/utils/parse_utils.dart';
+import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
+import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
-import 'package:y300/features/profile/data/repositories/profile_repository.dart';
 
 abstract class ForumFavoriteRepository {
   Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
@@ -20,12 +21,12 @@ abstract class ForumFavoriteRepository {
 class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
   DefaultForumFavoriteRepository({
     required ApiClient apiClient,
-    required ProfileRepository profileRepository,
+    required FormhashProvider formhashProvider,
   }) : _apiClient = apiClient,
-       _profileRepository = profileRepository;
+       _formhashProvider = formhashProvider;
 
   final ApiClient _apiClient;
-  final ProfileRepository _profileRepository;
+  final FormhashProvider _formhashProvider;
   @override
   Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
     required String fid,
@@ -91,29 +92,22 @@ class DefaultForumFavoriteRepository implements ForumFavoriteRepository {
   }
 
   Future<ApiResult<String>> _loadFormhash() async {
-    final profile = await _profileRepository.getProfile();
-    return profile.when(
-      success: (data) {
-        final formhash = data.formhash.trim();
-        if (formhash.isEmpty) {
+    final result = await _formhashProvider.loadFormhash(preferProfile: true);
+    return result.when(
+      success: (value) {
+        final normalized = value.trim();
+        if (normalized.isEmpty) {
           return const ApiFailure<String>(
             ApiError(
               type: ApiErrorType.business,
-              message: 'formhash 为空，无法提交版块收藏操作',
+              code: 'formhash_invalid',
+              message: 'formhash 不能为空',
             ),
           );
         }
-        return ApiSuccess<String>(formhash);
+        return ApiSuccess<String>(normalized);
       },
-      failure: (error) => ApiFailure<String>(
-        ApiError(
-          type: error.type,
-          message: '获取 formhash 失败：${error.message}',
-          code: error.code,
-          statusCode: error.statusCode,
-          raw: error.raw,
-        ),
-      ),
+      failure: ApiFailure.new,
     );
   }
 
@@ -227,6 +221,6 @@ final forumFavoriteRepositoryProvider = Provider<ForumFavoriteRepository>((
 ) {
   return DefaultForumFavoriteRepository(
     apiClient: ref.watch(apiClientProvider),
-    profileRepository: ref.watch(profileRepositoryProvider),
+    formhashProvider: ref.watch(formhashProvider),
   );
 });

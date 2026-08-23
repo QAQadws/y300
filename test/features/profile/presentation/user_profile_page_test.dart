@@ -1,42 +1,40 @@
 import 'package:flutter/material.dart';
-import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
-import 'package:y300/features/profile/data/models/profile_blog_models.dart';
-import 'package:y300/features/profile/data/models/user_profile_models.dart';
-import 'package:y300/features/profile/data/models/my_message_models.dart';
-import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
-import 'package:y300/features/profile/data/repositories/profile_blog_repository.dart';
-import 'package:y300/features/profile/data/repositories/user_profile_repository.dart';
+import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/domain/models/forum_user_profile_models.dart';
+import 'package:y300/features/profile/domain/models/profile_user_identity.dart';
+import 'package:y300/features/profile/domain/models/user_blog_models.dart';
+import 'package:y300/features/profile/domain/repositories/forum_user_profile_repository.dart';
+import 'package:y300/features/profile/domain/repositories/user_blog_directory_repository.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 
+import '../../../test_support/localized_test_app.dart';
+
 void main() {
-  testWidgets('UserProfilePage renders mobile profile data', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          userProfileRepositoryProvider.overrideWithValue(
-            _FakeUserProfileRepository(_profile),
-          ),
-          imageRequestHeaderBuilderProvider.overrideWithValue(
-            const _StaticImageHeaderBuilder(),
-          ),
-        ],
-        child: const LocalizedTestApp(home: UserProfilePage(uid: '509957')),
-      ),
-    );
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    await tester.pumpAndSettle();
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
 
-    expect(find.text('alice的资料'), findsWidgets);
+  testWidgets('UserProfilePage renders source-neutral profile data', (
+    tester,
+  ) async {
+    await _pumpPublicProfile(tester, repository: _FakeProfileRepository());
+
+    expect(find.text('alice的资料'), findsOneWidget);
     expect(find.text('alice'), findsOneWidget);
     expect(find.byKey(const Key('user-profile-metrics')), findsOneWidget);
     expect(find.text('5263'), findsOneWidget);
@@ -49,33 +47,41 @@ void main() {
     expect(find.text('百合達人'), findsOneWidget);
   });
 
-  testWidgets('UserProfilePage avatar uses avatar cache request', (
+  testWidgets('UserProfilePage gates optional sections by capability', (
     tester,
   ) async {
-    final profile = UserProfileData(
-      uid: '509957',
-      username: 'alice',
-      title: 'alice的资料',
-      avatarUrl:
-          'https://bbs.yamibo.com/uc_server/data/avatar/000/50/99/57_avatar_middle.jpg',
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          userProfileRepositoryProvider.overrideWithValue(
-            _FakeUserProfileRepository(profile),
-          ),
-          imageRequestHeaderBuilderProvider.overrideWithValue(
-            const _StaticImageHeaderBuilder(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
-        ],
-        child: const LocalizedTestApp(home: UserProfilePage(uid: '509957')),
+    await _pumpPublicProfile(
+      tester,
+      repository: _FakeProfileRepository(
+        capabilities: _profileCapabilities(
+          supported: const <ForumUserProfileCapability>[
+            ForumUserProfileCapability.stableUserIdentity,
+            ForumUserProfileCapability.userName,
+          ],
+        ),
       ),
     );
 
-    await tester.pump();
-    await tester.pump();
+    expect(find.byKey(const Key('user-profile-metrics')), findsNothing);
+    expect(find.byKey(const Key('user-profile-signature')), findsNothing);
+    expect(find.byKey(const Key('user-profile-details')), findsNothing);
+    expect(find.text('5263'), findsNothing);
+    expect(find.text('百合達人'), findsNothing);
+  });
+
+  testWidgets('UserProfilePage avatar uses profile cache ownership', (
+    tester,
+  ) async {
+    await _pumpPublicProfile(
+      tester,
+      repository: _FakeProfileRepository(
+        data: _profileWith(
+          avatarUrl:
+              'https://bbs.yamibo.com/uc_server/data/avatar/000/50/99/57_avatar_middle.jpg',
+        ),
+      ),
+      imageCacheService: _NoopImageCacheService(),
+    );
 
     final avatarImage = tester.widget<CachedLibraryImage>(
       find.descendant(
@@ -88,82 +94,53 @@ void main() {
     expect(avatarImage.request?.ownerId, '509957');
   });
 
-  testWidgets('UserProfilePage localizes an app-generated title fallback', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          userProfileRepositoryProvider.overrideWithValue(
-            _FakeUserProfileRepository(
-              const UserProfileData(
-                uid: '509957',
-                username: 'alice',
-                title: '',
-              ),
-            ),
-          ),
-          imageRequestHeaderBuilderProvider.overrideWithValue(
-            const _StaticImageHeaderBuilder(),
-          ),
-        ],
-        child: const LocalizedTestApp(
-          locale: Locale('zh', 'TW'),
-          home: UserProfilePage(uid: '509957'),
-        ),
-      ),
+  testWidgets(
+    'UserProfilePage localizes app chrome and preserves server text',
+    (tester) async {
+      await _pumpPublicProfile(
+        tester,
+        repository: _FakeProfileRepository(),
+        locale: const Locale('zh', 'TW'),
+      );
+
+      expect(find.text('alice 的資料'), findsOneWidget);
+      expect(find.text('Ta 的主題'), findsOneWidget);
+      expect(find.text('傳送短訊息'), findsOneWidget);
+      expect(find.text('百合達人'), findsOneWidget);
+    },
+  );
+
+  testWidgets('refresh failure keeps existing profile content', (tester) async {
+    final repository = _FakeProfileRepository(failAfterSuccess: true);
+    await _pumpPublicProfile(tester, repository: repository);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(UserProfilePage)),
     );
+
+    await container.read(userProfileProvider('509957').notifier).refresh();
     await tester.pumpAndSettle();
 
-    expect(find.text('alice 的資料'), findsOneWidget);
-    expect(find.text('alice的资料'), findsNothing);
+    expect(find.text('alice'), findsOneWidget);
+    expect(find.textContaining('网络连接失败'), findsOneWidget);
+    expect(repository.policies, <CacheLoadPolicy>[
+      CacheLoadPolicy.cacheFirst,
+      CacheLoadPolicy.networkFirst,
+    ]);
   });
 
-  testWidgets('UserProfilePage localizes fallback actions and preserves data', (
+  testWidgets('MyProfilePage uses self view and opens structured blog feed', (
     tester,
   ) async {
+    final profileRepository = _FakeProfileRepository(data: _myProfile);
+    final blogRepository = _FakeBlogDirectoryRepository();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          userProfileRepositoryProvider.overrideWithValue(
-            _FakeUserProfileRepository(_profile),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          forumUserProfileRepositoryProvider.overrideWithValue(
+            profileRepository,
           ),
-          imageRequestHeaderBuilderProvider.overrideWithValue(
-            const _StaticImageHeaderBuilder(),
-          ),
-        ],
-        child: const LocalizedTestApp(
-          locale: Locale('zh', 'TW'),
-          home: UserProfilePage(uid: '509957'),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Ta 的主題'), findsOneWidget);
-    expect(find.text('傳送短訊息'), findsOneWidget);
-    expect(find.text('alice的资料'), findsWidgets);
-    expect(find.text('百合達人'), findsOneWidget);
-  });
-
-  testWidgets('MyProfilePage renders my actions and opens message center', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: true),
-          ),
-          userProfileRepositoryProvider.overrideWithValue(
-            _FakeUserProfileRepository(_myProfile),
-          ),
-          myMessageRepositoryProvider.overrideWithValue(
-            const _FakeMyMessageRepository(),
-          ),
-          profileBlogRepositoryProvider.overrideWithValue(
-            const _FakeProfileBlogRepository(),
-          ),
+          userBlogDirectoryRepositoryProvider.overrideWithValue(blogRepository),
           imageRequestHeaderBuilderProvider.overrideWithValue(
             const _StaticImageHeaderBuilder(),
           ),
@@ -171,10 +148,9 @@ void main() {
         child: const LocalizedTestApp(home: MyProfilePage()),
       ),
     );
-
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('user-profile-page-list')), findsOneWidget);
+    expect(profileRepository.queries.single.view, ForumUserProfileView.self);
     expect(find.text('我的资料'), findsWidgets);
     expect(find.text('我的收藏'), findsOneWidget);
     expect(find.text('消息提醒'), findsOneWidget);
@@ -185,192 +161,192 @@ void main() {
 
     expect(find.byKey(const Key('profile-blog-list')), findsOneWidget);
     expect(find.text('还没有相关的日志'), findsOneWidget);
+    expect(blogRepository.queries.single.scope, UserBlogFeedScope.self);
+    expect(blogRepository.queries.single.order, isNull);
+  });
 
-    await tester.tap(find.byType(BackButton));
+  testWidgets('profile layout remains usable at 300dp with large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(300, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          forumUserProfileRepositoryProvider.overrideWithValue(
+            _FakeProfileRepository(),
+          ),
+          imageRequestHeaderBuilderProvider.overrideWithValue(
+            const _StaticImageHeaderBuilder(),
+          ),
+        ],
+        child: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          child: const LocalizedTestApp(home: UserProfilePage(uid: '509957')),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('消息提醒'));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('my-message-center-tabs')), findsOneWidget);
-    expect(find.text('提醒 1'), findsOneWidget);
-    expect(find.text('消息 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('user-profile-page-list')), findsOneWidget);
   });
 }
 
-const _profile = UserProfileData(
-  uid: '509957',
-  username: 'alice',
-  title: 'alice的资料',
-  avatarUrl: null,
-  coverUrl: null,
+Future<void> _pumpPublicProfile(
+  WidgetTester tester, {
+  required ForumUserProfileRepository repository,
+  Locale locale = const Locale('zh'),
+  ImageCacheService? imageCacheService,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        forumUserProfileRepositoryProvider.overrideWithValue(repository),
+        imageRequestHeaderBuilderProvider.overrideWithValue(
+          const _StaticImageHeaderBuilder(),
+        ),
+        if (imageCacheService != null)
+          imageCacheServiceProvider.overrideWithValue(imageCacheService),
+      ],
+      child: LocalizedTestApp(
+        locale: locale,
+        home: const UserProfilePage(uid: '509957'),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+const _profile = ForumUserProfileData(
+  identity: ProfileUserIdentity(userId: '509957', displayName: 'alice'),
   signatureHtml: '<p>Make a deal with god</p>',
-  threadUrl: 'https://bbs.yamibo.com/home.php?mod=space&uid=509957&do=thread',
-  blogUrl: 'https://bbs.yamibo.com/home.php?mod=space&uid=509957&do=blog',
-  messageUrl: 'https://bbs.yamibo.com/home.php?mod=space&do=pm&touid=509957',
-  friendUrl: 'https://bbs.yamibo.com/home.php?mod=spacecp&ac=friend&uid=509957',
-  credits: [
-    UserProfileMetric(label: '总积分', value: '5263'),
-    UserProfileMetric(label: '积分', value: '4300 点'),
-    UserProfileMetric(label: '对象', value: '2888'),
+  metrics: <ForumUserProfileMetric>[
+    ForumUserProfileMetric(label: '总积分', value: '5263'),
+    ForumUserProfileMetric(label: '积分', value: '4300 点'),
+    ForumUserProfileMetric(label: '对象', value: '2888'),
   ],
-  details: [
-    UserProfileDetailItem(label: 'UID', value: '509957'),
-    UserProfileDetailItem(label: '用户组', value: '百合達人'),
+  details: <ForumUserProfileDetail>[
+    ForumUserProfileDetail(label: 'UID', value: '509957'),
+    ForumUserProfileDetail(label: '用户组', value: '百合達人'),
   ],
 );
 
-const _myProfile = UserProfileData(
-  uid: '597454',
-  username: '2834758851',
-  title: '我的资料',
-  avatarUrl: null,
-  coverUrl: null,
-  messageUrl: 'https://bbs.yamibo.com/home.php?mod=space&do=pm&mobile=2',
-  credits: [
-    UserProfileMetric(label: '总积分', value: '65'),
-    UserProfileMetric(label: '积分', value: '7 点'),
-    UserProfileMetric(label: '对象', value: '175'),
+const _myProfile = ForumUserProfileData(
+  identity: ProfileUserIdentity(userId: '597454', displayName: '2834758851'),
+  metrics: <ForumUserProfileMetric>[
+    ForumUserProfileMetric(label: '总积分', value: '65'),
+    ForumUserProfileMetric(label: '积分', value: '7 点'),
+    ForumUserProfileMetric(label: '对象', value: '175'),
   ],
-  actions: [
-    UserProfileAction(
-      label: '我的主题',
-      url: 'https://bbs.yamibo.com/home.php?mod=space&do=thread',
-    ),
-    UserProfileAction(
-      label: '我的收藏',
-      url: 'https://bbs.yamibo.com/home.php?mod=space&do=favorite',
-    ),
-    UserProfileAction(
-      label: '我的日志',
-      url: 'https://bbs.yamibo.com/home.php?mod=space&do=blog&view=me',
-    ),
-    UserProfileAction(
-      label: '消息提醒',
-      url: 'https://bbs.yamibo.com/home.php?mod=space&do=pm',
-    ),
-    UserProfileAction(
-      label: '每日签到',
-      url: 'https://bbs.yamibo.com/plugin.php?id=zqlj_sign',
-    ),
-  ],
-  details: [
-    UserProfileDetailItem(label: 'UID', value: '597454'),
-    UserProfileDetailItem(label: '用户组', value: '百合幼苗'),
+  details: <ForumUserProfileDetail>[
+    ForumUserProfileDetail(label: 'UID', value: '597454'),
+    ForumUserProfileDetail(label: '用户组', value: '百合幼苗'),
   ],
 );
 
-class _FakeUserProfileRepository implements UserProfileRepository {
-  const _FakeUserProfileRepository(this.profile);
-
-  final UserProfileData profile;
-
-  @override
-  Future<ApiResult<UserProfileData>> getUserProfile({
-    required String uid,
-  }) async {
-    return ApiSuccess<UserProfileData>(profile);
-  }
-
-  @override
-  Future<ApiResult<UserProfileData>> getMyProfile({required String uid}) async {
-    return ApiSuccess<UserProfileData>(profile);
-  }
+ForumUserProfileData _profileWith({String? avatarUrl}) {
+  return ForumUserProfileData(
+    identity: _profile.identity,
+    avatarUrl: avatarUrl,
+    signatureHtml: _profile.signatureHtml,
+    metrics: _profile.metrics,
+    details: _profile.details,
+  );
 }
 
-class _FakeProfileBlogRepository implements ProfileBlogRepository {
-  const _FakeProfileBlogRepository();
-
-  @override
-  Future<ApiResult<ProfileBlogListPageData>> getBlogList({
-    ProfileBlogView view = ProfileBlogView.all,
-    ProfileBlogOrder order = ProfileBlogOrder.latest,
-    int page = 1,
-  }) async {
-    return ApiSuccess<ProfileBlogListPageData>(
-      ProfileBlogListPageData(
-        title: '日志',
-        activeView: view,
-        activeOrder: order,
-        viewTabs: [
-          for (final item in ProfileBlogView.values)
-            ProfileBlogNavigationTab(
-              label: item.queryValue,
-              url: 'https://bbs.yamibo.com/home.php?view=${item.queryValue}',
-              isActive: item == view,
-            ),
-        ],
-        orderTabs: const <ProfileBlogNavigationTab>[],
-        items: const <ProfileBlogListItem>[],
-        emptyMessage: '还没有相关的日志',
+ForumUserProfileReadCapabilities _profileCapabilities({
+  Iterable<ForumUserProfileCapability> supported =
+      ForumUserProfileCapability.values,
+}) {
+  return ForumUserProfileReadCapabilities(
+    values: DataCapabilitySet<ForumUserProfileCapability>.from(
+      supported: supported,
+      unsupported: ForumUserProfileCapability.values.where(
+        (value) => !supported.contains(value),
       ),
-    );
-  }
+    ),
+  );
+}
+
+class _FakeProfileRepository implements ForumUserProfileRepository {
+  _FakeProfileRepository({
+    this.data = _profile,
+    ForumUserProfileReadCapabilities? capabilities,
+    this.failAfterSuccess = false,
+  }) : readCapabilities = capabilities ?? _profileCapabilities();
+
+  final ForumUserProfileData data;
+  final ForumUserProfileReadCapabilities readCapabilities;
+  final bool failAfterSuccess;
+  final List<ForumUserProfileQuery> queries = <ForumUserProfileQuery>[];
+  final List<CacheLoadPolicy> policies = <CacheLoadPolicy>[];
 
   @override
-  Future<ApiResult<ProfileBlogDetailData>> getBlogDetail({
-    required String url,
+  ForumUserProfileSourceCapabilities get capabilities =>
+      ForumUserProfileSourceCapabilities(values: readCapabilities.values);
+
+  @override
+  Future<DataReadResult<ForumUserProfileData, ForumUserProfileReadCapabilities>>
+  load(
+    ForumUserProfileQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    return const ApiFailure<ProfileBlogDetailData>(
-      ApiError(type: ApiErrorType.business, message: 'not used'),
+    queries.add(query);
+    policies.add(cachePolicy);
+    if (failAfterSuccess && queries.length > 1) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.network,
+        diagnosticMessage: 'network failure',
+      );
+    }
+    return DataReadSuccess(
+      data: data,
+      capabilities: readCapabilities,
+      metadata: const DataReadMetadata.network(),
     );
   }
 }
 
-class _FakeMyMessageRepository implements MyMessageRepository {
-  const _FakeMyMessageRepository();
+class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
+  final List<UserBlogDirectoryQuery> queries = <UserBlogDirectoryQuery>[];
 
   @override
-  Future<ApiResult<MyMessageCenterData>> getMessageCenter() async {
-    return const ApiSuccess<MyMessageCenterData>(
-      MyMessageCenterData(
-        notifications: MyNotificationPage(
-          count: 1,
-          page: 1,
-          perPage: 30,
-          items: [
-            MyNotificationItem(
-              id: 'n1',
-              type: 'post',
-              isNew: false,
-              authorId: '8',
-              author: '筱林透',
-              noteHtml: '<a href="forum.php?mod=viewthread&tid=1">回复了您</a>',
-              dateline: '2026-06-21 12:00',
-            ),
-          ],
+  UserBlogDirectorySourceCapabilities get capabilities =>
+      UserBlogDirectorySourceCapabilities(
+        values: DataCapabilitySet<UserBlogDirectoryCapability>.supported(
+          UserBlogDirectoryCapability.values,
         ),
-        privateMessages: MyPrivateMessagePage(
-          count: 1,
-          page: 1,
-          perPage: 15,
-          items: [
-            MyPrivateMessageItem(
-              plid: 'p1',
-              pmid: 'p1',
-              isNew: false,
-              subject: '嗨',
-              fromUid: '597454',
-              fromName: '2834758851',
-              toUid: '8',
-              toName: '筱林透',
-              message: '好的',
-              dateline: '2026-5-11 19:50',
-            ),
-          ],
-        ),
+        paginationPrecision: PaginationPrecision.unknown,
+      );
+
+  @override
+  Future<
+    DataReadResult<UserBlogDirectoryData, UserBlogDirectoryReadCapabilities>
+  >
+  load(
+    UserBlogDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
+    queries.add(query);
+    return DataReadSuccess(
+      data: UserBlogDirectoryData(
+        scope: query.scope,
+        order: query.order,
+        items: const <UserBlogSummary>[],
+        pagination: UserBlogPagination(currentPage: query.page),
       ),
+      capabilities: UserBlogDirectoryReadCapabilities(
+        values: DataCapabilitySet<UserBlogDirectoryCapability>.supported(
+          UserBlogDirectoryCapability.values,
+        ),
+        paginationPrecision: PaginationPrecision.unknown,
+      ),
+      metadata: const DataReadMetadata.network(),
     );
-  }
-
-  @override
-  Future<ApiResult<MyNotificationPage>> getNotifications() async {
-    return ApiSuccess((await getMessageCenter()).dataOrNull!.notifications);
-  }
-
-  @override
-  Future<ApiResult<MyPrivateMessagePage>> getPrivateMessages() async {
-    return ApiSuccess((await getMessageCenter()).dataOrNull!.privateMessages);
   }
 }
 
@@ -416,9 +392,21 @@ class _NoopImageCacheService implements ImageCacheService {
 }
 
 class _FakeAuthRepository implements AuthRepository {
-  const _FakeAuthRepository({required this.isLoggedIn});
+  const _FakeAuthRepository();
 
-  final bool isLoggedIn;
+  @override
+  Future<ApiResult<SessionInfo>> refreshSession() async => ApiSuccess(
+    SessionInfo(
+      uid: '597454',
+      username: '2834758851',
+      formhash: 'fh',
+      isLoggedIn: true,
+    ),
+  );
+
+  @override
+  Future<ApiResult<bool>> verifyAuthByForumIndex() async =>
+      const ApiSuccess<bool>(true);
 
   @override
   Future<ApiResult<SessionInfo>> login({
@@ -427,39 +415,11 @@ class _FakeAuthRepository implements AuthRepository {
     String questionId = '0',
     String answer = '',
   }) async {
-    return ApiSuccess(_session);
+    return refreshSession();
   }
 
   @override
   Future<void> logout() async {}
-
-  @override
-  Future<ApiResult<SessionInfo>> refreshSession() async {
-    return ApiSuccess(
-      isLoggedIn
-          ? _session
-          : SessionInfo(
-              uid: '0',
-              username: '',
-              formhash: '',
-              isLoggedIn: false,
-            ),
-    );
-  }
-
-  @override
-  Future<ApiResult<bool>> verifyAuthByForumIndex() async {
-    return ApiSuccess(isLoggedIn);
-  }
-
-  SessionInfo get _session {
-    return SessionInfo(
-      uid: '597454',
-      username: '2834758851',
-      formhash: 'fh',
-      isLoggedIn: true,
-    );
-  }
 }
 
 class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
@@ -473,9 +433,6 @@ class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
 
 Finder _richTextContaining(String text) {
   return find.byWidgetPredicate((widget) {
-    if (widget is! RichText) {
-      return false;
-    }
-    return widget.text.toPlainText().contains(text);
+    return widget is RichText && widget.text.toPlainText().contains(text);
   });
 }

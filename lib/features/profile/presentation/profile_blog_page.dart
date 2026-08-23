@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/profile/data/models/profile_blog_models.dart';
-import 'package:y300/features/profile/data/repositories/profile_blog_repository.dart';
+import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/domain/models/user_blog_models.dart';
+import 'package:y300/features/profile/domain/repositories/user_blog_detail_repository.dart';
+import 'package:y300/features/profile/domain/repositories/user_blog_directory_repository.dart';
 import 'package:y300/features/profile/presentation/profile_text_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -15,82 +18,305 @@ import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 
 @immutable
-class ProfileBlogListRequest {
-  const ProfileBlogListRequest({
-    this.view = ProfileBlogView.all,
-    this.order = ProfileBlogOrder.latest,
-    this.page = 1,
+final class ProfileBlogPageArgs {
+  const ProfileBlogPageArgs({
+    this.initialScope = UserBlogFeedScope.public,
+    this.initialOrder = UserBlogOrder.latest,
   });
 
-  final ProfileBlogView view;
-  final ProfileBlogOrder order;
-  final int page;
+  final UserBlogFeedScope initialScope;
+  final UserBlogOrder initialOrder;
 
-  ProfileBlogListRequest copyWith({
-    ProfileBlogView? view,
-    ProfileBlogOrder? order,
-    int? page,
+  @override
+  bool operator ==(Object other) {
+    return other is ProfileBlogPageArgs &&
+        other.initialScope == initialScope &&
+        other.initialOrder == initialOrder;
+  }
+
+  @override
+  int get hashCode => Object.hash(initialScope, initialOrder);
+}
+
+final class UserBlogDirectoryPageState {
+  const UserBlogDirectoryPageState({
+    required this.query,
+    this.data,
+    this.capabilities,
+    this.metadata,
+    this.failure,
+    this.isLoading = false,
+  });
+
+  final UserBlogDirectoryQuery query;
+  final UserBlogDirectoryData? data;
+  final UserBlogDirectoryReadCapabilities? capabilities;
+  final DataReadMetadata? metadata;
+  final DataReadFailure<
+    UserBlogDirectoryData,
+    UserBlogDirectoryReadCapabilities
+  >?
+  failure;
+  final bool isLoading;
+
+  UserBlogDirectoryPageState copyWith({
+    UserBlogDirectoryQuery? query,
+    UserBlogDirectoryData? data,
+    UserBlogDirectoryReadCapabilities? capabilities,
+    DataReadMetadata? metadata,
+    DataReadFailure<UserBlogDirectoryData, UserBlogDirectoryReadCapabilities>?
+    failure,
+    bool? isLoading,
+    bool clearFailure = false,
   }) {
-    return ProfileBlogListRequest(
-      view: view ?? this.view,
-      order: order ?? this.order,
-      page: page ?? this.page,
+    return UserBlogDirectoryPageState(
+      query: query ?? this.query,
+      data: data ?? this.data,
+      capabilities: capabilities ?? this.capabilities,
+      metadata: metadata ?? this.metadata,
+      failure: clearFailure ? null : (failure ?? this.failure),
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 }
 
-final profileBlogListProvider = FutureProvider.autoDispose
-    .family<ProfileBlogListPageData, ProfileBlogListRequest>((
-      ref,
-      request,
-    ) async {
-      final result = await ref
-          .watch(profileBlogRepositoryProvider)
-          .getBlogList(
-            view: request.view,
-            order: request.order,
-            page: request.page,
-          );
-      return switch (result) {
-        ApiSuccess(:final data) => data,
-        ApiFailure(:final error) => throw error,
-      };
-    });
+final profileBlogListProvider = AsyncNotifierProvider.autoDispose
+    .family<
+      ProfileBlogPageController,
+      UserBlogDirectoryPageState,
+      ProfileBlogPageArgs
+    >((args) => ProfileBlogPageController(args));
 
-final profileBlogDetailProvider = FutureProvider.autoDispose
-    .family<ProfileBlogDetailData, String>((ref, url) async {
-      final result = await ref
-          .watch(profileBlogRepositoryProvider)
-          .getBlogDetail(url: url);
-      return switch (result) {
-        ApiSuccess(:final data) => data,
-        ApiFailure(:final error) => throw error,
-      };
-    });
+final class ProfileBlogPageController
+    extends AsyncNotifier<UserBlogDirectoryPageState> {
+  ProfileBlogPageController(this._args);
 
-class ProfileBlogPage extends ConsumerStatefulWidget {
-  const ProfileBlogPage({
-    super.key,
-    this.initialView = ProfileBlogView.all,
-    this.initialOrder = ProfileBlogOrder.latest,
-  });
-
-  final ProfileBlogView initialView;
-  final ProfileBlogOrder initialOrder;
+  final ProfileBlogPageArgs _args;
 
   @override
-  ConsumerState<ProfileBlogPage> createState() => _ProfileBlogPageState();
+  Future<UserBlogDirectoryPageState> build() {
+    final query = _queryFor(
+      scope: _args.initialScope,
+      order: _args.initialOrder,
+    );
+    return _load(
+      query,
+      previous: null,
+      cachePolicy: CacheLoadPolicy.cacheFirst,
+    );
+  }
+
+  Future<void> refresh() async {
+    final previous = state.value;
+    if (previous == null) {
+      return;
+    }
+    state = AsyncData(previous.copyWith(isLoading: true, clearFailure: true));
+    state = AsyncData(
+      await _load(
+        previous.query,
+        previous: previous,
+        cachePolicy: CacheLoadPolicy.networkFirst,
+      ),
+    );
+  }
+
+  Future<void> selectScope(UserBlogFeedScope scope) async {
+    final previous = state.value;
+    if (previous == null ||
+        previous.isLoading ||
+        previous.query.scope == scope) {
+      return;
+    }
+    final query = _queryFor(
+      scope: scope,
+      order: scope == UserBlogFeedScope.public
+          ? (previous.query.order ?? UserBlogOrder.latest)
+          : null,
+    );
+    await _replaceQuery(query, previous);
+  }
+
+  Future<void> selectOrder(UserBlogOrder order) async {
+    final previous = state.value;
+    if (previous == null ||
+        previous.isLoading ||
+        previous.query.scope != UserBlogFeedScope.public ||
+        previous.query.order == order) {
+      return;
+    }
+    await _replaceQuery(UserBlogDirectoryQuery.public(order: order), previous);
+  }
+
+  Future<void> loadNextPage() async {
+    final previous = state.value;
+    final pagination = previous?.data?.pagination;
+    if (previous == null ||
+        previous.isLoading ||
+        pagination == null ||
+        pagination.hasNext == false ||
+        (pagination.totalPages != null &&
+            pagination.currentPage >= pagination.totalPages!)) {
+      return;
+    }
+    await _replaceQuery(
+      UserBlogDirectoryQuery(
+        scope: previous.query.scope,
+        order: previous.query.order,
+        page: pagination.currentPage + 1,
+      ),
+      previous,
+    );
+  }
+
+  Future<void> _replaceQuery(
+    UserBlogDirectoryQuery query,
+    UserBlogDirectoryPageState previous,
+  ) async {
+    state = AsyncData(previous.copyWith(isLoading: true, clearFailure: true));
+    state = AsyncData(
+      await _load(
+        query,
+        previous: previous,
+        cachePolicy: CacheLoadPolicy.cacheFirst,
+      ),
+    );
+  }
+
+  Future<UserBlogDirectoryPageState> _load(
+    UserBlogDirectoryQuery query, {
+    required UserBlogDirectoryPageState? previous,
+    required CacheLoadPolicy cachePolicy,
+  }) async {
+    final result = await ref
+        .read(userBlogDirectoryRepositoryProvider)
+        .load(query, cachePolicy: cachePolicy);
+    if (result case DataReadSuccess<
+      UserBlogDirectoryData,
+      UserBlogDirectoryReadCapabilities
+    >(
+      :final data,
+      :final capabilities,
+      :final metadata,
+    )) {
+      return UserBlogDirectoryPageState(
+        query: query,
+        data: data,
+        capabilities: capabilities,
+        metadata: metadata,
+      );
+    }
+    return (previous ?? UserBlogDirectoryPageState(query: query)).copyWith(
+      failure: result.failureOrNull,
+      isLoading: false,
+    );
+  }
+
+  UserBlogDirectoryQuery _queryFor({
+    required UserBlogFeedScope scope,
+    UserBlogOrder? order,
+  }) {
+    return scope == UserBlogFeedScope.public
+        ? UserBlogDirectoryQuery.public(order: order ?? UserBlogOrder.latest)
+        : scope == UserBlogFeedScope.self
+        ? const UserBlogDirectoryQuery.self()
+        : const UserBlogDirectoryQuery.friends();
+  }
 }
 
-class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
-  late ProfileBlogListRequest _request = ProfileBlogListRequest(
-    view: widget.initialView,
-    order: widget.initialOrder,
-  );
+final class UserBlogDetailPageState {
+  const UserBlogDetailPageState({
+    this.data,
+    this.capabilities,
+    this.metadata,
+    this.failure,
+  });
+
+  final UserBlogDetailData? data;
+  final UserBlogDetailReadCapabilities? capabilities;
+  final DataReadMetadata? metadata;
+  final DataReadFailure<UserBlogDetailData, UserBlogDetailReadCapabilities>?
+  failure;
+}
+
+final profileBlogDetailProvider = AsyncNotifierProvider.autoDispose
+    .family<
+      ProfileBlogDetailController,
+      UserBlogDetailPageState,
+      UserBlogDetailQuery
+    >((query) => ProfileBlogDetailController(query));
+
+final class ProfileBlogDetailController
+    extends AsyncNotifier<UserBlogDetailPageState> {
+  ProfileBlogDetailController(this._query);
+
+  final UserBlogDetailQuery _query;
 
   @override
-  Widget build(BuildContext context) {
-    final asyncData = ref.watch(profileBlogListProvider(_request));
+  Future<UserBlogDetailPageState> build() {
+    return _load(previous: null, cachePolicy: CacheLoadPolicy.cacheFirst);
+  }
+
+  Future<void> refresh() async {
+    final previous = state.value;
+    state = AsyncData(
+      await _load(
+        previous: previous,
+        cachePolicy: CacheLoadPolicy.networkFirst,
+      ),
+    );
+  }
+
+  Future<UserBlogDetailPageState> _load({
+    required UserBlogDetailPageState? previous,
+    required CacheLoadPolicy cachePolicy,
+  }) async {
+    final result = await ref
+        .read(userBlogDetailRepositoryProvider)
+        .load(_query, cachePolicy: cachePolicy);
+    if (result case DataReadSuccess<
+      UserBlogDetailData,
+      UserBlogDetailReadCapabilities
+    >(
+      :final data,
+      :final capabilities,
+      :final metadata,
+    )) {
+      return UserBlogDetailPageState(
+        data: data,
+        capabilities: capabilities,
+        metadata: metadata,
+      );
+    }
+    return UserBlogDetailPageState(
+      data: previous?.data,
+      capabilities: previous?.capabilities,
+      metadata: previous?.metadata,
+      failure: result.failureOrNull,
+    );
+  }
+}
+
+class ProfileBlogPage extends ConsumerWidget {
+  const ProfileBlogPage({
+    super.key,
+    this.initialScope = UserBlogFeedScope.public,
+    this.initialOrder = UserBlogOrder.latest,
+  });
+
+  final UserBlogFeedScope initialScope;
+  final UserBlogOrder initialOrder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final args = ProfileBlogPageArgs(
+      initialScope: initialScope,
+      initialOrder: initialOrder,
+    );
+    final asyncState = ref.watch(profileBlogListProvider(args));
+    final state = asyncState.value;
+    final data = state?.data;
+    final controller = ref.read(profileBlogListProvider(args).notifier);
     final palette = _ProfileBlogPalette.resolve(Theme.of(context));
     final l10n = AppLocalizations.of(context);
 
@@ -101,55 +327,66 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
         actions: [
           IconButton(
             tooltip: l10n.profileBlogWrite,
-            onPressed: () => _showTodo(l10n.profileBlogWriteUnavailable),
+            onPressed: () =>
+                _showTodo(context, l10n.profileBlogWriteUnavailable),
             icon: const Icon(Icons.edit_note),
           ),
         ],
       ),
-      body: asyncData.when(
-        data: (data) => _ProfileBlogListContent(
-          data: data,
-          request: _request,
-          palette: palette,
-          imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
-          onSelectView: (view) {
-            setState(() {
-              _request = _request.copyWith(view: view, page: 1);
-            });
-          },
-          onSelectOrder: (order) {
-            setState(() {
-              _request = _request.copyWith(
-                view: ProfileBlogView.all,
-                order: order,
-                page: 1,
-              );
-            });
-          },
-          onOpenBlog: (item) => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => ProfileBlogDetailPage(url: item.url),
+      body: data != null
+          ? RefreshIndicator(
+              onRefresh: controller.refresh,
+              child: _ProfileBlogListContent(
+                data: data,
+                capabilities: state?.capabilities,
+                failure: state?.failure,
+                palette: palette,
+                imageHeaderBuilder: ref.watch(
+                  imageRequestHeaderBuilderProvider,
+                ),
+                onSelectScope: controller.selectScope,
+                onSelectOrder: controller.selectOrder,
+                onOpenBlog: (item) => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ProfileBlogDetailPage(
+                      ownerUserId: item.ownerUserId,
+                      blogId: item.blogId,
+                    ),
+                  ),
+                ),
+                onLoadNextPage: _canLoadNext(data, state?.capabilities)
+                    ? controller.loadNextPage
+                    : null,
+              ),
+            )
+          : asyncState.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _ProfileBlogError(
+              error: state?.failure ?? asyncState.error,
+              palette: palette,
+              onRetry: controller.refresh,
             ),
-          ),
-          onLoadNextPage: data.pagination?.nextUrl == null
-              ? null
-              : () {
-                  setState(() {
-                    _request = _request.copyWith(page: _request.page + 1);
-                  });
-                },
-        ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ProfileBlogError(
-          error: error,
-          palette: palette,
-          onRetry: () => ref.invalidate(profileBlogListProvider(_request)),
-        ),
-      ),
     );
   }
 
-  void _showTodo(String message) {
+  bool _canLoadNext(
+    UserBlogDirectoryData data,
+    UserBlogDirectoryReadCapabilities? capabilities,
+  ) {
+    final pagination = data.pagination;
+    if (capabilities?.supports(
+          UserBlogDirectoryCapability.directionalPagination,
+        ) ==
+        true) {
+      return pagination.hasNext == true;
+    }
+    return capabilities?.supports(UserBlogDirectoryCapability.totalPageCount) ==
+            true &&
+        pagination.totalPages != null &&
+        pagination.currentPage < pagination.totalPages!;
+  }
+
+  void _showTodo(BuildContext context, String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
@@ -157,40 +394,55 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
 }
 
 class ProfileBlogDetailPage extends ConsumerWidget {
-  const ProfileBlogDetailPage({super.key, required this.url});
+  const ProfileBlogDetailPage({
+    super.key,
+    required this.ownerUserId,
+    required this.blogId,
+  });
 
-  final String url;
+  final String ownerUserId;
+  final String blogId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncData = ref.watch(profileBlogDetailProvider(url));
+    final query = UserBlogDetailQuery(ownerUserId: ownerUserId, blogId: blogId);
+    final asyncState = ref.watch(profileBlogDetailProvider(query));
+    final state = asyncState.value;
+    final data = state?.data;
     final palette = _ProfileBlogPalette.resolve(Theme.of(context));
     final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
     final l10n = AppLocalizations.of(context);
-    final rawTitle = asyncData.value?.title.trim();
+    final rawTitle = data?.title.trim();
 
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
         title: Text(
-          rawTitle?.isNotEmpty == true
-              ? asyncData.value!.title
-              : l10n.profileBlogTitle,
+          rawTitle?.isNotEmpty == true ? data!.title : l10n.profileBlogTitle,
         ),
       ),
-      body: asyncData.when(
-        data: (data) => _ProfileBlogDetailContent(
-          data: data,
-          palette: palette,
-          imageHeaderBuilder: imageHeaderBuilder,
-        ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ProfileBlogError(
-          error: error,
-          palette: palette,
-          onRetry: () => ref.invalidate(profileBlogDetailProvider(url)),
-        ),
-      ),
+      body: data != null
+          ? RefreshIndicator(
+              onRefresh: ref
+                  .read(profileBlogDetailProvider(query).notifier)
+                  .refresh,
+              child: _ProfileBlogDetailContent(
+                data: data,
+                capabilities: state?.capabilities,
+                failure: state?.failure,
+                palette: palette,
+                imageHeaderBuilder: imageHeaderBuilder,
+              ),
+            )
+          : asyncState.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _ProfileBlogError(
+              error: state?.failure ?? asyncState.error,
+              palette: palette,
+              onRetry: ref
+                  .read(profileBlogDetailProvider(query).notifier)
+                  .refresh,
+            ),
     );
   }
 }
@@ -198,22 +450,24 @@ class ProfileBlogDetailPage extends ConsumerWidget {
 class _ProfileBlogListContent extends StatelessWidget {
   const _ProfileBlogListContent({
     required this.data,
-    required this.request,
+    required this.capabilities,
+    required this.failure,
     required this.palette,
     required this.imageHeaderBuilder,
-    required this.onSelectView,
+    required this.onSelectScope,
     required this.onSelectOrder,
     required this.onOpenBlog,
     required this.onLoadNextPage,
   });
 
-  final ProfileBlogListPageData data;
-  final ProfileBlogListRequest request;
+  final UserBlogDirectoryData data;
+  final UserBlogDirectoryReadCapabilities? capabilities;
+  final Object? failure;
   final _ProfileBlogPalette palette;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
-  final ValueChanged<ProfileBlogView> onSelectView;
-  final ValueChanged<ProfileBlogOrder> onSelectOrder;
-  final ValueChanged<ProfileBlogListItem> onOpenBlog;
+  final ValueChanged<UserBlogFeedScope> onSelectScope;
+  final ValueChanged<UserBlogOrder> onSelectOrder;
+  final ValueChanged<UserBlogSummary> onOpenBlog;
   final VoidCallback? onLoadNextPage;
 
   @override
@@ -222,22 +476,34 @@ class _ProfileBlogListContent extends StatelessWidget {
       key: const Key('profile-blog-list'),
       padding: EdgeInsets.zero,
       children: [
+        if (failure != null)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              AppLocalizations.of(context).profileBlogLoadFailed(
+                LocalizedErrorSummary.resolve(
+                  AppLocalizations.of(context),
+                  failure,
+                ),
+              ),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: palette.muted),
+            ),
+          ),
         _ViewTabs(
-          activeView: data.activeView,
+          activeScope: data.scope,
           palette: palette,
-          onSelect: onSelectView,
+          onSelect: onSelectScope,
         ),
-        if (data.activeView == ProfileBlogView.all)
+        if (data.scope == UserBlogFeedScope.public)
           _OrderTabs(
-            activeOrder: data.activeOrder,
+            activeOrder: data.order ?? UserBlogOrder.latest,
             palette: palette,
             onSelect: onSelectOrder,
           ),
         if (data.items.isEmpty)
           _ProfileBlogEmptyState(
-            message:
-                data.emptyMessage ??
-                AppLocalizations.of(context).profileBlogEmpty,
+            message: AppLocalizations.of(context).profileBlogEmpty,
             palette: palette,
           )
         else
@@ -247,8 +513,9 @@ class _ProfileBlogListContent extends StatelessWidget {
               children: [
                 for (final item in data.items) ...[
                   _ProfileBlogListCard(
-                    key: Key('profile-blog-item-${item.id}'),
+                    key: Key('profile-blog-item-${item.blogId}'),
                     item: item,
+                    capabilities: capabilities,
                     palette: palette,
                     imageHeaderBuilder: imageHeaderBuilder,
                     onTap: () => onOpenBlog(item),
@@ -258,9 +525,11 @@ class _ProfileBlogListContent extends StatelessWidget {
               ],
             ),
           ),
-        if (data.pagination != null)
+        if (data.pagination.totalPages != null ||
+            data.pagination.hasPrevious != null ||
+            data.pagination.hasNext != null)
           _PaginationBar(
-            pagination: data.pagination!,
+            pagination: data.pagination,
             palette: palette,
             onLoadNextPage: onLoadNextPage,
           ),
@@ -271,14 +540,14 @@ class _ProfileBlogListContent extends StatelessWidget {
 
 class _ViewTabs extends StatelessWidget {
   const _ViewTabs({
-    required this.activeView,
+    required this.activeScope,
     required this.palette,
     required this.onSelect,
   });
 
-  final ProfileBlogView activeView;
+  final UserBlogFeedScope activeScope;
   final _ProfileBlogPalette palette;
-  final ValueChanged<ProfileBlogView> onSelect;
+  final ValueChanged<UserBlogFeedScope> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -287,16 +556,16 @@ class _ViewTabs extends StatelessWidget {
       child: Row(
         key: const Key('profile-blog-view-tabs'),
         children: [
-          for (final view in ProfileBlogView.values)
+          for (final scope in UserBlogFeedScope.values)
             Expanded(
               child: _TabButton(
                 label: ProfileTextResolver.blogView(
                   AppLocalizations.of(context),
-                  view,
+                  scope,
                 ),
-                selected: activeView == view,
+                selected: activeScope == scope,
                 palette: palette,
-                onTap: () => onSelect(view),
+                onTap: () => onSelect(scope),
               ),
             ),
         ],
@@ -312,9 +581,9 @@ class _OrderTabs extends StatelessWidget {
     required this.onSelect,
   });
 
-  final ProfileBlogOrder activeOrder;
+  final UserBlogOrder activeOrder;
   final _ProfileBlogPalette palette;
-  final ValueChanged<ProfileBlogOrder> onSelect;
+  final ValueChanged<UserBlogOrder> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -325,7 +594,7 @@ class _OrderTabs extends StatelessWidget {
       child: Wrap(
         spacing: 8,
         children: [
-          for (final order in ProfileBlogOrder.values)
+          for (final order in UserBlogOrder.values)
             ChoiceChip(
               label: Text(
                 ProfileTextResolver.blogOrder(
@@ -394,12 +663,14 @@ class _ProfileBlogListCard extends StatelessWidget {
   const _ProfileBlogListCard({
     super.key,
     required this.item,
+    required this.capabilities,
     required this.palette,
     required this.imageHeaderBuilder,
     required this.onTap,
   });
 
-  final ProfileBlogListItem item;
+  final UserBlogSummary item;
+  final UserBlogDirectoryReadCapabilities? capabilities;
   final _ProfileBlogPalette palette;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
   final VoidCallback onTap;
@@ -419,30 +690,47 @@ class _ProfileBlogListCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  _ProfileBlogAvatar(
-                    imageUrl: item.avatarUrl,
-                    ownerId: item.author,
-                    radius: 17,
-                    imageHeaderBuilder: imageHeaderBuilder,
-                  ),
-                  const SizedBox(width: 10),
+                  if (capabilities?.supports(
+                        UserBlogDirectoryCapability.avatarReference,
+                      ) ==
+                      true)
+                    _ProfileBlogAvatar(
+                      imageUrl: item.avatarUrl,
+                      ownerId: item.ownerUserId,
+                      radius: 17,
+                      imageHeaderBuilder: imageHeaderBuilder,
+                    ),
+                  if (capabilities?.supports(
+                        UserBlogDirectoryCapability.avatarReference,
+                      ) ==
+                      true)
+                    const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          item.author,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: palette.title,
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                        if (item.dateline.isNotEmpty)
+                        if (capabilities?.supports(
+                                  UserBlogDirectoryCapability.author,
+                                ) ==
+                                true &&
+                            item.authorName != null)
                           Text(
-                            item.dateline,
+                            item.authorName!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                                  color: palette.title,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        if (capabilities?.supports(
+                                  UserBlogDirectoryCapability.publishedAtText,
+                                ) ==
+                                true &&
+                            item.publishedAtText != null)
+                          Text(
+                            item.publishedAtText!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.labelMedium
@@ -461,10 +749,12 @@ class _ProfileBlogListCard extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              if (item.excerpt.isNotEmpty) ...[
+              if (capabilities?.supports(UserBlogDirectoryCapability.excerpt) ==
+                      true &&
+                  item.excerpt != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  item.excerpt,
+                  item.excerpt!,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -488,7 +778,7 @@ class _PaginationBar extends StatelessWidget {
     required this.onLoadNextPage,
   });
 
-  final ProfileBlogPagination pagination;
+  final UserBlogPagination pagination;
   final _ProfileBlogPalette palette;
   final VoidCallback? onLoadNextPage;
 
@@ -496,16 +786,23 @@ class _PaginationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
         children: [
           Text(
-            AppLocalizations.of(
-              context,
-            ).commonPageOf(pagination.currentPage, pagination.totalPages),
+            pagination.totalPages == null
+                ? AppLocalizations.of(
+                    context,
+                  ).commonPage(pagination.currentPage)
+                : AppLocalizations.of(context).commonPageOf(
+                    pagination.currentPage,
+                    pagination.totalPages!,
+                  ),
             style: TextStyle(color: palette.muted),
           ),
-          const SizedBox(width: 12),
           FilledButton.tonal(
             key: const Key('profile-blog-next-page-button'),
             onPressed: onLoadNextPage,
@@ -544,11 +841,15 @@ class _ProfileBlogEmptyState extends StatelessWidget {
 class _ProfileBlogDetailContent extends StatelessWidget {
   const _ProfileBlogDetailContent({
     required this.data,
+    required this.capabilities,
+    required this.failure,
     required this.palette,
     required this.imageHeaderBuilder,
   });
 
-  final ProfileBlogDetailData data;
+  final UserBlogDetailData data;
+  final UserBlogDetailReadCapabilities? capabilities;
+  final Object? failure;
   final _ProfileBlogPalette palette;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
 
@@ -558,12 +859,29 @@ class _ProfileBlogDetailContent extends StatelessWidget {
       key: const Key('profile-blog-detail'),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
       children: [
+        if (failure != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              AppLocalizations.of(context).profileBlogLoadFailed(
+                LocalizedErrorSummary.resolve(
+                  AppLocalizations.of(context),
+                  failure,
+                ),
+              ),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: palette.muted),
+            ),
+          ),
         _BlogDetailCard(
           data: data,
+          capabilities: capabilities,
           palette: palette,
           imageHeaderBuilder: imageHeaderBuilder,
         ),
-        if (data.comments.isNotEmpty) ...[
+        if (capabilities?.supports(UserBlogDetailCapability.orderedComments) ==
+                true &&
+            data.comments.isNotEmpty) ...[
           const SizedBox(height: 14),
           Text(
             AppLocalizations.of(context).profileBlogComments,
@@ -575,15 +893,20 @@ class _ProfileBlogDetailContent extends StatelessWidget {
           const SizedBox(height: 10),
           for (final comment in data.comments) ...[
             _CommentCard(
-              key: Key('profile-blog-comment-${comment.id}'),
+              key: Key('profile-blog-comment-${comment.commentId}'),
               comment: comment,
+              capabilities: capabilities,
               palette: palette,
               imageHeaderBuilder: imageHeaderBuilder,
             ),
             const SizedBox(height: 10),
           ],
         ],
-        if (data.commentForm != null) ...[
+        if (capabilities?.supports(
+                  UserBlogDetailCapability.commentingAvailability,
+                ) ==
+                true &&
+            data.commentsOpen == true) ...[
           const SizedBox(height: 8),
           OutlinedButton.icon(
             key: const Key('profile-blog-comment-placeholder'),
@@ -606,11 +929,13 @@ class _ProfileBlogDetailContent extends StatelessWidget {
 class _BlogDetailCard extends StatelessWidget {
   const _BlogDetailCard({
     required this.data,
+    required this.capabilities,
     required this.palette,
     required this.imageHeaderBuilder,
   });
 
-  final ProfileBlogDetailData data;
+  final UserBlogDetailData data;
+  final UserBlogDetailReadCapabilities? capabilities;
   final _ProfileBlogPalette palette;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
 
@@ -632,13 +957,18 @@ class _BlogDetailCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              _ProfileBlogAvatar(
-                imageUrl: data.avatarUrl,
-                ownerId: data.author,
-                radius: 17,
-                imageHeaderBuilder: imageHeaderBuilder,
-              ),
-              const SizedBox(width: 10),
+              if (capabilities?.supports(
+                    UserBlogDetailCapability.avatarReference,
+                  ) ==
+                  true) ...[
+                _ProfileBlogAvatar(
+                  imageUrl: data.avatarUrl,
+                  ownerId: data.ownerUserId,
+                  radius: 17,
+                  imageHeaderBuilder: imageHeaderBuilder,
+                ),
+                const SizedBox(width: 10),
+              ],
               Expanded(
                 child: Text(
                   _detailMeta(context, data),
@@ -657,10 +987,10 @@ class _BlogDetailCard extends StatelessWidget {
               context,
             ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.55),
             child: ForumHtmlContentView(
-              html: data.messageHtml,
-              sourceId: 'profile-blog-${data.id}',
+              html: data.bodyHtml,
+              sourceId: 'profile-blog-${data.blogId}',
               imageHeaderBuilder: imageHeaderBuilder,
-              imageCacheOwnerId: data.id,
+              imageCacheOwnerId: data.blogId,
               contentImageKind: ForumImageKind.blogInline,
               surfaceColor: palette.card,
               foregroundColor: palette.body,
@@ -674,13 +1004,23 @@ class _BlogDetailCard extends StatelessWidget {
     );
   }
 
-  String _detailMeta(BuildContext context, ProfileBlogDetailData data) {
+  String _detailMeta(BuildContext context, UserBlogDetailData data) {
     final l10n = AppLocalizations.of(context);
     final parts = <String>[
-      if (data.author.trim().isNotEmpty) data.author.trim(),
-      if (data.dateline.trim().isNotEmpty) data.dateline.trim(),
-      l10n.profileBlogViews(data.views),
-      l10n.profileBlogCommentCount(data.commentsCount),
+      if (capabilities?.supports(UserBlogDetailCapability.author) == true &&
+          data.authorName != null)
+        data.authorName!,
+      if (capabilities?.supports(UserBlogDetailCapability.publishedAtText) ==
+              true &&
+          data.publishedAtText != null)
+        data.publishedAtText!,
+      if (capabilities?.supports(UserBlogDetailCapability.viewCount) == true &&
+          data.viewCount != null)
+        l10n.profileBlogViews(data.viewCount!),
+      if (capabilities?.supports(UserBlogDetailCapability.commentCount) ==
+              true &&
+          data.commentCount != null)
+        l10n.profileBlogCommentCount(data.commentCount!),
     ];
     return parts.join(' · ');
   }
@@ -690,11 +1030,13 @@ class _CommentCard extends StatelessWidget {
   const _CommentCard({
     super.key,
     required this.comment,
+    required this.capabilities,
     required this.palette,
     required this.imageHeaderBuilder,
   });
 
-  final ProfileBlogComment comment;
+  final UserBlogComment comment;
+  final UserBlogDetailReadCapabilities? capabilities;
   final _ProfileBlogPalette palette;
   final ImageRequestHeaderBuilder imageHeaderBuilder;
 
@@ -708,16 +1050,29 @@ class _CommentCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              _ProfileBlogAvatar(
-                imageUrl: comment.avatarUrl,
-                ownerId: comment.author,
-                radius: 15,
-                imageHeaderBuilder: imageHeaderBuilder,
-              ),
-              const SizedBox(width: 9),
+              if (capabilities?.supports(
+                    UserBlogDetailCapability.commentAvatarReference,
+                  ) ==
+                  true) ...[
+                _ProfileBlogAvatar(
+                  imageUrl: comment.avatarUrl,
+                  ownerId: comment.authorUserId ?? comment.authorName,
+                  radius: 15,
+                  imageHeaderBuilder: imageHeaderBuilder,
+                ),
+                const SizedBox(width: 9),
+              ],
               Expanded(
                 child: Text(
-                  '${comment.author} · ${comment.dateline}',
+                  <String>[
+                    comment.authorName,
+                    if (capabilities?.supports(
+                              UserBlogDetailCapability.commentPublishedAtText,
+                            ) ==
+                            true &&
+                        comment.publishedAtText != null)
+                      comment.publishedAtText!,
+                  ].join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -734,10 +1089,10 @@ class _CommentCard extends StatelessWidget {
               context,
             ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.45),
             child: ForumHtmlContentView(
-              html: comment.messageHtml,
-              sourceId: 'profile-blog-comment-${comment.id}',
+              html: comment.bodyHtml,
+              sourceId: 'profile-blog-comment-${comment.commentId}',
               imageHeaderBuilder: imageHeaderBuilder,
-              imageCacheOwnerId: comment.id,
+              imageCacheOwnerId: comment.commentId,
               contentImageKind: ForumImageKind.blogInline,
               surfaceColor: palette.card,
               foregroundColor: palette.body,
@@ -786,7 +1141,7 @@ class _ProfileBlogError extends StatelessWidget {
     required this.onRetry,
   });
 
-  final Object error;
+  final Object? error;
   final _ProfileBlogPalette palette;
   final VoidCallback onRetry;
 

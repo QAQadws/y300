@@ -8,6 +8,7 @@ import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
 import 'package:y300/features/auth/data/services/auth_remote_data_source.dart';
 import 'package:y300/features/auth/data/models/auth_session_models.dart';
 import 'package:y300/features/auth/data/services/session_verifier.dart';
+import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 
 export 'package:y300/features/auth/data/models/auth_session_models.dart';
 
@@ -127,13 +128,6 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     remoteDataSource: ref.watch(authRemoteDataSourceProvider),
     formhashProvider: ref.watch(formhashProvider),
     sessionVerifier: ref.watch(sessionVerifierProvider),
-    sessionStore: ref.watch(yamiboSessionStoreProvider),
-  );
-});
-
-final formhashProvider = Provider<FormhashProvider>((ref) {
-  return ApiFormhashProvider(
-    ref.watch(apiClientProvider),
     sessionStore: ref.watch(yamiboSessionStoreProvider),
   );
 });

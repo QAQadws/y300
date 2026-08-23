@@ -1,19 +1,19 @@
-import 'package:y300/features/profile/data/models/profile_blog_models.dart';
+import 'package:y300/features/profile/domain/models/user_blog_models.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 abstract final class ProfileTextResolver {
-  static String blogView(AppLocalizations l10n, ProfileBlogView view) {
+  static String blogView(AppLocalizations l10n, UserBlogFeedScope view) {
     return switch (view) {
-      ProfileBlogView.friends => l10n.profileBlogFriends,
-      ProfileBlogView.mine => l10n.profileBlogMine,
-      ProfileBlogView.all => l10n.profileBlogExplore,
+      UserBlogFeedScope.friends => l10n.profileBlogFriends,
+      UserBlogFeedScope.self => l10n.profileBlogMine,
+      UserBlogFeedScope.public => l10n.profileBlogExplore,
     };
   }
 
-  static String blogOrder(AppLocalizations l10n, ProfileBlogOrder order) {
+  static String blogOrder(AppLocalizations l10n, UserBlogOrder order) {
     return switch (order) {
-      ProfileBlogOrder.latest => l10n.profileBlogLatest,
-      ProfileBlogOrder.hot => l10n.profileBlogRecommended,
+      UserBlogOrder.latest => l10n.profileBlogLatest,
+      UserBlogOrder.recommended => l10n.profileBlogRecommended,
     };
   }
 }

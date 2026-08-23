@@ -5,7 +5,8 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
-import 'package:y300/features/profile/data/repositories/profile_repository.dart';
+import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
+import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 import 'package:y300/features/search/data/services/discuz_search_html_parser.dart';
 import 'package:y300/features/search/data/services/forum_search_service.dart';
 import 'package:y300/features/search/data/services/forum_search_scheduler.dart';
@@ -16,22 +17,21 @@ export 'package:y300/features/search/data/services/forum_search_service.dart';
 
 class DiscuzSearchService implements ForumSearchService {
   DiscuzSearchService({
-    required ProfileRepository profileRepository,
+    required FormhashProvider formhashProvider,
     required SearchRateLimiter rateLimiter,
     required YamiboHttpGateway gateway,
     DiscuzSearchHtmlParser? htmlParser,
-  }) : _profileRepository = profileRepository,
+  }) : _formhashProvider = formhashProvider,
        _rateLimiter = rateLimiter,
        _gateway = gateway,
        _htmlParser = htmlParser ?? DiscuzSearchHtmlParser();
 
-  final ProfileRepository _profileRepository;
+  final FormhashProvider _formhashProvider;
   final SearchRateLimiter _rateLimiter;
   final YamiboHttpGateway _gateway;
   final DiscuzSearchHtmlParser _htmlParser;
-  // bbs.yamibo.com 的 formhash 与登录会话绑定，重复 GET profile 拉到的
-  // 永远是同一个值——首次同步阶段一连发 70 次 search，每次都先去拉 profile
-  // 是纯净的浪费。这里只缓存 hash 字符串，避免把整段 ProfileData 留在内存。
+  // 搜索上下文中的 formhash 与登录会话绑定；保留 service 级缓存，避免自动
+  // 分页期间重复进入认证 provider。
   String? _cachedFormhash;
 
   @override
@@ -173,15 +173,15 @@ class DiscuzSearchService implements ForumSearchService {
     if (cached != null && cached.isNotEmpty) {
       return cached;
     }
-    final profile = await _profileRepository.getProfile();
-    return profile.when(
-      success: (data) {
-        final formhash = data.formhash.trim();
-        if (formhash.isEmpty) {
+    final result = await _formhashProvider.loadFormhash(preferProfile: true);
+    return result.when(
+      success: (formhash) {
+        final normalized = formhash.trim();
+        if (normalized.isEmpty) {
           throw const DiscuzSearchServiceException('formhash 为空，无法执行搜索');
         }
-        _cachedFormhash = formhash;
-        return formhash;
+        _cachedFormhash = normalized;
+        return normalized;
       },
       failure: (error) =>
           throw DiscuzSearchServiceException('获取 formhash 失败：${error.message}'),
@@ -244,7 +244,7 @@ final searchRateLimiterProvider = Provider<SearchRateLimiter>((ref) {
 
 final rawDiscuzSearchServiceProvider = Provider<ForumSearchService>((ref) {
   return DiscuzSearchService(
-    profileRepository: ref.read(profileRepositoryProvider),
+    formhashProvider: ref.read(formhashProvider),
     rateLimiter: ref.read(searchRateLimiterProvider),
     gateway: ref.read(yamiboHttpGatewayProvider),
   );

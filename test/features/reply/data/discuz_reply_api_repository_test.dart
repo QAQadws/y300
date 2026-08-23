@@ -6,10 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 import 'package:y300/features/reply/data/services/discuz_reply_remote_data_source.dart';
 import 'package:y300/features/reply/data/services/reply_form_preparation_data_source.dart';
-import 'package:y300/features/profile/data/models/profile_models.dart';
-import 'package:y300/features/profile/data/repositories/profile_repository.dart';
 import 'package:y300/features/reply/data/repositories/discuz_reply_api_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/domain/services/reply_draft_validator.dart';
@@ -72,7 +71,7 @@ void main() {
         ),
       );
       final repository = _buildRepositoryWithRemote(
-        profileRepository: _FakeProfileRepository.success(formhash: ''),
+        formhashProvider: _FakeFormhashProvider(formhash: ''),
         remoteDataSource: remoteDataSource,
       );
 
@@ -212,9 +211,7 @@ void main() {
           ),
         );
         final repository = _buildRepositoryWithRemote(
-          profileRepository: _FakeProfileRepository.success(
-            formhash: 'profile-formhash',
-          ),
+          formhashProvider: _FakeFormhashProvider(formhash: 'profile-formhash'),
           remoteDataSource: remoteDataSource,
         );
 
@@ -300,7 +297,7 @@ DiscuzReplyApiRepository _buildRepository({
 }) {
   final dio = Dio()..httpClientAdapter = adapter;
   return DiscuzReplyApiRepository(
-    profileRepository: _FakeProfileRepository.success(formhash: 'fe182126'),
+    formhashProvider: _FakeFormhashProvider(formhash: 'fe182126'),
     cookieStore: CookieStore(),
     dio: dio,
   );
@@ -309,37 +306,27 @@ DiscuzReplyApiRepository _buildRepository({
 DiscuzReplyApiRepository _buildRepositoryWithRemote({
   required DiscuzReplyRemoteDataSource remoteDataSource,
   ReplyFormPreparationDataSource? preparationDataSource,
-  ProfileRepository? profileRepository,
+  FormhashProvider? formhashProvider,
 }) {
   return DiscuzReplyApiRepository(
-    profileRepository:
-        profileRepository ??
-        _FakeProfileRepository.success(formhash: 'fe182126'),
+    formhashProvider:
+        formhashProvider ?? _FakeFormhashProvider(formhash: 'fe182126'),
     cookieStore: CookieStore(),
     remoteDataSource: remoteDataSource,
     preparationDataSource: preparationDataSource,
   );
 }
 
-class _FakeProfileRepository implements ProfileRepository {
-  _FakeProfileRepository.success({required String formhash})
-    : _result = ApiSuccess<ProfileData>(
-        ProfileData(
-          uid: '1',
-          username: 'tester',
-          avatar: '',
-          groupId: '10',
-          credits: 0,
-          posts: 0,
-          threads: 0,
-          formhash: formhash,
-        ),
-      );
+class _FakeFormhashProvider implements FormhashProvider {
+  _FakeFormhashProvider({required this.formhash});
 
-  final ApiResult<ProfileData> _result;
+  final String formhash;
 
   @override
-  Future<ApiResult<ProfileData>> getProfile() async => _result;
+  Future<ApiResult<String>> loadFormhash({bool preferProfile = false}) async {
+    expect(preferProfile, isTrue);
+    return ApiSuccess<String>(formhash);
+  }
 }
 
 class _FakeReplyRemoteDataSource implements DiscuzReplyRemoteDataSource {

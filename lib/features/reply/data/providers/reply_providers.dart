@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/profile/data/repositories/profile_repository.dart';
+import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
 import 'package:y300/features/reply/data/repositories/discuz_reply_api_repository.dart';
 import 'package:y300/features/reply/data/services/reply_form_preparation_data_source.dart';
 import 'package:y300/features/reply/data/repositories/reply_repository.dart';
@@ -33,7 +33,7 @@ final replyFormPreparationDataSourceProvider =
 
 final replyRepositoryProvider = Provider<ReplyRepository>((ref) {
   return DiscuzReplyApiRepository(
-    profileRepository: ref.read(profileRepositoryProvider),
+    formhashProvider: ref.read(formhashProvider),
     cookieStore: ref.read(cookieStoreProvider),
     gateway: ref.read(yamiboHttpGatewayProvider),
     preparationDataSource: ref.read(replyFormPreparationDataSourceProvider),

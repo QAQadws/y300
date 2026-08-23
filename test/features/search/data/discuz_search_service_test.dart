@@ -8,8 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
-import 'package:y300/features/profile/data/models/profile_models.dart';
-import 'package:y300/features/profile/data/repositories/profile_repository.dart';
+import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 import 'package:y300/features/search/data/services/discuz_search_service.dart';
 import 'package:y300/features/search/data/models/discuz_search_models.dart';
 import 'package:y300/features/search/data/services/search_rate_limiter.dart';
@@ -59,7 +58,7 @@ void main() {
 }
 
 DiscuzSearchService _buildService({required _DiscuzSearchTestAdapter adapter}) {
-  final profileRepository = _FakeProfileRepository.success(formhash: 'fh_123');
+  final formhashProvider = _FakeFormhashProvider(formhash: 'fh_123');
   final limiter = _FakeSearchRateLimiter(
     checkResult: const _LimiterState.allowed(),
   );
@@ -73,7 +72,7 @@ DiscuzSearchService _buildService({required _DiscuzSearchTestAdapter adapter}) {
     ),
   )..httpClientAdapter = adapter;
   return DiscuzSearchService(
-    profileRepository: profileRepository,
+    formhashProvider: formhashProvider,
     rateLimiter: limiter,
     gateway: YamiboHttpGateway(
       cookieStore: CookieStore(),
@@ -111,25 +110,16 @@ String _sampleNextPageHtml() {
 ''';
 }
 
-class _FakeProfileRepository implements ProfileRepository {
-  _FakeProfileRepository.success({required String formhash})
-    : _result = ApiSuccess<ProfileData>(
-        ProfileData(
-          uid: '1',
-          username: 'tester',
-          avatar: '',
-          groupId: '10',
-          credits: 0,
-          posts: 0,
-          threads: 0,
-          formhash: formhash,
-        ),
-      );
+class _FakeFormhashProvider implements FormhashProvider {
+  _FakeFormhashProvider({required this.formhash});
 
-  final ApiResult<ProfileData> _result;
+  final String formhash;
 
   @override
-  Future<ApiResult<ProfileData>> getProfile() async => _result;
+  Future<ApiResult<String>> loadFormhash({bool preferProfile = false}) async {
+    expect(preferProfile, isTrue);
+    return ApiSuccess<String>(formhash);
+  }
 }
 
 class _FakeSearchRateLimiter extends SearchRateLimiter {

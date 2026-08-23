@@ -6,18 +6,18 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/utils/parse_utils.dart';
-import 'package:y300/features/profile/data/repositories/profile_repository.dart';
+import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 import 'package:y300/features/thread/data/repositories/thread_favorite_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 
 class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
   DiscuzThreadFavoriteApiRepository({
-    required ProfileRepository profileRepository,
+    required FormhashProvider formhashProvider,
     required YamiboHttpGateway gateway,
-  }) : _profileRepository = profileRepository,
+  }) : _formhashProvider = formhashProvider,
        _gateway = gateway;
 
-  final ProfileRepository _profileRepository;
+  final FormhashProvider _formhashProvider;
   final YamiboHttpGateway _gateway;
 
   @override
@@ -192,29 +192,22 @@ class DiscuzThreadFavoriteApiRepository implements ThreadFavoriteRepository {
   }
 
   Future<ApiResult<String>> _loadFormhash() async {
-    final profile = await _profileRepository.getProfile();
-    return profile.when(
-      success: (data) {
-        final formhash = data.formhash.trim();
-        if (formhash.isEmpty) {
+    final result = await _formhashProvider.loadFormhash(preferProfile: true);
+    return result.when(
+      success: (value) {
+        final normalized = value.trim();
+        if (normalized.isEmpty) {
           return const ApiFailure<String>(
             ApiError(
               type: ApiErrorType.business,
-              message: 'formhash 为空，无法收藏帖子',
+              code: 'formhash_invalid',
+              message: 'formhash 不能为空',
             ),
           );
         }
-        return ApiSuccess<String>(formhash);
+        return ApiSuccess<String>(normalized);
       },
-      failure: (error) => ApiFailure<String>(
-        ApiError(
-          type: error.type,
-          message: '获取 formhash 失败：${error.message}',
-          code: error.code,
-          statusCode: error.statusCode,
-          raw: error.raw,
-        ),
-      ),
+      failure: ApiFailure.new,
     );
   }
 

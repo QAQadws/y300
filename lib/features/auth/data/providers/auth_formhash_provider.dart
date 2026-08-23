@@ -1,12 +1,11 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/discuz_response.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/core/utils/parse_utils.dart';
-
-abstract class FormhashProvider {
-  Future<ApiResult<String>> loadFormhash({bool preferProfile = false});
-}
+import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 
 class ApiFormhashProvider implements FormhashProvider {
   ApiFormhashProvider(this._apiClient, {YamiboSessionStore? sessionStore})
@@ -69,3 +68,10 @@ class ApiFormhashProvider implements FormhashProvider {
     );
   }
 }
+
+final formhashProvider = Provider<FormhashProvider>((ref) {
+  return ApiFormhashProvider(
+    ref.watch(apiClientProvider),
+    sessionStore: ref.watch(yamiboSessionStoreProvider),
+  );
+});
