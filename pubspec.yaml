@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  yamibo_forum_client:
+    path: packages/yamibo_forum_client
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.2

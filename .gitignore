@@ -31,6 +31,8 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+# Package-local Flutter/Dart test outputs.
+/packages/yamibo_forum_client/build/
 /coverage/
 
 # Symbolication related

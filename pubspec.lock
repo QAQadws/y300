@@ -1562,6 +1562,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "6.6.1"
+  yamibo_forum_client:
+    dependency: "direct main"
+    description:
+      path: "packages/yamibo_forum_client"
+      relative: true
+    source: path
+    version: "0.1.0"
   yaml:
     dependency: transitive
     description:

@@ -7,6 +7,7 @@ import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/core/network/yamibo/yamibo.dart';
+export 'yamibo_forum_client_provider.dart';
 
 final loggerProvider = Provider<Logger>((ref) {
   return Logger();
