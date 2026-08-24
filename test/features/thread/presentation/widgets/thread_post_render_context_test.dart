@@ -10,7 +10,7 @@ void main() {
       palette: ThreadDetailNativePalette.resolve(
         ThemeData.light(useMaterial3: true),
       ),
-      imageHeaderBuilder: null,
+      imageReferer: null,
       renderOwnerFor: (post) => ThreadPostRenderContext.commentRenderOwner(
         sourceTid: '573279',
         pid: post.pid,

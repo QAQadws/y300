@@ -168,6 +168,17 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     unawaited(
       ref.read(mainShellYamiboSessionWarmupProvider).call().catchError((_) {}),
     );
+    // Resolve the process-wide image cache transport before the first remote
+    // image needs it. Failure remains local to image placeholders/retries.
+    unawaited(_warmImageCacheManager());
+  }
+
+  Future<void> _warmImageCacheManager() async {
+    try {
+      await ref.read(imageCacheManagerProvider.future);
+    } catch (_) {
+      // Cache initialization is best effort and must never delay the shell.
+    }
   }
 
   @override
@@ -498,7 +509,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       MainShellDestination.novel => NovelTabPage(isActive: isActive),
       MainShellDestination.history => HistoryPage(
         onOpenEntry: ref.read(historyEntryRouterProvider).open,
-        imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+        imageReferer: ref.watch(forumImageRefererProvider),
       ),
       MainShellDestination.more => const MorePage(),
     };

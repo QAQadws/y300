@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -10,6 +11,7 @@ import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_logger.dart';
+import 'package:y300/core/network/yamibo/yamibo_resource_stream.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
@@ -58,6 +60,10 @@ class YamiboHttpGateway {
   final YamiboRequestLogger _requestLogger;
   final Dio _dio;
   int _nextRequestSequence = 0;
+
+  static const int _resourceSignatureLimit = 512;
+  static const int _maxResourceRedirects = 5;
+  static const Duration _defaultResourceLifetime = Duration(days: 7);
 
   Future<ApiResult<YamiboHttpResponse<String>>> getText(
     Uri uri, {
@@ -119,6 +125,227 @@ class YamiboHttpGateway {
     );
   }
 
+  /// Opens an image resource through the application-owned Cookie/WAF/Dio
+  /// session without buffering the complete response in memory.
+  Future<ApiResult<YamiboResourceStreamResponse>> openImageResource(
+    Uri uri, {
+    required Uri referer,
+    required String userAgent,
+    String? ifNoneMatch,
+    CancelToken? cancelToken,
+  }) {
+    return _openImageResource(
+      uri,
+      referer: referer,
+      userAgent: userAgent,
+      ifNoneMatch: ifNoneMatch,
+      cancelToken: cancelToken,
+      redirectCount: 0,
+      recoveryAttempt: 0,
+      allowConditionalHeaders: true,
+    );
+  }
+
+  Future<ApiResult<YamiboResourceStreamResponse>> _openImageResource(
+    Uri uri, {
+    required Uri referer,
+    required String userAgent,
+    required String? ifNoneMatch,
+    required CancelToken? cancelToken,
+    required int redirectCount,
+    required int recoveryAttempt,
+    required bool allowConditionalHeaders,
+  }) async {
+    if (!_isHttpResource(uri) || uri.host.isEmpty || uri.userInfo.isNotEmpty) {
+      return const ApiFailure(
+        ApiError(
+          type: ApiErrorType.business,
+          message: 'invalid_resource_reference',
+          code: 'invalid_resource_reference',
+        ),
+      );
+    }
+    final sameSite = _isSameSiteResource(uri);
+    final effectiveReferer = _resourceReferer(referer, sameSite: sameSite);
+    final headers = <String, String>{
+      'User-Agent': userAgent.trim().isEmpty ? _defaultUserAgent : userAgent,
+      'Accept':
+          'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'Referer': effectiveReferer.toString(),
+      if (allowConditionalHeaders && ifNoneMatch?.trim().isNotEmpty == true)
+        'If-None-Match': ifNoneMatch!.trim(),
+    };
+    if (sameSite) {
+      final cookieHeader = await _cookieStore.readCookieHeader(uri);
+      if (cookieHeader != null && cookieHeader.isNotEmpty) {
+        headers['Cookie'] = cookieHeader;
+      }
+    }
+
+    try {
+      final response = await _dio.requestUri<ResponseBody>(
+        uri,
+        options: Options(
+          method: 'GET',
+          headers: headers,
+          responseType: ResponseType.stream,
+          followRedirects: false,
+          validateStatus: (status) => status != null,
+        ),
+        cancelToken: cancelToken,
+      );
+      final body = response.data;
+      if (body == null) {
+        return const ApiFailure(
+          ApiError(
+            type: ApiErrorType.network,
+            message: 'missing_resource_stream',
+            code: 'missing_resource_stream',
+          ),
+        );
+      }
+      final iterator = StreamIterator<List<int>>(body.stream);
+      final status = response.statusCode ?? 0;
+
+      if (_isResourceRedirect(status)) {
+        await iterator.cancel();
+        final location = response.headers.value('location');
+        final target = location == null ? null : uri.resolve(location);
+        if (target == null ||
+            !_isHttpResource(target) ||
+            target.userInfo.isNotEmpty ||
+            redirectCount >= _maxResourceRedirects ||
+            (uri.scheme == 'https' && target.scheme == 'http')) {
+          return ApiFailure(
+            ApiError(
+              type: ApiErrorType.server,
+              message: 'resource_redirect_rejected',
+              code: 'resource_redirect_rejected',
+              statusCode: status,
+            ),
+          );
+        }
+        return _openImageResource(
+          target.removeFragment(),
+          referer: referer,
+          userAgent: userAgent,
+          ifNoneMatch: ifNoneMatch,
+          cancelToken: cancelToken,
+          redirectCount: redirectCount + 1,
+          recoveryAttempt: recoveryAttempt,
+          allowConditionalHeaders:
+              allowConditionalHeaders && _sameResourceAuthority(uri, target),
+        );
+      }
+
+      if (status == 304) {
+        await iterator.cancel();
+        return ApiSuccess(
+          YamiboResourceStreamResponse(
+            uri: response.realUri,
+            statusCode: status,
+            content: const Stream<List<int>>.empty(),
+            contentType: response.headers.value('content-type'),
+            eTag: response.headers.value('etag'),
+            validUntil: _resourceValidUntil(response.headers.map),
+            fileExtension: _resourceExtension(
+              response.headers.value('content-type'),
+              response.realUri,
+            ),
+          ),
+        );
+      }
+
+      final challenge = sameSite
+          ? WafChallengeDetector.detect(statusCode: status)
+          : null;
+      if (challenge != null) {
+        await iterator.cancel();
+        if (recoveryAttempt > 0) {
+          return ApiFailure(
+            ApiError(
+              type: ApiErrorType.server,
+              message: 'network.security_challenge_persisted',
+              code: 'security_challenge_persisted',
+              statusCode: status,
+            ),
+          );
+        }
+        final recovery = await _recoverSecurityChallenge(
+          uri: uri,
+          method: 'GET',
+          evidence: challenge,
+          userAgent: userAgent,
+        );
+        if (recovery != WafChallengeRecoveryResult.verified) {
+          return ApiFailure(
+            ApiError(
+              type: ApiErrorType.server,
+              message: 'network.security_verification_not_completed',
+              code: 'security_verification_not_completed',
+              statusCode: status,
+            ),
+          );
+        }
+        return _openImageResource(
+          uri,
+          referer: referer,
+          userAgent: userAgent,
+          ifNoneMatch: ifNoneMatch,
+          cancelToken: cancelToken,
+          redirectCount: redirectCount,
+          recoveryAttempt: recoveryAttempt + 1,
+          allowConditionalHeaders: allowConditionalHeaders,
+        );
+      }
+
+      if (sameSite) await _saveCookies(response);
+
+      if (status < 200 || status >= 300) {
+        await iterator.cancel();
+        return ApiFailure(_resourceStatusError(status));
+      }
+
+      final prefix = await _readResourcePrefix(iterator);
+      final contentType = response.headers.value('content-type');
+      if (!_isSupportedImageResource(contentType, prefix.bytes)) {
+        await iterator.cancel();
+        return ApiFailure(
+          ApiError(
+            type: ApiErrorType.parse,
+            message: 'resource_is_not_image',
+            code: 'resource_is_not_image',
+            statusCode: status,
+          ),
+        );
+      }
+
+      return ApiSuccess(
+        YamiboResourceStreamResponse(
+          uri: response.realUri,
+          statusCode: status,
+          content: _resourceStream(prefix, iterator),
+          contentLength: body.contentLength,
+          contentType: contentType,
+          eTag: response.headers.value('etag'),
+          validUntil: _resourceValidUntil(response.headers.map),
+          fileExtension: _resourceExtension(contentType, response.realUri),
+        ),
+      );
+    } on DioException catch (error) {
+      return ApiFailure(_mapDioError(error));
+    } catch (_) {
+      return const ApiFailure(
+        ApiError(
+          type: ApiErrorType.unknown,
+          message: 'resource_unknown',
+          code: 'resource_unknown',
+        ),
+      );
+    }
+  }
+
   /// Checks whether the shared native cookie jar can now access a same-site
   /// page without the WAF challenge.
   ///
@@ -173,9 +400,7 @@ class YamiboHttpGateway {
         return WafChallengeClearance.inconclusive;
       }
       final evidence = WafChallengeDetector.detect(
-        body: response.data,
         statusCode: response.statusCode,
-        method: 'GET',
       );
       if (evidence != null) {
         return WafChallengeClearance.challenged;
@@ -189,9 +414,7 @@ class YamiboHttpGateway {
       final response = error.response;
       if (response != null) {
         final evidence = WafChallengeDetector.detect(
-          body: response.data,
           statusCode: response.statusCode,
-          method: 'GET',
         );
         if (evidence != null) {
           return WafChallengeClearance.challenged;
@@ -352,11 +575,8 @@ class YamiboHttpGateway {
       final body = normalizeBody(response.data);
 
       final challengeEvidence = _detectSecurityChallenge(
-        context: context,
         uri: response.requestOptions.uri,
-        method: response.requestOptions.method,
         statusCode: response.statusCode,
-        body: body,
       );
       if (challengeEvidence != null) {
         final recovery = attempt == 0
@@ -398,7 +618,6 @@ class YamiboHttpGateway {
         return ApiFailure(
           _securityChallengeError(
             statusCode: response.statusCode,
-            body: body,
             alreadyRetried: attempt > 0,
           ),
         );
@@ -429,11 +648,8 @@ class YamiboHttpGateway {
       final elapsedMs = _elapsedMs(startedAt);
       final response = error.response;
       final challengeEvidence = _detectSecurityChallenge(
-        context: context,
         uri: error.requestOptions.uri,
-        method: error.requestOptions.method,
         statusCode: response?.statusCode,
-        body: response?.data,
       );
       if (challengeEvidence != null) {
         final recovery = attempt == 0
@@ -475,7 +691,6 @@ class YamiboHttpGateway {
         return ApiFailure(
           _securityChallengeError(
             statusCode: response?.statusCode,
-            body: response?.data,
             alreadyRetried: attempt > 0,
           ),
         );
@@ -505,26 +720,13 @@ class YamiboHttpGateway {
   }
 
   WafChallengeEvidence? _detectSecurityChallenge({
-    required YamiboRequestContext context,
     required Uri uri,
-    required String method,
     required int? statusCode,
-    required Object? body,
   }) {
     if (!_isSameSite(uri)) {
       return null;
     }
-    final evidence = WafChallengeDetector.detect(
-      body: body,
-      statusCode: statusCode,
-      method: method,
-    );
-    if (evidence == WafChallengeEvidence.httpMethodNotAllowed &&
-        (context.kind == YamiboRequestKind.resource ||
-            context.kind == YamiboRequestKind.imageProbe)) {
-      return null;
-    }
-    return evidence;
+    return WafChallengeDetector.detect(statusCode: statusCode);
   }
 
   Future<WafChallengeRecoveryResult> _recoverSecurityChallenge({
@@ -549,7 +751,6 @@ class YamiboHttpGateway {
 
   ApiError _securityChallengeError({
     required int? statusCode,
-    required Object? body,
     required bool alreadyRetried,
   }) {
     return ApiError(
@@ -561,7 +762,6 @@ class YamiboHttpGateway {
           ? 'security_challenge_persisted'
           : 'security_verification_not_completed',
       statusCode: statusCode,
-      raw: body,
     );
   }
 
@@ -758,4 +958,237 @@ class YamiboHttpGateway {
         )
         .join('&');
   }
+
+  bool _isHttpResource(Uri uri) =>
+      uri.scheme == 'http' || uri.scheme == 'https';
+
+  bool _isSameSiteResource(Uri uri) =>
+      _isHttpResource(uri) &&
+      uri.host.toLowerCase() == _siteUri.host.toLowerCase() &&
+      uri.port == _siteUri.port;
+
+  bool _sameResourceAuthority(Uri first, Uri second) =>
+      first.scheme == second.scheme &&
+      first.host.toLowerCase() == second.host.toLowerCase() &&
+      first.port == second.port;
+
+  Uri _resourceReferer(Uri referer, {required bool sameSite}) {
+    final fallback = _siteUri.replace(path: '/', query: null, fragment: null);
+    if (!_isHttpResource(referer) || !_isSameSiteResource(referer)) {
+      return fallback;
+    }
+    if (sameSite) return referer.removeFragment();
+    return _uriWithoutQueryOrFragment(referer);
+  }
+
+  Uri _uriWithoutQueryOrFragment(Uri uri) => Uri(
+    scheme: uri.scheme,
+    userInfo: uri.userInfo,
+    host: uri.host,
+    port: uri.hasPort ? uri.port : null,
+    path: uri.path,
+  );
+
+  bool _isResourceRedirect(int status) =>
+      status == 301 ||
+      status == 302 ||
+      status == 303 ||
+      status == 307 ||
+      status == 308;
+
+  Future<_YamiboResourcePrefix> _readResourcePrefix(
+    StreamIterator<List<int>> iterator,
+  ) async {
+    final prefix = <int>[];
+    List<int>? tail;
+    while (prefix.length < _resourceSignatureLimit &&
+        await iterator.moveNext()) {
+      final chunk = iterator.current;
+      final remaining = _resourceSignatureLimit - prefix.length;
+      if (chunk.length <= remaining) {
+        prefix.addAll(chunk);
+      } else {
+        prefix.addAll(chunk.take(remaining));
+        tail = chunk.sublist(remaining);
+      }
+      if (tail != null) break;
+    }
+    return _YamiboResourcePrefix(bytes: prefix, tail: tail);
+  }
+
+  Stream<List<int>> _resourceStream(
+    _YamiboResourcePrefix prefix,
+    StreamIterator<List<int>> iterator,
+  ) async* {
+    var received = 0;
+    try {
+      if (prefix.bytes.isNotEmpty) {
+        received += prefix.bytes.length;
+        yield prefix.bytes;
+      }
+      final tail = prefix.tail;
+      if (tail != null && tail.isNotEmpty) {
+        received += tail.length;
+        yield tail;
+      }
+      while (await iterator.moveNext()) {
+        final chunk = iterator.current;
+        received += chunk.length;
+        yield chunk;
+      }
+    } on DioException catch (error) {
+      throw YamiboResourceStreamException(
+        error: _mapDioError(error),
+        bytesReceived: received,
+      );
+    } catch (_) {
+      throw YamiboResourceStreamException(
+        error: const ApiError(
+          type: ApiErrorType.network,
+          message: 'resource_stream_failed',
+          code: 'resource_stream_failed',
+        ),
+        bytesReceived: received,
+      );
+    } finally {
+      await iterator.cancel();
+    }
+  }
+
+  ApiError _resourceStatusError(int status) {
+    if (status == 401 || status == 403) {
+      return ApiError(
+        type: ApiErrorType.unauthorized,
+        message: 'resource_unauthorized',
+        code: 'resource_unauthorized',
+        statusCode: status,
+      );
+    }
+    if (status == 404) {
+      return const ApiError(
+        type: ApiErrorType.business,
+        message: 'resource_not_found',
+        code: 'resource_not_found',
+        statusCode: 404,
+      );
+    }
+    return ApiError(
+      type: ApiErrorType.server,
+      message: 'resource_http_error',
+      code: 'resource_http_error',
+      statusCode: status,
+    );
+  }
+
+  DateTime _resourceValidUntil(Map<String, List<String>> headers) {
+    var lifetime = _defaultResourceLifetime;
+    final cacheControl = _firstResponseHeader(headers, 'cache-control');
+    if (cacheControl != null) {
+      for (final setting in cacheControl.split(',')) {
+        final value = setting.trim().toLowerCase();
+        if (value == 'no-cache' || value == 'no-store') {
+          lifetime = Duration.zero;
+        } else if (value.startsWith('max-age=')) {
+          final seconds = int.tryParse(value.substring('max-age='.length));
+          if (seconds != null && seconds >= 0) {
+            lifetime = Duration(seconds: seconds);
+          }
+        }
+      }
+    }
+    return DateTime.now().add(lifetime);
+  }
+
+  String? _firstResponseHeader(Map<String, List<String>> headers, String name) {
+    final expected = name.toLowerCase();
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() == expected && entry.value.isNotEmpty) {
+        return entry.value.first;
+      }
+    }
+    return null;
+  }
+
+  bool _isSupportedImageResource(String? contentType, List<int> prefix) {
+    final mime = contentType?.split(';').first.trim().toLowerCase();
+    if (mime?.startsWith('image/') == true) return true;
+    if (mime != null &&
+        mime.isNotEmpty &&
+        mime != 'application/octet-stream' &&
+        mime != 'binary/octet-stream') {
+      return false;
+    }
+    return _hasImageSignature(prefix);
+  }
+
+  bool _hasImageSignature(List<int> bytes) {
+    bool starts(List<int> signature) {
+      if (bytes.length < signature.length) return false;
+      for (var i = 0; i < signature.length; i++) {
+        if (bytes[i] != signature[i]) return false;
+      }
+      return true;
+    }
+
+    if (starts(const <int>[0xff, 0xd8, 0xff]) ||
+        starts(const <int>[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
+        starts(const <int>[0x47, 0x49, 0x46, 0x38]) ||
+        starts(const <int>[0x42, 0x4d]) ||
+        starts(const <int>[0x00, 0x00, 0x01, 0x00])) {
+      return true;
+    }
+    if (bytes.length >= 12 &&
+        ascii.decode(bytes.sublist(0, 4), allowInvalid: true) == 'RIFF' &&
+        ascii.decode(bytes.sublist(8, 12), allowInvalid: true) == 'WEBP') {
+      return true;
+    }
+    if (bytes.length >= 12 &&
+        ascii.decode(bytes.sublist(4, 8), allowInvalid: true) == 'ftyp') {
+      final brand = ascii.decode(bytes.sublist(8, 12), allowInvalid: true);
+      return const <String>{
+        'avif',
+        'avis',
+        'heic',
+        'heix',
+        'hevc',
+        'hevx',
+        'mif1',
+        'msf1',
+      }.contains(brand);
+    }
+    final text = utf8
+        .decode(bytes.take(1024).toList(growable: false), allowMalformed: true)
+        .trimLeft()
+        .toLowerCase();
+    return text.startsWith('<svg') ||
+        (text.startsWith('<?xml') && text.contains('<svg'));
+  }
+
+  String _resourceExtension(String? contentType, Uri uri) {
+    final mime = contentType?.split(';').first.trim().toLowerCase();
+    final fromMime = switch (mime) {
+      'image/jpeg' => '.jpg',
+      'image/png' => '.png',
+      'image/gif' => '.gif',
+      'image/webp' => '.webp',
+      'image/avif' => '.avif',
+      'image/svg+xml' => '.svg',
+      'image/bmp' => '.bmp',
+      'image/x-icon' || 'image/vnd.microsoft.icon' => '.ico',
+      _ => '',
+    };
+    if (fromMime.isNotEmpty) return fromMime;
+    final segment = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+    final dot = segment.lastIndexOf('.');
+    if (dot < 0) return '';
+    final extension = segment.substring(dot).toLowerCase();
+    return RegExp(r'^\.[a-z0-9]{1,5}$').hasMatch(extension) ? extension : '';
+  }
+}
+
+class _YamiboResourcePrefix {
+  const _YamiboResourcePrefix({required this.bytes, required this.tail});
+
+  final List<int> bytes;
+  final List<int>? tail;
 }

@@ -5,7 +5,6 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
@@ -17,13 +16,13 @@ class ForumHomeCarousel extends ConsumerStatefulWidget {
   const ForumHomeCarousel({
     super.key,
     required this.items,
-    required this.headerBuilder,
+    required this.imageReferer,
     required this.onOpen,
     this.isActive = true,
   });
 
   final List<ForumHomeCarouselItem> items;
-  final ImageRequestHeaderBuilder headerBuilder;
+  final String imageReferer;
   final ValueChanged<ForumHomeCarouselItem> onOpen;
   final bool isActive;
 
@@ -90,7 +89,7 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
             _displayedItems.first.aspectRatio ??
             ForumHomeCarouselImageProbe.fallbackAspectRatio,
         controller: _carouselController,
-        headerBuilder: widget.headerBuilder,
+        imageReferer: widget.imageReferer,
         imageRequestResolver: ref.watch(forumImageRequestResolverProvider),
         items: _displayedItems,
         onOpen: widget.onOpen,
@@ -200,7 +199,7 @@ class _ForumHomeCarouselBody extends StatelessWidget {
   const _ForumHomeCarouselBody({
     required this.aspectRatio,
     required this.controller,
-    required this.headerBuilder,
+    required this.imageReferer,
     required this.imageRequestResolver,
     required this.items,
     required this.onOpen,
@@ -210,7 +209,7 @@ class _ForumHomeCarouselBody extends StatelessWidget {
 
   final double aspectRatio;
   final CarouselSliderController controller;
-  final ImageRequestHeaderBuilder headerBuilder;
+  final String imageReferer;
   final ForumImageRequestResolver imageRequestResolver;
   final List<ForumHomeCarouselItem> items;
   final ValueChanged<ForumHomeCarouselItem> onOpen;
@@ -263,7 +262,7 @@ class _ForumHomeCarouselBody extends StatelessWidget {
                         fit: BoxFit.contain,
                         width: double.infinity,
                         height: double.infinity,
-                        headerBuilder: headerBuilder,
+                        referer: imageReferer,
                         placeholder: ColoredBox(
                           color: palette.carouselPlaceholder,
                           child: const SizedBox.expand(),

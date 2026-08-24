@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -135,8 +134,8 @@ void main() {
             profileRepository,
           ),
           userBlogDirectoryRepositoryProvider.overrideWithValue(blogRepository),
-          imageRequestHeaderBuilderProvider.overrideWithValue(
-            const _StaticImageHeaderBuilder(),
+          forumImageRefererProvider.overrideWithValue(
+            'https://bbs.yamibo.com/',
           ),
         ],
         child: const LocalizedTestApp(home: MyProfilePage()),
@@ -173,8 +172,8 @@ void main() {
           forumUserProfileRepositoryProvider.overrideWithValue(
             _FakeProfileRepository(),
           ),
-          imageRequestHeaderBuilderProvider.overrideWithValue(
-            const _StaticImageHeaderBuilder(),
+          forumImageRefererProvider.overrideWithValue(
+            'https://bbs.yamibo.com/',
           ),
         ],
         child: MediaQuery(
@@ -200,9 +199,7 @@ Future<void> _pumpPublicProfile(
     ProviderScope(
       overrides: [
         forumUserProfileRepositoryProvider.overrideWithValue(repository),
-        imageRequestHeaderBuilderProvider.overrideWithValue(
-          const _StaticImageHeaderBuilder(),
-        ),
+        forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
         if (imageCacheService != null)
           imageCacheServiceProvider.overrideWithValue(imageCacheService),
       ],
@@ -414,15 +411,6 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> logout() async {}
-}
-
-class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticImageHeaderBuilder();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{};
-  }
 }
 
 Finder _richTextContaining(String text) {

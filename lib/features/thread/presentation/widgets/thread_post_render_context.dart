@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -75,7 +74,7 @@ class ThreadPostCardInteractionPolicy {
 class ThreadPostRenderContext {
   ThreadPostRenderContext({
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.renderOwnerFor,
     this.imageRefererFor = _emptyImageReferer,
     ThreadDetailRenderEntryPlanner? renderPlanner,
@@ -96,7 +95,7 @@ class ThreadPostRenderContext {
            );
 
   final ThreadDetailNativePalette palette;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final String Function(ThreadPost post) renderOwnerFor;
   final String Function(ThreadPost post) imageRefererFor;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;

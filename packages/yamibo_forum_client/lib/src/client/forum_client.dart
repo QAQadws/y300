@@ -6,6 +6,7 @@ import '../contracts/forum_directory.dart';
 import '../contracts/forum_display_models.dart';
 import '../contracts/forum_display_repository.dart';
 import '../contracts/forum_search.dart';
+import '../contracts/forum_resource.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/thread_reply_page.dart';
@@ -19,10 +20,16 @@ final class YamiboForumClient {
   YamiboForumClient({
     required this.config,
     required this.network,
+    ForumResourceClient? resources,
     this.sourcePlan = const ForumClientSourcePlan(),
-  });
+  }) : resources =
+           resources ??
+           (network is ForumResourceClient
+               ? network as ForumResourceClient
+               : const UnsupportedForumResourceClient());
   final ForumClientConfig config;
   final ForumClientNetwork network;
+  final ForumResourceClient resources;
   final ForumClientSourcePlan sourcePlan;
 
   ForumDirectoryRepository? get forumDirectory => sourcePlan.forumDirectory;

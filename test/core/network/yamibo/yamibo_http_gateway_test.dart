@@ -136,6 +136,178 @@ void main() {
       expect(logOutput.lines.join('\n'), contains('body=Bytes(length=4)'));
     });
 
+    test(
+      'streams image resources and restores the image-signature prefix',
+      () async {
+        final bytes = <int>[
+          0x89,
+          0x50,
+          0x4e,
+          0x47,
+          0x0d,
+          0x0a,
+          0x1a,
+          0x0a,
+          ...List<int>.generate(9000, (index) => index & 0xff),
+        ];
+        final adapter = _GatewayTestAdapter(
+          bytesBody: bytes,
+          contentType: 'image/png',
+        );
+        final gateway = _buildGateway(adapter: adapter);
+
+        final result = await gateway.openImageResource(
+          Uri.parse('https://bbs.yamibo.com/data/attachment/image.png'),
+          referer: Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1',
+          ),
+          userAgent: BrowserUserAgents.desktop,
+        );
+        final received = await result.dataOrNull!.content
+            .expand((chunk) => chunk)
+            .toList();
+
+        expect(received, bytes);
+        expect(result.dataOrNull?.fileExtension, '.png');
+        expect(adapter.fetchCount, 1);
+      },
+    );
+
+    test('resource 405 triggers one WAF recovery before streaming', () async {
+      final uri = Uri.parse('https://bbs.yamibo.com/data/attachment/image.jpg');
+      final cookieStore = CookieStore();
+      await cookieStore.saveCookies(uri, const <String, String>{
+        'EeqY_2132_auth': 'confirmed-auth',
+      });
+      final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
+        _ScriptedResponse(
+          statusCode: 405,
+          textBody: 'Method Not Allowed',
+          setCookie: <String>['EeqY_2132_auth=deleted; Max-Age=0; Path=/'],
+        ),
+        _ScriptedResponse(
+          bytesBody: <int>[0xff, 0xd8, 0xff, 0x00],
+          contentType: 'image/jpeg',
+        ),
+      ]);
+      final coordinator = WafChallengeRecoveryCoordinator(
+        retryCooldown: Duration.zero,
+      );
+      var launchCount = 0;
+      coordinator.attachLauncher((request) async {
+        launchCount += 1;
+        expect(request.evidence, WafChallengeEvidence.httpStatus405);
+        return WafChallengeRecoveryResult.verified;
+      });
+      final gateway = _buildGateway(
+        adapter: adapter,
+        cookieStore: cookieStore,
+        wafChallengeRecoveryCoordinator: coordinator,
+      );
+
+      final result = await gateway.openImageResource(
+        uri,
+        referer: Uri.parse('https://bbs.yamibo.com/'),
+        userAgent: BrowserUserAgents.desktop,
+      );
+
+      final bytes = await result.dataOrNull!.content
+          .expand((chunk) => chunk)
+          .toList();
+      expect(bytes, const <int>[0xff, 0xd8, 0xff, 0x00]);
+      expect(adapter.fetchCount, 2);
+      expect(launchCount, 1);
+      expect(
+        await cookieStore.readCookieMap(uri),
+        containsPair('EeqY_2132_auth', 'confirmed-auth'),
+      );
+    });
+
+    test(
+      'resource redirects isolate Cookie, Referer query, and ETag by host',
+      () async {
+        final adapter = _GatewayTestAdapter.scripted(<_ScriptedResponse>[
+          const _ScriptedResponse(
+            statusCode: 302,
+            headers: <String, List<String>>{
+              'location': <String>[
+                'https://cdn.example.invalid/final-image.jpg',
+              ],
+            },
+          ),
+          const _ScriptedResponse(
+            bytesBody: <int>[0xff, 0xd8, 0xff],
+            contentType: 'image/jpeg',
+          ),
+        ]);
+        final cookies = CookieStore();
+        await cookies.saveCookies(
+          Uri.parse('https://bbs.yamibo.com/'),
+          const <String, String>{'sid': 'secret'},
+        );
+        final gateway = _buildGateway(adapter: adapter, cookieStore: cookies);
+
+        final result = await gateway.openImageResource(
+          Uri.parse('https://bbs.yamibo.com/redirect.jpg'),
+          referer: Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1',
+          ),
+          userAgent: BrowserUserAgents.desktop,
+          ifNoneMatch: 'private-etag',
+        );
+
+        expect(result.isSuccess, isTrue);
+        expect(adapter.requests, hasLength(2));
+        expect(adapter.requests.first.headers['Cookie'], 'sid=secret');
+        expect(
+          adapter.requests.first.headers['Referer'],
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1',
+        );
+        expect(adapter.requests.first.headers['If-None-Match'], 'private-etag');
+        expect(adapter.requests.last.headers.containsKey('Cookie'), isFalse);
+        expect(
+          adapter.requests.last.headers['Referer'],
+          'https://bbs.yamibo.com/forum.php',
+        );
+        expect(
+          adapter.requests.last.headers.containsKey('If-None-Match'),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'resource script-shaped 200 is rejected without WAF recovery',
+      () async {
+        final adapter = _GatewayTestAdapter.scripted(<_ScriptedResponse>[
+          const _ScriptedResponse(
+            textBody: '<html><script>var arg1="fixture";</script></html>',
+            contentType: 'text/html',
+          ),
+        ]);
+        var launchCount = 0;
+        final coordinator =
+            WafChallengeRecoveryCoordinator(retryCooldown: Duration.zero)
+              ..attachLauncher((_) async {
+                launchCount += 1;
+                return WafChallengeRecoveryResult.verified;
+              });
+        final gateway = _buildGateway(
+          adapter: adapter,
+          wafChallengeRecoveryCoordinator: coordinator,
+        );
+
+        final result = await gateway.openImageResource(
+          Uri.parse('https://bbs.yamibo.com/data/attachment/image.jpg'),
+          referer: Uri.parse('https://bbs.yamibo.com/'),
+          userAgent: BrowserUserAgents.desktop,
+        );
+        expect(result.errorOrNull?.code, 'resource_is_not_image');
+        expect(adapter.fetchCount, 1);
+        expect(launchCount, 0);
+      },
+    );
+
     test('postFormFields preserves duplicate form field names', () async {
       final adapter = _GatewayTestAdapter(textBody: 'ok');
       final gateway = _buildGateway(adapter: adapter);
@@ -181,7 +353,7 @@ void main() {
     });
 
     test(
-      'runs foreground recovery and retries an explicit script challenge',
+      'does not classify a script-shaped HTTP 200 response as WAF',
       () async {
         final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
           _ScriptedResponse(
@@ -189,16 +361,13 @@ void main() {
                 "<html><script>var arg1='ABC';document.cookie="
                 "'acw_sc__v2=pass';</script></html>",
           ),
-          _ScriptedResponse(textBody: '<html>forum home</html>'),
         ]);
         final coordinator = WafChallengeRecoveryCoordinator(
           retryCooldown: Duration.zero,
         );
         var launchCount = 0;
-        coordinator.attachLauncher((request) async {
+        coordinator.attachLauncher((_) async {
           launchCount += 1;
-          expect(request.evidence, WafChallengeEvidence.scriptBody);
-          expect(request.userAgent, BrowserUserAgents.mobile);
           return WafChallengeRecoveryResult.verified;
         });
         final gateway = _buildGateway(
@@ -214,9 +383,9 @@ void main() {
           ),
         );
 
-        expect(result.dataOrNull?.body, '<html>forum home</html>');
-        expect(adapter.fetchCount, 2);
-        expect(launchCount, 1);
+        expect(result.dataOrNull?.body, contains('var arg1'));
+        expect(adapter.fetchCount, 1);
+        expect(launchCount, 0);
       },
     );
 
@@ -226,12 +395,11 @@ void main() {
         _ScriptedResponse(textBody: '<html>recovered</html>'),
       ]);
       final coordinator =
-          WafChallengeRecoveryCoordinator(
-            retryCooldown: Duration.zero,
-          )..attachLauncher((request) async {
-            expect(request.evidence, WafChallengeEvidence.httpMethodNotAllowed);
-            return WafChallengeRecoveryResult.verified;
-          });
+          WafChallengeRecoveryCoordinator(retryCooldown: Duration.zero)
+            ..attachLauncher((request) async {
+              expect(request.evidence, WafChallengeEvidence.httpStatus405);
+              return WafChallengeRecoveryResult.verified;
+            });
       final gateway = _buildGateway(
         adapter: adapter,
         wafChallengeRecoveryCoordinator: coordinator,
@@ -318,7 +486,7 @@ void main() {
     );
 
     test(
-      'native clearance probe rejects a non-empty challenge document',
+      'native clearance probe ignores script-shaped HTTP 200 content',
       () async {
         final adapter = _GatewayTestAdapter(
           textBody:
@@ -332,7 +500,7 @@ void main() {
           userAgent: 'probe-agent',
         );
 
-        expect(result, WafChallengeClearance.challenged);
+        expect(result, WafChallengeClearance.cleared);
       },
     );
 
@@ -352,11 +520,11 @@ void main() {
       },
     );
 
-    test('does not recover or replay an ordinary POST 405', () async {
-      final adapter = _GatewayTestAdapter(
-        statusCode: 405,
-        textBody: 'Method Not Allowed',
-      );
+    test('treats a POST 405 as WAF and replays it once', () async {
+      final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
+        _ScriptedResponse(statusCode: 405, textBody: 'Method Not Allowed'),
+        _ScriptedResponse(textBody: 'posted'),
+      ]);
       final coordinator = WafChallengeRecoveryCoordinator(
         retryCooldown: Duration.zero,
       );
@@ -379,17 +547,17 @@ void main() {
         data: const <String, String>{'value': '1'},
       );
 
-      expect(result.isFailure, isTrue);
-      expect(result.errorOrNull?.statusCode, 405);
-      expect(adapter.fetchCount, 1);
-      expect(launchCount, 0);
+      expect(result.dataOrNull?.body, 'posted');
+      expect(adapter.fetchCount, 2);
+      expect(launchCount, 1);
     });
 
     test(
       'does not loop when the retried request is still challenged',
       () async {
         final adapter = _GatewayTestAdapter(
-          textBody: "<html><script>var arg1='ABC';</script></html>",
+          statusCode: 405,
+          textBody: 'Method Not Allowed',
         );
         final coordinator = WafChallengeRecoveryCoordinator(
           retryCooldown: Duration.zero,
@@ -427,7 +595,8 @@ void main() {
       });
       final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
         _ScriptedResponse(
-          textBody: "<html><script>var arg1='ABC';</script></html>",
+          statusCode: 405,
+          textBody: 'Method Not Allowed',
           setCookie: <String>['EeqY_2132_auth=deleted; Max-Age=0; Path=/'],
         ),
         _ScriptedResponse(textBody: '<html>recovered</html>'),
@@ -567,12 +736,16 @@ class _ScriptedResponse {
     this.textBody = '',
     this.bytesBody = const <int>[],
     this.setCookie = const <String>[],
+    this.contentType,
+    this.headers = const <String, List<String>>{},
   });
 
   final int statusCode;
   final String textBody;
   final List<int> bytesBody;
   final List<String> setCookie;
+  final String? contentType;
+  final Map<String, List<String>> headers;
 }
 
 class _GatewayTestAdapter implements HttpClientAdapter {
@@ -583,12 +756,14 @@ class _GatewayTestAdapter implements HttpClientAdapter {
     String textBody = '',
     List<int> bytesBody = const <int>[],
     List<String> setCookie = const <String>[],
+    String? contentType,
   }) : _responses = <_ScriptedResponse>[
          _ScriptedResponse(
            statusCode: statusCode,
            textBody: textBody,
            bytesBody: bytesBody,
            setCookie: setCookie,
+           contentType: contentType,
          ),
        ],
        _replayLastForever = true;
@@ -601,6 +776,7 @@ class _GatewayTestAdapter implements HttpClientAdapter {
   final List<_ScriptedResponse> _responses;
   final bool _replayLastForever;
   int fetchCount = 0;
+  final List<RequestOptions> requests = <RequestOptions>[];
   Map<String, dynamic> lastHeaders = const <String, dynamic>{};
   String? lastRequestBody;
 
@@ -613,6 +789,7 @@ class _GatewayTestAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    requests.add(options);
     lastHeaders = options.headers;
     lastRequestBody = await _readRequestBody(requestStream);
     final index = fetchCount;
@@ -622,12 +799,24 @@ class _GatewayTestAdapter implements HttpClientAdapter {
         : (_replayLastForever
               ? _responses.last
               : throw StateError('No more scripted responses'));
-    final headers = scripted.setCookie.isEmpty
-        ? const <String, List<String>>{}
-        : <String, List<String>>{'set-cookie': scripted.setCookie};
+    final headers = <String, List<String>>{
+      ...scripted.headers,
+      if (scripted.setCookie.isNotEmpty) 'set-cookie': scripted.setCookie,
+      if (scripted.contentType != null)
+        Headers.contentTypeHeader: <String>[scripted.contentType!],
+    };
     if (options.responseType == ResponseType.bytes) {
       return ResponseBody.fromBytes(
         scripted.bytesBody,
+        scripted.statusCode,
+        headers: headers,
+      );
+    }
+    if (options.responseType == ResponseType.stream) {
+      return ResponseBody.fromBytes(
+        scripted.bytesBody.isNotEmpty
+            ? scripted.bytesBody
+            : scripted.textBody.codeUnits,
         scripted.statusCode,
         headers: headers,
       );

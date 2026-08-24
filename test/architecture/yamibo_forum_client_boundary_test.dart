@@ -71,12 +71,31 @@ void main() {
       'lib/features/profile/data/repositories/forum_user_profile_repository.dart',
       'lib/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart',
       'packages/yamibo_forum_client/lib/yamibo_forum_client_parsers.dart',
+      'lib/core/network/image_request_headers.dart',
     ];
 
     expect(
       removedPaths.where((path) => File(path).existsSync()).toList(),
       isEmpty,
     );
+  });
+
+  test('forum images cannot restore an independent transport bypass', () {
+    const forbidden = <String>[
+      'ImageRequestHeaderBuilder',
+      'DiscuzImageRequestHeaderBuilder',
+      'DefaultCacheManager(',
+      'HttpFileService(',
+    ];
+    final violations = _dartFiles(<String>['lib'])
+        .where((file) {
+          final source = file.readAsStringSync();
+          return forbidden.any(source.contains);
+        })
+        .map((file) => file.path)
+        .toList();
+
+    expect(violations, isEmpty);
   });
 }
 

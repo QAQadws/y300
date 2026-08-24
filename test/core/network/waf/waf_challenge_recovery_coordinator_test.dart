@@ -7,7 +7,7 @@ void main() {
   final request = WafChallengeRecoveryRequest(
     triggeringUri: Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
     method: 'GET',
-    evidence: WafChallengeEvidence.scriptBody,
+    evidence: WafChallengeEvidence.httpStatus405,
     userAgent: 'test-agent',
   );
 

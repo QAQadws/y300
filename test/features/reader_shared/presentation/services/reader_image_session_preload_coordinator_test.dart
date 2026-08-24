@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
@@ -536,7 +535,7 @@ class _TestCapability extends ReaderCapability {
   ReaderContent get content => _content(count: 1);
 
   @override
-  ImageRequestHeaderBuilder? get imageHeaderBuilder => null;
+  String? get imageReferer => null;
 
   @override
   ReaderTitleSpec titleFor(ReaderEngineContext context) {

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
@@ -29,7 +28,7 @@ Widget _clipForumHtmlInlineMedia(Widget child) {
 class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
   ForumHtmlCachedImageWidgetFactory({
     required this.threadId,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.imageCacheOwnerId,
     this.onImageResolved,
     this.onTapImageRequest,
@@ -47,7 +46,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
            layoutHintResolver ?? const ForumImageLayoutHintResolver();
 
   final String threadId;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final String? imageCacheOwnerId;
   final ValueChanged<Size>? onImageResolved;
   final void Function(ForumHtmlImageRequest request)? onTapImageRequest;
@@ -105,7 +104,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
         _ForumHtmlCachedStickerImageView(
           spec: spec,
           request: request,
-          imageHeaderBuilder: imageHeaderBuilder,
+          imageReferer: imageReferer,
           onImageResolved: onImageResolved,
           initialHint: layoutHintResolver.resolve(spec: spec),
           dimensionIndex: imageDimensionIndex,
@@ -124,7 +123,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
       _ForumHtmlCachedBlockImageView(
         spec: spec,
         request: request,
-        imageHeaderBuilder: imageHeaderBuilder,
+        imageReferer: imageReferer,
         onImageResolved: onImageResolved,
         onBlockImageResolved: onBlockImageResolved,
         onImageLayoutShift: onImageLayoutShift,
@@ -280,7 +279,7 @@ class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
   const _ForumHtmlCachedBlockImageView({
     required this.spec,
     required this.request,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.onImageResolved,
     required this.onBlockImageResolved,
     required this.onImageLayoutShift,
@@ -291,7 +290,7 @@ class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
 
   final ForumImageLoadSpec spec;
   final ImageCacheRequest request;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ValueChanged<Size>? onImageResolved;
   final void Function(
     ForumImageLoadSpec spec,
@@ -349,7 +348,7 @@ class _ForumHtmlCachedBlockImageViewState
         onRetry: _retryImage,
       ),
       showDelayedLoadingIndicator: true,
-      headerBuilder: widget.imageHeaderBuilder,
+      referer: widget.imageReferer,
       onImageResolved: _handleImageResolved,
       retryToken: _retryToken,
     );
@@ -477,7 +476,7 @@ class _ForumHtmlCachedStickerImageView extends ConsumerStatefulWidget {
   const _ForumHtmlCachedStickerImageView({
     required this.spec,
     required this.request,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.onImageResolved,
     required this.initialHint,
     required this.dimensionIndex,
@@ -486,7 +485,7 @@ class _ForumHtmlCachedStickerImageView extends ConsumerStatefulWidget {
 
   final ForumImageLoadSpec spec;
   final ImageCacheRequest request;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ValueChanged<Size>? onImageResolved;
   final ForumImageLayoutHint initialHint;
   final ForumImageDimensionIndex? dimensionIndex;
@@ -536,7 +535,7 @@ class _ForumHtmlCachedStickerImageViewState
         size: (size?.shortestSide ?? 14).clamp(12, 18).toDouble(),
         color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
-      headerBuilder: widget.imageHeaderBuilder,
+      referer: widget.imageReferer,
       onImageResolved: widget.onImageResolved,
     );
     final media = size == null

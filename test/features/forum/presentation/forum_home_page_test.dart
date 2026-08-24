@@ -8,7 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
@@ -257,8 +256,8 @@ void main() {
             imageCacheServiceProvider.overrideWithValue(
               _FakeImageCacheService(),
             ),
-            imageRequestHeaderBuilderProvider.overrideWithValue(
-              const _FakeImageRequestHeaderBuilder(),
+            forumImageRefererProvider.overrideWithValue(
+              'https://bbs.yamibo.com/',
             ),
             forumImagePrecacheServiceProvider.overrideWithValue(
               precacheService,
@@ -268,7 +267,7 @@ void main() {
             home: Scaffold(
               body: ForumHomeCarousel(
                 items: items,
-                headerBuilder: const _FakeImageRequestHeaderBuilder(),
+                imageReferer: 'https://bbs.yamibo.com/',
                 onOpen: (_) {},
               ),
             ),
@@ -1093,9 +1092,7 @@ List<riverpod_misc.Override> _overrides(
     forumImagePrecacheServiceProvider.overrideWithValue(
       forumImagePrecacheService ?? _FakeForumImagePrecacheService(),
     ),
-    imageRequestHeaderBuilderProvider.overrideWithValue(
-      const _FakeImageRequestHeaderBuilder(),
-    ),
+    forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
     forumHomeRequestProfileResolverProvider.overrideWithValue(
       requestProfileResolver ??
           const _FakeForumHomeRequestProfileResolver(
@@ -1487,15 +1484,6 @@ class _RecordingNativePageCacheInvalidationService
 
   @override
   Future<void> invalidateThread(String tid) async {}
-}
-
-class _FakeImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _FakeImageRequestHeaderBuilder();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{};
-  }
 }
 
 class _FakeImageCacheService implements ImageCacheService {

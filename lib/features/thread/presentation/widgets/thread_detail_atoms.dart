@@ -9,7 +9,7 @@ class ThreadAuthorAvatar extends StatelessWidget {
     required this.author,
     required this.authorId,
     required this.avatarUrl,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.avatarFallbackPolicy = ForumAvatarFallbackPolicy.neutralSurface,
     this.onTap,
   });
@@ -17,7 +17,7 @@ class ThreadAuthorAvatar extends StatelessWidget {
   final String author;
   final String authorId;
   final String? avatarUrl;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ForumAvatarFallbackPolicy avatarFallbackPolicy;
   final VoidCallback? onTap;
 
@@ -29,7 +29,7 @@ class ThreadAuthorAvatar extends StatelessWidget {
       ownerId: _avatarOwnerId(),
       ownerType: ImageCacheOwnerType.thread,
       size: 34,
-      headerBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
       fallbackPolicy: avatarFallbackPolicy,
     );
     if (onTap == null) {

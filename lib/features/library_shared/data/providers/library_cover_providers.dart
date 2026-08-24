@@ -1,6 +1,6 @@
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/media/device_memory_profile.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_decode_scheduler.dart';
@@ -11,16 +11,10 @@ final libraryCoverDirectoryResolverProvider =
     });
 
 final libraryCoverDownloaderProvider = Provider<LibraryCoverDownloader>((ref) {
-  final dio = Dio(
-    BaseOptions(
-      connectTimeout: const Duration(seconds: 20),
-      receiveTimeout: const Duration(seconds: 45),
-    ),
-  );
-  ref.onDispose(() => dio.close(force: true));
-  return DioLibraryCoverDownloader(
-    headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
-    dio: dio,
+  return ForumResourceLibraryCoverDownloader(
+    resourceClient: ref.watch(yamiboForumResourceClientProvider),
+    referenceResolver: ref.watch(yamiboForumResourceReferenceResolverProvider),
+    referer: ref.watch(forumImageRefererProvider),
   );
 });
 

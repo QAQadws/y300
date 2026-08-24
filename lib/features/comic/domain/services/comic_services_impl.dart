@@ -3,7 +3,6 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
@@ -669,19 +668,19 @@ class NetworkComicReaderService implements ComicReaderService {
   NetworkComicReaderService({
     required ComicEpisodeCatalogRepository episodeCatalogRepository,
     ImageCacheService? imageCacheService,
-    BaseCacheManager? cacheManager,
-    ImageRequestHeaderBuilder? headerBuilder,
+    required BaseCacheManager cacheManager,
+    String? imageReferer,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
   }) : _episodeCatalogRepository = episodeCatalogRepository,
        _imageCacheService = imageCacheService,
-       _cacheManager = cacheManager ?? DefaultCacheManager(),
-       _headerBuilder = headerBuilder,
+       _cacheManager = cacheManager,
+       _imageReferer = imageReferer,
        _urlResolver = urlResolver;
 
   final ComicEpisodeCatalogRepository _episodeCatalogRepository;
   final ImageCacheService? _imageCacheService;
   final BaseCacheManager _cacheManager;
-  final ImageRequestHeaderBuilder? _headerBuilder;
+  final String? _imageReferer;
   final SiteUrlResolver _urlResolver;
 
   @override
@@ -749,6 +748,7 @@ class NetworkComicReaderService implements ComicReaderService {
           episodeId: episodeId,
           imageIndex: imageIndex,
           protected: protected,
+          referer: _imageReferer,
         ),
       );
       return ComicImageCacheResult(
@@ -761,13 +761,14 @@ class NetworkComicReaderService implements ComicReaderService {
     }
 
     try {
-      final headers = await _buildHeaders(sourceUrl);
       final fileInfo = await _cacheManager.downloadFile(
         sourceUrl,
         key: normalizedKey == null || normalizedKey.isEmpty
             ? sourceUrl
             : normalizedKey,
-        authHeaders: headers.isEmpty ? null : headers,
+        authHeaders: _imageReferer?.trim().isEmpty == false
+            ? <String, String>{'Referer': _imageReferer!.trim()}
+            : null,
       );
       return ComicImageCacheResult(
         success: true,
@@ -780,14 +781,6 @@ class NetworkComicReaderService implements ComicReaderService {
     } catch (_) {
       return const ComicImageCacheResult(success: false);
     }
-  }
-
-  Future<Map<String, String>> _buildHeaders(String imageUrl) async {
-    final builder = _headerBuilder;
-    if (builder == null) {
-      return const <String, String>{};
-    }
-    return builder.buildHeaders(imageUrl);
   }
 
   @override
@@ -815,7 +808,7 @@ final comicReaderServiceProvider = FutureProvider<ComicReaderService>((
     episodeCatalogRepository: ref.read(comicEpisodeCatalogRepositoryProvider),
     imageCacheService: ref.read(imageCacheServiceProvider),
     cacheManager: await ref.read(comicCacheManagerProvider.future),
-    headerBuilder: ref.read(imageRequestHeaderBuilderProvider),
+    imageReferer: ref.read(forumImageRefererProvider),
   );
 });
 

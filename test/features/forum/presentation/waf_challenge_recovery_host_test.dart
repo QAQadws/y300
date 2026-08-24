@@ -73,7 +73,7 @@ void main() {
         WafChallengeRecoveryRequest(
           triggeringUri: Uri.parse('https://bbs.yamibo.com/thread-1-1-1.html'),
           method: 'GET',
-          evidence: WafChallengeEvidence.scriptBody,
+          evidence: WafChallengeEvidence.httpStatus405,
           userAgent: 'test-agent',
         ),
       );
@@ -142,7 +142,7 @@ void main() {
       WafChallengeRecoveryRequest(
         triggeringUri: Uri.parse('https://bbs.yamibo.com/index.php'),
         method: 'GET',
-        evidence: WafChallengeEvidence.httpMethodNotAllowed,
+        evidence: WafChallengeEvidence.httpStatus405,
       ),
     );
     await tester.pump();
@@ -211,7 +211,7 @@ void main() {
       WafChallengeRecoveryRequest(
         triggeringUri: Uri.parse('https://bbs.yamibo.com/index.php'),
         method: 'GET',
-        evidence: WafChallengeEvidence.scriptBody,
+        evidence: WafChallengeEvidence.httpStatus405,
       ),
     );
     await tester.pump();

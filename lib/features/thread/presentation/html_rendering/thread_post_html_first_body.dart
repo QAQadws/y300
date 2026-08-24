@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -33,7 +32,6 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     required this.threadId,
     required this.imageReferer,
     required this.plan,
-    required this.imageHeaderBuilder,
     required this.onOpenPostLink,
     required this.onOpenPostImage,
     required this.theme,
@@ -52,7 +50,6 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   final String threadId;
   final String imageReferer;
   final ThreadPostBodyRenderPlan plan;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImage;
@@ -133,7 +130,7 @@ class _ThreadPostHtmlFirstBodyState
           preparedDocument: preparedDocument,
           sourceId: sourceId,
           threadId: widget.threadId,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageReferer: widget.imageReferer,
           imageCacheOwnerId: widget.threadId,
           imageFallbackAspectRatioFor: widget.imageFallbackAspectRatioFor,
           onBlockImageResolved: widget.onBlockImageResolved,
@@ -285,7 +282,6 @@ class ThreadPostHtmlBody extends StatelessWidget {
     required this.threadId,
     required this.imageReferer,
     required this.plan,
-    required this.imageHeaderBuilder,
     required this.onOpenPostLink,
     required this.onOpenPostImage,
     required this.theme,
@@ -303,7 +299,6 @@ class ThreadPostHtmlBody extends StatelessWidget {
   final String threadId;
   final String imageReferer;
   final ThreadPostBodyRenderPlan plan;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImage;
@@ -330,7 +325,6 @@ class ThreadPostHtmlBody extends StatelessWidget {
       threadId: threadId,
       imageReferer: imageReferer,
       plan: plan,
-      imageHeaderBuilder: imageHeaderBuilder,
       onOpenPostLink: onOpenPostLink,
       onOpenPostImage: onOpenPostImage,
       theme: theme,

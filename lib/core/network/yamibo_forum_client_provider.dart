@@ -2,11 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/browser_user_agents.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+
+export 'yamibo_forum_transport_providers.dart';
 
 typedef Y300ThreadDetailHtmlDecoder =
     ThreadDetailData Function(
@@ -58,25 +60,6 @@ final yamiboThreadDetailApiDecoderProvider =
 /// Process-wide package facade. Y300 intentionally injects its shared host
 /// transport so reads, commands, Cookie state, and WAF recovery stay on one
 /// application-owned session path.
-final yamiboForumClientConfigProvider = Provider<ForumClientConfig>((ref) {
-  return ForumClientConfig(
-    siteOrigin: Uri.parse(AppConfig.siteBaseUrl),
-    apiOrigin: Uri.parse(AppConfig.apiBaseUrl),
-    userAgent: BrowserUserAgents.mobile,
-    desktopUserAgent: BrowserUserAgents.desktop,
-    apiUserAgent: BrowserUserAgents.mobile,
-    connectTimeout: AppConfig.connectTimeout,
-    receiveTimeout: AppConfig.receiveTimeout,
-  );
-});
-
-final yamiboForumClientNetworkProvider = Provider<ForumClientNetwork>((ref) {
-  return Y300ForumClientNetworkAdapter(
-    gateway: ref.watch(yamiboHttpGatewayProvider),
-    apiOrigin: Uri.parse(AppConfig.apiBaseUrl),
-  );
-});
-
 final yamiboForumClientProvider = Provider<YamiboForumClient>((ref) {
   return YamiboForumClientBuilder(
     config: ref.watch(yamiboForumClientConfigProvider),

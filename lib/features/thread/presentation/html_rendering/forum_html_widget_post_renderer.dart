@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
@@ -30,7 +29,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.enableCaching,
     this.sourceId,
     this.threadId,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.imageCacheOwnerId,
     this.imageRequestResolver,
     this.imageDimensionIndex,
@@ -51,7 +50,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final bool? enableCaching;
   final String? sourceId;
   final String? threadId;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final String? imageCacheOwnerId;
   final ForumImageRequestResolver? imageRequestResolver;
   final ForumImageDimensionIndex? imageDimensionIndex;
@@ -136,7 +135,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     }
     return () => ForumHtmlCachedImageWidgetFactory(
       threadId: tid,
-      imageHeaderBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
       imageCacheOwnerId: imageCacheOwnerId,
       onTapImageRequest: callbacks.onTapImage == null
           ? null
@@ -192,7 +191,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           enableCaching: enableCaching,
           sourceId: sourceId,
           threadId: threadId,
-          imageHeaderBuilder: imageHeaderBuilder,
+          imageReferer: imageReferer,
           imageCacheOwnerId: imageCacheOwnerId,
           imageRequestResolver: imageRequestResolver,
           imageDimensionIndex: imageDimensionIndex,

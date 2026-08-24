@@ -8,7 +8,6 @@ import 'package:y300/app/localization/app_server_content_conversion_provider.dar
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -97,7 +96,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   final ThreadFloorLinkBuilder _floorLinkBuilder = ThreadFloorLinkBuilder();
   Timer? _highlightClearTimer;
   String? _highlightPostPid;
-  ImageRequestHeaderBuilder? _latestImageHeaderBuilder;
+  String? _latestImageReferer;
   bool _quickScrollMetricsSyncScheduled = false;
 
   /// 跨重建保留的图片真实尺寸快照，供 render plan 锁定首帧高度（防上滑回溯）。
@@ -161,15 +160,15 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       converterId: converter.id,
       candidate: projectionCandidate,
     );
-    final imageHeaderBuilder = ref.watch(
-      imageRequestHeaderBuilderForRefererProvider(_imageRefererFor(state)),
+    final imageReferer = ref.watch(
+      forumImageRefererForSourceProvider(_imageRefererFor(state)),
     );
     final htmlFirstPrecacheService = ref.watch(
       forumImagePrecacheServiceProvider,
     );
     final historyRecorder = ref.watch(historyVisitRecorderProvider);
     final historyDiagnostics = ref.watch(historyDiagnosticRecorderProvider);
-    _latestImageHeaderBuilder = imageHeaderBuilder;
+    _latestImageReferer = imageReferer;
     ref.listen<AsyncValue<ThreadDetailPageState>>(
       threadDetailControllerProvider(args),
       (previous, next) {
@@ -298,7 +297,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                           scrollController: _scrollController,
                           highlightPostPid: _highlightPostPid,
                           targetPid: widget.targetPid,
-                          imageHeaderBuilder: imageHeaderBuilder,
                           imageReferer: _imageRefererFor(state),
                           imageDimensionStore: _imageDimensionStore,
                           onLoadPreviousPage: () {
@@ -800,7 +798,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       MaterialPageRoute<void>(
         builder: (_) => ThreadImageReaderPage(
           request: readerRequest,
-          imageHeaderBuilder: _latestImageHeaderBuilder,
+          imageReferer: _latestImageReferer,
         ),
       ),
     );
@@ -852,7 +850,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
               threadId: widget.tid,
               imageReferer: _imageRefererFor(state),
               plan: plan,
-              imageHeaderBuilder: _latestImageHeaderBuilder,
               onOpenPostLink: _openForumLink,
               onOpenPostImage: _openPostImages,
               onImageFallback: _copyHtmlFirstImageUrl,
@@ -1496,7 +1493,7 @@ Widget threadDetailPostCardPreview() {
     child: ThreadPostCard(
       post: _threadDetailPreviewPost,
       state: state,
-      imageHeaderBuilder: null,
+      imageReferer: null,
       onOpenAuthorProfile: (_) {},
       onCopyActionUrl: (_, _) {},
       onOpenPostLink: (_) {},

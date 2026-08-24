@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -224,9 +223,7 @@ Widget _wrap(Widget child) {
   return ProviderScope(
     overrides: [
       imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
-      imageRequestHeaderBuilderProvider.overrideWithValue(
-        const _StaticImageRequestHeaderBuilder(),
-      ),
+      forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
     ],
     child: LocalizedTestApp(home: Scaffold(body: child)),
   );
@@ -271,13 +268,4 @@ class _NoopImageCacheService implements ImageCacheService {
 
   @override
   Future<void> pruneToLimit({required int maxBytes}) async {}
-}
-
-class _StaticImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticImageRequestHeaderBuilder();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{};
-  }
 }

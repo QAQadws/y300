@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attachment_preview_resolvers.dart';
@@ -156,7 +154,6 @@ void main() {
       const referer = 'https://bbs.yamibo.com/forum.php?mod=post';
       final sourceController = TextEditingController();
       addTearDown(sourceController.dispose);
-      final headerBuilder = _FakeImageRequestHeaderBuilder();
       final resolver = MapComposerAttachmentPreviewResolver(
         resolutions: const {
           '1624572': ComposerAttachmentResolution(
@@ -173,11 +170,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            imageRequestHeaderBuilderForRefererProvider(
-              referer,
-            ).overrideWithValue(headerBuilder),
-          ],
+          overrides: const [],
           child: LocalizedTestApp(
             home: Scaffold(
               body: SizedBox(
@@ -215,7 +208,7 @@ void main() {
         image.networkSource?.resolvedUrl,
         'https://bbs.yamibo.com/data/attachment/forum/202607/23/example.jpg',
       );
-      expect(image.networkSource?.headerBuilder, same(headerBuilder));
+      expect(image.networkSource?.referer, referer);
     },
   );
 }
@@ -254,12 +247,4 @@ double _expectedAttachmentMaxWidth(double surfaceWidth) {
       (ForumContentSpacing.composerQuillSurfaceHorizontal * 2) -
       (ForumContentSpacing.quillInnerHorizontal * 2) -
       4;
-}
-
-final class _FakeImageRequestHeaderBuilder
-    implements ImageRequestHeaderBuilder {
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{'Referer': 'test-referer'};
-  }
 }

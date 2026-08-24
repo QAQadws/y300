@@ -1,4 +1,3 @@
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 
 /// 显示控件 [AppImage] 的唯一输入：描述“这是哪张图、怎么取”。
@@ -25,18 +24,24 @@ sealed class AppImageSource {
 class NetworkAppImageSource extends AppImageSource {
   NetworkAppImageSource({
     required String url,
-    this.headerBuilder,
+    String? cacheKey,
+    this.referer,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
-  }) : resolvedUrl = urlResolver.resolve(url.trim()) ?? url.trim();
+  }) : resolvedUrl = urlResolver.resolve(url.trim()) ?? url.trim(),
+       _cacheKey = cacheKey?.trim();
 
   /// 规范化后的绝对 URL（相对路径已解析为站点绝对地址）。
   final String resolvedUrl;
 
-  /// 异步请求头构建器（Discuz 图片需要 Referer / Cookie 等）。
-  final ImageRequestHeaderBuilder? headerBuilder;
+  final String? _cacheKey;
+
+  /// Same-site page that owns this image. Cookie and User-Agent are supplied
+  /// by the shared resource transport rather than presentation code.
+  final String? referer;
 
   @override
-  String get cacheKey => resolvedUrl;
+  String get cacheKey =>
+      _cacheKey?.isNotEmpty == true ? _cacheKey! : resolvedUrl;
 }
 
 /// 资产层提供的本地文件：用户自定义封面、已下载章节图等。

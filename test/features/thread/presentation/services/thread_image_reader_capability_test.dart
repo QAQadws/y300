@@ -36,7 +36,7 @@ void main() {
         initialIndex: 0,
         continuousImages: const [item],
       ),
-      imageHeaderBuilder: null,
+      imageReferer: null,
       title: l10n.threadImageReaderTitle,
       displayLabel: l10n.threadImageDisplay,
       downloadLabel: l10n.threadImageDownload,

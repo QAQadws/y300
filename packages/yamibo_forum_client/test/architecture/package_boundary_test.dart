@@ -8,6 +8,7 @@ void main() {
       'package:flutter/',
       'package:flutter_riverpod/',
       'package:sqflite/',
+      'package:flutter_cache_manager/',
       'package:y300/',
     ];
     final violations = <String>[];

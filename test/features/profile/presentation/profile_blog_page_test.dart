@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
@@ -201,8 +200,8 @@ void main() {
           userBlogDetailRepositoryProvider.overrideWithValue(
             _FakeBlogDetailRepository(),
           ),
-          imageRequestHeaderBuilderProvider.overrideWithValue(
-            const _StaticImageHeaderBuilder(),
+          forumImageRefererProvider.overrideWithValue(
+            'https://bbs.yamibo.com/',
           ),
         ],
         child: MediaQuery(
@@ -232,9 +231,7 @@ Future<void> _pumpBlogPage(
           directoryRepository,
         ),
         userBlogDetailRepositoryProvider.overrideWithValue(detailRepository),
-        imageRequestHeaderBuilderProvider.overrideWithValue(
-          const _StaticImageHeaderBuilder(),
-        ),
+        forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
       ],
       child: LocalizedTestApp(locale: locale, home: const ProfileBlogPage()),
     ),
@@ -413,15 +410,6 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
       capabilities: readCapabilities,
       metadata: const DataReadMetadata.network(),
     );
-  }
-}
-
-class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticImageHeaderBuilder();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{};
   }
 }
 

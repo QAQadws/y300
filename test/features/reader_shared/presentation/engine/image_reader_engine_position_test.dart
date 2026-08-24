@@ -3,7 +3,6 @@ import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -333,7 +332,7 @@ class _ThrowingSeekCapability extends ReaderCapability {
   );
 
   @override
-  ImageRequestHeaderBuilder? get imageHeaderBuilder => null;
+  String? get imageReferer => null;
 
   @override
   ReaderTitleSpec titleFor(ReaderEngineContext context) {
@@ -393,7 +392,7 @@ class _RecordingPagedCapability extends ReaderCapability {
   );
 
   @override
-  ImageRequestHeaderBuilder? get imageHeaderBuilder => null;
+  String? get imageReferer => null;
 
   @override
   ReaderTitleSpec titleFor(ReaderEngineContext context) {
@@ -453,7 +452,7 @@ class _DecodedDimensionCapability extends ReaderCapability {
   );
 
   @override
-  ImageRequestHeaderBuilder? get imageHeaderBuilder => null;
+  String? get imageReferer => null;
 
   @override
   ReaderTitleSpec titleFor(ReaderEngineContext context) {
@@ -520,7 +519,7 @@ class _DecodedVerticalDimensionCapability extends ReaderCapability {
   );
 
   @override
-  ImageRequestHeaderBuilder? get imageHeaderBuilder => null;
+  String? get imageReferer => null;
 
   @override
   ReaderTitleSpec titleFor(ReaderEngineContext context) {

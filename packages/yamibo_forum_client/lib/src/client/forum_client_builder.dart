@@ -1,5 +1,6 @@
 import '../adapters/forum_client_adapter_factory.dart';
 import '../cache/forum_cache.dart';
+import '../contracts/forum_resource.dart';
 import '../network/forum_network.dart';
 import '../session/forum_formhash_provider.dart';
 import '../session/forum_session_store.dart';
@@ -19,6 +20,7 @@ final class YamiboForumClientBuilder {
     this.documentStore,
     this.snapshotStore,
     this.formhashProvider,
+    this.resourceClient,
   });
 
   final ForumClientConfig config;
@@ -27,6 +29,7 @@ final class YamiboForumClientBuilder {
   final ForumDocumentStore? documentStore;
   final ForumSnapshotStore? snapshotStore;
   final ForumFormhashProvider? formhashProvider;
+  final ForumResourceClient? resourceClient;
 
   YamiboForumClient buildStandardReads() {
     final factory = ForumClientAdapterFactory(
@@ -40,6 +43,7 @@ final class YamiboForumClientBuilder {
     return YamiboForumClient(
       config: config,
       network: network,
+      resources: resourceClient,
       sourcePlan: ForumClientSourcePlan(
         forumDirectory: factory.createHtmlForumDirectory(),
         forumTagDirectory: factory.createForumTagDirectory(),

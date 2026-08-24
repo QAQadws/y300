@@ -35,7 +35,7 @@ void main() {
     final request = ForumWafRecoveryRequest(
       uri: Uri.parse('https://bbs.yamibo.com/'),
       method: 'GET',
-      evidence: ForumWafEvidence.scriptBody,
+      evidence: ForumWafEvidence.httpStatus405,
       userAgent: 'test',
     );
     final first = coordinator.recover(request);

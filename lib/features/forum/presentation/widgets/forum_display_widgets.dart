@@ -673,7 +673,7 @@ class _ForumHeadImageState extends ConsumerState<_ForumHeadImage> {
                     decodeDisplaySize: Size(availableWidth, targetHeight),
                     placeholder: placeholder,
                     errorPlaceholder: placeholder,
-                    headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+                    referer: ref.watch(forumImageRefererProvider),
                     fit: BoxFit.fitWidth,
                     fadeInDuration: duration,
                     remoteDisplayPolicy:

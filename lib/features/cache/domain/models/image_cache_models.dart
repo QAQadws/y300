@@ -51,6 +51,7 @@ class ImageCacheRequest {
   const ImageCacheRequest({
     required this.cacheKey,
     required this.sourceUrl,
+    this.referer,
     required this.ownerType,
     required this.ownerId,
     required this.role,
@@ -62,6 +63,7 @@ class ImageCacheRequest {
 
   final String cacheKey;
   final String sourceUrl;
+  final String? referer;
   final ImageCacheOwnerType ownerType;
   final String ownerId;
   final ImageCacheRole role;

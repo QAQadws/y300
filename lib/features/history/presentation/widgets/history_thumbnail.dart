@@ -1,7 +1,6 @@
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 
@@ -95,7 +94,7 @@ class HistoryThumbnail extends StatelessWidget {
   const HistoryThumbnail({
     super.key,
     required this.entry,
-    this.headerBuilder,
+    this.imageReferer,
     this.resolver = const HistoryThumbnailResolver(),
   });
 
@@ -103,7 +102,7 @@ class HistoryThumbnail extends StatelessWidget {
   static const double height = 88;
 
   final HistoryEntry entry;
-  final ImageRequestHeaderBuilder? headerBuilder;
+  final String? imageReferer;
   final HistoryThumbnailResolver resolver;
 
   @override
@@ -128,7 +127,7 @@ class HistoryThumbnail extends StatelessWidget {
                 height: height,
                 decodeDisplaySize: const Size(width, height),
                 alignment: resolved.alignment,
-                headerBuilder: headerBuilder,
+                referer: imageReferer,
                 placeholder: fallback,
                 errorPlaceholder: fallback,
               )

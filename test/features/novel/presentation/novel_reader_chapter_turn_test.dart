@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
@@ -615,7 +614,7 @@ Widget _buildSurface({
               required String sourceId,
               required String? threadId,
               required String? imageCacheOwnerId,
-              required ImageRequestHeaderBuilder? imageHeaderBuilder,
+              required String? imageReferer,
             }) => coordinator,
       ),
     ),

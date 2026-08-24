@@ -45,7 +45,7 @@ void main() {
               moduleKey: LibraryModuleKey.comic,
               topInset: 0,
               palette: _palette,
-              imageHeaderBuilder: null,
+              imageReferer: null,
               onToggleShelf: _noop,
               onRefresh: _noop,
               onOpenThread: _noop,

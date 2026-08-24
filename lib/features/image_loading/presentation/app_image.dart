@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:y300/core/media/image_display_provider.dart';
 import 'package:y300/core/media/image_downscale_policy.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/features/image_loading/domain/app_image_source.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
@@ -72,10 +71,6 @@ class _AppImageState extends ConsumerState<AppImage> {
   bool _networkResolved = false;
   String? _reportedImageIdentity;
   String? _reportedFailureIdentity;
-  Future<Map<String, String>>? _networkHeadersFuture;
-  String? _networkHeadersUrl;
-  String? _networkHeadersCacheKey;
-  ImageRequestHeaderBuilder? _networkHeadersBuilder;
 
   @override
   void didUpdateWidget(covariant AppImage oldWidget) {
@@ -88,12 +83,6 @@ class _AppImageState extends ConsumerState<AppImage> {
       _networkResolved = false;
       _reportedImageIdentity = null;
       _reportedFailureIdentity = null;
-    }
-    if (!_hasSameNetworkRequestIdentity(
-      oldWidget.networkSource,
-      widget.networkSource,
-    )) {
-      _clearNetworkHeadersFuture();
     }
   }
 
@@ -164,52 +153,33 @@ class _AppImageState extends ConsumerState<AppImage> {
   }
 
   Widget _buildNetworkImage(NetworkAppImageSource source) {
-    // cacheManager 异步解析（依赖缓存目录）。未就绪时用包内默认实例，文件仍会
-    // 缓存，仅落点不同；就绪后切换到共享实例，与资产层读写同一批磁盘文件。
+    // Wait for the one application cache manager. Falling back to the plugin's
+    // default manager would bypass the shared Cookie/WAF resource transport.
     final cacheManagerAsync = ref.watch(appImageCacheManagerProvider);
-    final cacheManager = cacheManagerAsync.maybeWhen(
-      data: (manager) => manager.rawCacheManager,
-      orElse: () => null,
-    );
-
-    if (source.headerBuilder == null) {
-      return _buildResolvedNetworkImage(
+    return cacheManagerAsync.when(
+      data: (manager) => _buildResolvedNetworkImage(
         source,
-        headers: const <String, String>{},
-        cacheManager: cacheManager,
-      );
-    }
-
-    return FutureBuilder<Map<String, String>>(
-      future: _headersFutureFor(source),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          // 头部未就绪前先占位，避免不带 Cookie 的请求拿到 403。
-          return widget.placeholder;
-        }
-        if (snapshot.hasError || !snapshot.hasData) {
-          _markImageFailed('headers:${source.cacheKey}');
-          return _effectiveErrorPlaceholder;
-        }
-        return _buildResolvedNetworkImage(
-          source,
-          headers: snapshot.requireData,
-          cacheManager: cacheManager,
-        );
+        cacheManager: manager.rawCacheManager,
+      ),
+      loading: () => widget.placeholder,
+      error: (error, stackTrace) {
+        _markImageFailed('cache-manager:${source.cacheKey}');
+        return _effectiveErrorPlaceholder;
       },
     );
   }
 
   Widget _buildResolvedNetworkImage(
     NetworkAppImageSource source, {
-    required Map<String, String> headers,
-    required BaseCacheManager? cacheManager,
+    required BaseCacheManager cacheManager,
   }) {
     final provider = CachedNetworkImageProvider(
       source.resolvedUrl,
       cacheKey: source.cacheKey,
       cacheManager: cacheManager,
-      headers: headers.isEmpty ? null : headers,
+      headers: source.referer == null
+          ? null
+          : <String, String>{'Referer': source.referer!},
       maxWidth: _decodeTarget.cacheWidth,
       maxHeight: _decodeTarget.cacheHeight,
     );
@@ -242,24 +212,6 @@ class _AppImageState extends ConsumerState<AppImage> {
     );
   }
 
-  Future<Map<String, String>> _headersFutureFor(NetworkAppImageSource source) {
-    final builder = source.headerBuilder!;
-    final canReuse =
-        _networkHeadersFuture != null &&
-        _networkHeadersUrl == source.resolvedUrl &&
-        _networkHeadersCacheKey == source.cacheKey &&
-        identical(_networkHeadersBuilder, builder);
-    if (!canReuse) {
-      _networkHeadersUrl = source.resolvedUrl;
-      _networkHeadersCacheKey = source.cacheKey;
-      _networkHeadersBuilder = builder;
-      _networkHeadersFuture = Future<Map<String, String>>.sync(
-        () => builder.buildHeaders(source.resolvedUrl),
-      );
-    }
-    return _networkHeadersFuture!;
-  }
-
   bool _hasSameNetworkRequestIdentity(
     NetworkAppImageSource? previous,
     NetworkAppImageSource? next,
@@ -269,14 +221,7 @@ class _AppImageState extends ConsumerState<AppImage> {
     }
     return previous.resolvedUrl == next.resolvedUrl &&
         previous.cacheKey == next.cacheKey &&
-        identical(previous.headerBuilder, next.headerBuilder);
-  }
-
-  void _clearNetworkHeadersFuture() {
-    _networkHeadersFuture = null;
-    _networkHeadersUrl = null;
-    _networkHeadersCacheKey = null;
-    _networkHeadersBuilder = null;
+        previous.referer == next.referer;
   }
 
   double _finiteOr(double? preferred, double fallback) {

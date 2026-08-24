@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io' as io;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/media/image_display_provider.dart';
 import 'package:y300/core/media/image_downscale_policy.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
+import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 /// Shared image widget for library surfaces.
@@ -17,11 +19,13 @@ import 'package:y300/shared/widgets/forum_default_avatar.dart';
 /// 解码降采样：默认通过 [downscalePolicy] 按实际显示尺寸解码，避免大图按原图
 /// 解码出超大 bitmap 反复驱逐运行时图片缓存。该控件被书架、详情头、阅读器、
 /// 头像等多处复用，内置降采样可一次惠及全部调用点。
-class LibraryCachedImage extends StatefulWidget {
+class LibraryCachedImage extends ConsumerStatefulWidget {
   const LibraryCachedImage({
     super.key,
     this.localPath,
     this.imageUrl,
+    this.cacheKey,
+    this.referer,
     this.imageProviderOverride,
     this.remoteImageProviderOverride,
     required this.fit,
@@ -32,7 +36,6 @@ class LibraryCachedImage extends StatefulWidget {
     this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
     this.errorPlaceholder,
-    this.headerBuilder,
     this.onImageResolved,
     this.onRemoteImageResolved,
     this.onImageFailed,
@@ -42,6 +45,8 @@ class LibraryCachedImage extends StatefulWidget {
 
   final String? localPath;
   final String? imageUrl;
+  final String? cacheKey;
+  final String? referer;
   @visibleForTesting
   final ImageProvider? imageProviderOverride;
   @visibleForTesting
@@ -56,7 +61,6 @@ class LibraryCachedImage extends StatefulWidget {
   final ImageDownscalePolicy downscalePolicy;
   final Widget placeholder;
   final Widget? errorPlaceholder;
-  final ImageRequestHeaderBuilder? headerBuilder;
   final ValueChanged<Size>? onImageResolved;
   final VoidCallback? onRemoteImageResolved;
   final VoidCallback? onImageFailed;
@@ -72,15 +76,12 @@ class LibraryCachedImage extends StatefulWidget {
   final int retryToken;
 
   @override
-  State<LibraryCachedImage> createState() => _LibraryCachedImageState();
+  ConsumerState<LibraryCachedImage> createState() => _LibraryCachedImageState();
 }
 
-class _LibraryCachedImageState extends State<LibraryCachedImage> {
+class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
   static const SiteUrlResolver _urlResolver = SiteUrlResolver();
 
-  Future<Map<String, String>>? _headersFuture;
-  String? _headersUrl;
-  ImageRequestHeaderBuilder? _headersBuilder;
   bool _remoteResolved = false;
   bool _remoteResolveScheduled = false;
   String? _reportedImageIdentity;
@@ -102,7 +103,8 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
         oldWidget.imageProviderOverride != widget.imageProviderOverride ||
         oldWidget.remoteImageProviderOverride !=
             widget.remoteImageProviderOverride ||
-        oldWidget.headerBuilder != widget.headerBuilder) {
+        oldWidget.cacheKey != widget.cacheKey ||
+        oldWidget.referer != widget.referer) {
       _resetLoadState();
     }
     if (oldWidget.retryToken != widget.retryToken) {
@@ -112,9 +114,6 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
   }
 
   void _resetLoadState() {
-    _headersFuture = null;
-    _headersUrl = null;
-    _headersBuilder = null;
     _remoteResolved = false;
     _remoteResolveScheduled = false;
     _reportedImageIdentity = null;
@@ -243,50 +242,42 @@ class _LibraryCachedImageState extends State<LibraryCachedImage> {
       if (isForumDefaultOrUnsupportedAvatarUrl(remote)) {
         return _errorPlaceholder;
       }
-      final builder = widget.headerBuilder;
-      if (builder == null) {
-        return _buildRemoteImageShell(remote, const <String, String>{});
-      }
-      return FutureBuilder<Map<String, String>>(
-        future: _headersFor(remote, builder),
-        builder: (context, snapshot) {
-          final headers = snapshot.connectionState == ConnectionState.done
-              ? snapshot.data ?? const <String, String>{}
-              : null;
-          return _buildRemoteImageShell(remote, headers);
-        },
-      );
+      return _buildRemoteImageShell(remote);
     }
     return widget.placeholder;
   }
 
-  Future<Map<String, String>> _headersFor(
-    String remote,
-    ImageRequestHeaderBuilder builder,
-  ) {
-    final cached = _headersFuture;
-    if (cached != null &&
-        _headersUrl == remote &&
-        identical(_headersBuilder, builder)) {
-      return cached;
+  Widget _buildRemoteImageShell(String remote) {
+    final override = widget.remoteImageProviderOverride;
+    if (override != null) {
+      return _buildNetworkImage(remote, override);
     }
-    _headersUrl = remote;
-    _headersBuilder = builder;
-    _headersFuture = builder.buildHeaders(remote);
-    return _headersFuture!;
+    final manager = ref.watch(appImageCacheManagerProvider);
+    return manager.when(
+      data: (value) => _buildNetworkImage(
+        remote,
+        CachedNetworkImageProvider(
+          remote,
+          cacheKey: widget.cacheKey?.trim().isNotEmpty == true
+              ? widget.cacheKey!.trim()
+              : remote,
+          cacheManager: value.rawCacheManager,
+          headers: widget.referer == null
+              ? null
+              : <String, String>{'Referer': widget.referer.toString()},
+        ),
+      ),
+      loading: () => widget.placeholder,
+      error: (error, stackTrace) {
+        final identity = 'cache-manager:$remote';
+        _markRemoteResolved();
+        _markImageFailed(identity);
+        return _errorPlaceholder;
+      },
+    );
   }
 
-  Widget _buildRemoteImageShell(String remote, Map<String, String>? headers) {
-    if (headers == null) {
-      return widget.placeholder;
-    }
-    return _buildNetworkImage(remote, headers);
-  }
-
-  Widget _buildNetworkImage(String remote, Map<String, String> headers) {
-    final provider =
-        widget.remoteImageProviderOverride ??
-        NetworkImage(remote, headers: headers.isEmpty ? null : headers);
+  Widget _buildNetworkImage(String remote, ImageProvider provider) {
     final displayProvider = widget.decodeDisplaySize == null
         ? ResizeImage.resizeIfNeeded(
             _decodeTarget.cacheWidth,

@@ -3,7 +3,6 @@ import 'dart:ui';
 
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:path/path.dart' as p;
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
@@ -53,14 +52,12 @@ class DefaultImageCacheService
     required ImageCacheRepository repository,
     required Future<BaseCacheManager> cacheManagerFuture,
     required ImageCacheDirectoryResolver directoryResolver,
-    ImageRequestHeaderBuilder? headerBuilder,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
     ImageFileDownloader downloader = const CacheManagerImageFileDownloader(),
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
   }) : _repository = repository,
        _cacheManagerFuture = cacheManagerFuture,
        _directoryResolver = directoryResolver,
-       _headerBuilder = headerBuilder,
        _urlResolver = urlResolver,
        _downloader = downloader,
        _mutationReporter = mutationReporter;
@@ -68,7 +65,6 @@ class DefaultImageCacheService
   final ImageCacheRepository _repository;
   final Future<BaseCacheManager> _cacheManagerFuture;
   final ImageCacheDirectoryResolver _directoryResolver;
-  final ImageRequestHeaderBuilder? _headerBuilder;
   final SiteUrlResolver _urlResolver;
   final ImageFileDownloader _downloader;
   final CacheMutationReporter _mutationReporter;
@@ -169,7 +165,10 @@ class DefaultImageCacheService
     }
 
     try {
-      final headers = await _buildHeaders(sourceUrl);
+      final referer = request.referer;
+      final headers = referer == null
+          ? const <String, String>{}
+          : <String, String>{'Referer': referer};
       final localPath = await _downloader.download(
         cacheManager: cacheManager,
         sourceUrl: sourceUrl,
@@ -202,14 +201,6 @@ class DefaultImageCacheService
     } catch (_) {
       return CachedImageResult.failed;
     }
-  }
-
-  Future<Map<String, String>> _buildHeaders(String sourceUrl) async {
-    final builder = _headerBuilder;
-    if (builder == null) {
-      return const <String, String>{};
-    }
-    return builder.buildHeaders(sourceUrl);
   }
 
   @override

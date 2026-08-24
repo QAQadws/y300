@@ -64,7 +64,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     final preferencesState = ref.watch(readerPreferencesControllerProvider);
     final preferences = preferencesState.value ?? ReaderPreferences.defaults();
     final state = ref.watch(comicReaderControllerProvider(_readerArgs));
-    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final imageReferer = ref.watch(forumImageRefererProvider);
 
     return Scaffold(
       body: state.when(
@@ -107,7 +107,7 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
                 capability: ComicReaderCapability(
                   viewState: viewState,
                   preferences: preferences,
-                  imageHeaderBuilder: imageHeaderBuilder,
+                  imageReferer: imageReferer,
                   controller: controller,
                   l10n: l10n,
                   diagnosticRecorder: widget.diagnosticRecorder,

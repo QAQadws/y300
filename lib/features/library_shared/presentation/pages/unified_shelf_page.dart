@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/media/cover_focal_point.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/contracts/library_view_preferences_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
@@ -36,7 +35,7 @@ class UnifiedShelfPage extends StatefulWidget {
     required this.adapter,
     this.viewPreferencesRepository,
     required this.onOpenWork,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.featureFlags = ShelfFeatureFlags.defaults,
     this.isActive = true,
     this.selectionHost,
@@ -45,7 +44,7 @@ class UnifiedShelfPage extends StatefulWidget {
   final ShelfModuleAdapter adapter;
   final LibraryViewPreferencesRepository? viewPreferencesRepository;
   final Future<void> Function(BuildContext context, String workId) onOpenWork;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ShelfFeatureFlags featureFlags;
   final bool isActive;
   final ShelfSelectionHostController? selectionHost;
@@ -144,7 +143,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final state = _controller.state;
-    final imageHeaderBuilder = widget.imageHeaderBuilder;
+    final imageReferer = widget.imageReferer;
     final categories = state.categories;
     final tabs = categories
         .map(
@@ -289,7 +288,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
                                       items: items,
                                       displayMode: liveState.displayMode,
                                       gridColumns: liveState.gridColumnCount,
-                                      imageHeaderBuilder: imageHeaderBuilder,
+                                      imageReferer: imageReferer,
                                       useShelfCoverImage: widget
                                           .featureFlags
                                           .useShelfCoverImage,
@@ -1008,7 +1007,7 @@ class _ShelfCategoryPage extends ConsumerStatefulWidget {
     required this.items,
     required this.displayMode,
     required this.gridColumns,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     required this.useShelfCoverImage,
     required this.showUnreadBadge,
     required this.onTapItem,
@@ -1023,7 +1022,7 @@ class _ShelfCategoryPage extends ConsumerStatefulWidget {
   final List<LibraryWorkItem> items;
   final LibraryDisplayMode displayMode;
   final int gridColumns;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final bool useShelfCoverImage;
   final bool showUnreadBadge;
   final Future<void> Function(String workId) onTapItem;
@@ -1073,7 +1072,7 @@ class _ShelfCategoryPageState extends ConsumerState<_ShelfCategoryPage>
             categoryId: widget.categoryId,
             moduleKey: widget.moduleKey,
             items: widget.items,
-            imageHeaderBuilder: widget.imageHeaderBuilder,
+            imageReferer: widget.imageReferer,
             useShelfCoverImage: widget.useShelfCoverImage,
             showUnreadBadge: widget.showUnreadBadge,
             onTapItem: widget.onTapItem,
@@ -1086,7 +1085,7 @@ class _ShelfCategoryPageState extends ConsumerState<_ShelfCategoryPage>
             moduleKey: widget.moduleKey,
             items: widget.items,
             gridColumns: widget.gridColumns,
-            imageHeaderBuilder: widget.imageHeaderBuilder,
+            imageReferer: widget.imageReferer,
             useShelfCoverImage: widget.useShelfCoverImage,
             showUnreadBadge: widget.showUnreadBadge,
             onTapItem: widget.onTapItem,
@@ -1189,7 +1188,7 @@ class _WorkGrid extends StatelessWidget {
     required this.moduleKey,
     required this.items,
     required this.gridColumns,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     required this.useShelfCoverImage,
     required this.showUnreadBadge,
     required this.onTapItem,
@@ -1202,7 +1201,7 @@ class _WorkGrid extends StatelessWidget {
   final LibraryModuleKey moduleKey;
   final List<LibraryWorkItem> items;
   final int gridColumns;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final bool useShelfCoverImage;
   final bool showUnreadBadge;
   final Future<void> Function(String workId) onTapItem;
@@ -1255,7 +1254,7 @@ class _WorkGrid extends StatelessWidget {
                 customCoverFocusX: item.customCoverFocusX,
                 customCoverFocusY: item.customCoverFocusY,
                 coverAsset: item.coverAsset,
-                imageHeaderBuilder: imageHeaderBuilder,
+                imageReferer: imageReferer,
                 coverLayerBuilder: useShelfCoverImage
                     ? null
                     : _legacyCoverLayerBuilder,
@@ -1286,7 +1285,7 @@ class _WorkGrid extends StatelessWidget {
       fit: config.fit,
       alignment: config.alignment,
       placeholder: config.placeholder,
-      headerBuilder: config.imageHeaderBuilder,
+      referer: config.imageReferer,
     );
   }
 }
@@ -1359,7 +1358,7 @@ class _WorkList extends StatelessWidget {
     required this.categoryId,
     required this.moduleKey,
     required this.items,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     required this.useShelfCoverImage,
     required this.showUnreadBadge,
     required this.onTapItem,
@@ -1371,7 +1370,7 @@ class _WorkList extends StatelessWidget {
   final String categoryId;
   final LibraryModuleKey moduleKey;
   final List<LibraryWorkItem> items;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final bool useShelfCoverImage;
   final bool showUnreadBadge;
   final Future<void> Function(String workId) onTapItem;
@@ -1482,7 +1481,7 @@ class _WorkList extends StatelessWidget {
         fit: BoxFit.cover,
         alignment: alignment,
         placeholder: placeholder,
-        headerBuilder: imageHeaderBuilder,
+        referer: imageReferer,
       );
     }
     return ShelfCoverImage(
@@ -1490,7 +1489,7 @@ class _WorkList extends StatelessWidget {
       coverAsset: item.coverAsset,
       localPath: _preferredLocalPath(item),
       remoteUrl: _preferredRemoteUrl(item),
-      imageHeaderBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
       fit: BoxFit.cover,
       alignment: alignment,
       placeholder: placeholder,

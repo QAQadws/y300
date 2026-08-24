@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:io' as io;
-import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/image_request_headers.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 
@@ -68,10 +66,13 @@ void main() {
   });
 
   test('network cover downloads are strictly serial', () async {
-    final adapter = _ControlledDownloadAdapter();
-    final downloader = DioLibraryCoverDownloader(
-      headerBuilder: const _StaticHeaderBuilder(),
-      dio: Dio()..httpClientAdapter = adapter,
+    final resourceClient = _ControlledResourceClient();
+    final downloader = ForumResourceLibraryCoverDownloader(
+      resourceClient: resourceClient,
+      referenceResolver: ForumResourceReferenceResolver(
+        siteOrigin: Uri.parse('https://bbs.yamibo.com'),
+      ),
+      referer: 'https://bbs.yamibo.com/',
     );
     final firstPath = '${root.path}/first.img';
     final secondPath = '${root.path}/second.img';
@@ -80,23 +81,23 @@ void main() {
       url: 'https://img.test/first.jpg',
       targetPath: firstPath,
     );
-    await adapter.firstStarted;
+    await resourceClient.firstStarted;
     final second = downloader.download(
       url: 'https://img.test/second.jpg',
       targetPath: secondPath,
     );
     await Future<void>.delayed(Duration.zero);
 
-    expect(adapter.callCount, 1);
-    expect(adapter.maxActive, 1);
+    expect(resourceClient.callCount, 1);
+    expect(resourceClient.maxActive, 1);
 
-    adapter.release(0);
+    resourceClient.release(0);
     await first;
-    await adapter.secondStarted;
-    expect(adapter.callCount, 2);
-    expect(adapter.maxActive, 1);
+    await resourceClient.secondStarted;
+    expect(resourceClient.callCount, 2);
+    expect(resourceClient.maxActive, 1);
 
-    adapter.release(1);
+    resourceClient.release(1);
     await second;
     expect(await io.File(firstPath).readAsBytes(), <int>[1]);
     expect(await io.File(secondPath).readAsBytes(), <int>[2]);
@@ -144,16 +145,7 @@ class _FakeDownloader implements LibraryCoverDownloader {
   }
 }
 
-class _StaticHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticHeaderBuilder();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{};
-  }
-}
-
-class _ControlledDownloadAdapter implements HttpClientAdapter {
+class _ControlledResourceClient implements ForumResourceClient {
   final List<Completer<void>> _releases = <Completer<void>>[
     Completer<void>(),
     Completer<void>(),
@@ -171,14 +163,7 @@ class _ControlledDownloadAdapter implements HttpClientAdapter {
   void release(int index) => _releases[index].complete();
 
   @override
-  void close({bool force = false}) {}
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) async {
+  Future<ForumResourceResult> open(ForumResourceRequest request) async {
     final index = callCount;
     callCount += 1;
     _active += 1;
@@ -192,6 +177,14 @@ class _ControlledDownloadAdapter implements HttpClientAdapter {
     }
     await _releases[index].future;
     _active -= 1;
-    return ResponseBody.fromBytes(<int>[index + 1], 200);
+    return ForumResourceSuccess(
+      uri: request.reference.uri,
+      statusCode: 200,
+      content: Stream<List<int>>.value(<int>[index + 1]),
+      contentLength: 1,
+      contentType: 'image/jpeg',
+      validUntil: DateTime(2099),
+      fileExtension: '.jpg',
+    );
   }
 }

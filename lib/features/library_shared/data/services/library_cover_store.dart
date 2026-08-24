@@ -3,10 +3,9 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:crypto/crypto.dart';
-import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:y300/core/network/image_request_headers.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 
 abstract interface class LibraryCoverStore {
@@ -47,32 +46,42 @@ abstract interface class LibraryCoverDownloader {
   Future<void> download({required String url, required String targetPath});
 }
 
-class DioLibraryCoverDownloader implements LibraryCoverDownloader {
-  DioLibraryCoverDownloader({
-    required ImageRequestHeaderBuilder headerBuilder,
-    Dio? dio,
-  }) : _headerBuilder = headerBuilder,
-       _dio = dio ?? Dio(),
+class ForumResourceLibraryCoverDownloader implements LibraryCoverDownloader {
+  ForumResourceLibraryCoverDownloader({
+    required ForumResourceClient resourceClient,
+    required ForumResourceReferenceResolver referenceResolver,
+    required String referer,
+  }) : _resourceClient = resourceClient,
+       _referenceResolver = referenceResolver,
+       _referer = referer,
        _queue = _SerialTaskQueue();
 
-  final ImageRequestHeaderBuilder _headerBuilder;
-  final Dio _dio;
+  final ForumResourceClient _resourceClient;
+  final ForumResourceReferenceResolver _referenceResolver;
+  final String _referer;
   final _SerialTaskQueue _queue;
 
   @override
   Future<void> download({required String url, required String targetPath}) {
     return _queue.run(() async {
-      final headers = await _headerBuilder.buildHeaders(url);
-      await _dio.download(
+      final reference = _referenceResolver.resolve(
         url,
-        targetPath,
-        options: Options(
-          headers: headers.isEmpty ? null : headers,
-          followRedirects: true,
-        ),
+        referer: Uri.tryParse(_referer),
       );
-      final file = await io.File(targetPath).open(mode: io.FileMode.append);
+      if (reference == null) {
+        throw StateError('Invalid cover resource reference');
+      }
+      final result = await _resourceClient.open(
+        ForumResourceRequest(reference: reference),
+      );
+      if (result is! ForumResourceSuccess || result.statusCode == 304) {
+        throw StateError('Cover resource request failed');
+      }
+      final file = await io.File(targetPath).open(mode: io.FileMode.writeOnly);
       try {
+        await for (final chunk in result.content) {
+          await file.writeFrom(chunk);
+        }
         await file.flush();
       } finally {
         await file.close();

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -15,7 +14,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
     super.key,
     required this.html,
     required this.sourceId,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.imageCacheOwnerId,
     this.contentImageKind = ForumImageKind.blogInline,
     this.onOpenLink,
@@ -27,7 +26,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
 
   final String html;
   final String sourceId;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final String? imageCacheOwnerId;
   final ForumImageKind contentImageKind;
   final ValueChanged<String>? onOpenLink;
@@ -93,7 +92,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       theme: renderTheme,
       sourceId: sourceId,
       threadId: ownerId,
-      imageHeaderBuilder: widget.imageHeaderBuilder,
+      imageReferer: widget.imageReferer,
       imageCacheOwnerId: ownerId,
       preferences: preferences,
       preparedDocument: _preparedDocument,

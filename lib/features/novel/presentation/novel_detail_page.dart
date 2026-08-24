@@ -103,7 +103,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     return UnifiedDetailPage(
       adapter: adapter,
       workId: widget.novelId,
-      imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+      imageReferer: ref.watch(forumImageRefererProvider),
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
       pickCoverImage: () async {
         final picked = await ref

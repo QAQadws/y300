@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/config/app_config.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
 import 'package:y300/features/cache/data/services/cache_mutation_bus.dart';
@@ -11,6 +12,7 @@ import 'package:y300/features/cache/data/services/default_image_cache_service.da
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/services/image_cache_manager_factory.dart';
+import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
 import 'package:y300/features/cache/data/services/protected_cover_file_store.dart';
@@ -43,7 +45,12 @@ final imageCacheDirectoryResolverProvider =
 final imageCacheManagerFactoryProvider = Provider<ImageCacheManagerFactory>((
   ref,
 ) {
-  return const ImageCacheManagerFactory();
+  return ImageCacheManagerFactory(
+    fileService: Y300ForumResourceFileService(
+      client: ref.watch(yamiboForumResourceClientProvider),
+      siteOrigin: Uri.parse(AppConfig.siteBaseUrl),
+    ),
+  );
 });
 
 final imageCacheManagerProvider = FutureProvider<BaseCacheManager>((ref) async {
@@ -111,7 +118,6 @@ final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
     repository: ref.watch(imageCacheRepositoryProvider),
     cacheManagerFuture: ref.watch(imageCacheManagerProvider.future),
     directoryResolver: ref.watch(imageCacheDirectoryResolverProvider),
-    headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
     mutationReporter: ref.watch(cacheMutationBusProvider),
   );
 });

@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/media/cover_focal_point.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
@@ -37,7 +36,7 @@ class UnifiedDetailHeaderSection extends ConsumerWidget {
     required this.moduleKey,
     required this.topInset,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.onToggleShelf,
     required this.onRefresh,
     this.onRefreshLongPress,
@@ -50,7 +49,7 @@ class UnifiedDetailHeaderSection extends ConsumerWidget {
   final LibraryModuleKey moduleKey;
   final double topInset;
   final UnifiedDetailPalette palette;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final VoidCallback onToggleShelf;
   final VoidCallback onRefresh;
   final VoidCallback? onRefreshLongPress;
@@ -101,7 +100,7 @@ class UnifiedDetailHeaderSection extends ConsumerWidget {
               moduleKey: moduleKey,
               topInset: topInset,
               palette: palette,
-              imageHeaderBuilder: imageHeaderBuilder,
+              imageReferer: imageReferer,
               coverProvider: coverProvider,
             ),
             _HeaderActionsRow(
@@ -138,7 +137,7 @@ class _HeroInfoSection extends StatelessWidget {
     required this.moduleKey,
     required this.topInset,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.coverProvider,
   });
 
@@ -155,7 +154,7 @@ class _HeroInfoSection extends StatelessWidget {
   final LibraryModuleKey moduleKey;
   final double topInset;
   final UnifiedDetailPalette palette;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final LibraryCoverImageProvider? coverProvider;
 
   @override
@@ -181,7 +180,7 @@ class _HeroInfoSection extends StatelessWidget {
             coverLocalPath: header.coverLocalPath,
             customCoverLocalPath: header.customCoverLocalPath,
             palette: palette,
-            imageHeaderBuilder: imageHeaderBuilder,
+            imageReferer: imageReferer,
             coverProvider: coverProvider,
           ),
           Padding(
@@ -201,7 +200,7 @@ class _HeroInfoSection extends StatelessWidget {
                         )
                       : Alignment.center,
                   palette: palette,
-                  imageHeaderBuilder: imageHeaderBuilder,
+                  imageReferer: imageReferer,
                   coverProvider: coverProvider,
                   coverAsset: header.coverAsset,
                 ),
@@ -477,7 +476,7 @@ class _DetailHeaderBackground extends StatelessWidget {
     required this.coverLocalPath,
     required this.customCoverLocalPath,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.coverProvider,
   });
 
@@ -489,7 +488,7 @@ class _DetailHeaderBackground extends StatelessWidget {
   final String? coverLocalPath;
   final String? customCoverLocalPath;
   final UnifiedDetailPalette palette;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final LibraryCoverImageProvider? coverProvider;
 
   @override
@@ -514,7 +513,7 @@ class _DetailHeaderBackground extends StatelessWidget {
                         key: const Key('unified-detail-background-placeholder'),
                         color: palette.headerPlaceholderBackground,
                       ),
-                      headerBuilder: imageHeaderBuilder,
+                      referer: imageReferer,
                     )
                   : LibraryCoverProviderImage(
                       provider: coverProvider!,
@@ -634,7 +633,7 @@ class _CoverImage extends StatelessWidget {
     required this.url,
     required this.localPath,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.coverProvider,
     required this.coverAsset,
     this.alignment = Alignment.center,
@@ -643,7 +642,7 @@ class _CoverImage extends StatelessWidget {
   final String? url;
   final String? localPath;
   final UnifiedDetailPalette palette;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final LibraryCoverImageProvider? coverProvider;
   final LibraryCoverAssetRef? coverAsset;
 
@@ -682,7 +681,7 @@ class _CoverImage extends StatelessWidget {
                   key: const Key('unified-detail-cover-placeholder'),
                   color: palette.headerPlaceholderBackground,
                 ),
-                headerBuilder: imageHeaderBuilder,
+                referer: imageReferer,
               ),
       ),
     );

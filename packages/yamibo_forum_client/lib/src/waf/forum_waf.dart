@@ -1,4 +1,4 @@
-enum ForumWafEvidence { scriptBody, methodNotAllowed }
+enum ForumWafEvidence { httpStatus405 }
 
 enum ForumWafRecoveryResult {
   verified,

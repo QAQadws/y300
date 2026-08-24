@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
@@ -14,13 +13,13 @@ class ComicCommentListItem extends StatelessWidget {
     super.key,
     required this.projection,
     required this.sourceTid,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.renderContext,
   });
 
   final ComicCommentItemProjection projection;
   final String sourceTid;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ThreadPostRenderContext? renderContext;
 
   @override
@@ -31,7 +30,7 @@ class ComicCommentListItem extends StatelessWidget {
       child: ComicCommentCard(
         projection: projection,
         sourceTid: sourceTid,
-        imageHeaderBuilder: imageHeaderBuilder,
+        imageReferer: imageReferer,
         renderContext: renderContext,
       ),
     );
@@ -49,7 +48,7 @@ class ComicCommentListSurface extends StatefulWidget {
     required this.sourceTid,
     this.projection,
     this.isLoading = false,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.onRetry,
     this.padding = const EdgeInsets.fromLTRB(12, 12, 12, 24),
     this.renderContext,
@@ -58,7 +57,7 @@ class ComicCommentListSurface extends StatefulWidget {
   final String sourceTid;
   final ComicCommentContentProjection? projection;
   final bool isLoading;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final VoidCallback? onRetry;
   final EdgeInsetsGeometry padding;
   final ThreadPostRenderContext? renderContext;
@@ -138,7 +137,7 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
         return ComicCommentListItem(
           projection: projection.items[index],
           sourceTid: widget.sourceTid,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageReferer: widget.imageReferer,
           renderContext: renderContext,
         );
       },
@@ -149,7 +148,7 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
     final identity = (
       sourceTid: widget.sourceTid.trim(),
-      imageHeaderBuilder: widget.imageHeaderBuilder,
+      imageReferer: widget.imageReferer,
       brightness: Theme.of(context).brightness,
       palette: palette.card.toARGB32(),
     );
@@ -158,7 +157,7 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
       _ownedRenderContextIdentity = identity;
       _ownedRenderContext = ThreadPostRenderContext(
         palette: palette,
-        imageHeaderBuilder: widget.imageHeaderBuilder,
+        imageReferer: widget.imageReferer,
         renderOwnerFor: (post) => ThreadPostRenderContext.commentRenderOwner(
           sourceTid: widget.sourceTid,
           pid: post.pid,

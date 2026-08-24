@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -31,7 +30,7 @@ class ComicReaderCapability extends ReaderCapability {
   ComicReaderCapability({
     required this.viewState,
     required this.preferences,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.controller,
     required this.l10n,
     required this.onShowMoreActions,
@@ -49,7 +48,7 @@ class ComicReaderCapability extends ReaderCapability {
   final ComicReaderViewState viewState;
   final ReaderPreferences preferences;
   @override
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ComicReaderController controller;
   final AppLocalizations l10n;
   @override
@@ -381,7 +380,7 @@ class ComicReaderCapability extends ReaderCapability {
         viewState.imageSessionRevision,
         image.retryRevision,
       ),
-      headerBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
       loadingIndicatorColor: spec.loadingIndicatorColor,
       onImageResolved: (size) {
         spec.onDimensionsResolved(size);

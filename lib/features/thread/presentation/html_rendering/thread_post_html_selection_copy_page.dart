@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
@@ -17,7 +16,6 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
     required this.threadId,
     required this.imageReferer,
     required this.plan,
-    required this.imageHeaderBuilder,
     required this.onOpenPostLink,
     required this.onOpenPostImage,
     required this.onImageFallback,
@@ -28,7 +26,6 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
   final String threadId;
   final String imageReferer;
   final ThreadPostBodyRenderPlan plan;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
   onOpenPostImage;
@@ -70,7 +67,6 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
                   threadId: threadId,
                   imageReferer: imageReferer,
                   plan: plan,
-                  imageHeaderBuilder: imageHeaderBuilder,
                   onOpenPostLink: onOpenPostLink,
                   onOpenPostImage: onOpenPostImage,
                   theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(

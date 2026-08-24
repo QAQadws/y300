@@ -62,6 +62,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   }
 
+  Future<void> pumpReaderUiTransition(WidgetTester tester) async {
+    // Reader images may intentionally keep a loading indicator animating while
+    // the surrounding menu/sheet transition has already completed. Waiting
+    // for the whole tree to settle would therefore couple unrelated UI tests
+    // to network-image completion.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+
   Future<void> revealNextChapterTransition(WidgetTester tester) async {
     final listFinder = find.byKey(const Key('comic-reader-image-list'));
     for (var i = 0; i < 4; i++) {
@@ -206,7 +215,7 @@ void main() {
     await tester.tap(
       find.byKey(const Key('shared-reader-top-action-bookmark')),
     );
-    await tester.pumpAndSettle();
+    await pumpReaderUiTransition(tester);
     expect(find.byType(SnackBar), findsOneWidget);
     expect(find.text('已添加书签'), findsOneWidget);
   });
@@ -602,7 +611,7 @@ void main() {
       tester,
       const Key('shared-reader-bottom-action-mode'),
     );
-    await tester.pumpAndSettle();
+    await pumpReaderUiTransition(tester);
 
     expect(find.byKey(const Key('comic-reader-page-view')), findsOneWidget);
     expect(
@@ -619,7 +628,7 @@ void main() {
       tester,
       const Key('shared-reader-bottom-action-mode'),
     );
-    await tester.pumpAndSettle();
+    await pumpReaderUiTransition(tester);
 
     final rtlPageView = tester.widget<PageView>(
       find.byKey(const Key('comic-reader-page-view')),
@@ -630,7 +639,7 @@ void main() {
       tester,
       const Key('shared-reader-bottom-action-mode'),
     );
-    await tester.pumpAndSettle();
+    await pumpReaderUiTransition(tester);
 
     expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
   });
@@ -671,7 +680,7 @@ void main() {
         tester,
         const Key('shared-reader-bottom-action-catalog'),
       );
-      await tester.pumpAndSettle();
+      await pumpReaderUiTransition(tester);
 
       expect(find.text('章节列表'), findsOneWidget);
 
@@ -680,12 +689,12 @@ void main() {
           const ValueKey<String>('comic-reader-chapter-yamibo:100:101'),
         ),
       );
-      await tester.pumpAndSettle();
+      await pumpReaderUiTransition(tester);
       await openReaderMenu(tester);
       await tester.tap(
         find.byKey(const Key('shared-reader-bottom-action-display')),
       );
-      await tester.pumpAndSettle();
+      await pumpReaderUiTransition(tester);
 
       expect(
         find.byKey(const Key('comic-reader-display-settings-sheet')),
@@ -733,7 +742,7 @@ void main() {
     await tester.pumpAndSettle();
     await openReaderMenu(tester);
     await tapVisibleByKey(tester, const Key('shared-reader-top-action-more'));
-    await tester.pumpAndSettle();
+    await pumpReaderUiTransition(tester);
     expect(
       find.byKey(const Key('shared-reader-action-cache-episode')),
       findsNothing,
@@ -767,7 +776,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(coverStore.installedSourcePath, '/cache/mock.jpg');
+    expect(
+      coverStore.installedSourcePath,
+      io.File('assets/noavatar.png').absolute.path,
+    );
     expect(coverStore.installedAsset?.assetId, 'comic/yamibo:100/custom');
     expect(coverStore.installedAsset?.revision, 1);
     expect(coverStore.installedAsset?.kind, LibraryCoverAssetKind.custom);
@@ -823,7 +835,7 @@ void main() {
         const Key('shared-reader-progress-slider'),
         const Offset(300, 0),
       );
-      await tester.pumpAndSettle();
+      await pumpReaderUiTransition(tester);
 
       expect(
         find.byKey(const Key('shared-reader-current-label')),
@@ -916,7 +928,7 @@ void main() {
     await tester.tapAt(surfaceCenter);
     await tester.pump(const Duration(milliseconds: 40));
     await tester.tapAt(surfaceCenter);
-    await tester.pumpAndSettle();
+    await pumpReaderUiTransition(tester);
 
     expect(find.byType(InteractiveViewer), findsNothing);
     expect(zoomTransform().transform.getMaxScaleOnAxis(), greaterThan(1));
@@ -924,13 +936,13 @@ void main() {
 
     final previousOffset = readerList().controller!.offset;
     await tester.dragFrom(surfaceCenter, const Offset(0, -160));
-    await tester.pumpAndSettle();
+    await pumpReaderUiTransition(tester);
     expect(readerList().controller!.offset, greaterThan(previousOffset));
 
     await tester.tapAt(surfaceCenter);
     await tester.pump(const Duration(milliseconds: 40));
     await tester.tapAt(surfaceCenter);
-    await tester.pumpAndSettle();
+    await pumpReaderUiTransition(tester);
 
     expect(find.byType(InteractiveViewer), findsNothing);
     expect(readerList().physics, isNull);
@@ -1187,7 +1199,7 @@ class _ReaderFakeService implements ComicReaderService {
   }) async {
     return ComicImageCacheResult(
       success: true,
-      localPath: '/cache/mock.jpg',
+      localPath: io.File('assets/noavatar.png').absolute.path,
       cacheKey: cacheKey,
     );
   }
@@ -1285,10 +1297,11 @@ class _FakeImageCacheService implements ImageCacheService {
 
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    final localImage = io.File('assets/noavatar.png').absolute;
     return CachedImageResult(
       success: true,
       cacheKey: request.cacheKey,
-      localPath: '/cache/mock.jpg',
+      localPath: localImage.path,
     );
   }
 

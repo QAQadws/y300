@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -337,9 +336,7 @@ class ProfileBlogPage extends ConsumerWidget {
                 capabilities: state?.capabilities,
                 failure: state?.failure,
                 palette: palette,
-                imageHeaderBuilder: ref.watch(
-                  imageRequestHeaderBuilderProvider,
-                ),
+                imageReferer: ref.watch(forumImageRefererProvider),
                 onSelectScope: controller.selectScope,
                 onSelectOrder: controller.selectOrder,
                 onOpenBlog: (item) => Navigator.of(context).push(
@@ -406,7 +403,7 @@ class ProfileBlogDetailPage extends ConsumerWidget {
     final state = asyncState.value;
     final data = state?.data;
     final palette = _ProfileBlogPalette.resolve(Theme.of(context));
-    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final imageReferer = ref.watch(forumImageRefererProvider);
     final l10n = AppLocalizations.of(context);
     final rawTitle = data?.title.trim();
 
@@ -427,7 +424,7 @@ class ProfileBlogDetailPage extends ConsumerWidget {
                 capabilities: state?.capabilities,
                 failure: state?.failure,
                 palette: palette,
-                imageHeaderBuilder: imageHeaderBuilder,
+                imageReferer: imageReferer,
               ),
             )
           : asyncState.isLoading
@@ -449,7 +446,7 @@ class _ProfileBlogListContent extends StatelessWidget {
     required this.capabilities,
     required this.failure,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.onSelectScope,
     required this.onSelectOrder,
     required this.onOpenBlog,
@@ -460,7 +457,7 @@ class _ProfileBlogListContent extends StatelessWidget {
   final UserBlogDirectoryReadCapabilities? capabilities;
   final Object? failure;
   final _ProfileBlogPalette palette;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
   final ValueChanged<UserBlogFeedScope> onSelectScope;
   final ValueChanged<UserBlogOrder> onSelectOrder;
   final ValueChanged<UserBlogSummary> onOpenBlog;
@@ -513,7 +510,7 @@ class _ProfileBlogListContent extends StatelessWidget {
                     item: item,
                     capabilities: capabilities,
                     palette: palette,
-                    imageHeaderBuilder: imageHeaderBuilder,
+                    imageReferer: imageReferer,
                     onTap: () => onOpenBlog(item),
                   ),
                   const SizedBox(height: 10),
@@ -661,14 +658,14 @@ class _ProfileBlogListCard extends StatelessWidget {
     required this.item,
     required this.capabilities,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.onTap,
   });
 
   final UserBlogSummary item;
   final UserBlogDirectoryReadCapabilities? capabilities;
   final _ProfileBlogPalette palette;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
   final VoidCallback onTap;
 
   @override
@@ -694,7 +691,7 @@ class _ProfileBlogListCard extends StatelessWidget {
                       imageUrl: item.avatarUrl,
                       ownerId: item.ownerUserId,
                       radius: 17,
-                      imageHeaderBuilder: imageHeaderBuilder,
+                      imageReferer: imageReferer,
                     ),
                   if (capabilities?.supports(
                         UserBlogDirectoryCapability.avatarReference,
@@ -840,14 +837,14 @@ class _ProfileBlogDetailContent extends StatelessWidget {
     required this.capabilities,
     required this.failure,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
   });
 
   final UserBlogDetailData data;
   final UserBlogDetailReadCapabilities? capabilities;
   final Object? failure;
   final _ProfileBlogPalette palette;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
 
   @override
   Widget build(BuildContext context) {
@@ -873,7 +870,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
           data: data,
           capabilities: capabilities,
           palette: palette,
-          imageHeaderBuilder: imageHeaderBuilder,
+          imageReferer: imageReferer,
         ),
         if (capabilities?.supports(UserBlogDetailCapability.orderedComments) ==
                 true &&
@@ -893,7 +890,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
               comment: comment,
               capabilities: capabilities,
               palette: palette,
-              imageHeaderBuilder: imageHeaderBuilder,
+              imageReferer: imageReferer,
             ),
             const SizedBox(height: 10),
           ],
@@ -927,13 +924,13 @@ class _BlogDetailCard extends StatelessWidget {
     required this.data,
     required this.capabilities,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
   });
 
   final UserBlogDetailData data;
   final UserBlogDetailReadCapabilities? capabilities;
   final _ProfileBlogPalette palette;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
 
   @override
   Widget build(BuildContext context) {
@@ -961,7 +958,7 @@ class _BlogDetailCard extends StatelessWidget {
                   imageUrl: data.avatarUrl,
                   ownerId: data.ownerUserId,
                   radius: 17,
-                  imageHeaderBuilder: imageHeaderBuilder,
+                  imageReferer: imageReferer,
                 ),
                 const SizedBox(width: 10),
               ],
@@ -985,7 +982,7 @@ class _BlogDetailCard extends StatelessWidget {
             child: ForumHtmlContentView(
               html: data.bodyHtml,
               sourceId: 'profile-blog-${data.blogId}',
-              imageHeaderBuilder: imageHeaderBuilder,
+              imageReferer: imageReferer,
               imageCacheOwnerId: data.blogId,
               contentImageKind: ForumImageKind.blogInline,
               surfaceColor: palette.card,
@@ -1028,13 +1025,13 @@ class _CommentCard extends StatelessWidget {
     required this.comment,
     required this.capabilities,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
   });
 
   final UserBlogComment comment;
   final UserBlogDetailReadCapabilities? capabilities;
   final _ProfileBlogPalette palette;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
 
   @override
   Widget build(BuildContext context) {
@@ -1054,7 +1051,7 @@ class _CommentCard extends StatelessWidget {
                   imageUrl: comment.avatarUrl,
                   ownerId: comment.authorUserId ?? comment.authorName,
                   radius: 15,
-                  imageHeaderBuilder: imageHeaderBuilder,
+                  imageReferer: imageReferer,
                 ),
                 const SizedBox(width: 9),
               ],
@@ -1087,7 +1084,7 @@ class _CommentCard extends StatelessWidget {
             child: ForumHtmlContentView(
               html: comment.bodyHtml,
               sourceId: 'profile-blog-comment-${comment.commentId}',
-              imageHeaderBuilder: imageHeaderBuilder,
+              imageReferer: imageReferer,
               imageCacheOwnerId: comment.commentId,
               contentImageKind: ForumImageKind.blogInline,
               surfaceColor: palette.card,
@@ -1108,13 +1105,13 @@ class _ProfileBlogAvatar extends StatelessWidget {
     required this.imageUrl,
     required this.ownerId,
     required this.radius,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
   });
 
   final String? imageUrl;
   final String ownerId;
   final double radius;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
 
   @override
   Widget build(BuildContext context) {
@@ -1125,7 +1122,7 @@ class _ProfileBlogAvatar extends StatelessWidget {
       ownerId: ownerId.trim().isEmpty ? (url ?? 'unknown') : ownerId,
       ownerType: ImageCacheOwnerType.profile,
       size: size,
-      headerBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
     );
   }
 }

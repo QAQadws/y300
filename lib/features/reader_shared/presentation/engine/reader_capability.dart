@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
@@ -178,8 +177,9 @@ abstract class ReaderCapability {
   ContinuousImageDiagnosticRecorder get diagnosticRecorder =>
       const NoopContinuousImageDiagnosticRecorder();
 
-  /// 图片请求头构建器（鉴权/Referer）。
-  ImageRequestHeaderBuilder? get imageHeaderBuilder;
+  /// Same-site page used as the resource Referer. Authentication headers are
+  /// owned by the shared resource transport.
+  String? get imageReferer;
 
   /// Optional non-blocking business metadata writer for prepared images.
   ReaderImagePreparationSink? get imagePreparationSink => null;

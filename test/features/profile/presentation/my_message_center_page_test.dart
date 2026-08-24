@@ -3,7 +3,6 @@ import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/profile/data/models/my_message_models.dart';
 import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
@@ -19,8 +18,8 @@ void main() {
           myMessageRepositoryProvider.overrideWithValue(
             const _FakeMyMessageRepository(),
           ),
-          imageRequestHeaderBuilderProvider.overrideWithValue(
-            const _StaticImageHeaderBuilder(),
+          forumImageRefererProvider.overrideWithValue(
+            'https://bbs.yamibo.com/',
           ),
         ],
         child: const LocalizedTestApp(home: MyMessageCenterPage()),
@@ -53,8 +52,8 @@ void main() {
           myMessageRepositoryProvider.overrideWithValue(
             const _FakeMyMessageRepository(),
           ),
-          imageRequestHeaderBuilderProvider.overrideWithValue(
-            const _StaticImageHeaderBuilder(),
+          forumImageRefererProvider.overrideWithValue(
+            'https://bbs.yamibo.com/',
           ),
         ],
         child: const LocalizedTestApp(
@@ -79,8 +78,8 @@ void main() {
           myMessageRepositoryProvider.overrideWithValue(
             const _FakeMyMessageRepository(),
           ),
-          imageRequestHeaderBuilderProvider.overrideWithValue(
-            const _StaticImageHeaderBuilder(),
+          forumImageRefererProvider.overrideWithValue(
+            'https://bbs.yamibo.com/',
           ),
         ],
         child: const LocalizedTestApp(
@@ -151,15 +150,6 @@ class _FakeMyMessageRepository implements MyMessageRepository {
   @override
   Future<ApiResult<MyPrivateMessagePage>> getPrivateMessages() async {
     return ApiSuccess((await getMessageCenter()).dataOrNull!.privateMessages);
-  }
-}
-
-class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticImageHeaderBuilder();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{};
   }
 }
 

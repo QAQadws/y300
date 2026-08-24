@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/image_loading/domain/app_image_source.dart';
 import 'package:y300/features/image_loading/presentation/app_image.dart';
@@ -50,7 +49,6 @@ class ComposerAttachmentPreviewImage extends ConsumerWidget {
     return switch (source) {
       ComposerLocalImagePreview(:final path) => _buildLocal(path),
       ComposerRemoteImagePreview(:final url, :final referer) => _buildRemote(
-        ref,
         url,
         referer,
       ),
@@ -71,18 +69,12 @@ class ComposerAttachmentPreviewImage extends ConsumerWidget {
     );
   }
 
-  Widget _buildRemote(WidgetRef ref, String url, String referer) {
-    final headerBuilder = ref.watch(
-      imageRequestHeaderBuilderForRefererProvider(referer),
-    );
+  Widget _buildRemote(String url, String referer) {
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxWidth),
       child: AppImage(
         key: imageKey ?? ValueKey<String>('composer-remote-${resolution.aid}'),
-        networkSource: NetworkAppImageSource(
-          url: url,
-          headerBuilder: headerBuilder,
-        ),
+        networkSource: NetworkAppImageSource(url: url, referer: referer),
         fit: BoxFit.contain,
         placeholder: const SizedBox(
           width: 32,

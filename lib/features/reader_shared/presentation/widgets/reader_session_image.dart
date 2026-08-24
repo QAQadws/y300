@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
@@ -20,7 +19,7 @@ class ReaderSessionImage extends StatelessWidget {
     this.width,
     this.height,
     this.errorPlaceholder,
-    this.headerBuilder,
+    this.imageReferer,
     this.loadingIndicatorColor,
     this.onImageResolved,
     this.onImageFailed,
@@ -37,7 +36,7 @@ class ReaderSessionImage extends StatelessWidget {
   final double? height;
   final Widget placeholder;
   final Widget? errorPlaceholder;
-  final ImageRequestHeaderBuilder? headerBuilder;
+  final String? imageReferer;
   final Color? loadingIndicatorColor;
   final ValueChanged<Size>? onImageResolved;
   final VoidCallback? onImageFailed;
@@ -61,7 +60,7 @@ class ReaderSessionImage extends StatelessWidget {
         height: height,
         placeholder: placeholder,
         errorPlaceholder: errorPlaceholder,
-        headerBuilder: headerBuilder,
+        referer: imageReferer,
         onImageResolved: onImageResolved,
         onImageFailed: onImageFailed,
         onLocalPathResolved: sessionBinding.promoteLocalPath,

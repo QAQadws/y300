@@ -4,7 +4,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
@@ -52,7 +51,7 @@ typedef NovelReaderPaginationCoordinatorBuilder =
       required String sourceId,
       required String? threadId,
       required String? imageCacheOwnerId,
-      required ImageRequestHeaderBuilder? imageHeaderBuilder,
+      required String? imageReferer,
     });
 
 /// Command-only bridge from the reader chrome to the currently mounted paged
@@ -102,7 +101,6 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.onChapterEntryApplied,
     this.previousChapterTitle,
     this.nextChapterTitle,
-    this.imageHeaderBuilder,
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
@@ -152,7 +150,6 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   /// know about the episode list; a null title simply disables that direction.
   final String? previousChapterTitle;
   final String? nextChapterTitle;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
@@ -480,7 +477,6 @@ class _NovelReaderHtmlPagedSurfaceState
                           renderDocument: prepared.renderDocument,
                           episode: widget.episode,
                           imageReferer: widget.imageReferer,
-                          imageHeaderBuilder: widget.imageHeaderBuilder,
                           onLinkTap: widget.onLinkTap,
                           onOpenImage: widget.onOpenImage,
                           onImageFallback: widget.onImageFallback,
@@ -522,7 +518,7 @@ class _NovelReaderHtmlPagedSurfaceState
       sourceId: widget.episode.episodeId,
       threadId: widget.episode.sourceTid,
       imageOwner: widget.episode.sourceTid,
-      headerBuilder: widget.imageHeaderBuilder,
+      referer: widget.imageReferer,
       textScale: MediaQuery.textScalerOf(context).scale(1000).round(),
       builder: widget.coordinatorBuilder,
     );
@@ -537,7 +533,7 @@ class _NovelReaderHtmlPagedSurfaceState
             sourceId: widget.episode.episodeId,
             threadId: widget.episode.sourceTid,
             imageCacheOwnerId: widget.episode.sourceTid,
-            imageHeaderBuilder: widget.imageHeaderBuilder,
+            imageReferer: widget.imageReferer,
           ) ??
           _defaultCoordinator(
             context: context,
@@ -819,7 +815,7 @@ class _NovelReaderHtmlPagedSurfaceState
       sourceId: widget.episode.episodeId,
       threadId: widget.episode.sourceTid,
       imageCacheOwnerId: widget.episode.sourceTid,
-      imageHeaderBuilder: widget.imageHeaderBuilder,
+      imageReferer: widget.imageReferer,
       blockSpacingMode: blockSpacingMode,
     );
     return DefaultNovelReaderPaginationCoordinator(
@@ -1062,7 +1058,6 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     required this.episode,
     required this.imageReferer,
     required this.imageReaderBridge,
-    this.imageHeaderBuilder,
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
@@ -1093,7 +1088,6 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final ForumHtmlPreparedRenderDocument renderDocument;
   final NovelEpisodeItem episode;
   final String imageReferer;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
@@ -1278,7 +1272,6 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
                     renderDocument: widget.renderDocument,
                     episode: widget.episode,
                     imageReferer: widget.imageReferer,
-                    imageHeaderBuilder: widget.imageHeaderBuilder,
                     onLinkTap: widget.onLinkTap,
                     onOpenImage: widget.onOpenImage,
                     onImageFallback: widget.onImageFallback,
@@ -1653,7 +1646,6 @@ class _NovelReaderPagedPage extends StatelessWidget {
     required this.episode,
     required this.imageReferer,
     required this.imageReaderBridge,
-    this.imageHeaderBuilder,
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
@@ -1668,7 +1660,6 @@ class _NovelReaderPagedPage extends StatelessWidget {
   final ForumHtmlPreparedRenderDocument renderDocument;
   final NovelEpisodeItem episode;
   final String imageReferer;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
@@ -1686,7 +1677,7 @@ class _NovelReaderPagedPage extends StatelessWidget {
       preferences: htmlPreferences,
       sourceId: episode.episodeId,
       threadId: episode.sourceTid,
-      imageHeaderBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
       imageCacheOwnerId: episode.sourceTid,
       blockSpacingMode: ForumHtmlBlockSpacingMode.discuzLineDivs,
       callbacks: ForumHtmlRenderCallbacks(

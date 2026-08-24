@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
@@ -27,7 +26,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     this.decodeDisplaySize,
     required this.placeholder,
     this.errorPlaceholder,
-    this.headerBuilder,
+    this.referer,
     this.onImageResolved,
     this.onImageFailed,
     this.onLocalPathResolved,
@@ -49,7 +48,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   final Size? decodeDisplaySize;
   final Widget placeholder;
   final Widget? errorPlaceholder;
-  final ImageRequestHeaderBuilder? headerBuilder;
+  final String? referer;
   final ValueChanged<Size>? onImageResolved;
   final VoidCallback? onImageFailed;
   final ValueChanged<String>? onLocalPathResolved;
@@ -98,7 +97,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     if (oldWidget.imageProviderOverride != widget.imageProviderOverride ||
         oldWidget.remoteImageProviderOverride !=
             widget.remoteImageProviderOverride ||
-        oldWidget.headerBuilder != widget.headerBuilder) {
+        oldWidget.referer != widget.referer) {
       _restartCacheFlow();
       return;
     }
@@ -128,6 +127,8 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
           : LibraryCachedImage(
               localPath: _localPath,
               imageUrl: _allowRemoteFallback ? request?.sourceUrl : null,
+              cacheKey: request?.cacheKey,
+              referer: widget.referer ?? request?.referer,
               imageProviderOverride: widget.imageProviderOverride,
               remoteImageProviderOverride: widget.remoteImageProviderOverride,
               fit: widget.fit,
@@ -136,7 +137,6 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
               decodeDisplaySize: widget.decodeDisplaySize,
               placeholder: widget.placeholder,
               errorPlaceholder: widget.errorPlaceholder,
-              headerBuilder: widget.headerBuilder,
               fadeInDuration: widget.fadeInDuration,
               retryToken: widget.retryToken,
               onImageResolved: (size) =>

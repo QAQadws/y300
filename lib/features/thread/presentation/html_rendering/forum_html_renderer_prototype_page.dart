@@ -613,7 +613,6 @@ class _LoadedThreadDetailSampleViewState
           child: ThreadDetailContent(
             state: threadState,
             scrollController: _scrollController,
-            imageHeaderBuilder: null,
             imageReferer: widget.threadData.desktopUrl ?? '',
             onLoadPreviousPage: _showUnsupportedAction,
             onLoadNextPage: _showUnsupportedAction,

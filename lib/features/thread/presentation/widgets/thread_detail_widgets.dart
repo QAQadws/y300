@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -52,7 +51,6 @@ class ThreadDetailContent extends StatefulWidget {
     this.scrollController,
     this.highlightPostPid,
     this.targetPid,
-    required this.imageHeaderBuilder,
     required this.imageReferer,
     required this.onLoadPreviousPage,
     required this.onLoadNextPage,
@@ -77,7 +75,6 @@ class ThreadDetailContent extends StatefulWidget {
   final ScrollController? scrollController;
   final String? highlightPostPid;
   final String? targetPid;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String imageReferer;
   final VoidCallback onLoadPreviousPage;
   final VoidCallback onLoadNextPage;
@@ -472,7 +469,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
             state: widget.state,
             plan: entry.requirePlan(),
             highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
-            imageHeaderBuilder: widget.imageHeaderBuilder,
             imageReferer: widget.imageReferer,
             palette: palette,
             onOpenAuthorProfile: widget.onOpenAuthorProfile,
@@ -505,7 +501,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           plan: plan,
           highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
           palette: palette,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageReferer: widget.imageReferer,
           onOpenAuthorProfile: widget.onOpenAuthorProfile,
           onOpenPostActions: widget.onOpenPostActions,
         );
@@ -523,7 +519,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           threadId: widget.state.tid,
           plan: plan,
           highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
           imageReferer: widget.imageReferer,
           palette: palette,
           onOpenPostLink: widget.onOpenPostLink,
@@ -549,7 +544,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           state: widget.state,
           plan: plan,
           highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageReferer: widget.imageReferer,
           onOpenPostActions: widget.onOpenPostActions,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,

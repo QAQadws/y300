@@ -5,11 +5,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
-import 'package:y300/core/network/yamibo/yamibo_resource_client.dart';
+import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_chrome_repository.dart';
 
@@ -84,9 +85,21 @@ DiscuzForumHomeChromeRepository _buildRepository(
   return DiscuzForumHomeChromeRepository(
     htmlClient: YamiboHtmlClient(gateway: gateway),
     imageProbe: ForumHomeCarouselImageProbe(
-      resourceClient: YamiboResourceClient(gateway: gateway),
-      headerBuilder: const _StaticImageRequestHeaderBuilder(),
+      resourceClient: _resourceClient(gateway),
+      referenceResolver: ForumResourceReferenceResolver(
+        siteOrigin: Uri.parse('https://bbs.yamibo.com'),
+      ),
+      referer: 'https://bbs.yamibo.com/',
     ),
+  );
+}
+
+Y300ForumClientNetworkAdapter _resourceClient(YamiboHttpGateway gateway) {
+  return Y300ForumClientNetworkAdapter(
+    gateway: gateway,
+    apiOrigin: Uri.parse('https://api.yamibo.com'),
+    siteOrigin: Uri.parse('https://bbs.yamibo.com'),
+    resourceUserAgent: BrowserUserAgents.desktop,
   );
 }
 
@@ -161,18 +174,5 @@ class _ForumHomeChromeTestAdapter implements HttpClientAdapter {
     data.setUint32(16, width, Endian.big);
     data.setUint32(20, height, Endian.big);
     return bytes;
-  }
-}
-
-class _StaticImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticImageRequestHeaderBuilder();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{
-      'User-Agent': DiscuzImageRequestHeaderBuilder.browserUserAgent,
-      'Accept': DiscuzImageRequestHeaderBuilder.imageAcceptHeader,
-      'Referer': 'https://bbs.yamibo.com/',
-    };
   }
 }

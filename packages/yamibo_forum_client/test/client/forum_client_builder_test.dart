@@ -85,6 +85,29 @@ void main() {
       expect(identical(client.threadDetail, custom), isTrue);
       expect(client.sourcePlan.forumDirectory, isNull);
     });
+
+    test('uses a resource-capable network for image resources', () {
+      final network = _ResourceCapableNetwork();
+      final client = _builder(network: network).buildStandardReads();
+
+      expect(identical(client.resources, network), isTrue);
+    });
+
+    test('fails resource reads closed when no client is installed', () async {
+      final client = _builder().buildStandardReads();
+      final reference = ForumResourceReferenceResolver(
+        siteOrigin: _config.siteOrigin,
+      ).resolve('/avatar.jpg');
+
+      final result = await client.resources.open(
+        ForumResourceRequest(reference: reference!),
+      );
+
+      expect(
+        (result as ForumResourceError).failure.kind,
+        ForumResourceFailureKind.unsupported,
+      );
+    });
   });
 }
 
@@ -95,7 +118,7 @@ final _config = ForumClientConfig(
 );
 
 YamiboForumClientBuilder _builder({
-  _CountingNetwork? network,
+  ForumClientNetwork? network,
   ForumFormhashProvider? formhashProvider,
 }) {
   return YamiboForumClientBuilder(
@@ -108,7 +131,23 @@ YamiboForumClientBuilder _builder({
   );
 }
 
-final class _CountingNetwork implements ForumClientNetwork {
+final class _ResourceCapableNetwork extends _CountingNetwork
+    implements ForumResourceClient {
+  @override
+  Future<ForumResourceResult> open(ForumResourceRequest request) async {
+    return ForumResourceSuccess(
+      uri: request.reference.uri,
+      statusCode: 200,
+      content: Stream<List<int>>.value(const <int>[0xff, 0xd8, 0xff]),
+      contentLength: 3,
+      contentType: 'image/jpeg',
+      validUntil: DateTime.utc(2026, 1, 1),
+      fileExtension: '.jpg',
+    );
+  }
+}
+
+class _CountingNetwork implements ForumClientNetwork {
   int requestCount = 0;
 
   @override

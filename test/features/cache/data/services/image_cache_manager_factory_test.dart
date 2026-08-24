@@ -29,9 +29,9 @@ void main() {
         _ => null,
       },
     );
-    manager = const ImageCacheManagerFactory().create(
-      cacheDirectoryPath: cacheRoot.path,
-    );
+    manager = ImageCacheManagerFactory(
+      fileService: HttpFileService(),
+    ).create(cacheDirectoryPath: cacheRoot.path);
     await manager.emptyCache();
   });
 

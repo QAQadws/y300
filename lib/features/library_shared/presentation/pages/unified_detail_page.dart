@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -38,7 +37,7 @@ class UnifiedDetailPage extends StatefulWidget {
     required this.workId,
     required this.onOpenReader,
     required this.onOpenThread,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.pickCoverImage,
     this.shelfRefreshBus,
     this.chapterStatus,
@@ -55,7 +54,7 @@ class UnifiedDetailPage extends StatefulWidget {
   onOpenReader;
   final Future<void> Function(BuildContext context, ThreadRouteTarget target)
   onOpenThread;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
 
   /// 选择本地封面图片的回调，返回所选图片的本地路径（取消返回 null）。
   ///
@@ -431,7 +430,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         moduleKey: widget.adapter.moduleKey,
                         topInset: topInset,
                         palette: detailPalette,
-                        imageHeaderBuilder: widget.imageHeaderBuilder,
+                        imageReferer: widget.imageReferer,
                         onToggleShelf: () => _showMoveCategorySheet(),
                         onRefresh: _refreshAndShowFeedback,
                         onRefreshLongPress: _supportsFullRefresh

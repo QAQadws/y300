@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_content_projection_controller.dart';
@@ -26,12 +25,12 @@ class ComicCommentTailSurface extends ChangeNotifier
     required ComicCommentSessionController session,
     required ComicCommentContentProjectionController
     contentProjectionController,
-    required ImageRequestHeaderBuilder? imageHeaderBuilder,
+    required String? imageReferer,
     bool hasNextEpisode = false,
     FutureOr<void> Function()? onAdvanceEpisode,
   }) : _session = session,
        _contentProjectionController = contentProjectionController,
-       _imageHeaderBuilder = imageHeaderBuilder,
+       _imageReferer = imageReferer,
        _hasNextEpisode = hasNextEpisode,
        _onAdvanceEpisode = onAdvanceEpisode {
     _session.addListener(_onSessionChanged);
@@ -40,7 +39,7 @@ class ComicCommentTailSurface extends ChangeNotifier
 
   final ComicCommentSessionController _session;
   final ComicCommentContentProjectionController _contentProjectionController;
-  final ImageRequestHeaderBuilder? _imageHeaderBuilder;
+  final String? _imageReferer;
   bool _hasNextEpisode;
   FutureOr<void> Function()? _onAdvanceEpisode;
 
@@ -109,7 +108,7 @@ class ComicCommentTailSurface extends ChangeNotifier
     final list = ComicCommentListSurface(
       sourceTid: _session.key.sourceTid,
       projection: _projectionFor(result),
-      imageHeaderBuilder: _imageHeaderBuilder,
+      imageReferer: _imageReferer,
       onRetry: actions.onRetry,
       renderContext: _renderContextFor(context),
     );
@@ -167,7 +166,7 @@ class ComicCommentTailSurface extends ChangeNotifier
           child: ComicCommentListItem(
             projection: itemProjection,
             sourceTid: _session.key.sourceTid,
-            imageHeaderBuilder: _imageHeaderBuilder,
+            imageReferer: _imageReferer,
             renderContext: _renderContextFor(context),
           ),
         );
@@ -280,7 +279,7 @@ class ComicCommentTailSurface extends ChangeNotifier
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
     final identity = (
       sourceTid: _session.key.sourceTid.trim(),
-      imageHeaderBuilder: _imageHeaderBuilder,
+      imageReferer: _imageReferer,
       brightness: Theme.of(context).brightness,
       palette: palette.card.toARGB32(),
     );
@@ -288,7 +287,7 @@ class ComicCommentTailSurface extends ChangeNotifier
       _renderContextIdentity = identity;
       _renderContext = ThreadPostRenderContext(
         palette: palette,
-        imageHeaderBuilder: _imageHeaderBuilder,
+        imageReferer: _imageReferer,
         renderOwnerFor: (post) => ThreadPostRenderContext.commentRenderOwner(
           sourceTid: _session.key.sourceTid,
           pid: post.pid,

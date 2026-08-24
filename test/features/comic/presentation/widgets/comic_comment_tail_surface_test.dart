@@ -33,7 +33,7 @@ void main() {
     final tail = ComicCommentTailSurface(
       session: session,
       contentProjectionController: contentProjection,
-      imageHeaderBuilder: null,
+      imageReferer: null,
     );
     addTearDown(tail.dispose);
     addTearDown(contentProjection.dispose);
@@ -87,7 +87,7 @@ void main() {
     final tail = ComicCommentTailSurface(
       session: session,
       contentProjectionController: contentProjection,
-      imageHeaderBuilder: null,
+      imageReferer: null,
     );
     addTearDown(tail.dispose);
     addTearDown(contentProjection.dispose);
@@ -112,7 +112,7 @@ void main() {
       final tail = ComicCommentTailSurface(
         session: session,
         contentProjectionController: contentProjection,
-        imageHeaderBuilder: null,
+        imageReferer: null,
         hasNextEpisode: true,
         onAdvanceEpisode: () => advances++,
       );
@@ -139,7 +139,7 @@ void main() {
     final tail = ComicCommentTailSurface(
       session: session,
       contentProjectionController: contentProjection,
-      imageHeaderBuilder: null,
+      imageReferer: null,
       hasNextEpisode: true,
       onAdvanceEpisode: () {},
     );
@@ -184,7 +184,7 @@ void main() {
     final tail = ComicCommentTailSurface(
       session: session,
       contentProjectionController: contentProjection,
-      imageHeaderBuilder: null,
+      imageReferer: null,
     );
     addTearDown(tail.dispose);
     addTearDown(contentProjection.dispose);

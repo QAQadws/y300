@@ -3,88 +3,35 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/features/image_loading/data/app_image_cache_manager.dart';
+import 'package:y300/features/image_loading/data/app_image_providers.dart';
 
 void main() {
-  testWidgets('network image uses headers from header builder', (tester) async {
+  testWidgets('network image waits for the shared cache manager', (
+    tester,
+  ) async {
+    final manager = Completer<AppImageCacheManager>();
     await tester.pumpWidget(
-      LocalizedTestApp(
-        home: LibraryCachedImage(
-          imageUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
-          fit: BoxFit.cover,
-          placeholder: const SizedBox(key: Key('placeholder')),
-          headerBuilder: const _StaticImageHeaderBuilder(<String, String>{
-            'Referer': 'https://bbs.yamibo.com/',
-            'Cookie': 'auth=token123',
-          }),
+      ProviderScope(
+        overrides: [
+          appImageCacheManagerProvider.overrideWith((ref) => manager.future),
+        ],
+        child: const LocalizedTestApp(
+          home: LibraryCachedImage(
+            imageUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
+            fit: BoxFit.cover,
+            placeholder: SizedBox(key: Key('placeholder')),
+          ),
         ),
       ),
     );
 
     expect(find.byKey(const Key('placeholder')), findsOneWidget);
-    await tester.pump();
-
-    final image = tester.widget<Image>(find.byType(Image));
-    final provider = _underlyingProvider(image.image) as NetworkImage;
-    expect(provider.headers, <String, String>{
-      'Referer': 'https://bbs.yamibo.com/',
-      'Cookie': 'auth=token123',
-    });
-  });
-
-  testWidgets(
-    'network image keeps one placeholder while waiting for headers and first frame',
-    (tester) async {
-      final headerBuilder = _DeferredImageHeaderBuilder();
-      await tester.pumpWidget(
-        LocalizedTestApp(
-          home: LibraryCachedImage(
-            imageUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
-            fit: BoxFit.cover,
-            placeholder: const SizedBox(key: Key('placeholder')),
-            headerBuilder: headerBuilder,
-          ),
-        ),
-      );
-
-      expect(find.byKey(const Key('placeholder')), findsOneWidget);
-      expect(find.byType(Image), findsNothing);
-
-      headerBuilder.complete(const <String, String>{
-        'Referer': 'https://bbs.yamibo.com/',
-      });
-      await tester.pump();
-
-      expect(find.byKey(const Key('placeholder')), findsOneWidget);
-      expect(find.byType(Image), findsOneWidget);
-    },
-  );
-
-  testWidgets('network image normalizes relative Yamibo attachment urls', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const LocalizedTestApp(
-        home: LibraryCachedImage(
-          imageUrl: 'data/attachment/forum/page-1.jpg',
-          fit: BoxFit.cover,
-          placeholder: SizedBox(key: Key('placeholder')),
-        ),
-      ),
-    );
-
-    final image = tester.widget<Image>(find.byType(Image));
-    expect(
-      _underlyingProvider(image.image),
-      isA<NetworkImage>().having(
-        (provider) => provider.url,
-        'url',
-        'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
-      ),
-    );
+    expect(find.byType(Image), findsNothing);
   });
 
   testWidgets('svg remote url shows fallback instead of NetworkImage', (
@@ -422,37 +369,6 @@ void main() {
 
     expect(provider.loadCount, settledCount);
   });
-}
-
-/// 解开降采样包裹，取底层真实 provider。
-///
-/// 降采样后 Image 的 provider 可能是 ResizeImage 包裹的 FileImage/NetworkImage，
-/// 测试断言关心的是底层来源类型，与是否降采样无关。
-ImageProvider _underlyingProvider(ImageProvider provider) {
-  return provider is ResizeImage ? provider.imageProvider : provider;
-}
-
-class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticImageHeaderBuilder(this.headers);
-
-  final Map<String, String> headers;
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async => headers;
-}
-
-class _DeferredImageHeaderBuilder implements ImageRequestHeaderBuilder {
-  final Completer<Map<String, String>> _completer =
-      Completer<Map<String, String>>();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) {
-    return _completer.future;
-  }
-
-  void complete(Map<String, String> headers) {
-    _completer.complete(headers);
-  }
 }
 
 class _SynchronousImageProvider

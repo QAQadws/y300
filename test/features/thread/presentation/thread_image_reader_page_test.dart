@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,7 +82,7 @@ void main() {
       await tester.tap(
         find.byKey(const Key('shared-reader-bottom-action-display')),
       );
-      await tester.pumpAndSettle();
+      await _pumpReaderUiTransition(tester);
 
       tester
           .widget<Slider>(
@@ -401,7 +403,7 @@ void main() {
           find.byKey(const Key('thread-image-reader-page-view')),
           Offset(mode == 'ltr' ? -900 : 900, 0),
         );
-        await tester.pumpAndSettle();
+        await _pumpReaderUiTransition(tester);
         expect(controller.page, closeTo(3, 0.01));
         expect(
           tester
@@ -616,14 +618,14 @@ void main() {
         find.byKey(const Key('thread-image-reader-page-view')),
         const Offset(-900, 0),
       );
-      await tester.pumpAndSettle();
+      await _pumpReaderUiTransition(tester);
       expect(_pageController(tester).page, closeTo(3, 0.01));
 
       await _openReaderMenu(tester);
       await tester.tap(
         find.byKey(const Key('shared-reader-bottom-action-display')),
       );
-      await tester.pumpAndSettle();
+      await _pumpReaderUiTransition(tester);
       final l10n = AppLocalizations.of(
         tester.element(
           find.byKey(const Key('comic-reader-display-settings-sheet')),
@@ -636,7 +638,7 @@ void main() {
           find.byKey(const Key('comic-reader-display-settings-sheet')),
         ),
       ).pop();
-      await tester.pumpAndSettle();
+      await _pumpReaderUiTransition(tester);
 
       final pageView = tester.widget<PageView>(
         find.byKey(const Key('thread-image-reader-page-view')),
@@ -742,7 +744,7 @@ void main() {
     );
     final zoomedPage = _pageController(tester).page;
     await tester.dragFrom(center, const Offset(-900, 0));
-    await tester.pumpAndSettle();
+    await _pumpReaderUiTransition(tester);
     expect(_pageController(tester).page, closeTo(zoomedPage!, 0.01));
 
     await tester.tapAt(center);
@@ -779,7 +781,7 @@ void main() {
       find.byKey(const Key('thread-image-reader-page-view')),
       const Offset(-900, 0),
     );
-    await tester.pumpAndSettle();
+    await _pumpReaderUiTransition(tester);
     expect(_pageController(tester).page, closeTo(3, 0.01));
   });
 }
@@ -885,10 +887,18 @@ Future<void> _openReaderMenu(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 260));
 }
 
+Future<void> _pumpReaderUiTransition(WidgetTester tester) async {
+  // Reader images may keep a loading indicator active independently from the
+  // page, zoom, or settings animation under test.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.pump(const Duration(milliseconds: 32));
+}
+
 Future<void> _tapReaderZone(WidgetTester tester, Key key) async {
   await tester.tapAt(tester.getCenter(find.byKey(key)));
   await tester.pump(const Duration(milliseconds: 330));
-  await tester.pumpAndSettle();
+  await _pumpReaderUiTransition(tester);
 }
 
 class _RecordingContinuousImageDiagnosticRecorder
@@ -911,7 +921,11 @@ class _RecordingImageCacheService implements ImageCacheService {
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
     requests.add(request);
-    return CachedImageResult(success: true, cacheKey: request.cacheKey);
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: io.File('assets/noavatar.png').absolute.path,
+    );
   }
 
   @override
@@ -968,7 +982,7 @@ class _RecordingForumImagePrecacheService implements ForumImagePrecacheService {
     return ForumImagePrecacheResult(
       success: true,
       cacheKey: spec.cacheKey,
-      localPath: '/cache/${spec.imageIndex}.jpg',
+      localPath: io.File('assets/noavatar.png').absolute.path,
     );
   }
 
@@ -983,7 +997,7 @@ class _RecordingForumImagePrecacheService implements ForumImagePrecacheService {
       success: true,
       decoded: true,
       cacheKey: spec.cacheKey,
-      localPath: '/cache/${spec.imageIndex}.jpg',
+      localPath: io.File('assets/noavatar.png').absolute.path,
     );
   }
 }

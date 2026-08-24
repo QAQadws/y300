@@ -3,7 +3,6 @@ import 'package:logger/logger.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/core/network/yamibo/yamibo.dart';
@@ -97,21 +96,16 @@ final yamiboResourceClientProvider = Provider<YamiboResourceClient>((ref) {
   return YamiboResourceClient(gateway: ref.watch(yamiboHttpGatewayProvider));
 });
 
-final imageRequestHeaderBuilderProvider = Provider<ImageRequestHeaderBuilder>((
-  ref,
-) {
-  return DiscuzImageRequestHeaderBuilder(
-    cookieStore: ref.watch(cookieStoreProvider),
-  );
+final forumImageRefererProvider = Provider<String>((ref) {
+  return '${AppConfig.siteBaseUrl}/';
 });
 
-final imageRequestHeaderBuilderForRefererProvider =
-    Provider.family<ImageRequestHeaderBuilder, String?>((ref, referer) {
-      final normalizedReferer = referer?.trim();
-      return DiscuzImageRequestHeaderBuilder(
-        cookieStore: ref.watch(cookieStoreProvider),
-        referer: normalizedReferer == null || normalizedReferer.isEmpty
-            ? '${AppConfig.siteBaseUrl}/'
-            : normalizedReferer,
-      );
-    });
+final forumImageRefererForSourceProvider = Provider.family<String, String?>((
+  ref,
+  referer,
+) {
+  final normalized = referer?.trim();
+  return normalized == null || normalized.isEmpty
+      ? ref.watch(forumImageRefererProvider)
+      : normalized;
+});

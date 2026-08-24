@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
@@ -138,8 +139,11 @@ final forumHomeChromeRepositoryProvider = Provider<ForumHomeChromeRepository>((
   return DiscuzForumHomeChromeRepository(
     htmlClient: ref.watch(yamiboHtmlClientProvider),
     imageProbe: ForumHomeCarouselImageProbe(
-      resourceClient: ref.watch(yamiboResourceClientProvider),
-      headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+      resourceClient: ref.watch(yamiboForumResourceClientProvider),
+      referenceResolver: ref.watch(
+        yamiboForumResourceReferenceResolverProvider,
+      ),
+      referer: ref.watch(forumImageRefererProvider),
     ),
   );
 });

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/profile/data/models/my_message_models.dart';
@@ -29,7 +28,7 @@ class MyMessageCenterPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncData = ref.watch(myMessageCenterProvider);
-    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final imageReferer = ref.watch(forumImageRefererProvider);
     final palette = _MessageCenterPalette.resolve(Theme.of(context));
 
     return Scaffold(
@@ -41,7 +40,7 @@ class MyMessageCenterPage extends ConsumerWidget {
         data: (data) => _MessageCenterContent(
           data: data,
           palette: palette,
-          imageHeaderBuilder: imageHeaderBuilder,
+          imageReferer: imageReferer,
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => _MessageCenterError(
@@ -58,12 +57,12 @@ class _MessageCenterContent extends StatelessWidget {
   const _MessageCenterContent({
     required this.data,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
   });
 
   final MyMessageCenterData data;
   final _MessageCenterPalette palette;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +97,7 @@ class _MessageCenterContent extends StatelessWidget {
                 _NotificationList(
                   page: data.notifications,
                   palette: palette,
-                  imageHeaderBuilder: imageHeaderBuilder,
+                  imageReferer: imageReferer,
                 ),
                 _PrivateMessageList(
                   page: data.privateMessages,
@@ -117,12 +116,12 @@ class _NotificationList extends StatelessWidget {
   const _NotificationList({
     required this.page,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
   });
 
   final MyNotificationPage page;
   final _MessageCenterPalette palette;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +155,7 @@ class _NotificationList extends StatelessWidget {
               sourceId: 'my-notification-${item.id}',
               imageCacheOwnerId: item.id,
               contentImageKind: ForumImageKind.blogInline,
-              imageHeaderBuilder: imageHeaderBuilder,
+              imageReferer: imageReferer,
               surfaceColor: palette.card,
               foregroundColor: palette.body,
               onOpenLink: (url) => ScaffoldMessenger.of(

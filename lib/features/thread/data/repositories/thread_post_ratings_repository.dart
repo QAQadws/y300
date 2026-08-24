@@ -3,7 +3,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
@@ -226,7 +226,7 @@ final class DiscuzThreadPostRatingsRepository
         pageKind: 'thread.detail',
       ),
       headers: <String, String>{
-        'User-Agent': DiscuzImageRequestHeaderBuilder.browserUserAgent,
+        'User-Agent': BrowserUserAgents.desktop,
         'Accept':
             'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',

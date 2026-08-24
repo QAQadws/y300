@@ -15,7 +15,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
     required this.plan,
     required this.highlighted,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.onOpenAuthorProfile,
     required this.onOpenPostActions,
   });
@@ -27,7 +27,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
   final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
   final ThreadDetailNativePalette palette;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
@@ -69,7 +69,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
                   author: post.author,
                   authorId: post.authorId,
                   avatarUrl: post.avatarUrl,
-                  imageHeaderBuilder: imageHeaderBuilder,
+                  imageReferer: imageReferer,
                   onTap: post.authorId.trim().isEmpty
                       ? null
                       : () => onOpenAuthorProfile(sourcePost),
@@ -105,7 +105,6 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.threadId,
     required this.plan,
     required this.highlighted,
-    required this.imageHeaderBuilder,
     required this.imageReferer,
     required this.palette,
     required this.onOpenPostLink,
@@ -122,7 +121,6 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final String threadId;
   final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String imageReferer;
   final ThreadDetailNativePalette palette;
   final ValueChanged<String> onOpenPostLink;
@@ -176,7 +174,6 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             threadId: threadId,
             imageReferer: imageReferer,
             plan: plan,
-            imageHeaderBuilder: imageHeaderBuilder,
             onOpenPostLink: onOpenPostLink,
             onOpenPostImage: onOpenPostImages == null
                 ? null
@@ -207,7 +204,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
     required this.state,
     required this.plan,
     required this.highlighted,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.onOpenPostActions,
     required this.onOpenPostLink,
     required this.onOpenCommentAuthorProfile,
@@ -223,7 +220,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
   final ThreadDetailPageState state;
   final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
   final ValueChanged<String> onOpenPostLink;
@@ -295,7 +292,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
               if (post.poll != null) const SizedBox(height: 10),
               ThreadPostCommentSection(
                 comments: post.comments,
-                imageHeaderBuilder: imageHeaderBuilder,
+                imageReferer: imageReferer,
                 palette: palette,
                 onOpenAuthorProfile: (displayComment) {
                   final index = post.comments.indexOf(displayComment);
@@ -335,7 +332,6 @@ class _ThreadPostCardEntry extends StatefulWidget {
     required this.state,
     required this.plan,
     required this.highlighted,
-    required this.imageHeaderBuilder,
     required this.imageReferer,
     required this.palette,
     required this.onOpenAuthorProfile,
@@ -361,7 +357,6 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ThreadDetailPageState state;
   final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final String imageReferer;
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
@@ -430,7 +425,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           plan: widget.plan,
           highlighted: widget.highlighted,
           palette: widget.palette,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageReferer: widget.imageReferer,
           onOpenAuthorProfile: widget.onOpenAuthorProfile,
           onOpenPostActions: widget.onOpenPostActions,
         ),
@@ -441,7 +436,6 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           threadId: widget.state.tid,
           plan: widget.plan,
           highlighted: widget.highlighted,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
           imageReferer: widget.imageReferer,
           palette: widget.palette,
           onOpenPostLink: widget.onOpenPostLink,
@@ -461,7 +455,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           state: widget.state,
           plan: widget.plan,
           highlighted: widget.highlighted,
-          imageHeaderBuilder: widget.imageHeaderBuilder,
+          imageReferer: widget.imageReferer,
           onOpenPostActions: widget.onOpenPostActions,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
@@ -547,7 +541,7 @@ class ThreadPostCard extends StatelessWidget {
     required this.post,
     this.state,
     this.highlighted = false,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     this.onOpenAuthorProfile,
     this.onCopyActionUrl,
     this.onOpenPostLink,
@@ -566,7 +560,7 @@ class ThreadPostCard extends StatelessWidget {
   final ThreadPost post;
   final ThreadDetailPageState? state;
   final bool highlighted;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ValueChanged<ThreadPost>? onOpenAuthorProfile;
   final void Function(String label, String url)? onCopyActionUrl;
   final ValueChanged<String>? onOpenPostLink;
@@ -594,10 +588,12 @@ class ThreadPostCard extends StatelessWidget {
     final threadId = renderOwner == null || renderOwner.trim().isEmpty
         ? post.pid
         : renderOwner;
-    final imageReferer =
-        renderContext?.imageRefererFor(post) ?? detailState?.desktopUrl ?? '';
-    final resolvedImageHeaderBuilder =
-        renderContext?.imageHeaderBuilder ?? imageHeaderBuilder;
+    final contextualReferer = renderContext?.imageRefererFor(post).trim();
+    final resolvedImageReferer = contextualReferer?.isNotEmpty == true
+        ? contextualReferer!
+        : (detailState?.desktopUrl?.trim().isNotEmpty == true
+              ? detailState!.desktopUrl!.trim()
+              : imageReferer);
     final plan =
         renderContext?.planFor(post) ??
         const ThreadPostBodyRenderPlanner().plan(post.message);
@@ -656,7 +652,7 @@ class ThreadPostCard extends StatelessWidget {
                 author: post.author,
                 authorId: post.authorId,
                 avatarUrl: post.avatarUrl,
-                imageHeaderBuilder: resolvedImageHeaderBuilder,
+                imageReferer: resolvedImageReferer,
                 avatarFallbackPolicy: avatarFallbackPolicy,
                 onTap:
                     post.authorId.trim().isEmpty ||
@@ -694,9 +690,8 @@ class ThreadPostCard extends StatelessWidget {
               key: Key('thread-post-${post.pid}'),
               post: post,
               threadId: threadId,
-              imageReferer: imageReferer,
+              imageReferer: resolvedImageReferer ?? '',
               plan: plan,
-              imageHeaderBuilder: resolvedImageHeaderBuilder,
               onOpenPostLink: linkCallback,
               onOpenPostImage: imageOpenCallback,
               theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
@@ -745,7 +740,7 @@ class ThreadPostCard extends StatelessWidget {
             const SizedBox(height: 10),
             ThreadPostCommentSection(
               comments: post.comments,
-              imageHeaderBuilder: resolvedImageHeaderBuilder,
+              imageReferer: resolvedImageReferer,
               palette: resolvedPalette,
               onOpenAuthorProfile: commentAuthorProfileCallback,
             ),

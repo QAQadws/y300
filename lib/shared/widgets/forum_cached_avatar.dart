@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -19,7 +18,7 @@ class ForumCachedAvatar extends ConsumerWidget {
     required this.ownerId,
     required this.ownerType,
     required this.size,
-    this.headerBuilder,
+    this.imageReferer,
     this.fallbackPolicy = ForumAvatarFallbackPolicy.neutralSurface,
   });
 
@@ -27,7 +26,7 @@ class ForumCachedAvatar extends ConsumerWidget {
   final String ownerId;
   final ImageCacheOwnerType ownerType;
   final double size;
-  final ImageRequestHeaderBuilder? headerBuilder;
+  final String? imageReferer;
   final ForumAvatarFallbackPolicy fallbackPolicy;
 
   @override
@@ -58,6 +57,7 @@ class ForumCachedAvatar extends ConsumerWidget {
                   url: uri,
                   ownerId: ownerId.trim().isEmpty ? url : ownerId.trim(),
                   ownerType: ownerType,
+                  referer: imageReferer,
                   displayWidth: size,
                   displayHeight: size,
                   allowReaderOpen: false,
@@ -74,7 +74,7 @@ class ForumCachedAvatar extends ConsumerWidget {
             height: size,
             placeholder: fallback,
             errorPlaceholder: unavailableAvatar,
-            headerBuilder: headerBuilder,
+            referer: imageReferer,
             fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
           )
         : unavailableAvatar;

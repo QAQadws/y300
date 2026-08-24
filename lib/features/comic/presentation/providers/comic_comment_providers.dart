@@ -61,7 +61,7 @@ final comicCommentTailSurfaceProvider = Provider.autoDispose
         contentProjectionController: ref.watch(
           comicCommentContentProjectionControllerProvider(key),
         ),
-        imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+        imageReferer: ref.watch(forumImageRefererProvider),
       );
       ref.onDispose(surface.dispose);
       return surface;

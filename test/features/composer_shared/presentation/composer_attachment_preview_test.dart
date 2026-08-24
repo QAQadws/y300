@@ -3,8 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_attachment_preview.dart';
 import 'package:y300/features/image_loading/presentation/app_image.dart';
@@ -30,7 +28,6 @@ void main() {
   });
 
   testWidgets('renders a remote resolver source with AppImage', (tester) async {
-    final headerBuilder = _FakeImageRequestHeaderBuilder();
     await tester.pumpWidget(
       _build(
         const ComposerAttachmentResolution(
@@ -41,7 +38,6 @@ void main() {
             referer: 'https://bbs.yamibo.com/forum.php?mod=post',
           ),
         ),
-        headerBuilder: headerBuilder,
       ),
     );
 
@@ -50,17 +46,15 @@ void main() {
       image.networkSource?.resolvedUrl,
       'https://bbs.yamibo.com/data/attachment/123.jpg',
     );
-    expect(image.networkSource?.headerBuilder, same(headerBuilder));
-    final headers = await image.networkSource!.headerBuilder!.buildHeaders(
-      image.networkSource!.resolvedUrl,
+    expect(
+      image.networkSource?.referer,
+      'https://bbs.yamibo.com/forum.php?mod=post',
     );
-    expect(headers, <String, String>{'Referer': 'test-referer'});
   });
 
   testWidgets('canonicalizes Discuz attachment URL before AppImage requests it', (
     tester,
   ) async {
-    final headerBuilder = _FakeImageRequestHeaderBuilder();
     await tester.pumpWidget(
       _build(
         const ComposerAttachmentResolution(
@@ -72,7 +66,6 @@ void main() {
             referer: 'https://bbs.yamibo.com/forum.php?mod=post',
           ),
         ),
-        headerBuilder: headerBuilder,
       ),
     );
 
@@ -81,22 +74,18 @@ void main() {
       image.networkSource?.resolvedUrl,
       'https://bbs.yamibo.com/data/attachment/forum/202607/23/145701yziurruujso97oud.jpg',
     );
-    expect(image.networkSource?.headerBuilder, same(headerBuilder));
+    expect(
+      image.networkSource?.referer,
+      'https://bbs.yamibo.com/forum.php?mod=post',
+    );
   });
 }
 
 Widget _build(
   ComposerAttachmentResolution resolution, {
   ComposerLocalFileExists? localFileExists,
-  ImageRequestHeaderBuilder? headerBuilder,
 }) {
   return ProviderScope(
-    overrides: [
-      if (headerBuilder != null)
-        imageRequestHeaderBuilderForRefererProvider(
-          'https://bbs.yamibo.com/forum.php?mod=post',
-        ).overrideWithValue(headerBuilder),
-    ],
     child: LocalizedTestApp(
       home: Scaffold(
         body: ComposerAttachmentPreviewImage(
@@ -110,12 +99,4 @@ Widget _build(
       ),
     ),
   );
-}
-
-final class _FakeImageRequestHeaderBuilder
-    implements ImageRequestHeaderBuilder {
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{'Referer': 'test-referer'};
-  }
 }

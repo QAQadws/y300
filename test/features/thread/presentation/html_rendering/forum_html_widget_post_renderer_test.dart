@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
@@ -14,6 +13,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
@@ -569,18 +569,24 @@ void main() {
     tester,
   ) async {
     final cacheService = _RecordingImageCacheService();
-    const headerBuilder = _StaticImageHeaderBuilder();
+    const referer = 'https://bbs.yamibo.com/';
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(cacheService),
+          appImageCacheManagerProvider.overrideWith(
+            (ref) async =>
+                throw StateError('intentional cache manager failure'),
+          ),
+        ],
         child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
               theme: forumHtmlTestTheme,
               sourceId: 'cached-thread-image',
               threadId: '573279',
-              imageHeaderBuilder: headerBuilder,
+              imageReferer: referer,
               html:
                   '<img src="data/attachment/forum/page-1.jpg" '
                   'width="640" height="480">',
@@ -595,7 +601,7 @@ void main() {
       find.byType(CachedLibraryImage).first,
     );
 
-    expect(image.headerBuilder, same(headerBuilder));
+    expect(image.referer, referer);
     expect(image.showDelayedLoadingIndicator, isTrue);
     expect(image.loadingIndicatorDelay, const Duration(milliseconds: 300));
     expect(image.request?.role, ImageCacheRole.threadInline);
@@ -624,7 +630,12 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(cacheService),
+          appImageCacheManagerProvider.overrideWith(
+            (ref) async => throw StateError('fixture network failure'),
+          ),
+        ],
         child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
@@ -678,7 +689,12 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(cacheService),
+          appImageCacheManagerProvider.overrideWith(
+            (ref) async => throw StateError('fixture network failure'),
+          ),
+        ],
         child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
@@ -696,10 +712,15 @@ void main() {
     // 测试环境的 HttpClient 对所有请求返回失败，图片必然走到失败占位。
     await tester.pumpAndSettle();
 
-    expect(find.text('图片加载失败'), findsOneWidget);
     expect(cacheService.requests, hasLength(1));
+    final retryButton = find.byKey(
+      ValueKey<String>(
+        'thread-post-image-retry-${cacheService.requests.single.cacheKey}',
+      ),
+    );
+    expect(retryButton, findsOneWidget);
 
-    await tester.tap(find.widgetWithText(OutlinedButton, '重试'));
+    await tester.tap(retryButton);
     await tester.pumpAndSettle();
 
     expect(cacheService.requests, hasLength(2));
@@ -1534,15 +1555,6 @@ TextSpan? _findTextSpanContainingIn(InlineSpan span, String text) {
     }
   }
   return null;
-}
-
-class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticImageHeaderBuilder();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{'Referer': 'https://bbs.yamibo.com/'};
-  }
 }
 
 class _RecordingForumImageRequestResolver implements ForumImageRequestResolver {

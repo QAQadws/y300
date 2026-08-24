@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
@@ -20,6 +18,7 @@ import 'package:y300/features/thread/presentation/post_edit_composer_page.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 import 'package:y300/features/thread/presentation/widgets/post_edit_attachment_panel.dart';
 import 'package:y300/features/image_loading/presentation/app_image.dart';
+import 'package:y300/features/image_loading/data/app_image_providers.dart';
 
 import '../../../test_support/localized_test_app.dart';
 
@@ -114,11 +113,10 @@ void main() {
     );
   });
 
-  testWidgets('message updates keep remote attachment header resolution', (
-    tester,
-  ) async {
+  testWidgets('message updates keep remote attachment referer', (tester) async {
     final results = <Object?>[];
-    final headers = _CountingImageHeaderBuilder();
+    const referer =
+        'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=5&tid=20&pid=30';
     final args = _args(
       _snapshot(
         message: '[attachimg]12[/attachimg]',
@@ -131,14 +129,15 @@ void main() {
         ],
       ),
     );
-    await tester.pumpWidget(
-      _buildApp(args: args, results: results, imageHeaderBuilder: headers),
-    );
+    await tester.pumpWidget(_buildApp(args: args, results: results));
     await _openEditor(tester);
     await tester.pump();
 
     expect(find.byType(AppImage), findsOneWidget);
-    expect(headers.callCount, 1);
+    expect(
+      tester.widget<AppImage>(find.byType(AppImage)).networkSource?.referer,
+      referer,
+    );
 
     final container = ProviderScope.containerOf(
       tester.element(find.byType(PostEditComposerPage)),
@@ -150,7 +149,10 @@ void main() {
     await tester.pump();
 
     expect(find.byType(AppImage), findsOneWidget);
-    expect(headers.callCount, 1);
+    expect(
+      tester.widget<AppImage>(find.byType(AppImage)).networkSource?.referer,
+      referer,
+    );
   });
 
   testWidgets('first-post edit shows the server subject', (tester) async {
@@ -224,7 +226,6 @@ void main() {
 Widget _buildApp({
   required PostEditComposerArgs args,
   required List<Object?> results,
-  ImageRequestHeaderBuilder? imageHeaderBuilder,
 }) {
   return ProviderScope(
     overrides: [
@@ -238,26 +239,15 @@ Widget _buildApp({
       composerImageUploadCoordinatorProvider.overrideWithValue(
         const _NoopUploadCoordinator(),
       ),
-      if (imageHeaderBuilder != null)
-        imageRequestHeaderBuilderForRefererProvider.overrideWith(
-          (ref, referer) => imageHeaderBuilder,
-        ),
+      appImageCacheManagerProvider.overrideWith(
+        (ref) async => throw StateError('network images are not loaded here'),
+      ),
       stickerGroupsProvider.overrideWith((_) async => const []),
     ],
     child: LocalizedTestApp(
       home: _PostEditLauncher(args: args, results: results),
     ),
   );
-}
-
-class _CountingImageHeaderBuilder implements ImageRequestHeaderBuilder {
-  int callCount = 0;
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    callCount += 1;
-    return const <String, String>{'Referer': 'https://bbs.yamibo.com/'};
-  }
 }
 
 Future<void> _openEditor(WidgetTester tester) async {

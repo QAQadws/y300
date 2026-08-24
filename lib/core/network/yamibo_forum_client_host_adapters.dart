@@ -11,15 +11,113 @@ import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 
 /// Routes package reads through Y300's single Cookie/session/WAF transport.
 final class Y300ForumClientNetworkAdapter
-    implements forum.ForumClientNetwork {
+    implements forum.ForumClientNetwork, forum.ForumResourceClient {
   const Y300ForumClientNetworkAdapter({
     required YamiboHttpGateway gateway,
     required Uri apiOrigin,
+    required Uri siteOrigin,
+    required String resourceUserAgent,
   }) : _gateway = gateway,
-       _apiOrigin = apiOrigin;
+       _apiOrigin = apiOrigin,
+       _siteOrigin = siteOrigin,
+       _resourceUserAgent = resourceUserAgent;
 
   final YamiboHttpGateway _gateway;
   final Uri _apiOrigin;
+  final Uri _siteOrigin;
+  final String _resourceUserAgent;
+
+  @override
+  Future<forum.ForumResourceResult> open(
+    forum.ForumResourceRequest request,
+  ) async {
+    final reference =
+        forum.ForumResourceReferenceResolver(siteOrigin: _siteOrigin).resolve(
+          request.reference.uri.toString(),
+          referer: request.reference.referer,
+          kind: request.reference.kind,
+        );
+    if (reference == null || reference.kind != forum.ForumResourceKind.image) {
+      return const forum.ForumResourceError(
+        forum.ForumResourceFailure(
+          kind: forum.ForumResourceFailureKind.invalidReference,
+          code: 'invalid_resource_reference',
+        ),
+      );
+    }
+    final cancelToken = CancelToken();
+    final cancellation = request.cancellation;
+    if (cancellation != null) {
+      unawaited(
+        cancellation.whenCancelled.then((_) {
+          if (!cancelToken.isCancelled) cancelToken.cancel('request_cancelled');
+        }),
+      );
+    }
+    final result = await _gateway.openImageResource(
+      reference.uri,
+      referer: reference.referer,
+      userAgent: _resourceUserAgent,
+      ifNoneMatch: request.ifNoneMatch,
+      cancelToken: cancelToken,
+    );
+    return switch (result) {
+      ApiSuccess<YamiboResourceStreamResponse>(:final data) =>
+        forum.ForumResourceSuccess(
+          uri: data.uri,
+          statusCode: data.statusCode,
+          content: _mapResourceStream(data.content),
+          contentLength: data.contentLength,
+          contentType: data.contentType,
+          eTag: data.eTag,
+          validUntil: data.validUntil,
+          fileExtension: data.fileExtension,
+        ),
+      ApiFailure<YamiboResourceStreamResponse>(:final error) =>
+        forum.ForumResourceError(_mapResourceError(error)),
+    };
+  }
+
+  Stream<List<int>> _mapResourceStream(Stream<List<int>> source) async* {
+    try {
+      yield* source;
+    } on YamiboResourceStreamException catch (error) {
+      throw forum.ForumResourceStreamException(
+        failure: _mapResourceError(error.error),
+        bytesReceived: error.bytesReceived,
+      );
+    }
+  }
+
+  forum.ForumResourceFailure _mapResourceError(ApiError error) {
+    final code = error.code ?? error.type.name;
+    final kind = switch (code) {
+      'invalid_resource_reference' =>
+        forum.ForumResourceFailureKind.invalidReference,
+      'resource_redirect_rejected' =>
+        forum.ForumResourceFailureKind.redirectRejected,
+      'resource_not_found' => forum.ForumResourceFailureKind.notFound,
+      'resource_is_not_image' => forum.ForumResourceFailureKind.invalidContent,
+      'security_challenge_persisted' || 'security_verification_not_completed' =>
+        forum.ForumResourceFailureKind.securityChallenge,
+      'request_cancelled' => forum.ForumResourceFailureKind.cancelled,
+      _ => switch (error.type) {
+        ApiErrorType.network => forum.ForumResourceFailureKind.network,
+        ApiErrorType.timeout => forum.ForumResourceFailureKind.timeout,
+        ApiErrorType.unauthorized =>
+          forum.ForumResourceFailureKind.unauthorized,
+        ApiErrorType.server => forum.ForumResourceFailureKind.server,
+        ApiErrorType.parse => forum.ForumResourceFailureKind.invalidContent,
+        ApiErrorType.business => forum.ForumResourceFailureKind.server,
+        ApiErrorType.unknown => forum.ForumResourceFailureKind.unknown,
+      },
+    };
+    return forum.ForumResourceFailure(
+      kind: kind,
+      code: code,
+      statusCode: error.statusCode,
+    );
+  }
 
   @override
   Future<forum.ForumTransportResult<forum.ForumResponse<Object?>>> send(

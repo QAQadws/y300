@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
@@ -27,7 +26,6 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
     required this.typography,
     required this.theme,
     required this.imageReferer,
-    this.imageHeaderBuilder,
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
@@ -48,7 +46,6 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   final NovelReaderTypography typography;
   final ForumHtmlThemeContext theme;
   final String imageReferer;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
   final ValueChanged<NovelReaderLink>? onLinkTap;
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
@@ -122,7 +119,7 @@ class _NovelReaderHtmlDocumentViewState
               preferences: preferences,
               sourceId: widget.episode.episodeId,
               threadId: widget.episode.sourceTid,
-              imageHeaderBuilder: widget.imageHeaderBuilder,
+              imageReferer: widget.imageReferer,
               imageCacheOwnerId: widget.episode.sourceTid,
               callbacks: ForumHtmlRenderCallbacks(
                 onInteraction: widget.onContentInteraction,

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/media/image_downscale_policy.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/image_loading/domain/app_image_source.dart';
 import 'package:y300/features/image_loading/presentation/app_image.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
@@ -19,7 +18,7 @@ class ShelfCoverImage extends StatelessWidget {
     required this.coverKey,
     this.localPath,
     this.remoteUrl,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     required this.fit,
     this.width,
     this.height,
@@ -33,7 +32,7 @@ class ShelfCoverImage extends StatelessWidget {
   final String coverKey;
   final String? localPath;
   final String? remoteUrl;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final BoxFit fit;
   final double? width;
   final double? height;
@@ -60,7 +59,7 @@ class ShelfCoverImage extends StatelessWidget {
     }
     final remote = remoteUrl?.trim();
     final networkSource = (remote != null && remote.isNotEmpty)
-        ? NetworkAppImageSource(url: remote, headerBuilder: imageHeaderBuilder)
+        ? NetworkAppImageSource(url: remote, referer: imageReferer)
         : null;
     return AppImage(
       key: ValueKey<String>('shelf-cover-$coverKey'),

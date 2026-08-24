@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_clock.dart';
@@ -27,7 +26,7 @@ class HistoryPage extends ConsumerStatefulWidget {
     this.controller,
     this.clock,
     this.groupingPolicy = const HistoryDateGroupingPolicy(),
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.thumbnailBuilder,
   });
 
@@ -35,7 +34,7 @@ class HistoryPage extends ConsumerStatefulWidget {
   final HistoryController? controller;
   final HistoryClock? clock;
   final HistoryDateGroupingPolicy groupingPolicy;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final HistoryThumbnailBuilder? thumbnailBuilder;
 
   @override
@@ -224,7 +223,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
               return HistoryEntryTile(
                 key: ValueKey<String>('history-entry-${entry.target}'),
                 entry: entry,
-                headerBuilder: widget.imageHeaderBuilder,
+                imageReferer: widget.imageReferer,
                 thumbnailBuilder: widget.thumbnailBuilder,
                 onOpen: () => _openEntry(entry),
                 onDelete: () => _deleteEntry(entry),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/presentation/history_text_resolver.dart';
 import 'package:y300/features/history/presentation/widgets/history_thumbnail.dart';
@@ -15,14 +14,14 @@ class HistoryEntryTile extends StatelessWidget {
     required this.entry,
     required this.onOpen,
     required this.onDelete,
-    this.headerBuilder,
+    this.imageReferer,
     this.thumbnailBuilder,
   });
 
   final HistoryEntry entry;
   final VoidCallback onOpen;
   final VoidCallback onDelete;
-  final ImageRequestHeaderBuilder? headerBuilder;
+  final String? imageReferer;
   final HistoryThumbnailBuilder? thumbnailBuilder;
 
   @override
@@ -61,7 +60,7 @@ class HistoryEntryTile extends StatelessWidget {
                         thumbnailBuilder?.call(context, entry) ??
                         HistoryThumbnail(
                           entry: entry,
-                          headerBuilder: headerBuilder,
+                          imageReferer: imageReferer,
                         ),
                   ),
                   const SizedBox(width: 12),

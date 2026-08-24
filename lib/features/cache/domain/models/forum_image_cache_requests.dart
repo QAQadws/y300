@@ -9,11 +9,13 @@ import 'package:y300/features/cache/domain/services/image_retention_classifier.d
 abstract final class ForumImageCacheRequests {
   static ImageCacheRequest forumHeadImage({
     required String url,
+    String? referer,
     String ownerId = 'home',
   }) {
     return ImageCacheRequest(
       cacheKey: ImageCacheKeys.forumHeadImage(url),
       sourceUrl: url,
+      referer: referer,
       ownerType: ImageCacheOwnerType.forum,
       ownerId: ownerId,
       role: ImageCacheRole.forumHeadImage,
@@ -26,11 +28,13 @@ abstract final class ForumImageCacheRequests {
   static ImageCacheRequest threadInline({
     required String tid,
     required String url,
+    String? referer,
     int? imageIndex,
   }) {
     return ImageCacheRequest(
       cacheKey: ImageCacheKeys.threadInline(url),
       sourceUrl: url,
+      referer: referer,
       ownerType: ImageCacheOwnerType.thread,
       ownerId: tid.trim().isEmpty ? 'unknown' : tid.trim(),
       role: ImageCacheRole.threadInline,
@@ -44,11 +48,13 @@ abstract final class ForumImageCacheRequests {
   static ImageCacheRequest threadAttachment({
     required String tid,
     required String url,
+    String? referer,
     int? imageIndex,
   }) {
     return ImageCacheRequest(
       cacheKey: ImageCacheKeys.threadAttachment(url),
       sourceUrl: url,
+      referer: referer,
       ownerType: ImageCacheOwnerType.thread,
       ownerId: tid.trim().isEmpty ? 'unknown' : tid.trim(),
       role: ImageCacheRole.threadAttachment,
@@ -62,11 +68,13 @@ abstract final class ForumImageCacheRequests {
   static ImageCacheRequest avatar({
     required String ownerId,
     required String url,
+    String? referer,
     ImageCacheOwnerType ownerType = ImageCacheOwnerType.profile,
   }) {
     return ImageCacheRequest(
       cacheKey: ImageCacheKeys.avatar(url),
       sourceUrl: url,
+      referer: referer,
       ownerType: ownerType,
       ownerId: ownerId.trim().isEmpty ? 'unknown' : ownerId.trim(),
       role: ImageCacheRole.avatar,
@@ -78,11 +86,13 @@ abstract final class ForumImageCacheRequests {
 
   static ImageCacheRequest remoteSmiley({
     required String url,
+    String? referer,
     String ownerId = 'yamibo-smiley-v4',
   }) {
     return ImageCacheRequest(
       cacheKey: ImageCacheKeys.remoteSmiley(url),
       sourceUrl: url,
+      referer: referer,
       ownerType: ImageCacheOwnerType.sticker,
       ownerId: ownerId,
       role: ImageCacheRole.remoteSmiley,
@@ -95,11 +105,13 @@ abstract final class ForumImageCacheRequests {
   static ImageCacheRequest blogInline({
     required String blogId,
     required String url,
+    String? referer,
     int? imageIndex,
   }) {
     return ImageCacheRequest(
       cacheKey: ImageCacheKeys.blogInline(url),
       sourceUrl: url,
+      referer: referer,
       ownerType: ImageCacheOwnerType.blog,
       ownerId: blogId.trim().isEmpty ? 'unknown' : blogId.trim(),
       role: ImageCacheRole.blogInline,
@@ -113,11 +125,13 @@ abstract final class ForumImageCacheRequests {
   static ImageCacheRequest composerUnusedAttachment({
     required String aid,
     required String url,
+    String? referer,
   }) {
     final normalizedAid = aid.trim().isEmpty ? 'unknown' : aid.trim();
     return ImageCacheRequest(
       cacheKey: ImageCacheKeys.composerUnusedAttachment(normalizedAid),
       sourceUrl: url,
+      referer: referer,
       ownerType: ImageCacheOwnerType.composer,
       ownerId: normalizedAid,
       role: ImageCacheRole.composerUnusedAttachment,

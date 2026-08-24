@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
@@ -216,7 +215,7 @@ class UserProfilePage extends ConsumerWidget {
     final asyncProfile = ref.watch(userProfileProvider(uid));
     final pageState = asyncProfile.value;
     final profile = pageState?.data;
-    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final imageReferer = ref.watch(forumImageRefererProvider);
     final palette = _UserProfilePalette.resolve(Theme.of(context));
     final l10n = AppLocalizations.of(context);
 
@@ -241,7 +240,7 @@ class UserProfilePage extends ConsumerWidget {
                 capabilities: pageState?.capabilities,
                 failure: pageState?.failure,
                 palette: palette,
-                imageHeaderBuilder: imageHeaderBuilder,
+                imageReferer: imageReferer,
                 isMyProfile: false,
               ),
             )
@@ -264,7 +263,7 @@ class MyProfilePage extends ConsumerWidget {
     final asyncProfile = ref.watch(myUserProfileProvider);
     final pageState = asyncProfile.value;
     final profile = pageState?.data;
-    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final imageReferer = ref.watch(forumImageRefererProvider);
     final palette = _UserProfilePalette.resolve(Theme.of(context));
     final l10n = AppLocalizations.of(context);
 
@@ -289,7 +288,7 @@ class MyProfilePage extends ConsumerWidget {
                 capabilities: pageState?.capabilities,
                 failure: pageState?.failure,
                 palette: palette,
-                imageHeaderBuilder: imageHeaderBuilder,
+                imageReferer: imageReferer,
                 isMyProfile: true,
                 onOpenMessages: () {
                   Navigator.of(context).push(
@@ -326,7 +325,7 @@ class _UserProfileContent extends StatelessWidget {
     required this.capabilities,
     required this.failure,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.isMyProfile,
     this.onOpenMessages,
     this.onOpenBlogs,
@@ -336,7 +335,7 @@ class _UserProfileContent extends StatelessWidget {
   final ForumUserProfileReadCapabilities? capabilities;
   final Object? failure;
   final _UserProfilePalette palette;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
   final bool isMyProfile;
   final VoidCallback? onOpenMessages;
   final VoidCallback? onOpenBlogs;
@@ -360,7 +359,7 @@ class _UserProfileContent extends StatelessWidget {
           profile: profile,
           capabilities: capabilities,
           palette: palette,
-          imageHeaderBuilder: imageHeaderBuilder,
+          imageReferer: imageReferer,
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
@@ -396,7 +395,7 @@ class _UserProfileContent extends StatelessWidget {
                       _SignatureSection(
                         profile: profile,
                         palette: palette,
-                        imageHeaderBuilder: imageHeaderBuilder,
+                        imageReferer: imageReferer,
                       ),
                     ],
                     if (capabilities?.supports(
@@ -422,13 +421,13 @@ class _UserProfileHero extends StatelessWidget {
     required this.profile,
     required this.capabilities,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
   });
 
   final ForumUserProfileData profile;
   final ForumUserProfileReadCapabilities? capabilities;
   final _UserProfilePalette palette;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
 
   @override
   Widget build(BuildContext context) {
@@ -453,7 +452,7 @@ class _UserProfileHero extends StatelessWidget {
               imageUrl: coverUrl,
               fit: BoxFit.cover,
               placeholder: const SizedBox.expand(),
-              headerBuilder: imageHeaderBuilder,
+              referer: imageReferer,
             ),
           Container(color: Colors.black.withValues(alpha: 0.42)),
           Column(
@@ -468,7 +467,7 @@ class _UserProfileHero extends StatelessWidget {
                     ownerId: profile.identity.userId,
                     ownerType: ImageCacheOwnerType.profile,
                     size: 68,
-                    headerBuilder: imageHeaderBuilder,
+                    imageReferer: imageReferer,
                   ),
                 ),
               ),
@@ -682,12 +681,12 @@ class _SignatureSection extends StatelessWidget {
   const _SignatureSection({
     required this.profile,
     required this.palette,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
   });
 
   final ForumUserProfileData profile;
   final _UserProfilePalette palette;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
 
   @override
   Widget build(BuildContext context) {
@@ -703,7 +702,7 @@ class _SignatureSection extends StatelessWidget {
           html: profile.signatureHtml ?? '',
           sourceId: 'user-profile-signature-${profile.identity.userId}',
           imageCacheOwnerId: profile.identity.userId,
-          imageHeaderBuilder: imageHeaderBuilder,
+          imageReferer: imageReferer,
           surfaceColor: palette.card,
           foregroundColor: palette.body,
           onOpenLink: (url) => ScaffoldMessenger.of(

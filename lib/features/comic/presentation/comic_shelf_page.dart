@@ -45,7 +45,7 @@ class ComicShelfPage extends ConsumerWidget {
       viewPreferencesRepository: ref.watch(
         libraryViewPreferencesRepositoryProvider,
       ),
-      imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+      imageReferer: ref.watch(forumImageRefererProvider),
       isActive: isActive,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
       onOpenWork: (context, workId) async {

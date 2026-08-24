@@ -54,7 +54,7 @@ class ComicDetailPage extends ConsumerWidget {
       adapter: adapter,
       workId: comicId,
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
-      imageHeaderBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+      imageReferer: ref.watch(forumImageRefererProvider),
       pickCoverImage: () async {
         // 用通用图片选择器选一张本地图作为自定义封面来源（仅取第一张）。
         final picked = await ref

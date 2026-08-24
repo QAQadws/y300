@@ -8,7 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -1296,8 +1295,8 @@ void main() {
             novelReaderPreferencesRepositoryProvider.overrideWithValue(
               _FakeNovelReaderPreferencesRepository(repository),
             ),
-            imageRequestHeaderBuilderProvider.overrideWithValue(
-              const _StaticImageHeaderBuilder(),
+            forumImageRefererProvider.overrideWithValue(
+              'https://bbs.yamibo.com/',
             ),
             libraryStateRepositoryProvider.overrideWithValue(
               _MemoryLibraryStateRepository(),
@@ -1339,8 +1338,8 @@ void main() {
             novelReaderPreferencesRepositoryProvider.overrideWithValue(
               _FakeNovelReaderPreferencesRepository(repository),
             ),
-            imageRequestHeaderBuilderProvider.overrideWithValue(
-              const _StaticImageHeaderBuilder(),
+            forumImageRefererProvider.overrideWithValue(
+              'https://bbs.yamibo.com/',
             ),
             libraryStateRepositoryProvider.overrideWithValue(
               _MemoryLibraryStateRepository(),
@@ -1773,9 +1772,7 @@ Widget _buildReaderApp({
       forumWebViewExternalLauncherProvider.overrideWithValue(
         _FakeForumWebViewExternalLauncher(),
       ),
-      imageRequestHeaderBuilderProvider.overrideWithValue(
-        const _StaticImageHeaderBuilder(),
-      ),
+      forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
       imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
       if (documentBuildService != null)
         novelReaderDocumentBuildServiceProvider.overrideWithValue(
@@ -1884,15 +1881,6 @@ class _FakeForumWebViewExternalLauncher
     implements ForumWebViewExternalLauncher {
   @override
   Future<bool> launch(Uri uri) async => true;
-}
-
-class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticImageHeaderBuilder();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{};
-  }
 }
 
 class _NoopImageCacheService implements ImageCacheService {

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -239,7 +238,7 @@ final class NovelReaderHtmlPaginationMeasureAdapter
     required this.sourceId,
     this.threadId,
     this.imageCacheOwnerId,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
     this.timeout = const Duration(milliseconds: 800),
   }) : _hostContext = hostContext;
@@ -250,7 +249,7 @@ final class NovelReaderHtmlPaginationMeasureAdapter
   final String sourceId;
   final String? threadId;
   final String? imageCacheOwnerId;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
   final Duration timeout;
 
@@ -266,7 +265,7 @@ final class NovelReaderHtmlPaginationMeasureAdapter
       sourceId: sourceId,
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,
-      imageHeaderBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
       blockSpacingMode: blockSpacingMode,
       chapter: chapter,
       key: key,
@@ -311,7 +310,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
     required this.sourceId,
     required this.threadId,
     required this.imageCacheOwnerId,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.blockSpacingMode,
     required this.chapter,
     required this.key,
@@ -324,7 +323,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
   final String sourceId;
   final String? threadId;
   final String? imageCacheOwnerId;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
   final NovelReaderPreparedChapter chapter;
   final NovelReaderPaginationKey key;
@@ -459,7 +458,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
       preferences: preferences,
       sourceId: sourceId,
       threadId: threadId,
-      imageHeaderBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
       imageCacheOwnerId: imageCacheOwnerId,
       buildAsync: false,
       enableCaching: false,

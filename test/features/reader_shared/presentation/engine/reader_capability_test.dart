@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
@@ -66,7 +65,7 @@ class _MinimalCapability extends ReaderCapability {
   );
 
   @override
-  ImageRequestHeaderBuilder? get imageHeaderBuilder => null;
+  String? get imageReferer => null;
 
   @override
   ReaderTitleSpec titleFor(ReaderEngineContext context) {

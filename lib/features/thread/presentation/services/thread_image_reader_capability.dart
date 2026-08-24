@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
@@ -19,7 +18,7 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 class ThreadImageReaderCapability extends ReaderCapability {
   ThreadImageReaderCapability({
     required this.request,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     this.diagnosticRecorder = const NoopContinuousImageDiagnosticRecorder(),
     required this.title,
     required this.displayLabel,
@@ -30,7 +29,7 @@ class ThreadImageReaderCapability extends ReaderCapability {
   @override
   final ContinuousImageDiagnosticRecorder diagnosticRecorder;
   @override
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final String title;
   final String displayLabel;
   final String downloadLabel;
@@ -129,7 +128,7 @@ class ThreadImageReaderCapability extends ReaderCapability {
       fit: spec.fit,
       expectedDisplaySize: spec.expectedDisplaySize,
       width: spec.paged ? null : double.infinity,
-      headerBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
       placeholder: const SizedBox.shrink(),
       // 失败位不自带宽高比：竖向连续模式由 ContinuousImageReaderSlot 按布局提示
       // 预留 minHeight，这里再套比例会顶掉预留高度，滑块 seek 就会落偏。

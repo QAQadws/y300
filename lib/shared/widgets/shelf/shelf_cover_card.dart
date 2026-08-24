@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:y300/core/media/cover_focal_point.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_grid_geometry.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
@@ -17,7 +16,7 @@ class ShelfCoverLayerConfig {
     required this.placeholder,
     required this.fit,
     this.alignment = Alignment.center,
-    this.imageHeaderBuilder,
+    this.imageReferer,
   });
 
   final String? localPath;
@@ -27,7 +26,7 @@ class ShelfCoverLayerConfig {
 
   /// `BoxFit.cover` 下的对齐点（自定义封面焦点）。默认居中。
   final AlignmentGeometry alignment;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
 }
 
 /// 通用书架封面卡片。
@@ -49,7 +48,7 @@ class ShelfCoverCard extends StatelessWidget {
     this.onLongPress,
     this.topLeftBadge,
     this.showTwoLineCustomEllipsis = false,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.coverLayerBuilder,
     this.selected = false,
     this.coverAsset,
@@ -68,7 +67,7 @@ class ShelfCoverCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final Widget? topLeftBadge;
   final bool showTwoLineCustomEllipsis;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ShelfCoverLayerBuilder? coverLayerBuilder;
   final bool selected;
   final LibraryCoverAssetRef? coverAsset;
@@ -137,7 +136,7 @@ class ShelfCoverCard extends StatelessWidget {
           fit: BoxFit.cover,
           alignment: alignment,
           placeholder: placeholder,
-          imageHeaderBuilder: imageHeaderBuilder,
+          imageReferer: imageReferer,
         ),
       );
     }
@@ -145,7 +144,7 @@ class ShelfCoverCard extends StatelessWidget {
       coverKey: coverKey ?? title,
       localPath: _preferredLocalPath,
       remoteUrl: coverImageUrl,
-      imageHeaderBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
       fit: BoxFit.cover,
       alignment: alignment,
       coverAsset: coverAsset,

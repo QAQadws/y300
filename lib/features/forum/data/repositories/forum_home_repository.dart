@@ -579,8 +579,11 @@ final forumHomeHtmlRepositoryProvider = Provider<ForumHomeHtmlRepository>((
   return ForumHomeHtmlRepository(
     htmlClient: ref.watch(yamiboHtmlClientProvider),
     imageProbe: ForumHomeCarouselImageProbe(
-      resourceClient: ref.watch(yamiboResourceClientProvider),
-      headerBuilder: ref.watch(imageRequestHeaderBuilderProvider),
+      resourceClient: ref.watch(yamiboForumResourceClientProvider),
+      referenceResolver: ref.watch(
+        yamiboForumResourceReferenceResolverProvider,
+      ),
+      referer: ref.watch(forumImageRefererProvider),
     ),
     sessionStore: ref.watch(yamiboSessionStoreProvider),
     documentCacheService: ref.watch(documentCacheServiceProvider),

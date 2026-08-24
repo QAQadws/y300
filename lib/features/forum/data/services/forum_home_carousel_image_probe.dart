@@ -1,54 +1,54 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
-import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/image_request_headers.dart';
-import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
-import 'package:y300/core/network/yamibo/yamibo_resource_client.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 class ForumHomeCarouselImageProbe {
   ForumHomeCarouselImageProbe({
-    required YamiboResourceClient resourceClient,
-    required ImageRequestHeaderBuilder headerBuilder,
+    required ForumResourceClient resourceClient,
+    required ForumResourceReferenceResolver referenceResolver,
+    required String referer,
   }) : _resourceClient = resourceClient,
-       _headerBuilder = headerBuilder;
+       _referenceResolver = referenceResolver,
+       _referer = referer;
 
   static const double fallbackAspectRatio = 3.45;
   static const Duration probeTimeout = Duration(seconds: 2);
   static const double _minReasonableAspectRatio = 2.4;
   static const double _maxReasonableAspectRatio = 5.2;
 
-  final YamiboResourceClient _resourceClient;
-  final ImageRequestHeaderBuilder _headerBuilder;
+  final ForumResourceClient _resourceClient;
+  final ForumResourceReferenceResolver _referenceResolver;
+  final String _referer;
 
   Future<double?> resolveAspectRatio(String imageUrl) async {
-    final cancelToken = CancelToken();
+    final cancellation = ForumRequestCancellation();
     final timeoutTimer = Timer(probeTimeout, () {
-      if (!cancelToken.isCancelled) {
-        cancelToken.cancel('carousel image probe timeout');
-      }
+      cancellation.cancel();
     });
     try {
-      final headers = await _headerBuilder.buildHeaders(imageUrl);
-      final response = await _resourceClient.getBytes(
-        url: imageUrl,
-        context: const YamiboRequestContext(
-          kind: YamiboRequestKind.imageProbe,
-          operation: 'forum.home.carouselProbe',
-          pageKind: 'forum.home',
-        ),
-        headers: headers,
-        cancelToken: cancelToken,
+      final reference = _referenceResolver.resolve(
+        imageUrl,
+        referer: Uri.tryParse(_referer),
       );
-      if (response case ApiFailure<List<int>>()) {
+      if (reference == null) {
         return null;
       }
-      final bytes = response.dataOrNull ?? const <int>[];
+      final response = await _resourceClient.open(
+        ForumResourceRequest(reference: reference, cancellation: cancellation),
+      );
+      if (response is! ForumResourceSuccess || response.statusCode == 304) {
+        return null;
+      }
+      final builder = BytesBuilder(copy: false);
+      await for (final chunk in response.content) {
+        builder.add(chunk);
+      }
+      final bytes = builder.takeBytes();
       if (bytes.isEmpty) {
         return null;
       }
-      return _aspectRatioFromBytes(Uint8List.fromList(bytes));
+      return _aspectRatioFromBytes(bytes);
     } catch (_) {
       return null;
     } finally {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
@@ -1488,7 +1489,7 @@ void main() {
           const Key('thread-post-html-first-readable-image-p1-1'),
         );
         await _tapVisibleTop(tester, secondImage);
-        await tester.pumpAndSettle();
+        await _pumpThreadUiTransition(tester);
 
         expect(find.byType(ThreadImageReaderPage), findsOneWidget);
         expect(
@@ -1767,7 +1768,7 @@ void main() {
     testWidgets('schedules only lightweight HTML-first post image preloads', (
       tester,
     ) async {
-      final imageCacheService = _RecordingImageCacheService();
+      final imagePrecacheService = _RecordingForumImagePrecacheService();
       final repository = _FakeThreadRepository((tid, page) async {
         return ApiSuccess(
           _threadDetailData(
@@ -1803,7 +1804,7 @@ void main() {
         ProviderScope(
           overrides: _threadDetailOverrides(
             repository,
-            imageCacheService: imageCacheService,
+            forumImagePrecacheService: imagePrecacheService,
           ),
           child: const LocalizedTestApp(
             home: ThreadDetailPage(tid: '100', subject: '测试主题'),
@@ -1814,18 +1815,21 @@ void main() {
       await tester.pump();
       await tester.pump();
 
+      for (var attempt = 0; attempt < 10; attempt++) {
+        final scheduled = imagePrecacheService.decodedSpecs.any(
+          (spec) => spec.sourceUrl.contains('page-2.jpg'),
+        );
+        if (scheduled) break;
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+
       expect(
-        imageCacheService.requests.any(
-          (request) => request.sourceUrl.contains('page-2.jpg'),
+        imagePrecacheService.decodedSpecs.any(
+          (spec) => spec.sourceUrl.contains('page-2.jpg'),
         ),
         isTrue,
       );
-      expect(
-        imageCacheService.requests
-            .where((request) => request.role == ImageCacheRole.threadInline)
-            .length,
-        lessThanOrEqualTo(3),
-      );
+      expect(imagePrecacheService.decodedSpecs.length, lessThanOrEqualTo(3));
     });
 
     testWidgets('stretches whole post card segments to the same width', (
@@ -1857,7 +1861,6 @@ void main() {
             home: Scaffold(
               body: ThreadDetailContent(
                 state: state,
-                imageHeaderBuilder: null,
                 imageReferer:
                     'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
                 onLoadPreviousPage: () {},
@@ -1935,7 +1938,6 @@ void main() {
             home: Scaffold(
               body: ThreadDetailContent(
                 state: state,
-                imageHeaderBuilder: null,
                 imageReferer:
                     'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
                 onLoadPreviousPage: () {},
@@ -2003,7 +2005,6 @@ void main() {
               home: Scaffold(
                 body: ThreadDetailContent(
                   state: state,
-                  imageHeaderBuilder: null,
                   imageReferer:
                       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
                   onLoadPreviousPage: () {},
@@ -2090,7 +2091,7 @@ void main() {
       await tester.tap(
         find.byKey(const Key('thread-post-html-first-readable-image-p1-0')),
       );
-      await tester.pumpAndSettle();
+      await _pumpThreadUiTransition(tester);
 
       expect(find.byType(ThreadImageReaderPage), findsOneWidget);
       expect(
@@ -3172,7 +3173,7 @@ void main() {
         tester,
         find.byKey(const Key('thread-post-body-copy-1')),
       );
-      await tester.pumpAndSettle();
+      await _pumpThreadUiTransition(tester);
 
       expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
       expect(find.text('回复'), findsOneWidget);
@@ -3183,7 +3184,7 @@ void main() {
         tester,
         const Key('thread-post-copy-all-action'),
       );
-      await tester.pumpAndSettle();
+      await _pumpThreadUiTransition(tester);
 
       expect(copiedTexts.single, contains('第一段链接文本'));
       expect(copiedTexts.single, contains('作者: 引用正文'));
@@ -3195,12 +3196,12 @@ void main() {
         tester,
         find.byKey(const Key('thread-post-body-copy-1')),
       );
-      await tester.pumpAndSettle();
+      await _pumpThreadUiTransition(tester);
       await _tapPostActionSheetItem(
         tester,
         const Key('thread-post-select-copy-action'),
       );
-      await tester.pumpAndSettle();
+      await _pumpThreadUiTransition(tester);
 
       expect(
         find.byKey(const Key('thread-post-html-selection-copy-page')),
@@ -3578,16 +3579,10 @@ void main() {
         request!.sourceUrl,
         'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
       );
-      expect(image.headerBuilder, isNotNull);
-      final headers = await image.headerBuilder!.buildHeaders(
-        request.sourceUrl,
-      );
       expect(
-        headers['Referer'],
+        image.referer,
         'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
       );
-      expect(headers['User-Agent'], contains('Chrome'));
-      expect(headers['Accept'], contains('image/'));
     });
 
     testWidgets('opens native rate sheet and submits post rating', (
@@ -5076,7 +5071,11 @@ class _FakeForumHtmlReaderPreferencesRepository
 class _NoopImageCacheService implements ImageCacheService {
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
-    return CachedImageResult(success: true, cacheKey: request.cacheKey);
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: io.File('assets/noavatar.png').absolute.path,
+    );
   }
 
   @override
@@ -5124,7 +5123,11 @@ class _RecordingImageCacheService extends _NoopImageCacheService {
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
     requests.add(request);
-    return CachedImageResult(success: true, cacheKey: request.cacheKey);
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: io.File('assets/noavatar.png').absolute.path,
+    );
   }
 }
 
@@ -5248,6 +5251,14 @@ Future<void> _tapVisibleTop(WidgetTester tester, Finder finder) async {
   final y = (topLeft.dy + 8).clamp(1.0, viewHeight - 1);
   final x = (topLeft.dx + size.width / 2).clamp(1.0, viewWidth - 1);
   await tester.tapAt(Offset(x, y));
+}
+
+Future<void> _pumpThreadUiTransition(WidgetTester tester) async {
+  // A post can keep remote media loading while navigation or a bottom sheet
+  // has already finished animating. Bound the UI transition instead of
+  // waiting for unrelated image streams to become idle.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 Future<void> _longPressVisibleTop(WidgetTester tester, Finder finder) async {

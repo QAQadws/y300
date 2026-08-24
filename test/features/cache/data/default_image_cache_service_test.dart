@@ -6,7 +6,6 @@ import 'dart:ui';
 import 'package:file/file.dart' as file;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
@@ -52,48 +51,8 @@ void main() {
     await Future.wait(<Future<CachedImageResult>>[first, second]);
   });
 
-  test('ensureCached passes anti-hotlink headers to downloader', () async {
-    final tempDir = await io.Directory.systemTemp.createTemp(
-      'y300-image-cache-test-',
-    );
-    addTearDown(() async {
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
-    });
-    final imageFile = io.File('${tempDir.path}/downloaded.jpg');
-    await imageFile.writeAsBytes(<int>[1, 2, 3, 4]);
-    final downloader = _SpyImageFileDownloader(localPath: imageFile.path);
-    final service = DefaultImageCacheService(
-      repository: _MemoryImageCacheRepository(),
-      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
-      directoryResolver: const ImageCacheDirectoryResolver(),
-      headerBuilder: const _StaticImageHeaderBuilder(<String, String>{
-        'Referer': 'https://bbs.yamibo.com/',
-        'Cookie': 'auth=token123',
-      }),
-      downloader: downloader,
-    );
-
-    final result = await service.ensureCached(
-      const ImageCacheRequest(
-        cacheKey: 'comic-page-1',
-        sourceUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
-        ownerType: ImageCacheOwnerType.comic,
-        ownerId: 'yamibo:100',
-        role: ImageCacheRole.comicPage,
-      ),
-    );
-
-    expect(result.success, isTrue);
-    expect(downloader.lastHeaders, <String, String>{
-      'Referer': 'https://bbs.yamibo.com/',
-      'Cookie': 'auth=token123',
-    });
-  });
-
   test(
-    'ensureCached normalizes relative source url before building headers',
+    'ensureCached passes only the resource referer to cache manager',
     () async {
       final tempDir = await io.Directory.systemTemp.createTemp(
         'y300-image-cache-test-',
@@ -106,7 +65,47 @@ void main() {
       final imageFile = io.File('${tempDir.path}/downloaded.jpg');
       await imageFile.writeAsBytes(<int>[1, 2, 3, 4]);
       final downloader = _SpyImageFileDownloader(localPath: imageFile.path);
-      final headerBuilder = _SpyImageHeaderBuilder();
+      final service = DefaultImageCacheService(
+        repository: _MemoryImageCacheRepository(),
+        cacheManagerFuture: Future<BaseCacheManager>.value(
+          _UnusedCacheManager(),
+        ),
+        directoryResolver: const ImageCacheDirectoryResolver(),
+        downloader: downloader,
+      );
+
+      final result = await service.ensureCached(
+        const ImageCacheRequest(
+          cacheKey: 'comic-page-1',
+          sourceUrl: 'https://bbs.yamibo.com/data/attachment/test.jpg',
+          referer: 'https://bbs.yamibo.com/thread-1-1-1.html',
+          ownerType: ImageCacheOwnerType.comic,
+          ownerId: 'yamibo:100',
+          role: ImageCacheRole.comicPage,
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(downloader.lastHeaders, <String, String>{
+        'Referer': 'https://bbs.yamibo.com/thread-1-1-1.html',
+      });
+    },
+  );
+
+  test(
+    'ensureCached normalizes relative source url before downloading',
+    () async {
+      final tempDir = await io.Directory.systemTemp.createTemp(
+        'y300-image-cache-test-',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+      final imageFile = io.File('${tempDir.path}/downloaded.jpg');
+      await imageFile.writeAsBytes(<int>[1, 2, 3, 4]);
+      final downloader = _SpyImageFileDownloader(localPath: imageFile.path);
       final repository = _MemoryImageCacheRepository();
       final service = DefaultImageCacheService(
         repository: repository,
@@ -114,7 +113,6 @@ void main() {
           _UnusedCacheManager(),
         ),
         directoryResolver: const ImageCacheDirectoryResolver(),
-        headerBuilder: headerBuilder,
         downloader: downloader,
       );
 
@@ -128,10 +126,6 @@ void main() {
         ),
       );
 
-      expect(
-        headerBuilder.lastUrl,
-        'https://bbs.yamibo.com/data/attachment/test.jpg',
-      );
       expect(
         downloader.lastSourceUrl,
         'https://bbs.yamibo.com/data/attachment/test.jpg',
@@ -594,25 +588,6 @@ void main() {
     expect(repository.records.containsKey('thread-1'), isFalse);
     expect(repository.records.containsKey('smiley-1'), isTrue);
   });
-}
-
-class _StaticImageHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticImageHeaderBuilder(this.headers);
-
-  final Map<String, String> headers;
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async => headers;
-}
-
-class _SpyImageHeaderBuilder implements ImageRequestHeaderBuilder {
-  String? lastUrl;
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    lastUrl = imageUrl;
-    return const <String, String>{'Referer': 'https://bbs.yamibo.com/'};
-  }
 }
 
 class _SpyImageFileDownloader implements ImageFileDownloader {

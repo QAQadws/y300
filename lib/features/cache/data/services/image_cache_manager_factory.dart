@@ -2,7 +2,9 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:y300/features/comic/data/services/custom_cache_file_system.dart';
 
 class ImageCacheManagerFactory {
-  const ImageCacheManagerFactory();
+  const ImageCacheManagerFactory({required this.fileService});
+
+  final FileService fileService;
 
   static const String cacheKey = 'y300_images';
 
@@ -14,6 +16,7 @@ class ImageCacheManagerFactory {
           basePath: cacheDirectoryPath,
           cacheKey: cacheKey,
         ),
+        fileService: fileService,
       ),
     );
   }

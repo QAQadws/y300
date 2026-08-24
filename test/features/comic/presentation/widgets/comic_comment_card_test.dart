@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -68,7 +67,7 @@ void main() {
   testWidgets('uses the shared cached avatar contract for remote authors', (
     tester,
   ) async {
-    const headers = _StaticImageRequestHeaderBuilder();
+    const referer = 'https://bbs.yamibo.com/';
     await tester.pumpWidget(
       _host(
         ComicCommentCard(
@@ -79,7 +78,7 @@ void main() {
             ),
           ),
           sourceTid: '573279',
-          imageHeaderBuilder: headers,
+          imageReferer: referer,
         ),
         imageCacheService: _NoopImageCacheService(),
       ),
@@ -96,7 +95,7 @@ void main() {
     expect(avatar.request?.role, ImageCacheRole.avatar);
     expect(avatar.request?.ownerType, ImageCacheOwnerType.thread);
     expect(avatar.request?.ownerId, '422014');
-    expect(avatar.headerBuilder, same(headers));
+    expect(avatar.referer, referer);
     expect(avatar.fadeInDuration, ForumCachedAvatar.fadeInDuration);
 
     final localDefault = avatar.errorPlaceholder as CachedLibraryImage;
@@ -240,15 +239,6 @@ Widget _host(
       home: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   );
-}
-
-class _StaticImageRequestHeaderBuilder implements ImageRequestHeaderBuilder {
-  const _StaticImageRequestHeaderBuilder();
-
-  @override
-  Future<Map<String, String>> buildHeaders(String imageUrl) async {
-    return const <String, String>{'Referer': 'https://bbs.yamibo.com/'};
-  }
 }
 
 final class _FixedPreferencesRepository

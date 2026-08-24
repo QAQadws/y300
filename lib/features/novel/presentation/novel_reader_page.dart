@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
@@ -143,7 +142,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   Widget build(BuildContext context) {
     final state = ref.watch(novelReaderControllerProvider(_args));
     final controller = ref.read(novelReaderControllerProvider(_args).notifier);
-    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final imageReferer = ref.watch(forumImageRefererProvider);
     final externalLauncher = ref.watch(forumWebViewExternalLauncherProvider);
 
     return PopScope<void>(
@@ -272,7 +271,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                       const NovelForumHtmlRenderThemeFactory().fromPalette(
                         palette,
                       ),
-                      imageHeaderBuilder,
+                      imageReferer,
                       externalLauncher,
                       ReaderChromeInsets(
                         safeAreaTop: safeAreaTop,
@@ -612,7 +611,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderViewState viewState,
     NovelReaderTypography typography,
     ForumHtmlThemeContext htmlTheme,
-    ImageRequestHeaderBuilder imageHeaderBuilder,
+    String imageReferer,
     ForumWebViewExternalLauncher externalLauncher,
     ReaderChromeInsets chromeInsets, {
     required String surfaceIdentity,
@@ -644,7 +643,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           }
           return _turnToAdjacentChapter(edge, viewState);
         },
-        imageHeaderBuilder: imageHeaderBuilder,
         onContentReady: () => _markReaderSurfaceReady(surfaceIdentity),
         onContentTerminal: () =>
             _markReaderSurfaceReady(surfaceIdentity, terminal: true),
@@ -714,7 +712,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         typography: typography,
         theme: htmlTheme,
         imageReferer: _imageRefererFor(viewState),
-        imageHeaderBuilder: imageHeaderBuilder,
         onLinkTap: (link) {
           if (_isCurrentReaderSurface(surfaceIdentity)) {
             _openReaderLink(link, externalLauncher);
@@ -1639,7 +1636,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       MaterialPageRoute<void>(
         builder: (_) => ThreadImageReaderPage(
           request: request,
-          imageHeaderBuilder: ref.read(imageRequestHeaderBuilderProvider),
+          imageReferer: ref.read(forumImageRefererProvider),
         ),
       ),
     );

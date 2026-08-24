@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -99,7 +98,7 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final imageHeaderBuilder = ref.watch(imageRequestHeaderBuilderProvider);
+    final imageReferer = ref.watch(forumImageRefererProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -144,7 +143,7 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
           Offstage(
             offstage: _isSwitchingAuthContext,
             child: _ResolvedForumHomeBody(
-              imageHeaderBuilder: imageHeaderBuilder,
+              imageReferer: imageReferer,
               isActive: widget.isActive,
             ),
           ),
@@ -306,11 +305,11 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
 
 class _ResolvedForumHomeBody extends ConsumerWidget {
   const _ResolvedForumHomeBody({
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.isActive,
   });
 
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
   final bool isActive;
 
   @override
@@ -354,7 +353,7 @@ class _ResolvedForumHomeBody extends ConsumerWidget {
           mode: mode,
           candidate: projectionAsync.asData?.value,
         ),
-        imageHeaderBuilder: imageHeaderBuilder,
+        imageReferer: imageReferer,
         isActive: isActive,
       ),
     );
@@ -379,13 +378,13 @@ class _ForumHomeContent extends ConsumerStatefulWidget {
   const _ForumHomeContent({
     required this.state,
     required this.projection,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.isActive,
   });
 
   final ForumHomePageState state;
   final ForumHomeContentProjection projection;
-  final ImageRequestHeaderBuilder imageHeaderBuilder;
+  final String imageReferer;
   final bool isActive;
 
   @override
@@ -423,7 +422,7 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
               children: [
                 ForumHomeCarousel(
                   items: widget.state.viewData.carouselItems,
-                  headerBuilder: widget.imageHeaderBuilder,
+                  imageReferer: widget.imageReferer,
                   onOpen: (item) => _openCarouselTarget(context, ref, item),
                   isActive: widget.isActive,
                 ),

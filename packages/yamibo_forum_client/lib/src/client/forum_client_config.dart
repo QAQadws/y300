@@ -5,6 +5,7 @@ final class ForumClientConfig {
     this.userAgent = 'YamiboForumClient/1.0',
     this.desktopUserAgent,
     this.apiUserAgent,
+    this.resourceUserAgent,
     this.connectTimeout = const Duration(seconds: 15),
     this.receiveTimeout = const Duration(seconds: 20),
   });
@@ -16,10 +17,13 @@ final class ForumClientConfig {
   final String userAgent;
   final String? desktopUserAgent;
   final String? apiUserAgent;
+  final String? resourceUserAgent;
   final Duration connectTimeout;
   final Duration receiveTimeout;
 
   String get mobileUserAgent => userAgent;
   String get effectiveDesktopUserAgent => desktopUserAgent ?? userAgent;
   String get effectiveApiUserAgent => apiUserAgent ?? userAgent;
+  String get effectiveResourceUserAgent =>
+      resourceUserAgent ?? desktopUserAgent ?? userAgent;
 }

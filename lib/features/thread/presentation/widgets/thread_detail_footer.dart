@@ -6,13 +6,13 @@ class ThreadPostCommentSection extends StatefulWidget {
   const ThreadPostCommentSection({
     super.key,
     required this.comments,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.palette,
     this.onOpenAuthorProfile,
   });
 
   final List<ThreadPostCommentEntry> comments;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPostCommentEntry>? onOpenAuthorProfile;
 
@@ -72,7 +72,7 @@ class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection> {
                     ),
                   ThreadPostCommentRow(
                     comment: widget.comments[index],
-                    imageHeaderBuilder: widget.imageHeaderBuilder,
+                    imageReferer: widget.imageReferer,
                     palette: widget.palette,
                     onOpenAuthorProfile: widget.onOpenAuthorProfile,
                   ),
@@ -222,13 +222,13 @@ class ThreadPostCommentRow extends StatelessWidget {
   const ThreadPostCommentRow({
     super.key,
     required this.comment,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
     required this.palette,
     this.onOpenAuthorProfile,
   });
 
   final ThreadPostCommentEntry comment;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPostCommentEntry>? onOpenAuthorProfile;
 
@@ -252,7 +252,7 @@ class ThreadPostCommentRow extends StatelessWidget {
               'thread-comment-author-avatar-${_commentAuthorKey(comment)}',
             ),
             comment: comment,
-            imageHeaderBuilder: imageHeaderBuilder,
+            imageReferer: imageReferer,
           ),
         ),
         const SizedBox(width: 8),
@@ -348,11 +348,11 @@ class _ThreadCommentAvatar extends StatelessWidget {
   const _ThreadCommentAvatar({
     super.key,
     required this.comment,
-    required this.imageHeaderBuilder,
+    required this.imageReferer,
   });
 
   final ThreadPostCommentEntry comment;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
 
   @override
   Widget build(BuildContext context) {
@@ -364,7 +364,7 @@ class _ThreadCommentAvatar extends StatelessWidget {
           : comment.author,
       ownerType: ImageCacheOwnerType.thread,
       size: size,
-      headerBuilder: imageHeaderBuilder,
+      imageReferer: imageReferer,
     );
   }
 }

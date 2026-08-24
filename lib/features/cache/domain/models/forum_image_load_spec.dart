@@ -46,6 +46,7 @@ class ForumImageLoadSpec {
   const ForumImageLoadSpec({
     required this.kind,
     required this.url,
+    this.referer,
     this.ownerId,
     this.ownerType,
     this.episodeId,
@@ -64,6 +65,7 @@ class ForumImageLoadSpec {
 
   final ForumImageKind kind;
   final Uri url;
+  final String? referer;
   final String? ownerId;
   final ImageCacheOwnerType? ownerType;
   final String? episodeId;

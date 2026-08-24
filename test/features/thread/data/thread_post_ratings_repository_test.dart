@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/image_request_headers.dart';
+import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 
@@ -94,10 +94,7 @@ void main() {
         'inajax': '1',
         'ajaxtarget': 'fwin_content_viewratings',
       });
-      expect(
-        adapter.lastUserAgent,
-        DiscuzImageRequestHeaderBuilder.browserUserAgent,
-      );
+      expect(adapter.lastUserAgent, BrowserUserAgents.desktop);
       expect(adapter.header('referer'), contains('mod=viewthread'));
       expect(adapter.header('referer'), contains('tid=573833'));
     });

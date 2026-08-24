@@ -25,7 +25,7 @@ final class DefaultForumRequestProfileResolver
       ForumRequestProfileKind.mobileHtml => config.mobileUserAgent,
       ForumRequestProfileKind.desktopHtml => config.effectiveDesktopUserAgent,
       ForumRequestProfileKind.discuzApi => config.effectiveApiUserAgent,
-      ForumRequestProfileKind.resource => config.mobileUserAgent,
+      ForumRequestProfileKind.resource => config.effectiveResourceUserAgent,
     };
     final accept = switch (kind) {
       ForumRequestProfileKind.discuzApi => 'application/json,text/plain,*/*',

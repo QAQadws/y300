@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -18,13 +17,13 @@ class ComicCommentCard extends StatefulWidget {
     super.key,
     required this.projection,
     required this.sourceTid,
-    this.imageHeaderBuilder,
+    this.imageReferer,
     this.renderContext,
   });
 
   final ComicCommentItemProjection projection;
   final String sourceTid;
-  final ImageRequestHeaderBuilder? imageHeaderBuilder;
+  final String? imageReferer;
   final ThreadPostRenderContext? renderContext;
 
   /// Converts a comment to the existing parser-mode post-card input.
@@ -63,7 +62,7 @@ class _ComicCommentCardState extends State<ComicCommentCard> {
       key: Key('comic-comment-card-${widget.projection.sourceItem.pid}'),
       post: post,
       state: null,
-      imageHeaderBuilder: widget.imageHeaderBuilder,
+      imageReferer: widget.imageReferer,
       palette: ThreadDetailNativePalette.resolve(Theme.of(context)),
       interactionPolicy: const ThreadPostCardInteractionPolicy.readOnly(),
       avatarFallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
@@ -78,7 +77,7 @@ class _ComicCommentCardState extends State<ComicCommentCard> {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
     final identity = (
       sourceTid: widget.sourceTid.trim(),
-      imageHeaderBuilder: widget.imageHeaderBuilder,
+      imageReferer: widget.imageReferer,
       brightness: Theme.of(context).brightness,
       palette: palette.card.toARGB32(),
     );
@@ -87,7 +86,7 @@ class _ComicCommentCardState extends State<ComicCommentCard> {
       _ownedRenderContextIdentity = identity;
       _ownedRenderContext = ThreadPostRenderContext(
         palette: palette,
-        imageHeaderBuilder: widget.imageHeaderBuilder,
+        imageReferer: widget.imageReferer,
         renderOwnerFor: (post) => ThreadPostRenderContext.commentRenderOwner(
           sourceTid: widget.sourceTid,
           pid: post.pid,

@@ -21,34 +21,40 @@ class DefaultForumImageRequestResolver implements ForumImageRequestResolver {
         return ForumImageCacheRequests.threadInline(
           tid: _ownerId(spec),
           url: url,
+          referer: spec.referer,
           imageIndex: spec.imageIndex,
         );
       case ForumImageKind.threadAttachment:
         return ForumImageCacheRequests.threadAttachment(
           tid: _ownerId(spec),
           url: url,
+          referer: spec.referer,
           imageIndex: spec.imageIndex,
         );
       case ForumImageKind.remoteSmiley:
         return ForumImageCacheRequests.remoteSmiley(
           url: url,
+          referer: spec.referer,
           ownerId: _ownerId(spec, fallback: 'yamibo-smiley-v4'),
         );
       case ForumImageKind.avatar:
         return ForumImageCacheRequests.avatar(
           ownerId: _ownerId(spec),
           url: url,
+          referer: spec.referer,
           ownerType: spec.ownerType ?? ImageCacheOwnerType.profile,
         );
       case ForumImageKind.forumHeadImage:
         return ForumImageCacheRequests.forumHeadImage(
           url: url,
+          referer: spec.referer,
           ownerId: _ownerId(spec, fallback: 'home'),
         );
       case ForumImageKind.blogInline:
         return ForumImageCacheRequests.blogInline(
           blogId: _ownerId(spec),
           url: url,
+          referer: spec.referer,
           imageIndex: spec.imageIndex,
         );
       case ForumImageKind.forumIcon:
@@ -182,6 +188,7 @@ class DefaultForumImageRequestResolver implements ForumImageRequestResolver {
     return ImageCacheRequest(
       cacheKey: cacheKey,
       sourceUrl: spec.sourceUrl,
+      referer: spec.referer,
       ownerType: spec.ownerType ?? defaultOwnerType,
       ownerId: _ownerId(spec, fallback: defaultOwnerId),
       role: defaultRole,
