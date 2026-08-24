@@ -68,6 +68,7 @@ final yamiboForumClientProvider = Provider<YamiboForumClient>((ref) {
     documentStore: ref.watch(yamiboForumDocumentStoreProvider),
     snapshotStore: ref.watch(yamiboForumSnapshotStoreProvider),
     formhashProvider: ref.watch(yamiboForumFormhashProvider),
+    stickerCatalogStore: ref.watch(yamiboForumStickerCatalogStoreProvider),
   ).buildStandardReads();
 });
 
@@ -88,3 +89,8 @@ final yamiboForumSnapshotStoreProvider = Provider<ForumSnapshotStore>((ref) {
     ref.watch(parsedSnapshotCacheServiceProvider),
   );
 });
+
+final yamiboForumStickerCatalogStoreProvider =
+    Provider<ForumStickerCatalogStore>((ref) {
+      return const Y300ForumStickerCatalogStore();
+    });

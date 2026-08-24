@@ -547,3 +547,267 @@ void runUserBlogDetailContractSuite(
     });
   });
 }
+
+final class ForumHomeContractDriver {
+  const ForumHomeContractDriver({
+    required this.name,
+    required this.createRepository,
+  });
+
+  final String name;
+  final ForumHomeRepository Function() createRepository;
+}
+
+void runForumHomeContractSuite(
+  ForumHomeContractDriver Function() createDriver,
+) {
+  group('ForumHome contract: ${createDriver().name}', () {
+    test('returns stable directory and ordered remote references', () async {
+      final result = await createDriver().createRepository().loadHome(
+        const ForumHomeQuery(),
+      );
+      final success =
+          result
+              as DataReadSuccess<ForumHomeDocument, ForumHomeReadCapabilities>;
+      final fids = success.data.directory.sections
+          .expand((section) => section.forums)
+          .map((forum) => forum.fid)
+          .toList();
+      expect(fids.every((fid) => fid.trim().isNotEmpty), isTrue);
+      expect(fids.toSet(), hasLength(fids.length));
+      expect(
+        success.capabilities.supports(ForumHomeCapability.forumDirectory),
+        isTrue,
+      );
+      expect(success.metadata.origin, isNot(DataReadOrigin.unknown));
+    });
+  });
+}
+
+final class ForumNotificationContractDriver {
+  const ForumNotificationContractDriver({
+    required this.name,
+    required this.createRepository,
+  });
+
+  final String name;
+  final ForumNotificationRepository Function() createRepository;
+}
+
+void runForumNotificationContractSuite(
+  ForumNotificationContractDriver Function() createDriver,
+) {
+  group('ForumNotification contract: ${createDriver().name}', () {
+    test('returns unique ordered notification identities', () async {
+      final result = await createDriver().createRepository().load(
+        const ForumNotificationQuery(),
+      );
+      final success =
+          result
+              as DataReadSuccess<
+                ForumNotificationPage,
+                ForumNotificationReadCapabilities
+              >;
+      final ids = success.data.items.map((item) => item.id).toList();
+      expect(ids.every((id) => id.trim().isNotEmpty), isTrue);
+      expect(ids.toSet(), hasLength(ids.length));
+      expect(
+        success.capabilities.values.supports(
+          ForumNotificationCapability.stableIdentity,
+        ),
+        isTrue,
+      );
+      expect(success.metadata.origin, isNot(DataReadOrigin.unknown));
+    });
+  });
+}
+
+final class ForumPrivateMessageContractDriver {
+  const ForumPrivateMessageContractDriver({
+    required this.name,
+    required this.createRepository,
+  });
+
+  final String name;
+  final ForumPrivateMessageRepository Function() createRepository;
+}
+
+void runForumPrivateMessageContractSuite(
+  ForumPrivateMessageContractDriver Function() createDriver,
+) {
+  group('ForumPrivateMessage contract: ${createDriver().name}', () {
+    test('returns unique ordered message identities', () async {
+      final result = await createDriver().createRepository().load(
+        const ForumPrivateMessageQuery(),
+      );
+      final success =
+          result
+              as DataReadSuccess<
+                ForumPrivateMessagePage,
+                ForumPrivateMessageReadCapabilities
+              >;
+      final ids = success.data.items.map((item) => item.messageId).toList();
+      expect(ids.every((id) => id.trim().isNotEmpty), isTrue);
+      expect(ids.toSet(), hasLength(ids.length));
+      expect(
+        success.capabilities.values.supports(
+          ForumPrivateMessageCapability.stableIdentity,
+        ),
+        isTrue,
+      );
+      expect(success.metadata.origin, isNot(DataReadOrigin.unknown));
+    });
+  });
+}
+
+final class ForumStickerCatalogContractDriver {
+  const ForumStickerCatalogContractDriver({
+    required this.name,
+    required this.createRepository,
+  });
+
+  final String name;
+  final ForumStickerCatalogRepository Function() createRepository;
+}
+
+void runForumStickerCatalogContractSuite(
+  ForumStickerCatalogContractDriver Function() createDriver,
+) {
+  group('ForumStickerCatalog contract: ${createDriver().name}', () {
+    test('returns stable ordered groups and normalized codes', () async {
+      final result = await createDriver().createRepository().load(
+        const ForumStickerCatalogQuery(),
+      );
+      final success =
+          result
+              as DataReadSuccess<
+                ForumStickerCatalogData,
+                ForumStickerCatalogReadCapabilities
+              >;
+      final groupIds = success.data.groups.map((group) => group.id).toList();
+      expect(groupIds.every((id) => id.trim().isNotEmpty), isTrue);
+      expect(groupIds.toSet(), hasLength(groupIds.length));
+      expect(
+        success.data.groups
+            .expand((group) => group.items)
+            .every((item) => item.insertionCode.trim().isNotEmpty),
+        isTrue,
+      );
+      expect(success.metadata.origin, isNot(DataReadOrigin.unknown));
+    });
+  });
+}
+
+final class ThreadPostRatingsContractDriver {
+  const ThreadPostRatingsContractDriver({
+    required this.name,
+    required this.createRepository,
+    required this.query,
+  });
+
+  final String name;
+  final ThreadPostRatingsRepository Function() createRepository;
+  final ThreadPostRatingsQuery query;
+}
+
+void runThreadPostRatingsContractSuite(
+  ThreadPostRatingsContractDriver Function() createDriver,
+) {
+  group('ThreadPostRatings contract: ${createDriver().name}', () {
+    test('returns ordered ratings for the requested post', () async {
+      final driver = createDriver();
+      final result = await driver.createRepository().load(driver.query);
+      final success =
+          result
+              as DataReadSuccess<
+                ThreadPostRatingsData,
+                ThreadPostRatingsReadCapabilities
+              >;
+      expect(success.data.participantCount, success.data.ratings.length);
+      expect(
+        success.capabilities.values.supports(
+          ThreadPostRatingsCapability.stablePostIdentity,
+        ),
+        isTrue,
+      );
+      expect(success.metadata.origin, isNot(DataReadOrigin.unknown));
+    });
+  });
+}
+
+final class ThreadPostLocatorContractDriver {
+  const ThreadPostLocatorContractDriver({
+    required this.name,
+    required this.createRepository,
+    required this.query,
+  });
+
+  final String name;
+  final ThreadPostLocatorRepository Function() createRepository;
+  final ThreadPostLocationQuery query;
+}
+
+void runThreadPostLocatorContractSuite(
+  ThreadPostLocatorContractDriver Function() createDriver,
+) {
+  group('ThreadPostLocator contract: ${createDriver().name}', () {
+    test('returns exact matching thread and post identities', () async {
+      final driver = createDriver();
+      final result = await driver.createRepository().locate(driver.query);
+      final success =
+          result
+              as DataReadSuccess<
+                ThreadPostLocationData,
+                ThreadPostLocatorReadCapabilities
+              >;
+      expect(success.data.tid, driver.query.tid);
+      expect(success.data.pid, driver.query.pid);
+      expect(success.data.page, greaterThan(0));
+      expect(success.metadata.origin, isNot(DataReadOrigin.unknown));
+    });
+  });
+}
+
+final class ThreadAuthorPostContractDriver {
+  const ThreadAuthorPostContractDriver({
+    required this.name,
+    required this.createRepository,
+    required this.query,
+  });
+
+  final String name;
+  final ThreadAuthorPostRepository Function() createRepository;
+  final ThreadAuthorPostQuery query;
+}
+
+void runThreadAuthorPostContractSuite(
+  ThreadAuthorPostContractDriver Function() createDriver,
+) {
+  group('ThreadAuthorPost contract: ${createDriver().name}', () {
+    test(
+      'returns only stable ordered posts for the requested author',
+      () async {
+        final driver = createDriver();
+        final result = await driver.createRepository().load(driver.query);
+        final success =
+            result
+                as DataReadSuccess<
+                  ThreadAuthorPostPage,
+                  ThreadAuthorPostReadCapabilities
+                >;
+        expect(success.data.tid, driver.query.tid);
+        expect(success.data.currentPage, driver.query.page);
+        final pids = success.data.posts.map((post) => post.pid).toList();
+        expect(pids.every((pid) => pid.trim().isNotEmpty), isTrue);
+        expect(pids.toSet(), hasLength(pids.length));
+        expect(
+          success.data.posts.every(
+            (post) => post.authorId == driver.query.authorId,
+          ),
+          isTrue,
+        );
+        expect(success.metadata.origin, isNot(DataReadOrigin.unknown));
+      },
+    );
+  });
+}

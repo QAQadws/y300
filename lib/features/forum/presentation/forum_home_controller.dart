@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
-import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
+    hide ForumHomeFavoriteForum, ForumHomeRepository;
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';

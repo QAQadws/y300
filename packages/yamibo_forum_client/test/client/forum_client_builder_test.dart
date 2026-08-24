@@ -8,7 +8,8 @@ void main() {
       final client = _builder().buildStandardReads();
       final sources = client.sourcePlan;
 
-      expect(sources.forumDirectory, isA<DiscuzForumDirectoryHtmlRepository>());
+      expect(sources.forumHome, isA<DiscuzForumHomeHtmlRepository>());
+      expect(identical(sources.forumDirectory, sources.forumHome), isTrue);
       expect(
         sources.forumTagDirectory,
         isA<DiscuzForumTagDirectoryRepository>(),
@@ -25,6 +26,21 @@ void main() {
       expect(
         sources.currentUserProfile,
         isA<DiscuzCurrentUserProfileRepository>(),
+      );
+      expect(sources.notifications, isA<DiscuzForumNotificationRepository>());
+      expect(
+        sources.privateMessages,
+        isA<DiscuzForumPrivateMessageRepository>(),
+      );
+      expect(
+        sources.stickerCatalog,
+        isA<DiscuzForumStickerCatalogRepository>(),
+      );
+      expect(sources.postRatings, isA<DiscuzThreadPostRatingsRepository>());
+      expect(sources.postLocator, isA<DiscuzThreadPostLocatorRepository>());
+      expect(
+        sources.threadAuthorPosts,
+        isA<DiscuzThreadAuthorPostRepository>(),
       );
       expect(sources.forumUserProfile, isA<DiscuzForumUserProfileRepository>());
       expect(

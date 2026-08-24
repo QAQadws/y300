@@ -70,6 +70,12 @@ void main() {
       'lib/features/tags/data/repositories/forum_tag_directory_repository.dart',
       'lib/features/profile/data/repositories/forum_user_profile_repository.dart',
       'lib/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart',
+      'lib/features/forum/data/repositories/forum_home_chrome_repository.dart',
+      'lib/features/forum/data/models/forum_home_html_models.dart',
+      'lib/features/forum/data/services/forum_home_html_parser.dart',
+      'lib/features/forum/data/services/forum_home_chrome_parser.dart',
+      'lib/features/forum/data/services/forum_home_snapshot_codec.dart',
+      'lib/features/profile/data/services/my_message_parser.dart',
       'packages/yamibo_forum_client/lib/yamibo_forum_client_parsers.dart',
       'lib/core/network/image_request_headers.dart',
     ];
@@ -91,6 +97,62 @@ void main() {
         .where((file) {
           final source = file.readAsStringSync();
           return forbidden.any(source.contains);
+        })
+        .map((file) => file.path)
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
+  test('migrated read endpoints stay behind the package facade', () {
+    const allowedReferenceBuilders = <String>{
+      'lib/features/novel/data/services/thread_post_locator_novel_chapter_source_route_resolver.dart',
+      'lib/features/thread/domain/services/thread_floor_link_builder.dart',
+    };
+    const forbidden = <String>[
+      "module: 'mynotelist'",
+      "module: 'mypm'",
+      "module: 'smiley'",
+      "'action': 'viewratings'",
+      "'goto': 'findpost'",
+    ];
+    final violations = _dartFiles(<String>['lib'])
+        .where((file) {
+          final source = file.readAsStringSync();
+          return forbidden.any(source.contains);
+        })
+        .map((file) => _normalized(file.path))
+        .where((path) => !allowedReferenceBuilders.contains(path))
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
+  test('novel reads cannot reconstruct the version 1 transport', () {
+    final violations = _dartFiles(<String>['lib/features/novel'])
+        .where((file) {
+          final source = file.readAsStringSync();
+          return source.contains("module: 'viewthread'") ||
+              source.contains("'version': 1") ||
+              source.contains("'version': '1'");
+        })
+        .map((file) => file.path)
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
+  test('tests do not depend on ignored private forum fixtures', () {
+    final violations = _dartFiles(<String>['test'])
+        .where(
+          (file) =>
+              _normalized(file.path) !=
+              'test/architecture/yamibo_forum_client_boundary_test.dart',
+        )
+        .where((file) {
+          final source = file.readAsStringSync();
+          return source.contains('docs/html/我的资料/我的提醒') ||
+              source.contains('docs/html/我的资料/我的消息');
         })
         .map((file) => file.path)
         .toList();

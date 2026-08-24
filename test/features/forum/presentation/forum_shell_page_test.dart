@@ -7,7 +7,8 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
-import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
+    hide ForumHomeFavoriteForum, ForumHomeRepository;
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/auth/data/repositories/auth_repository.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';

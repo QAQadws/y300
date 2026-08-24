@@ -1,59 +1,38 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:logger/logger.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/network/api_client.dart';
-import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/yamibo_forum_client_provider.dart';
-import 'package:y300/features/novel/data/services/novel_thread_gateway.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-
-import '../test_support/novel_phase0_api_fixtures.dart';
+import 'package:y300/features/novel/data/services/novel_thread_gateway.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  group('ApiNovelThreadGateway', () {
-    setUp(() {
-      SharedPreferences.setMockInitialValues(<String, Object>{});
-    });
-
+  group('PackageNovelThreadGateway', () {
     test(
-      'requests viewthread with version=1 and parses thread detail',
+      'projects the package author-post page into the novel model',
       () async {
-        final adapter = _NovelThreadGatewayAdapter(
-          responseJson: <String, dynamic>{
-            'Version': '1',
-            'Charset': 'UTF-8',
-            'Variables': <String, dynamic>{
-              'fid': '49',
-              'ppp': '200',
-              'thread': <String, dynamic>{
-                'tid': '200',
-                'fid': '49',
-                'subject': '测试小说标题',
-                'author': '楼主A',
-                'replies': '2',
-                'views': '10',
-              },
-              'postlist': <Map<String, dynamic>>[
-                <String, dynamic>{
-                  'pid': '5001',
-                  'author': '楼主A',
-                  'authorid': '1',
-                  'message': '<p>第1章</p>',
-                  'number': '1',
-                  'first': '1',
-                  'dateline': '2026-05-03',
-                },
+        final source = _FakeAuthorPostRepository(
+          DataReadSuccess(
+            data: ThreadAuthorPostPage(
+              tid: '200',
+              subject: '测试小说标题',
+              posts: [
+                ThreadPost(
+                  pid: '5001',
+                  author: '楼主A',
+                  authorId: '1',
+                  message: '<p>第1章</p>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: '2026-01-01',
+                ),
               ],
-            },
-          },
+              currentPage: 3,
+              pageSize: 200,
+              totalReplyHint: 2,
+              hasNext: true,
+            ),
+            capabilities: _readCapabilities,
+            metadata: const DataReadMetadata.network(),
+          ),
         );
-        final gateway = _buildGateway(adapter);
+        final gateway = PackageNovelThreadGateway(source);
 
         final result = await gateway.loadAuthorPostsPage(
           tid: '200',
@@ -61,98 +40,28 @@ void main() {
           page: 3,
         );
 
-        expect(adapter.lastUri?.queryParameters['module'], 'viewthread');
-        expect(adapter.lastUri?.queryParameters['tid'], '200');
-        expect(adapter.lastUri?.queryParameters['page'], '3');
-        expect(adapter.lastUri?.queryParameters['version'], '1');
-        expect(adapter.lastUri?.queryParameters['ppp'], '200');
-        expect(adapter.lastUri?.queryParameters['authorid'], '1');
+        expect(source.queries.single.tid, '200');
+        expect(source.queries.single.authorId, '1');
+        expect(source.queries.single.page, 3);
+        expect(source.queries.single.pageSize, 200);
         expect(result.tid, '200');
         expect(result.currentPage, 3);
         expect(result.perPage, 200);
-        expect(result.posts, hasLength(1));
         expect(result.posts.single.pid, '5001');
+        expect(result.nextPageUrl, 'author-page:4');
       },
     );
 
-    test(
-      'shared API client can express the target author-page query contract',
-      () async {
-        final fixture = await NovelPhase0ApiFixture.load(
-          novelPhase0AuthorPageFixturePaths[1],
-        );
-        final adapter = _NovelThreadGatewayAdapter(responseJson: fixture.root);
-        final client = _buildApiClient(adapter);
-
-        final result = await client.getParsed<ThreadDetailData>(
-          module: 'viewthread',
-          queryParameters: <String, dynamic>{
-            'tid': '521519',
-            'page': 2,
-            'version': 1,
-            'ppp': 200,
-            'authorid': '406769',
-          },
-          parser: (response) =>
-              createY300ThreadDetailApiDecoder()(response.variables, page: 2),
-        );
-
-        expect(result.isSuccess, isTrue);
-        expect(adapter.lastUri?.queryParameters, <String, String>{
-          'module': 'viewthread',
-          'tid': '521519',
-          'page': '2',
-          'version': '1',
-          'ppp': '200',
-          'authorid': '406769',
-        });
-        expect(result.dataOrNull?.currentPage, 2);
-        expect(result.dataOrNull?.perPage, 200);
-        expect(
-          result.dataOrNull?.posts.map((post) => post.authorId),
-          everyElement('406769'),
-        );
-      },
-    );
-
-    test('production gateway sends the exact author-page contract', () async {
-      final fixture = await NovelPhase0ApiFixture.load(
-        novelPhase0AuthorPageFixturePaths[1],
+    test('throws when the package read fails', () async {
+      final gateway = PackageNovelThreadGateway(
+        _FakeAuthorPostRepository(
+          const DataReadFailure(
+            kind: DataReadFailureKind.business,
+            code: 'viewthread_forbidden',
+            diagnosticMessage: '读取失败',
+          ),
+        ),
       );
-      final adapter = _NovelThreadGatewayAdapter(responseJson: fixture.root);
-      final gateway = _buildGateway(adapter);
-
-      final result = await gateway.loadAuthorPostsPage(
-        tid: '521519',
-        authorId: '406769',
-        page: 2,
-      );
-
-      expect(adapter.lastUri?.queryParameters, <String, String>{
-        'module': 'viewthread',
-        'tid': '521519',
-        'page': '2',
-        'version': '1',
-        'ppp': '200',
-        'authorid': '406769',
-      });
-      expect(result.currentPage, 2);
-      expect(result.posts.map((post) => post.authorId), everyElement('406769'));
-    });
-
-    test('throws state error when api result is failure', () async {
-      final adapter = _NovelThreadGatewayAdapter(
-        responseJson: <String, dynamic>{
-          'Version': '1',
-          'Charset': 'UTF-8',
-          'Variables': <String, dynamic>{},
-          'Message': <String, dynamic>{
-            'messageval': 'viewthread_forbidden',
-            'messagestr': '读取失败',
-          },
-        },
-      );
-      final gateway = _buildGateway(adapter);
 
       expect(
         () => gateway.loadAuthorPostsPage(tid: '200', authorId: '1', page: 1),
@@ -164,50 +73,30 @@ void main() {
   });
 }
 
-ApiNovelThreadGateway _buildGateway(_NovelThreadGatewayAdapter adapter) {
-  return ApiNovelThreadGateway(
-    _buildApiClient(adapter),
-    createY300ThreadDetailApiDecoder(),
-  );
-}
+final _readCapabilities = ThreadAuthorPostReadCapabilities(
+  values: DataCapabilitySet.supported(ThreadAuthorPostCapability.values),
+);
 
-ApiClient _buildApiClient(_NovelThreadGatewayAdapter adapter) {
-  final dio = Dio(
-    BaseOptions(
-      baseUrl: 'https://bbs.yamibo.com/api/mobile/index.php',
-      connectTimeout: const Duration(seconds: 3),
-      receiveTimeout: const Duration(seconds: 3),
-    ),
-  )..httpClientAdapter = adapter;
+final class _FakeAuthorPostRepository implements ThreadAuthorPostRepository {
+  _FakeAuthorPostRepository(this.result);
 
-  return ApiClient(
-    cookieStore: CookieStore(),
-    logger: Logger(level: Level.off),
-    dio: dio,
-    enableLog: false,
-  );
-}
-
-class _NovelThreadGatewayAdapter implements HttpClientAdapter {
-  _NovelThreadGatewayAdapter({required this.responseJson});
-
-  final Map<String, dynamic> responseJson;
-  Uri? lastUri;
+  final DataReadResult<ThreadAuthorPostPage, ThreadAuthorPostReadCapabilities>
+  result;
+  final queries = <ThreadAuthorPostQuery>[];
 
   @override
-  void close({bool force = false}) {}
+  ThreadAuthorPostSourceCapabilities get capabilities =>
+      ThreadAuthorPostSourceCapabilities(
+        values: DataCapabilitySet.supported(ThreadAuthorPostCapability.values),
+      );
 
   @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) async {
-    lastUri = options.uri;
-    return ResponseBody.fromString(
-      jsonEncode(responseJson),
-      200,
-      headers: const <String, List<String>>{},
-    );
+  Future<DataReadResult<ThreadAuthorPostPage, ThreadAuthorPostReadCapabilities>>
+  load(
+    ThreadAuthorPostQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.networkFirst,
+  }) async {
+    queries.add(query);
+    return result;
   }
 }

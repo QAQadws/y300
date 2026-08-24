@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_draft_providers.dart';
 import 'package:y300/features/composer_shared/data/repositories/discuz_composer_unused_image_repository.dart';
@@ -18,7 +19,6 @@ import 'package:y300/features/composer_shared/domain/services/composer_sticker_i
 import 'package:y300/features/composer_shared/domain/services/composer_submission_failure_classifier.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_verification_service.dart';
 import 'package:y300/features/composer_shared/domain/services/sticker_bbcode_tokenizer.dart';
-import 'package:y300/features/composer_shared/domain/services/sticker_code_normalizer.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_unused_image_repository.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -32,19 +32,11 @@ export 'package:y300/features/composer_shared/data/providers/composer_draft_prov
 /// 业务 provider（`replyRepositoryProvider`、`replyComposerControllerProvider` 等）
 /// 仍然留在各自的 feature 目录里，它们消费这里暴露的依赖。
 
-final stickerCodeNormalizerProvider = Provider<StickerCodeNormalizer>((_) {
-  return const StickerCodeNormalizer();
-});
-
 final stickerCatalogRepositoryProvider = Provider<StickerCatalogRepository>((
   ref,
 ) {
-  return RemoteStickerCatalogRepository(
-    remoteDataSource: YamiboStickerCatalogRemoteDataSource(
-      gateway: ref.read(yamiboHttpGatewayProvider),
-    ),
-    cacheStore: const FileStickerCatalogCacheStore(),
-    normalizer: ref.read(stickerCodeNormalizerProvider),
+  return PackageStickerCatalogRepository(
+    repository: ref.watch(yamiboForumClientProvider).stickerCatalog!,
   );
 });
 

@@ -64,10 +64,13 @@ currently verified by Y300:
 
 | Capability | Source |
 | --- | --- |
-| Forum directory, forum display, thread detail | HTML-first |
+| Forum home document, directory, forum display, thread detail | HTML-first |
 | Tag directory, public profile, user blogs | HTML |
-| Favorites and current-user profile | Discuz API |
+| Favorites, current-user profile, notifications, private messages, stickers | Discuz API |
 | Comic catalog, discovery, replies, ingestion detail | Discuz v4 API |
+| Full post ratings | Discuz AJAX CDATA |
+| Post location | Discuz HTML redirect plus identity proof |
+| Author-filtered post pages | Discuz `viewthread version=1` |
 | Search | HTML, only when a `ForumFormhashProvider` is supplied |
 
 If no formhash provider is supplied, only search is left uninstalled and its
@@ -75,9 +78,10 @@ facade methods fail closed with `DataReadFailureKind.unsupported`. Advanced
 hosts can import the adapters barrel and build a custom `ForumClientSourcePlan`
 for individual contracts; there is deliberately no global HTML/API switch.
 
-Novel body reads are not part of the standard client. Y300 keeps their
-`version=1` contract in the novel feature because it has different content and
-lifecycle requirements.
+The standard client exposes the source-neutral author-post page used by Y300's
+novel synchronization and permanently fixes that adapter to `version=1`.
+Novel chapter construction, title parsing, synchronization, body projection,
+and reader state remain application business logic and are not package models.
 
 ## Host responsibilities
 
@@ -145,11 +149,13 @@ fail closed as `unsupported`.
 
 ## Current capability boundary
 
-The package currently covers forum/thread directories and details, Tag,
-search, remote favorite directories, profiles/blogs, comic episode discovery,
-and reply-page reads. Login UI and write operations—including posting,
-replying, editing, favorite mutations, ratings, comments, polls, and uploads—
-remain application-owned and are not represented as read results.
+The package currently covers the forum home document, forum/thread directories
+and details, Tag, search, remote favorite directories, profiles/blogs,
+notifications, private messages, stickers, full rating details, post location,
+author-filtered post pages, comic episode discovery, reply-page reads, and
+protected image transport. Login UI and write operations—including posting,
+replying, editing, favorite mutations, creating ratings/comments, voting, and
+uploads—remain application-owned and are not represented as read results.
 
 A future optional `yamibo_forum_client_flutter` package may provide reusable
 WebView WAF and lifecycle integration. It will depend on this package rather

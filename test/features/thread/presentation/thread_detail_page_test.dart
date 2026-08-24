@@ -22,7 +22,8 @@ import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
+    hide ThreadPostRatingsRepository;
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';

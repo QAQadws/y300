@@ -1,7 +1,6 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
+    as forum;
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
-import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
-import 'package:y300/features/thread/data/services/thread_detail_document_decoder.dart';
 
 class ThreadPostLocation {
   const ThreadPostLocation({
@@ -25,15 +24,10 @@ abstract class ThreadPostLocator {
   });
 }
 
-class HtmlThreadPostLocator implements ThreadPostLocator {
-  const HtmlThreadPostLocator({
-    required YamiboHttpGateway gateway,
-    required ThreadDetailDocumentDecoder decoder,
-  }) : _gateway = gateway,
-       _decoder = decoder;
-
-  final YamiboHttpGateway _gateway;
-  final ThreadDetailDocumentDecoder _decoder;
+/// Compatibility projection for existing App routing consumers.
+final class PackageThreadPostLocator implements ThreadPostLocator {
+  const PackageThreadPostLocator(this._repository);
+  final forum.ThreadPostLocatorRepository _repository;
 
   @override
   Future<ApiResult<ThreadPostLocation>> locate({
@@ -41,63 +35,47 @@ class HtmlThreadPostLocator implements ThreadPostLocator {
     required String pid,
     required Uri sourceUri,
   }) async {
-    final result = await _gateway.getText(
-      sourceUri,
-      context: const YamiboRequestContext(
-        kind: YamiboRequestKind.html,
-        operation: 'thread.post.locate',
-        pageKind: 'thread.detail',
-      ),
-      followRedirects: true,
-      validateStatus: (status) =>
-          status != null && status >= 200 && status < 400,
+    final result = await _repository.locate(
+      forum.ThreadPostLocationQuery(tid: tid, pid: pid),
     );
-    if (result case ApiFailure(:final error)) {
-      return ApiFailure<ThreadPostLocation>(
-        ApiError(
-          type: error.type,
-          message: '楼层定位失败: ${error.message}',
-          code: error.code,
-          statusCode: error.statusCode,
-          raw: error.raw,
+    return switch (result) {
+      forum.DataReadSuccess<
+        forum.ThreadPostLocationData,
+        forum.ThreadPostLocatorReadCapabilities
+      >(
+        :final data,
+      ) =>
+        ApiSuccess(
+          ThreadPostLocation(
+            tid: data.tid,
+            pid: data.pid,
+            page: data.page,
+            url: data.resolvedUri.toString(),
+          ),
         ),
-      );
-    }
-    try {
-      final response = result.dataOrNull;
-      if (response == null) {
-        return const ApiFailure<ThreadPostLocation>(
-          ApiError(type: ApiErrorType.unknown, message: '楼层定位结果为空'),
-        );
-      }
-      final detail = _decoder.decode(
-        response.body,
-        fallbackTid: tid,
-        fallbackPage: 1,
-      );
-      final hasTargetPost = detail.posts.any((post) => post.pid == pid);
-      if (!hasTargetPost) {
-        return const ApiFailure<ThreadPostLocation>(
-          ApiError(type: ApiErrorType.parse, message: '目标楼层未出现在定位结果中'),
-        );
-      }
-      final page = detail.currentPage <= 0 ? 1 : detail.currentPage;
-      return ApiSuccess<ThreadPostLocation>(
-        ThreadPostLocation(
-          tid: detail.tid.isEmpty ? tid : detail.tid,
-          pid: pid,
-          page: page,
-          url: response.uri.toString(),
-        ),
-      );
-    } catch (error) {
-      return ApiFailure<ThreadPostLocation>(
-        ApiError(
-          type: ApiErrorType.parse,
-          message: '楼层定位结果解析失败: $error',
-          raw: error,
-        ),
-      );
-    }
+      final forum.DataReadFailure<
+        forum.ThreadPostLocationData,
+        forum.ThreadPostLocatorReadCapabilities
+      >
+      failure =>
+        ApiFailure(_toApiError(failure)),
+    };
   }
 }
+
+ApiError _toApiError<T, C>(forum.DataReadFailure<T, C> failure) => ApiError(
+  type: switch (failure.kind) {
+    forum.DataReadFailureKind.network ||
+    forum.DataReadFailureKind.cancelled => ApiErrorType.network,
+    forum.DataReadFailureKind.timeout => ApiErrorType.timeout,
+    forum.DataReadFailureKind.unauthorized => ApiErrorType.unauthorized,
+    forum.DataReadFailureKind.server => ApiErrorType.server,
+    forum.DataReadFailureKind.parse => ApiErrorType.parse,
+    forum.DataReadFailureKind.business ||
+    forum.DataReadFailureKind.unsupported => ApiErrorType.business,
+    forum.DataReadFailureKind.unknown => ApiErrorType.unknown,
+  },
+  message: failure.diagnosticMessage,
+  code: failure.code,
+  statusCode: failure.statusCode,
+);

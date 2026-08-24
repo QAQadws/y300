@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io' as io;
 
 import 'package:dio/dio.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo.dart';
@@ -409,6 +412,39 @@ final class Y300ForumSnapshotStoreAdapter implements forum.ForumSnapshotStore {
     forum.ForumSnapshotDescriptor descriptor,
     DateTime accessedAt,
   ) => _delegate.touch(descriptor.cacheKey, accessedAt);
+}
+
+/// Persists the package-owned sticker catalog codec in Y300's existing path.
+final class Y300ForumStickerCatalogStore
+    implements forum.ForumStickerCatalogStore {
+  const Y300ForumStickerCatalogStore({Future<String> Function()? cacheFilePath})
+    : _cacheFilePath = cacheFilePath ?? _defaultCacheFilePath;
+
+  final Future<String> Function() _cacheFilePath;
+
+  @override
+  Future<String?> read() async {
+    final file = io.File(await _cacheFilePath());
+    return await file.exists() ? file.readAsString() : null;
+  }
+
+  @override
+  Future<void> write(String encoded) async {
+    final file = io.File(await _cacheFilePath());
+    await file.parent.create(recursive: true);
+    await file.writeAsString(encoded, flush: true);
+  }
+
+  @override
+  Future<void> clear() async {
+    final file = io.File(await _cacheFilePath());
+    if (await file.exists()) await file.delete();
+  }
+
+  static Future<String> _defaultCacheFilePath() async {
+    final support = await getApplicationSupportDirectory();
+    return p.join(support.path, 'cache', 'catalog', 'yamibo_smiley_v4.json');
+  }
 }
 
 final class _Y300SnapshotCodec<T>

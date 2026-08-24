@@ -1,15 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/api_client.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
-import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
-class ApiNovelThreadGateway implements NovelThreadGateway {
-  const ApiNovelThreadGateway(this._apiClient, this._decodeThreadDetail);
+final class PackageNovelThreadGateway implements NovelThreadGateway {
+  const PackageNovelThreadGateway(this._repository);
 
-  final ApiClient _apiClient;
-  final Y300ThreadDetailApiDecoder _decodeThreadDetail;
+  final ThreadAuthorPostRepository _repository;
 
   @override
   Future<ThreadDetailData> loadAuthorPostsPage({
@@ -18,43 +15,46 @@ class ApiNovelThreadGateway implements NovelThreadGateway {
     required int page,
     int postsPerPage = 200,
   }) async {
-    final normalizedTid = tid.trim();
-    final normalizedAuthorId = authorId.trim();
-    if (normalizedTid.isEmpty) {
-      throw ArgumentError.value(tid, 'tid', 'must not be empty');
-    }
-    if (normalizedAuthorId.isEmpty) {
-      throw ArgumentError.value(authorId, 'authorId', 'must not be empty');
-    }
-    if (page < 1) {
-      throw RangeError.range(page, 1, null, 'page');
-    }
-    if (postsPerPage < 1) {
-      throw RangeError.range(postsPerPage, 1, null, 'postsPerPage');
-    }
-    final result = await _apiClient.getParsed<ThreadDetailData>(
-      module: 'viewthread',
-      queryParameters: <String, dynamic>{
-        'tid': normalizedTid,
-        'page': page,
-        'version': 1,
-        'ppp': postsPerPage,
-        'authorid': normalizedAuthorId,
-      },
-      parser: (response) => _decodeThreadDetail(response.variables, page: page),
+    final result = await _repository.load(
+      ThreadAuthorPostQuery(
+        tid: tid,
+        authorId: authorId,
+        page: page,
+        pageSize: postsPerPage,
+      ),
     );
-    final data = result.dataOrNull;
-    if (!result.isSuccess || data == null) {
-      final message = result.errorOrNull?.message ?? '加载帖子详情失败';
-      throw StateError(message);
+    if (result case DataReadFailure<
+      ThreadAuthorPostPage,
+      ThreadAuthorPostReadCapabilities
+    >(
+      :final diagnosticMessage,
+    )) {
+      throw StateError(diagnosticMessage);
     }
-    return data;
+    final data =
+        (result
+                as DataReadSuccess<
+                  ThreadAuthorPostPage,
+                  ThreadAuthorPostReadCapabilities
+                >)
+            .data;
+    return ThreadDetailData(
+      tid: data.tid,
+      fid: '',
+      subject: data.subject,
+      author: data.posts.isEmpty ? '' : data.posts.first.author,
+      replies: data.totalReplyHint,
+      views: 0,
+      currentPage: data.currentPage,
+      perPage: data.pageSize,
+      posts: data.posts,
+      nextPageUrl: data.hasNext ? 'author-page:${data.currentPage + 1}' : null,
+    );
   }
 }
 
 final novelThreadGatewayProvider = Provider<NovelThreadGateway>((ref) {
-  return ApiNovelThreadGateway(
-    ref.watch(apiClientProvider),
-    ref.watch(yamiboThreadDetailApiDecoderProvider),
+  return PackageNovelThreadGateway(
+    ref.watch(yamiboForumClientProvider).threadAuthorPosts!,
   );
 });

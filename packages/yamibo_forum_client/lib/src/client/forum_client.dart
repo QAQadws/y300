@@ -3,15 +3,19 @@ import '../contracts/cache_load_policy.dart';
 import '../contracts/data_read_contract.dart';
 import '../contracts/favorite_directories.dart';
 import '../contracts/forum_directory.dart';
+import '../contracts/forum_home.dart';
 import '../contracts/forum_display_models.dart';
 import '../contracts/forum_display_repository.dart';
 import '../contracts/forum_search.dart';
 import '../contracts/forum_resource.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
+import '../contracts/message_directories.dart';
+import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_detail_models.dart';
 import '../contracts/thread_repository.dart';
+import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
 import 'forum_client_config.dart';
 import 'forum_client_source_plan.dart';
@@ -33,6 +37,7 @@ final class YamiboForumClient {
   final ForumClientSourcePlan sourcePlan;
 
   ForumDirectoryRepository? get forumDirectory => sourcePlan.forumDirectory;
+  ForumHomeRepository? get forumHome => sourcePlan.forumHome;
   ForumDisplayRepository? get forumDisplay => sourcePlan.forumDisplay;
   ForumTagDirectoryRepository? get forumTagDirectory =>
       sourcePlan.forumTagDirectory;
@@ -51,6 +56,72 @@ final class YamiboForumClient {
   ThreadRepository? get threadDetail => sourcePlan.threadDetail;
   ThreadRepository? get threadIngestionDetail =>
       sourcePlan.threadIngestionDetail;
+  ForumNotificationRepository? get notifications => sourcePlan.notifications;
+  ForumPrivateMessageRepository? get privateMessages =>
+      sourcePlan.privateMessages;
+  ForumStickerCatalogRepository? get stickerCatalog =>
+      sourcePlan.stickerCatalog;
+  ThreadPostRatingsRepository? get postRatings => sourcePlan.postRatings;
+  ThreadPostLocatorRepository? get postLocator => sourcePlan.postLocator;
+  ThreadAuthorPostRepository? get threadAuthorPosts =>
+      sourcePlan.threadAuthorPosts;
+
+  Future<DataReadResult<ForumHomeDocument, ForumHomeReadCapabilities>>
+  loadForumHome(
+    ForumHomeQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) =>
+      sourcePlan.forumHome?.loadHome(query, cachePolicy: cachePolicy) ??
+      unsupported<ForumHomeDocument, ForumHomeReadCapabilities>();
+
+  Future<ForumHomeCachedRead?> readCachedForumHome(ForumHomeQuery query) =>
+      sourcePlan.forumHome?.readCached(query) ?? Future.value(null);
+
+  Future<
+    DataReadResult<ForumNotificationPage, ForumNotificationReadCapabilities>
+  >
+  loadNotifications(ForumNotificationQuery query) =>
+      sourcePlan.notifications?.load(query) ??
+      unsupported<ForumNotificationPage, ForumNotificationReadCapabilities>();
+
+  Future<
+    DataReadResult<ForumPrivateMessagePage, ForumPrivateMessageReadCapabilities>
+  >
+  loadPrivateMessages(ForumPrivateMessageQuery query) =>
+      sourcePlan.privateMessages?.load(query) ??
+      unsupported<
+        ForumPrivateMessagePage,
+        ForumPrivateMessageReadCapabilities
+      >();
+
+  Future<
+    DataReadResult<ForumStickerCatalogData, ForumStickerCatalogReadCapabilities>
+  >
+  loadStickerCatalog(ForumStickerCatalogQuery query) =>
+      sourcePlan.stickerCatalog?.load(query) ??
+      unsupported<
+        ForumStickerCatalogData,
+        ForumStickerCatalogReadCapabilities
+      >();
+
+  Future<
+    DataReadResult<ThreadPostRatingsData, ThreadPostRatingsReadCapabilities>
+  >
+  loadPostRatings(ThreadPostRatingsQuery query) =>
+      sourcePlan.postRatings?.load(query) ??
+      unsupported<ThreadPostRatingsData, ThreadPostRatingsReadCapabilities>();
+
+  Future<
+    DataReadResult<ThreadPostLocationData, ThreadPostLocatorReadCapabilities>
+  >
+  locatePost(ThreadPostLocationQuery query) =>
+      sourcePlan.postLocator?.locate(query) ??
+      unsupported<ThreadPostLocationData, ThreadPostLocatorReadCapabilities>();
+
+  Future<DataReadResult<ThreadAuthorPostPage, ThreadAuthorPostReadCapabilities>>
+  loadAuthorPosts(ThreadAuthorPostQuery query) =>
+      sourcePlan.threadAuthorPosts?.load(query) ??
+      unsupported<ThreadAuthorPostPage, ThreadAuthorPostReadCapabilities>();
 
   Future<DataReadResult<ForumDirectoryData, ForumDirectoryReadCapabilities>>
   loadForumDirectory(
