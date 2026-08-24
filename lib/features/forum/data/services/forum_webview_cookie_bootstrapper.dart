@@ -9,11 +9,11 @@ final forumWebViewCookieBootstrapperProvider =
       );
     });
 
-abstract class ForumWebViewCookieBootstrapper {
+abstract interface class ForumWebViewCookieBootstrapper {
   Future<Map<String, String>> buildSeedCookies({required Uri uri});
 }
 
-class DefaultForumWebViewCookieBootstrapper
+final class DefaultForumWebViewCookieBootstrapper
     implements ForumWebViewCookieBootstrapper {
   const DefaultForumWebViewCookieBootstrapper({
     required CookieStore cookieStore,

@@ -39,6 +39,24 @@ void main() {
     expect(violations, isEmpty);
   });
 
+  test('presentation never performs source-specific forum reads', () {
+    const forbidden = <String>[
+      'yamiboApiClientProvider',
+      'apiClientProvider',
+      '.getDiscuz(',
+    ];
+    final violations = _dartFiles(<String>['lib/features'])
+        .where((file) => _normalized(file.path).contains('/presentation/'))
+        .where((file) {
+          final source = file.readAsStringSync();
+          return forbidden.any(source.contains);
+        })
+        .map((file) => file.path)
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
   test('migrated compatibility shims and duplicate adapters stay removed', () {
     const removedPaths = <String>[
       'lib/core/data_source/data_read_contract.dart',
@@ -51,6 +69,7 @@ void main() {
       'lib/features/search/data/repositories/discuz_forum_search_repository.dart',
       'lib/features/tags/data/repositories/forum_tag_directory_repository.dart',
       'lib/features/profile/data/repositories/forum_user_profile_repository.dart',
+      'lib/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart',
       'packages/yamibo_forum_client/lib/yamibo_forum_client_parsers.dart',
     ];
 

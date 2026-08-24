@@ -10,7 +10,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
-import 'package:y300/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart';
+import 'package:y300/features/forum/data/services/forum_webview_cookie_bootstrapper.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_early_script_builder.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigation_header_builder.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';

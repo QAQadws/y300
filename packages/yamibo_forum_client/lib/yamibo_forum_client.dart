@@ -1,4 +1,5 @@
 export 'src/client/forum_client.dart';
+export 'src/client/forum_client_builder.dart';
 export 'src/client/forum_client_config.dart';
 export 'src/client/forum_client_source_plan.dart';
 export 'yamibo_forum_client_contracts.dart';

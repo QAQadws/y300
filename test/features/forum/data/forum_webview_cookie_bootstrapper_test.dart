@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/features/forum/domain/services/forum_webview_cookie_bootstrapper.dart';
+import 'package:y300/features/forum/data/services/forum_webview_cookie_bootstrapper.dart';
 
 void main() {
   test(
@@ -50,7 +50,7 @@ void main() {
   );
 }
 
-class _FakeCookieStore extends CookieStore {
+final class _FakeCookieStore extends CookieStore {
   _FakeCookieStore({required this.cookies});
 
   final Map<String, String> cookies;

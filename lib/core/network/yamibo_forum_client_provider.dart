@@ -78,36 +78,14 @@ final yamiboForumClientNetworkProvider = Provider<ForumClientNetwork>((ref) {
 });
 
 final yamiboForumClientProvider = Provider<YamiboForumClient>((ref) {
-  final factory = ForumClientAdapterFactory(
+  return YamiboForumClientBuilder(
     config: ref.watch(yamiboForumClientConfigProvider),
     network: ref.watch(yamiboForumClientNetworkProvider),
     sessionStore: ref.watch(yamiboForumSessionStoreProvider),
     documentStore: ref.watch(yamiboForumDocumentStoreProvider),
     snapshotStore: ref.watch(yamiboForumSnapshotStoreProvider),
-  );
-  return YamiboForumClient(
-    config: ref.watch(yamiboForumClientConfigProvider),
-    network: ref.watch(yamiboForumClientNetworkProvider),
-    sourcePlan: ForumClientSourcePlan(
-      forumDirectory: factory.createHtmlForumDirectory(),
-      forumTagDirectory: factory.createForumTagDirectory(),
-      forumDisplay: factory.createHtmlForumDisplay(),
-      favoriteForumDirectory: factory.createFavoriteForumDirectory(),
-      favoriteThreadDirectory: factory.createFavoriteThreadDirectory(),
-      currentUserProfile: factory.createCurrentUserProfile(),
-      forumUserProfile: factory.createForumUserProfile(),
-      userBlogDirectory: factory.createUserBlogDirectory(),
-      userBlogDetail: factory.createUserBlogDetail(),
-      forumSearch: factory.createForumSearch(
-        ref.watch(yamiboForumFormhashProvider),
-      ),
-      comicEpisodeCatalog: factory.createApiComicEpisodeCatalog(),
-      comicThreadDiscovery: factory.createApiComicThreadDiscovery(),
-      threadReplyPage: factory.createApiThreadReplyPage(),
-      threadDetail: factory.createHtmlThreadDetail(),
-      threadIngestionDetail: factory.createApiThreadDetail(apiVersion: '4'),
-    ),
-  );
+    formhashProvider: ref.watch(yamiboForumFormhashProvider),
+  ).buildStandardReads();
 });
 
 final yamiboForumFormhashProvider = Provider<ForumFormhashProvider>((ref) {
