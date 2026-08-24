@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/thread/domain/models/thread_reply_page.dart';
 import 'package:y300/features/thread/domain/repositories/thread_reply_page_repository.dart';
 import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
@@ -88,7 +88,5 @@ final _replyPageCapabilities = ThreadReplyPageReadCapabilities(
 final threadReplyPageRepositoryProvider = Provider<ThreadReplyPageRepository>((
   ref,
 ) {
-  return ApiThreadReplyPageRepository(
-    repository: ref.watch(threadJsonRepositoryProvider),
-  );
+  return ref.watch(yamiboForumClientProvider).threadReplyPage!;
 });

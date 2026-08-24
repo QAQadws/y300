@@ -3,7 +3,7 @@ import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/favorites/data/mappers/favorite_directory_api_mappers.dart';
 import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
@@ -104,16 +104,12 @@ final class DiscuzFavoriteThreadDirectoryRepository
 
 final favoriteForumDirectoryRepositoryProvider =
     Provider<FavoriteForumDirectoryRepository>((ref) {
-      return DiscuzFavoriteForumDirectoryRepository(
-        ref.watch(apiClientProvider),
-      );
+      return ref.watch(yamiboForumClientProvider).favoriteForumDirectory!;
     });
 
 final favoriteThreadDirectoryRepositoryProvider =
     Provider<FavoriteThreadDirectoryRepository>((ref) {
-      return DiscuzFavoriteThreadDirectoryRepository(
-        ref.watch(apiClientProvider),
-      );
+      return ref.watch(yamiboForumClientProvider).favoriteThreadDirectory!;
     });
 
 final _forumCapabilities = FavoriteForumDirectorySourceCapabilities(

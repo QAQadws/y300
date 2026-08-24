@@ -23,6 +23,8 @@ import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.d
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
+    as forum_adapters;
 import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
 
 void main() {
@@ -610,7 +612,10 @@ void main() {
           forumDirectoryRepositoryProvider,
         );
         expect(homeRepository, isA<ForumHomeHtmlRepository>());
-        expect(directoryRepository, same(homeRepository));
+        expect(
+          directoryRepository,
+          isA<forum_adapters.DiscuzForumDirectoryHtmlRepository>(),
+        );
         expect(adapter.htmlRequestedUris, <String>[
           'https://bbs.yamibo.com/index.php?mobile=2',
         ]);

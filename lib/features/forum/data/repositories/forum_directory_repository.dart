@@ -3,7 +3,7 @@ import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/forum/data/mappers/forum_directory_api_mapper.dart';
 import 'package:y300/features/forum/data/services/forum_directory_validator.dart';
@@ -66,5 +66,7 @@ final _apiCapabilities = ForumDirectorySourceCapabilities(
 final forumDirectoryApiRepositoryProvider = Provider<ForumDirectoryRepository>((
   ref,
 ) {
-  return DiscuzForumDirectoryRepository(ref.watch(apiClientProvider));
+  return ref
+      .watch(yamiboForumClientAdapterFactoryProvider)
+      .createApiForumDirectory();
 });

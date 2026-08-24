@@ -18,6 +18,8 @@ import 'package:y300/features/profile/data/repositories/current_user_profile_rep
 import 'package:y300/features/profile/data/repositories/forum_user_profile_repository.dart';
 import 'package:y300/features/profile/domain/models/current_user_profile_models.dart';
 import 'package:y300/features/profile/domain/models/forum_user_profile_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
+    as forum_adapters;
 
 import '../../../support/data_source_contracts/current_user_profile_repository_contract_suite.dart';
 import '../../../support/data_source_contracts/forum_user_profile_repository_contract_suite.dart';
@@ -175,11 +177,11 @@ void main() {
 
       expect(
         container.read(currentUserProfileRepositoryProvider),
-        isA<DiscuzCurrentUserProfileRepository>(),
+        isA<forum_adapters.DiscuzCurrentUserProfileRepository>(),
       );
       expect(
         container.read(forumUserProfileRepositoryProvider),
-        isA<DiscuzForumUserProfileRepository>(),
+        isA<forum_adapters.DiscuzForumUserProfileRepository>(),
       );
     });
   });

@@ -1,9 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/profile/data/repositories/current_user_profile_repository.dart';
-import 'package:y300/features/profile/data/repositories/forum_user_profile_repository.dart';
-import 'package:y300/features/profile/data/repositories/user_blog_detail_repository.dart';
-import 'package:y300/features/profile/data/repositories/user_blog_directory_repository.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/profile/domain/repositories/current_user_profile_repository.dart';
 import 'package:y300/features/profile/domain/repositories/forum_user_profile_repository.dart';
 import 'package:y300/features/profile/domain/repositories/user_blog_detail_repository.dart';
@@ -11,28 +7,22 @@ import 'package:y300/features/profile/domain/repositories/user_blog_directory_re
 
 final currentUserProfileRepositoryProvider =
     Provider<CurrentUserProfileRepository>((ref) {
-      return DiscuzCurrentUserProfileRepository(ref.watch(apiClientProvider));
+      return ref.watch(yamiboForumClientProvider).currentUserProfile!;
     });
 
 final forumUserProfileRepositoryProvider = Provider<ForumUserProfileRepository>(
   (ref) {
-    return DiscuzForumUserProfileRepository(
-      htmlClient: ref.watch(yamiboHtmlClientProvider),
-    );
+    return ref.watch(yamiboForumClientProvider).forumUserProfile!;
   },
 );
 
 final userBlogDirectoryRepositoryProvider =
     Provider<UserBlogDirectoryRepository>((ref) {
-      return DiscuzUserBlogDirectoryRepository(
-        htmlClient: ref.watch(yamiboHtmlClientProvider),
-      );
+      return ref.watch(yamiboForumClientProvider).userBlogDirectory!;
     });
 
 final userBlogDetailRepositoryProvider = Provider<UserBlogDetailRepository>((
   ref,
 ) {
-  return DiscuzUserBlogDetailRepository(
-    htmlClient: ref.watch(yamiboHtmlClientProvider),
-  );
+  return ref.watch(yamiboForumClientProvider).userBlogDetail!;
 });

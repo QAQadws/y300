@@ -5,6 +5,7 @@ enum ForumTransportFailureKind {
   timeout,
   server,
   unauthorized,
+  parse,
   business,
   cancelled,
   unknown,
@@ -42,6 +43,7 @@ DataReadFailureKind toReadFailureKind(ForumTransportFailureKind kind) =>
       ForumTransportFailureKind.server => DataReadFailureKind.server,
       ForumTransportFailureKind.unauthorized =>
         DataReadFailureKind.unauthorized,
+      ForumTransportFailureKind.parse => DataReadFailureKind.parse,
       ForumTransportFailureKind.business => DataReadFailureKind.business,
       ForumTransportFailureKind.cancelled => DataReadFailureKind.cancelled,
       ForumTransportFailureKind.unknown => DataReadFailureKind.unknown,

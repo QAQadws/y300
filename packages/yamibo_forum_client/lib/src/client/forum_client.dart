@@ -3,10 +3,14 @@ import '../contracts/cache_load_policy.dart';
 import '../contracts/data_read_contract.dart';
 import '../contracts/favorite_directories.dart';
 import '../contracts/forum_directory.dart';
+import '../contracts/forum_display_models.dart';
+import '../contracts/forum_display_repository.dart';
 import '../contracts/forum_search.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/thread_reply_page.dart';
+import '../contracts/thread_detail_models.dart';
+import '../contracts/thread_repository.dart';
 import '../network/forum_network.dart';
 import 'forum_client_config.dart';
 import 'forum_client_source_plan.dart';
@@ -22,6 +26,7 @@ final class YamiboForumClient {
   final ForumClientSourcePlan sourcePlan;
 
   ForumDirectoryRepository? get forumDirectory => sourcePlan.forumDirectory;
+  ForumDisplayRepository? get forumDisplay => sourcePlan.forumDisplay;
   ForumTagDirectoryRepository? get forumTagDirectory =>
       sourcePlan.forumTagDirectory;
   FavoriteForumDirectoryRepository? get favoriteForumDirectory =>
@@ -36,6 +41,7 @@ final class YamiboForumClient {
       sourcePlan.userBlogDirectory;
   UserBlogDetailRepository? get userBlogDetail => sourcePlan.userBlogDetail;
   ForumSearchRepository? get forumSearch => sourcePlan.forumSearch;
+  ThreadRepository? get threadDetail => sourcePlan.threadDetail;
 
   Future<DataReadResult<ForumDirectoryData, ForumDirectoryReadCapabilities>>
   loadForumDirectory(
@@ -157,6 +163,30 @@ final class YamiboForumClient {
         diagnosticMessage: 'source_not_installed',
       );
 
+  Future<DataReadResult<ForumDisplayData, ForumDisplayReadCapabilities>>
+  loadForumDisplay(
+    ForumDisplayQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) =>
+      sourcePlan.forumDisplay?.getForumDisplayByQuery(
+        query,
+        cachePolicy: cachePolicy,
+      ) ??
+      unsupported<ForumDisplayData, ForumDisplayReadCapabilities>();
+
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  loadThreadDetail({
+    required String tid,
+    int page = 1,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) =>
+      sourcePlan.threadDetail?.getThreadDetail(
+        tid: tid,
+        page: page,
+        query: query,
+      ) ??
+      unsupported<ThreadDetailData, ThreadDetailReadCapabilities>();
+
   // Keep the narrow phase-2 types visible to the package API without creating
   // a second transport-specific repository abstraction before adapter migration.
   ComicEpisodeCatalogRepository? get comicEpisodeCatalog =>
@@ -164,4 +194,29 @@ final class YamiboForumClient {
   ComicThreadDiscoveryRepository? get comicThreadDiscovery =>
       sourcePlan.comicThreadDiscovery;
   ThreadReplyPageRepository? get threadReplyPage => sourcePlan.threadReplyPage;
+
+  Future<
+    DataReadResult<ComicEpisodeImageCatalog, ComicEpisodeCatalogCapabilities>
+  >
+  loadComicEpisodeCatalog(ComicEpisodeCatalogRequest request) =>
+      sourcePlan.comicEpisodeCatalog?.loadCatalog(request) ??
+      unsupported<ComicEpisodeImageCatalog, ComicEpisodeCatalogCapabilities>();
+
+  Future<
+    DataReadResult<
+      ComicThreadDiscoveryDocument,
+      ComicThreadDiscoveryCapabilities
+    >
+  >
+  loadComicThreadDiscovery(ComicThreadDiscoveryRequest request) =>
+      sourcePlan.comicThreadDiscovery?.load(request) ??
+      unsupported<
+        ComicThreadDiscoveryDocument,
+        ComicThreadDiscoveryCapabilities
+      >();
+
+  Future<DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>
+  loadThreadReplies({required String tid, required int page}) =>
+      sourcePlan.threadReplyPage?.loadPage(tid: tid, page: page) ??
+      unsupported<ThreadReplyPage, ThreadReplyPageReadCapabilities>();
 }

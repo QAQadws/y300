@@ -5,14 +5,13 @@ import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_parser_service.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
-import 'package:y300/features/comic/data/repositories/discuz_api_comic_episode_catalog_repository.dart';
-import 'package:y300/features/comic/data/repositories/thread_repository_comic_thread_discovery_adapter.dart';
 import 'package:y300/features/comic/domain/models/comic_episode_image_catalog.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
@@ -39,9 +38,6 @@ import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.d
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
 import 'package:y300/features/search/domain/models/forum_search_models.dart';
-import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
-import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
 
@@ -797,25 +793,14 @@ class NetworkComicReaderService implements ComicReaderService {
   }
 }
 
-/// Comic chapter catalogs are a Discuz API contract. Keep this boundary
-/// separate from the HTML-first repository used to render thread pages.
-final comicEpisodeThreadRepositoryProvider = Provider<ThreadRepository>((ref) {
-  return ref.watch(threadJsonRepositoryProvider);
-});
-
 final comicEpisodeCatalogRepositoryProvider =
     Provider<ComicEpisodeCatalogRepository>((ref) {
-      return DiscuzApiComicEpisodeCatalogRepository(
-        threadRepository: ref.watch(comicEpisodeThreadRepositoryProvider),
-        imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
-      );
+      return ref.watch(yamiboForumClientProvider).comicEpisodeCatalog!;
     });
 
 final comicThreadDiscoveryRepositoryProvider =
     Provider<ComicThreadDiscoveryRepository>((ref) {
-      return ThreadRepositoryComicThreadDiscoveryAdapter(
-        threadRepository: ref.watch(comicEpisodeThreadRepositoryProvider),
-      );
+      return ref.watch(yamiboForumClientProvider).comicThreadDiscovery!;
     });
 
 final comicReaderServiceProvider = FutureProvider<ComicReaderService>((

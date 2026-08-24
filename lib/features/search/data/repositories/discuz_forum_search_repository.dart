@@ -3,11 +3,10 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
-import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/search/data/services/discuz_search_html_parser.dart';
@@ -536,8 +535,5 @@ final _htmlCapabilities = ForumSearchSourceCapabilities(
 );
 
 final forumSearchRepositoryProvider = Provider<ForumSearchRepository>((ref) {
-  return DiscuzForumSearchRepository(
-    formhashProvider: ref.read(formhashProvider),
-    gateway: ref.read(yamiboHttpGatewayProvider),
-  );
+  return ref.watch(yamiboForumClientProvider).forumSearch!;
 });

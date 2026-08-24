@@ -1,7 +1,23 @@
 import 'forum_session_store.dart';
 
+import '../network/forum_transport.dart';
+
+sealed class ForumFormhashResult {
+  const ForumFormhashResult();
+}
+
+final class ForumFormhashSuccess extends ForumFormhashResult {
+  const ForumFormhashSuccess(this.value);
+  final String value;
+}
+
+final class ForumFormhashError extends ForumFormhashResult {
+  const ForumFormhashError(this.failure);
+  final ForumTransportFailure failure;
+}
+
 abstract interface class ForumFormhashProvider {
-  Future<String> loadFormhash({bool preferProfile = true});
+  Future<ForumFormhashResult> loadFormhash({bool preferProfile = true});
 }
 
 final class SessionForumFormhashProvider implements ForumFormhashProvider {
@@ -11,18 +27,35 @@ final class SessionForumFormhashProvider implements ForumFormhashProvider {
     required this.loadFallback,
   });
   final ForumSessionStore sessions;
-  final Future<String> Function() loadFromProfile;
-  final Future<String> Function() loadFallback;
+  final Future<ForumFormhashResult> Function() loadFromProfile;
+  final Future<ForumFormhashResult> Function() loadFallback;
   @override
-  Future<String> loadFormhash({bool preferProfile = true}) async {
+  Future<ForumFormhashResult> loadFormhash({bool preferProfile = true}) async {
     final cached = sessions.readFreshFormhash();
-    if (cached != null && cached.trim().isNotEmpty) return cached;
+    if (cached != null && cached.trim().isNotEmpty) {
+      return ForumFormhashSuccess(cached);
+    }
     final first = preferProfile ? loadFromProfile : loadFallback;
     final second = preferProfile ? loadFallback : loadFromProfile;
-    for (final loader in <Future<String> Function()>[first, second]) {
-      final value = (await loader()).trim();
-      if (value.isNotEmpty) return value;
+    ForumTransportFailure? lastFailure;
+    for (final loader in <Future<ForumFormhashResult> Function()>[
+      first,
+      second,
+    ]) {
+      final result = await loader();
+      if (result case ForumFormhashSuccess(:final value)) {
+        final normalized = value.trim();
+        if (normalized.isNotEmpty) return ForumFormhashSuccess(normalized);
+      } else if (result case ForumFormhashError(:final failure)) {
+        lastFailure = failure;
+      }
     }
-    throw StateError('formhash_unavailable');
+    return ForumFormhashError(
+      lastFailure ??
+          const ForumTransportFailure(
+            kind: ForumTransportFailureKind.business,
+            code: 'formhash_unavailable',
+          ),
+    );
   }
 }

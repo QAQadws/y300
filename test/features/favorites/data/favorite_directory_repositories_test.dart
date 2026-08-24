@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
+    as forum_adapters;
 import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
@@ -130,11 +132,11 @@ void main() {
 
       expect(
         container.read(favoriteForumDirectoryRepositoryProvider),
-        isA<DiscuzFavoriteForumDirectoryRepository>(),
+        isA<forum_adapters.DiscuzFavoriteForumDirectoryRepository>(),
       );
       expect(
         container.read(favoriteThreadDirectoryRepositoryProvider),
-        isA<DiscuzFavoriteThreadDirectoryRepository>(),
+        isA<forum_adapters.DiscuzFavoriteThreadDirectoryRepository>(),
       );
     });
   });

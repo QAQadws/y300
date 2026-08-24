@@ -7,7 +7,8 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
-import 'package:y300/features/forum/data/repositories/forum_display_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
+    as forum_adapters;
 import 'package:y300/features/forum/data/providers/forum_display_repository_providers.dart';
 
 void main() {
@@ -35,6 +36,6 @@ void main() {
 
     final repository = container.read(forumDisplayRepositoryProvider);
 
-    expect(repository, isA<ForumDisplayHtmlRepository>());
+    expect(repository, isA<forum_adapters.ForumDisplayHtmlRepository>());
   });
 }

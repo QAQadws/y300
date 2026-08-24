@@ -8,7 +8,8 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
-import 'package:y300/features/tags/data/repositories/forum_tag_directory_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
+    as forum_adapters;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +36,7 @@ void main() {
 
     expect(
       container.read(forumTagDirectoryRepositoryProvider),
-      isA<DiscuzForumTagDirectoryRepository>(),
+      isA<forum_adapters.DiscuzForumTagDirectoryRepository>(),
     );
   });
 }

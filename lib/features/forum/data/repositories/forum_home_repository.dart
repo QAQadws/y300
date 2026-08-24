@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
@@ -597,7 +598,7 @@ final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
 final forumDirectoryRepositoryProvider = Provider<ForumDirectoryRepository>((
   ref,
 ) {
-  return ref.watch(forumHomeHtmlRepositoryProvider);
+  return ref.watch(yamiboForumClientProvider).forumDirectory!;
 });
 
 DataReadFailureKind _failureKindFor(ApiError error) {

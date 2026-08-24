@@ -12,11 +12,13 @@ import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/comic/data/repositories/discuz_api_comic_episode_catalog_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_repository.dart';
+import 'package:y300/features/thread/data/repositories/thread_reply_page_repository.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
+    as forum_adapters;
 
 import '../../../support/data_source_contracts/data_read_contract_scenarios.dart';
 import '../../../support/data_source_contracts/thread_repository_contract_suite.dart';
@@ -61,27 +63,8 @@ void main() {
 
     expect(
       repository,
-      isA<ApiThreadRepository>(),
+      isA<forum_adapters.ApiThreadRepository>(),
       reason: '同步/发现必须走 JSON viewthread（带 typeid），不能退回 HTML。',
-    );
-  });
-
-  test('comic episode source is pinned to JSON ApiThreadRepository', () {
-    final container = ProviderContainer(
-      overrides: [
-        apiClientProvider.overrideWithValue(
-          ApiClient(cookieStore: CookieStore(), logger: Logger()),
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    final repository = container.read(comicEpisodeThreadRepositoryProvider);
-
-    expect(
-      repository,
-      isA<ApiThreadRepository>(),
-      reason: '漫画章节目录必须走 JSON viewthread，不能随阅读页切换到 HTML。',
     );
   });
 
@@ -97,7 +80,30 @@ void main() {
 
     final repository = container.read(comicEpisodeCatalogRepositoryProvider);
 
-    expect(repository, isA<DiscuzApiComicEpisodeCatalogRepository>());
+    expect(
+      repository,
+      isA<forum_adapters.DiscuzApiComicEpisodeCatalogRepository>(),
+    );
+  });
+
+  test('comic discovery and reply page use package v4 adapters', () {
+    final container = ProviderContainer(
+      overrides: [
+        apiClientProvider.overrideWithValue(
+          ApiClient(cookieStore: CookieStore(), logger: Logger()),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    expect(
+      container.read(comicThreadDiscoveryRepositoryProvider),
+      isA<forum_adapters.ThreadRepositoryComicThreadDiscoveryAdapter>(),
+    );
+    expect(
+      container.read(threadReplyPageRepositoryProvider),
+      isA<forum_adapters.ApiThreadReplyPageRepository>(),
+    );
   });
 
   test('ApiThreadRepository requests viewthread v4 first page', () async {

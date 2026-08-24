@@ -15,6 +15,8 @@ import 'package:y300/features/profile/data/providers/profile_read_providers.dart
 import 'package:y300/features/profile/data/repositories/user_blog_detail_repository.dart';
 import 'package:y300/features/profile/data/repositories/user_blog_directory_repository.dart';
 import 'package:y300/features/profile/domain/models/user_blog_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
+    as forum_adapters;
 
 import '../../../support/data_source_contracts/user_blog_detail_repository_contract_suite.dart';
 import '../../../support/data_source_contracts/user_blog_directory_repository_contract_suite.dart';
@@ -193,11 +195,11 @@ void main() {
 
       expect(
         container.read(userBlogDirectoryRepositoryProvider),
-        isA<DiscuzUserBlogDirectoryRepository>(),
+        isA<forum_adapters.DiscuzUserBlogDirectoryRepository>(),
       );
       expect(
         container.read(userBlogDetailRepositoryProvider),
-        isA<DiscuzUserBlogDetailRepository>(),
+        isA<forum_adapters.DiscuzUserBlogDetailRepository>(),
       );
     });
   });
