@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 void main() {
   group('ForumPostDomExtractor', () {
@@ -130,14 +130,14 @@ plain text thread-999-1-1.html should not count
   });
 }
 
-class _ThrowingThreadUrlParser extends ForumThreadUrlParser {
+class _ThrowingThreadUrlParser extends ForumReferenceResolver {
   const _ThrowingThreadUrlParser();
 
   @override
-  String? normalizeHref(String href) {
+  String? normalizeHref(String href, {String? baseUrl}) {
     if (href.contains('bad://boom')) {
       throw const FormatException('bad href');
     }
-    return super.normalizeHref(href);
+    return super.normalizeHref(href, baseUrl: baseUrl);
   }
 }

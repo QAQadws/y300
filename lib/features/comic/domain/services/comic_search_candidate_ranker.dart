@@ -1,5 +1,5 @@
 import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolver.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 class ComicSearchCandidate {
   const ComicSearchCandidate({

@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/features/thread/data/services/thread_detail_document_decoder.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 
 void main() {
@@ -17,7 +19,10 @@ void main() {
 
   test('locates a findpost target from returned desktop thread HTML', () async {
     final adapter = _ThreadPostLocatorAdapter(body: _threadPageHtml);
-    final locator = HtmlThreadPostLocator(gateway: _buildGateway(adapter));
+    final locator = HtmlThreadPostLocator(
+      gateway: _buildGateway(adapter),
+      decoder: ThreadDetailDocumentDecoder(createY300ThreadDetailHtmlDecoder()),
+    );
 
     final result = await locator.locate(
       tid: '572057',
@@ -37,7 +42,10 @@ void main() {
 
   test('fails when the located page does not contain the target post', () async {
     final adapter = _ThreadPostLocatorAdapter(body: _threadPageHtml);
-    final locator = HtmlThreadPostLocator(gateway: _buildGateway(adapter));
+    final locator = HtmlThreadPostLocator(
+      gateway: _buildGateway(adapter),
+      decoder: ThreadDetailDocumentDecoder(createY300ThreadDetailHtmlDecoder()),
+    );
 
     final result = await locator.locate(
       tid: '572057',

@@ -1,6 +1,4 @@
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';

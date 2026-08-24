@@ -4,10 +4,8 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_ingest_service.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
@@ -25,11 +23,9 @@ import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.d
 import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/services/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
-import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
 import 'package:y300/features/favorites/domain/services/library_post_ingest_task_runner.dart';
@@ -42,8 +38,6 @@ import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 const _longRunningTagName = '長篇連載';

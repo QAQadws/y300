@@ -1,7 +1,7 @@
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
 import 'package:y300/features/comic/domain/models/comic_post_parsing_models.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 
 /// Parse consecutive OP posts from floor-1.

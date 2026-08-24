@@ -1,10 +1,21 @@
 # yamibo_forum_client
 
-Private protocol client boundary for the Y300 Yamibo forum client.
+Private, pure-Dart protocol client for Yamibo forum reads.
 
-The package owns transport, cookies, session/formhash state, and WAF recovery
-coordination. Feature repositories and application orchestration remain in
-Y300. The package has no Flutter, Riverpod, SQLite, or Y300 dependency.
+Public boundaries are intentionally split:
 
-This package is intentionally private (`publish_to: none`) while adapter
-migration is evaluated in a later phase.
+- `yamibo_forum_client.dart`: facade, runtime ports, and client configuration;
+- `yamibo_forum_client_contracts.dart`: source-neutral contracts, models,
+  capabilities, read results, and stable reference/image helpers;
+- `yamibo_forum_client_adapters.dart`: adapter factory and source parsers for
+  composition roots and package tests only.
+
+The package can use its standalone Dio runtime, memory session stores, and WAF
+delegates. Y300 instead injects Host Adapters backed by its process-wide
+`YamiboHttpGateway`, Cookie/session/formhash stores, WAF recovery coordinator,
+and document/snapshot cache. This deliberately keeps reads and still-unmigrated
+writes on one authenticated transport path.
+
+Application domain and presentation code must depend only on the contracts
+barrel. The package has no Flutter, Riverpod, SQLite, or Y300 dependency and is
+still private (`publish_to: none`).

@@ -6,22 +6,22 @@ import 'package:y300/features/comic/data/local/comic_local_models.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 class ComicEpisodeStore {
   ComicEpisodeStore(
     this._dbFuture, {
     required ComicCoverStore coverStore,
     ComicSubjectParser? subjectParser,
-    ForumThreadUrlParser? threadUrlParser,
+    ForumReferenceResolver? threadUrlParser,
   }) : _coverStore = coverStore,
        _subjectParser = subjectParser ?? const RuleBasedComicSubjectParser(),
-       _threadUrlParser = threadUrlParser ?? const ForumThreadUrlParser();
+       _threadUrlParser = threadUrlParser ?? const ForumReferenceResolver();
 
   final Future<Database> _dbFuture;
   final ComicCoverStore _coverStore;
   final ComicSubjectParser _subjectParser;
-  final ForumThreadUrlParser _threadUrlParser;
+  final ForumReferenceResolver _threadUrlParser;
 
   /// 读取章节列表。
   ///

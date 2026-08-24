@@ -1,5 +1,5 @@
 import 'package:test/test.dart';
-import 'package:yamibo_forum_client/yamibo_forum_client_parsers.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 
 void main() {
   test('strict parser rejects malformed values with stable code only', () {

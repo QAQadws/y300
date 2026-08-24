@@ -1,9 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/data/mappers/comic_thread_discovery_document_mapper.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 void main() {
   group('ComicConsecutiveOpPostParser', () {
@@ -136,8 +134,8 @@ void main() {
 }
 
 List<ComicThreadDiscoveryPost> _projectPosts(List<ThreadPost> posts) {
-  return const ComicThreadDiscoveryDocumentMapper()
-      .map(
+  return const ComicThreadDiscoveryProjector()
+      .project(
         ThreadDetailData(
           tid: '500000',
           fid: '30',

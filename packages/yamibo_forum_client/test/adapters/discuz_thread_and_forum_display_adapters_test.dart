@@ -2,6 +2,8 @@ import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 
+import '../support/data_source_contracts/repository_contract_suites.dart';
+
 void main() {
   late _TextNetwork network;
   late ForumClientAdapterFactory factory;
@@ -18,6 +20,47 @@ void main() {
       network: network,
     );
   });
+
+  runThreadRepositoryContractSuite(
+    () => ThreadRepositoryContractDriver(
+      name: 'HTML-first',
+      tid: '100',
+      createRepository: () {
+        network.body = _threadHtml;
+        return factory.createHtmlThreadDetail();
+      },
+    ),
+  );
+  runThreadRepositoryContractSuite(
+    () => ThreadRepositoryContractDriver(
+      name: 'Discuz v4 API',
+      tid: '100',
+      createRepository: () {
+        network.body = _threadApiBody;
+        return factory.createApiThreadDetail(apiVersion: '4');
+      },
+    ),
+  );
+  runForumDisplayRepositoryContractSuite(
+    () => ForumDisplayRepositoryContractDriver(
+      name: 'HTML-first',
+      fid: '30',
+      createRepository: () {
+        network.body = _forumDisplayHtml;
+        return factory.createHtmlForumDisplay();
+      },
+    ),
+  );
+  runForumDisplayRepositoryContractSuite(
+    () => ForumDisplayRepositoryContractDriver(
+      name: 'Discuz v4 API',
+      fid: '30',
+      createRepository: () {
+        network.body = _forumDisplayApiBody;
+        return factory.createApiForumDisplay();
+      },
+    ),
+  );
 
   test('HTML forum display returns stable identity and rich summary', () async {
     network.body = _forumDisplayHtml;
@@ -146,3 +189,54 @@ const _threadHtml = '''
   </div>
 </body></html>
 ''';
+
+const _threadApiBody = <String, Object?>{
+  'Variables': <String, Object?>{
+    'fid': '33',
+    'ppp': '20',
+    'thread': <String, Object?>{
+      'tid': '100',
+      'fid': '33',
+      'typeid': '7',
+      'subject': 'Fixture thread',
+      'author': 'fixture-author',
+      'replies': '0',
+      'views': '12',
+    },
+    'postlist': <Object?>[
+      <String, Object?>{
+        'pid': '1',
+        'author': 'fixture-author',
+        'authorid': '10',
+        'message': 'Body',
+        'number': '1',
+        'first': '1',
+        'dateline': '2026-01-01',
+      },
+    ],
+  },
+};
+
+const _forumDisplayApiBody = <String, Object?>{
+  'Variables': <String, Object?>{
+    'fid': '30',
+    'page': '1',
+    'perpage': '20',
+    'forum': <String, Object?>{
+      'fid': '30',
+      'name': 'Fixture forum',
+      'threads': '1',
+    },
+    'forum_threadlist': <Object?>[
+      <String, Object?>{
+        'tid': '572604',
+        'subject': 'Fixture topic',
+        'author': 'fixture-author',
+        'authorid': '10',
+        'replies': '3',
+        'views': '12',
+        'dateline': '2026-01-01',
+      },
+    ],
+  },
+};

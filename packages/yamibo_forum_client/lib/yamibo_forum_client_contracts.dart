@@ -1,0 +1,20 @@
+// Source-neutral public contracts for application domain and presentation code.
+//
+// Hosts that assemble concrete Discuz adapters should import
+// `yamibo_forum_client_adapters.dart` from their composition root instead.
+export 'src/contracts/cache_load_policy.dart';
+export 'src/contracts/comic_contracts.dart';
+export 'src/contracts/data_read_contract.dart';
+export 'src/contracts/favorite_directories.dart';
+export 'src/contracts/forum_directory.dart';
+export 'src/contracts/forum_display_models.dart';
+export 'src/contracts/forum_display_repository.dart';
+export 'src/contracts/forum_search.dart';
+export 'src/contracts/forum_tag_directory.dart';
+export 'src/contracts/profile_and_blog.dart';
+export 'src/contracts/thread_detail_models.dart';
+export 'src/contracts/thread_reply_page.dart';
+export 'src/contracts/thread_repository.dart';
+export 'src/references/comic_thread_discovery_projector.dart';
+export 'src/references/forum_reference_resolver.dart';
+export 'src/references/forum_post_image_extractor.dart';

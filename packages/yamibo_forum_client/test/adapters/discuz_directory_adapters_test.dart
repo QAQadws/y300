@@ -2,6 +2,8 @@ import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 
+import '../support/data_source_contracts/repository_contract_suites.dart';
+
 void main() {
   late _FakeNetwork network;
   late ForumClientAdapterFactory factory;
@@ -18,6 +20,53 @@ void main() {
       network: network,
     );
   });
+
+  runForumDirectoryContractSuite(
+    () => ForumDirectoryContractDriver(
+      name: 'Discuz v4 API',
+      createRepository: () {
+        network.body = _apiDirectoryBody;
+        return factory.createApiForumDirectory();
+      },
+    ),
+  );
+  runForumTagDirectoryContractSuite(
+    () => ForumTagDirectoryContractDriver(
+      name: 'Discuz mobile tag HTML',
+      createRepository: () {
+        network.body = _tagDirectoryBody;
+        return factory.createForumTagDirectory();
+      },
+      query: const ForumTagDirectoryQuery(tagId: '21920'),
+    ),
+  );
+  runFavoriteForumDirectoryContractSuite(
+    () => FavoriteForumDirectoryContractDriver(
+      name: 'Discuz v4 API',
+      createRepository: () {
+        network.body = _favoriteForumBody;
+        return factory.createFavoriteForumDirectory();
+      },
+    ),
+  );
+  runFavoriteThreadDirectoryContractSuite(
+    () => FavoriteThreadDirectoryContractDriver(
+      name: 'Discuz v4 API',
+      createRepository: () {
+        network.body = _favoriteThreadBody;
+        return factory.createFavoriteThreadDirectory();
+      },
+    ),
+  );
+  runForumDirectoryContractSuite(
+    () => ForumDirectoryContractDriver(
+      name: 'HTML-first',
+      createRepository: () {
+        network.body = _htmlDirectoryBody;
+        return factory.createHtmlForumDirectory();
+      },
+    ),
+  );
 
   test(
     'forum directory uses forumindex v4 and maps stable identities',
@@ -195,6 +244,19 @@ void main() {
     expect(network.requests.single.uri.queryParameters['page'], '1');
   });
 
+  test('tag directory preserves the normalized source thread URL', () async {
+    network.body = _tagDirectoryBody;
+
+    final result = await factory.createForumTagDirectory().load(
+      const ForumTagDirectoryQuery(tagId: '21920'),
+    );
+
+    expect(
+      result.dataOrNull!.topics.single.threadUrl,
+      'https://example.test/thread-101-1-1.html',
+    );
+  });
+
   test('business envelope is a sanitized failure', () async {
     network.body = {
       'Message': {'messageval': 'login_required', 'messagestr': 'private'},
@@ -241,3 +303,69 @@ final class _FakeNetwork implements ForumClientNetwork {
     );
   }
 }
+
+const _apiDirectoryBody = <String, Object?>{
+  'Variables': <String, Object?>{
+    'catlist': <Object?>[
+      <String, Object?>{
+        'fid': 'cat-1',
+        'name': 'Category',
+        'forums': <String>['30'],
+      },
+    ],
+    'forumlist': <Object?>[
+      <String, Object?>{
+        'fid': '30',
+        'name': 'Forum',
+        'description': 'Description',
+        'todayposts': '2',
+      },
+    ],
+  },
+};
+
+const _htmlDirectoryBody = '''
+<div class="forumlist">
+  <a class="subforumshow" href="#regular"><h2>Category</h2></a>
+  <div id="regular">
+    <a class="murl" href="forum.php?mod=forumdisplay&amp;fid=30">
+      <span class="mtit">Forum</span><span class="mtxt">Description</span>
+    </a>
+  </div>
+</div>
+''';
+
+const _tagDirectoryBody = '''
+<html><body>
+  <div id="pt"><a href="misc.php?mod=tag&amp;id=21920">Fixture tag</a></div>
+  <div class="bm tl"><table><tr>
+    <th><a href="thread-101-1-1.html">Fixture topic</a></th>
+  </tr></table></div>
+</body></html>
+''';
+
+const _favoriteForumBody = <String, Object?>{
+  'Variables': <String, Object?>{
+    'list': <Object?>[
+      <String, Object?>{
+        'id': '30',
+        'favid': 'fav-30',
+        'title': 'Fixture forum',
+      },
+    ],
+  },
+};
+
+const _favoriteThreadBody = <String, Object?>{
+  'Variables': <String, Object?>{
+    'count': '1',
+    'perpage': '20',
+    'list': <Object?>[
+      <String, Object?>{
+        'id': '101',
+        'favid': 'fav-101',
+        'title': 'Fixture thread',
+      },
+    ],
+  },
+};

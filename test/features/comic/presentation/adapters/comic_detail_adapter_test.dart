@@ -1,13 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
-import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_catalog_directory_reader.dart';
 import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_download_queue.dart';
@@ -1555,7 +1554,7 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
         ),
-        catalogHtmlFetcher: _FakeCatalogHtmlFetcher(),
+        catalogDirectoryReader: _FakeCatalogDirectoryReader(),
       );
 
   final ParsedThreadResult? threadResult;
@@ -1568,9 +1567,20 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
   }
 }
 
-class _FakeCatalogHtmlFetcher implements CatalogHtmlFetcher {
+class _FakeCatalogDirectoryReader implements ComicCatalogDirectoryReader {
   @override
-  Future<String?> fetchHtml(String url) async => null;
+  Future<
+    DataReadResult<ComicCatalogDirectory, ComicCatalogDirectoryCapabilities>
+  >
+  load(ComicCatalogDirectoryRequest request) async => DataReadSuccess(
+    data: const ComicCatalogDirectory(links: <ComicEpisodeLink>[]),
+    capabilities: ComicCatalogDirectoryCapabilities(
+      values: DataCapabilitySet.supported(
+        ComicCatalogDirectoryCapability.values,
+      ),
+    ),
+    metadata: const DataReadMetadata.network(),
+  );
 }
 
 class _FakeIncrementalDiscovery extends ComicIncrementalEpisodeDiscovery {

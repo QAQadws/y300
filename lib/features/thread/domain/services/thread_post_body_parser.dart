@@ -2,7 +2,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_anchor.dart';
 
 class ThreadPostBodyParser {
@@ -50,7 +50,7 @@ class ThreadPostBodyParser {
     }
     final normalized = DefaultForumImageSourcePipeline.normalizeImageSource(
       rawUrl,
-      urlResolver: _urlResolver,
+      urlResolver: _urlResolver.resolve,
     );
     if (normalized == null ||
         !DefaultForumImageSourcePipeline.isHttpImageUrl(normalized) ||
@@ -79,7 +79,7 @@ class ThreadPostBodyParser {
     }
     final normalized = DefaultForumImageSourcePipeline.normalizeImageSource(
       rawUrl,
-      urlResolver: _urlResolver,
+      urlResolver: _urlResolver.resolve,
     );
     if (normalized == null ||
         !DefaultForumImageSourcePipeline.isHttpImageUrl(normalized) ||

@@ -1,7 +1,6 @@
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 enum YamiboForumLinkKind {
   thread,
@@ -32,15 +31,12 @@ class YamiboForumLinkDestination {
 class YamiboForumLinkResolver {
   const YamiboForumLinkResolver({
     SiteUrlResolver siteUrlResolver = const SiteUrlResolver(),
-    ForumThreadUrlParser threadUrlParser = const ForumThreadUrlParser(),
-    YamiboTagPageParsing tagPageParsing = const YamiboTagPageParsing(),
+    ForumReferenceResolver references = const ForumReferenceResolver(),
   }) : _siteUrlResolver = siteUrlResolver,
-       _threadUrlParser = threadUrlParser,
-       _tagPageParsing = tagPageParsing;
+       _references = references;
 
   final SiteUrlResolver _siteUrlResolver;
-  final ForumThreadUrlParser _threadUrlParser;
-  final YamiboTagPageParsing _tagPageParsing;
+  final ForumReferenceResolver _references;
 
   YamiboForumLinkDestination? resolve(String rawUrl) {
     final normalizedUrl = _siteUrlResolver.resolve(rawUrl);
@@ -69,7 +65,7 @@ class YamiboForumLinkResolver {
       );
     }
 
-    final threadTid = _threadUrlParser.extractTid(normalizedUrl);
+    final threadTid = _references.extractTid(normalizedUrl);
     if (threadTid != null && threadTid.isNotEmpty) {
       return YamiboForumLinkDestination(
         kind: YamiboForumLinkKind.thread,
@@ -80,7 +76,8 @@ class YamiboForumLinkResolver {
 
     final tagId = _extractTagId(uri);
     if (tagId != null) {
-      final tagUrl = _tagPageParsing.normalizeCatalogEntryUrl(normalizedUrl);
+      final tagUrl = _references.normalizeTagPageReference(normalizedUrl);
+      if (tagUrl == null) return null;
       return YamiboForumLinkDestination(
         kind: YamiboForumLinkKind.tagThreadPage,
         uri: Uri.parse(tagUrl),
@@ -169,8 +166,7 @@ class YamiboForumLinkResolver {
     if (uri.queryParameters['mod']?.toLowerCase() != 'tag') {
       return null;
     }
-    final id = uri.queryParameters['id']?.trim();
-    return id == null || id.isEmpty ? null : id;
+    return _references.extractTagId(uri.toString());
   }
 
   bool _isYamiboSite(Uri uri) {

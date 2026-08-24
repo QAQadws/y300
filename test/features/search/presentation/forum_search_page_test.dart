@@ -4,14 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:y300/app/theme/app_theme.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
-import 'package:y300/features/search/domain/repositories/forum_search_repository.dart';
 
 void main() {
   testWidgets('ForumSearchPage builds search chrome', (tester) async {

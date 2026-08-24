@@ -1,7 +1,7 @@
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
-import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
+import 'package:y300/features/thread/data/services/thread_detail_document_decoder.dart';
 
 class ThreadPostLocation {
   const ThreadPostLocation({
@@ -28,12 +28,12 @@ abstract class ThreadPostLocator {
 class HtmlThreadPostLocator implements ThreadPostLocator {
   const HtmlThreadPostLocator({
     required YamiboHttpGateway gateway,
-    ThreadDetailHtmlParser parser = const ThreadDetailHtmlParser(),
+    required ThreadDetailDocumentDecoder decoder,
   }) : _gateway = gateway,
-       _parser = parser;
+       _decoder = decoder;
 
   final YamiboHttpGateway _gateway;
-  final ThreadDetailHtmlParser _parser;
+  final ThreadDetailDocumentDecoder _decoder;
 
   @override
   Future<ApiResult<ThreadPostLocation>> locate({
@@ -70,7 +70,7 @@ class HtmlThreadPostLocator implements ThreadPostLocator {
           ApiError(type: ApiErrorType.unknown, message: '楼层定位结果为空'),
         );
       }
-      final detail = _parser.parse(
+      final detail = _decoder.decode(
         response.body,
         fallbackTid: tid,
         fallbackPage: 1,

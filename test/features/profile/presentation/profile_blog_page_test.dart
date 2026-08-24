@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/domain/models/user_blog_models.dart';
-import 'package:y300/features/profile/domain/repositories/user_blog_detail_repository.dart';
-import 'package:y300/features/profile/domain/repositories/user_blog_directory_repository.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 
 import '../../../test_support/localized_test_app.dart';

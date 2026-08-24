@@ -4,12 +4,60 @@ import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/core/network/yamibo_forum_client_bridges.dart';
+import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 
-/// Process-wide package facade. During 4-B its adapters still use Y300's
-/// existing transport and cache services through explicit bridges.
+typedef Y300ThreadDetailHtmlDecoder =
+    ThreadDetailData Function(
+      String html, {
+      required String fallbackTid,
+      required int fallbackPage,
+      String fallbackSubject,
+    });
+
+typedef Y300ThreadDetailApiDecoder =
+    ThreadDetailData Function(
+      Map<String, dynamic> variables, {
+      required int page,
+    });
+
+Y300ThreadDetailHtmlDecoder createY300ThreadDetailHtmlDecoder() {
+  final parser = ThreadDetailHtmlParser(
+    siteOrigin: Uri.parse(AppConfig.siteBaseUrl),
+  );
+  return (
+    html, {
+    required fallbackTid,
+    required fallbackPage,
+    fallbackSubject = '',
+  }) => parser.parse(
+    html,
+    fallbackTid: fallbackTid,
+    fallbackPage: fallbackPage,
+    fallbackSubject: fallbackSubject,
+  );
+}
+
+Y300ThreadDetailApiDecoder createY300ThreadDetailApiDecoder() {
+  const mapper = ThreadDetailApiMapper();
+  return (variables, {required page}) =>
+      mapper.mapVariables(variables, page: page);
+}
+
+final yamiboThreadDetailHtmlDecoderProvider =
+    Provider<Y300ThreadDetailHtmlDecoder>((ref) {
+      return createY300ThreadDetailHtmlDecoder();
+    });
+
+final yamiboThreadDetailApiDecoderProvider =
+    Provider<Y300ThreadDetailApiDecoder>((ref) {
+      return createY300ThreadDetailApiDecoder();
+    });
+
+/// Process-wide package facade. Y300 intentionally injects its shared host
+/// transport so reads, commands, Cookie state, and WAF recovery stay on one
+/// application-owned session path.
 final yamiboForumClientConfigProvider = Provider<ForumClientConfig>((ref) {
   return ForumClientConfig(
     siteOrigin: Uri.parse(AppConfig.siteBaseUrl),
@@ -23,25 +71,20 @@ final yamiboForumClientConfigProvider = Provider<ForumClientConfig>((ref) {
 });
 
 final yamiboForumClientNetworkProvider = Provider<ForumClientNetwork>((ref) {
-  return YamiboGatewayForumClientNetwork(
+  return Y300ForumClientNetworkAdapter(
     gateway: ref.watch(yamiboHttpGatewayProvider),
     apiOrigin: Uri.parse(AppConfig.apiBaseUrl),
   );
 });
 
-final yamiboForumClientAdapterFactoryProvider =
-    Provider<ForumClientAdapterFactory>((ref) {
-      return ForumClientAdapterFactory(
-        config: ref.watch(yamiboForumClientConfigProvider),
-        network: ref.watch(yamiboForumClientNetworkProvider),
-        sessionStore: ref.watch(yamiboForumSessionStoreProvider),
-        documentStore: ref.watch(yamiboForumDocumentStoreProvider),
-        snapshotStore: ref.watch(yamiboForumSnapshotStoreProvider),
-      );
-    });
-
 final yamiboForumClientProvider = Provider<YamiboForumClient>((ref) {
-  final factory = ref.watch(yamiboForumClientAdapterFactoryProvider);
+  final factory = ForumClientAdapterFactory(
+    config: ref.watch(yamiboForumClientConfigProvider),
+    network: ref.watch(yamiboForumClientNetworkProvider),
+    sessionStore: ref.watch(yamiboForumSessionStoreProvider),
+    documentStore: ref.watch(yamiboForumDocumentStoreProvider),
+    snapshotStore: ref.watch(yamiboForumSnapshotStoreProvider),
+  );
   return YamiboForumClient(
     config: ref.watch(yamiboForumClientConfigProvider),
     network: ref.watch(yamiboForumClientNetworkProvider),
@@ -62,22 +105,25 @@ final yamiboForumClientProvider = Provider<YamiboForumClient>((ref) {
       comicThreadDiscovery: factory.createApiComicThreadDiscovery(),
       threadReplyPage: factory.createApiThreadReplyPage(),
       threadDetail: factory.createHtmlThreadDetail(),
+      threadIngestionDetail: factory.createApiThreadDetail(apiVersion: '4'),
     ),
   );
 });
 
 final yamiboForumFormhashProvider = Provider<ForumFormhashProvider>((ref) {
-  return Y300ForumFormhashProvider(ref.watch(formhashProvider));
+  return Y300ForumFormhashAdapter(ref.watch(formhashProvider));
 });
 
 final yamiboForumSessionStoreProvider = Provider<ForumSessionStore>((ref) {
-  return Y300ForumSessionStore(ref.watch(yamiboSessionStoreProvider));
+  return Y300ForumSessionAdapter(ref.watch(yamiboSessionStoreProvider));
 });
 
 final yamiboForumDocumentStoreProvider = Provider<ForumDocumentStore>((ref) {
-  return Y300ForumDocumentStore(ref.watch(documentCacheServiceProvider));
+  return Y300ForumDocumentStoreAdapter(ref.watch(documentCacheServiceProvider));
 });
 
 final yamiboForumSnapshotStoreProvider = Provider<ForumSnapshotStore>((ref) {
-  return Y300ForumSnapshotStore(ref.watch(parsedSnapshotCacheServiceProvider));
+  return Y300ForumSnapshotStoreAdapter(
+    ref.watch(parsedSnapshotCacheServiceProvider),
+  );
 });

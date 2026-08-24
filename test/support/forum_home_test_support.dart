@@ -1,6 +1,5 @@
-import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
-import 'package:y300/features/forum/domain/repositories/forum_directory_repository.dart';
 
 typedef ForumHomeReadResult =
     DataReadResult<ForumHomePayload, ForumDirectoryReadCapabilities>;

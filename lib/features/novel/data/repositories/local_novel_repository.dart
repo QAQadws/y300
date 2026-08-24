@@ -21,7 +21,7 @@ import 'package:y300/features/novel/domain/services/novel_episode_discovery_serv
 import 'package:y300/features/novel/domain/services/novel_intro_section_extractor.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
 

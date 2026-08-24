@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
@@ -16,7 +16,6 @@ import 'package:y300/features/favorites/data/services/library_post_ingest_task_r
 import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 void main() {
   group('DefaultLibraryPostIngestTaskRunner', () {

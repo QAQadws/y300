@@ -3,7 +3,7 @@ import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_image_deduplicator.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
@@ -84,7 +84,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
       final normalizedSrc =
           DefaultForumImageSourcePipeline.normalizeImageSource(
             rawSrc,
-            urlResolver: _urlResolver,
+            urlResolver: _urlResolver.resolve,
           );
       final resolved = normalizedSrc == null
           ? null

@@ -1,4 +1,4 @@
-import 'package:y300/features/forum/domain/models/forum_display_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/presentation/forum_content_projection_support.dart';
 import 'package:y300/features/forum/presentation/forum_display_content_projection.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';

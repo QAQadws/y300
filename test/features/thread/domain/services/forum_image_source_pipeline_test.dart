@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 void main() {
   group('DefaultForumImageSourcePipeline', () {

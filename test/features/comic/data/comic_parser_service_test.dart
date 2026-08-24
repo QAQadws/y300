@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/services/comic_parser_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
-import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
 
 void main() {
   group('HtmlComicParserService', () {
@@ -233,28 +230,5 @@ void main() {
         );
       },
     );
-
-    test('extracts desktop attachment-form comic pages after detail parsing', () {
-      const detailParser = ThreadDetailHtmlParser();
-      final html = File('docs/html/帖子详细页/附件形式的漫画帖.html').readAsStringSync();
-      final detail = detailParser.parse(
-        html,
-        fallbackTid: '572699',
-        fallbackPage: 1,
-      );
-
-      final parser = HtmlComicParserService();
-      final result = parser.parse(message: detail.posts.first.message);
-
-      expect(result.imageUrls, hasLength(75));
-      expect(
-        result.imageUrls.first,
-        'https://bbs.yamibo.com/data/attachment/forum/202606/20/132204m50yzddi08r50cyd.png',
-      );
-      expect(
-        result.imageUrls.last,
-        'https://bbs.yamibo.com/data/attachment/forum/202606/20/132245ea1y0rwiv1y1o00i.png',
-      );
-    });
   });
 }

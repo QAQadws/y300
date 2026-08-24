@@ -1,14 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
-import 'package:y300/features/thread/data/mappers/thread_detail_api_mapper.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 class ApiNovelThreadGateway implements NovelThreadGateway {
-  const ApiNovelThreadGateway(this._apiClient);
+  const ApiNovelThreadGateway(this._apiClient, this._decodeThreadDetail);
 
   final ApiClient _apiClient;
+  final Y300ThreadDetailApiDecoder _decodeThreadDetail;
 
   @override
   Future<ThreadDetailData> loadAuthorPostsPage({
@@ -40,10 +41,7 @@ class ApiNovelThreadGateway implements NovelThreadGateway {
         'ppp': postsPerPage,
         'authorid': normalizedAuthorId,
       },
-      parser: (response) => const ThreadDetailApiMapper().mapVariables(
-        response.variables,
-        page: page,
-      ),
+      parser: (response) => _decodeThreadDetail(response.variables, page: page),
     );
     final data = result.dataOrNull;
     if (!result.isSuccess || data == null) {
@@ -55,5 +53,8 @@ class ApiNovelThreadGateway implements NovelThreadGateway {
 }
 
 final novelThreadGatewayProvider = Provider<NovelThreadGateway>((ref) {
-  return ApiNovelThreadGateway(ref.watch(apiClientProvider));
+  return ApiNovelThreadGateway(
+    ref.watch(apiClientProvider),
+    ref.watch(yamiboThreadDetailApiDecoderProvider),
+  );
 });

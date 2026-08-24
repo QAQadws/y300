@@ -1,11 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
-import 'package:y300/features/tags/domain/models/forum_tag_directory_models.dart';
-import 'package:y300/features/tags/domain/repositories/forum_tag_directory_repository.dart';
 
 class YamiboTagThreadPageArgs {
   const YamiboTagThreadPageArgs({

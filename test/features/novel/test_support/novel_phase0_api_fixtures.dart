@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:y300/features/thread/data/mappers/thread_detail_api_mapper.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 class NovelPhase0ApiFixture {
   const NovelPhase0ApiFixture._({required this.path, required this.root});
@@ -17,10 +17,7 @@ class NovelPhase0ApiFixture {
   int get requestedPage => _asInt(metadata['requestedPage']);
 
   ThreadDetailData parseDetail() {
-    return const ThreadDetailApiMapper().mapVariables(
-      variables,
-      page: requestedPage,
-    );
+    return createY300ThreadDetailApiDecoder()(variables, page: requestedPage);
   }
 
   static Future<NovelPhase0ApiFixture> load(String path) async {

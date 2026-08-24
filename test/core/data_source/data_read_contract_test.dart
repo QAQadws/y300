@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
 
 enum _Capability { identity, richContent, action }

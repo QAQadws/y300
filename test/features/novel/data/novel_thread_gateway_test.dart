@@ -7,9 +7,9 @@ import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/novel/data/services/novel_thread_gateway.dart';
-import 'package:y300/features/thread/data/mappers/thread_detail_api_mapper.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../test_support/novel_phase0_api_fixtures.dart';
 
@@ -93,10 +93,8 @@ void main() {
             'ppp': 200,
             'authorid': '406769',
           },
-          parser: (response) => const ThreadDetailApiMapper().mapVariables(
-            response.variables,
-            page: 2,
-          ),
+          parser: (response) =>
+              createY300ThreadDetailApiDecoder()(response.variables, page: 2),
         );
 
         expect(result.isSuccess, isTrue);
@@ -167,7 +165,10 @@ void main() {
 }
 
 ApiNovelThreadGateway _buildGateway(_NovelThreadGatewayAdapter adapter) {
-  return ApiNovelThreadGateway(_buildApiClient(adapter));
+  return ApiNovelThreadGateway(
+    _buildApiClient(adapter),
+    createY300ThreadDetailApiDecoder(),
+  );
 }
 
 ApiClient _buildApiClient(_NovelThreadGatewayAdapter adapter) {

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/presentation/mappers/thread_history_visit_mapper.dart';
 import 'package:y300/features/thread/presentation/services/thread_history_commit_guard.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';

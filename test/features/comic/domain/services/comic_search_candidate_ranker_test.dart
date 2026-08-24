@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolver.dart';
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 void main() {
   group('DefaultComicSearchCandidateRanker', () {

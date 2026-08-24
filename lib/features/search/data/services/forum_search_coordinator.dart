@@ -2,12 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
-import 'package:y300/features/search/data/repositories/discuz_forum_search_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/search/data/providers/forum_search_providers.dart';
 import 'package:y300/features/search/data/services/search_rate_limiter.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
-import 'package:y300/features/search/domain/repositories/forum_search_repository.dart';
 
 final class ForumSearchExecution {
   const ForumSearchExecution._({this.readResult, this.retryAfter});

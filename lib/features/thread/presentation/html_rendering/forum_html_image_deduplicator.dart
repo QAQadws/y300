@@ -1,6 +1,6 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 /// Removes duplicated Discuz attachment images from an HTML fragment.
 ///
@@ -53,7 +53,7 @@ class ForumHtmlImageDeduplicator {
     }
     final normalized = DefaultForumImageSourcePipeline.normalizeImageSource(
       rawUrl,
-      urlResolver: _urlResolver,
+      urlResolver: _urlResolver.resolve,
     );
     if (normalized == null ||
         !DefaultForumImageSourcePipeline.isHttpImageUrl(normalized) ||

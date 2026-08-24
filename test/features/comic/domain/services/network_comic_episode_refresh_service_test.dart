@@ -1,9 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/comic/data/mappers/comic_thread_discovery_document_mapper.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
-import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_catalog_directory_reader.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_link_merger.dart';
@@ -16,10 +13,7 @@ import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
-import 'package:y300/features/search/domain/repositories/forum_search_repository.dart';
-import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import '../../../../support/search/search_response_fixtures.dart';
 
 void main() {
@@ -957,7 +951,7 @@ void main() {
 
         final outcome = await service.fetchCatalogOnly(
           const ComicEpisodeRefreshRequest(sourceTid: '100'),
-          preloadedRootDetail: const ComicThreadDiscoveryDocumentMapper().map(
+          preloadedRootDetail: const ComicThreadDiscoveryProjector().project(
             _threadDetail(
               tid: '100',
               subject: '测试漫画 第1话',
@@ -1014,7 +1008,7 @@ void main() {
 
         final outcome = await service.fetchSearchAndCurrentOnly(
           const ComicEpisodeRefreshRequest(sourceTid: '100'),
-          preloadedRootDetail: const ComicThreadDiscoveryDocumentMapper().map(
+          preloadedRootDetail: const ComicThreadDiscoveryProjector().project(
             _threadDetail(
               tid: '100',
               subject: '测试漫画 第2话',
@@ -1469,7 +1463,7 @@ class _FakeDiscoveryService extends ComicEpisodeDiscoveryService {
          opPostParser: ComicConsecutiveOpPostParser(
            engine: ComicPostParsingEngine(),
          ),
-         catalogHtmlFetcher: _NoopCatalogHtmlFetcher(),
+         catalogDirectoryReader: _NoopCatalogDirectoryReader(),
        );
 
   final Map<String, List<ComicEpisodeLink>> byTid;
@@ -1551,11 +1545,20 @@ final class _UnusedComicThreadDiscoveryRepository
   }
 }
 
-class _NoopCatalogHtmlFetcher implements CatalogHtmlFetcher {
+class _NoopCatalogDirectoryReader implements ComicCatalogDirectoryReader {
   @override
-  Future<String?> fetchHtml(String url) async {
-    return null;
-  }
+  Future<
+    DataReadResult<ComicCatalogDirectory, ComicCatalogDirectoryCapabilities>
+  >
+  load(ComicCatalogDirectoryRequest request) async => DataReadSuccess(
+    data: const ComicCatalogDirectory(links: <ComicEpisodeLink>[]),
+    capabilities: ComicCatalogDirectoryCapabilities(
+      values: DataCapabilitySet.supported(
+        ComicCatalogDirectoryCapability.values,
+      ),
+    ),
+    metadata: const DataReadMetadata.network(),
+  );
 }
 
 class _FakeForumSearchCoordinator implements ForumSearchCoordinator {

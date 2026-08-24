@@ -1,15 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/comic/data/repositories/thread_repository_comic_thread_discovery_adapter.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
-import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_incremental_episode_discovery.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
+
+import '../../../../support/fixture_comic_thread_discovery_repository.dart';
 
 void main() {
   group('ComicIncrementalEpisodeDiscovery', () {
@@ -356,7 +354,7 @@ ComicThreadDiscoveryRepository _fakeThreadFetcher({
 ComicThreadDiscoveryRepository _discoveryRepository(
   Future<ApiResult<ThreadDetailData>> Function(String tid) loader,
 ) {
-  return ThreadRepositoryComicThreadDiscoveryAdapter(
+  return FixtureComicThreadDiscoveryRepository(
     threadRepository: _FixtureThreadRepository(loader),
   );
 }

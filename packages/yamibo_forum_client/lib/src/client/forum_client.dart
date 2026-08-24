@@ -42,6 +42,8 @@ final class YamiboForumClient {
   UserBlogDetailRepository? get userBlogDetail => sourcePlan.userBlogDetail;
   ForumSearchRepository? get forumSearch => sourcePlan.forumSearch;
   ThreadRepository? get threadDetail => sourcePlan.threadDetail;
+  ThreadRepository? get threadIngestionDetail =>
+      sourcePlan.threadIngestionDetail;
 
   Future<DataReadResult<ForumDirectoryData, ForumDirectoryReadCapabilities>>
   loadForumDirectory(

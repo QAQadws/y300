@@ -18,7 +18,7 @@ import '../test_support/novel_pagination_html_fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const loader = NovelPaginationHtmlFixtureLoader();
+  final loader = NovelPaginationHtmlFixtureLoader();
   for (final sample in novelPaginationHtmlFixtures) {
     test(
       'real UTF-8 ${sample.title} fixture reaches the hybrid planner',

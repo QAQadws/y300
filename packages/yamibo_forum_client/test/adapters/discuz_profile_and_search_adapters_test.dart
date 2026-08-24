@@ -2,12 +2,64 @@ import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 
+import '../support/data_source_contracts/repository_contract_suites.dart';
+
 void main() {
   final config = ForumClientConfig(
     siteOrigin: Uri.parse('https://example.test'),
     apiOrigin: Uri.parse('https://example.test/api/mobile/index.php'),
     userAgent: 'mobile-test',
     desktopUserAgent: 'desktop-test',
+  );
+
+  runCurrentUserProfileContractSuite(
+    () => CurrentUserProfileContractDriver(
+      name: 'Discuz v4 API',
+      createRepository: () => ForumClientAdapterFactory(
+        config: config,
+        network: _FixedNetwork(_currentProfileBody),
+      ).createCurrentUserProfile(),
+    ),
+  );
+  runForumUserProfileContractSuite(
+    () => ForumUserProfileContractDriver(
+      name: 'Discuz mobile profile HTML',
+      createRepository: () => ForumClientAdapterFactory(
+        config: config,
+        network: _ScenarioNetwork(profileBody: _profileHtml),
+      ).createForumUserProfile(),
+      query: const ForumUserProfileQuery(userId: '509957'),
+    ),
+  );
+  runForumSearchContractSuite(
+    () => ForumSearchContractDriver(
+      name: 'Discuz mobile search HTML',
+      createRepository: () => ForumClientAdapterFactory(
+        config: config,
+        network: _ScenarioNetwork(),
+      ).createForumSearch(const _Formhash()),
+      query: const ForumSearchQuery(keyword: 'fixture'),
+    ),
+  );
+  runUserBlogDirectoryContractSuite(
+    () => UserBlogDirectoryContractDriver(
+      name: 'Discuz mobile blog directory HTML',
+      createRepository: () => ForumClientAdapterFactory(
+        config: config,
+        network: _FixedNetwork(_blogDirectoryHtml),
+      ).createUserBlogDirectory(),
+      query: const UserBlogDirectoryQuery.public(),
+    ),
+  );
+  runUserBlogDetailContractSuite(
+    () => UserBlogDetailContractDriver(
+      name: 'Discuz mobile blog detail HTML',
+      createRepository: () => ForumClientAdapterFactory(
+        config: config,
+        network: _FixedNetwork(_blogDetailHtml),
+      ).createUserBlogDetail(),
+      query: const UserBlogDetailQuery(ownerUserId: '101', blogId: '11'),
+    ),
   );
 
   test(
@@ -137,6 +189,24 @@ final class _ScenarioNetwork implements ForumClientNetwork {
   );
 }
 
+final class _FixedNetwork implements ForumClientNetwork {
+  _FixedNetwork(this.body);
+
+  final Object? body;
+
+  @override
+  Future<ForumTransportResult<ForumResponse<Object?>>> send(
+    ForumRequest request,
+  ) async => ForumTransportSuccess(
+    ForumResponse(
+      uri: request.uri,
+      statusCode: 200,
+      headers: const {},
+      body: body,
+    ),
+  );
+}
+
 final class _Formhash implements ForumFormhashProvider {
   const _Formhash();
 
@@ -165,4 +235,42 @@ const _profileHtml = '''
     <li><b>Profile</b></li><li>UID<span>509957</span></li>
   </ul></div>
 </div><a href="member.php?mod=logging&amp;action=logout">Logout</a></body></html>
+''';
+
+const _currentProfileBody = <String, Object?>{
+  'Variables': <String, Object?>{
+    'member_uid': '509957',
+    'member_username': 'Fixture user',
+    'space': <String, Object?>{
+      'uid': '509957',
+      'username': 'Fixture user',
+      'credits': '12',
+      'posts': '3',
+      'threads': '1',
+    },
+  },
+};
+
+const _blogDirectoryHtml = '''
+<html><body>
+  <div class="dhnv"><a class="mon" href="home.php?mod=space&amp;do=blog&amp;view=all">Public</a></div>
+  <div id="dhnavs_li"><ul><li class="mon"><a href="home.php?mod=space&amp;do=blog&amp;view=all">Latest</a></li></ul></div>
+  <div class="threadlist"><ul><li class="list">
+    <div class="threadlist_top"><a class="avatar"><img src="/avatar.jpg"></a><div class="muser"><h3><a href="home.php?mod=space&amp;uid=101&amp;do=profile">Author</a></h3><div class="mtime"><span>Today</span></div></div></div>
+    <a href="home.php?mod=space&amp;uid=101&amp;do=blog&amp;id=11"><div class="threadlist_tit">Fixture blog</div><div class="threadlist_mes">Excerpt</div></a>
+  </li></ul></div>
+</body></html>
+''';
+
+const _blogDetailHtml = '''
+<html><body><div class="viewthread">
+  <div class="view_tit">Fixture blog</div>
+  <div class="plc">
+    <div class="avatar"><img src="/owner.jpg"></div>
+    <ul class="authi"><li class="mtit"><a href="home.php?mod=space&amp;uid=101">Owner</a></li><li class="mtime">Today</li></ul>
+    <div class="message"><p>Body</p></div>
+    <div class="threadlist_foot"><a href="home.php?mod=spacecp&amp;ac=favorite&amp;type=blog&amp;id=11">Favorite</a></div>
+  </div>
+  <div class="doing_list_box"></div>
+</div></body></html>
 ''';

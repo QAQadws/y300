@@ -3,8 +3,7 @@ import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_parsing_rule.dart';
 import 'package:y300/features/novel/domain/services/novel_same_thread_catalog_extractor.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 /// Builds a refresh plan from thread pages by applying small parsing rules.
@@ -221,7 +220,7 @@ class NovelEpisodeDiscoveryService {
     if (post.attachmentImages.isEmpty) return post.message;
     final sources = DefaultForumImageSourcePipeline.extractAttachmentSources(
       post,
-      urlResolver: const SiteUrlResolver(),
+      urlResolver: const SiteUrlResolver().resolve,
     );
     final aidToUrl = <String, String>{
       for (final s in sources)

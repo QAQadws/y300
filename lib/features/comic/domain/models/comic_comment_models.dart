@@ -1,4 +1,4 @@
-import 'package:y300/features/thread/domain/models/thread_reply_page.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 enum ComicCommentLoadStatus {
   success,

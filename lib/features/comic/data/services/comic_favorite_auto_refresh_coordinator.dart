@@ -1,4 +1,3 @@
-import 'package:y300/features/comic/data/mappers/comic_thread_discovery_document_mapper.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
@@ -11,7 +10,7 @@ import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.d
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 /// 抽象 catalogUrl 持久化接口。
 ///
@@ -67,8 +66,8 @@ class ComicFavoriteAutoRefreshCoordinator {
     required ComicTitleAnalyzer titleAnalyzer,
     CatalogUrlUpdater? catalogUrlUpdater,
     ComicDetailLoader? comicDetailLoader,
-    ComicThreadDiscoveryDocumentMapper discoveryMapper =
-        const ComicThreadDiscoveryDocumentMapper(),
+    ComicThreadDiscoveryProjector discoveryProjector =
+        const ComicThreadDiscoveryProjector(),
   }) : _refreshService = refreshService,
        _searchQueue = searchQueue,
        _refreshOutcomeApplier = refreshOutcomeApplier,
@@ -77,7 +76,7 @@ class ComicFavoriteAutoRefreshCoordinator {
        _titleAnalyzer = titleAnalyzer,
        _catalogUrlUpdater = catalogUrlUpdater,
        _comicDetailLoader = comicDetailLoader,
-       _discoveryMapper = discoveryMapper;
+       _discoveryProjector = discoveryProjector;
 
   final ComicEpisodeRefreshService _refreshService;
   final ComicSearchRefreshQueueEnqueuer _searchQueue;
@@ -87,7 +86,7 @@ class ComicFavoriteAutoRefreshCoordinator {
   final ComicTitleAnalyzer _titleAnalyzer;
   final CatalogUrlUpdater? _catalogUrlUpdater;
   final ComicDetailLoader? _comicDetailLoader;
-  final ComicThreadDiscoveryDocumentMapper _discoveryMapper;
+  final ComicThreadDiscoveryProjector _discoveryProjector;
 
   Future<ComicFavoriteAutoRefreshResult> refreshAfterFavoriteIngest({
     required String comicId,
@@ -131,7 +130,7 @@ class ComicFavoriteAutoRefreshCoordinator {
   }) async {
     final preloadedDiscovery = preloadedRootDetail == null
         ? null
-        : _discoveryMapper.map(preloadedRootDetail);
+        : _discoveryProjector.project(preloadedRootDetail);
     final storedDetail = await _comicDetailLoader?.call(comicId);
     final customCatalogUrl = _normalized(storedDetail?.customCatalogUrl);
     final sourceCatalogUrl = _normalized(storedDetail?.catalogUrl);

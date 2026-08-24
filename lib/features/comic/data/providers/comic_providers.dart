@@ -16,7 +16,7 @@ import 'package:y300/features/comic/domain/services/comic_reading_state_writer.d
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
-import 'package:y300/features/thread/data/repositories/thread_reply_page_repository.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 
 final comicRepositoryProvider = Provider<ComicRepository>((ref) {
   return LocalComicRepository(

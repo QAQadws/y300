@@ -1,5 +1,4 @@
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 const String favoriteSyncKey = 'myfavthread';

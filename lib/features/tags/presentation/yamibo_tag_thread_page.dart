@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
-import 'package:y300/features/tags/domain/models/forum_tag_directory_models.dart';
-import 'package:y300/features/tags/domain/repositories/forum_tag_directory_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page_controller.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';

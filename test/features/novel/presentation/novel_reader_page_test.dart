@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/core/network/image_request_headers.dart';
@@ -36,9 +36,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_document_
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
-import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 void main() {

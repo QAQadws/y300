@@ -24,6 +24,7 @@ final class ForumClientSourcePlan {
     this.comicThreadDiscovery,
     this.threadReplyPage,
     this.threadDetail,
+    this.threadIngestionDetail,
   });
   final ForumDirectoryRepository? forumDirectory;
   final ForumDisplayRepository? forumDisplay;
@@ -39,4 +40,5 @@ final class ForumClientSourcePlan {
   final ComicThreadDiscoveryRepository? comicThreadDiscovery;
   final ThreadReplyPageRepository? threadReplyPage;
   final ThreadRepository? threadDetail;
+  final ThreadRepository? threadIngestionDetail;
 }

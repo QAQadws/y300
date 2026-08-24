@@ -1,10 +1,7 @@
 import 'package:y300/core/network/api_result.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/favorites/data/repositories/favorite_directory_repositories.dart';
-import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
-import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
-import 'package:y300/features/forum/domain/models/forum_display_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 

@@ -148,6 +148,7 @@ final class DiscuzTagDirectoryHtmlParser {
     return ForumTagTopicSummary(
       tid: tid,
       title: title,
+      threadUrl: threadUrl,
       forumId: _extractForumId(forumUrl),
       forumName: _emptyToNull(_cleanText(forumAnchor?.text ?? '')),
       authorId: _extractUid(authorUrl),

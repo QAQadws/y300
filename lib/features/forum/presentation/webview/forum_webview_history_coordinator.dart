@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 typedef ForumWebViewHistoryCommit =
     FutureOr<void> Function(ForumWebViewHistoryCandidate candidate);
@@ -46,7 +46,7 @@ class ForumWebViewHistoryCoordinator {
     required ForumWebViewHistoryCommit onCommit,
     ForumWebViewHistoryCommitFailure? onCommitFailure,
     ForumWebViewHistorySkip? onSkip,
-    ForumThreadUrlParser urlParser = const ForumThreadUrlParser(),
+    ForumReferenceResolver urlParser = const ForumReferenceResolver(),
   }) : _onCommit = onCommit,
        _onCommitFailure = onCommitFailure,
        _onSkip = onSkip,
@@ -55,7 +55,7 @@ class ForumWebViewHistoryCoordinator {
   final ForumWebViewHistoryCommit _onCommit;
   final ForumWebViewHistoryCommitFailure? _onCommitFailure;
   final ForumWebViewHistorySkip? _onSkip;
-  final ForumThreadUrlParser _urlParser;
+  final ForumReferenceResolver _urlParser;
 
   bool _supportsPageCommitVisible = false;
   bool _disposed = false;

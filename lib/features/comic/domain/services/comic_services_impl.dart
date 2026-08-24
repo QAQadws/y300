@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/image_request_headers.dart';
 import 'package:y300/core/network/network_providers.dart';
@@ -12,12 +12,10 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_parser_service.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
-import 'package:y300/features/comic/domain/models/comic_episode_image_catalog.dart';
+import 'package:y300/features/comic/data/repositories/forum_tag_comic_catalog_directory_reader.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
-import 'package:y300/features/comic/domain/repositories/comic_episode_catalog_repository.dart';
-import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_catalog_directory_reader.dart';
 import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
@@ -37,7 +35,6 @@ import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
 
@@ -542,6 +539,16 @@ final class _ComicSearchExecution {
   final bool rateLimited;
 }
 
+final comicCatalogDirectoryReaderProvider =
+    Provider<ComicCatalogDirectoryReader>((ref) {
+      return ForumTagComicCatalogDirectoryReader(
+        repository: ref.watch(yamiboForumClientProvider).forumTagDirectory!,
+        references: const ForumReferenceResolver(
+          siteOrigin: AppConfig.siteBaseUrl,
+        ),
+      );
+    });
+
 final comicEpisodeDiscoveryServiceProvider =
     Provider<ComicEpisodeDiscoveryService>((ref) {
       final engine = ComicPostParsingEngine();
@@ -549,9 +556,7 @@ final comicEpisodeDiscoveryServiceProvider =
       return ComicEpisodeDiscoveryService(
         repository: ref.watch(comicThreadDiscoveryRepositoryProvider),
         opPostParser: opPostParser,
-        catalogHtmlFetcher: YamiboCatalogHtmlFetcher(
-          htmlClient: ref.watch(yamiboHtmlClientProvider),
-        ),
+        catalogDirectoryReader: ref.watch(comicCatalogDirectoryReaderProvider),
         eligibilityPolicy: ref.watch(
           comicRecursiveThreadEligibilityPolicyProvider,
         ),

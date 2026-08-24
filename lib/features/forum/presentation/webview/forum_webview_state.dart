@@ -1,6 +1,4 @@
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
-import 'package:y300/features/favorites/domain/repositories/favorite_directory_repositories.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 
 class ForumWebViewState {

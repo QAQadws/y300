@@ -2,7 +2,7 @@ import 'package:y300/features/favorites/domain/models/favorite_detail_context.da
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 /// 阶段 3：模块后处理任务基类。

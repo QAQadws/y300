@@ -2,7 +2,7 @@ import 'dart:collection';
 
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
 import 'package:y300/features/comic/domain/models/comic_post_parsing_models.dart';
-import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 /// Phase-1 parser engine:
@@ -14,9 +14,9 @@ class ComicPostParsingEngine {
   ComicPostParsingEngine({
     List<ComicPostParsingRule>? rules,
     ForumPostDomExtractor? domExtractor,
-    YamiboTagPageParsing tagPageParsing = const YamiboTagPageParsing(),
+    ForumReferenceResolver references = const ForumReferenceResolver(),
   }) : _domExtractor = domExtractor ?? const ForumPostDomExtractor(),
-       _tagPageParsing = tagPageParsing,
+       _references = references,
        _rules =
            rules ??
            <ComicPostParsingRule>[
@@ -40,7 +40,7 @@ class ComicPostParsingEngine {
   );
 
   final ForumPostDomExtractor _domExtractor;
-  final YamiboTagPageParsing _tagPageParsing;
+  final ForumReferenceResolver _references;
   final List<ComicPostParsingRule> _rules;
 
   EpisodeExtractionResult parse({required String messageHtml}) {
@@ -152,7 +152,7 @@ class ComicPostParsingEngine {
 
   bool _isCatalogAnchor({required String text, required String normalizedUrl}) {
     return _catalogTextPattern.hasMatch(text.trim()) &&
-        _tagPageParsing.isTagCatalogUrl(normalizedUrl);
+        _references.isTagCatalogUrl(normalizedUrl);
   }
 
   List<int?> _detectSequentialGroups(List<ParsedAnchor> anchors) {

@@ -2,11 +2,54 @@ import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 
+import '../support/data_source_contracts/repository_contract_suites.dart';
+
 void main() {
   final config = ForumClientConfig(
     siteOrigin: Uri.parse('https://example.test'),
     apiOrigin: Uri.parse('https://example.test/api/mobile/index.php'),
     userAgent: 'test-agent',
+  );
+
+  runComicEpisodeCatalogContractSuite(
+    () => ComicEpisodeCatalogContractDriver(
+      name: 'v4 projection',
+      sourceTid: '100',
+      createRepository: () => DiscuzApiComicEpisodeCatalogRepository(
+        threadRepository: _FakeThreadRepository(
+          _detail(
+            posts: [
+              _post(
+                pid: 'p1',
+                number: 1,
+                isFirst: true,
+                message: '<img src="/page.jpg">',
+              ),
+            ],
+          ),
+        ),
+        config: config,
+      ),
+    ),
+  );
+  runComicThreadDiscoveryContractSuite(
+    () => ComicThreadDiscoveryContractDriver(
+      name: 'v4 projection',
+      sourceTid: '100',
+      createRepository: () => ThreadRepositoryComicThreadDiscoveryAdapter(
+        threadRepository: _FakeThreadRepository(_detail()),
+        config: config,
+      ),
+    ),
+  );
+  runThreadReplyPageContractSuite(
+    () => ThreadReplyPageContractDriver(
+      name: 'v4 projection',
+      tid: '100',
+      createRepository: () => ApiThreadReplyPageRepository(
+        repository: _FakeThreadRepository(_detail()),
+      ),
+    ),
   );
 
   test('catalog projects ordered DOM and attachment images once', () async {

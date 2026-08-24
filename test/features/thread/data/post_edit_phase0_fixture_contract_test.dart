@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
+import 'package:y300/features/thread/data/services/thread_detail_document_decoder.dart';
 
 const _fixtureRoot = 'test/fixtures/thread/post_edit';
 const _manifestPath = '$_fixtureRoot/manifest.json';
@@ -36,8 +37,10 @@ void main() {
     });
 
     test('thread edit link and edit form describe the same target', () {
-      const parser = ThreadDetailHtmlParser();
-      final detail = parser.parse(
+      final decoder = ThreadDetailDocumentDecoder(
+        createY300ThreadDetailHtmlDecoder(),
+      );
+      final detail = decoder.decode(
         _readUtf8(_mobileThreadPath),
         fallbackTid: '557857',
         fallbackPage: 215,

@@ -4,14 +4,17 @@ import '../contracts/data_read_contract.dart';
 import '../contracts/thread_detail_models.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_repository.dart';
-import 'forum_image_source_pipeline.dart';
+import '../references/comic_thread_discovery_projector.dart';
+import '../references/forum_post_image_extractor.dart';
 
 final class DiscuzApiComicEpisodeCatalogRepository
     implements ComicEpisodeCatalogRepository {
   DiscuzApiComicEpisodeCatalogRepository({
     required this.threadRepository,
     required ForumClientConfig config,
-  }) : _images = ForumImageSourcePipeline(config);
+  }) : _images = DefaultForumImageSourcePipeline(
+         siteBaseUrl: config.siteOrigin.toString(),
+       );
 
   final ThreadRepository threadRepository;
   final ForumImageSourcePipeline _images;
@@ -95,10 +98,14 @@ final class ThreadRepositoryComicThreadDiscoveryAdapter
   ThreadRepositoryComicThreadDiscoveryAdapter({
     required this.threadRepository,
     required ForumClientConfig config,
-  }) : _images = ForumImageSourcePipeline(config);
+  }) : _projector = ComicThreadDiscoveryProjector(
+         imageSourcePipeline: DefaultForumImageSourcePipeline(
+           siteBaseUrl: config.siteOrigin.toString(),
+         ),
+       );
 
   final ThreadRepository threadRepository;
-  final ForumImageSourcePipeline _images;
+  final ComicThreadDiscoveryProjector _projector;
 
   @override
   ComicThreadDiscoverySourceCapabilities get capabilities =>
@@ -144,16 +151,8 @@ final class ThreadRepositoryComicThreadDiscoveryAdapter
             diagnosticMessage: 'comic_discovery_identity_invalid',
           );
         }
-        final orderedPosts = detail.posts.toList(growable: false)
-          ..sort((left, right) => left.number.compareTo(right.number));
         return DataReadSuccess(
-          data: ComicThreadDiscoveryDocument(
-            tid: detail.tid.trim(),
-            fid: detail.fid.trim(),
-            typeId: detail.typeid.trim(),
-            subject: detail.subject,
-            posts: orderedPosts.map(_mapDiscoveryPost).toList(growable: false),
-          ),
+          data: _projector.project(detail),
           capabilities: ComicThreadDiscoveryCapabilities(
             _mapDiscoveryCapabilities(threadCapabilities.values),
           ),
@@ -161,26 +160,6 @@ final class ThreadRepositoryComicThreadDiscoveryAdapter
         );
       },
       failure: (failure) => failure.retype(),
-    );
-  }
-
-  ComicThreadDiscoveryPost _mapDiscoveryPost(ThreadPost post) {
-    return ComicThreadDiscoveryPost(
-      pid: post.pid.trim(),
-      authorId: post.authorId.trim(),
-      floorNumber: post.number,
-      isFirst: post.isFirst,
-      messageHtml: post.message,
-      imageReferences: _images
-          .collectFromPost(post)
-          .map(
-            (source) => ComicThreadDiscoveryImageReference(
-              url: source.normalizedUrl,
-              origin: _mapOrigin(source.origin),
-              attachmentId: source.attachmentId,
-            ),
-          )
-          .toList(growable: false),
     );
   }
 }

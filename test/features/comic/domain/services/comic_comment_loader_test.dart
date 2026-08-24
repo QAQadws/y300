@@ -1,11 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import '../../data/comic_comment_fixtures.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
-import 'package:y300/features/thread/data/mappers/thread_detail_api_mapper.dart';
-import 'package:y300/features/thread/domain/models/thread_reply_page.dart';
-import 'package:y300/features/thread/domain/repositories/thread_reply_page_repository.dart';
 
 void main() {
   test(
@@ -284,7 +282,7 @@ void main() {
 }
 
 ThreadReplyPage _fixturePage(int page) {
-  final data = const ThreadDetailApiMapper().mapVariables(
+  final data = createY300ThreadDetailApiDecoder()(
     comicCommentPageVariables(page: page),
     page: page,
   );

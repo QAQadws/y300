@@ -1,5 +1,5 @@
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 enum ComicCatalogUrlInputErrorCode {
   invalidUrl,
@@ -25,10 +25,10 @@ class ComicCatalogUrlInputException implements Exception {
 /// accepting another host would display one URL while requesting another.
 class ComicCatalogUrlPolicy {
   const ComicCatalogUrlPolicy({
-    YamiboTagPageParsing tagPageParsing = const YamiboTagPageParsing(),
-  }) : _tagPageParsing = tagPageParsing;
+    ForumReferenceResolver references = const ForumReferenceResolver(),
+  }) : _references = references;
 
-  final YamiboTagPageParsing _tagPageParsing;
+  final ForumReferenceResolver _references;
 
   String? normalizeOverride(String? rawUrl) {
     final value = rawUrl?.trim();
@@ -36,23 +36,30 @@ class ComicCatalogUrlPolicy {
       return null;
     }
 
-    late final String normalized;
-    try {
-      normalized = _tagPageParsing.normalizeCatalogEntryUrl(value);
-    } on FormatException {
+    final parsed = Uri.tryParse(value);
+    if (parsed == null) {
       throw const ComicCatalogUrlInputException(
         ComicCatalogUrlInputErrorCode.invalidUrl,
       );
     }
-    final uri = Uri.tryParse(normalized);
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      throw const ComicCatalogUrlInputException(
-        ComicCatalogUrlInputErrorCode.incompleteUrl,
-      );
-    }
-    if (uri.scheme != 'http' && uri.scheme != 'https') {
+    if (parsed.isAbsolute &&
+        parsed.scheme != 'http' &&
+        parsed.scheme != 'https') {
       throw const ComicCatalogUrlInputException(
         ComicCatalogUrlInputErrorCode.unsupportedScheme,
+      );
+    }
+    final uri = _references.resolveSameSite(value);
+    if (uri == null) {
+      if (parsed.isAbsolute && parsed.host.isNotEmpty) {
+        final siteUri = Uri.parse(AppConfig.siteBaseUrl);
+        throw ComicCatalogUrlInputException(
+          ComicCatalogUrlInputErrorCode.unexpectedHost,
+          expectedHost: siteUri.host,
+        );
+      }
+      throw const ComicCatalogUrlInputException(
+        ComicCatalogUrlInputErrorCode.incompleteUrl,
       );
     }
 
@@ -63,11 +70,17 @@ class ComicCatalogUrlPolicy {
         expectedHost: siteUri.host,
       );
     }
-    if (!_tagPageParsing.isTagCatalogUrl(uri.toString())) {
+    if (!_references.isTagCatalogUrl(uri.toString())) {
       throw const ComicCatalogUrlInputException(
         ComicCatalogUrlInputErrorCode.notTagCatalog,
       );
     }
-    return uri.removeFragment().toString();
+    final normalized = _references.normalizeTagPageReference(uri.toString());
+    if (normalized == null) {
+      throw const ComicCatalogUrlInputException(
+        ComicCatalogUrlInputErrorCode.invalidUrl,
+      );
+    }
+    return Uri.parse(normalized).removeFragment().toString();
   }
 }

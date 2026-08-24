@@ -1,4 +1,4 @@
-import 'package:y300/features/profile/domain/models/user_blog_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 abstract final class ProfileTextResolver {

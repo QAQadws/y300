@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
+import 'package:y300/features/thread/data/providers/forum_image_source_pipeline_provider.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 final comicPostAggregationServiceProvider =
     Provider<ComicPostAggregationService>((ref) {

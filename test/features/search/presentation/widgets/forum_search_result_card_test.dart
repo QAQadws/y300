@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/search/presentation/widgets/forum_search_result_card.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 

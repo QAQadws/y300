@@ -33,6 +33,7 @@ final class ForumTagTopicSummary {
   const ForumTagTopicSummary({
     required this.tid,
     required this.title,
+    this.threadUrl,
     this.forumId,
     this.forumName,
     this.authorId,
@@ -47,6 +48,7 @@ final class ForumTagTopicSummary {
   });
   final String tid;
   final String title;
+  final String? threadUrl;
   final String? forumId;
   final String? forumName;
   final String? authorId;

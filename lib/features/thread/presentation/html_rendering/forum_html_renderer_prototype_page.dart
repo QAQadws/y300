@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_fragment_extractor.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_render_input.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_sample_document.dart';
@@ -269,12 +269,14 @@ class _ForumHtmlRendererPrototypePageState
     required ForumHtmlReaderPreferences preferences,
     required TextConversionMode conversionMode,
   }) async {
-    final parsed = const ThreadDetailHtmlParser().parse(
-      rawHtml,
-      fallbackTid: _selectedSample.id,
-      fallbackPage: 1,
-      fallbackSubject: _selectedSample.title,
-    );
+    final parsed = ref
+        .read(threadDetailDocumentDecoderProvider)
+        .decode(
+          rawHtml,
+          fallbackTid: _selectedSample.id,
+          fallbackPage: 1,
+          fallbackSubject: _selectedSample.title,
+        );
     final converter = ref.read(textConverterProvider(conversionMode));
     final conversionService = ref.read(htmlTextNodeConversionServiceProvider);
     var convertedTextNodeCount = 0;

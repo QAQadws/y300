@@ -1,6 +1,5 @@
 import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 /// Extracts image URLs from Discuz mobile-api attachment metadata.
 ///
@@ -17,7 +16,7 @@ class ForumAttachmentImageExtractor {
   List<String> extractImageUrls(ThreadPost post) {
     return DefaultForumImageSourcePipeline.extractAttachmentSources(
       post,
-      urlResolver: _urlResolver,
+      urlResolver: _urlResolver.resolve,
     ).map((source) => source.normalizedUrl).toList(growable: false);
   }
 }

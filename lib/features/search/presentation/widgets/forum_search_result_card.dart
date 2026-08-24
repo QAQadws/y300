@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
-import 'package:y300/features/search/domain/repositories/forum_search_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 

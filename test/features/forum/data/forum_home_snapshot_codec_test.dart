@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/services/forum_home_snapshot_codec.dart';
-import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 void main() {
   const codec = ForumHomeSnapshotCodec();

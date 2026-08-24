@@ -1,8 +1,7 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/thread/domain/services/forum_image_source_pipeline.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 class ForumPostAnchor {
   const ForumPostAnchor({
@@ -27,12 +26,12 @@ class ForumPostAnchor {
 /// share one HTML normalization path without sharing business semantics.
 class ForumPostDomExtractor {
   const ForumPostDomExtractor({
-    ForumThreadUrlParser? urlParser,
+    ForumReferenceResolver? urlParser,
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
-  }) : _urlParser = urlParser ?? const ForumThreadUrlParser(),
+  }) : _urlParser = urlParser ?? const ForumReferenceResolver(),
        _urlResolver = urlResolver;
 
-  final ForumThreadUrlParser _urlParser;
+  final ForumReferenceResolver _urlParser;
   final SiteUrlResolver _urlResolver;
 
   static const Set<String> _paragraphBlockTags = <String>{
@@ -99,7 +98,7 @@ class ForumPostDomExtractor {
   }) {
     return DefaultForumImageSourcePipeline.collectDomImageSources(
       html,
-      urlResolver: _urlResolver,
+      urlResolver: _urlResolver.resolve,
       includeForumChrome: !ignoreForumChromeImages,
     ).map((source) => source.normalizedUrl).toList(growable: false);
   }
@@ -107,7 +106,7 @@ class ForumPostDomExtractor {
   String? normalizeImageSource(String src) =>
       DefaultForumImageSourcePipeline.normalizeImageSource(
         src,
-        urlResolver: _urlResolver,
+        urlResolver: _urlResolver.resolve,
       );
 
   String extractPlainText(String html) {

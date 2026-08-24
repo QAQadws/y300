@@ -1,13 +1,13 @@
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_history_coordinator.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 class ForumWebViewHistoryVisitMapper {
   const ForumWebViewHistoryVisitMapper({
-    ForumThreadUrlParser urlParser = const ForumThreadUrlParser(),
+    ForumReferenceResolver urlParser = const ForumReferenceResolver(),
   }) : _urlParser = urlParser;
 
-  final ForumThreadUrlParser _urlParser;
+  final ForumReferenceResolver _urlParser;
 
   HistoryVisitDraft map(ForumWebViewHistoryCandidate candidate) {
     final page = _extractPage(candidate.finalUri);

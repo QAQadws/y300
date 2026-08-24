@@ -1,4 +1,4 @@
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 /// Per-refresh cache for narrow comic discovery documents.
 final class ComicThreadDiscoveryCache {

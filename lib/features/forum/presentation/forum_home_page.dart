@@ -7,8 +7,7 @@ import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
-import 'package:y300/features/favorites/data/repositories/favorite_directory_repositories.dart';
-import 'package:y300/features/favorites/domain/models/favorite_directory_models.dart';
+import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
@@ -24,7 +23,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_external_
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_favorite_forum_picker.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
@@ -515,7 +514,7 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
     WidgetRef ref,
     ForumHomeCarouselItem item,
   ) async {
-    final parser = const ForumThreadUrlParser();
+    final parser = const ForumReferenceResolver();
     final normalized = parser.normalizeHref(item.targetUrl);
     final tid = normalized == null ? null : parser.extractTid(normalized);
     if (tid != null && tid.isNotEmpty) {

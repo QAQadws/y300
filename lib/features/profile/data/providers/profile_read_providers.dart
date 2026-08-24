@@ -1,9 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
-import 'package:y300/features/profile/domain/repositories/current_user_profile_repository.dart';
-import 'package:y300/features/profile/domain/repositories/forum_user_profile_repository.dart';
-import 'package:y300/features/profile/domain/repositories/user_blog_detail_repository.dart';
-import 'package:y300/features/profile/domain/repositories/user_blog_directory_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 final currentUserProfileRepositoryProvider =
     Provider<CurrentUserProfileRepository>((ref) {

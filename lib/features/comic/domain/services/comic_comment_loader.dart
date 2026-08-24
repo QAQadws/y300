@@ -1,10 +1,8 @@
 import 'dart:async';
 
-import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_diagnostics.dart';
-import 'package:y300/features/thread/domain/models/thread_reply_page.dart';
-import 'package:y300/features/thread/domain/repositories/thread_reply_page_repository.dart';
 import 'package:y300/features/thread/domain/services/forum_avatar_url_builder.dart';
 
 abstract interface class ComicCommentLoader {

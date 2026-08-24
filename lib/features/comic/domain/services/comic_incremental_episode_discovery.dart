@@ -1,13 +1,11 @@
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
-import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_eligibility_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 /// 增量章节发现服务。
 ///
@@ -20,7 +18,7 @@ class ComicIncrementalEpisodeDiscovery {
     required ComicThreadDiscoveryRepository repository,
     required ComicConsecutiveOpPostParser opPostParser,
     ForumPostDomExtractor? domExtractor,
-    ForumThreadUrlParser? urlParser,
+    ForumReferenceResolver? urlParser,
     ComicRecursiveThreadEligibilityPolicy eligibilityPolicy =
         const DefaultComicRecursiveThreadEligibilityPolicy(),
     ComicRecursiveThreadRequestGovernor? recursiveRequestGovernor,
@@ -31,9 +29,9 @@ class ComicIncrementalEpisodeDiscovery {
        _domExtractor =
            domExtractor ??
            ForumPostDomExtractor(
-             urlParser: urlParser ?? const ForumThreadUrlParser(),
+             urlParser: urlParser ?? const ForumReferenceResolver(),
            ),
-       _urlParser = urlParser ?? const ForumThreadUrlParser(),
+       _urlParser = urlParser ?? const ForumReferenceResolver(),
        _eligibilityPolicy = eligibilityPolicy,
        _recursiveRequestGovernor =
            recursiveRequestGovernor ??
@@ -44,7 +42,7 @@ class ComicIncrementalEpisodeDiscovery {
   final ComicThreadDiscoveryRepository _repository;
   final ComicConsecutiveOpPostParser _opPostParser;
   final ForumPostDomExtractor _domExtractor;
-  final ForumThreadUrlParser _urlParser;
+  final ForumReferenceResolver _urlParser;
   final ComicRecursiveThreadEligibilityPolicy _eligibilityPolicy;
   final ComicRecursiveThreadRequestGovernor _recursiveRequestGovernor;
   final int _maxRecursiveDepth;

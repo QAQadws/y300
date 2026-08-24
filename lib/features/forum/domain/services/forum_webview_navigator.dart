@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 final forumWebViewNavigatorProvider = Provider<ForumWebViewNavigator>((ref) {
   return DefaultForumWebViewNavigator();
@@ -48,7 +48,8 @@ class DefaultForumWebViewNavigator implements ForumWebViewNavigator {
 
   final Uri _siteRoot;
   final String _siteHost;
-  final ForumThreadUrlParser _threadUrlParser = const ForumThreadUrlParser();
+  final ForumReferenceResolver _threadUrlParser =
+      const ForumReferenceResolver();
 
   @override
   Uri get homeUri => _siteRoot.resolve('index.php?mobile=2');

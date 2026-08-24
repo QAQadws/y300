@@ -10,7 +10,7 @@ import 'package:y300/features/novel/domain/repositories/novel_source_state_repos
 import 'package:y300/features/novel/domain/services/novel_author_post_episode_builder.dart';
 import 'package:y300/features/novel/domain/services/novel_sync_request_governor.dart';
 import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../test_support/novel_title_fixtures.dart';
 

@@ -5,7 +5,7 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
-import 'package:y300/features/forum/domain/models/forum_display_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/domain/services/forum_chrome_image_adapter.dart';
 import 'package:y300/features/forum/presentation/forum_display_content_projection.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';

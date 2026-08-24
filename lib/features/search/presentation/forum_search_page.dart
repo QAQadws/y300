@@ -2,17 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
-import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
-import 'package:y300/features/search/domain/repositories/forum_search_repository.dart';
 import 'package:y300/features/search/presentation/search_text_resolver.dart';
 import 'package:y300/features/search/presentation/widgets/forum_search_result_card.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';

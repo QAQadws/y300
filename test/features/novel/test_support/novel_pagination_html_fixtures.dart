@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:y300/features/thread/data/services/thread_detail_html_parser.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
+import 'package:y300/features/thread/data/services/thread_detail_document_decoder.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_sample_document.dart';
 
 final List<ForumHtmlSampleDocument> novelPaginationHtmlFixtures =
@@ -17,16 +18,17 @@ final List<ForumHtmlSampleDocument> novelPaginationHtmlFixtures =
     );
 
 final class NovelPaginationHtmlFixtureLoader {
-  const NovelPaginationHtmlFixtureLoader({
-    this.parser = const ThreadDetailHtmlParser(),
-  });
+  NovelPaginationHtmlFixtureLoader({ThreadDetailDocumentDecoder? decoder})
+    : decoder =
+          decoder ??
+          ThreadDetailDocumentDecoder(createY300ThreadDetailHtmlDecoder());
 
-  final ThreadDetailHtmlParser parser;
+  final ThreadDetailDocumentDecoder decoder;
 
   String loadFirstPostMessage(ForumHtmlSampleDocument sample) {
     final bytes = File(sample.sourceDocPath).readAsBytesSync();
     final source = utf8.decode(bytes);
-    final detail = parser.parse(
+    final detail = decoder.decode(
       source,
       fallbackTid: 'phase6-${sample.id}',
       fallbackPage: 1,

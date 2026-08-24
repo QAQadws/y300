@@ -1,7 +1,5 @@
-import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
-import 'package:y300/features/forum/domain/models/forum_display_models.dart';
-import 'package:y300/features/forum/domain/repositories/forum_display_repository.dart';
 
 enum ForumDisplayFailureCode { loadFailed }
 

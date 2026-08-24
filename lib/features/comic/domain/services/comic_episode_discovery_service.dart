@@ -1,20 +1,15 @@
 import 'dart:collection';
 
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
-import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
-import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
-import 'package:y300/features/comic/domain/services/catalog_thread_html_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/comic/domain/repositories/comic_catalog_directory_reader.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_eligibility_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/tags/domain/services/yamibo_tag_page_parsing.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
 
 enum EpisodeDiscoveryStrategy { direct, recursive, catalog }
 
@@ -46,78 +41,24 @@ class EpisodeDiscoveryConfig {
   final int maxCatalogPages;
 }
 
-abstract class CatalogHtmlFetcher {
-  Future<String?> fetchHtml(String url);
-}
-
-class YamiboCatalogHtmlFetcher implements CatalogHtmlFetcher {
-  YamiboCatalogHtmlFetcher({
-    required YamiboHtmlClient htmlClient,
-    YamiboTagPageParsing tagPageParsing = const YamiboTagPageParsing(),
-  }) : _htmlClient = htmlClient,
-       _tagPageParsing = tagPageParsing;
-
-  final YamiboHtmlClient _htmlClient;
-  final YamiboTagPageParsing _tagPageParsing;
-
-  @override
-  Future<String?> fetchHtml(String url) async {
-    try {
-      final normalized = _tagPageParsing.normalizeCatalogEntryUrl(url);
-      if (!_tagPageParsing.isTagCatalogUrl(normalized)) {
-        return null;
-      }
-      final uri = Uri.tryParse(normalized);
-      if (uri == null || !uri.hasScheme) {
-        return null;
-      }
-      final response = await _htmlClient.getDesktopPage(
-        path: uri.path.isEmpty ? '/misc.php' : uri.path,
-        queryParameters: uri.queryParameters,
-        context: const YamiboRequestContext(
-          kind: YamiboRequestKind.html,
-          operation: 'comic.catalog.fetch',
-          pageKind: 'comic.catalog',
-        ),
-      );
-      return response.dataOrNull;
-    } catch (_) {
-      return null;
-    }
-  }
-}
-
-@Deprecated('Use YamiboCatalogHtmlFetcher.')
-typedef DioCatalogHtmlFetcher = YamiboCatalogHtmlFetcher;
-
 class ComicEpisodeDiscoveryService {
   ComicEpisodeDiscoveryService({
     required ComicThreadDiscoveryRepository repository,
     required ComicConsecutiveOpPostParser opPostParser,
-    required CatalogHtmlFetcher catalogHtmlFetcher,
-    CatalogThreadHtmlParser? catalogThreadHtmlParser,
-    YamiboTagPageParsing? tagPageParsing,
+    required ComicCatalogDirectoryReader catalogDirectoryReader,
+    ForumReferenceResolver references = const ForumReferenceResolver(
+      siteOrigin: AppConfig.siteBaseUrl,
+    ),
     ForumPostDomExtractor? domExtractor,
-    ForumThreadUrlParser? urlParser,
     ComicRecursiveThreadEligibilityPolicy eligibilityPolicy =
         const DefaultComicRecursiveThreadEligibilityPolicy(),
     ComicRecursiveThreadRequestGovernor? recursiveRequestGovernor,
     EpisodeDiscoveryConfig config = const EpisodeDiscoveryConfig(),
   }) : _repository = repository,
        _opPostParser = opPostParser,
-       _catalogHtmlFetcher = catalogHtmlFetcher,
-       _tagPageParsing = tagPageParsing ?? const YamiboTagPageParsing(),
-       _catalogThreadHtmlParser =
-           catalogThreadHtmlParser ??
-           CatalogThreadHtmlParser(
-             tagPageParsing: tagPageParsing ?? const YamiboTagPageParsing(),
-           ),
-       _domExtractor =
-           domExtractor ??
-           ForumPostDomExtractor(
-             urlParser: urlParser ?? const ForumThreadUrlParser(),
-           ),
-       _urlParser = urlParser ?? const ForumThreadUrlParser(),
+       _catalogDirectoryReader = catalogDirectoryReader,
+       _references = references,
+       _domExtractor = domExtractor ?? const ForumPostDomExtractor(),
        _eligibilityPolicy = eligibilityPolicy,
        _recursiveRequestGovernor =
            recursiveRequestGovernor ??
@@ -131,11 +72,9 @@ class ComicEpisodeDiscoveryService {
 
   final ComicThreadDiscoveryRepository _repository;
   final ComicConsecutiveOpPostParser _opPostParser;
-  final CatalogHtmlFetcher _catalogHtmlFetcher;
-  final YamiboTagPageParsing _tagPageParsing;
-  final CatalogThreadHtmlParser _catalogThreadHtmlParser;
+  final ComicCatalogDirectoryReader _catalogDirectoryReader;
+  final ForumReferenceResolver _references;
   final ForumPostDomExtractor _domExtractor;
-  final ForumThreadUrlParser _urlParser;
   final ComicRecursiveThreadEligibilityPolicy _eligibilityPolicy;
   final ComicRecursiveThreadRequestGovernor _recursiveRequestGovernor;
   final EpisodeDiscoveryConfig _config;
@@ -349,75 +288,19 @@ class ComicEpisodeDiscoveryService {
     if (catalogUrl == null || catalogUrl.isEmpty) {
       return const <ComicEpisodeLink>[];
     }
-    if (!_tagPageParsing.isTagCatalogUrl(catalogUrl)) {
-      return const <ComicEpisodeLink>[];
-    }
-
-    final queue = Queue<String>();
-    final visitedPages = <String>{};
-    final links = <String, ComicEpisodeLink>{};
-    final normalizedEntry = _tagPageParsing.normalizeCatalogEntryUrl(
-      catalogUrl,
+    final result = await _catalogDirectoryReader.load(
+      ComicCatalogDirectoryRequest(
+        catalogUrl: catalogUrl,
+        maxPages: _config.maxCatalogPages,
+        requestGate: governor == null
+            ? null
+            : _FavoriteCatalogRequestGate(governor),
+      ),
     );
-    queue.add(normalizedEntry);
-
-    while (queue.isNotEmpty && visitedPages.length < _config.maxCatalogPages) {
-      final pageUrl = queue.removeFirst();
-      if (!_tagPageParsing.isTagCatalogUrl(pageUrl) ||
-          !visitedPages.add(pageUrl)) {
-        continue;
-      }
-      final html = await _runCatalogRequest(
-        governor: governor,
-        action: () => _catalogHtmlFetcher.fetchHtml(pageUrl),
-      );
-      if (html == null || html.isEmpty) {
-        continue;
-      }
-
-      final parsedCatalog = _catalogThreadHtmlParser.parse(
-        html: html,
-        pageUrl: pageUrl,
-      );
-
-      for (final entry in parsedCatalog.entries) {
-        links.putIfAbsent(
-          entry.tid,
-          () => ComicEpisodeLink(
-            url: entry.url,
-            rawText: entry.subject.isEmpty ? '目录条目' : entry.subject,
-            episodeTitle: entry.subject.isEmpty ? null : entry.subject,
-          ),
-        );
-      }
-
-      final nextPage = parsedCatalog.nextPageUrl;
-      if (nextPage != null && !visitedPages.contains(nextPage)) {
-        queue.add(nextPage);
-      }
-
-      // When parser can infer total pages, eagerly enqueue remaining pages to avoid missing tails.
-      final basePageUri = Uri.tryParse(pageUrl);
-      final currentPage =
-          parsedCatalog.currentPage ??
-          int.tryParse(basePageUri?.queryParameters['page'] ?? '') ??
-          1;
-      final totalPages = parsedCatalog.totalPages;
-      if (basePageUri != null &&
-          totalPages != null &&
-          totalPages > currentPage) {
-        for (var page = currentPage + 1; page <= totalPages; page++) {
-          final candidate = _tagPageParsing
-              .withPage(basePageUri, page)
-              .toString();
-          if (!visitedPages.contains(candidate)) {
-            queue.add(candidate);
-          }
-        }
-      }
-    }
-
-    return links.values.toList(growable: false);
+    return result.when(
+      success: (directory, _, _) => directory.links,
+      failure: (_) => const <ComicEpisodeLink>[],
+    );
   }
 
   Future<_ParsedThreadRoot?> _fetchAndParse(
@@ -521,7 +404,7 @@ class ComicEpisodeDiscoveryService {
   }
 
   String? _extractTidFromUrl(String url) {
-    return _urlParser.extractTid(url);
+    return _references.extractTid(url);
   }
 
   /// 获取并解析帖子详情，返回跳转链接和候选 tid。
@@ -558,19 +441,18 @@ class ComicEpisodeDiscoveryService {
     }
     return _recursiveRequestGovernor.schedule(runWithFavoriteGovernor);
   }
+}
 
-  Future<T> _runCatalogRequest<T>({
-    required FavoriteFirstSyncRequestGovernor? governor,
-    required Future<T> Function() action,
-  }) {
-    if (governor == null) {
-      return action();
-    }
-    return governor.run(
-      kind: FavoriteFirstSyncRequestKind.comicCatalogHtml,
-      action: action,
-    );
-  }
+final class _FavoriteCatalogRequestGate implements ComicCatalogRequestGate {
+  const _FavoriteCatalogRequestGate(this._governor);
+
+  final FavoriteFirstSyncRequestGovernor _governor;
+
+  @override
+  Future<T> run<T>(Future<T> Function() action) => _governor.run(
+    kind: FavoriteFirstSyncRequestKind.comicCatalogHtml,
+    action: action,
+  );
 }
 
 /// 帖子解析结果（public），用于增量发现。

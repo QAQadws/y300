@@ -3,7 +3,7 @@ import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
-import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 class ForumHomeSnapshotCodec
     implements

@@ -1,18 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
+import 'package:html/parser.dart' as html_parser;
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/comic/data/mappers/comic_thread_discovery_document_mapper.dart';
-import 'package:y300/features/comic/data/repositories/thread_repository_comic_thread_discovery_adapter.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
-import 'package:y300/features/comic/domain/repositories/comic_thread_discovery_repository.dart';
+import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/repositories/comic_catalog_directory_reader.dart';
 import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
-import 'package:y300/features/thread/domain/repositories/thread_repository.dart';
+
+import '../../../../support/fixture_comic_thread_discovery_repository.dart';
 
 void main() {
   group('ComicEpisodeDiscoveryService', () {
@@ -39,7 +38,9 @@ void main() {
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+          catalogDirectoryReader: _FakeCatalogDirectoryReader(
+            <String, String>{},
+          ),
         );
 
         final result = await service.discoverFromTid('100');
@@ -76,7 +77,9 @@ void main() {
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+          catalogDirectoryReader: _FakeCatalogDirectoryReader(
+            <String, String>{},
+          ),
         );
 
         final result = await service.discoverFromTid('2000');
@@ -115,7 +118,9 @@ void main() {
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+          catalogDirectoryReader: _FakeCatalogDirectoryReader(
+            <String, String>{},
+          ),
         );
 
         final result = await service.discoverFromTid('2050');
@@ -155,7 +160,9 @@ void main() {
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+          catalogDirectoryReader: _FakeCatalogDirectoryReader(
+            <String, String>{},
+          ),
         );
 
         final result = await service.discoverFromTid('2100');
@@ -201,7 +208,9 @@ void main() {
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+          catalogDirectoryReader: _FakeCatalogDirectoryReader(
+            <String, String>{},
+          ),
           recursiveRequestGovernor: recursiveGovernor,
         );
 
@@ -261,7 +270,9 @@ void main() {
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+          catalogDirectoryReader: _FakeCatalogDirectoryReader(
+            <String, String>{},
+          ),
           recursiveRequestGovernor: _immediateRecursiveGovernor(),
           config: const EpisodeDiscoveryConfig(maxConsecutiveFailures: 1),
         );
@@ -298,7 +309,7 @@ void main() {
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
         ),
-        catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+        catalogDirectoryReader: _FakeCatalogDirectoryReader(<String, String>{}),
         recursiveRequestGovernor: recursiveGovernor,
       );
 
@@ -331,7 +342,7 @@ void main() {
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
         ),
-        catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+        catalogDirectoryReader: _FakeCatalogDirectoryReader(<String, String>{}),
         recursiveRequestGovernor: recursiveGovernor,
       );
 
@@ -366,7 +377,7 @@ void main() {
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher({
+          catalogDirectoryReader: _FakeCatalogDirectoryReader({
             'https://bbs.yamibo.com/misc.php?mod=tag&id=21137&type=thread&page=1':
                 '''
 <html><body>
@@ -399,7 +410,7 @@ void main() {
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
         ),
-        catalogHtmlFetcher: _FakeCatalogHtmlFetcher({
+        catalogDirectoryReader: _FakeCatalogDirectoryReader({
           'https://bbs.yamibo.com/misc.php?mod=tag&id=18235&type=thread&page=1':
               '''
 <html><body>
@@ -439,7 +450,7 @@ void main() {
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
         ),
-        catalogHtmlFetcher: _FakeCatalogHtmlFetcher({
+        catalogDirectoryReader: _FakeCatalogDirectoryReader({
           'https://bbs.yamibo.com/misc.php?mod=tag&id=21661&type=thread&page=1':
               '''
 <div class="pg"><strong>1</strong>
@@ -489,7 +500,9 @@ void main() {
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+          catalogDirectoryReader: _FakeCatalogDirectoryReader(
+            <String, String>{},
+          ),
         );
 
         final result = await service.discoverFromTid('900');
@@ -513,7 +526,7 @@ void main() {
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher({
+          catalogDirectoryReader: _FakeCatalogDirectoryReader({
             'https://bbs.yamibo.com/misc.php?mod=tag&id=99999&type=thread&page=1':
                 '''
 <html><body>
@@ -549,7 +562,9 @@ void main() {
           opPostParser: ComicConsecutiveOpPostParser(
             engine: ComicPostParsingEngine(),
           ),
-          catalogHtmlFetcher: _FakeCatalogHtmlFetcher(<String, String>{}),
+          catalogDirectoryReader: _FakeCatalogDirectoryReader(
+            <String, String>{},
+          ),
         );
 
         final links = await service.discoverFromCatalogUrl(
@@ -561,7 +576,7 @@ void main() {
     );
 
     test('rejects a persisted non-tag catalog url before fetching', () async {
-      final fetcher = _FakeCatalogHtmlFetcher(<String, String>{});
+      final fetcher = _FakeCatalogDirectoryReader(<String, String>{});
       final service = ComicEpisodeDiscoveryService(
         repository: _fakeThreadFetcher(
           detailsByTid: <String, ThreadDetailData>{},
@@ -569,7 +584,7 @@ void main() {
         opPostParser: ComicConsecutiveOpPostParser(
           engine: ComicPostParsingEngine(),
         ),
-        catalogHtmlFetcher: fetcher,
+        catalogDirectoryReader: fetcher,
       );
 
       final links = await service.discoverFromCatalogUrl(
@@ -630,13 +645,13 @@ ComicThreadDiscoveryRepository _fakeThreadFetcher({
 ComicThreadDiscoveryRepository _discoveryRepository(
   Future<ApiResult<ThreadDetailData>> Function(String tid) loader,
 ) {
-  return ThreadRepositoryComicThreadDiscoveryAdapter(
+  return FixtureComicThreadDiscoveryRepository(
     threadRepository: _FixtureThreadRepository(loader),
   );
 }
 
 ComicThreadDiscoveryDocument _discoveryDocument(ThreadDetailData detail) {
-  return const ComicThreadDiscoveryDocumentMapper().map(detail);
+  return const ComicThreadDiscoveryProjector().project(detail);
 }
 
 final class _FixtureThreadRepository implements ThreadRepository {
@@ -672,16 +687,67 @@ final class _FixtureThreadRepository implements ThreadRepository {
   }
 }
 
-class _FakeCatalogHtmlFetcher implements CatalogHtmlFetcher {
-  _FakeCatalogHtmlFetcher(this.pages);
+class _FakeCatalogDirectoryReader implements ComicCatalogDirectoryReader {
+  _FakeCatalogDirectoryReader(this.pages);
 
   final Map<String, String> pages;
   final List<String> requestedUrls = <String>[];
 
   @override
-  Future<String?> fetchHtml(String url) async {
-    requestedUrls.add(url);
-    return pages[url];
+  Future<
+    DataReadResult<ComicCatalogDirectory, ComicCatalogDirectoryCapabilities>
+  >
+  load(ComicCatalogDirectoryRequest request) async {
+    final references = const ForumReferenceResolver(
+      siteOrigin: 'https://bbs.yamibo.com',
+    );
+    final tagId = references.extractTagId(request.catalogUrl);
+    if (tagId == null) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.parse,
+        diagnosticMessage: 'invalid_catalog_reference',
+      );
+    }
+    final links = <String, ComicEpisodeLink>{};
+    var page = references.extractTagPage(request.catalogUrl);
+    for (var count = 0; count < request.maxPages; count += 1) {
+      final pageUrl = references.normalizeTagPageReference(
+        request.catalogUrl,
+        page: page,
+      )!;
+      requestedUrls.add(pageUrl);
+      final html = pages[pageUrl];
+      if (html == null || html.isEmpty) break;
+      final document = html_parser.parseFragment(html);
+      for (final anchor in document.querySelectorAll('a[href]')) {
+        final href = anchor.attributes['href']?.trim() ?? '';
+        final tid = references.extractTid(href, baseUrl: pageUrl);
+        final title = anchor.text.trim();
+        final normalizedUrl = references.normalizeHref(href, baseUrl: pageUrl);
+        if (tid == null || title.isEmpty || normalizedUrl == null) continue;
+        links.putIfAbsent(
+          tid,
+          () => ComicEpisodeLink(
+            url: normalizedUrl,
+            rawText: title,
+            episodeTitle: title,
+          ),
+        );
+      }
+      if (document.querySelector('a.nxt') == null) {
+        break;
+      }
+      page += 1;
+    }
+    return DataReadSuccess(
+      data: ComicCatalogDirectory(links: links.values.toList()),
+      capabilities: ComicCatalogDirectoryCapabilities(
+        values: DataCapabilitySet.supported(
+          ComicCatalogDirectoryCapability.values,
+        ),
+      ),
+      metadata: const DataReadMetadata.network(),
+    );
   }
 }
 

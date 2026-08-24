@@ -8,8 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
-import 'package:y300/features/forum/domain/models/forum_display_models.dart';
-import 'package:y300/features/forum/domain/repositories/forum_display_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/data/services/forum_favorite_action_service.dart';
 import 'package:y300/features/forum/presentation/forum_content_projection_providers.dart';
 import 'package:y300/features/forum/presentation/forum_display_content_projection.dart';
@@ -22,7 +21,6 @@ import 'package:y300/features/forum/presentation/widgets/forum_display_widgets.d
 import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
-import 'package:y300/features/search/domain/models/forum_search_models.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';

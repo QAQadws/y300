@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/data/mappers/comic_thread_discovery_document_mapper.dart';
-import 'package:y300/features/comic/domain/models/comic_thread_discovery_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_search_refresh_queue_repository.dart';
@@ -12,7 +11,6 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/thread/domain/models/thread_detail_models.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -181,7 +179,7 @@ void main() {
           request: _request(),
           title: '测试漫画',
           origin: ComicSearchRefreshOrigin.favoriteSync,
-          preloadedRootDetail: const ComicThreadDiscoveryDocumentMapper().map(
+          preloadedRootDetail: const ComicThreadDiscoveryProjector().project(
             detail,
           ),
         );
@@ -239,7 +237,7 @@ void main() {
           request: _request(),
           title: '测试漫画',
           origin: ComicSearchRefreshOrigin.favoriteSync,
-          preloadedRootDetail: const ComicThreadDiscoveryDocumentMapper().map(
+          preloadedRootDetail: const ComicThreadDiscoveryProjector().project(
             detail,
           ),
         );

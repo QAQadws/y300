@@ -1,5 +1,5 @@
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/features/thread/domain/services/forum_thread_url_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 /// 手动添加章节的解析结果。
 class ManualEpisodeTarget {
@@ -38,10 +38,10 @@ class ComicManualEpisodeInputException implements Exception {
 /// 让下游完全不必关心用户从哪一种页面复制的。
 class ComicManualEpisodeUrlPolicy {
   const ComicManualEpisodeUrlPolicy({
-    ForumThreadUrlParser threadUrlParser = const ForumThreadUrlParser(),
+    ForumReferenceResolver threadUrlParser = const ForumReferenceResolver(),
   }) : _threadUrlParser = threadUrlParser;
 
-  final ForumThreadUrlParser _threadUrlParser;
+  final ForumReferenceResolver _threadUrlParser;
 
   static final RegExp _tidPattern = RegExp(r'^[1-9][0-9]*$');
 
@@ -58,6 +58,28 @@ class ComicManualEpisodeUrlPolicy {
     // 完整链接再被解析回来。
     if (_tidPattern.hasMatch(value)) {
       return ManualEpisodeTarget(tid: value, sourceUrl: _viewThreadUrl(value));
+    }
+
+    final inputUri = Uri.tryParse(value);
+    if (inputUri == null) {
+      throw const ComicManualEpisodeInputException(
+        ComicManualEpisodeInputErrorCode.invalidUrl,
+      );
+    }
+    if (inputUri.isAbsolute &&
+        inputUri.scheme != 'http' &&
+        inputUri.scheme != 'https') {
+      throw const ComicManualEpisodeInputException(
+        ComicManualEpisodeInputErrorCode.unsupportedScheme,
+      );
+    }
+    final siteHost = Uri.parse(AppConfig.siteBaseUrl).host;
+    if (inputUri.isAbsolute &&
+        inputUri.host.toLowerCase() != siteHost.toLowerCase()) {
+      throw ComicManualEpisodeInputException(
+        ComicManualEpisodeInputErrorCode.unexpectedHost,
+        expectedHost: siteHost,
+      );
     }
 
     final normalized = _threadUrlParser.normalizeHref(value);
@@ -79,7 +101,6 @@ class ComicManualEpisodeUrlPolicy {
       );
     }
 
-    final siteHost = Uri.parse(AppConfig.siteBaseUrl).host;
     if (uri.host.isNotEmpty &&
         uri.host.toLowerCase() != siteHost.toLowerCase()) {
       throw ComicManualEpisodeInputException(

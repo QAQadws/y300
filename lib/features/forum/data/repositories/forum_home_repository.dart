@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/data_source/data_read_contract.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
@@ -8,7 +7,7 @@ import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/services/cache_key_canonicalizer.dart';
-import 'package:y300/features/cache/domain/services/cache_load_policy.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
@@ -17,8 +16,6 @@ import 'package:y300/features/forum/data/services/forum_home_snapshot_codec.dart
 import 'package:y300/features/forum/data/services/forum_directory_validator.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/models/forum_home_html_models.dart';
-import 'package:y300/features/forum/domain/models/forum_directory_models.dart';
-import 'package:y300/features/forum/domain/repositories/forum_directory_repository.dart';
 
 /// 论坛首页聚合结果：把论坛首页基础数据与登录态相关扩展信息统一返回。
 class ForumHomePayload {
