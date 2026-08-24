@@ -1,12 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     as forum;
-import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
-import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
+import 'package:y300/features/forum/data/services/forum_home_carousel_dimension_resolver.dart';
 
 class ForumHomePayload {
   ForumHomePayload({
@@ -67,16 +68,16 @@ final class ForumHomeHtmlRepository
   const ForumHomeHtmlRepository({
     required forum.ForumHomeRepository repository,
     required forum.ForumDirectoryRepository directoryRepository,
-    required ForumHomeCarouselImageProbe imageProbe,
+    required ForumHomeCarouselDimensionResolver dimensionResolver,
     YamiboSessionStore? sessionStore,
   }) : _repository = repository,
        _directoryRepository = directoryRepository,
-       _imageProbe = imageProbe,
+       _dimensionResolver = dimensionResolver,
        _sessionStore = sessionStore;
 
   final forum.ForumHomeRepository _repository;
   final forum.ForumDirectoryRepository _directoryRepository;
-  final ForumHomeCarouselImageProbe _imageProbe;
+  final ForumHomeCarouselDimensionResolver _dimensionResolver;
   final YamiboSessionStore? _sessionStore;
 
   @override
@@ -103,8 +104,11 @@ final class ForumHomeHtmlRepository
       forum.ForumHomeQuery(audience: _audience(requestProfile)),
     );
     if (value == null) return null;
+    final payload = await _withResolvedCarouselAspectRatio(
+      _project(value.data, requestProfile: requestProfile),
+    );
     return ForumHomeCacheEntry(
-      payload: _project(value.data, requestProfile: requestProfile),
+      payload: payload,
       capabilities: _directoryCapabilities,
       metadata: value.metadata,
       updatedAt: value.updatedAt,
@@ -150,10 +154,9 @@ final class ForumHomeHtmlRepository
               forum.ForumHomeDocument,
               forum.ForumHomeReadCapabilities
             >;
-    var payload = _project(success.data, requestProfile: profile);
-    if (success.metadata.origin == forum.DataReadOrigin.network) {
-      payload = await _resolveCarousel(payload);
-    }
+    final payload = await _withResolvedCarouselAspectRatio(
+      _project(success.data, requestProfile: profile),
+    );
     return forum.DataReadSuccess(
       data: payload,
       capabilities: _directoryCapabilities,
@@ -206,10 +209,12 @@ final class ForumHomeHtmlRepository
     );
   }
 
-  Future<ForumHomePayload> _resolveCarousel(ForumHomePayload payload) async {
+  Future<ForumHomePayload> _withResolvedCarouselAspectRatio(
+    ForumHomePayload payload,
+  ) async {
     if (payload.chromeData.carouselItems.isEmpty) return payload;
     final first = payload.chromeData.carouselItems.first;
-    final ratio = await _imageProbe.resolveAspectRatio(first.imageUrl);
+    final ratio = await _dimensionResolver.resolveAspectRatio(first.imageUrl);
     if (ratio == null) return payload;
     return ForumHomePayload(
       directory: payload.directory,
@@ -231,12 +236,8 @@ final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
     repository: client.forumHome!,
     directoryRepository: client.forumDirectory!,
     sessionStore: ref.watch(yamiboSessionStoreProvider),
-    imageProbe: ForumHomeCarouselImageProbe(
-      resourceClient: ref.watch(yamiboForumResourceClientProvider),
-      referenceResolver: ref.watch(
-        yamiboForumResourceReferenceResolverProvider,
-      ),
-      referer: ref.watch(forumImageRefererProvider),
+    dimensionResolver: ForumHomeCarouselDimensionResolver(
+      dimensionIndex: ref.watch(forumImageDimensionIndexProvider),
     ),
   );
 });

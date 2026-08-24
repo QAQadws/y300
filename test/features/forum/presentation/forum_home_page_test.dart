@@ -186,6 +186,13 @@ void main() {
           tester.getSize(find.byKey(const Key('forum-home-carousel'))).height,
           greaterThan(0),
         );
+        final carouselClip = tester.widget<ClipRRect>(
+          find.ancestor(
+            of: find.byKey(const Key('forum-home-carousel')),
+            matching: find.byType(ClipRRect),
+          ),
+        );
+        expect(carouselClip.borderRadius, BorderRadius.circular(4));
         expect(find.text('综合区'), findsOneWidget);
         expect(find.text('公告区'), findsOneWidget);
         expect(find.text('今日'), findsOneWidget);
@@ -232,6 +239,100 @@ void main() {
         ),
         isNotEmpty,
       );
+    });
+
+    testWidgets(
+      'carousel applies a ratio update without replacing its content',
+      (tester) async {
+        Widget build(double? aspectRatio) {
+          return ProviderScope(
+            overrides: [
+              imageCacheServiceProvider.overrideWithValue(
+                _FakeImageCacheService(),
+              ),
+              forumImageRefererProvider.overrideWithValue(
+                'https://bbs.yamibo.com/',
+              ),
+            ],
+            child: LocalizedTestApp(
+              home: Scaffold(
+                body: ForumHomeCarousel(
+                  items: [
+                    ForumHomeCarouselItem(
+                      imageUrl: 'https://bbs.yamibo.com/banner.jpg',
+                      targetUrl:
+                          'https://bbs.yamibo.com/thread-570956-1-1.html',
+                      aspectRatio: aspectRatio,
+                    ),
+                  ],
+                  imageReferer: 'https://bbs.yamibo.com/',
+                  onOpen: (_) {},
+                ),
+              ),
+            ),
+          );
+        }
+
+        await tester.pumpWidget(build(null));
+        await tester.pump();
+
+        final carousel = find.byKey(const Key('forum-home-carousel'));
+        final width = tester.getSize(carousel).width;
+        expect(tester.getSize(carousel).height, closeTo(width / 3.45, 0.01));
+
+        await tester.pumpWidget(build(3));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(tester.getSize(carousel).height, closeTo(width / 3, 0.01));
+      },
+    );
+
+    testWidgets('carousel adopts the first decoded image ratio', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+            forumImageRefererProvider.overrideWithValue(
+              'https://bbs.yamibo.com/',
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: Scaffold(
+              body: ForumHomeCarousel(
+                items: const [
+                  ForumHomeCarouselItem(
+                    imageUrl: 'https://bbs.yamibo.com/banner.jpg',
+                    targetUrl: 'https://bbs.yamibo.com/thread-570956-1-1.html',
+                  ),
+                ],
+                imageReferer: 'https://bbs.yamibo.com/',
+                onOpen: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final carousel = find.byKey(const Key('forum-home-carousel'));
+      final width = tester.getSize(carousel).width;
+      final image = tester.widget<CachedLibraryImage>(
+        find.descendant(
+          of: carousel,
+          matching: find.byType(CachedLibraryImage),
+        ),
+      );
+
+      image.onImageResolved!(const Size(900, 300));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(tester.getSize(carousel).height, closeTo(width / 3, 0.01));
     });
 
     testWidgets('carousel pending item prewarm uses forum image precache', (

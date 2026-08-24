@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
@@ -6,37 +6,44 @@ import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
+import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
-import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
+import 'package:y300/features/forum/data/services/forum_home_carousel_dimension_resolver.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ForumHomeHtmlRepository', () {
-    test('projects one mobile HTML read and probes its first banner', () async {
-      final fixture = _buildFixture();
+    test(
+      'projects one mobile HTML read and restores local dimensions',
+      () async {
+        final fixture = _buildFixture();
 
-      final result = await fixture.repository.getForumHomePayload();
+        final result = await fixture.repository.getForumHomePayload();
 
-      expect(result.isSuccess, isTrue);
-      final payload = result.dataOrNull!;
-      expect(payload.isLoggedIn, isFalse);
-      expect(payload.favoriteForums.map((item) => item.fid), ['33']);
-      expect(payload.directory.sections.single.title, '庙堂');
-      expect(payload.directory.sections.single.forums.map((item) => item.fid), [
-        '16',
-        '370',
-      ]);
-      expect(payload.chromeData.carouselItems.single.aspectRatio, 3);
-      expect(fixture.network.documentRequests, 1);
-      expect(fixture.network.imageRequests, 1);
-      expect(
-        fixture.network.lastRequest?.uri.toString(),
-        'https://bbs.yamibo.com/index.php?mobile=2',
-      );
-    });
+        expect(result.isSuccess, isTrue);
+        final payload = result.dataOrNull!;
+        expect(payload.isLoggedIn, isFalse);
+        expect(payload.favoriteForums.map((item) => item.fid), ['33']);
+        expect(payload.directory.sections.single.title, '庙堂');
+        expect(
+          payload.directory.sections.single.forums.map((item) => item.fid),
+          ['16', '370'],
+        );
+        expect(payload.chromeData.carouselItems.single.aspectRatio, 3);
+        expect(fixture.network.documentRequests, 1);
+        expect(fixture.dimensions.lastKnownRequests, 1);
+        expect(fixture.dimensions.lastSpec?.ownerId, 'home');
+        expect(
+          fixture.network.lastRequest?.uri.toString(),
+          'https://bbs.yamibo.com/index.php?mobile=2',
+        );
+      },
+    );
 
     test(
       'writes and reuses the package snapshot without another request',
@@ -50,8 +57,12 @@ void main() {
         expect(first.isSuccess, isTrue);
         expect(second.isSuccess, isTrue);
         expect(second.dataOrNull!.directory.sections.single.title, '庙堂');
+        expect(
+          second.dataOrNull!.chromeData.carouselItems.single.aspectRatio,
+          3,
+        );
         expect(fixture.network.documentRequests, 1);
-        expect(fixture.network.imageRequests, 1);
+        expect(fixture.dimensions.lastKnownRequests, 2);
         expect(fixture.documents.values, hasLength(1));
         expect(fixture.snapshots.values, hasLength(1));
         expect(
@@ -88,7 +99,24 @@ void main() {
           forum.DataReadOrigin.cachedDocumentFallback,
         );
         expect(fixture.network.documentRequests, 2);
-        expect(fixture.network.imageRequests, 1);
+        expect(fixture.dimensions.lastKnownRequests, 2);
+      },
+    );
+
+    test(
+      'keeps an unresolved carousel ratio null without network probing',
+      () async {
+        final fixture = _buildFixture(dimensions: null);
+
+        final result = await fixture.repository.getForumHomePayload();
+
+        expect(result.isSuccess, isTrue);
+        expect(
+          result.dataOrNull!.chromeData.carouselItems.single.aspectRatio,
+          isNull,
+        );
+        expect(fixture.network.documentRequests, 1);
+        expect(fixture.dimensions.lastKnownRequests, 1);
       },
     );
 
@@ -121,8 +149,16 @@ void main() {
   });
 }
 
-_HomeFixture _buildFixture({YamiboSessionStore? sessionStore}) {
+_HomeFixture _buildFixture({
+  YamiboSessionStore? sessionStore,
+  ForumImageDimensions? dimensions = const ForumImageDimensions(
+    width: 300,
+    height: 100,
+    source: ForumImageDimensionSource.cacheMetadata,
+  ),
+}) {
   final network = _HomeNetwork();
+  final dimensionIndex = _RecordingForumImageDimensionIndex(dimensions);
   final documents = _MemoryDocumentCacheService();
   final snapshots = _MemorySnapshotCacheService();
   final config = forum.ForumClientConfig(
@@ -132,7 +168,6 @@ _HomeFixture _buildFixture({YamiboSessionStore? sessionStore}) {
   final client = forum.YamiboForumClientBuilder(
     config: config,
     network: network,
-    resourceClient: network,
     sessionStore: sessionStore == null
         ? null
         : Y300ForumSessionAdapter(sessionStore),
@@ -144,17 +179,14 @@ _HomeFixture _buildFixture({YamiboSessionStore? sessionStore}) {
       repository: client.forumHome!,
       directoryRepository: client.forumDirectory!,
       sessionStore: sessionStore,
-      imageProbe: ForumHomeCarouselImageProbe(
-        resourceClient: network,
-        referenceResolver: forum.ForumResourceReferenceResolver(
-          siteOrigin: config.siteOrigin,
-        ),
-        referer: config.siteOrigin.toString(),
+      dimensionResolver: ForumHomeCarouselDimensionResolver(
+        dimensionIndex: dimensionIndex,
       ),
     ),
     network: network,
     documents: documents,
     snapshots: snapshots,
+    dimensions: dimensionIndex,
   );
 }
 
@@ -164,18 +196,18 @@ final class _HomeFixture {
     required this.network,
     required this.documents,
     required this.snapshots,
+    required this.dimensions,
   });
 
   final ForumHomeHtmlRepository repository;
   final _HomeNetwork network;
   final _MemoryDocumentCacheService documents;
   final _MemorySnapshotCacheService snapshots;
+  final _RecordingForumImageDimensionIndex dimensions;
 }
 
-final class _HomeNetwork
-    implements forum.ForumClientNetwork, forum.ForumResourceClient {
+final class _HomeNetwork implements forum.ForumClientNetwork {
   int documentRequests = 0;
-  int imageRequests = 0;
   bool failDocuments = false;
   forum.ForumRequest? lastRequest;
 
@@ -204,27 +236,36 @@ final class _HomeNetwork
       ),
     );
   }
+}
+
+final class _RecordingForumImageDimensionIndex
+    implements ForumImageDimensionIndex {
+  _RecordingForumImageDimensionIndex(this.dimensions);
+
+  final ForumImageDimensions? dimensions;
+  int lastKnownRequests = 0;
+  ForumImageLoadSpec? lastSpec;
 
   @override
-  Future<forum.ForumResourceResult> open(
-    forum.ForumResourceRequest request,
-  ) async {
-    imageRequests += 1;
-    final bytes = Uint8List(24);
-    bytes.setAll(0, const [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    final data = ByteData.sublistView(bytes);
-    data.setUint32(16, 300, Endian.big);
-    data.setUint32(20, 100, Endian.big);
-    return forum.ForumResourceSuccess(
-      uri: request.reference.uri,
-      statusCode: 200,
-      content: Stream<List<int>>.value(bytes),
-      contentLength: bytes.length,
-      contentType: 'image/png',
-      validUntil: DateTime(2026, 1, 2),
-      fileExtension: '.png',
-    );
+  Future<ForumImageDimensions?> getBySpec(ForumImageLoadSpec spec) async {
+    lastSpec = spec;
+    return dimensions;
   }
+
+  @override
+  Future<ForumImageDimensions?> getLastKnownBySpec(
+    ForumImageLoadSpec spec,
+  ) async {
+    lastKnownRequests += 1;
+    lastSpec = spec;
+    return dimensions;
+  }
+
+  @override
+  Future<void> recordDecodedDimensions({
+    required ForumImageLoadSpec spec,
+    required Size size,
+  }) async {}
 }
 
 final class _MemoryDocumentCacheService implements DocumentCacheService {

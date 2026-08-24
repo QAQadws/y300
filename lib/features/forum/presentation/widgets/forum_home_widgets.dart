@@ -9,8 +9,9 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
-import 'package:y300/features/forum/data/services/forum_home_carousel_image_probe.dart';
+import 'package:y300/features/forum/data/services/forum_home_carousel_dimension_resolver.dart';
 import 'package:y300/features/forum/domain/services/forum_chrome_image_adapter.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
 class ForumHomeCarousel extends ConsumerStatefulWidget {
   const ForumHomeCarousel({
@@ -37,14 +38,17 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
   List<ForumHomeCarouselItem>? _pendingItems;
   String? _displayedSignature;
   String? _pendingSignature;
+  double? _displayedAspectRatio;
   int _currentIndex = 0;
   int _pendingGeneration = 0;
+  int _displayGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     _displayedItems = widget.items;
     _displayedSignature = _signatureFor(widget.items);
+    _displayedAspectRatio = _aspectRatioFor(widget.items);
   }
 
   @override
@@ -54,12 +58,33 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
     if (_displayedSignature == null) {
       _displayedItems = widget.items;
       _displayedSignature = nextSignature;
+      _displayedAspectRatio = _aspectRatioFor(widget.items);
       return;
     }
     if (nextSignature == _displayedSignature) {
+      _displayedItems = widget.items;
+      _displayedAspectRatio =
+          _aspectRatioFor(widget.items) ?? _displayedAspectRatio;
+      if (_pendingSignature != null && _pendingSignature != nextSignature) {
+        _pendingGeneration += 1;
+        _pendingItems = null;
+        _pendingSignature = null;
+      }
       if (!oldWidget.isActive && widget.isActive && _pendingItems != null) {
         _applyPendingItemsIfPossible();
       }
+      return;
+    }
+
+    if (widget.items.isEmpty) {
+      _pendingGeneration += 1;
+      _displayGeneration += 1;
+      _displayedItems = widget.items;
+      _displayedSignature = nextSignature;
+      _displayedAspectRatio = null;
+      _pendingItems = null;
+      _pendingSignature = null;
+      _currentIndex = 0;
       return;
     }
 
@@ -86,8 +111,8 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
       child: _ForumHomeCarouselBody(
         aspectRatio:
-            _displayedItems.first.aspectRatio ??
-            ForumHomeCarouselImageProbe.fallbackAspectRatio,
+            _displayedAspectRatio ??
+            ForumHomeCarouselDimensionResolver.fallbackAspectRatio,
         controller: _carouselController,
         imageReferer: widget.imageReferer,
         imageRequestResolver: ref.watch(forumImageRequestResolverProvider),
@@ -95,6 +120,8 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
         onOpen: widget.onOpen,
         palette: palette,
         onPageChanged: _handlePageChanged,
+        displayGeneration: _displayGeneration,
+        onFirstImageResolved: _handleFirstImageResolved,
       ),
     );
   }
@@ -104,9 +131,9 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
     if (items == null || items.isEmpty) {
       return;
     }
+    final displaySize = _carouselDisplaySize(context, preferredItems: items);
     await Future.wait<void>(
-      items.map((item) => _resolveImage(item)),
-      eagerError: false,
+      items.map((item) => _resolveImage(item, displaySize)),
     );
     if (!mounted || generation != _pendingGeneration) {
       return;
@@ -116,7 +143,10 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
     }
   }
 
-  Future<void> _resolveImage(ForumHomeCarouselItem item) async {
+  Future<void> _resolveImage(
+    ForumHomeCarouselItem item,
+    Size expectedDisplaySize,
+  ) async {
     final spec = const ForumChromeImageAdapter().carouselImage(item.imageUrl);
     if (spec == null) {
       return;
@@ -127,22 +157,48 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
           .precacheDecoded(
             context: context,
             spec: spec,
-            expectedDisplaySize: _carouselDisplaySize(context),
+            expectedDisplaySize: expectedDisplaySize,
           );
     } catch (_) {
       return;
     }
   }
 
-  Size _carouselDisplaySize(BuildContext context) {
+  Size _carouselDisplaySize(
+    BuildContext context, {
+    List<ForumHomeCarouselItem>? preferredItems,
+  }) {
     final mediaWidth = MediaQuery.sizeOf(context).width;
     final width = (mediaWidth - 20).clamp(1, double.infinity).toDouble();
-    final ratio = _displayedItems.isNotEmpty
-        ? _displayedItems.first.aspectRatio
-        : null;
+    final ratio =
+        _aspectRatioFor(preferredItems ?? _displayedItems) ??
+        _displayedAspectRatio;
     final aspectRatio =
-        ratio ?? ForumHomeCarouselImageProbe.fallbackAspectRatio;
+        ratio ?? ForumHomeCarouselDimensionResolver.fallbackAspectRatio;
     return Size(width, width / aspectRatio);
+  }
+
+  void _handleFirstImageResolved(
+    int generation,
+    ForumHomeCarouselItem item,
+    Size decodedSize,
+  ) {
+    if (generation != _displayGeneration || _displayedItems.isEmpty) {
+      return;
+    }
+    final first = _displayedItems.first;
+    if (first.imageUrl != item.imageUrl || first.targetUrl != item.targetUrl) {
+      return;
+    }
+    final aspectRatio = decodedSize.width / decodedSize.height;
+    if (!_isValidAspectRatio(aspectRatio) ||
+        (_displayedAspectRatio != null &&
+            (_displayedAspectRatio! - aspectRatio).abs() < 0.0001)) {
+      return;
+    }
+    setState(() {
+      _displayedAspectRatio = aspectRatio;
+    });
   }
 
   void _handlePageChanged(int index, CarouselPageChangedReason reason) {
@@ -171,8 +227,10 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
       return;
     }
     setState(() {
+      _displayGeneration += 1;
       _displayedItems = pending;
       _displayedSignature = _pendingSignature;
+      _displayedAspectRatio = _aspectRatioFor(pending) ?? _displayedAspectRatio;
       _pendingItems = null;
       _pendingSignature = null;
       _currentIndex = 0;
@@ -193,6 +251,18 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
     }
     return items.map((item) => '${item.imageUrl}|${item.targetUrl}').join('||');
   }
+
+  double? _aspectRatioFor(List<ForumHomeCarouselItem> items) {
+    if (items.isEmpty) {
+      return null;
+    }
+    final aspectRatio = items.first.aspectRatio;
+    return _isValidAspectRatio(aspectRatio) ? aspectRatio : null;
+  }
+
+  bool _isValidAspectRatio(double? value) {
+    return value != null && value.isFinite && value > 0;
+  }
 }
 
 class _ForumHomeCarouselBody extends StatelessWidget {
@@ -205,6 +275,8 @@ class _ForumHomeCarouselBody extends StatelessWidget {
     required this.onOpen,
     required this.palette,
     required this.onPageChanged,
+    required this.displayGeneration,
+    required this.onFirstImageResolved,
   });
 
   final double aspectRatio;
@@ -214,8 +286,11 @@ class _ForumHomeCarouselBody extends StatelessWidget {
   final List<ForumHomeCarouselItem> items;
   final ValueChanged<ForumHomeCarouselItem> onOpen;
   final ForumHomeNativePalette palette;
+  final int displayGeneration;
   final void Function(int index, CarouselPageChangedReason reason)
   onPageChanged;
+  final void Function(int generation, ForumHomeCarouselItem item, Size size)
+  onFirstImageResolved;
 
   @override
   Widget build(BuildContext context) {
@@ -225,59 +300,75 @@ class _ForumHomeCarouselBody extends StatelessWidget {
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width - 24;
         final carouselHeight = availableWidth / aspectRatio;
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: SizedBox(
-            key: const Key('forum-home-carousel'),
-            width: double.infinity,
-            height: carouselHeight,
-            child: CarouselSlider.builder(
-              carouselController: controller,
-              itemCount: items.length,
-              options: CarouselOptions(
-                height: carouselHeight,
-                viewportFraction: 1,
-                autoPlay: items.length > 1,
-                autoPlayInterval: const Duration(seconds: 3),
-                autoPlayAnimationDuration: const Duration(milliseconds: 450),
-                enableInfiniteScroll: items.length > 1,
-                disableCenter: true,
-                onPageChanged: onPageChanged,
-              ),
-              itemBuilder: (context, index, realIndex) {
-                final item = items[index];
-                final spec = const ForumChromeImageAdapter().carouselImage(
-                  item.imageUrl,
-                );
-                return SizedBox.expand(
-                  child: Material(
-                    color: palette.carouselPlaceholder,
-                    child: InkWell(
-                      key: Key('forum-home-carousel-item-$index'),
-                      onTap: () => onOpen(item),
-                      child: CachedLibraryImage(
-                        request: spec == null
-                            ? null
-                            : imageRequestResolver.resolveCacheRequest(spec),
-                        fit: BoxFit.contain,
-                        width: double.infinity,
-                        height: double.infinity,
-                        referer: imageReferer,
-                        placeholder: ColoredBox(
-                          color: palette.carouselPlaceholder,
-                          child: const SizedBox.expand(),
-                        ),
-                        errorPlaceholder: ColoredBox(
-                          color: palette.carouselPlaceholder,
-                          child: const Center(
-                            child: Icon(Icons.image_not_supported_outlined),
+        final duration = MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : ForumMediaLoadingStyle.fadeInDuration;
+        return AnimatedSize(
+          duration: duration,
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              key: const Key('forum-home-carousel'),
+              width: double.infinity,
+              height: carouselHeight,
+              child: CarouselSlider.builder(
+                carouselController: controller,
+                itemCount: items.length,
+                options: CarouselOptions(
+                  height: carouselHeight,
+                  viewportFraction: 1,
+                  autoPlay: items.length > 1,
+                  autoPlayInterval: const Duration(seconds: 3),
+                  autoPlayAnimationDuration: const Duration(milliseconds: 450),
+                  enableInfiniteScroll: items.length > 1,
+                  disableCenter: true,
+                  onPageChanged: onPageChanged,
+                ),
+                itemBuilder: (context, index, realIndex) {
+                  final item = items[index];
+                  final spec = const ForumChromeImageAdapter().carouselImage(
+                    item.imageUrl,
+                  );
+                  return SizedBox.expand(
+                    child: Material(
+                      color: palette.carouselPlaceholder,
+                      child: InkWell(
+                        key: Key('forum-home-carousel-item-$index'),
+                        onTap: () => onOpen(item),
+                        child: CachedLibraryImage(
+                          request: spec == null
+                              ? null
+                              : imageRequestResolver.resolveCacheRequest(spec),
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                          height: double.infinity,
+                          referer: imageReferer,
+                          placeholder: ColoredBox(
+                            color: palette.carouselPlaceholder,
+                            child: const SizedBox.expand(),
                           ),
+                          errorPlaceholder: ColoredBox(
+                            color: palette.carouselPlaceholder,
+                            child: const Center(
+                              child: Icon(Icons.image_not_supported_outlined),
+                            ),
+                          ),
+                          fadeInDuration: duration,
+                          onImageResolved: index == 0
+                              ? (size) => onFirstImageResolved(
+                                  displayGeneration,
+                                  item,
+                                  size,
+                                )
+                              : null,
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         );
