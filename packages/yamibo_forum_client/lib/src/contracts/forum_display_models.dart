@@ -1,3 +1,6 @@
+/// Models describing a forum display page and its server-provided actions.
+library;
+
 enum ForumDisplayFavoriteAction { favorite, unfavorite, unknown }
 
 class ForumDisplayQuery {

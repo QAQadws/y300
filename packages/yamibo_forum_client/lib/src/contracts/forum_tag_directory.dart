@@ -1,3 +1,6 @@
+/// Read contracts for tag identities and their ordered topic directories.
+library;
+
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 

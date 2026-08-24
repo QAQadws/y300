@@ -1,5 +1,14 @@
+/// Public facade and supported runtime integrations for the Yamibo forum
+/// client.
+///
+/// Most applications should use [YamiboForumClientBuilder] and consume the
+/// source-neutral contracts re-exported by this library. Advanced concrete
+/// adapters are exposed separately by `yamibo_forum_client_adapters.dart`.
+library;
+
 export 'src/client/forum_client.dart';
 export 'src/client/forum_client_builder.dart';
+export 'src/client/forum_client_cache_ports.dart';
 export 'src/client/forum_client_config.dart';
 export 'src/client/forum_client_source_plan.dart';
 export 'yamibo_forum_client_contracts.dart';

@@ -1,7 +1,15 @@
 name: yamibo_forum_client
-description: Private Yamibo forum protocol client boundary for Y300.
+description: Unofficial pure-Dart read client and protocol adapters for Yamibo forums.
 publish_to: none
-version: 0.1.0
+version: 0.2.0
+repository: https://github.com/QAQadws/y300/tree/main/packages/yamibo_forum_client
+issue_tracker: https://github.com/QAQadws/y300/issues
+topics:
+  - discuz
+  - forum
+  - client
+  - html
+  - waf
 
 environment:
   sdk: ^3.12.0

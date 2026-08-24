@@ -1,3 +1,6 @@
+/// Thread detail query, capability, and repository contracts.
+library;
+
 import 'data_read_contract.dart';
 import 'thread_detail_models.dart';
 

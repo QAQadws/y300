@@ -1,6 +1,10 @@
-// Advanced construction surface for hosts that assemble source adapters.
-// Application domain and presentation code should import
-// `yamibo_forum_client.dart` instead.
+/// Experimental adapter, parser, mapper, and custom composition APIs.
+///
+/// These declarations are intended for composition roots and adapter tests.
+/// They may change in a pre-1.0 minor release; application domain and
+/// presentation code should import `yamibo_forum_client_contracts.dart`.
+library;
+
 export 'src/cache/forum_cache.dart';
 export 'src/cache/forum_cache_key_canonicalizer.dart';
 export 'src/network/forum_request_profile.dart';

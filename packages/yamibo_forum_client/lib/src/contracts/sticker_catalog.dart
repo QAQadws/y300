@@ -1,3 +1,6 @@
+/// Read and persistence contracts for the ordered Discuz sticker catalog.
+library;
+
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 
@@ -58,6 +61,20 @@ abstract interface class ForumStickerCatalogStore {
   Future<String?> read();
   Future<void> write(String encoded);
   Future<void> clear();
+}
+
+/// Ephemeral sticker catalog store for tests and non-production tools.
+final class MemoryForumStickerCatalogStore implements ForumStickerCatalogStore {
+  String? _value;
+
+  @override
+  Future<String?> read() async => _value;
+
+  @override
+  Future<void> write(String encoded) async => _value = encoded;
+
+  @override
+  Future<void> clear() async => _value = null;
 }
 
 abstract interface class ForumStickerCatalogRepository {

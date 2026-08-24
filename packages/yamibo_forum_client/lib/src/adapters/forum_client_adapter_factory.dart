@@ -13,6 +13,8 @@ import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
 import '../network/forum_request_profile.dart';
+import '../network/forum_response.dart';
+import '../network/forum_transport.dart';
 import '../cache/forum_cache.dart';
 import '../session/forum_session_store.dart';
 import 'discuz_api_client.dart';
@@ -43,6 +45,7 @@ final class ForumClientAdapterFactory {
          network: network,
          requestProfiles:
              requestProfiles ?? DefaultForumRequestProfileResolver(config),
+         sessionStore: sessionStore,
        );
 
   final ForumClientConfig config;
@@ -151,6 +154,36 @@ final class ForumClientAdapterFactory {
         requestProfiles: requestProfiles,
         formhashProvider: formhash,
       );
+
+  ForumFormhashProvider createStandardFormhashProvider(
+    ForumSessionStore sessions,
+  ) => SessionForumFormhashProvider(
+    sessions: sessions,
+    loadFromProfile: () => _loadFormhash('profile'),
+    loadFallback: () => _loadFormhash('forumindex'),
+  );
+
+  Future<ForumFormhashResult> _loadFormhash(String module) async {
+    final result = await _api.get(module: module);
+    return switch (result) {
+      ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(:final failure) =>
+        ForumFormhashError(failure),
+      ForumTransportSuccess<ForumResponse<DiscuzApiEnvelope>>(
+        :final response,
+      ) =>
+        switch (response.body.variables['formhash']?.toString().trim()) {
+          final String value when value.isNotEmpty => ForumFormhashSuccess(
+            value,
+          ),
+          _ => const ForumFormhashError(
+            ForumTransportFailure(
+              kind: ForumTransportFailureKind.business,
+              code: 'formhash_unavailable',
+            ),
+          ),
+        },
+    };
+  }
 
   ForumDisplayRepository createHtmlForumDisplay() => ForumDisplayHtmlRepository(
     config: config,

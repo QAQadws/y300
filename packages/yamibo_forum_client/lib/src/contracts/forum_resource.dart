@@ -1,10 +1,17 @@
+/// Streaming contracts for protected and third-party forum image resources.
+library;
+
 import '../network/forum_request.dart';
 
+/// Resource kinds supported by the package streaming boundary.
 enum ForumResourceKind { image }
 
+/// Whether a resource shares the managed forum's authority.
 enum ForumResourceOrigin { sameSite, thirdParty }
 
+/// Validated resource identity and privacy-safe referer.
 final class ForumResourceReference {
+  /// Creates an already validated resource reference.
   const ForumResourceReference({
     required this.uri,
     required this.referer,
@@ -12,24 +19,39 @@ final class ForumResourceReference {
     required this.origin,
   });
 
+  /// Requested resource URI.
   final Uri uri;
+
+  /// Sanitized same-site referer.
   final Uri referer;
+
+  /// Requested resource kind.
   final ForumResourceKind kind;
+
+  /// Same-site classification used for Cookie and WAF isolation.
   final ForumResourceOrigin origin;
 }
 
+/// Request for one resource stream.
 final class ForumResourceRequest {
+  /// Creates a resource request.
   const ForumResourceRequest({
     required this.reference,
     this.ifNoneMatch,
     this.cancellation,
   });
 
+  /// Validated resource reference.
   final ForumResourceReference reference;
+
+  /// Optional ETag used for a conditional GET.
   final String? ifNoneMatch;
+
+  /// Optional cooperative cancellation signal.
   final ForumRequestCancellation? cancellation;
 }
 
+/// Stable failure categories for protected resource reads.
 enum ForumResourceFailureKind {
   invalidReference,
   unsupported,
@@ -45,23 +67,33 @@ enum ForumResourceFailureKind {
   unknown,
 }
 
+/// Safe resource failure without response bodies or authentication data.
 final class ForumResourceFailure {
+  /// Creates a resource failure.
   const ForumResourceFailure({
     required this.kind,
     required this.code,
     this.statusCode,
   });
 
+  /// Stable failure category.
   final ForumResourceFailureKind kind;
+
+  /// Protocol-safe diagnostic code.
   final String code;
+
+  /// Optional HTTP status code.
   final int? statusCode;
 }
 
+/// Result of opening a resource stream.
 sealed class ForumResourceResult {
   const ForumResourceResult();
 }
 
+/// Successfully opened single-subscription resource stream.
 final class ForumResourceSuccess extends ForumResourceResult {
+  /// Creates a successful resource response.
   const ForumResourceSuccess({
     required this.uri,
     required this.statusCode,
@@ -73,31 +105,52 @@ final class ForumResourceSuccess extends ForumResourceResult {
     this.fileExtension = '',
   });
 
+  /// Final URI after accepted redirects.
   final Uri uri;
+
+  /// HTTP response status, including 304 when applicable.
   final int statusCode;
+
+  /// Byte stream that must be consumed once or cancelled.
   final Stream<List<int>> content;
+
+  /// Declared response length when known.
   final int? contentLength;
+
+  /// Validated response media type when supplied.
   final String? contentType;
+
+  /// Response ETag used by Host caches.
   final String? eTag;
+
+  /// Cache validity computed from response headers or package defaults.
   final DateTime validUntil;
 
   /// Includes the leading dot when known, matching common cache-manager APIs.
   final String fileExtension;
 }
 
+/// Resource request that failed before exposing usable bytes.
 final class ForumResourceError extends ForumResourceResult {
+  /// Creates an error result.
   const ForumResourceError(this.failure);
 
+  /// Stable failure description.
   final ForumResourceFailure failure;
 }
 
+/// Typed failure raised after a resource stream has begun.
 final class ForumResourceStreamException implements Exception {
+  /// Creates a partial-stream exception.
   const ForumResourceStreamException({
     required this.failure,
     required this.bytesReceived,
   });
 
+  /// Stable failure that terminated the stream.
   final ForumResourceFailure failure;
+
+  /// Number of bytes exposed before the failure.
   final int bytesReceived;
 
   @override
@@ -105,11 +158,15 @@ final class ForumResourceStreamException implements Exception {
       'ForumResourceStreamException(${failure.code}, bytes=$bytesReceived)';
 }
 
+/// Opens validated forum image references as single-subscription streams.
 abstract interface class ForumResourceClient {
+  /// Opens [request] without buffering the full resource.
   Future<ForumResourceResult> open(ForumResourceRequest request);
 }
 
+/// Fail-closed resource client used when no transport is installed.
 final class UnsupportedForumResourceClient implements ForumResourceClient {
+  /// Creates an unsupported resource client.
   const UnsupportedForumResourceClient();
 
   @override
@@ -122,11 +179,15 @@ final class UnsupportedForumResourceClient implements ForumResourceClient {
       );
 }
 
+/// Validates and classifies resource references for one forum origin.
 final class ForumResourceReferenceResolver {
+  /// Creates a resolver for [siteOrigin].
   const ForumResourceReferenceResolver({required this.siteOrigin});
 
+  /// Canonical managed forum origin.
   final Uri siteOrigin;
 
+  /// Resolves [value] and sanitizes its referer, or returns `null` if unsafe.
   ForumResourceReference? resolve(
     String value, {
     Uri? referer,

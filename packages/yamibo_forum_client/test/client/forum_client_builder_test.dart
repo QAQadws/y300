@@ -65,22 +65,13 @@ void main() {
       );
     });
 
-    test(
-      'omits search without formhash and fails closed without transport',
-      () async {
-        final network = _CountingNetwork();
-        final client = _builder(network: network).buildStandardReads();
+    test('installs search without a host formhash provider', () {
+      final network = _CountingNetwork();
+      final client = _builder(network: network).buildStandardReads();
 
-        expect(client.sourcePlan.forumSearch, isNull);
-        final result = await client.searchForums(
-          const ForumSearchQuery(keyword: 'fixture'),
-        );
-
-        expect(result.failureOrNull?.kind, DataReadFailureKind.unsupported);
-        expect(result.failureOrNull?.code, 'source_not_installed');
-        expect(network.requestCount, 0);
-      },
-    );
+      expect(client.sourcePlan.forumSearch, isA<DiscuzForumSearchRepository>());
+      expect(network.requestCount, 0);
+    });
 
     test('installs search when a formhash provider is supplied', () {
       final client = _builder(
@@ -109,6 +100,22 @@ void main() {
       expect(identical(client.resources, network), isTrue);
     });
 
+    test('standard Dio composition only needs host persistence ports', () {
+      final client = YamiboForumClientBuilder.standardDio(
+        config: _config,
+        cookies: MemoryForumCookieStore(),
+        caches: ForumClientCachePorts(
+          documents: MemoryForumDocumentStore(),
+          snapshots: MemoryForumSnapshotStore(),
+          stickers: MemoryForumStickerCatalogStore(),
+        ),
+      ).buildStandardReads();
+
+      expect(client.network, isA<DioForumClientNetwork>());
+      expect(identical(client.resources, client.network), isTrue);
+      expect(client.sourcePlan.forumSearch, isNotNull);
+    });
+
     test('fails resource reads closed when no client is installed', () async {
       final client = _builder().buildStandardReads();
       final reference = ForumResourceReferenceResolver(
@@ -123,6 +130,83 @@ void main() {
         (result as ForumResourceError).failure.kind,
         ForumResourceFailureKind.unsupported,
       );
+    });
+
+    test('standard formhash reads profile and updates session', () async {
+      final sessions = MemoryForumSessionStore();
+      final network = _QueueNetwork(<Object?>[
+        <String, Object?>{
+          'Variables': <String, Object?>{
+            'member_uid': '42',
+            'member_username': 'Fixture User',
+            'formhash': 'fixture-formhash',
+          },
+        },
+      ]);
+      final factory = ForumClientAdapterFactory(
+        config: _config,
+        network: network,
+        sessionStore: sessions,
+      );
+
+      final result = await factory
+          .createStandardFormhashProvider(sessions)
+          .loadFormhash();
+
+      expect(result, isA<ForumFormhashSuccess>());
+      expect((result as ForumFormhashSuccess).value, 'fixture-formhash');
+      expect(network.modules, <String>['profile']);
+      expect(sessions.readCurrent()?.userId, '42');
+      expect(sessions.readCurrent()?.username, 'Fixture User');
+      expect(sessions.readFreshFormhash(), 'fixture-formhash');
+    });
+
+    test('standard formhash falls back to forumindex', () async {
+      final sessions = MemoryForumSessionStore();
+      final network = _QueueNetwork(<Object?>[
+        <String, Object?>{
+          'Variables': <String, Object?>{'member_uid': '0'},
+        },
+        <String, Object?>{
+          'Variables': <String, Object?>{'formhash': 'fallback-formhash'},
+        },
+      ]);
+      final factory = ForumClientAdapterFactory(
+        config: _config,
+        network: network,
+        sessionStore: sessions,
+      );
+
+      final result = await factory
+          .createStandardFormhashProvider(sessions)
+          .loadFormhash();
+
+      expect((result as ForumFormhashSuccess).value, 'fallback-formhash');
+      expect(network.modules, <String>['profile', 'forumindex']);
+      expect(sessions.readFreshFormhash(), 'fallback-formhash');
+    });
+
+    test('session projection failures do not invalidate a read', () async {
+      final network = _QueueNetwork(<Object?>[
+        <String, Object?>{
+          'Variables': <String, Object?>{
+            'member_uid': '42',
+            'formhash': 'fixture-formhash',
+          },
+        },
+      ]);
+      final factory = ForumClientAdapterFactory(
+        config: _config,
+        network: network,
+        sessionStore: _ThrowingSessionStore(),
+      );
+
+      final result = await factory
+          .createStandardFormhashProvider(_ThrowingSessionStore())
+          .loadFormhash();
+
+      expect(result, isA<ForumFormhashSuccess>());
+      expect((result as ForumFormhashSuccess).value, 'fixture-formhash');
     });
   });
 }
@@ -180,6 +264,36 @@ class _CountingNetwork implements ForumClientNetwork {
   }
 }
 
+final class _QueueNetwork implements ForumClientNetwork {
+  _QueueNetwork(this._responses);
+
+  final List<Object?> _responses;
+  final List<String> modules = <String>[];
+
+  @override
+  Future<ForumTransportResult<ForumResponse<Object?>>> send(
+    ForumRequest request,
+  ) async {
+    modules.add(request.uri.queryParameters['module'] ?? '');
+    if (_responses.isEmpty) {
+      return const ForumTransportError(
+        ForumTransportFailure(
+          kind: ForumTransportFailureKind.network,
+          code: 'fixture_exhausted',
+        ),
+      );
+    }
+    return ForumTransportSuccess(
+      ForumResponse<Object?>(
+        uri: request.uri,
+        statusCode: 200,
+        headers: const <String, List<String>>{},
+        body: _responses.removeAt(0),
+      ),
+    );
+  }
+}
+
 final class _FixtureFormhashProvider implements ForumFormhashProvider {
   const _FixtureFormhashProvider();
 
@@ -209,4 +323,20 @@ final class _FixtureThreadRepository implements ThreadRepository {
     code: 'fixture_unsupported',
     diagnosticMessage: 'fixture_unsupported',
   );
+}
+
+final class _ThrowingSessionStore implements ForumSessionStore {
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<void> merge(ForumSessionSnapshot snapshot) async {
+    throw StateError('fixture persistence failure');
+  }
+
+  @override
+  ForumSessionSnapshot? readCurrent() => null;
+
+  @override
+  String? readFreshFormhash() => null;
 }

@@ -1,3 +1,6 @@
+/// Source-neutral thread, post, attachment, poll, and navigation models.
+library;
+
 class ForumPostAttachmentImage {
   const ForumPostAttachmentImage({
     required this.aid,

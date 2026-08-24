@@ -1,3 +1,6 @@
+/// Query, pagination, and result contracts for forum search.
+library;
+
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 

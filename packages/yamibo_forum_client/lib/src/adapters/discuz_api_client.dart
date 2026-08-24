@@ -6,6 +6,7 @@ import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
+import '../session/forum_session_store.dart';
 
 final class DiscuzApiEnvelope {
   const DiscuzApiEnvelope({
@@ -26,11 +27,13 @@ final class DiscuzApiClient {
     required this.config,
     required this.network,
     required this.requestProfiles,
+    this.sessionStore,
   });
 
   final ForumClientConfig config;
   final ForumClientNetwork network;
   final ForumRequestProfileResolver requestProfiles;
+  final ForumSessionStore? sessionStore;
 
   Future<ForumTransportResult<ForumResponse<DiscuzApiEnvelope>>> get({
     required String module,
@@ -69,14 +72,76 @@ final class DiscuzApiClient {
         cancellation: cancellation,
       ),
     );
-    return switch (response) {
-      ForumTransportError<ForumResponse<Object?>>(:final failure) =>
-        ForumTransportError(failure),
-      ForumTransportSuccess<ForumResponse<Object?>>(:final response) => _decode(
-        response,
-        treatMessageAsBusinessError: treatMessageAsBusinessError,
-      ),
-    };
+    final ForumTransportResult<ForumResponse<DiscuzApiEnvelope>> decoded =
+        switch (response) {
+          ForumTransportError<ForumResponse<Object?>>(:final failure) =>
+            ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(failure),
+          ForumTransportSuccess<ForumResponse<Object?>>(:final response) =>
+            _decode(
+              response,
+              treatMessageAsBusinessError: treatMessageAsBusinessError,
+            ),
+        };
+    if (decoded case ForumTransportSuccess<ForumResponse<DiscuzApiEnvelope>>(
+      :final response,
+    )) {
+      await _mergeSession(response.body.variables, source: 'api:$module');
+    }
+    return decoded;
+  }
+
+  Future<void> _mergeSession(
+    Map<String, Object?> variables, {
+    required String source,
+  }) async {
+    final store = sessionStore;
+    if (store == null) return;
+    final rawSpace = variables['space'];
+    final space = rawSpace is Map
+        ? <String, Object?>{
+            for (final entry in rawSpace.entries)
+              entry.key.toString(): entry.value,
+          }
+        : const <String, Object?>{};
+    final userId = _firstNonEmpty(<Object?>[
+      variables['member_uid'],
+      space['uid'],
+    ]);
+    final username = _firstNonEmpty(<Object?>[
+      variables['member_username'],
+      space['username'],
+    ]);
+    final formhash = variables['formhash']?.toString().trim() ?? '';
+    final auth = variables['auth']?.toString().trim() ?? '';
+    if (userId.isEmpty &&
+        username.isEmpty &&
+        formhash.isEmpty &&
+        auth.isEmpty) {
+      return;
+    }
+    try {
+      await store.merge(
+        ForumSessionSnapshot(
+          isLoggedIn: (userId.isNotEmpty && userId != '0') || auth.isNotEmpty,
+          userId: userId,
+          username: username,
+          formhash: formhash,
+          updatedAt: DateTime.now(),
+          source: source,
+        ),
+      );
+    } on Object {
+      // Session data is a reproducible projection. A Host persistence failure
+      // must not turn an otherwise valid forum response into a read failure.
+    }
+  }
+
+  String _firstNonEmpty(Iterable<Object?> values) {
+    for (final value in values) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+    return '';
   }
 
   ForumTransportResult<ForumResponse<DiscuzApiEnvelope>> _decode(

@@ -1,3 +1,6 @@
+/// Narrow paginated reply contract used by comment-style consumers.
+library;
+
 import 'data_read_contract.dart';
 
 final class ThreadReplyEntry {

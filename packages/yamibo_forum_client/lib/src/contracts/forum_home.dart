@@ -1,3 +1,6 @@
+/// Read contract for the combined forum home document and cached projection.
+library;
+
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 import 'forum_directory.dart';

@@ -1,13 +1,15 @@
 # yamibo_forum_client
 
-`yamibo_forum_client` is the pure-Dart read client used by Y300 for Yamibo
-forum data. It owns request descriptions, Discuz/HTML adapters, parsing,
+`yamibo_forum_client` is an unofficial pure-Dart read client used by Y300 for
+Yamibo forum data. It owns request descriptions, Discuz/HTML adapters, parsing,
 source-neutral models, capabilities, cache codecs, transport error mapping,
 and the protocol side of WAF recovery.
 
-The package is currently private (`publish_to: none`) and its public API is
-still in the `0.1.x` compatibility period. It can be consumed through a local
-path or a Git dependency that points to this monorepo subdirectory.
+The package remains unpublished (`publish_to: none`) and can be consumed using
+a local path or Git dependency targeting this monorepo subdirectory. Version
+`0.2.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
+[API_STABILITY.md](API_STABILITY.md). The package is licensed under
+`GPL-3.0-only`; see [LICENSE](LICENSE).
 
 ## Public boundaries
 
@@ -31,14 +33,15 @@ final config = ForumClientConfig(
   ),
   userAgent: 'MyThirdPartyApp/1.0',
 );
-final cookies = MemoryForumCookieStore();
-final network = DioForumClientNetwork(config: config, cookies: cookies);
-final client = YamiboForumClientBuilder(
+final client = YamiboForumClientBuilder.standardDio(
   config: config,
-  network: network,
-  sessionStore: MemoryForumSessionStore(),
-  documentStore: MemoryForumDocumentStore(),
-  snapshotStore: MemoryForumSnapshotStore(),
+  cookies: persistentCookieStore,
+  caches: ForumClientCachePorts(
+    documents: persistentDocumentStore,
+    snapshots: persistentSnapshotStore,
+    stickers: persistentStickerStore,
+  ),
+  waf: platformWafDelegate,
 ).buildStandardReads();
 
 final result = await client.loadForumDirectory(
@@ -53,9 +56,10 @@ switch (result) {
 }
 ```
 
-See [`example/basic_read.dart`](example/basic_read.dart) for a complete
-standalone example. The example performs a public read only when run manually;
-package tests never contact the live forum.
+The identifiers named `persistent...` and `platformWafDelegate` above are Host
+implementations. The package supplies the Dio transport, request profiles,
+session projection, standard formhash discovery, adapters, and source plan.
+Package tests never contact the live forum.
 
 ## Standard read-source matrix
 
@@ -71,12 +75,12 @@ currently verified by Y300:
 | Full post ratings | Discuz AJAX CDATA |
 | Post location | Discuz HTML redirect plus identity proof |
 | Author-filtered post pages | Discuz `viewthread version=1` |
-| Search | HTML, only when a `ForumFormhashProvider` is supplied |
+| Search | HTML with package-owned `profile`/`forumindex` formhash discovery |
 
-If no formhash provider is supplied, only search is left uninstalled and its
-facade methods fail closed with `DataReadFailureKind.unsupported`. Advanced
-hosts can import the adapters barrel and build a custom `ForumClientSourcePlan`
-for individual contracts; there is deliberately no global HTML/API switch.
+Hosts with an existing authenticated session stack may override the standard
+formhash provider. Advanced hosts can import the adapters barrel and build a
+custom `ForumClientSourcePlan` for individual contracts; this API is
+experimental and there is deliberately no global HTML/API switch.
 
 The standard client exposes the source-neutral author-post page used by Y300's
 novel synchronization and permanently fixes that adapter to `version=1`.
@@ -85,10 +89,20 @@ and reader state remain application business logic and are not package models.
 
 ## Host responsibilities
 
-The memory Cookie, session, document, and snapshot stores are suitable for
-examples and tests only. A production application should provide persistent
-implementations of the corresponding ports and must protect authentication
-material according to its platform security model.
+A standalone production application needs to implement only these persistence
+and platform boundaries:
+
+- `ForumCookieStore`, persisted and protected according to the platform
+  security model;
+- `ForumDocumentStore`, `ForumSnapshotStore`, and
+  `ForumStickerCatalogStore`, conveniently grouped by `ForumClientCachePorts`;
+- `ForumWafRecoveryDelegate` when the forum enables its WAF challenge.
+
+The package-owned session projection is reproducible and remains in memory.
+The standard formhash provider checks that projection, then requests `profile`
+and falls back to `forumindex`. Authentication remains rooted in the Cookie
+store. Memory store implementations are suitable for tests and short-lived
+tools only, not production persistence.
 
 The core treats HTTP 405 from a managed forum origin as the sole WAF evidence,
 coordinates single-flight recovery, enforces cooldown, and permits at most one
@@ -156,6 +170,35 @@ author-filtered post pages, comic episode discovery, reply-page reads, and
 protected image transport. Login UI and write operations—including posting,
 replying, editing, favorite mutations, creating ratings/comments, voting, and
 uploads—remain application-owned and are not represented as read results.
+
+## Y300 parity and unmigrated APIs
+
+This package is a read client core, not a complete Discuz SDK. The following
+forum protocol operations still live in Y300 and are not part of the package:
+
+- login, logout, session verification, and authentication recovery;
+- favorite/unfavorite mutations;
+- posting, thread reply, floor reply, and post-edit form preparation and
+  submission;
+- rating, comment, and poll submissions;
+- attachment upload/deletion, upload permission checks, and unused attachment
+  cleanup;
+- notification state mutations and private-message sending.
+
+The following responsibilities are intentionally application-owned even when
+their network references are produced by the package:
+
+- WebView login/browsing/fallback, platform Cookie synchronization, and
+  lifecycle management;
+- the Flutter WebView implementation of `ForumWafRecoveryDelegate`;
+- image disk caching, decoding, preloading, presentation, and reader recovery;
+- SQLite data, shelves, favorite ingestion, comic/novel synchronization, and
+  reading progress;
+- download queues, CBZ files, notifications, and page generation ownership;
+- Quill, BBCode, localization, routing, and all user interface state.
+
+See [MIGRATION.md](MIGRATION.md) before changing integration style and
+[CHANGELOG.md](CHANGELOG.md) before upgrading.
 
 A future optional `yamibo_forum_client_flutter` package may provide reusable
 WebView WAF and lifecycle integration. It will depend on this package rather

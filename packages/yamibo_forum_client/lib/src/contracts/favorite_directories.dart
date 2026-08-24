@@ -1,3 +1,6 @@
+/// Read contracts for remote forum and thread favorite directories.
+library;
+
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 

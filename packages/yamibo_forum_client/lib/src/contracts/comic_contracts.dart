@@ -1,3 +1,6 @@
+/// Source-neutral comic episode catalog and discovery contracts.
+library;
+
 import 'data_read_contract.dart';
 
 enum ComicEpisodeImageOrigin { dom, attachment }

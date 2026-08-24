@@ -1,10 +1,19 @@
+/// Persistent Cookie boundary used by the standalone network runtime.
 abstract interface class ForumCookieStore {
+  /// Reads cookies applicable to [uri] without exposing transport headers.
   Future<Map<String, String>> read(Uri uri);
+
+  /// Merges normalized Cookie name/value pairs for [uri].
   Future<void> merge(Uri uri, Map<String, String> cookies);
+
+  /// Parses and merges response `Set-Cookie` header values.
   Future<void> mergeSetCookie(Uri uri, List<String> headers);
+
+  /// Removes all forum cookies managed by this store.
   Future<void> clear();
 }
 
+/// Ephemeral Cookie store for tests and short-lived tools.
 final class MemoryForumCookieStore implements ForumCookieStore {
   final Map<String, Map<String, String>> _cookies =
       <String, Map<String, String>>{};

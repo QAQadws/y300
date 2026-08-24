@@ -1,3 +1,6 @@
+/// Read contract and capability model for a forum display page.
+library;
+
 import 'data_read_contract.dart';
 import 'cache_load_policy.dart';
 import 'forum_display_models.dart';

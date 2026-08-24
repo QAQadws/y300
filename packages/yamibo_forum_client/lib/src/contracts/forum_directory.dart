@@ -1,3 +1,6 @@
+/// Source-neutral forum directory identities, sections, and capabilities.
+library;
+
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 

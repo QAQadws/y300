@@ -20,7 +20,12 @@ import '../network/forum_network.dart';
 import 'forum_client_config.dart';
 import 'forum_client_source_plan.dart';
 
+/// Source-neutral facade over the configured Yamibo forum read contracts.
+///
+/// A missing source never falls back to a guessed protocol. Facade methods
+/// return an `unsupported` [DataReadFailure] instead.
 final class YamiboForumClient {
+  /// Creates a facade around an explicit, advanced source plan.
   YamiboForumClient({
     required this.config,
     required this.network,
@@ -31,41 +36,87 @@ final class YamiboForumClient {
            (network is ForumResourceClient
                ? network as ForumResourceClient
                : const UnsupportedForumResourceClient());
+
+  /// Client origins and request configuration.
   final ForumClientConfig config;
+
+  /// Shared structured-read transport.
   final ForumClientNetwork network;
+
+  /// Protected image streaming client.
   final ForumResourceClient resources;
+
+  /// Experimental per-contract source plan used by this facade.
   final ForumClientSourcePlan sourcePlan;
 
+  /// Configured forum-directory source, if installed.
   ForumDirectoryRepository? get forumDirectory => sourcePlan.forumDirectory;
+
+  /// Configured combined forum-home source, if installed.
   ForumHomeRepository? get forumHome => sourcePlan.forumHome;
+
+  /// Configured forum thread-list source, if installed.
   ForumDisplayRepository? get forumDisplay => sourcePlan.forumDisplay;
+
+  /// Configured Tag directory source, if installed.
   ForumTagDirectoryRepository? get forumTagDirectory =>
       sourcePlan.forumTagDirectory;
+
+  /// Configured favorite-forum directory source, if installed.
   FavoriteForumDirectoryRepository? get favoriteForumDirectory =>
       sourcePlan.favoriteForumDirectory;
+
+  /// Configured favorite-thread directory source, if installed.
   FavoriteThreadDirectoryRepository? get favoriteThreadDirectory =>
       sourcePlan.favoriteThreadDirectory;
+
+  /// Configured current-user profile source, if installed.
   CurrentUserProfileRepository? get currentUserProfile =>
       sourcePlan.currentUserProfile;
+
+  /// Configured public-profile source, if installed.
   ForumUserProfileRepository? get forumUserProfile =>
       sourcePlan.forumUserProfile;
+
+  /// Configured user-blog directory source, if installed.
   UserBlogDirectoryRepository? get userBlogDirectory =>
       sourcePlan.userBlogDirectory;
+
+  /// Configured user-blog detail source, if installed.
   UserBlogDetailRepository? get userBlogDetail => sourcePlan.userBlogDetail;
+
+  /// Configured forum-search source, if installed.
   ForumSearchRepository? get forumSearch => sourcePlan.forumSearch;
+
+  /// Configured presentation-oriented thread source, if installed.
   ThreadRepository? get threadDetail => sourcePlan.threadDetail;
+
+  /// Configured structured-ingestion thread source, if installed.
   ThreadRepository? get threadIngestionDetail =>
       sourcePlan.threadIngestionDetail;
+
+  /// Configured notification source, if installed.
   ForumNotificationRepository? get notifications => sourcePlan.notifications;
+
+  /// Configured private-message source, if installed.
   ForumPrivateMessageRepository? get privateMessages =>
       sourcePlan.privateMessages;
+
+  /// Configured sticker catalog source, if installed.
   ForumStickerCatalogRepository? get stickerCatalog =>
       sourcePlan.stickerCatalog;
+
+  /// Configured complete-rating source, if installed.
   ThreadPostRatingsRepository? get postRatings => sourcePlan.postRatings;
+
+  /// Configured post-location source, if installed.
   ThreadPostLocatorRepository? get postLocator => sourcePlan.postLocator;
+
+  /// Configured author-filtered post source, if installed.
   ThreadAuthorPostRepository? get threadAuthorPosts =>
       sourcePlan.threadAuthorPosts;
 
+  /// Loads the combined forum-home document.
   Future<DataReadResult<ForumHomeDocument, ForumHomeReadCapabilities>>
   loadForumHome(
     ForumHomeQuery query, {
@@ -74,9 +125,11 @@ final class YamiboForumClient {
       sourcePlan.forumHome?.loadHome(query, cachePolicy: cachePolicy) ??
       unsupported<ForumHomeDocument, ForumHomeReadCapabilities>();
 
+  /// Reads the locally cached forum-home projection without networking.
   Future<ForumHomeCachedRead?> readCachedForumHome(ForumHomeQuery query) =>
       sourcePlan.forumHome?.readCached(query) ?? Future.value(null);
 
+  /// Loads a page of forum notifications.
   Future<
     DataReadResult<ForumNotificationPage, ForumNotificationReadCapabilities>
   >
@@ -84,6 +137,7 @@ final class YamiboForumClient {
       sourcePlan.notifications?.load(query) ??
       unsupported<ForumNotificationPage, ForumNotificationReadCapabilities>();
 
+  /// Loads a page of private messages.
   Future<
     DataReadResult<ForumPrivateMessagePage, ForumPrivateMessageReadCapabilities>
   >
@@ -94,6 +148,7 @@ final class YamiboForumClient {
         ForumPrivateMessageReadCapabilities
       >();
 
+  /// Loads the ordered forum sticker catalog.
   Future<
     DataReadResult<ForumStickerCatalogData, ForumStickerCatalogReadCapabilities>
   >
@@ -104,6 +159,7 @@ final class YamiboForumClient {
         ForumStickerCatalogReadCapabilities
       >();
 
+  /// Loads complete rating details for one post.
   Future<
     DataReadResult<ThreadPostRatingsData, ThreadPostRatingsReadCapabilities>
   >
@@ -111,6 +167,7 @@ final class YamiboForumClient {
       sourcePlan.postRatings?.load(query) ??
       unsupported<ThreadPostRatingsData, ThreadPostRatingsReadCapabilities>();
 
+  /// Resolves the exact page containing a post.
   Future<
     DataReadResult<ThreadPostLocationData, ThreadPostLocatorReadCapabilities>
   >
@@ -118,11 +175,13 @@ final class YamiboForumClient {
       sourcePlan.postLocator?.locate(query) ??
       unsupported<ThreadPostLocationData, ThreadPostLocatorReadCapabilities>();
 
+  /// Loads a page containing only posts by the requested author.
   Future<DataReadResult<ThreadAuthorPostPage, ThreadAuthorPostReadCapabilities>>
   loadAuthorPosts(ThreadAuthorPostQuery query) =>
       sourcePlan.threadAuthorPosts?.load(query) ??
       unsupported<ThreadAuthorPostPage, ThreadAuthorPostReadCapabilities>();
 
+  /// Loads the forum hierarchy using the selected cache policy.
   Future<DataReadResult<ForumDirectoryData, ForumDirectoryReadCapabilities>>
   loadForumDirectory(
     ForumDirectoryQuery query, {
@@ -131,6 +190,7 @@ final class YamiboForumClient {
       sourcePlan.forumDirectory?.load(query, cachePolicy: cachePolicy) ??
       unsupported<ForumDirectoryData, ForumDirectoryReadCapabilities>();
 
+  /// Loads the Tag directory using the selected cache policy.
   Future<
     DataReadResult<ForumTagDirectoryData, ForumTagDirectoryReadCapabilities>
   >
@@ -141,6 +201,7 @@ final class YamiboForumClient {
       sourcePlan.forumTagDirectory?.load(query, cachePolicy: cachePolicy) ??
       unsupported<ForumTagDirectoryData, ForumTagDirectoryReadCapabilities>();
 
+  /// Loads the authenticated user's favorite forums.
   Future<
     DataReadResult<
       FavoriteForumDirectoryData,
@@ -160,6 +221,7 @@ final class YamiboForumClient {
         FavoriteForumDirectoryReadCapabilities
       >();
 
+  /// Loads the authenticated user's favorite threads.
   Future<
     DataReadResult<
       FavoriteThreadDirectoryData,
@@ -179,6 +241,7 @@ final class YamiboForumClient {
         FavoriteThreadDirectoryReadCapabilities
       >();
 
+  /// Loads the authenticated user's source-neutral profile projection.
   Future<
     DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
   >
@@ -189,6 +252,7 @@ final class YamiboForumClient {
       sourcePlan.currentUserProfile?.load(query, cachePolicy: cachePolicy) ??
       unsupported<CurrentUserProfileData, CurrentUserProfileReadCapabilities>();
 
+  /// Loads a public forum profile.
   Future<DataReadResult<ForumUserProfileData, ForumUserProfileReadCapabilities>>
   loadForumUserProfile(
     ForumUserProfileQuery query, {
@@ -197,6 +261,7 @@ final class YamiboForumClient {
       sourcePlan.forumUserProfile?.load(query, cachePolicy: cachePolicy) ??
       unsupported<ForumUserProfileData, ForumUserProfileReadCapabilities>();
 
+  /// Loads a user's blog directory.
   Future<
     DataReadResult<UserBlogDirectoryData, UserBlogDirectoryReadCapabilities>
   >
@@ -207,6 +272,7 @@ final class YamiboForumClient {
       sourcePlan.userBlogDirectory?.load(query, cachePolicy: cachePolicy) ??
       unsupported<UserBlogDirectoryData, UserBlogDirectoryReadCapabilities>();
 
+  /// Loads one user blog entry.
   Future<DataReadResult<UserBlogDetailData, UserBlogDetailReadCapabilities>>
   loadUserBlogDetail(
     UserBlogDetailQuery query, {
@@ -215,6 +281,7 @@ final class YamiboForumClient {
       sourcePlan.userBlogDetail?.load(query, cachePolicy: cachePolicy) ??
       unsupported<UserBlogDetailData, UserBlogDetailReadCapabilities>();
 
+  /// Starts a forum search.
   Future<DataReadResult<ForumSearchData, ForumSearchReadCapabilities>>
   searchForums(
     ForumSearchQuery query, {
@@ -223,6 +290,7 @@ final class YamiboForumClient {
       sourcePlan.forumSearch?.load(query, cachePolicy: cachePolicy) ??
       unsupported<ForumSearchData, ForumSearchReadCapabilities>();
 
+  /// Loads a previously proved next search-result page.
   Future<DataReadResult<ForumSearchData, ForumSearchReadCapabilities>>
   loadNextForumSearchPage(
     ForumSearchQuery query,
@@ -236,6 +304,7 @@ final class YamiboForumClient {
       ) ??
       unsupported<ForumSearchData, ForumSearchReadCapabilities>();
 
+  /// Produces the standard fail-closed result for an uninstalled source.
   Future<DataReadResult<T, C>> unsupported<T, C>() async =>
       DataReadFailure<T, C>(
         kind: DataReadFailureKind.unsupported,
@@ -243,6 +312,7 @@ final class YamiboForumClient {
         diagnosticMessage: 'source_not_installed',
       );
 
+  /// Loads a forum thread listing.
   Future<DataReadResult<ForumDisplayData, ForumDisplayReadCapabilities>>
   loadForumDisplay(
     ForumDisplayQuery query, {
@@ -254,6 +324,7 @@ final class YamiboForumClient {
       ) ??
       unsupported<ForumDisplayData, ForumDisplayReadCapabilities>();
 
+  /// Loads one page of a thread detail.
   Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
   loadThreadDetail({
     required String tid,
@@ -267,14 +338,18 @@ final class YamiboForumClient {
       ) ??
       unsupported<ThreadDetailData, ThreadDetailReadCapabilities>();
 
-  // Keep the narrow phase-2 types visible to the package API without creating
-  // a second transport-specific repository abstraction before adapter migration.
+  /// Configured comic episode image catalog source, if installed.
   ComicEpisodeCatalogRepository? get comicEpisodeCatalog =>
       sourcePlan.comicEpisodeCatalog;
+
+  /// Configured comic discovery source, if installed.
   ComicThreadDiscoveryRepository? get comicThreadDiscovery =>
       sourcePlan.comicThreadDiscovery;
+
+  /// Configured thread-reply page source, if installed.
   ThreadReplyPageRepository? get threadReplyPage => sourcePlan.threadReplyPage;
 
+  /// Loads the ordered image catalog for one comic episode.
   Future<
     DataReadResult<ComicEpisodeImageCatalog, ComicEpisodeCatalogCapabilities>
   >
@@ -282,6 +357,7 @@ final class YamiboForumClient {
       sourcePlan.comicEpisodeCatalog?.loadCatalog(request) ??
       unsupported<ComicEpisodeImageCatalog, ComicEpisodeCatalogCapabilities>();
 
+  /// Loads a source-neutral comic discovery document.
   Future<
     DataReadResult<
       ComicThreadDiscoveryDocument,
@@ -295,6 +371,7 @@ final class YamiboForumClient {
         ComicThreadDiscoveryCapabilities
       >();
 
+  /// Loads a page of thread replies.
   Future<DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>
   loadThreadReplies({required String tid, required int page}) =>
       sourcePlan.threadReplyPage?.loadPage(tid: tid, page: page) ??

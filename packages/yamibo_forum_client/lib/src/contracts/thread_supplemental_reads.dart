@@ -1,3 +1,6 @@
+/// Supplemental read contracts for ratings, post location, and author views.
+library;
+
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 import 'thread_detail_models.dart';

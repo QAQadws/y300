@@ -341,6 +341,27 @@ void main() {
       expect(adapter.requests, hasLength(1));
     });
 
+    test('HTTP 405 fails closed when no WAF delegate is installed', () async {
+      final adapter = _ScriptedResourceAdapter(const <_ResourceResponse>[
+        _ResourceResponse(statusCode: 405),
+      ]);
+      final network = _network(config, adapter: adapter);
+
+      final result = await network.send(
+        ForumRequest(
+          method: ForumRequestMethod.get,
+          uri: siteOrigin.resolve('/index.php?mobile=2'),
+          context: const ForumRequestContext(operation: 'fixture.read'),
+        ),
+      );
+
+      final failure =
+          (result as ForumTransportError<ForumResponse<Object?>>).failure;
+      expect(failure.code, 'waf_unavailable');
+      expect(failure.statusCode, 405);
+      expect(adapter.requests, hasLength(1));
+    });
+
     test('HTTP 405 invokes recovery and replays exactly once', () async {
       final cookies = MemoryForumCookieStore();
       await cookies.merge(siteOrigin, const <String, String>{

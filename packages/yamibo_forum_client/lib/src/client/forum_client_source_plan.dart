@@ -12,7 +12,13 @@ import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_supplemental_reads.dart';
 
+/// Experimental per-contract source composition used by advanced hosts.
+///
+/// Omitted contracts fail closed through the `YamiboForumClient` facade.
+/// Standard clients should use `YamiboForumClientBuilder.buildStandardReads`
+/// instead.
 final class ForumClientSourcePlan {
+  /// Creates a source plan from independently replaceable read contracts.
   const ForumClientSourcePlan({
     this.forumDirectory,
     this.forumHome,
@@ -37,26 +43,70 @@ final class ForumClientSourcePlan {
     this.postLocator,
     this.threadAuthorPosts,
   });
+
+  /// Source for the forum hierarchy.
   final ForumDirectoryRepository? forumDirectory;
+
+  /// Source for the combined forum-home document.
   final ForumHomeRepository? forumHome;
+
+  /// Source for a forum's thread listing.
   final ForumDisplayRepository? forumDisplay;
+
+  /// Source for forum Tag directories.
   final ForumTagDirectoryRepository? forumTagDirectory;
+
+  /// Source for the authenticated user's favorite forums.
   final FavoriteForumDirectoryRepository? favoriteForumDirectory;
+
+  /// Source for the authenticated user's favorite threads.
   final FavoriteThreadDirectoryRepository? favoriteThreadDirectory;
+
+  /// Source for the authenticated user's profile projection.
   final CurrentUserProfileRepository? currentUserProfile;
+
+  /// Source for notification pages.
   final ForumNotificationRepository? notifications;
+
+  /// Source for private-message pages.
   final ForumPrivateMessageRepository? privateMessages;
+
+  /// Source for the forum sticker catalog.
   final ForumStickerCatalogRepository? stickerCatalog;
+
+  /// Source for public user profiles.
   final ForumUserProfileRepository? forumUserProfile;
+
+  /// Source for a user's blog directory.
   final UserBlogDirectoryRepository? userBlogDirectory;
+
+  /// Source for an individual blog entry.
   final UserBlogDetailRepository? userBlogDetail;
+
+  /// Source for forum search.
   final ForumSearchRepository? forumSearch;
+
+  /// Source for ordered comic episode image catalogs.
   final ComicEpisodeCatalogRepository? comicEpisodeCatalog;
+
+  /// Source for comic thread discovery documents.
   final ComicThreadDiscoveryRepository? comicThreadDiscovery;
+
+  /// Source for paged thread replies.
   final ThreadReplyPageRepository? threadReplyPage;
+
+  /// Source used by ordinary thread-detail presentation.
   final ThreadRepository? threadDetail;
+
+  /// Source used by workflows that ingest structured thread data.
   final ThreadRepository? threadIngestionDetail;
+
+  /// Source for complete post-rating details.
   final ThreadPostRatingsRepository? postRatings;
+
+  /// Source for locating a post within a paginated thread.
   final ThreadPostLocatorRepository? postLocator;
+
+  /// Source for author-filtered post pages.
   final ThreadAuthorPostRepository? threadAuthorPosts;
 }

@@ -1,3 +1,6 @@
+/// Read contracts for current/public profiles and user blog content.
+library;
+
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 

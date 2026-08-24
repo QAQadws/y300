@@ -2,10 +2,15 @@ import '../adapters/forum_client_adapter_factory.dart';
 import '../cache/forum_cache.dart';
 import '../contracts/forum_resource.dart';
 import '../contracts/sticker_catalog.dart';
+import '../logging/forum_client_logger.dart';
+import '../network/dio_forum_network.dart';
 import '../network/forum_network.dart';
+import '../session/forum_cookie_store.dart';
 import '../session/forum_formhash_provider.dart';
 import '../session/forum_session_store.dart';
+import '../waf/forum_waf.dart';
 import 'forum_client.dart';
+import 'forum_client_cache_ports.dart';
 import 'forum_client_config.dart';
 import 'forum_client_source_plan.dart';
 
@@ -14,6 +19,11 @@ import 'forum_client_source_plan.dart';
 /// Hosts that need a different source for one business contract can assemble
 /// [ForumClientSourcePlan] directly through the advanced adapters barrel.
 final class YamiboForumClientBuilder {
+  /// Creates a builder around a host-supplied transport.
+  ///
+  /// This is the integration point used by Y300 to keep package reads on its
+  /// process-wide Cookie, session, and WAF transport. Third-party clients that
+  /// do not already own a transport should prefer [standardDio].
   const YamiboForumClientBuilder({
     required this.config,
     required this.network,
@@ -25,24 +35,71 @@ final class YamiboForumClientBuilder {
     this.stickerCatalogStore,
   });
 
+  /// Creates the standard pure-Dart Dio runtime.
+  ///
+  /// A production host only needs to supply persistent Cookie and cache ports.
+  /// Supplying [waf] enables verified recovery when the managed forum returns
+  /// HTTP 405; without it, challenged requests fail closed as unavailable.
+  factory YamiboForumClientBuilder.standardDio({
+    required ForumClientConfig config,
+    required ForumCookieStore cookies,
+    required ForumClientCachePorts caches,
+    ForumWafRecoveryDelegate? waf,
+    ForumClientLogger? logger,
+  }) {
+    final network = DioForumClientNetwork(
+      config: config,
+      cookies: cookies,
+      waf: waf,
+      logger: logger,
+    );
+    return YamiboForumClientBuilder(
+      config: config,
+      network: network,
+      sessionStore: MemoryForumSessionStore(),
+      documentStore: caches.documents,
+      snapshotStore: caches.snapshots,
+      resourceClient: network,
+      stickerCatalogStore: caches.stickers,
+    );
+  }
+
+  /// Forum origins, request identities, and timeout configuration.
   final ForumClientConfig config;
+
+  /// Transport shared by every structured read adapter.
   final ForumClientNetwork network;
+
+  /// Optional host session projection; an in-memory store is used by default.
   final ForumSessionStore? sessionStore;
+
+  /// Optional source-document cache.
   final ForumDocumentStore? documentStore;
+
+  /// Optional parsed-snapshot cache.
   final ForumSnapshotStore? snapshotStore;
+
+  /// Optional formhash override used by hosts with an existing session stack.
   final ForumFormhashProvider? formhashProvider;
+
+  /// Optional protected-resource transport override.
   final ForumResourceClient? resourceClient;
+
+  /// Optional persistent sticker catalog store.
   final ForumStickerCatalogStore? stickerCatalogStore;
 
+  /// Builds the currently verified read-source matrix.
   YamiboForumClient buildStandardReads() {
+    final sessions = sessionStore ?? MemoryForumSessionStore();
     final factory = ForumClientAdapterFactory(
       config: config,
       network: network,
-      sessionStore: sessionStore,
+      sessionStore: sessions,
       documentStore: documentStore,
       snapshotStore: snapshotStore,
     );
-    final formhash = formhashProvider;
+    final formhash =
+        formhashProvider ?? factory.createStandardFormhashProvider(sessions);
     final forumHome = factory.createHtmlForumHome();
     return YamiboForumClient(
       config: config,
@@ -64,9 +121,7 @@ final class YamiboForumClientBuilder {
         forumUserProfile: factory.createForumUserProfile(),
         userBlogDirectory: factory.createUserBlogDirectory(),
         userBlogDetail: factory.createUserBlogDetail(),
-        forumSearch: formhash == null
-            ? null
-            : factory.createForumSearch(formhash),
+        forumSearch: factory.createForumSearch(formhash),
         comicEpisodeCatalog: factory.createApiComicEpisodeCatalog(),
         comicThreadDiscovery: factory.createApiComicThreadDiscovery(),
         threadReplyPage: factory.createApiThreadReplyPage(),

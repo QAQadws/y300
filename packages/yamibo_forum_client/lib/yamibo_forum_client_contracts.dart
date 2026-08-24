@@ -1,7 +1,10 @@
-// Source-neutral public contracts for application domain and presentation code.
-//
-// Hosts that assemble concrete Discuz adapters should import
-// `yamibo_forum_client_adapters.dart` from their composition root instead.
+/// Source-neutral contracts, models, capabilities, and read results.
+///
+/// Application domain and presentation code should depend on this library
+/// rather than concrete Discuz adapters. Unsupported or unknown capabilities
+/// must be handled fail closed.
+library;
+
 export 'src/contracts/cache_load_policy.dart';
 export 'src/contracts/comic_contracts.dart';
 export 'src/contracts/data_read_contract.dart';
