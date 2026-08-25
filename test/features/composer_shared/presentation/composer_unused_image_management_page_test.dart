@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +12,7 @@ import 'package:y300/features/composer_shared/data/repositories/composer_draft_r
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_unused_image_models.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_unused_image_repository.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_unused_image_management_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
 import '../../../test_support/localized_test_app.dart';
 
@@ -17,11 +20,12 @@ void main() {
   testWidgets('shows cache hits immediately and serializes network misses', (
     tester,
   ) async {
+    final validThumbnailPath = io.File('assets/noavatar.png').absolute.path;
     final repository = _FakeUnusedImageRepository(
       images: [_image('1'), _image('2'), _image('3')],
     );
     final cache = _FakeImageCacheService(
-      cachedByAid: const <String, String>{'1': '/cache/1.jpg'},
+      cachedByAid: <String, String>{'1': validThumbnailPath},
       now: tester.binding.clock.now,
     );
     await tester.pumpWidget(_testApp(repository: repository, cache: cache));
@@ -49,6 +53,88 @@ void main() {
     await tester.pump(const Duration(milliseconds: 2));
     expect(cache.ensureAids, <String>['2', '3']);
     expect(
+      cache.ensureRequests.map((request) => request.referer),
+      everyElement(
+        'https://bbs.yamibo.com/forum.php?mod=ajax&action=imagelist&posttime=0',
+      ),
+    );
+    expect(
+      cache.ensureStartedAt[1].difference(cache.ensureStartedAt[0]),
+      greaterThanOrEqualTo(const Duration(milliseconds: 600)),
+    );
+  });
+
+  testWidgets('evicts an undecodable cache hit and retries it only once', (
+    tester,
+  ) async {
+    final validThumbnailPath = io.File('assets/noavatar.png').absolute.path;
+    final repository = _FakeUnusedImageRepository(images: [_image('12')]);
+    final cache = _FakeImageCacheService(
+      cachedByAid: <String, String>{'12': validThumbnailPath},
+      ensuredPathsByAid: <String, String>{'12': validThumbnailPath},
+      now: tester.binding.clock.now,
+    );
+    await tester.pumpWidget(
+      _testApp(
+        repository: repository,
+        cache: cache,
+        thumbnailInterval: Duration.zero,
+      ),
+    );
+    await tester.pump();
+
+    _reportImageDecodeFailure(tester, '12');
+    await tester.pump();
+    await tester.pump();
+
+    expect(cache.deletedOwnerAids, <String>['12']);
+    expect(cache.ensureAids, <String>['12']);
+    expect(
+      cache.ensureRequests.single.referer,
+      'https://bbs.yamibo.com/forum.php?mod=ajax&action=imagelist&posttime=0',
+    );
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(const Key('unused-images-grid'))),
+    );
+    container
+        .read(composerUnusedImageManagementControllerProvider.notifier)
+        .reportThumbnailDecodeFailure(aid: '12', localPath: validThumbnailPath);
+
+    expect(cache.deletedOwnerAids, <String>['12']);
+    expect(cache.ensureAids, <String>['12']);
+    expect(
+      container
+          .read(composerUnusedImageManagementControllerProvider)
+          .requireValue
+          .failedThumbnailAids,
+      contains('12'),
+    );
+  });
+
+  testWidgets('serializes simultaneous decode repairs', (tester) async {
+    final validThumbnailPath = io.File('assets/noavatar.png').absolute.path;
+    final repository = _FakeUnusedImageRepository(
+      images: [_image('1'), _image('2')],
+    );
+    final cache = _FakeImageCacheService(
+      cachedByAid: <String, String>{
+        '1': validThumbnailPath,
+        '2': validThumbnailPath,
+      },
+      now: tester.binding.clock.now,
+    );
+    await tester.pumpWidget(_testApp(repository: repository, cache: cache));
+    await tester.pump();
+
+    _reportImageDecodeFailure(tester, '1');
+    _reportImageDecodeFailure(tester, '2');
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(cache.ensureAids, <String>['1']);
+
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(cache.ensureAids, <String>['1', '2']);
+    expect(
       cache.ensureStartedAt[1].difference(cache.ensureStartedAt[0]),
       greaterThanOrEqualTo(const Duration(milliseconds: 600)),
     );
@@ -75,10 +161,11 @@ void main() {
   testWidgets('confirms deletion and reconciles drafts and thumbnail cache', (
     tester,
   ) async {
+    final validThumbnailPath = io.File('assets/noavatar.png').absolute.path;
     final repository = _FakeUnusedImageRepository(images: [_image('12')]);
     final drafts = _FakeDraftRepository();
     final cache = _FakeImageCacheService(
-      cachedByAid: const <String, String>{'12': '/cache/12.jpg'},
+      cachedByAid: <String, String>{'12': validThumbnailPath},
       now: tester.binding.clock.now,
     );
     await tester.pumpWidget(
@@ -106,12 +193,13 @@ void main() {
   testWidgets('keeps a card when server deletion is not confirmed', (
     tester,
   ) async {
+    final validThumbnailPath = io.File('assets/noavatar.png').absolute.path;
     final repository = _FakeUnusedImageRepository(
       images: [_image('12')],
       deleteSucceeds: false,
     );
     final cache = _FakeImageCacheService(
-      cachedByAid: const <String, String>{'12': '/cache/12.jpg'},
+      cachedByAid: <String, String>{'12': validThumbnailPath},
       now: tester.binding.clock.now,
     );
     await tester.pumpWidget(_testApp(repository: repository, cache: cache));
@@ -156,11 +244,16 @@ Widget _testApp({
   required _FakeUnusedImageRepository repository,
   required _FakeImageCacheService cache,
   _FakeDraftRepository? drafts,
+  Duration? thumbnailInterval,
 }) {
   return ProviderScope(
     overrides: [
       composerUnusedImageRepositoryProvider.overrideWithValue(repository),
       imageCacheServiceProvider.overrideWithValue(cache),
+      if (thumbnailInterval != null)
+        composerUnusedImageThumbnailIntervalProvider.overrideWithValue(
+          thumbnailInterval,
+        ),
       composerDraftRepositoryProvider.overrideWithValue(
         drafts ?? _FakeDraftRepository(),
       ),
@@ -175,7 +268,20 @@ ComposerUnusedImage _image(String aid) {
     thumbnailUri: Uri.parse(
       'https://bbs.yamibo.com/forum.php?mod=image&aid=$aid&size=300x300',
     ),
+    thumbnailRefererUri: Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=ajax&action=imagelist&posttime=0',
+    ),
     fileName: '$aid.jpg',
+  );
+}
+
+void _reportImageDecodeFailure(WidgetTester tester, String aid) {
+  final finder = find.byKey(Key('unused-image-thumbnail-$aid'));
+  final image = tester.widget<Image>(finder);
+  image.errorBuilder!(
+    tester.element(finder),
+    const FormatException('invalid image fixture'),
+    StackTrace.empty,
   );
 }
 
@@ -221,13 +327,16 @@ final class _FakeUnusedImageRepository
 final class _FakeImageCacheService implements ImageCacheService {
   _FakeImageCacheService({
     this.cachedByAid = const <String, String>{},
+    this.ensuredPathsByAid = const <String, String>{},
     required DateTime Function() now,
   }) : _now = now;
 
   final Map<String, String> cachedByAid;
+  final Map<String, String> ensuredPathsByAid;
   final DateTime Function() _now;
   final List<String> ensureAids = <String>[];
   final List<DateTime> ensureStartedAt = <DateTime>[];
+  final List<ImageCacheRequest> ensureRequests = <ImageCacheRequest>[];
   final List<String> deletedOwnerAids = <String>[];
 
   @override
@@ -249,10 +358,13 @@ final class _FakeImageCacheService implements ImageCacheService {
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
     ensureAids.add(request.ownerId);
     ensureStartedAt.add(_now());
+    ensureRequests.add(request);
     return CachedImageResult(
       success: true,
       cacheKey: request.cacheKey,
-      localPath: '/cache/${request.ownerId}.jpg',
+      localPath:
+          ensuredPathsByAid[request.ownerId] ??
+          io.File('assets/noavatar.png').absolute.path,
     );
   }
 

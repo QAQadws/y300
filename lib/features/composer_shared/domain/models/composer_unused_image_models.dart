@@ -4,12 +4,14 @@ final class ComposerUnusedImage {
   const ComposerUnusedImage({
     required this.aid,
     required this.thumbnailUri,
+    required this.thumbnailRefererUri,
     this.fileName = '',
     this.description = '',
   });
 
   final String aid;
   final Uri thumbnailUri;
+  final Uri thumbnailRefererUri;
   final String fileName;
   final String description;
 }

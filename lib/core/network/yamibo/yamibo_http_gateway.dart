@@ -205,11 +205,10 @@ class YamiboHttpGateway {
           ),
         );
       }
-      final iterator = StreamIterator<List<int>>(body.stream);
       final status = response.statusCode ?? 0;
 
       if (_isResourceRedirect(status)) {
-        await iterator.cancel();
+        await _cancelResourceBodyBestEffort(body.stream);
         final location = response.headers.value('location');
         final target = location == null ? null : uri.resolve(location);
         if (target == null ||
@@ -240,7 +239,7 @@ class YamiboHttpGateway {
       }
 
       if (status == 304) {
-        await iterator.cancel();
+        await _cancelResourceBodyBestEffort(body.stream);
         return ApiSuccess(
           YamiboResourceStreamResponse(
             uri: response.realUri,
@@ -261,7 +260,7 @@ class YamiboHttpGateway {
           ? WafChallengeDetector.detect(statusCode: status)
           : null;
       if (challenge != null) {
-        await iterator.cancel();
+        await _cancelResourceBodyBestEffort(body.stream);
         if (recoveryAttempt > 0) {
           return ApiFailure(
             ApiError(
@@ -303,14 +302,30 @@ class YamiboHttpGateway {
       if (sameSite) await _saveCookies(response);
 
       if (status < 200 || status >= 300) {
-        await iterator.cancel();
+        await _cancelResourceBodyBestEffort(body.stream);
         return ApiFailure(_resourceStatusError(status));
       }
 
-      final prefix = await _readResourcePrefix(iterator);
       final contentType = response.headers.value('content-type');
+      if (_hasDeclaredImageContentType(contentType)) {
+        return ApiSuccess(
+          YamiboResourceStreamResponse(
+            uri: response.realUri,
+            statusCode: status,
+            content: _directResourceStream(body.stream),
+            contentLength: body.contentLength,
+            contentType: contentType,
+            eTag: response.headers.value('etag'),
+            validUntil: _resourceValidUntil(response.headers.map),
+            fileExtension: _resourceExtension(contentType, response.realUri),
+          ),
+        );
+      }
+
+      final iterator = StreamIterator<List<int>>(body.stream);
+      final prefix = await _readResourcePrefix(iterator);
       if (!_isSupportedImageResource(contentType, prefix.bytes)) {
-        await iterator.cancel();
+        await _cancelResourceIteratorBestEffort(iterator);
         return ApiFailure(
           ApiError(
             type: ApiErrorType.parse,
@@ -330,7 +345,11 @@ class YamiboHttpGateway {
           contentType: contentType,
           eTag: response.headers.value('etag'),
           validUntil: _resourceValidUntil(response.headers.map),
-          fileExtension: _resourceExtension(contentType, response.realUri),
+          fileExtension: _resourceExtension(
+            contentType,
+            response.realUri,
+            signature: prefix.bytes,
+          ),
         ),
       );
     } on DioException catch (error) {
@@ -1051,7 +1070,7 @@ class YamiboHttpGateway {
         bytesReceived: received,
       );
     } finally {
-      await iterator.cancel();
+      await _cancelResourceIteratorBestEffort(iterator);
     }
   }
 
@@ -1111,60 +1130,26 @@ class YamiboHttpGateway {
 
   bool _isSupportedImageResource(String? contentType, List<int> prefix) {
     final mime = contentType?.split(';').first.trim().toLowerCase();
-    if (mime?.startsWith('image/') == true) return true;
-    if (mime != null &&
-        mime.isNotEmpty &&
-        mime != 'application/octet-stream' &&
-        mime != 'binary/octet-stream') {
-      return false;
-    }
-    return _hasImageSignature(prefix);
+    return _hasImageSignature(prefix) || mime?.startsWith('image/') == true;
   }
 
-  bool _hasImageSignature(List<int> bytes) {
-    bool starts(List<int> signature) {
-      if (bytes.length < signature.length) return false;
-      for (var i = 0; i < signature.length; i++) {
-        if (bytes[i] != signature[i]) return false;
-      }
-      return true;
-    }
-
-    if (starts(const <int>[0xff, 0xd8, 0xff]) ||
-        starts(const <int>[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
-        starts(const <int>[0x47, 0x49, 0x46, 0x38]) ||
-        starts(const <int>[0x42, 0x4d]) ||
-        starts(const <int>[0x00, 0x00, 0x01, 0x00])) {
-      return true;
-    }
-    if (bytes.length >= 12 &&
-        ascii.decode(bytes.sublist(0, 4), allowInvalid: true) == 'RIFF' &&
-        ascii.decode(bytes.sublist(8, 12), allowInvalid: true) == 'WEBP') {
-      return true;
-    }
-    if (bytes.length >= 12 &&
-        ascii.decode(bytes.sublist(4, 8), allowInvalid: true) == 'ftyp') {
-      final brand = ascii.decode(bytes.sublist(8, 12), allowInvalid: true);
-      return const <String>{
-        'avif',
-        'avis',
-        'heic',
-        'heix',
-        'hevc',
-        'hevx',
-        'mif1',
-        'msf1',
-      }.contains(brand);
-    }
-    final text = utf8
-        .decode(bytes.take(1024).toList(growable: false), allowMalformed: true)
-        .trimLeft()
-        .toLowerCase();
-    return text.startsWith('<svg') ||
-        (text.startsWith('<?xml') && text.contains('<svg'));
+  bool _hasDeclaredImageContentType(String? contentType) {
+    final mime = contentType?.split(';').first.trim().toLowerCase();
+    return mime?.startsWith('image/') == true;
   }
 
-  String _resourceExtension(String? contentType, Uri uri) {
+  bool _hasImageSignature(List<int> bytes) =>
+      _resourceExtensionFromSignature(bytes).isNotEmpty;
+
+  String _resourceExtension(
+    String? contentType,
+    Uri uri, {
+    List<int>? signature,
+  }) {
+    final fromSignature = signature == null
+        ? ''
+        : _resourceExtensionFromSignature(signature);
+    if (fromSignature.isNotEmpty) return fromSignature;
     final mime = contentType?.split(';').first.trim().toLowerCase();
     final fromMime = switch (mime) {
       'image/jpeg' => '.jpg',
@@ -1183,6 +1168,91 @@ class YamiboHttpGateway {
     if (dot < 0) return '';
     final extension = segment.substring(dot).toLowerCase();
     return RegExp(r'^\.[a-z0-9]{1,5}$').hasMatch(extension) ? extension : '';
+  }
+
+  String _resourceExtensionFromSignature(List<int> bytes) {
+    bool starts(List<int> signature) {
+      if (bytes.length < signature.length) return false;
+      for (var index = 0; index < signature.length; index += 1) {
+        if (bytes[index] != signature[index]) return false;
+      }
+      return true;
+    }
+
+    if (starts(const <int>[0xff, 0xd8, 0xff])) return '.jpg';
+    if (starts(const <int>[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+      return '.png';
+    }
+    if (starts(const <int>[0x47, 0x49, 0x46, 0x38])) return '.gif';
+    if (starts(const <int>[0x42, 0x4d])) return '.bmp';
+    if (starts(const <int>[0x00, 0x00, 0x01, 0x00])) return '.ico';
+    if (bytes.length >= 12 &&
+        ascii.decode(bytes.sublist(0, 4), allowInvalid: true) == 'RIFF' &&
+        ascii.decode(bytes.sublist(8, 12), allowInvalid: true) == 'WEBP') {
+      return '.webp';
+    }
+    if (bytes.length >= 12 &&
+        ascii.decode(bytes.sublist(4, 8), allowInvalid: true) == 'ftyp') {
+      final brand = ascii.decode(bytes.sublist(8, 12), allowInvalid: true);
+      if (brand == 'avif' || brand == 'avis') return '.avif';
+      if (const <String>{
+        'heic',
+        'heix',
+        'hevc',
+        'hevx',
+        'mif1',
+        'msf1',
+      }.contains(brand)) {
+        return '.heic';
+      }
+    }
+    final text = utf8
+        .decode(bytes.take(1024).toList(growable: false), allowMalformed: true)
+        .trimLeft()
+        .toLowerCase();
+    return text.startsWith('<svg') ||
+            (text.startsWith('<?xml') && text.contains('<svg'))
+        ? '.svg'
+        : '';
+  }
+
+  Stream<List<int>> _directResourceStream(Stream<List<int>> source) async* {
+    var received = 0;
+    try {
+      await for (final chunk in source) {
+        received += chunk.length;
+        yield chunk;
+      }
+    } on DioException catch (error) {
+      throw YamiboResourceStreamException(
+        error: _mapDioError(error),
+        bytesReceived: received,
+      );
+    } catch (_) {
+      throw YamiboResourceStreamException(
+        error: const ApiError(
+          type: ApiErrorType.network,
+          message: 'resource_stream_failed',
+          code: 'resource_stream_failed',
+        ),
+        bytesReceived: received,
+      );
+    }
+  }
+
+  Future<void> _cancelResourceBodyBestEffort(Stream<List<int>> source) async {
+    final iterator = StreamIterator<List<int>>(source);
+    await _cancelResourceIteratorBestEffort(iterator);
+  }
+
+  Future<void> _cancelResourceIteratorBestEffort(
+    StreamIterator<List<int>> iterator,
+  ) async {
+    try {
+      await iterator.cancel();
+    } catch (_) {
+      // Resource cleanup must not replace the already classified response.
+    }
   }
 }
 

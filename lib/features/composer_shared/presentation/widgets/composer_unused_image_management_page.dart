@@ -135,6 +135,7 @@ class _UnusedImagesCatalog extends ConsumerWidget {
             isLoading: state.loadingThumbnailAids.contains(image.aid),
             didFail: state.failedThumbnailAids.contains(image.aid),
             isDeleting: state.deletingAids.contains(image.aid),
+            onThumbnailDecodeFailed: controller.reportThumbnailDecodeFailure,
           );
         },
       ),
@@ -149,6 +150,7 @@ class _UnusedImageCard extends ConsumerWidget {
     required this.isLoading,
     required this.didFail,
     required this.isDeleting,
+    required this.onThumbnailDecodeFailed,
   });
 
   final ComposerUnusedImage image;
@@ -156,6 +158,8 @@ class _UnusedImageCard extends ConsumerWidget {
   final bool isLoading;
   final bool didFail;
   final bool isDeleting;
+  final void Function({required String aid, required String localPath})
+  onThumbnailDecodeFailed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -220,7 +224,15 @@ class _UnusedImageCard extends ConsumerWidget {
         File(path),
         key: Key('unused-image-thumbnail-${image.aid}'),
         fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined),
+        errorBuilder: (imageContext, _, _) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!imageContext.mounted) {
+              return;
+            }
+            onThumbnailDecodeFailed(aid: image.aid, localPath: path);
+          });
+          return const Icon(Icons.broken_image_outlined);
+        },
       );
     }
     if (isLoading) {

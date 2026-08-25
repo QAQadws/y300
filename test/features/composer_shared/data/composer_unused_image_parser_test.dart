@@ -26,6 +26,7 @@ void main() {
     expect(result.first.thumbnailUri.host, 'bbs.yamibo.com');
     expect(result.first.thumbnailUri.queryParameters['aid'], '1629686');
     expect(result.first.thumbnailUri.queryParameters['size'], '300x300');
+    expect(result.first.thumbnailRefererUri, sourceUri);
   });
 
   test('deduplicates identical aids without changing first-seen order', () {

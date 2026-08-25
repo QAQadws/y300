@@ -164,6 +164,30 @@ void main() {
       },
     );
 
+    test(
+      'accepts signature-proven dynamic images with a misleading MIME type',
+      () async {
+        const bytes = <int>[0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10];
+        final adapter = _ScriptedResourceAdapter(const <_ResourceResponse>[
+          _ResourceResponse(
+            bytes: bytes,
+            headers: <String, List<String>>{
+              Headers.contentTypeHeader: <String>['text/html; charset=utf-8'],
+            },
+          ),
+        ]);
+        final network = _network(config, adapter: adapter);
+
+        final result = await network.open(
+          _request(siteOrigin, '/forum.php?mod=image&aid=1&type=fixnone'),
+        );
+        final success = result as ForumResourceSuccess;
+
+        expect(await success.content.expand((chunk) => chunk).toList(), bytes);
+        expect(success.fileExtension, '.jpg');
+      },
+    );
+
     test('third-party resources never receive forum cookies', () async {
       final cookies = MemoryForumCookieStore();
       await cookies.merge(siteOrigin, const <String, String>{'sid': 'secret'});

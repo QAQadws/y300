@@ -7,6 +7,8 @@ void main() {
     final request = ForumImageCacheRequests.composerUnusedAttachment(
       aid: ' 123456 ',
       url: 'https://bbs.yamibo.com/forum.php?mod=image&aid=123456&key=secret',
+      referer:
+          'https://bbs.yamibo.com/forum.php?mod=ajax&action=imagelist&posttime=0',
     );
 
     expect(request.cacheKey, 'composer/unused/123456');
@@ -14,6 +16,10 @@ void main() {
     expect(request.ownerId, '123456');
     expect(request.role, ImageCacheRole.composerUnusedAttachment);
     expect(request.effectiveRetentionClass, ImageRetentionClass.ephemeral);
+    expect(
+      request.referer,
+      'https://bbs.yamibo.com/forum.php?mod=ajax&action=imagelist&posttime=0',
+    );
     expect(request.cacheKey, isNot(contains('secret')));
   });
 }

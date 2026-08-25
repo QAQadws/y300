@@ -173,6 +173,36 @@ void main() {
       },
     );
 
+    test(
+      'accepts a signature-proven dynamic image with a misleading MIME type',
+      () async {
+        const bytes = <int>[0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10];
+        final adapter = _GatewayTestAdapter(
+          bytesBody: bytes,
+          contentType: 'text/html; charset=utf-8',
+        );
+        final gateway = _buildGateway(adapter: adapter);
+
+        final result = await gateway.openImageResource(
+          Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=image&aid=1&type=fixnone',
+          ),
+          referer: Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=ajax&action=imagelist',
+          ),
+          userAgent: BrowserUserAgents.desktop,
+        );
+        final response = result.dataOrNull;
+
+        expect(result.isSuccess, isTrue);
+        expect(
+          await response!.content.expand((chunk) => chunk).toList(),
+          bytes,
+        );
+        expect(response.fileExtension, '.jpg');
+      },
+    );
+
     test('resource 405 triggers one WAF recovery before streaming', () async {
       final uri = Uri.parse('https://bbs.yamibo.com/data/attachment/image.jpg');
       final cookieStore = CookieStore();

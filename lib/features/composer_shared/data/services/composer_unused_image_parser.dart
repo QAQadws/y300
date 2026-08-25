@@ -105,12 +105,14 @@ final class ComposerUnusedImageParser {
       final parsed = ComposerUnusedImage(
         aid: aid,
         thumbnailUri: thumbnailUri,
+        thumbnailRefererUri: sourceUri,
         fileName: title,
         description: description,
       );
       final previous = byAid[aid];
       if (previous != null) {
         if (previous.thumbnailUri != parsed.thumbnailUri ||
+            previous.thumbnailRefererUri != parsed.thumbnailRefererUri ||
             previous.fileName != parsed.fileName ||
             previous.description != parsed.description) {
           throw const FormatException('Conflicting unused attachment aid');

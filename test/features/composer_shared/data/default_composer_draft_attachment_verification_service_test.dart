@@ -186,6 +186,9 @@ ComposerUnusedImage _remote(String aid) {
     thumbnailUri: Uri.parse(
       'https://bbs.yamibo.com/forum.php?mod=image&aid=$aid&size=300x300',
     ),
+    thumbnailRefererUri: Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=ajax&action=imagelist&posttime=0',
+    ),
     fileName: '$aid.jpg',
   );
 }

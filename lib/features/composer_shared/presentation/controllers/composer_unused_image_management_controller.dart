@@ -64,6 +64,10 @@ class ComposerUnusedImageManagementController
   var _generation = 0;
   var _disposed = false;
   final Set<String> _serverDeletedAids = <String>{};
+  final Set<String> _queuedThumbnailAids = <String>{};
+  final Set<String> _decodeRepairAttemptedAids = <String>{};
+  Future<void> _thumbnailQueueTail = Future<void>.value();
+  var _hasScheduledThumbnailTask = false;
 
   ComposerUnusedImageRepository get _unusedImageRepository =>
       ref.read(composerUnusedImageRepositoryProvider);
@@ -79,8 +83,10 @@ class ComposerUnusedImageManagementController
     ref.onDispose(() {
       _disposed = true;
       _generation += 1;
+      _queuedThumbnailAids.clear();
+      _decodeRepairAttemptedAids.clear();
     });
-    final generation = ++_generation;
+    final generation = _beginGeneration();
     final loaded = await _loadCatalog(
       generation: generation,
       repository: _unusedImageRepository,
@@ -95,7 +101,7 @@ class ComposerUnusedImageManagementController
     if (current != null && current.deletingAids.isNotEmpty) {
       return;
     }
-    final generation = ++_generation;
+    final generation = _beginGeneration();
     final repository = _unusedImageRepository;
     final cacheService = _imageCacheService;
     state = const AsyncLoading<ComposerUnusedImageManagementState>();
@@ -183,6 +189,58 @@ class ComposerUnusedImageManagementController
     return true;
   }
 
+  void reportThumbnailDecodeFailure({
+    required String aid,
+    required String localPath,
+  }) {
+    if (_disposed || !ref.mounted) {
+      return;
+    }
+    final normalizedAid = aid.trim();
+    final normalizedPath = localPath.trim();
+    final current = state.asData?.value;
+    if (normalizedAid.isEmpty ||
+        normalizedPath.isEmpty ||
+        current == null ||
+        current.thumbnailPaths[normalizedAid]?.trim() != normalizedPath ||
+        !current.containsAid(normalizedAid) ||
+        _serverDeletedAids.contains(normalizedAid)) {
+      return;
+    }
+
+    final thumbnailPaths = Map<String, String>.of(current.thumbnailPaths)
+      ..remove(normalizedAid);
+    final loadingAids = Set<String>.of(current.loadingThumbnailAids);
+    final failedAids = Set<String>.of(current.failedThumbnailAids);
+    final shouldRepair = _decodeRepairAttemptedAids.add(normalizedAid);
+    if (shouldRepair) {
+      loadingAids.add(normalizedAid);
+      failedAids.remove(normalizedAid);
+    } else {
+      loadingAids.remove(normalizedAid);
+      failedAids.add(normalizedAid);
+    }
+    state = AsyncData(
+      current.copyWith(
+        thumbnailPaths: thumbnailPaths,
+        loadingThumbnailAids: loadingAids,
+        failedThumbnailAids: failedAids,
+      ),
+    );
+    if (!shouldRepair) {
+      return;
+    }
+
+    final image = current.images.firstWhere(
+      (candidate) => candidate.aid == normalizedAid,
+    );
+    _enqueueThumbnailDownload(
+      image: image,
+      generation: _generation,
+      invalidateFirst: true,
+    );
+  }
+
   Future<_LoadedUnusedImageCatalog> _loadCatalog({
     required int generation,
     required ComposerUnusedImageRepository repository,
@@ -239,57 +297,88 @@ class ComposerUnusedImageManagementController
     final cacheService = _imageCacheService;
     final interval = _thumbnailInterval;
     unawaited(
-      Future<void>.delayed(Duration.zero).then(
-        (_) => _downloadMissingThumbnails(
-          images: images,
-          generation: generation,
-          cacheService: cacheService,
-          interval: interval,
-        ),
-      ),
+      Future<void>.delayed(Duration.zero).then((_) {
+        if (!_isCurrent(generation)) {
+          return;
+        }
+        for (final image in images) {
+          _enqueueThumbnailDownload(
+            image: image,
+            generation: generation,
+            cacheService: cacheService,
+            interval: interval,
+          );
+        }
+      }),
     );
   }
 
-  Future<void> _downloadMissingThumbnails({
-    required List<ComposerUnusedImage> images,
+  void _enqueueThumbnailDownload({
+    required ComposerUnusedImage image,
     required int generation,
-    required ImageCacheService cacheService,
-    required Duration interval,
-  }) async {
-    for (var index = 0; index < images.length; index += 1) {
-      if (!_isCurrent(generation)) {
-        return;
-      }
-      final image = images[index];
-      final current = state.asData?.value;
-      if (current == null ||
-          !current.containsAid(image.aid) ||
-          _serverDeletedAids.contains(image.aid)) {
-        continue;
-      }
-      final request = ForumImageCacheRequests.composerUnusedAttachment(
-        aid: image.aid,
-        url: image.thumbnailUri.toString(),
-      );
-      CachedImageResult result;
-      try {
-        result = await cacheService.ensureCached(request);
-      } catch (_) {
-        result = CachedImageResult.failed;
-      }
-      if (!_isCurrent(generation)) {
-        return;
-      }
-      if (_serverDeletedAids.contains(image.aid) ||
-          state.asData?.value.containsAid(image.aid) != true) {
-        await _deleteThumbnailBestEffort(cacheService, image.aid);
-      } else {
-        _recordThumbnailResult(image.aid, result);
-      }
-      if (index < images.length - 1 && interval > Duration.zero) {
-        await Future<void>.delayed(interval);
-      }
+    bool invalidateFirst = false,
+    ImageCacheService? cacheService,
+    Duration? interval,
+  }) {
+    if (!_isCurrent(generation) || !_queuedThumbnailAids.add(image.aid)) {
+      return;
     }
+    final resolvedCacheService = cacheService ?? _imageCacheService;
+    final resolvedInterval = interval ?? _thumbnailInterval;
+    final delayBeforeStart = _hasScheduledThumbnailTask;
+    _hasScheduledThumbnailTask = true;
+    final previous = _thumbnailQueueTail;
+    late final Future<void> task;
+    task = previous
+        .then((_) async {
+          if (delayBeforeStart && resolvedInterval > Duration.zero) {
+            await Future<void>.delayed(resolvedInterval);
+          }
+          if (!_isCurrent(generation)) {
+            return;
+          }
+          final current = state.asData?.value;
+          if (current == null ||
+              !current.containsAid(image.aid) ||
+              _serverDeletedAids.contains(image.aid)) {
+            return;
+          }
+          if (invalidateFirst) {
+            await _deleteThumbnailBestEffort(resolvedCacheService, image.aid);
+            if (!_isCurrent(generation) ||
+                state.asData?.value.containsAid(image.aid) != true ||
+                _serverDeletedAids.contains(image.aid)) {
+              return;
+            }
+          }
+          final request = ForumImageCacheRequests.composerUnusedAttachment(
+            aid: image.aid,
+            url: image.thumbnailUri.toString(),
+            referer: image.thumbnailRefererUri.toString(),
+          );
+          CachedImageResult result;
+          try {
+            result = await resolvedCacheService.ensureCached(request);
+          } catch (_) {
+            result = CachedImageResult.failed;
+          }
+          if (!_isCurrent(generation)) {
+            return;
+          }
+          if (_serverDeletedAids.contains(image.aid) ||
+              state.asData?.value.containsAid(image.aid) != true) {
+            await _deleteThumbnailBestEffort(resolvedCacheService, image.aid);
+          } else {
+            _queuedThumbnailAids.remove(image.aid);
+            _recordThumbnailResult(image.aid, result);
+          }
+        })
+        .whenComplete(() {
+          if (_isCurrent(generation)) {
+            _queuedThumbnailAids.remove(image.aid);
+          }
+        });
+    _thumbnailQueueTail = task;
   }
 
   void _recordThumbnailResult(String aid, CachedImageResult result) {
@@ -331,6 +420,15 @@ class ComposerUnusedImageManagementController
   }
 
   bool _isCurrent(int generation) => !_disposed && generation == _generation;
+
+  int _beginGeneration() {
+    _generation += 1;
+    _queuedThumbnailAids.clear();
+    _decodeRepairAttemptedAids.clear();
+    _thumbnailQueueTail = Future<void>.value();
+    _hasScheduledThumbnailTask = false;
+    return _generation;
+  }
 
   Future<void> _invalidateDraftAidBestEffort(
     ComposerDraftRepository repository,
