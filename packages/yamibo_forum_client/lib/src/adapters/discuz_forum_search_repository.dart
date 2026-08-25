@@ -10,6 +10,7 @@ import '../network/forum_transport.dart';
 import '../session/forum_formhash_provider.dart';
 import '../url/forum_uri_resolver.dart';
 import 'discuz_search_html_parser.dart';
+import 'discuz_search_context_validator.dart';
 
 final class DiscuzForumSearchRepository implements ForumSearchRepository {
   DiscuzForumSearchRepository({
@@ -20,6 +21,9 @@ final class DiscuzForumSearchRepository implements ForumSearchRepository {
     DiscuzSearchHtmlParser? parser,
   }) : _config = config,
        _resolver = ForumUriResolver(siteOrigin: config.siteOrigin),
+       _contextValidator = DiscuzSearchContextValidator(
+         siteOrigin: config.siteOrigin,
+       ),
        _parser =
            parser ?? DiscuzSearchHtmlParser(siteOrigin: config.siteOrigin);
 
@@ -28,6 +32,7 @@ final class DiscuzForumSearchRepository implements ForumSearchRepository {
   final ForumRequestProfileResolver requestProfiles;
   final ForumFormhashProvider formhashProvider;
   final ForumUriResolver _resolver;
+  final DiscuzSearchContextValidator _contextValidator;
   final DiscuzSearchHtmlParser _parser;
   final Map<String, _Continuation> _continuations = <String, _Continuation>{};
   String? _cachedFormhash;
@@ -90,24 +95,21 @@ final class DiscuzForumSearchRepository implements ForumSearchRepository {
     if (resultUri == null) {
       return _parseFailure('forum_search_context_missing');
     }
-    final searchIds = resultUri.queryParametersAll['searchid'] ?? const [];
-    final searchId = searchIds.length == 1 ? searchIds.single.trim() : '';
-    final pages = resultUri.queryParametersAll['page'] ?? const [];
-    final page = pages.isEmpty
-        ? 1
-        : pages.length == 1
-        ? int.tryParse(pages.single.trim())
-        : null;
-    if (searchId.isEmpty ||
-        page != 1 ||
-        !_matchesScope(resultUri, normalized)) {
+    final validated = _contextValidator.validate(
+      resultUri,
+      query: normalized,
+      expectedPage: 1,
+      allowImplicitFirstPage: true,
+    );
+    final context = validated.context;
+    if (context == null) {
       return _parseFailure('forum_search_context_invalid');
     }
     return _loadPage(
       uri: resultUri,
       query: normalized,
       page: 1,
-      searchId: searchId,
+      searchId: context.searchId,
       referer: entryUri,
       operation: 'search.forum.result',
     );
@@ -309,27 +311,10 @@ final class DiscuzForumSearchRepository implements ForumSearchRepository {
     final value = raw?.trim() ?? '';
     if (value.isEmpty) return null;
     try {
-      final uri = _resolver.resolve(value);
-      return _resolver.isSameSite(uri) &&
-              uri.path.toLowerCase() == '/search.php'
-          ? uri
-          : null;
+      return _resolver.resolve(value);
     } on FormatException {
       return null;
     }
-  }
-
-  bool _matchesScope(Uri uri, ForumSearchQuery query) {
-    final mods = uri.queryParametersAll['mod'] ?? const [];
-    final forumIds = uri.queryParametersAll['srhfid'] ?? const [];
-    if (mods.length != 1 || forumIds.length > 1) return false;
-    return switch (query.scope) {
-      ForumSearchScope.allForums => mods.single == 'forum' && forumIds.isEmpty,
-      ForumSearchScope.currentForum =>
-        mods.single == 'curforum' &&
-            forumIds.length == 1 &&
-            forumIds.single == query.normalizedForumId,
-    };
   }
 
   ForumSearchReadCapabilities _readCapabilities(ForumSearchData data) {

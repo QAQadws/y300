@@ -70,6 +70,11 @@ void main() {
       expect(links, isNotEmpty);
       expect(links.first.url, contains('9001'));
       expect(searchCoordinator.calledKeywords, contains('百合情结'));
+      expect(
+        searchCoordinator.queries.single.scope,
+        ForumSearchScope.currentForum,
+      );
+      expect(searchCoordinator.queries.single.normalizedForumId, '30');
       expect(discovery.requestedTids, containsAll(<String>['301']));
     });
 
@@ -1567,6 +1572,7 @@ class _FakeForumSearchCoordinator implements ForumSearchCoordinator {
 
   final SearchTestResponse _response;
   final List<String> calledKeywords = <String>[];
+  final List<ForumSearchQuery> queries = <ForumSearchQuery>[];
 
   @override
   Future<ForumSearchExecution> search(
@@ -1575,6 +1581,7 @@ class _FakeForumSearchCoordinator implements ForumSearchCoordinator {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
     calledKeywords.add(query.normalizedKeyword);
+    queries.add(query);
     return _execution(query);
   }
 

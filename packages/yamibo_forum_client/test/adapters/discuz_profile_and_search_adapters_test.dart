@@ -124,6 +124,180 @@ void main() {
     expect(network.requests.last.uri.queryParameters['page'], '2');
   });
 
+  test(
+    'current-forum search accepts canonical Discuz result redirects',
+    () async {
+      final network = _ScenarioNetwork(
+        postLocation: 'search.php?mod=forum&searchid=777&searchsubmit=yes',
+      );
+      final repository = ForumClientAdapterFactory(
+        config: config,
+        network: network,
+      ).createForumSearch(const _Formhash());
+      const query = ForumSearchQuery(
+        keyword: 'fixture',
+        scope: ForumSearchScope.currentForum,
+        forumId: '30',
+      );
+
+      final first = await repository.load(query);
+
+      final firstSuccess =
+          first
+              as DataReadSuccess<ForumSearchData, ForumSearchReadCapabilities>;
+      expect(firstSuccess.data.topics.single.forumId, '30');
+      expect(firstSuccess.data.pagination.nextPage, isNotNull);
+      expect(network.requests.first.uri.queryParameters['mod'], 'curforum');
+      expect(network.requests.first.uri.queryParameters['srhfid'], '30');
+      expect(network.requests.first.body, containsPair('srhfid', '30'));
+
+      final second = await repository.loadNextPage(
+        query,
+        firstSuccess.data.pagination.nextPage!,
+      );
+
+      expect(second.dataOrNull!.topics.single.tid, '101');
+      expect(network.requests, hasLength(3));
+    },
+  );
+
+  test('current-forum search keeps exact scoped redirects valid', () async {
+    final network = _ScenarioNetwork(
+      postLocation:
+          'search.php?mod=curforum&srhfid=30&searchid=777&searchsubmit=yes',
+    );
+    final repository = ForumClientAdapterFactory(
+      config: config,
+      network: network,
+    ).createForumSearch(const _Formhash());
+
+    final result = await repository.load(
+      const ForumSearchQuery(
+        keyword: 'fixture',
+        scope: ForumSearchScope.currentForum,
+        forumId: '30',
+      ),
+    );
+
+    expect(result.failureOrNull, isNull);
+    expect(network.requests, hasLength(2));
+  });
+
+  test(
+    'current-forum search rejects an explicitly conflicting forum',
+    () async {
+      final network = _ScenarioNetwork(
+        postLocation:
+            'search.php?mod=forum&srhfid=99&searchid=777&searchsubmit=yes',
+      );
+      final repository = ForumClientAdapterFactory(
+        config: config,
+        network: network,
+      ).createForumSearch(const _Formhash());
+
+      final result = await repository.load(
+        const ForumSearchQuery(
+          keyword: 'fixture',
+          scope: ForumSearchScope.currentForum,
+          forumId: '30',
+        ),
+      );
+
+      expect(result.failureOrNull?.code, 'forum_search_context_invalid');
+      expect(network.requests, hasLength(1));
+    },
+  );
+
+  test('current-forum search rejects topics from another forum', () async {
+    final network = _ScenarioNetwork(
+      postLocation: 'search.php?mod=forum&searchid=777&searchsubmit=yes',
+      initialBody: _searchPage(tid: '100', forumId: '99', nextPage: null),
+    );
+    final repository = ForumClientAdapterFactory(
+      config: config,
+      network: network,
+    ).createForumSearch(const _Formhash());
+
+    final result = await repository.load(
+      const ForumSearchQuery(
+        keyword: 'fixture',
+        scope: ForumSearchScope.currentForum,
+        forumId: '30',
+      ),
+    );
+
+    expect(result.failureOrNull?.code, 'search_forum_identity_mismatch');
+    expect(network.requests, hasLength(2));
+  });
+
+  test('current-forum search allows a proven empty result', () async {
+    final network = _ScenarioNetwork(
+      postLocation: 'search.php?mod=forum&searchid=777&searchsubmit=yes',
+      initialBody: '<ul class="threadlist"></ul>',
+    );
+    final repository = ForumClientAdapterFactory(
+      config: config,
+      network: network,
+    ).createForumSearch(const _Formhash());
+
+    final result = await repository.load(
+      const ForumSearchQuery(
+        keyword: 'fixture',
+        scope: ForumSearchScope.currentForum,
+        forumId: '30',
+      ),
+    );
+
+    expect(result.failureOrNull, isNull);
+    expect(result.dataOrNull!.topics, isEmpty);
+  });
+
+  test('search keeps invalid result contexts fail closed', () async {
+    for (final location in <String>[
+      'search.php?mod=forum',
+      'search.php?mod=forum&searchid=777&searchid=779',
+      'search.php?mod=forum&searchid=777&page=2',
+      'search.php?mod=forum&mod=curforum&searchid=777',
+      'https://other.test/search.php?mod=forum&searchid=777',
+      'http://example.test/search.php?mod=forum&searchid=777',
+    ]) {
+      final network = _ScenarioNetwork(postLocation: location);
+      final repository = ForumClientAdapterFactory(
+        config: config,
+        network: network,
+      ).createForumSearch(const _Formhash());
+
+      final result = await repository.load(
+        const ForumSearchQuery(keyword: 'fixture'),
+      );
+
+      expect(
+        result.failureOrNull?.code,
+        'forum_search_context_invalid',
+        reason: location,
+      );
+      expect(network.requests, hasLength(1), reason: location);
+    }
+  });
+
+  test('all-forum search does not accept a scoped result context', () async {
+    final network = _ScenarioNetwork(
+      postLocation:
+          'search.php?mod=forum&srhfid=30&searchid=777&searchsubmit=yes',
+    );
+    final repository = ForumClientAdapterFactory(
+      config: config,
+      network: network,
+    ).createForumSearch(const _Formhash());
+
+    final result = await repository.load(
+      const ForumSearchQuery(keyword: 'fixture'),
+    );
+
+    expect(result.failureOrNull?.code, 'forum_search_context_invalid');
+    expect(network.requests, hasLength(1));
+  });
+
   test('search rejects invalid query before formhash or transport', () async {
     final network = _ScenarioNetwork();
     final repository = ForumClientAdapterFactory(
@@ -141,9 +315,11 @@ void main() {
 }
 
 final class _ScenarioNetwork implements ForumClientNetwork {
-  _ScenarioNetwork({this.profileBody});
+  _ScenarioNetwork({this.profileBody, this.postLocation, this.initialBody});
 
   final String? profileBody;
+  final String? postLocation;
+  final String? initialBody;
   final List<ForumRequest> requests = [];
 
   @override
@@ -159,8 +335,11 @@ final class _ScenarioNetwork implements ForumClientNetwork {
         ForumResponse(
           uri: request.uri,
           statusCode: 302,
-          headers: const {
-            'location': ['search.php?mod=forum&searchid=777&searchsubmit=yes'],
+          headers: {
+            'location': [
+              postLocation ??
+                  'search.php?mod=forum&searchid=777&searchsubmit=yes',
+            ],
           },
           body: '',
         ),
@@ -169,10 +348,9 @@ final class _ScenarioNetwork implements ForumClientNetwork {
     final page = request.uri.queryParameters['page'];
     return _response(
       request,
-      _searchPage(
-        tid: page == '2' ? '101' : '100',
-        nextPage: page == '2' ? null : 2,
-      ),
+      page == '2'
+          ? _searchPage(tid: '101', nextPage: null)
+          : initialBody ?? _searchPage(tid: '100', nextPage: 2),
     );
   }
 
@@ -216,13 +394,17 @@ final class _Formhash implements ForumFormhashProvider {
   }
 }
 
-String _searchPage({required String tid, required int? nextPage}) =>
+String _searchPage({
+  required String tid,
+  String forumId = '30',
+  required int? nextPage,
+}) =>
     '''
 <ul class="threadlist"><li class="list">
   <a href="forum.php?mod=viewthread&amp;tid=$tid&amp;mobile=2">
     <div class="threadlist_tit"><em>Fixture $tid</em></div>
   </a>
-  <div class="threadlist_foot"><a href="forum.php?mod=forumdisplay&amp;fid=30&amp;mobile=2">Forum</a></div>
+  <div class="threadlist_foot"><a href="forum.php?mod=forumdisplay&amp;fid=$forumId&amp;mobile=2">Forum</a></div>
 </li></ul>
 ${nextPage == null ? '' : '<div class="pg"><a class="nxt" href="search.php?mod=forum&amp;searchid=777&amp;page=$nextPage&amp;mobile=2">Next</a></div>'}
 ''';

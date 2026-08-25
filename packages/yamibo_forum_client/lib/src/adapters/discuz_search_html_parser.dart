@@ -3,6 +3,7 @@ import 'package:html/parser.dart' as html_parser;
 
 import '../contracts/forum_search.dart';
 import '../url/forum_uri_resolver.dart';
+import 'discuz_search_context_validator.dart';
 
 final class DiscuzSearchHtmlParseException implements Exception {
   const DiscuzSearchHtmlParseException(this.code);
@@ -30,9 +31,11 @@ final class DiscuzSearchParsedPage {
 
 final class DiscuzSearchHtmlParser {
   DiscuzSearchHtmlParser({required Uri siteOrigin})
-    : _resolver = ForumUriResolver(siteOrigin: siteOrigin);
+    : _resolver = ForumUriResolver(siteOrigin: siteOrigin),
+      _contextValidator = DiscuzSearchContextValidator(siteOrigin: siteOrigin);
 
   final ForumUriResolver _resolver;
+  final DiscuzSearchContextValidator _contextValidator;
 
   DiscuzSearchParsedPage parse({
     required String html,
@@ -173,13 +176,13 @@ final class DiscuzSearchHtmlParser {
     if (uri == null || uri.path.toLowerCase() != '/search.php') {
       throw const DiscuzSearchHtmlParseException('search_next_link_invalid');
     }
-    final searchIds = uri.queryParametersAll['searchid'] ?? const <String>[];
-    final pages = uri.queryParametersAll['page'] ?? const <String>[];
-    final searchId = searchIds.length == 1 ? searchIds.single.trim() : '';
-    final page = pages.length == 1 ? int.tryParse(pages.single.trim()) : null;
-    if (searchId != expectedSearchContextId ||
-        page != currentPage + 1 ||
-        !_matchesScope(uri, query)) {
+    final validation = _contextValidator.validate(
+      uri,
+      query: query,
+      expectedSearchId: expectedSearchContextId,
+      expectedPage: currentPage + 1,
+    );
+    if (validation.context == null) {
       throw const DiscuzSearchHtmlParseException('search_next_context_invalid');
     }
     return uri;
@@ -191,38 +194,27 @@ final class DiscuzSearchHtmlParser {
     required String expectedSearchContextId,
     required int requestedPage,
   }) {
-    if (!_resolver.isSameSite(uri) || uri.path.toLowerCase() != '/search.php') {
-      throw const DiscuzSearchHtmlParseException('search_context_invalid');
+    final validation = _contextValidator.validate(
+      uri,
+      query: query,
+      expectedSearchId: expectedSearchContextId,
+      expectedPage: requestedPage,
+      allowImplicitFirstPage: true,
+    );
+    final context = validation.context;
+    if (context != null) {
+      return _SearchPageContext(
+        searchContextId: context.searchId,
+        currentPage: context.page,
+      );
     }
-    final ids = uri.queryParametersAll['searchid'] ?? const <String>[];
-    final id = ids.length == 1 ? ids.single.trim() : '';
-    if (id.isEmpty || id != expectedSearchContextId) {
-      throw const DiscuzSearchHtmlParseException('search_context_missing');
-    }
-    final pages = uri.queryParametersAll['page'] ?? const <String>[];
-    final page = pages.isEmpty
-        ? 1
-        : pages.length == 1
-        ? int.tryParse(pages.single.trim())
-        : null;
-    if (page != requestedPage || !_matchesScope(uri, query)) {
-      throw const DiscuzSearchHtmlParseException('search_page_invalid');
-    }
-    return _SearchPageContext(searchContextId: id, currentPage: page!);
-  }
-
-  bool _matchesScope(Uri uri, ForumSearchQuery query) {
-    final mods = uri.queryParametersAll['mod'] ?? const <String>[];
-    final forumIds = uri.queryParametersAll['srhfid'] ?? const <String>[];
-    if (mods.length != 1 || forumIds.length > 1) return false;
-    final mod = mods.single.trim().toLowerCase();
-    return switch (query.scope) {
-      ForumSearchScope.allForums => mod == 'forum' && forumIds.isEmpty,
-      ForumSearchScope.currentForum =>
-        mod == 'curforum' &&
-            forumIds.length == 1 &&
-            forumIds.single == query.normalizedForumId,
-    };
+    throw DiscuzSearchHtmlParseException(switch (validation.failure) {
+      DiscuzSearchContextFailure.invalidUri => 'search_context_invalid',
+      DiscuzSearchContextFailure.invalidSearchId => 'search_context_missing',
+      DiscuzSearchContextFailure.invalidPage ||
+      DiscuzSearchContextFailure.scopeMismatch => 'search_page_invalid',
+      null => 'search_context_invalid',
+    });
   }
 
   Uri? _sameSite(String? raw) {
