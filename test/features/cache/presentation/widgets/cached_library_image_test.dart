@@ -222,6 +222,38 @@ void main() {
     );
   });
 
+  testWidgets(
+    'reports a local cache decode failure without exposing its path',
+    (tester) async {
+      final cacheService = _ControlledImageCacheService();
+      final provider = _ControlledImageProvider();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(cacheService),
+          ],
+          child: LocalizedTestApp(
+            home: CachedLibraryImage(
+              request: _request('thread-image'),
+              fit: BoxFit.cover,
+              placeholder: const SizedBox(key: Key('placeholder')),
+              errorPlaceholder: const SizedBox(key: Key('error-placeholder')),
+              imageProviderOverride: provider,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      provider.fail();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('error-placeholder')), findsOneWidget);
+      expect(cacheService.decodeFailures, hasLength(1));
+      expect(cacheService.decodeFailures.single.cacheKey, 'thread-image');
+    },
+  );
+
   testWidgets('allows remote fallback only after direct cache lookup misses', (
     tester,
   ) async {
@@ -539,12 +571,14 @@ ImageProvider _underlyingProvider(ImageProvider provider) {
   return provider;
 }
 
-class _ControlledImageCacheService implements ImageCacheService {
+class _ControlledImageCacheService
+    implements ImageCacheService, ImageCacheDecodeFailureReporter {
   final Map<String, Completer<CachedImageResult?>> _getCachedCompleters =
       <String, Completer<CachedImageResult?>>{};
   final Map<String, Completer<CachedImageResult>> _ensureCompleters =
       <String, Completer<CachedImageResult>>{};
   final Map<String, int> _getCachedCounts = <String, int>{};
+  final List<ImageCacheRequest> decodeFailures = <ImageCacheRequest>[];
 
   int getCachedCount(String cacheKey) => _getCachedCounts[cacheKey] ?? 0;
 
@@ -618,6 +652,15 @@ class _ControlledImageCacheService implements ImageCacheService {
 
   @override
   Future<void> clearUnprotected() async {}
+
+  @override
+  void reportDecodeFailure({
+    required ImageCacheRequest request,
+    required Object error,
+    StackTrace? stackTrace,
+  }) {
+    decodeFailures.add(request);
+  }
 }
 
 class _SynchronousImageProvider

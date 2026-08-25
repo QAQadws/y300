@@ -143,6 +143,13 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
                   _handleImageResolved(request, size, generation),
               onRemoteImageResolved: () =>
                   _handleRemoteImageResolved(generation),
+              onLocalImageDecodeFailed: (error, stackTrace) =>
+                  _handleLocalImageDecodeFailed(
+                    request,
+                    error,
+                    stackTrace,
+                    generation,
+                  ),
               onImageFailed: () => _handleImageFailed(generation),
             ),
     );
@@ -182,6 +189,26 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     }
     _markDisplaySettled(generation);
     widget.onImageFailed?.call();
+  }
+
+  void _handleLocalImageDecodeFailed(
+    ImageCacheRequest? request,
+    Object error,
+    StackTrace? stackTrace,
+    int generation,
+  ) {
+    if (generation != _generation || request == null) {
+      return;
+    }
+    final service = ref.read(imageCacheServiceProvider);
+    if (service is ImageCacheDecodeFailureReporter) {
+      final reporter = service as ImageCacheDecodeFailureReporter;
+      reporter.reportDecodeFailure(
+        request: request,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   void _markDisplaySettled(int generation) {

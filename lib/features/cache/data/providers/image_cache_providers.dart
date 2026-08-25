@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
+import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
@@ -12,6 +14,7 @@ import 'package:y300/features/cache/data/services/default_image_cache_service.da
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/services/image_cache_manager_factory.dart';
+import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
 import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
@@ -64,6 +67,14 @@ final imageCacheManagerProvider = FutureProvider<BaseCacheManager>((ref) async {
 final imageCacheRepositoryProvider = Provider<ImageCacheRepository>((ref) {
   return LocalImageCacheRepository.lazy(() => ComicLocalDb.open());
 });
+
+final imageCacheDiagnosticRecorderProvider =
+    Provider<ImageCacheDiagnosticRecorder>((ref) {
+      if (!kDebugMode) {
+        return const NoopImageCacheDiagnosticRecorder();
+      }
+      return LoggerImageCacheDiagnosticRecorder(ref.watch(loggerProvider));
+    });
 
 final cacheMutationBusProvider = Provider<CacheMutationBus>((ref) {
   final bus = CacheMutationBus();
@@ -119,6 +130,7 @@ final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
     cacheManagerFuture: ref.watch(imageCacheManagerProvider.future),
     directoryResolver: ref.watch(imageCacheDirectoryResolverProvider),
     mutationReporter: ref.watch(cacheMutationBusProvider),
+    diagnosticRecorder: ref.watch(imageCacheDiagnosticRecorderProvider),
   );
 });
 

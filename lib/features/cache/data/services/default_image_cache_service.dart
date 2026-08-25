@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
+import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
@@ -47,6 +48,7 @@ class DefaultImageCacheService
         ImageCacheService,
         ImageCacheOwnerDimensionLookup,
         ImageCacheDimensionRecorder,
+        ImageCacheDecodeFailureReporter,
         CacheBudgetParticipant {
   DefaultImageCacheService({
     required ImageCacheRepository repository,
@@ -55,12 +57,15 @@ class DefaultImageCacheService
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
     ImageFileDownloader downloader = const CacheManagerImageFileDownloader(),
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
+    ImageCacheDiagnosticRecorder diagnosticRecorder =
+        const NoopImageCacheDiagnosticRecorder(),
   }) : _repository = repository,
        _cacheManagerFuture = cacheManagerFuture,
        _directoryResolver = directoryResolver,
        _urlResolver = urlResolver,
        _downloader = downloader,
-       _mutationReporter = mutationReporter;
+       _mutationReporter = mutationReporter,
+       _diagnosticRecorder = diagnosticRecorder;
 
   final ImageCacheRepository _repository;
   final Future<BaseCacheManager> _cacheManagerFuture;
@@ -68,6 +73,7 @@ class DefaultImageCacheService
   final SiteUrlResolver _urlResolver;
   final ImageFileDownloader _downloader;
   final CacheMutationReporter _mutationReporter;
+  final ImageCacheDiagnosticRecorder _diagnosticRecorder;
   final Map<String, Future<CachedImageResult>> _ensureTasks =
       <String, Future<CachedImageResult>>{};
 
@@ -92,83 +98,100 @@ class DefaultImageCacheService
   }
 
   Future<CachedImageResult> _ensureCached(ImageCacheRequest request) async {
+    final stopwatch = Stopwatch()..start();
     final cacheKey = request.cacheKey.trim();
     final sourceUrl =
         _urlResolver.resolve(request.sourceUrl) ?? request.sourceUrl.trim();
     if (cacheKey.isEmpty || sourceUrl.isEmpty) {
+      _reportFailure(
+        request: request,
+        stage: ImageCacheDiagnosticStage.validation,
+        error: const FormatException('invalid_cache_request'),
+        elapsed: stopwatch.elapsed,
+        reasonCode: 'cache_request_invalid',
+      );
       return CachedImageResult.failed;
     }
 
-    final now = DateTime.now();
-    final existing = await _repository.getByKey(cacheKey);
-    final existingSourceUrl = existing?.lastSourceUrl?.trim();
-    final sourceChanged =
-        existingSourceUrl != null &&
-        existingSourceUrl.isNotEmpty &&
-        existingSourceUrl != sourceUrl;
-    final existingPath = existing?.localPath?.trim();
-    if (!sourceChanged && existingPath != null && existingPath.isNotEmpty) {
-      final file = io.File(existingPath);
-      if (await file.exists()) {
-        final bytes = await file.length();
-        await _repository.upsert(
-          _recordFromRequest(
-            request,
-            sourceUrl: sourceUrl,
+    var stage = ImageCacheDiagnosticStage.indexRead;
+    try {
+      final now = DateTime.now();
+      final existing = await _repository.getByKey(cacheKey);
+      final existingSourceUrl = existing?.lastSourceUrl?.trim();
+      final sourceChanged =
+          existingSourceUrl != null &&
+          existingSourceUrl.isNotEmpty &&
+          existingSourceUrl != sourceUrl;
+      final existingPath = existing?.localPath?.trim();
+      if (!sourceChanged && existingPath != null && existingPath.isNotEmpty) {
+        stage = ImageCacheDiagnosticStage.fileInspection;
+        final file = io.File(existingPath);
+        if (await file.exists()) {
+          final bytes = await file.length();
+          stage = ImageCacheDiagnosticStage.indexWrite;
+          await _repository.upsert(
+            _recordFromRequest(
+              request,
+              sourceUrl: sourceUrl,
+              localPath: file.path,
+              bytes: bytes,
+              now: now,
+              createdAt: existing?.createdAt,
+              width: existing?.width,
+              height: existing?.height,
+            ),
+          );
+          return CachedImageResult(
+            success: true,
+            cacheKey: cacheKey,
             localPath: file.path,
             bytes: bytes,
-            now: now,
-            createdAt: existing?.createdAt,
+            fromCache: true,
             width: existing?.width,
             height: existing?.height,
-          ),
-        );
-        return CachedImageResult(
-          success: true,
-          cacheKey: cacheKey,
-          localPath: file.path,
-          bytes: bytes,
-          fromCache: true,
-          width: existing?.width,
-          height: existing?.height,
-        );
+          );
+        }
       }
-    }
 
-    final cacheManager = await _cacheManagerFuture;
-    final cached = await cacheManager.getFileFromCache(cacheKey);
-    if (!sourceChanged &&
-        cached != null &&
-        await io.File(cached.file.path).exists()) {
-      final bytes = await io.File(cached.file.path).length();
-      await _repository.upsert(
-        _recordFromRequest(
-          request,
-          sourceUrl: sourceUrl,
-          localPath: cached.file.path,
-          bytes: bytes,
-          now: now,
-          createdAt: existing?.createdAt,
-          width: existing?.width,
-          height: existing?.height,
-        ),
-      );
-      return CachedImageResult(
-        success: true,
-        cacheKey: cacheKey,
-        localPath: cached.file.path,
-        bytes: bytes,
-        fromCache: true,
-        width: existing?.width,
-        height: existing?.height,
-      );
-    }
+      stage = ImageCacheDiagnosticStage.managerInitialization;
+      final cacheManager = await _cacheManagerFuture;
+      stage = ImageCacheDiagnosticStage.cacheLookup;
+      final cached = await cacheManager.getFileFromCache(cacheKey);
+      if (!sourceChanged && cached != null) {
+        stage = ImageCacheDiagnosticStage.fileInspection;
+        final cachedFile = io.File(cached.file.path);
+        if (await cachedFile.exists()) {
+          final bytes = await cachedFile.length();
+          stage = ImageCacheDiagnosticStage.indexWrite;
+          await _repository.upsert(
+            _recordFromRequest(
+              request,
+              sourceUrl: sourceUrl,
+              localPath: cached.file.path,
+              bytes: bytes,
+              now: now,
+              createdAt: existing?.createdAt,
+              width: existing?.width,
+              height: existing?.height,
+            ),
+          );
+          return CachedImageResult(
+            success: true,
+            cacheKey: cacheKey,
+            localPath: cached.file.path,
+            bytes: bytes,
+            fromCache: true,
+            width: existing?.width,
+            height: existing?.height,
+          );
+        }
+      }
 
-    try {
       final referer = request.referer;
       final headers = referer == null
           ? const <String, String>{}
           : <String, String>{'Referer': referer};
+      stage = ImageCacheDiagnosticStage.download;
       final localPath = await _downloader.download(
         cacheManager: cacheManager,
         sourceUrl: sourceUrl,
@@ -176,7 +199,9 @@ class DefaultImageCacheService
         headers: headers.isEmpty ? null : headers,
         force: sourceChanged,
       );
+      stage = ImageCacheDiagnosticStage.fileInspection;
       final bytes = await io.File(localPath).length();
+      stage = ImageCacheDiagnosticStage.indexWrite;
       await _repository.upsert(
         _recordFromRequest(
           request,
@@ -198,7 +223,13 @@ class DefaultImageCacheService
         width: sourceChanged ? null : existing?.width,
         height: sourceChanged ? null : existing?.height,
       );
-    } catch (_) {
+    } catch (error) {
+      _reportFailure(
+        request: request,
+        stage: stage,
+        error: error,
+        elapsed: stopwatch.elapsed,
+      );
       return CachedImageResult.failed;
     }
   }
@@ -232,6 +263,44 @@ class DefaultImageCacheService
       width: record.width,
       height: record.height,
     );
+  }
+
+  @override
+  void reportDecodeFailure({
+    required ImageCacheRequest request,
+    required Object error,
+    StackTrace? stackTrace,
+  }) {
+    _reportFailure(
+      request: request,
+      stage: ImageCacheDiagnosticStage.decode,
+      error: error,
+      elapsed: Duration.zero,
+    );
+  }
+
+  void _reportFailure({
+    required ImageCacheRequest request,
+    required ImageCacheDiagnosticStage stage,
+    required Object error,
+    required Duration elapsed,
+    String? reasonCode,
+  }) {
+    try {
+      _diagnosticRecorder.recordFailure(
+        buildImageCacheFailureDiagnostic(
+          stage: stage,
+          cacheKey: request.cacheKey,
+          ownerType: request.ownerType,
+          role: request.role,
+          error: error,
+          elapsed: elapsed,
+          reasonCode: reasonCode,
+        ),
+      );
+    } catch (_) {
+      // Diagnostics are strictly best-effort and never affect image loading.
+    }
   }
 
   @override

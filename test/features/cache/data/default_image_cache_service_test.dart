@@ -6,12 +6,136 @@ import 'dart:ui';
 import 'package:file/file.dart' as file;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
+import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
+import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 
 void main() {
+  test(
+    'download failures emit one privacy-safe structured diagnostic',
+    () async {
+      final recorder = _RecordingImageCacheDiagnosticRecorder();
+      final service = DefaultImageCacheService(
+        repository: _MemoryImageCacheRepository(),
+        cacheManagerFuture: Future<BaseCacheManager>.value(
+          _UnusedCacheManager(),
+        ),
+        directoryResolver: const ImageCacheDirectoryResolver(),
+        downloader: const _FailingImageFileDownloader(),
+        diagnosticRecorder: recorder,
+      );
+      const cacheKey = 'private/cache/key/123';
+
+      final result = await service.ensureCached(
+        const ImageCacheRequest(
+          cacheKey: cacheKey,
+          sourceUrl:
+              'https://bbs.yamibo.com/forum.php?mod=image&aid=123&key=secret',
+          referer:
+              'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=private',
+          ownerType: ImageCacheOwnerType.composer,
+          ownerId: 'private-owner',
+          role: ImageCacheRole.composerUnusedAttachment,
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(recorder.events, hasLength(1));
+      final event = recorder.events.single;
+      expect(event.stage, ImageCacheDiagnosticStage.download);
+      expect(event.ownerType, ImageCacheOwnerType.composer.dbValue);
+      expect(event.role, ImageCacheRole.composerUnusedAttachment.dbValue);
+      expect(event.failureKind, ImageCacheDiagnosticFailureKind.invalidContent);
+      expect(event.reasonCode, 'resource_is_not_image');
+      expect(event.cacheKeyFingerprint, isNot(contains(cacheKey)));
+      expect(event.cacheKeyFingerprint, hasLength(16));
+    },
+  );
+
+  test('diagnostic recorder failures never change cache result', () async {
+    final service = DefaultImageCacheService(
+      repository: _MemoryImageCacheRepository(),
+      cacheManagerFuture: Future<BaseCacheManager>.value(_UnusedCacheManager()),
+      directoryResolver: const ImageCacheDirectoryResolver(),
+      downloader: const _FailingImageFileDownloader(),
+      diagnosticRecorder: const _ThrowingImageCacheDiagnosticRecorder(),
+    );
+
+    final result = await service.ensureCached(
+      const ImageCacheRequest(
+        cacheKey: 'failure-isolation',
+        sourceUrl: 'https://bbs.yamibo.com/image.png',
+        ownerType: ImageCacheOwnerType.thread,
+        ownerId: 'thread-owner',
+        role: ImageCacheRole.threadInline,
+      ),
+    );
+
+    expect(result.success, isFalse);
+  });
+
+  test(
+    'manager initialization failures are classified and contained',
+    () async {
+      final recorder = _RecordingImageCacheDiagnosticRecorder();
+      final managerCompleter = Completer<BaseCacheManager>();
+      final service = DefaultImageCacheService(
+        repository: _MemoryImageCacheRepository(),
+        cacheManagerFuture: managerCompleter.future,
+        directoryResolver: const ImageCacheDirectoryResolver(),
+        diagnosticRecorder: recorder,
+      );
+
+      final resultFuture = service.ensureCached(
+        const ImageCacheRequest(
+          cacheKey: 'manager-failure',
+          sourceUrl: 'https://bbs.yamibo.com/image.png',
+          ownerType: ImageCacheOwnerType.thread,
+          ownerId: 'thread-owner',
+          role: ImageCacheRole.threadInline,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      managerCompleter.completeError(StateError('manager unavailable'));
+      final result = await resultFuture;
+
+      expect(result.success, isFalse);
+      expect(
+        recorder.events.single.stage,
+        ImageCacheDiagnosticStage.managerInitialization,
+      );
+      expect(
+        recorder.events.single.failureKind,
+        ImageCacheDiagnosticFailureKind.cacheManager,
+      );
+    },
+  );
+
+  test('typed resource stream diagnostics retain available byte count', () {
+    final event = buildImageCacheFailureDiagnostic(
+      stage: ImageCacheDiagnosticStage.download,
+      cacheKey: 'stream-failure',
+      ownerType: ImageCacheOwnerType.comic,
+      role: ImageCacheRole.comicPage,
+      error: const ForumResourceStreamException(
+        failure: ForumResourceFailure(
+          kind: ForumResourceFailureKind.network,
+          code: 'resource_stream_failed',
+        ),
+        bytesReceived: 23,
+      ),
+      elapsed: const Duration(milliseconds: 8),
+    );
+
+    expect(event.failureKind, ImageCacheDiagnosticFailureKind.network);
+    expect(event.reasonCode, 'resource_stream_failed');
+    expect(event.bytesReceived, 23);
+  });
+
   test('ensureCached deduplicates concurrent same-key downloads', () async {
     final tempDir = await io.Directory.systemTemp.createTemp(
       'y300-image-cache-dedupe-test-',
@@ -613,6 +737,48 @@ class _SpyImageFileDownloader implements ImageFileDownloader {
     lastHeaders = headers;
     lastForce = force;
     return downloadCompleter?.future ?? localPath;
+  }
+}
+
+class _FailingImageFileDownloader implements ImageFileDownloader {
+  const _FailingImageFileDownloader();
+
+  @override
+  Future<String> download({
+    required BaseCacheManager cacheManager,
+    required String sourceUrl,
+    required String cacheKey,
+    Map<String, String>? headers,
+    bool force = false,
+  }) {
+    throw const ForumResourceFileServiceException(
+      ForumResourceFailure(
+        kind: ForumResourceFailureKind.invalidContent,
+        code: 'resource_is_not_image',
+        statusCode: 200,
+      ),
+    );
+  }
+}
+
+class _RecordingImageCacheDiagnosticRecorder
+    implements ImageCacheDiagnosticRecorder {
+  final List<ImageCacheFailureDiagnostic> events =
+      <ImageCacheFailureDiagnostic>[];
+
+  @override
+  void recordFailure(ImageCacheFailureDiagnostic event) {
+    events.add(event);
+  }
+}
+
+class _ThrowingImageCacheDiagnosticRecorder
+    implements ImageCacheDiagnosticRecorder {
+  const _ThrowingImageCacheDiagnosticRecorder();
+
+  @override
+  void recordFailure(ImageCacheFailureDiagnostic event) {
+    throw StateError('diagnostic recorder failed');
   }
 }
 

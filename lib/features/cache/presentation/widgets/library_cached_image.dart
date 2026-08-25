@@ -39,6 +39,7 @@ class LibraryCachedImage extends ConsumerStatefulWidget {
     this.onImageResolved,
     this.onRemoteImageResolved,
     this.onImageFailed,
+    this.onLocalImageDecodeFailed,
     this.fadeInDuration = Duration.zero,
     this.retryToken = 0,
   });
@@ -64,6 +65,8 @@ class LibraryCachedImage extends ConsumerStatefulWidget {
   final ValueChanged<Size>? onImageResolved;
   final VoidCallback? onRemoteImageResolved;
   final VoidCallback? onImageFailed;
+  final void Function(Object error, StackTrace? stackTrace)?
+  onLocalImageDecodeFailed;
 
   /// Duration used to cross-fade the placeholder into an asynchronously
   /// decoded first frame. Synchronous image-cache hits remain immediate.
@@ -86,6 +89,7 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
   bool _remoteResolveScheduled = false;
   String? _reportedImageIdentity;
   String? _reportedFailureIdentity;
+  String? _reportedDecodeFailureIdentity;
   String? _evictedFailureIdentity;
   int _retryEpoch = 0;
 
@@ -118,6 +122,7 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
     _remoteResolveScheduled = false;
     _reportedImageIdentity = null;
     _reportedFailureIdentity = null;
+    _reportedDecodeFailureIdentity = null;
     _evictedFailureIdentity = null;
   }
 
@@ -189,7 +194,9 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
           );
         },
         errorBuilder: (context, error, stackTrace) {
-          _markImageFailed('override:${identityHashCode(testProvider)}');
+          final identity = 'override:${identityHashCode(testProvider)}';
+          _reportLocalDecodeFailure(identity, error, stackTrace);
+          _markImageFailed(identity);
           return _errorPlaceholder;
         },
       );
@@ -229,8 +236,10 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
             );
           },
           errorBuilder: (context, error, stackTrace) {
-            _evictFailedProvider(displayProvider, 'file:${file.path}');
-            _markImageFailed('file:${file.path}');
+            final identity = 'file:${file.path}';
+            _evictFailedProvider(displayProvider, identity);
+            _reportLocalDecodeFailure(identity, error, stackTrace);
+            _markImageFailed(identity);
             return _errorPlaceholder;
           },
         );
@@ -414,6 +423,19 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
         callback();
       }
     });
+  }
+
+  void _reportLocalDecodeFailure(
+    String identity,
+    Object error,
+    StackTrace? stackTrace,
+  ) {
+    final callback = widget.onLocalImageDecodeFailed;
+    if (callback == null || _reportedDecodeFailureIdentity == identity) {
+      return;
+    }
+    _reportedDecodeFailureIdentity = identity;
+    callback(error, stackTrace);
   }
 
   void _markRemoteResolved() {

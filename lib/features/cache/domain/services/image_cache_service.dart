@@ -49,3 +49,15 @@ abstract class ImageCacheDimensionRecorder {
     required Size size,
   });
 }
+
+/// Optional presentation-to-cache diagnostic hook for local decode failures.
+///
+/// It deliberately accepts the original cache request instead of a file path,
+/// keeping filesystem identity out of diagnostic events.
+abstract interface class ImageCacheDecodeFailureReporter {
+  void reportDecodeFailure({
+    required ImageCacheRequest request,
+    required Object error,
+    StackTrace? stackTrace,
+  });
+}
