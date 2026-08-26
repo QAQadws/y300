@@ -11,7 +11,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_unused_image_management_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
@@ -31,9 +31,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: false),
-          ),
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -55,9 +53,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: false),
-          ),
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -139,9 +135,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: false),
-          ),
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -172,7 +166,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(repository),
+          ...forumAuthOverrides(repository),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -238,9 +232,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: false),
-          ),
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(modeRepository),
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
@@ -281,7 +273,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(repository),
+          ...forumAuthOverrides(repository),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -313,9 +305,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authRepositoryProvider.overrideWithValue(
-              _FakeAuthRepository(isLoggedIn: false),
-            ),
+            ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
             forumModeSettingsRepositoryProvider.overrideWithValue(
               _FakeForumModeSettingsRepository(),
             ),
@@ -356,9 +346,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: false),
-          ),
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -397,9 +385,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: false),
-          ),
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(failOnSave: true),
           ),
@@ -432,9 +418,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: false),
-          ),
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -672,9 +656,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: false),
-          ),
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -742,9 +724,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(
-            _FakeAuthRepository(isLoggedIn: false),
-          ),
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),

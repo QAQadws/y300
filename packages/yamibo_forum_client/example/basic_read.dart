@@ -16,7 +16,7 @@ Future<void> main() async {
     sessionStore: MemoryForumSessionStore(),
     documentStore: MemoryForumDocumentStore(),
     snapshotStore: MemoryForumSnapshotStore(),
-  ).buildStandardReads();
+  ).buildStandardClient();
 
   final result = await client.loadForumDirectory(const ForumDirectoryQuery());
   switch (result) {

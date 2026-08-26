@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -129,7 +129,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          ...forumAuthOverrides(const _FakeAuthRepository()),
           forumUserProfileRepositoryProvider.overrideWithValue(
             profileRepository,
           ),

@@ -17,7 +17,9 @@ class YamiboSessionStore {
     if (current == null || current.formhash.trim().isEmpty) {
       return null;
     }
-    final age = _now().difference(current.updatedAt);
+    final age = _now().difference(
+      current.formhashUpdatedAt ?? current.updatedAt,
+    );
     if (age.isNegative || age <= formhashTtl) {
       return current.formhash;
     }
@@ -61,6 +63,9 @@ class YamiboSessionStore {
           : current.formhash,
       updatedAt: extracted.updatedAt,
       source: extracted.source,
+      formhashUpdatedAt: extractedFormhash.isNotEmpty
+          ? extracted.formhashUpdatedAt ?? extracted.updatedAt
+          : current.formhashUpdatedAt,
     );
   }
 }

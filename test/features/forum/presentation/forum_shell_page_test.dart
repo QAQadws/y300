@@ -10,7 +10,7 @@ import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     hide ForumHomeFavoriteForum, ForumHomeRepository;
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
@@ -41,7 +41,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
           ),
@@ -66,7 +66,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _DeferredForumModeSettingsRepository(mode: ForumShellMode.native),
           ),
@@ -103,7 +103,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            ...forumAuthOverrides(_FakeAuthRepository()),
             forumModeSettingsRepositoryProvider.overrideWithValue(
               _FailingForumModeSettingsRepository(),
             ),
@@ -137,7 +137,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(mode: ForumShellMode.native),
           ),
@@ -165,7 +165,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(mode: ForumShellMode.native),
           ),
@@ -197,7 +197,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(modeRepository),
           forumHomeRepositoryProvider.overrideWithValue(
             _FakeForumHomeRepository(),
@@ -237,7 +237,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(authRepository),
+          ...forumAuthOverrides(authRepository),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
           ),
@@ -294,7 +294,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authRepositoryProvider.overrideWithValue(authRepository),
+          ...forumAuthOverrides(authRepository),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(mode: ForumShellMode.webview),
           ),
@@ -336,7 +336,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authRepositoryProvider.overrideWithValue(authRepository),
+            ...forumAuthOverrides(authRepository),
             forumModeSettingsRepositoryProvider.overrideWithValue(
               _FakeForumModeSettingsRepository(mode: ForumShellMode.native),
             ),

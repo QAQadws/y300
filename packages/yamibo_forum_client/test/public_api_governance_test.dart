@@ -17,18 +17,18 @@ void main() {
       expect(packageLicense, contains('Version 3, 29 June 2007'));
     });
 
-    test('governance documents describe version 0.2.0 consistently', () {
+    test('governance documents describe version 0.3.0 consistently', () {
       final pubspec = File('pubspec.yaml').readAsStringSync();
       final changelog = File('CHANGELOG.md').readAsStringSync();
       final versioning = File('VERSIONING.md').readAsStringSync();
       final migration = File('MIGRATION.md').readAsStringSync();
       final stability = File('API_STABILITY.md').readAsStringSync();
 
-      expect(pubspec, contains('version: 0.2.0'));
+      expect(pubspec, contains('version: 0.3.0'));
       expect(pubspec, contains('publish_to: none'));
-      expect(changelog, contains('## 0.2.0'));
+      expect(changelog, contains('## 0.3.0'));
       expect(versioning, contains('Semantic Versioning'));
-      expect(migration, contains('## 0.1.x to 0.2.0'));
+      expect(migration, contains('## 0.2.x to 0.3.0'));
       expect(stability, contains('## Supported within 0.x'));
       expect(stability, contains('## Experimental'));
       expect(stability, contains('## Internal'));

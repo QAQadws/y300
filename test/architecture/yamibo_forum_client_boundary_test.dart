@@ -78,12 +78,39 @@ void main() {
       'lib/features/profile/data/services/my_message_parser.dart',
       'packages/yamibo_forum_client/lib/yamibo_forum_client_parsers.dart',
       'lib/core/network/image_request_headers.dart',
+      'lib/features/auth/data/repositories/auth_repository.dart',
+      'lib/features/auth/data/services/auth_remote_data_source.dart',
+      'lib/features/auth/data/services/session_verifier.dart',
+      'lib/features/auth/data/models/auth_session_models.dart',
     ];
 
     expect(
       removedPaths.where((path) => File(path).existsSync()).toList(),
       isEmpty,
     );
+  });
+
+  test('auth feature cannot restore source-specific authentication calls', () {
+    const forbidden = <String>[
+      "module: 'login'",
+      "module: 'profile'",
+      "module: 'forumindex'",
+      "'mlogout'",
+      '.getDiscuz(',
+      'ApiAuthRepository',
+      'DiscuzMobileAuthApi',
+      'ApiSessionVerifier',
+      'ApiFormhashProvider',
+    ];
+    final violations = _dartFiles(<String>['lib/features/auth'])
+        .where((file) {
+          final source = file.readAsStringSync();
+          return forbidden.any(source.contains);
+        })
+        .map((file) => file.path)
+        .toList();
+
+    expect(violations, isEmpty);
   });
 
   test('forum images cannot restore an independent transport bypass', () {

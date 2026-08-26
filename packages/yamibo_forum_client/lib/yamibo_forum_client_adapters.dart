@@ -12,6 +12,7 @@ export 'src/parsing/data_parse_exception.dart';
 export 'src/parsing/strict_json.dart';
 export 'src/url/forum_uri_resolver.dart';
 export 'src/adapters/discuz_api_client.dart';
+export 'src/adapters/discuz_authentication_adapter.dart';
 export 'src/adapters/discuz_comic_read_adapters.dart';
 export 'src/adapters/discuz_directory_adapters.dart';
 export 'src/adapters/discuz_forum_tag_directory_repository.dart';

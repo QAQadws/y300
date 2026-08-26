@@ -5,7 +5,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 void main() {
   group('YamiboForumClientBuilder', () {
     test('installs the verified standard read-source matrix', () {
-      final client = _builder().buildStandardReads();
+      final client = _builder().buildStandardClient();
       final sources = client.sourcePlan;
 
       expect(sources.forumHome, isA<DiscuzForumHomeHtmlRepository>());
@@ -63,11 +63,14 @@ void main() {
         (sources.threadIngestionDetail! as ApiThreadRepository).apiVersion,
         '4',
       );
+      expect(sources.session, isA<DiscuzAuthenticationAdapter>());
+      expect(sources.passwordLogin, isA<DiscuzAuthenticationAdapter>());
+      expect(sources.logout, isA<DiscuzLogoutCommandAdapter>());
     });
 
     test('installs search without a host formhash provider', () {
       final network = _CountingNetwork();
-      final client = _builder(network: network).buildStandardReads();
+      final client = _builder(network: network).buildStandardClient();
 
       expect(client.sourcePlan.forumSearch, isA<DiscuzForumSearchRepository>());
       expect(network.requestCount, 0);
@@ -76,7 +79,7 @@ void main() {
     test('installs search when a formhash provider is supplied', () {
       final client = _builder(
         formhashProvider: const _FixtureFormhashProvider(),
-      ).buildStandardReads();
+      ).buildStandardClient();
 
       expect(client.sourcePlan.forumSearch, isA<DiscuzForumSearchRepository>());
     });
@@ -95,7 +98,7 @@ void main() {
 
     test('uses a resource-capable network for image resources', () {
       final network = _ResourceCapableNetwork();
-      final client = _builder(network: network).buildStandardReads();
+      final client = _builder(network: network).buildStandardClient();
 
       expect(identical(client.resources, network), isTrue);
     });
@@ -109,7 +112,7 @@ void main() {
           snapshots: MemoryForumSnapshotStore(),
           stickers: MemoryForumStickerCatalogStore(),
         ),
-      ).buildStandardReads();
+      ).buildStandardClient();
 
       expect(client.network, isA<DioForumClientNetwork>());
       expect(identical(client.resources, client.network), isTrue);
@@ -117,7 +120,7 @@ void main() {
     });
 
     test('fails resource reads closed when no client is installed', () async {
-      final client = _builder().buildStandardReads();
+      final client = _builder().buildStandardClient();
       final reference = ForumResourceReferenceResolver(
         siteOrigin: _config.siteOrigin,
       ).resolve('/avatar.jpg');
@@ -207,6 +210,37 @@ void main() {
 
       expect(result, isA<ForumFormhashSuccess>());
       expect((result as ForumFormhashSuccess).value, 'fixture-formhash');
+    });
+
+    test('unrelated session updates do not extend formhash lifetime', () async {
+      var now = DateTime.utc(2026, 8, 26, 10);
+      final sessions = MemoryForumSessionStore(now: () => now);
+      await sessions.merge(
+        ForumSessionSnapshot(
+          isLoggedIn: true,
+          userId: '42',
+          username: 'reader',
+          formhash: 'short-lived',
+          updatedAt: now,
+          formhashUpdatedAt: now,
+          source: 'fixture:formhash',
+        ),
+      );
+      now = now.add(const Duration(minutes: 20));
+      await sessions.merge(
+        ForumSessionSnapshot(
+          isLoggedIn: true,
+          userId: '42',
+          username: 'renamed',
+          formhash: '',
+          updatedAt: now,
+          source: 'fixture:identity-only',
+        ),
+      );
+      now = now.add(const Duration(minutes: 11));
+
+      expect(sessions.readFreshFormhash(), isNull);
+      expect(sessions.readCurrent()?.username, 'renamed');
     });
   });
 }
@@ -298,8 +332,10 @@ final class _FixtureFormhashProvider implements ForumFormhashProvider {
   const _FixtureFormhashProvider();
 
   @override
-  Future<ForumFormhashResult> loadFormhash({bool preferProfile = true}) async =>
-      const ForumFormhashSuccess('fixture-formhash');
+  Future<ForumFormhashResult> loadFormhash({
+    bool preferProfile = true,
+    ForumRequestCancellation? cancellation,
+  }) async => const ForumFormhashSuccess('fixture-formhash');
 }
 
 final class _FixtureThreadRepository implements ThreadRepository {

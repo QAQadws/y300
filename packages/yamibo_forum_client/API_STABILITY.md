@@ -10,7 +10,8 @@ The following APIs are covered by the compatibility policy in
 [VERSIONING.md](VERSIONING.md):
 
 - `yamibo_forum_client_contracts.dart`: source-neutral queries, data models,
-  repository contracts, capabilities, `DataReadResult`, cache policy,
+  repository contracts, capabilities, `DataReadResult`, `DataCommandResult`,
+  authentication/session contracts, cache policy,
   cancellation, resource contracts, and reference/image helpers;
 - `yamibo_forum_client.dart`: `YamiboForumClient`,
   `YamiboForumClientBuilder`, `ForumClientConfig`, the standard Dio runtime,
@@ -18,6 +19,9 @@ The following APIs are covered by the compatibility policy in
 - in-memory store implementations, for tests and ephemeral development use;
 - `ForumClientCachePorts` and `YamiboForumClientBuilder.standardDio` as the
   supported third-party composition path.
+
+Command outcome categories and their fail-closed meanings are supported within
+`0.x`. Concrete Discuz authentication endpoint parsing remains experimental.
 
 Supported does not mean that every source provides every capability. Callers
 must still gate behavior on the returned capability set and treat `unknown` or
@@ -31,7 +35,7 @@ experimental:
 - the complete `yamibo_forum_client_adapters.dart` entry point;
 - `ForumClientSourcePlan` and direct construction of concrete source plans;
 - concrete Discuz/HTML parsers, mappers, repositories, snapshot codecs, and
-  `ForumClientAdapterFactory`;
+  `ForumClientAdapterFactory`, including `DiscuzAuthenticationAdapter`;
 - source-specific behavior that has not yet been validated by a second
   production adapter.
 

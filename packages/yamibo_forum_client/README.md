@@ -1,13 +1,14 @@
 # yamibo_forum_client
 
-`yamibo_forum_client` is an unofficial pure-Dart read client used by Y300 for
-Yamibo forum data. It owns request descriptions, Discuz/HTML adapters, parsing,
-source-neutral models, capabilities, cache codecs, transport error mapping,
-and the protocol side of WAF recovery.
+`yamibo_forum_client` is an unofficial pure-Dart read and basic-authentication
+client used by Y300 for Yamibo forum data. It owns request descriptions,
+Discuz/HTML adapters, parsing, source-neutral models, capabilities, command
+outcomes, cache codecs, transport error mapping, and the protocol side of WAF
+recovery.
 
 The package remains unpublished (`publish_to: none`) and can be consumed using
 a local path or Git dependency targeting this monorepo subdirectory. Version
-`0.2.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
+`0.3.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
 [API_STABILITY.md](API_STABILITY.md). The package is licensed under
 `GPL-3.0-only`; see [LICENSE](LICENSE).
 
@@ -42,7 +43,7 @@ final client = YamiboForumClientBuilder.standardDio(
     stickers: persistentStickerStore,
   ),
   waf: platformWafDelegate,
-).buildStandardReads();
+).buildStandardClient();
 
 final result = await client.loadForumDirectory(
   const ForumDirectoryQuery(),
@@ -61,9 +62,9 @@ implementations. The package supplies the Dio transport, request profiles,
 session projection, standard formhash discovery, adapters, and source plan.
 Package tests never contact the live forum.
 
-## Standard read-source matrix
+## Standard source matrix
 
-`YamiboForumClientBuilder.buildStandardReads()` installs the source choices
+`YamiboForumClientBuilder.buildStandardClient()` installs the source choices
 currently verified by Y300:
 
 | Capability | Source |
@@ -76,6 +77,25 @@ currently verified by Y300:
 | Post location | Discuz HTML redirect plus identity proof |
 | Author-filtered post pages | Discuz `viewthread version=1` |
 | Search | HTML with package-owned `profile`/`forumindex` formhash discovery |
+| Password login, session resolution, standard logout | Discuz v4 API |
+
+Authentication contracts are deliberately independent. A future source may
+implement session resolution without implementing password login or logout.
+Login is considered applied only after a subsequent profile response proves a
+stable non-zero user ID. Logout uses only
+`action=logout&formhash=...`; no `mlogout/hash` fallback is attempted.
+
+Command callers must distinguish five outcomes:
+
+- `DataCommandApplied`: the postcondition was proved;
+- `DataCommandRejected`: the server explicitly refused the command;
+- `DataCommandNotSent`: validation/session preparation failed before sending;
+- `DataCommandOutcomeUnknown`: a request was sent but its effect is unknown;
+- `DataCommandUnsupported`: the selected source does not implement it.
+
+No ordinary command request is retried automatically. A verified same-site
+HTTP 405 may still be replayed once by the shared WAF boundary before response
+bytes are exposed.
 
 Hosts with an existing authenticated session stack may override the standard
 formhash provider. Advanced hosts can import the adapters barrel and build a
@@ -100,9 +120,12 @@ and platform boundaries:
 
 The package-owned session projection is reproducible and remains in memory.
 The standard formhash provider checks that projection, then requests `profile`
-and falls back to `forumindex`. Authentication remains rooted in the Cookie
-store. Memory store implementations are suitable for tests and short-lived
-tools only, not production persistence.
+and falls back to `forumindex`; password login deliberately requests
+`forumindex` first, then `profile`. Formhash freshness has its own 30-minute
+timestamp, so unrelated profile updates cannot extend an old token.
+Authentication remains rooted in the Cookie store. Memory store
+implementations are suitable for tests and short-lived tools only, not
+production persistence.
 
 The core treats HTTP 405 from a managed forum origin as the sole WAF evidence,
 coordinates single-flight recovery, enforces cooldown, and permits at most one
@@ -163,7 +186,8 @@ fail closed as `unsupported`.
 
 ## Current capability boundary
 
-The package currently covers the forum home document, forum/thread directories
+The package currently covers basic password authentication and authoritative
+session/logout handling, the forum home document, forum/thread directories
 and details, Tag, search, remote favorite directories, profiles/blogs,
 notifications, private messages, stickers, full rating details, post location,
 author-filtered post pages, comic episode discovery, reply-page reads, and
@@ -176,7 +200,6 @@ uploads—remain application-owned and are not represented as read results.
 This package is a read client core, not a complete Discuz SDK. The following
 forum protocol operations still live in Y300 and are not part of the package:
 
-- login, logout, session verification, and authentication recovery;
 - favorite/unfavorite mutations;
 - posting, thread reply, floor reply, and post-edit form preparation and
   submission;

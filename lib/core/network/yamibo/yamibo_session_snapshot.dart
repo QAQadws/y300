@@ -6,6 +6,7 @@ class YamiboSessionSnapshot {
     required this.formhash,
     required this.updatedAt,
     required this.source,
+    this.formhashUpdatedAt,
   });
 
   final bool isLoggedIn;
@@ -14,6 +15,7 @@ class YamiboSessionSnapshot {
   final String formhash;
   final DateTime updatedAt;
   final String source;
+  final DateTime? formhashUpdatedAt;
 
   YamiboSessionSnapshot copyWith({
     bool? isLoggedIn,
@@ -22,6 +24,7 @@ class YamiboSessionSnapshot {
     String? formhash,
     DateTime? updatedAt,
     String? source,
+    DateTime? formhashUpdatedAt,
   }) {
     return YamiboSessionSnapshot(
       isLoggedIn: isLoggedIn ?? this.isLoggedIn,
@@ -30,6 +33,7 @@ class YamiboSessionSnapshot {
       formhash: formhash ?? this.formhash,
       updatedAt: updatedAt ?? this.updatedAt,
       source: source ?? this.source,
+      formhashUpdatedAt: formhashUpdatedAt ?? this.formhashUpdatedAt,
     );
   }
 }

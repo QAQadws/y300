@@ -5,7 +5,6 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 
 export 'yamibo_forum_transport_providers.dart';
@@ -67,13 +66,13 @@ final yamiboForumClientProvider = Provider<YamiboForumClient>((ref) {
     sessionStore: ref.watch(yamiboForumSessionStoreProvider),
     documentStore: ref.watch(yamiboForumDocumentStoreProvider),
     snapshotStore: ref.watch(yamiboForumSnapshotStoreProvider),
-    formhashProvider: ref.watch(yamiboForumFormhashProvider),
+    cookieStore: ref.watch(yamiboForumCookieStoreProvider),
     stickerCatalogStore: ref.watch(yamiboForumStickerCatalogStoreProvider),
-  ).buildStandardReads();
+  ).buildStandardClient();
 });
 
-final yamiboForumFormhashProvider = Provider<ForumFormhashProvider>((ref) {
-  return Y300ForumFormhashAdapter(ref.watch(formhashProvider));
+final yamiboForumCookieStoreProvider = Provider<ForumCookieStore>((ref) {
+  return Y300ForumCookieStoreAdapter(ref.watch(cookieStoreProvider));
 });
 
 final yamiboForumSessionStoreProvider = Provider<ForumSessionStore>((ref) {

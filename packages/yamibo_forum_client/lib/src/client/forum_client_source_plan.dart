@@ -1,6 +1,7 @@
 import '../contracts/comic_contracts.dart';
 import '../contracts/favorite_directories.dart';
 import '../contracts/forum_directory.dart';
+import '../contracts/forum_authentication.dart';
 import '../contracts/forum_home.dart';
 import '../contracts/forum_display_repository.dart';
 import '../contracts/forum_search.dart';
@@ -15,7 +16,7 @@ import '../contracts/thread_supplemental_reads.dart';
 /// Experimental per-contract source composition used by advanced hosts.
 ///
 /// Omitted contracts fail closed through the `YamiboForumClient` facade.
-/// Standard clients should use `YamiboForumClientBuilder.buildStandardReads`
+/// Standard clients should use `YamiboForumClientBuilder.buildStandardClient`
 /// instead.
 final class ForumClientSourcePlan {
   /// Creates a source plan from independently replaceable read contracts.
@@ -42,6 +43,9 @@ final class ForumClientSourcePlan {
     this.postRatings,
     this.postLocator,
     this.threadAuthorPosts,
+    this.session,
+    this.passwordLogin,
+    this.logout,
   });
 
   /// Source for the forum hierarchy.
@@ -109,4 +113,13 @@ final class ForumClientSourcePlan {
 
   /// Source for author-filtered post pages.
   final ThreadAuthorPostRepository? threadAuthorPosts;
+
+  /// Source for authoritative Cookie-backed session resolution.
+  final ForumSessionRepository? session;
+
+  /// Source for password login.
+  final ForumPasswordLoginCommand? passwordLogin;
+
+  /// Source for standard logout.
+  final ForumLogoutCommand? logout;
 }

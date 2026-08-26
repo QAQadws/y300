@@ -1,5 +1,6 @@
 import 'forum_session_store.dart';
 
+import '../network/forum_request.dart';
 import '../network/forum_transport.dart';
 
 /// Result of attempting to obtain a Discuz formhash.
@@ -28,7 +29,10 @@ final class ForumFormhashError extends ForumFormhashResult {
 /// Override point for hosts that already manage formhash acquisition.
 abstract interface class ForumFormhashProvider {
   /// Loads a usable formhash, optionally preferring the profile endpoint.
-  Future<ForumFormhashResult> loadFormhash({bool preferProfile = true});
+  Future<ForumFormhashResult> loadFormhash({
+    bool preferProfile = true,
+    ForumRequestCancellation? cancellation,
+  });
 }
 
 /// Formhash provider backed by a session projection and two source loaders.
@@ -44,12 +48,29 @@ final class SessionForumFormhashProvider implements ForumFormhashProvider {
   final ForumSessionStore sessions;
 
   /// Preferred profile formhash loader.
-  final Future<ForumFormhashResult> Function() loadFromProfile;
+  final Future<ForumFormhashResult> Function(
+    ForumRequestCancellation? cancellation,
+  )
+  loadFromProfile;
 
   /// Fallback forum-index formhash loader.
-  final Future<ForumFormhashResult> Function() loadFallback;
+  final Future<ForumFormhashResult> Function(
+    ForumRequestCancellation? cancellation,
+  )
+  loadFallback;
   @override
-  Future<ForumFormhashResult> loadFormhash({bool preferProfile = true}) async {
+  Future<ForumFormhashResult> loadFormhash({
+    bool preferProfile = true,
+    ForumRequestCancellation? cancellation,
+  }) async {
+    if (cancellation?.isCancelled ?? false) {
+      return const ForumFormhashError(
+        ForumTransportFailure(
+          kind: ForumTransportFailureKind.cancelled,
+          code: 'request_cancelled',
+        ),
+      );
+    }
     final cached = sessions.readFreshFormhash();
     if (cached != null && cached.trim().isNotEmpty) {
       return ForumFormhashSuccess(cached);
@@ -57,11 +78,28 @@ final class SessionForumFormhashProvider implements ForumFormhashProvider {
     final first = preferProfile ? loadFromProfile : loadFallback;
     final second = preferProfile ? loadFallback : loadFromProfile;
     ForumTransportFailure? lastFailure;
-    for (final loader in <Future<ForumFormhashResult> Function()>[
-      first,
-      second,
-    ]) {
-      final result = await loader();
+    for (final loader
+        in <Future<ForumFormhashResult> Function(ForumRequestCancellation?)>[
+          first,
+          second,
+        ]) {
+      if (cancellation?.isCancelled ?? false) {
+        return const ForumFormhashError(
+          ForumTransportFailure(
+            kind: ForumTransportFailureKind.cancelled,
+            code: 'request_cancelled',
+          ),
+        );
+      }
+      final result = await loader(cancellation);
+      if (cancellation?.isCancelled ?? false) {
+        return const ForumFormhashError(
+          ForumTransportFailure(
+            kind: ForumTransportFailureKind.cancelled,
+            code: 'request_cancelled',
+          ),
+        );
+      }
       if (result case ForumFormhashSuccess(:final value)) {
         final normalized = value.trim();
         if (normalized.isNotEmpty) return ForumFormhashSuccess(normalized);

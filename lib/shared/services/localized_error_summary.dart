@@ -20,6 +20,27 @@ abstract final class LocalizedErrorSummary {
   static final RegExp _whitespacePattern = RegExp(r'\s+');
 
   static String resolve(AppLocalizations l10n, Object? error) {
+    if (error case DataCommandFailure(:final kind)) {
+      return switch (kind) {
+        DataCommandFailureKind.network => l10n.commonNetworkError,
+        DataCommandFailureKind.timeout => l10n.commonTimeoutError,
+        DataCommandFailureKind.unauthenticated ||
+        DataCommandFailureKind.permissionDenied => l10n.commonUnauthorizedError,
+        DataCommandFailureKind.server ||
+        DataCommandFailureKind.securityChallenge => l10n.commonServerError,
+        DataCommandFailureKind.parse => l10n.commonParseError,
+        DataCommandFailureKind.validation ||
+        DataCommandFailureKind.staleFormhash ||
+        DataCommandFailureKind.unsupported => l10n.commonRequestError,
+        DataCommandFailureKind.cancelled ||
+        DataCommandFailureKind.unknown => l10n.commonUnknownError,
+      };
+    }
+    if (error case DataCommandResult<dynamic>(
+      :final failureOrNull,
+    ) when failureOrNull != null) {
+      return resolve(l10n, failureOrNull);
+    }
     if (error case DataReadFailure<dynamic, dynamic>(:final kind)) {
       return switch (kind) {
         DataReadFailureKind.network => l10n.commonNetworkError,

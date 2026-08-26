@@ -1,5 +1,41 @@
 # Migration guide
 
+## 0.2.x to 0.3.0
+
+Use `buildStandardClient()` for new integrations:
+
+```dart
+final client = YamiboForumClientBuilder.standardDio(
+  config: config,
+  cookies: persistentCookies,
+  caches: cachePorts,
+  waf: platformWafDelegate,
+).buildStandardClient();
+```
+
+`buildStandardReads()` is deprecated but delegates to the same composition.
+The standard client now installs independent password-login, session, and
+logout contracts. Consume `DataCommandResult` exhaustively: an
+`outcomeUnknown` command may already have changed server state and must never
+be treated as a rollback.
+
+Advanced Host-transport integrations must provide `cookieStore` to
+`YamiboForumClientBuilder` to enable authentication commands. Without it,
+reads remain available while login/logout return `unsupported`.
+
+Custom `ForumFormhashProvider` implementations must accept the new optional
+`cancellation` argument. Providers should pass it to their network request so
+a Host login timeout can stop formhash preparation before credentials are
+submitted.
+
+`ForumSessionSnapshot.formhashUpdatedAt` is optional for backward-compatible
+Host stores. New implementations should preserve it when merging a response
+that contains no new formhash. The old `updatedAt` value is used only when the
+dedicated timestamp is absent.
+
+Only the standard `action=logout&formhash=...` protocol is used in 0.3.0. Any
+Host dependency on the former `mlogout/hash` fallback must be removed.
+
 ## 0.1.x to 0.2.0
 
 Existing custom Host integrations remain source-compatible:

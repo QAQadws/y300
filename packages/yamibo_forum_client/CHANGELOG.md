@@ -8,7 +8,26 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
-- Reserved for changes made after `0.2.0`.
+- Reserved for changes made after `0.3.0`.
+
+## 0.3.0 - 2026-08-26
+
+### Added
+
+- Source-neutral command outcomes that distinguish applied, rejected,
+  not-sent, outcome-unknown, and unsupported operations.
+- Password login, authoritative session resolution, and standard logout
+  contracts with a verified Discuz v4 adapter.
+- A Host Cookie port in the advanced builder and a canonical formhash provider
+  exposed by the client facade for commands still migrating from Y300.
+
+### Changed
+
+- The standard composition entry point is now `buildStandardClient()`;
+  `buildStandardReads()` remains deprecated for source compatibility.
+- Formhash freshness now has an independent timestamp and is no longer
+  extended by unrelated identity updates.
+- Logout no longer attempts the legacy `mlogout/hash` fallback protocol.
 
 ## 0.2.0 - 2026-08-24
 

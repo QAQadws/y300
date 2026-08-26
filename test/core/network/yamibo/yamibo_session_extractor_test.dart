@@ -24,6 +24,7 @@ void main() {
       expect(snapshot.username, 'tester');
       expect(snapshot.formhash, 'fh_api');
       expect(snapshot.updatedAt, now);
+      expect(snapshot.formhashUpdatedAt, now);
       expect(snapshot.source, 'api:profile');
     });
 
@@ -41,6 +42,7 @@ void main() {
       expect(snapshot!.isLoggedIn, isTrue);
       expect(snapshot.uid, '597454');
       expect(snapshot.formhash, 'fh_html');
+      expect(snapshot.formhashUpdatedAt, now);
       expect(snapshot.source, 'html:forum.home.html');
     });
 

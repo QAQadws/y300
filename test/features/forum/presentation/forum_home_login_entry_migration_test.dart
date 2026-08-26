@@ -3,7 +3,7 @@ import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     hide ForumHomeFavoriteForum, ForumHomeRepository;
@@ -22,7 +22,7 @@ void main() {
             forumHomeRepositoryProvider.overrideWithValue(
               _FakeForumHomeRepository(),
             ),
-            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            ...forumAuthOverrides(_FakeAuthRepository()),
           ],
           child: const LocalizedTestApp(home: ForumHomePage()),
         ),

@@ -1,9 +1,11 @@
 import '../contracts/comic_contracts.dart';
 import '../contracts/cache_load_policy.dart';
 import '../contracts/data_read_contract.dart';
+import '../contracts/data_command_contract.dart';
 import '../contracts/favorite_directories.dart';
 import '../contracts/forum_directory.dart';
 import '../contracts/forum_home.dart';
+import '../contracts/forum_authentication.dart';
 import '../contracts/forum_display_models.dart';
 import '../contracts/forum_display_repository.dart';
 import '../contracts/forum_search.dart';
@@ -17,6 +19,9 @@ import '../contracts/thread_detail_models.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
+import '../network/forum_request.dart';
+import '../network/forum_transport.dart';
+import '../session/forum_formhash_provider.dart';
 import 'forum_client_config.dart';
 import 'forum_client_source_plan.dart';
 
@@ -30,12 +35,15 @@ final class YamiboForumClient {
     required this.config,
     required this.network,
     ForumResourceClient? resources,
+    ForumFormhashProvider? formhashProvider,
     this.sourcePlan = const ForumClientSourcePlan(),
   }) : resources =
            resources ??
            (network is ForumResourceClient
                ? network as ForumResourceClient
-               : const UnsupportedForumResourceClient());
+               : const UnsupportedForumResourceClient()),
+       formhashProvider =
+           formhashProvider ?? const _UnsupportedForumFormhashProvider();
 
   /// Client origins and request configuration.
   final ForumClientConfig config;
@@ -46,8 +54,50 @@ final class YamiboForumClient {
   /// Protected image streaming client.
   final ForumResourceClient resources;
 
+  /// Canonical formhash source shared with Host commands still being migrated.
+  final ForumFormhashProvider formhashProvider;
+
   /// Experimental per-contract source plan used by this facade.
   final ForumClientSourcePlan sourcePlan;
+
+  /// Configured authoritative session source, if installed.
+  ForumSessionRepository? get session => sourcePlan.session;
+
+  /// Configured password-login command, if installed.
+  ForumPasswordLoginCommand? get passwordLogin => sourcePlan.passwordLogin;
+
+  /// Configured standard-logout command, if installed.
+  ForumLogoutCommand? get logout => sourcePlan.logout;
+
+  /// Resolves the current Cookie-backed session.
+  Future<ForumSessionResult> resolveSession([
+    ForumSessionRequest request = const ForumSessionRequest(),
+  ]) =>
+      sourcePlan.session?.resolve(request) ??
+      Future.value(
+        const ForumSessionInconclusive(
+          DataCommandFailure(
+            kind: DataCommandFailureKind.unsupported,
+            retryPolicy: DataCommandRetryPolicy.never,
+            code: 'session_source_not_installed',
+            diagnosticMessage: 'session_source_not_installed',
+          ),
+        ),
+      );
+
+  /// Executes password login through the configured command source.
+  Future<DataCommandResult<ForumLoginReceipt>> loginWithPassword(
+    ForumPasswordLoginRequest request,
+  ) =>
+      sourcePlan.passwordLogin?.execute(request) ??
+      Future.value(const DataCommandUnsupported<ForumLoginReceipt>());
+
+  /// Executes the configured standard logout command.
+  Future<DataCommandResult<ForumLogoutReceipt>> logoutSession([
+    ForumLogoutRequest request = const ForumLogoutRequest(),
+  ]) =>
+      sourcePlan.logout?.execute(request) ??
+      Future.value(const DataCommandUnsupported<ForumLogoutReceipt>());
 
   /// Configured forum-directory source, if installed.
   ForumDirectoryRepository? get forumDirectory => sourcePlan.forumDirectory;
@@ -376,4 +426,19 @@ final class YamiboForumClient {
   loadThreadReplies({required String tid, required int page}) =>
       sourcePlan.threadReplyPage?.loadPage(tid: tid, page: page) ??
       unsupported<ThreadReplyPage, ThreadReplyPageReadCapabilities>();
+}
+
+final class _UnsupportedForumFormhashProvider implements ForumFormhashProvider {
+  const _UnsupportedForumFormhashProvider();
+
+  @override
+  Future<ForumFormhashResult> loadFormhash({
+    bool preferProfile = true,
+    ForumRequestCancellation? cancellation,
+  }) async => const ForumFormhashError(
+    ForumTransportFailure(
+      kind: ForumTransportFailureKind.business,
+      code: 'formhash_source_not_installed',
+    ),
+  );
 }

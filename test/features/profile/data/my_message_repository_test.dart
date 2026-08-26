@@ -11,7 +11,7 @@ void main() {
         apiOrigin: Uri.parse('https://api.yamibo.com/mobile/index.php'),
       ),
       network: network,
-    ).buildStandardReads();
+    ).buildStandardClient();
     final repository = PackageMyMessageRepository(client);
 
     final result = await repository.getMessageCenter();

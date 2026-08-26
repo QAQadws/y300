@@ -1,77 +1,47 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/api_client.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/core/network/discuz_response.dart';
-import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
-import 'package:y300/core/utils/parse_utils.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 
-class ApiFormhashProvider implements FormhashProvider {
-  ApiFormhashProvider(this._apiClient, {YamiboSessionStore? sessionStore})
-    : _sessionStore = sessionStore;
+/// Compatibility adapter for write flows that still consume `ApiResult`.
+/// Formhash acquisition itself has one canonical package implementation.
+final class PackageBackedFormhashProvider implements FormhashProvider {
+  const PackageBackedFormhashProvider(this._delegate);
 
-  final ApiClient _apiClient;
-  final YamiboSessionStore? _sessionStore;
+  final forum.ForumFormhashProvider _delegate;
 
   @override
   Future<ApiResult<String>> loadFormhash({bool preferProfile = false}) async {
-    final cached = _sessionStore?.readFreshFormhash();
-    if (cached != null && cached.trim().isNotEmpty) {
-      return ApiSuccess<String>(cached);
-    }
-
-    final modules = preferProfile
-        ? const <String>['profile', 'forumindex']
-        : const <String>['forumindex', 'profile'];
-
-    ApiError? lastError;
-    for (final module in modules) {
-      final result = await _apiClient.getDiscuz(module: module);
-      if (result case ApiFailure<DiscuzResponse>(:final error)) {
-        final extracted = _sessionStore?.readFreshFormhash();
-        if (extracted != null && extracted.trim().isNotEmpty) {
-          return ApiSuccess<String>(extracted);
-        }
-        lastError = error;
-        continue;
-      }
-
-      final response = (result as ApiSuccess<DiscuzResponse>).data;
-      final formhash = ParseUtils.asString(
-        response.variables['formhash'],
-      ).trim();
-      if (formhash.isNotEmpty) {
-        return ApiSuccess<String>(formhash);
-      }
-      lastError = ApiError(
-        type: ApiErrorType.business,
-        message: '$module.formhash 为空',
-        raw: response.variables,
-      );
-    }
-
-    final error = lastError;
-    if (error != null) {
-      return ApiFailure<String>(
-        ApiError(
-          type: error.type,
-          message: '获取 formhash 失败：${error.message}',
-          code: error.code,
-          statusCode: error.statusCode,
-          raw: error.raw,
-        ),
-      );
-    }
-    return const ApiFailure<String>(
-      ApiError(type: ApiErrorType.business, message: '获取 formhash 失败'),
-    );
+    final result = await _delegate.loadFormhash(preferProfile: preferProfile);
+    return switch (result) {
+      forum.ForumFormhashSuccess(:final value) => ApiSuccess<String>(value),
+      forum.ForumFormhashError(:final failure) => ApiFailure<String>(
+        _toApiError(failure),
+      ),
+    };
   }
+
+  ApiError _toApiError(forum.ForumTransportFailure failure) => ApiError(
+    type: switch (failure.kind) {
+      forum.ForumTransportFailureKind.network => ApiErrorType.network,
+      forum.ForumTransportFailureKind.timeout => ApiErrorType.timeout,
+      forum.ForumTransportFailureKind.unauthorized => ApiErrorType.unauthorized,
+      forum.ForumTransportFailureKind.server => ApiErrorType.server,
+      forum.ForumTransportFailureKind.parse => ApiErrorType.parse,
+      forum.ForumTransportFailureKind.business => ApiErrorType.business,
+      forum.ForumTransportFailureKind.cancelled ||
+      forum.ForumTransportFailureKind.unknown => ApiErrorType.unknown,
+    },
+    message: failure.code,
+    code: failure.kind == forum.ForumTransportFailureKind.cancelled
+        ? 'request_cancelled'
+        : failure.code,
+    statusCode: failure.statusCode,
+  );
 }
 
 final formhashProvider = Provider<FormhashProvider>((ref) {
-  return ApiFormhashProvider(
-    ref.watch(apiClientProvider),
-    sessionStore: ref.watch(yamiboSessionStoreProvider),
-  );
+  final client = ref.watch(yamiboForumClientProvider);
+  return PackageBackedFormhashProvider(client.formhashProvider);
 });

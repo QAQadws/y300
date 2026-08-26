@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import 'package:y300/features/auth/data/providers/auth_contract_providers.dart';
 
 final authSessionControllerProvider =
     AsyncNotifierProvider.autoDispose<
@@ -30,10 +31,10 @@ class AuthSessionViewState {
       isLoggingOut = false,
       logoutFailure = null;
 
-  factory AuthSessionViewState.fromSession(SessionInfo session) {
+  factory AuthSessionViewState.fromIdentity(ForumSessionIdentity session) {
     return AuthSessionViewState(
-      isLoggedIn: session.isLoggedIn,
-      uid: session.uid,
+      isLoggedIn: true,
+      uid: session.userId,
       username: session.username,
       isLoggingOut: false,
     );
@@ -58,7 +59,10 @@ class AuthSessionViewState {
 }
 
 class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
-  AuthRepository get _repository => ref.read(authRepositoryProvider);
+  ForumSessionRepository get _sessionRepository =>
+      ref.read(forumSessionRepositoryProvider);
+
+  ForumLogoutCommand get _logoutCommand => ref.read(forumLogoutCommandProvider);
 
   @override
   Future<AuthSessionViewState> build() {
@@ -66,12 +70,13 @@ class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
   }
 
   Future<void> refresh() async {
+    final previous = state.asData?.value;
     state = const AsyncLoading<AuthSessionViewState>();
-    state = await AsyncValue.guard(_loadSession);
+    state = await AsyncValue.guard(() => _loadSession(previous));
   }
 
-  void acceptSession(SessionInfo session) {
-    state = AsyncData(AuthSessionViewState.fromSession(session));
+  void acceptSession(ForumSessionIdentity session) {
+    state = AsyncData(AuthSessionViewState.fromIdentity(session));
   }
 
   Future<bool> logout() async {
@@ -82,21 +87,23 @@ class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
     }
 
     state = AsyncData(current.copyWith(isLoggingOut: true, clearError: true));
-    try {
-      await _repository.logout();
+    final result = await _logoutCommand.execute();
+    if (result case DataCommandApplied<ForumLogoutReceipt>()) {
       // API 侧登出成功后，尽力清空 WebView 平台 cookie jar，避免残留的登录态
       // cookie 让下次 WebView 登录直接“自动登入”旧账号。这一步是加固而非成败
-      // 关键——决定登录态的 dio 会话已在 repository.logout 里清除，因此即使平台
+      // 关键——决定登录态的 Cookie/session 已由 package command 清除，因此即使平台
       // cookie 清理抛错（如平台通道不可用），也不应让整个登出失败。
       await _clearWebViewCookiesBestEffort();
       state = const AsyncData(AuthSessionViewState.signedOut());
       return true;
-    } catch (error) {
-      state = AsyncData(
-        current.copyWith(isLoggingOut: false, logoutFailure: error),
-      );
-      return false;
     }
+    state = AsyncData(
+      current.copyWith(
+        isLoggingOut: false,
+        logoutFailure: result.failureOrNull ?? result,
+      ),
+    );
+    return false;
   }
 
   Future<void> _clearWebViewCookiesBestEffort() async {
@@ -107,11 +114,16 @@ class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
     }
   }
 
-  Future<AuthSessionViewState> _loadSession() async {
-    final result = await _repository.refreshSession();
-    return result.when(
-      success: AuthSessionViewState.fromSession,
-      failure: (_) => const AuthSessionViewState.signedOut(),
-    );
+  Future<AuthSessionViewState> _loadSession([
+    AuthSessionViewState? previous,
+  ]) async {
+    final result = await _sessionRepository.resolve();
+    return switch (result) {
+      ForumSessionAuthenticated(:final identity) =>
+        AuthSessionViewState.fromIdentity(identity),
+      ForumSessionAnonymous() => const AuthSessionViewState.signedOut(),
+      ForumSessionInconclusive() when previous?.isLoggedIn == true => previous!,
+      ForumSessionInconclusive() => const AuthSessionViewState.signedOut(),
+    };
   }
 }

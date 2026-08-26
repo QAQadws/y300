@@ -57,6 +57,35 @@ void main() {
       },
     );
 
+    test('identity-only updates do not extend formhash lifetime', () {
+      var now = DateTime(2026, 6, 19, 12);
+      final store = YamiboSessionStore(now: () => now);
+      store.saveExtracted(
+        _snapshot(
+          formhash: 'fh_short_lived',
+          uid: '123',
+          username: 'tester',
+          updatedAt: now,
+          formhashUpdatedAt: now,
+        ),
+      );
+
+      now = now.add(const Duration(minutes: 20));
+      store.saveExtracted(
+        _snapshot(
+          formhash: '',
+          uid: '123',
+          username: 'renamed',
+          updatedAt: now,
+          source: 'api:identity-only',
+        ),
+      );
+      now = now.add(const Duration(minutes: 11));
+
+      expect(store.readFreshFormhash(), isNull);
+      expect(store.readCurrent()?.username, 'renamed');
+    });
+
     test('clear removes current snapshot', () {
       final store = YamiboSessionStore();
       store.saveExtracted(
@@ -110,6 +139,7 @@ YamiboSessionSnapshot _snapshot({
   required String uid,
   required String username,
   required DateTime updatedAt,
+  DateTime? formhashUpdatedAt,
   String source = 'api:profile',
 }) {
   return YamiboSessionSnapshot(
@@ -118,6 +148,7 @@ YamiboSessionSnapshot _snapshot({
     username: username,
     formhash: formhash,
     updatedAt: updatedAt,
+    formhashUpdatedAt: formhashUpdatedAt,
     source: source,
   );
 }

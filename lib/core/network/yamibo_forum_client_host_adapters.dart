@@ -6,8 +6,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo.dart';
-import 'package:y300/features/auth/domain/services/formhash_provider.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
@@ -262,41 +262,24 @@ final class Y300ForumClientNetworkAdapter
   }
 }
 
-final class Y300ForumFormhashAdapter implements forum.ForumFormhashProvider {
-  const Y300ForumFormhashAdapter(this._delegate);
-  final FormhashProvider _delegate;
+final class Y300ForumCookieStoreAdapter implements forum.ForumCookieStore {
+  const Y300ForumCookieStoreAdapter(this._delegate);
+
+  final CookieStore _delegate;
 
   @override
-  Future<forum.ForumFormhashResult> loadFormhash({
-    bool preferProfile = true,
-  }) async {
-    final result = await _delegate.loadFormhash(preferProfile: preferProfile);
-    return switch (result) {
-      ApiSuccess<String>(:final data) => forum.ForumFormhashSuccess(data),
-      ApiFailure<String>(:final error) => forum.ForumFormhashError(
-        _mapApiError(error),
-      ),
-    };
-  }
+  Future<Map<String, String>> read(Uri uri) => _delegate.readCookieMap(uri);
 
-  forum.ForumTransportFailure _mapApiError(ApiError error) =>
-      forum.ForumTransportFailure(
-        kind: switch (error.type) {
-          ApiErrorType.network => forum.ForumTransportFailureKind.network,
-          ApiErrorType.timeout => forum.ForumTransportFailureKind.timeout,
-          ApiErrorType.unauthorized =>
-            forum.ForumTransportFailureKind.unauthorized,
-          ApiErrorType.server => forum.ForumTransportFailureKind.server,
-          ApiErrorType.parse => forum.ForumTransportFailureKind.parse,
-          ApiErrorType.business => forum.ForumTransportFailureKind.business,
-          ApiErrorType.unknown =>
-            error.code == 'request_cancelled'
-                ? forum.ForumTransportFailureKind.cancelled
-                : forum.ForumTransportFailureKind.unknown,
-        },
-        code: error.code ?? error.type.name,
-        statusCode: error.statusCode,
-      );
+  @override
+  Future<void> merge(Uri uri, Map<String, String> cookies) =>
+      _delegate.saveCookies(uri, cookies);
+
+  @override
+  Future<void> mergeSetCookie(Uri uri, List<String> headers) =>
+      _delegate.saveFromSetCookie(uri, headers);
+
+  @override
+  Future<void> clear() => _delegate.clear();
 }
 
 final class Y300ForumSessionAdapter implements forum.ForumSessionStore {
@@ -323,6 +306,7 @@ final class Y300ForumSessionAdapter implements forum.ForumSessionStore {
         formhash: snapshot.formhash,
         updatedAt: snapshot.updatedAt,
         source: snapshot.source,
+        formhashUpdatedAt: snapshot.formhashUpdatedAt,
       ),
     );
   }
@@ -339,6 +323,7 @@ forum.ForumSessionSnapshot _toPackageSession(YamiboSessionSnapshot value) =>
       formhash: value.formhash,
       updatedAt: value.updatedAt,
       source: value.source,
+      formhashUpdatedAt: value.formhashUpdatedAt,
     );
 
 final class Y300ForumDocumentStoreAdapter implements forum.ForumDocumentStore {

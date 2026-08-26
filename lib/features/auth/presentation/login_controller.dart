@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/auth/data/providers/auth_contract_providers.dart';
 import 'package:y300/features/auth/presentation/login_state.dart';
 
 final loginControllerProvider =
@@ -12,7 +12,10 @@ final loginControllerProvider =
 class LoginController extends AsyncNotifier<LoginPageState> {
   static const Duration _submitTimeout = Duration(seconds: 18);
 
-  AuthRepository get _repository => ref.read(authRepositoryProvider);
+  int _operationGeneration = 0;
+
+  ForumPasswordLoginCommand get _command =>
+      ref.read(forumPasswordLoginCommandProvider);
 
   @override
   LoginPageState build() {
@@ -31,7 +34,7 @@ class LoginController extends AsyncNotifier<LoginPageState> {
     state = AsyncData(_current.copyWith(password: value, clearError: true));
   }
 
-  Future<SessionInfo?> submit() async {
+  Future<ForumSessionIdentity?> submit() async {
     if (_current.isSubmitting) {
       return null;
     }
@@ -52,36 +55,57 @@ class LoginController extends AsyncNotifier<LoginPageState> {
 
     state = AsyncData(_current.copyWith(isSubmitting: true, clearError: true));
 
-    final result = await _repository
-        .login(username: username, password: password)
+    final operation = ++_operationGeneration;
+    final cancellation = ForumRequestCancellation();
+    ref.onDispose(cancellation.cancel);
+    final result = await _command
+        .execute(
+          ForumPasswordLoginRequest(
+            username: username,
+            password: password,
+            cancellation: cancellation,
+          ),
+        )
         .timeout(
           _submitTimeout,
-          onTimeout: () => const ApiFailure(
-            ApiError(type: ApiErrorType.timeout, message: 'auth.login.timeout'),
-          ),
+          onTimeout: () {
+            cancellation.cancel();
+            return const DataCommandOutcomeUnknown<ForumLoginReceipt>(
+              DataCommandFailure(
+                kind: DataCommandFailureKind.timeout,
+                retryPolicy: DataCommandRetryPolicy.explicitOnly,
+                code: 'auth_login_timeout',
+                diagnosticMessage: 'auth_login_timeout',
+              ),
+            );
+          },
         );
 
-    return result.when(
-      success: (session) {
+    if (!ref.mounted || operation != _operationGeneration) return null;
+    return switch (result) {
+      DataCommandApplied<ForumLoginReceipt>(:final receipt) => () {
         state = AsyncData(
           _current.copyWith(isSubmitting: false, clearError: true),
         );
-        return session;
-      },
-      failure: (error) {
+        return receipt.session;
+      }(),
+      _ => () {
+        final failure = result.failureOrNull;
         state = AsyncData(
           _current.copyWith(
             isSubmitting: false,
             failure: AuthLoginFailure(
-              code: error.type == ApiErrorType.timeout
+              code: failure?.kind == DataCommandFailureKind.timeout
                   ? AuthLoginFailureCode.timeout
                   : AuthLoginFailureCode.requestFailed,
-              detail: error,
+              detail: result is DataCommandRejected<ForumLoginReceipt>
+                  ? result
+                  : failure ?? result,
             ),
           ),
         );
         return null;
-      },
-    );
+      }(),
+    };
   }
 }

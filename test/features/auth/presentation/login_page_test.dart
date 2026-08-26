@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 
@@ -72,7 +72,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [authRepositoryProvider.overrideWithValue(repository)],
+          overrides: [...forumAuthOverrides(repository)],
           child: const LocalizedTestApp(
             locale: Locale('zh', 'TW'),
             home: LoginPage(),
@@ -89,14 +89,14 @@ void main() {
 
 Widget _buildTestApp(AuthRepository repository) {
   return ProviderScope(
-    overrides: [authRepositoryProvider.overrideWithValue(repository)],
+    overrides: [...forumAuthOverrides(repository)],
     child: const LocalizedTestApp(home: LoginPage()),
   );
 }
 
 Widget _buildPushFlowTestApp(AuthRepository repository) {
   return ProviderScope(
-    overrides: [authRepositoryProvider.overrideWithValue(repository)],
+    overrides: [...forumAuthOverrides(repository)],
     child: const LocalizedTestApp(home: _LoginHostPage()),
   );
 }

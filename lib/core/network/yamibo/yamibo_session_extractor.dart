@@ -26,13 +26,15 @@ class YamiboSessionExtractor {
     if (uid.isEmpty && username.isEmpty && formhash.isEmpty && auth.isEmpty) {
       return null;
     }
+    final now = _resolveNow();
     return YamiboSessionSnapshot(
       isLoggedIn: isLoggedIn,
       uid: uid,
       username: username,
       formhash: formhash,
-      updatedAt: _resolveNow(),
+      updatedAt: now,
       source: source,
+      formhashUpdatedAt: formhash.isEmpty ? null : now,
     );
   }
 
@@ -61,13 +63,15 @@ class YamiboSessionExtractor {
     if (uid.isEmpty && username.isEmpty && formhash.isEmpty && !hasLoginLink) {
       return null;
     }
+    final now = _resolveNow();
     return YamiboSessionSnapshot(
       isLoggedIn: isLoggedIn,
       uid: uid,
       username: username,
       formhash: formhash,
-      updatedAt: _resolveNow(),
+      updatedAt: now,
       source: source,
+      formhashUpdatedAt: formhash.isEmpty ? null : now,
     );
   }
 

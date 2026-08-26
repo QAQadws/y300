@@ -8,6 +8,7 @@ final class ForumSessionSnapshot {
     required this.formhash,
     required this.updatedAt,
     required this.source,
+    this.formhashUpdatedAt,
   });
 
   /// Whether the response proved an authenticated identity.
@@ -24,6 +25,12 @@ final class ForumSessionSnapshot {
 
   /// Time at which this projection was extracted.
   final DateTime updatedAt;
+
+  /// Time at which [formhash] was most recently extracted.
+  ///
+  /// Older Host stores may omit this value; callers then conservatively use
+  /// [updatedAt] for backward compatibility.
+  final DateTime? formhashUpdatedAt;
 
   /// Safe source label describing the extraction point.
   final String source;
@@ -62,7 +69,7 @@ final class MemoryForumSessionStore implements ForumSessionStore {
   String? readFreshFormhash() {
     final value = _current;
     if (value == null || value.formhash.trim().isEmpty) return null;
-    final age = _now().difference(value.updatedAt);
+    final age = _now().difference(value.formhashUpdatedAt ?? value.updatedAt);
     return age.isNegative || age <= formhashTtl ? value.formhash : null;
   }
 
@@ -73,14 +80,17 @@ final class MemoryForumSessionStore implements ForumSessionStore {
       _current = snapshot;
       return;
     }
+    final incomingUserId = snapshot.userId.trim();
+    final hasExplicitIdentity = incomingUserId.isNotEmpty;
+    final incomingFormhash = snapshot.formhash.trim();
     _current = ForumSessionSnapshot(
-      isLoggedIn: snapshot.userId.trim().isNotEmpty
+      isLoggedIn: hasExplicitIdentity
           ? snapshot.isLoggedIn
           : current.isLoggedIn,
-      userId: snapshot.userId.trim().isNotEmpty
-          ? snapshot.userId
-          : current.userId,
-      username: snapshot.username.trim().isNotEmpty
+      userId: hasExplicitIdentity ? incomingUserId : current.userId,
+      username: hasExplicitIdentity && !snapshot.isLoggedIn
+          ? ''
+          : snapshot.username.trim().isNotEmpty
           ? snapshot.username
           : current.username,
       formhash: snapshot.formhash.trim().isNotEmpty
@@ -88,6 +98,9 @@ final class MemoryForumSessionStore implements ForumSessionStore {
           : current.formhash,
       updatedAt: snapshot.updatedAt,
       source: snapshot.source,
+      formhashUpdatedAt: incomingFormhash.isNotEmpty
+          ? snapshot.formhashUpdatedAt ?? snapshot.updatedAt
+          : current.formhashUpdatedAt,
     );
   }
 

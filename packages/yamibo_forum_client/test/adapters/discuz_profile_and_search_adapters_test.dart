@@ -389,7 +389,10 @@ final class _Formhash implements ForumFormhashProvider {
   const _Formhash();
 
   @override
-  Future<ForumFormhashResult> loadFormhash({bool preferProfile = true}) async {
+  Future<ForumFormhashResult> loadFormhash({
+    bool preferProfile = true,
+    ForumRequestCancellation? cancellation,
+  }) async {
     return const ForumFormhashSuccess('fixture-formhash');
   }
 }

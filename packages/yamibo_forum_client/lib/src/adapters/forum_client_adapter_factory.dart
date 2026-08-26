@@ -1,5 +1,6 @@
 import '../client/forum_client_config.dart';
 import '../contracts/favorite_directories.dart';
+import '../contracts/forum_authentication.dart';
 import '../contracts/comic_contracts.dart';
 import '../contracts/forum_directory.dart';
 import '../contracts/forum_display_repository.dart';
@@ -12,11 +13,14 @@ import '../contracts/thread_repository.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
+import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
 import '../cache/forum_cache.dart';
 import '../session/forum_session_store.dart';
+import '../session/forum_cookie_store.dart';
+import 'discuz_authentication_adapter.dart';
 import 'discuz_api_client.dart';
 import 'discuz_comic_read_adapters.dart';
 import 'discuz_directory_adapters.dart';
@@ -36,6 +40,7 @@ final class ForumClientAdapterFactory {
     required this.network,
     ForumRequestProfileResolver? requestProfiles,
     this.sessionStore,
+    this.cookieStore,
     this.documentStore,
     this.snapshotStore,
   }) : requestProfiles =
@@ -53,6 +58,7 @@ final class ForumClientAdapterFactory {
   final ForumRequestProfileResolver requestProfiles;
   final DiscuzApiClient _api;
   final ForumSessionStore? sessionStore;
+  final ForumCookieStore? cookieStore;
   final ForumDocumentStore? documentStore;
   final ForumSnapshotStore? snapshotStore;
 
@@ -159,12 +165,35 @@ final class ForumClientAdapterFactory {
     ForumSessionStore sessions,
   ) => SessionForumFormhashProvider(
     sessions: sessions,
-    loadFromProfile: () => _loadFormhash('profile'),
-    loadFallback: () => _loadFormhash('forumindex'),
+    loadFromProfile: (cancellation) =>
+        _loadFormhash('profile', cancellation: cancellation),
+    loadFallback: (cancellation) =>
+        _loadFormhash('forumindex', cancellation: cancellation),
   );
 
-  Future<ForumFormhashResult> _loadFormhash(String module) async {
-    final result = await _api.get(module: module);
+  DiscuzAuthenticationAdapter createAuthentication(
+    ForumFormhashProvider formhash,
+    ForumSessionStore sessions,
+  ) => DiscuzAuthenticationAdapter(
+    DiscuzApiClient(
+      config: config,
+      network: network,
+      requestProfiles: requestProfiles,
+    ),
+    formhash,
+    sessions,
+    cookieStore,
+  );
+
+  ForumLogoutCommand createLogoutCommand(
+    DiscuzAuthenticationAdapter authentication,
+  ) => DiscuzLogoutCommandAdapter(authentication);
+
+  Future<ForumFormhashResult> _loadFormhash(
+    String module, {
+    ForumRequestCancellation? cancellation,
+  }) async {
+    final result = await _api.get(module: module, cancellation: cancellation);
     return switch (result) {
       ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(:final failure) =>
         ForumFormhashError(failure),

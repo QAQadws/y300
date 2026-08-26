@@ -11,7 +11,7 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
@@ -91,7 +91,7 @@ void main() {
             () async {},
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -249,7 +249,7 @@ void main() {
             mainShellReplyDraftAttachmentMaintenanceStarterProvider
                 .overrideWithValue(() async {}),
             mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            ...forumAuthOverrides(_FakeAuthRepository()),
             forumModeSettingsRepositoryProvider.overrideWithValue(
               _FakeForumModeSettingsRepository(),
             ),
@@ -344,7 +344,7 @@ void main() {
             () async {},
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -401,7 +401,7 @@ void main() {
               () async {},
             ),
             mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            ...forumAuthOverrides(_FakeAuthRepository()),
             forumModeSettingsRepositoryProvider.overrideWithValue(
               _FakeForumModeSettingsRepository(),
             ),
@@ -463,7 +463,7 @@ void main() {
               notificationService,
             ),
             mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            ...forumAuthOverrides(_FakeAuthRepository()),
             forumModeSettingsRepositoryProvider.overrideWithValue(
               _FakeForumModeSettingsRepository(),
             ),
@@ -518,7 +518,7 @@ void main() {
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {
             warmupCalls += 1;
           }),
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -570,7 +570,7 @@ void main() {
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {
             throw StateError('warmup failed');
           }),
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -623,7 +623,7 @@ void main() {
               () async {},
             ),
             mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+            ...forumAuthOverrides(_FakeAuthRepository()),
             shelfSelectionHostControllerProvider.overrideWithValue(
               selectionHost,
             ),
@@ -703,7 +703,7 @@ void main() {
             () async {},
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
@@ -865,7 +865,7 @@ void main() {
             () async {},
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ...forumAuthOverrides(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
@@ -967,7 +967,7 @@ Future<void> _pumpSelectionShell(
         mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
         mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
         mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
-        authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+        ...forumAuthOverrides(_FakeAuthRepository()),
         shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
         forumModeSettingsRepositoryProvider.overrideWithValue(
           _FakeForumModeSettingsRepository(),

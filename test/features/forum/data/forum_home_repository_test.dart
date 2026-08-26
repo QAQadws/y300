@@ -173,7 +173,7 @@ _HomeFixture _buildFixture({
         : Y300ForumSessionAdapter(sessionStore),
     documentStore: Y300ForumDocumentStoreAdapter(documents),
     snapshotStore: Y300ForumSnapshotStoreAdapter(snapshots),
-  ).buildStandardReads();
+  ).buildStandardClient();
   return _HomeFixture(
     repository: ForumHomeHtmlRepository(
       repository: client.forumHome!,

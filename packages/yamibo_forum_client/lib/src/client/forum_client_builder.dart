@@ -31,6 +31,7 @@ final class YamiboForumClientBuilder {
     this.documentStore,
     this.snapshotStore,
     this.formhashProvider,
+    this.cookieStore,
     this.resourceClient,
     this.stickerCatalogStore,
   });
@@ -60,6 +61,7 @@ final class YamiboForumClientBuilder {
       documentStore: caches.documents,
       snapshotStore: caches.snapshots,
       resourceClient: network,
+      cookieStore: cookies,
       stickerCatalogStore: caches.stickers,
     );
   }
@@ -82,14 +84,17 @@ final class YamiboForumClientBuilder {
   /// Optional formhash override used by hosts with an existing session stack.
   final ForumFormhashProvider? formhashProvider;
 
+  /// Optional persistent Cookie port required by authentication commands.
+  final ForumCookieStore? cookieStore;
+
   /// Optional protected-resource transport override.
   final ForumResourceClient? resourceClient;
 
   /// Optional persistent sticker catalog store.
   final ForumStickerCatalogStore? stickerCatalogStore;
 
-  /// Builds the currently verified read-source matrix.
-  YamiboForumClient buildStandardReads() {
+  /// Builds the currently verified read and basic-authentication matrix.
+  YamiboForumClient buildStandardClient() {
     final sessions = sessionStore ?? MemoryForumSessionStore();
     final factory = ForumClientAdapterFactory(
       config: config,
@@ -97,14 +102,17 @@ final class YamiboForumClientBuilder {
       sessionStore: sessions,
       documentStore: documentStore,
       snapshotStore: snapshotStore,
+      cookieStore: cookieStore,
     );
     final formhash =
         formhashProvider ?? factory.createStandardFormhashProvider(sessions);
     final forumHome = factory.createHtmlForumHome();
+    final authentication = factory.createAuthentication(formhash, sessions);
     return YamiboForumClient(
       config: config,
       network: network,
       resources: resourceClient,
+      formhashProvider: formhash,
       sourcePlan: ForumClientSourcePlan(
         forumDirectory: forumHome,
         forumHome: forumHome,
@@ -130,7 +138,17 @@ final class YamiboForumClientBuilder {
         postRatings: factory.createThreadPostRatings(),
         postLocator: factory.createThreadPostLocator(),
         threadAuthorPosts: factory.createThreadAuthorPosts(),
+        session: authentication,
+        passwordLogin: authentication,
+        logout: factory.createLogoutCommand(authentication),
       ),
     );
   }
+
+  /// Builds the standard client.
+  ///
+  /// Deprecated because the standard matrix now also contains basic
+  /// authentication commands. Existing integrations remain source-compatible.
+  @Deprecated('Use buildStandardClient() instead.')
+  YamiboForumClient buildStandardReads() => buildStandardClient();
 }

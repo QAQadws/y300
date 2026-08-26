@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
@@ -55,7 +55,7 @@ void main() {
             (ref) => _FakeFavoriteSyncService(),
           ),
           favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
-          authRepositoryProvider.overrideWithValue(authRepository),
+          ...forumAuthOverrides(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -105,7 +105,7 @@ void main() {
             favoriteShelfBootstrapperProvider.overrideWith(
               (ref) => bootstrapper,
             ),
-            authRepositoryProvider.overrideWithValue(authRepository),
+            ...forumAuthOverrides(authRepository),
             libraryStateRepositoryProvider.overrideWithValue(
               _FakeLibraryStateRepository(),
             ),
@@ -163,7 +163,7 @@ void main() {
             favoriteShelfBootstrapperProvider.overrideWith(
               (ref) => bootstrapper,
             ),
-            authRepositoryProvider.overrideWithValue(authRepository),
+            ...forumAuthOverrides(authRepository),
             libraryStateRepositoryProvider.overrideWithValue(
               _FakeLibraryStateRepository(),
             ),
@@ -210,7 +210,7 @@ void main() {
             (ref) => _FakeFavoriteSyncService(),
           ),
           favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
-          authRepositoryProvider.overrideWithValue(authRepository),
+          ...forumAuthOverrides(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -259,7 +259,7 @@ void main() {
             (ref) => _FakeFavoriteSyncService(),
           ),
           favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
-          authRepositoryProvider.overrideWithValue(authRepository),
+          ...forumAuthOverrides(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -329,7 +329,7 @@ void main() {
             (ref) => _FakeFavoriteSyncService(),
           ),
           favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
-          authRepositoryProvider.overrideWithValue(authRepository),
+          ...forumAuthOverrides(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
           ),
@@ -409,7 +409,7 @@ void main() {
             favoriteShelfBootstrapperProvider.overrideWith(
               (ref) => bootstrapper,
             ),
-            authRepositoryProvider.overrideWithValue(authRepository),
+            ...forumAuthOverrides(authRepository),
             libraryStateRepositoryProvider.overrideWithValue(
               _FakeLibraryStateRepository(),
             ),
@@ -458,7 +458,7 @@ void main() {
             favoriteShelfBootstrapperProvider.overrideWith(
               (ref) => bootstrapper,
             ),
-            authRepositoryProvider.overrideWithValue(authRepository),
+            ...forumAuthOverrides(authRepository),
             libraryStateRepositoryProvider.overrideWithValue(
               _FakeLibraryStateRepository(),
             ),

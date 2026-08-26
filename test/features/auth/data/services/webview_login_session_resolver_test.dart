@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
-import 'package:y300/features/auth/data/repositories/auth_repository.dart';
+import '../../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/auth/data/services/webview_login_progress.dart';
 import 'package:y300/features/auth/data/services/webview_login_session_resolver.dart';
 
@@ -65,7 +65,7 @@ WebViewLoginSessionResolver _buildResolver({
   );
   return WebViewLoginSessionResolver(
     cookieSyncService: syncService,
-    authRepository: authRepository,
+    sessionRepository: forumSessionRepositoryFrom(authRepository),
   );
 }
 
@@ -147,7 +147,7 @@ void main() {
       final progress = await resolver.evaluate();
 
       expect(progress, isA<WebViewLoginFailed>());
-      expect((progress as WebViewLoginFailed).message, '网络异常');
+      expect((progress as WebViewLoginFailed).message, 'network');
     },
   );
 }
