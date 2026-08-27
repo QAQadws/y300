@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -9,6 +8,8 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 
+import '../../../test_support/utf8_test_fixture.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -18,20 +19,20 @@ void main() {
 
   group('ThreadPostCommentFormParser', () {
     test('parses desktop comment dialog form', () {
-      final html = File('docs/html/帖子详细页/一个楼的点评功能.html').readAsStringSync();
+      final html = readUtf8TestFixture('thread/actions/comment_form.html');
       const parser = ThreadPostCommentFormParser();
 
       final form = parser.parse(
         html,
         fallbackCommentUrl:
-            'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=572529&pid=41562047',
+            'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=10001&pid=20001',
       );
 
       expect(form.actionUrl, contains('commentsubmit=yes'));
-      expect(form.formHash, 'cba80c43');
+      expect(form.formHash, 'fixture-formhash');
       expect(form.handleKey, 'comment');
-      expect(form.tid, '572529');
-      expect(form.pid, '41562047');
+      expect(form.tid, '10001');
+      expect(form.pid, '20001');
       expect(form.referer, contains('viewthread'));
       expect(form.maxLength, 200);
     });
@@ -39,7 +40,14 @@ void main() {
     test('parses cdata wrapped desktop comment dialog form', () {
       const html = '''
 <root>
-<![CDATA[ <form method="post" autocomplete="off" id="commentform" action="forum.php?mod=post&amp;action=reply&amp;comment=yes&amp;tid=570068&amp;pid=41518377&amp;extra=&amp;page=1&amp;commentsubmit=yes&amp;infloat=yes"> <div class="f_c"> <h3 class="flb"> <em id="return_comment">点评</em> </h3> <input type="hidden" name="formhash" id="formhash" value="cba80c43" /> <input type="hidden" name="handlekey" value="comment" /> <textarea rows="2" cols="50" name="message" id="commentmessage"></textarea> <span class="y">还可输入 <strong id="checklen">200</strong> 个字符</span> </div> </form> ]]>
+<![CDATA[
+<form id="commentform" action="forum.php?mod=post&amp;action=reply&amp;comment=yes&amp;tid=10001&amp;pid=20001&amp;commentsubmit=yes">
+  <input name="formhash" value="fixture-formhash">
+  <input name="handlekey" value="comment">
+  <textarea name="message"></textarea>
+  <strong id="checklen">200</strong>
+</form>
+]]>
 </root>
 ''';
       const parser = ThreadPostCommentFormParser();
@@ -47,13 +55,13 @@ void main() {
       final form = parser.parse(
         html,
         fallbackCommentUrl:
-            'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=570068&pid=41518377',
+            'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=10001&pid=20001',
       );
 
-      expect(form.formHash, 'cba80c43');
+      expect(form.formHash, 'fixture-formhash');
       expect(form.handleKey, 'comment');
-      expect(form.tid, '570068');
-      expect(form.pid, '41518377');
+      expect(form.tid, '10001');
+      expect(form.pid, '20001');
     });
 
     test(
@@ -70,7 +78,7 @@ void main() {
           () => parser.parse(
             html,
             fallbackCommentUrl:
-                'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=570068&pid=41520485',
+                'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=10001&pid=20001',
           ),
           throwsA(
             isA<ThreadPostCommentFormParseException>().having(
@@ -88,7 +96,7 @@ void main() {
     test(
       'builds comment form endpoint from seed for posts without action link',
       () async {
-        final html = File('docs/html/帖子详细页/一个楼的点评功能.html').readAsStringSync();
+        final html = readUtf8TestFixture('thread/actions/comment_form.html');
         final adapter = _CommentFormTestAdapter(textBody: html);
         final repository = DiscuzThreadPostCommentRepository(
           gateway: _buildGateway(adapter),
@@ -97,8 +105,8 @@ void main() {
         final result = await repository.loadFormFromSeed(
           const ThreadPostCommentFormSeed(
             commentUrl: '',
-            tid: '572529',
-            pid: '41562047',
+            tid: '10001',
+            pid: '20001',
             page: 2,
           ),
         );
@@ -106,8 +114,8 @@ void main() {
         expect(result.isSuccess, isTrue);
         expect(adapter.lastUri?.queryParameters['mod'], 'misc');
         expect(adapter.lastUri?.queryParameters['action'], 'comment');
-        expect(adapter.lastUri?.queryParameters['tid'], '572529');
-        expect(adapter.lastUri?.queryParameters['pid'], '41562047');
+        expect(adapter.lastUri?.queryParameters['tid'], '10001');
+        expect(adapter.lastUri?.queryParameters['pid'], '20001');
         expect(adapter.lastUri?.queryParameters['extra'], '');
         expect(adapter.lastUri?.queryParameters['page'], '2');
         expect(adapter.lastUri?.queryParameters['infloat'], 'yes');

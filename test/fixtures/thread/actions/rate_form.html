@@ -1,0 +1,36 @@
+<root>
+<![CDATA[
+<form
+  id="rateform"
+  method="post"
+  action="forum.php?mod=misc&amp;action=rate&amp;ratesubmit=yes&amp;infloat=yes"
+>
+  <input type="hidden" name="formhash" value="fixture-formhash">
+  <input type="hidden" name="tid" value="10001">
+  <input type="hidden" name="pid" value="20001">
+  <input
+    type="hidden"
+    name="referer"
+    value="https://bbs.yamibo.com/forum.php?mod=viewthread&amp;tid=10001#pid20001"
+  >
+  <input type="hidden" name="handlekey" value="rate">
+
+  <table>
+    <tr>
+      <td>测试积分</td>
+      <td><input type="text" name="score1" id="score1" value="0"></td>
+      <td>0 ~ 5</td>
+      <td>10</td>
+    </tr>
+  </table>
+
+  <ul id="reasonselect">
+    <li>测试理由一</li>
+    <li>测试理由二</li>
+    <li>测试理由三</li>
+  </ul>
+  <input type="text" name="reason" value="">
+  <input type="checkbox" name="sendreasonpm">
+</form>
+]]>
+</root>

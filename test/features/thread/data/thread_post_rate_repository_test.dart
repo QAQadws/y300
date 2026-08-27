@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -11,6 +10,8 @@ import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 
+import '../../../test_support/utf8_test_fixture.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -20,32 +21,26 @@ void main() {
 
   group('ThreadPostRateFormParser', () {
     test('parses desktop rate dialog form', () {
-      final html = File('docs/html/帖子详细页/一个楼的评分功能.html').readAsStringSync();
+      final html = readUtf8TestFixture('thread/actions/rate_form.html');
       const parser = ThreadPostRateFormParser();
 
       final form = parser.parse(
         html,
         fallbackRateUrl:
-            'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=572529&pid=41562047',
+            'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=10001&pid=20001',
       );
 
       expect(form.actionUrl, contains('ratesubmit=yes'));
-      expect(form.formHash, 'cba80c43');
-      expect(form.tid, '572529');
-      expect(form.pid, '41562047');
+      expect(form.formHash, 'fixture-formhash');
+      expect(form.tid, '10001');
+      expect(form.pid, '20001');
       expect(form.referer, contains('viewthread'));
       expect(form.scoreName, 'score1');
       expect(form.scoreMin, 0);
       expect(form.scoreMax, 5);
       expect(form.todayRemaining, 10);
       expect(form.defaultScore, 5);
-      expect(form.reasonOptions, <String>[
-        '你太可爱',
-        '好萌好萌好萌',
-        '我很赞同',
-        '精品文章',
-        '原创内容',
-      ]);
+      expect(form.reasonOptions, <String>['测试理由一', '测试理由二', '测试理由三']);
       expect(form.reasonOrigin, ThreadPostRateReasonOrigin.serverForm);
       expect(form.notifyAuthorDefault, isFalse);
     });
@@ -53,7 +48,16 @@ void main() {
     test('parses cdata wrapped desktop rate dialog form', () {
       const html = '''
 <root>
-<![CDATA[ <div class="tm_c" id="floatlayout_topicadmin"> <h3 class="flb"> <em id="return_rate">评分</em> </h3> <form id="rateform" method="post" autocomplete="off" action="forum.php?mod=misc&amp;action=rate&amp;ratesubmit=yes&amp;infloat=yes"> <input type="hidden" name="formhash" value="cba80c43" /> <input type="hidden" name="tid" value="560713" /> <input type="hidden" name="pid" value="41312932" /> <input type="hidden" name="referer" value="https://bbs.yamibo.com/forum.php?mod=viewthread&tid=560713&page=0#pid41312932" /> <input type="hidden" name="handlekey" value="rate"><div class="c"> <table cellspacing="0" cellpadding="0" class="dt mbm"> <tr> <th>&nbsp;</th> <th width="65">&nbsp;</th> <th width="65">评分区间</th> <th width="55">今日剩余</th> </tr><tr> <td> 积分</td> <td> <input type="text" name="score1" id="score1" class="px z" value="0" style="width: 25px;" /> <a href="javascript:;" class="dpbtn" onclick="showselect(this, 'score1', 'scoreoption1')">^</a> <ul id="scoreoption1" style="display:none"><li>+5</li><li>+4</li><li>+3</li><li>+2</li><li>+1</li></ul> </td> <td>0 ~ 5</td><td>10</td> </tr> </table> <div class="tpclg"> <h4>可选评分理由:</h4> <table cellspacing="0" cellpadding="0" class="reason_slct"> <tr> <td> <ul id="reasonselect" class="reasonselect pt"><li>你太可爱</li><li>好萌好萌好萌</li><li>我很赞同</li><li>精品文章</li><li>原创内容</li></ul> </td> </tr> <tr> <td><input type="text" name="reason" id="reason" class="px" /></td> </tr> </table> </div> </div> <p class="o pns"> <label for="sendreasonpm"><input type="checkbox" name="sendreasonpm" id="sendreasonpm" class="pc" />通知作者</label> <button name="ratesubmit" type="submit" value="true" class="pn pnc"><span>确定</span></button> </p> </form> </div> ]]>
+<![CDATA[
+<form id="rateform" action="forum.php?mod=misc&amp;action=rate&amp;ratesubmit=yes">
+  <input name="formhash" value="fixture-formhash">
+  <input name="tid" value="10001">
+  <input name="pid" value="20001">
+  <input name="referer" value="https://bbs.yamibo.com/forum.php?mod=viewthread&amp;tid=10001#pid20001">
+  <table><tr><td>测试积分</td><td><input name="score1" value="0"></td><td>0 ~ 5</td><td>10</td></tr></table>
+  <ul id="reasonselect"><li>测试理由一</li></ul>
+</form>
+]]>
 </root>
 ''';
       const parser = ThreadPostRateFormParser();
@@ -64,12 +68,12 @@ void main() {
             'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&ratesubmit=yes',
       );
 
-      expect(form.formHash, 'cba80c43');
-      expect(form.tid, '560713');
-      expect(form.pid, '41312932');
+      expect(form.formHash, 'fixture-formhash');
+      expect(form.tid, '10001');
+      expect(form.pid, '20001');
       expect(form.scoreMax, 5);
       expect(form.todayRemaining, 10);
-      expect(form.reasonOptions, contains('我很赞同'));
+      expect(form.reasonOptions, contains('测试理由一'));
     });
 
     test('builds fallback form from rate url and session formhash', () {
@@ -78,21 +82,21 @@ void main() {
       final form = builder.build(
         seed: const ThreadPostRateFormSeed(
           rateUrl:
-              'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=572529&pid=41562047',
-          tid: '572529',
-          pid: '41562047',
+              'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=10001&pid=20001',
+          tid: '10001',
+          pid: '20001',
           referer:
-              'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572529#pid41562047',
+              'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=10001#pid20001',
         ),
-        formHash: 'cba80c43',
+        formHash: 'fixture-formhash',
       );
 
       expect(form, isNotNull);
       expect(form!.actionUrl, contains('ratesubmit=yes'));
-      expect(form.formHash, 'cba80c43');
-      expect(form.tid, '572529');
-      expect(form.pid, '41562047');
-      expect(form.referer, contains('#pid41562047'));
+      expect(form.formHash, 'fixture-formhash');
+      expect(form.tid, '10001');
+      expect(form.pid, '20001');
+      expect(form.referer, contains('#pid20001'));
       expect(form.scoreName, 'score1');
       expect(form.scoreMin, 0);
       expect(form.scoreMax, 5);
@@ -111,9 +115,9 @@ void main() {
       final form = builder.build(
         seed: const ThreadPostRateFormSeed(
           rateUrl:
-              'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=572529&pid=41562047',
-          tid: '572529',
-          pid: '41562047',
+              'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=10001&pid=20001',
+          tid: '10001',
+          pid: '20001',
           referer: '',
         ),
         formHash: null,
@@ -129,9 +133,9 @@ void main() {
       sessionStore.saveExtracted(
         YamiboSessionSnapshot(
           isLoggedIn: true,
-          uid: '597454',
-          username: 'tester',
-          formhash: 'fh_rate',
+          uid: '30001',
+          username: 'fixture-user',
+          formhash: 'fixture-rate-formhash',
           updatedAt: DateTime.now(),
           source: 'api:profile',
         ),
@@ -143,14 +147,14 @@ void main() {
       );
 
       final result = await repository.loadForm(
-        'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=572529&pid=41562047',
+        'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=10001&pid=20001',
       );
 
       expect(result.isSuccess, isTrue);
       final form = result.dataOrNull!;
-      expect(form.formHash, 'fh_rate');
-      expect(form.tid, '572529');
-      expect(form.pid, '41562047');
+      expect(form.formHash, 'fixture-rate-formhash');
+      expect(form.tid, '10001');
+      expect(form.pid, '20001');
       expect(
         form.reasonOptions,
         ThreadPostRateFormFallbackBuilder.defaultReasonOptions,
@@ -174,32 +178,35 @@ void main() {
       final form = const ThreadPostRateFormFallbackBuilder().build(
         seed: const ThreadPostRateFormSeed(
           rateUrl:
-              'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=572529&pid=41562047',
-          tid: '572529',
-          pid: '41562047',
+              'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=10001&pid=20001',
+          tid: '10001',
+          pid: '20001',
           referer: '',
         ),
-        formHash: 'fh_rate',
+        formHash: 'fixture-rate-formhash',
       )!;
 
       final result = await repository.submit(
         ThreadPostRateDraft(
           form: form,
           score: 5,
-          reason: '我很赞同',
+          reason: '测试理由一',
           notifyAuthor: true,
         ),
       );
 
       expect(result.isSuccess, isTrue);
-      expect(adapter.lastRequestBody, contains('formhash=fh_rate'));
-      expect(adapter.lastRequestBody, contains('tid=572529'));
-      expect(adapter.lastRequestBody, contains('pid=41562047'));
+      expect(
+        adapter.lastRequestBody,
+        contains('formhash=fixture-rate-formhash'),
+      );
+      expect(adapter.lastRequestBody, contains('tid=10001'));
+      expect(adapter.lastRequestBody, contains('pid=20001'));
       expect(adapter.lastRequestBody, contains('score1=5'));
       expect(adapter.lastRequestBody, contains('reason='));
       expect(adapter.lastRequestBody, contains('sendreasonpm=on'));
       expect(adapter.lastRequestBody, contains('ratesubmit=true'));
-      expect(adapter.lastHeaders['referer'], contains('tid=572529'));
+      expect(adapter.lastHeaders['referer'], contains('tid=10001'));
       expect(adapter.lastUri?.queryParameters['ratesubmit'], 'yes');
       expect(adapter.lastUri?.queryParameters['infloat'], 'yes');
       expect(adapter.lastUri?.queryParameters['inajax'], '1');
@@ -218,19 +225,19 @@ void main() {
       final form = const ThreadPostRateFormFallbackBuilder().build(
         seed: const ThreadPostRateFormSeed(
           rateUrl:
-              'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=572529&pid=41562047',
-          tid: '572529',
-          pid: '41562047',
+              'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=10001&pid=20001',
+          tid: '10001',
+          pid: '20001',
           referer: '',
         ),
-        formHash: 'fh_rate',
+        formHash: 'fixture-rate-formhash',
       )!;
 
       final result = await repository.submit(
         ThreadPostRateDraft(
           form: form,
           score: 5,
-          reason: '我很赞同',
+          reason: '测试理由一',
           notifyAuthor: false,
         ),
       );

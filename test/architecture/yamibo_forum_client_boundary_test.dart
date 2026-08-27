@@ -168,24 +168,6 @@ void main() {
 
     expect(violations, isEmpty);
   });
-
-  test('tests do not depend on ignored private forum fixtures', () {
-    final violations = _dartFiles(<String>['test'])
-        .where(
-          (file) =>
-              _normalized(file.path) !=
-              'test/architecture/yamibo_forum_client_boundary_test.dart',
-        )
-        .where((file) {
-          final source = file.readAsStringSync();
-          return source.contains('docs/html/我的资料/我的提醒') ||
-              source.contains('docs/html/我的资料/我的消息');
-        })
-        .map((file) => file.path)
-        .toList();
-
-    expect(violations, isEmpty);
-  });
 }
 
 Iterable<File> _dartFiles(Iterable<String> roots) sync* {

@@ -1,40 +1,8 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_structure_analyzer.dart';
 
-const _realFixturePaths = <String, String>{
-  '文字背景色': 'docs/html/特殊格式/文字背景色.html',
-  '折叠目录': 'docs/html/特殊格式/折叠目录.html',
-  '字颜色字号': 'docs/html/特殊格式/字颜色字号.html',
-  '注音': 'docs/html/特殊格式/注音.html',
-};
-
 void main() {
   const analyzer = NovelReaderHtmlStructureAnalyzer();
-
-  for (final entry in _realFixturePaths.entries) {
-    final fixtureExists = File(entry.value).existsSync();
-    test(
-      'imports the real ${entry.key} fixture as UTF-8',
-      () {
-        final bytes = File(entry.value).readAsBytesSync();
-        final report = analyzer.analyze(
-          fixtureId: entry.key,
-          rawHtml: utf8.decode(bytes),
-        );
-
-        expect(report.sourceUtf8Bytes, bytes.length);
-        expect(report.messageFound, isTrue);
-        expect(report.messageTextRunes, greaterThan(0));
-        expect(report.messageSensitiveMarkers, isEmpty);
-      },
-      skip: fixtureExists
-          ? false
-          : 'Local Phase 0 HTML fixture is unavailable.',
-    );
-  }
 
   test('reports only structural counts for the first post message', () {
     const html = '''

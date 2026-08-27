@@ -20,7 +20,7 @@ void main() {
     final path = '$_fixtureDirectory/${entry.value}';
     final file = File(path);
     if (!file.existsSync()) {
-      stderr.writeln('Missing Phase 0 fixture: $path');
+      stderr.writeln('Missing local diagnostic fixture: $path');
       exitCode = 2;
       return;
     }
@@ -37,18 +37,25 @@ void main() {
 
 String _renderMarkdown(List<NovelReaderHtmlStructureReport> reports) {
   final buffer = StringBuffer()
-    ..writeln('# 小说阅读器 HTML-first 混合分页 Phase 0 样本结构基线')
+    ..writeln('# 小说阅读器 HTML 结构本地诊断')
     ..writeln()
     ..writeln(
-      '> 本文件由 `dart run tool/novel_reader_phase0_html_baseline.dart` 生成。',
+      '> 本文件由 '
+      '`dart run tool/local_diagnostics/'
+      'novel_reader_html_structure_baseline.dart` 生成。',
     )
-    ..writeln('> 仅保存结构计数，不保存正文、URL、Cookie、auth、请求头或本地路径。')
+    ..writeln('> 仅输出结构计数，不输出正文、URL、Cookie、认证字段或本地路径。')
     ..writeln()
     ..writeln(
-      '| 样本 | 源 UTF-8 字节 | 主楼 message | message UTF-8 字节 | 普通文本节点 | 普通文本字符 | font | font-size | 前景色 | 背景色 | 图片 | 折叠 | 展开折叠 | 表格 | 表格行 | 表格单元格 | ruby | rt | rp | script | message 敏感标记 |',
+      '| 样本 | 源 UTF-8 字节 | 主楼 message | message UTF-8 字节 | '
+      '普通文本节点 | 普通文本字符 | font | font-size | 前景色 | 背景色 | '
+      '图片 | 折叠 | 展开折叠 | 表格 | 表格行 | 表格单元格 | ruby | rt | '
+      'rp | script | message 敏感标记 |',
     )
     ..writeln(
-      '| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
+      '| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | '
+      '---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | '
+      '---: | ---: | --- |',
     );
   for (final report in reports) {
     buffer.writeln(
