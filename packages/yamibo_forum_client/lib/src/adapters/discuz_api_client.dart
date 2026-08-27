@@ -95,6 +95,7 @@ final class DiscuzApiClient {
     required Map<String, String> form,
     Map<String, Object?> queryParameters = const <String, Object?>{},
     bool treatMessageAsBusinessError = true,
+    Uri? referer,
     ForumRequestCancellation? cancellation,
   }) async {
     final apiOrigin = config.apiOrigin;
@@ -116,7 +117,10 @@ final class DiscuzApiClient {
         if (!queryParameters.containsKey('version')) 'version': '4',
       },
     );
-    final profile = requestProfiles.resolve(ForumRequestProfileKind.discuzApi);
+    final profile = requestProfiles.resolve(
+      ForumRequestProfileKind.discuzApi,
+      referer: referer,
+    );
     final response = await network.send(
       ForumRequest(
         method: ForumRequestMethod.post,

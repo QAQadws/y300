@@ -3,6 +3,7 @@ import '../contracts/cache_load_policy.dart';
 import '../contracts/data_read_contract.dart';
 import '../contracts/data_command_contract.dart';
 import '../contracts/favorite_directories.dart';
+import '../contracts/favorite_commands.dart';
 import '../contracts/forum_directory.dart';
 import '../contracts/forum_home.dart';
 import '../contracts/forum_authentication.dart';
@@ -119,6 +120,28 @@ final class YamiboForumClient {
   /// Configured favorite-thread directory source, if installed.
   FavoriteThreadDirectoryRepository? get favoriteThreadDirectory =>
       sourcePlan.favoriteThreadDirectory;
+
+  /// Configured forum-favorite command, if installed.
+  FavoriteForumCommand? get favoriteForumCommand =>
+      sourcePlan.favoriteForumCommand;
+
+  /// Configured thread-favorite command, if installed.
+  FavoriteThreadCommand? get favoriteThreadCommand =>
+      sourcePlan.favoriteThreadCommand;
+
+  /// Sets and confirms one forum's favorite state.
+  Future<DataCommandResult<ForumFavoriteReceipt>> setForumFavorite(
+    SetForumFavoriteRequest request,
+  ) =>
+      sourcePlan.favoriteForumCommand?.execute(request) ??
+      Future.value(const DataCommandUnsupported<ForumFavoriteReceipt>());
+
+  /// Sets and confirms one thread's favorite state.
+  Future<DataCommandResult<ThreadFavoriteReceipt>> setThreadFavorite(
+    SetThreadFavoriteRequest request,
+  ) =>
+      sourcePlan.favoriteThreadCommand?.execute(request) ??
+      Future.value(const DataCommandUnsupported<ThreadFavoriteReceipt>());
 
   /// Configured current-user profile source, if installed.
   CurrentUserProfileRepository? get currentUserProfile =>

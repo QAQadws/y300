@@ -1,5 +1,6 @@
 import '../contracts/comic_contracts.dart';
 import '../contracts/favorite_directories.dart';
+import '../contracts/favorite_commands.dart';
 import '../contracts/forum_directory.dart';
 import '../contracts/forum_authentication.dart';
 import '../contracts/forum_home.dart';
@@ -27,6 +28,8 @@ final class ForumClientSourcePlan {
     this.forumTagDirectory,
     this.favoriteForumDirectory,
     this.favoriteThreadDirectory,
+    this.favoriteForumCommand,
+    this.favoriteThreadCommand,
     this.currentUserProfile,
     this.notifications,
     this.privateMessages,
@@ -65,6 +68,12 @@ final class ForumClientSourcePlan {
 
   /// Source for the authenticated user's favorite threads.
   final FavoriteThreadDirectoryRepository? favoriteThreadDirectory;
+
+  /// Command for changing one forum's favorite state.
+  final FavoriteForumCommand? favoriteForumCommand;
+
+  /// Command for changing one thread's favorite state.
+  final FavoriteThreadCommand? favoriteThreadCommand;
 
   /// Source for the authenticated user's profile projection.
   final CurrentUserProfileRepository? currentUserProfile;

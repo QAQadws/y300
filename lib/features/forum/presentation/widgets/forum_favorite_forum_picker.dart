@@ -3,8 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -24,13 +22,13 @@ class ForumFavoriteForumPicker extends StatefulWidget {
   >
   Function()
   loadFavoriteForums;
-  final Future<ApiResult<ForumFavoriteMutationResult>> Function(
+  final Future<DataCommandResult<ForumFavoriteReceipt>> Function(
     FavoriteForumEntry forum,
   )
   onUnfavorite;
   final FutureOr<void> Function(
     FavoriteForumEntry forum,
-    ForumFavoriteMutationResult result,
+    ForumFavoriteReceipt result,
   )?
   onSuccess;
 
@@ -165,9 +163,9 @@ class _ForumFavoriteForumPickerState extends State<ForumFavoriteForumPicker> {
     if (!mounted) {
       return;
     }
-    if (result case ApiSuccess<ForumFavoriteMutationResult>(:final data)) {
+    if (result case DataCommandApplied<ForumFavoriteReceipt>(:final receipt)) {
       Navigator.of(context).pop();
-      await widget.onSuccess?.call(forum, data);
+      await widget.onSuccess?.call(forum, receipt);
       return;
     }
 
@@ -178,7 +176,7 @@ class _ForumFavoriteForumPickerState extends State<ForumFavoriteForumPicker> {
           content: Text(
             ForumTextResolver.favoriteActionFailure(
               AppLocalizations.of(context),
-              result.errorOrNull?.message,
+              result,
             ),
           ),
         ),

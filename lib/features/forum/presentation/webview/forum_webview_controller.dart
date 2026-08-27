@@ -1,10 +1,7 @@
 import 'dart:async';
 
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
-import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
-import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
@@ -31,7 +28,7 @@ final forumWebViewCompletionTargetProvider =
 
 class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
   late ForumWebViewNavigator _navigator;
-  late ForumFavoriteRepository _favoriteRepository;
+  late FavoriteForumCommand _favoriteCommand;
   late FavoriteForumDirectoryRepository _favoriteDirectoryRepository;
   ForumWebViewState? _lastKnownState;
   dynamic _keepAliveLink;
@@ -42,7 +39,7 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
   FutureOr<ForumWebViewState> build() {
     _disposed = false;
     _navigator = ref.read(forumWebViewNavigatorProvider);
-    _favoriteRepository = ref.read(forumFavoriteRepositoryProvider);
+    _favoriteCommand = ref.read(favoriteForumCommandProvider);
     _favoriteDirectoryRepository = ref.read(
       favoriteForumDirectoryRepositoryProvider,
     );
@@ -277,18 +274,28 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     });
   }
 
-  Future<ApiResult<ForumFavoriteMutationResult>> favoriteCurrentForum() async {
+  Future<DataCommandResult<ForumFavoriteReceipt>> favoriteCurrentForum() async {
     final fid = _currentState.fid?.trim() ?? '';
     if (fid.isEmpty) {
-      return const ApiFailure<ForumFavoriteMutationResult>(
-        ApiError(type: ApiErrorType.business, message: '当前版块 fid 缺失，无法收藏本版'),
+      return const DataCommandNotSent<ForumFavoriteReceipt>(
+        DataCommandFailure(
+          kind: DataCommandFailureKind.validation,
+          retryPolicy: DataCommandRetryPolicy.afterInputChange,
+          code: 'favorite_forum_fid_missing',
+          diagnosticMessage: 'favorite_forum_fid_missing',
+        ),
       );
     }
 
     return _runKeptAlive(() async {
       _setFavoriteMutationLoading(true);
-      final result = await _favoriteRepository.favoriteForum(fid: fid);
-      if (result.isSuccess) {
+      final result = await _favoriteCommand.execute(
+        SetForumFavoriteRequest(
+          fid: fid,
+          targetState: FavoriteTargetState.favorited,
+        ),
+      );
+      if (result case DataCommandApplied<ForumFavoriteReceipt>()) {
         await loadFavoriteForums();
       }
       _setFavoriteMutationLoading(false);
@@ -296,12 +303,17 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     });
   }
 
-  Future<ApiResult<ForumFavoriteMutationResult>>
+  Future<DataCommandResult<ForumFavoriteReceipt>>
   unfavoriteCurrentForum() async {
     final currentFavoriteForum = _currentState.currentFavoriteForum;
     if (currentFavoriteForum == null) {
-      return const ApiFailure<ForumFavoriteMutationResult>(
-        ApiError(type: ApiErrorType.business, message: '当前版块尚未收藏'),
+      return const DataCommandNotSent<ForumFavoriteReceipt>(
+        DataCommandFailure(
+          kind: DataCommandFailureKind.validation,
+          retryPolicy: DataCommandRetryPolicy.explicitOnly,
+          code: 'favorite_forum_not_favorited',
+          diagnosticMessage: 'favorite_forum_not_favorited',
+        ),
       );
     }
     final capabilities = _currentState.favoriteForumCapabilities;
@@ -312,17 +324,26 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
         ) ||
         remoteFavoriteId == null ||
         remoteFavoriteId.isEmpty) {
-      return const ApiFailure<ForumFavoriteMutationResult>(
-        ApiError(type: ApiErrorType.business, message: '找不到当前版块的收藏标识'),
+      return const DataCommandNotSent<ForumFavoriteReceipt>(
+        DataCommandFailure(
+          kind: DataCommandFailureKind.validation,
+          retryPolicy: DataCommandRetryPolicy.explicitOnly,
+          code: 'favorite_forum_remote_identity_missing',
+          diagnosticMessage: 'favorite_forum_remote_identity_missing',
+        ),
       );
     }
 
     return _runKeptAlive(() async {
       _setFavoriteMutationLoading(true);
-      final result = await _favoriteRepository.unfavoriteForum(
-        favid: remoteFavoriteId,
+      final result = await _favoriteCommand.execute(
+        SetForumFavoriteRequest(
+          fid: currentFavoriteForum.fid,
+          targetState: FavoriteTargetState.unfavorited,
+          knownRemoteFavoriteId: remoteFavoriteId,
+        ),
       );
-      if (result.isSuccess) {
+      if (result case DataCommandApplied<ForumFavoriteReceipt>()) {
         await loadFavoriteForums();
       }
       _setFavoriteMutationLoading(false);
@@ -330,12 +351,14 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
     });
   }
 
-  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForumByFavid({
-    required String favid,
+  Future<DataCommandResult<ForumFavoriteReceipt>> unfavoriteForum({
+    required FavoriteForumEntry forum,
   }) async {
-    final remoteFavoriteId = favid.trim();
+    final remoteFavoriteId = forum.remoteFavoriteId?.trim() ?? '';
+    final fid = forum.fid.trim();
     final current = _currentState;
     final canUnfavorite =
+        fid.isNotEmpty &&
         remoteFavoriteId.isNotEmpty &&
         current.favoriteForumCapabilities?.supports(
               FavoriteForumDirectoryCapability.stableRemoteFavoriteIdentity,
@@ -345,16 +368,25 @@ class ForumWebViewController extends AsyncNotifier<ForumWebViewState> {
           (forum) => forum.remoteFavoriteId?.trim() == remoteFavoriteId,
         );
     if (!canUnfavorite) {
-      return const ApiFailure<ForumFavoriteMutationResult>(
-        ApiError(type: ApiErrorType.business, message: '找不到当前版块的收藏标识'),
+      return const DataCommandNotSent<ForumFavoriteReceipt>(
+        DataCommandFailure(
+          kind: DataCommandFailureKind.validation,
+          retryPolicy: DataCommandRetryPolicy.explicitOnly,
+          code: 'favorite_forum_remote_identity_missing',
+          diagnosticMessage: 'favorite_forum_remote_identity_missing',
+        ),
       );
     }
     return _runKeptAlive(() async {
       _setFavoriteMutationLoading(true);
-      final result = await _favoriteRepository.unfavoriteForum(
-        favid: remoteFavoriteId,
+      final result = await _favoriteCommand.execute(
+        SetForumFavoriteRequest(
+          fid: fid,
+          targetState: FavoriteTargetState.unfavorited,
+          knownRemoteFavoriteId: remoteFavoriteId,
+        ),
       );
-      if (result.isSuccess) {
+      if (result case DataCommandApplied<ForumFavoriteReceipt>()) {
         await loadFavoriteForums();
       }
       _setFavoriteMutationLoading(false);

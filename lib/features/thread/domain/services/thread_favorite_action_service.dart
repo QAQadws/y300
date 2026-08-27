@@ -1,5 +1,4 @@
-import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/thread/data/repositories/thread_favorite_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 
 typedef ThreadFavoriteModuleRefresh =
@@ -8,7 +7,7 @@ typedef ThreadFavoriteModuleRefreshNotifier =
     void Function({required String reason, required String tid});
 
 abstract class ThreadFavoriteActionService {
-  Future<ApiResult<ThreadFavoriteActionResult>> favoriteThread({
+  Future<DataCommandResult<ThreadFavoriteActionResult>> favoriteThread({
     required String tid,
   });
 }
@@ -16,40 +15,40 @@ abstract class ThreadFavoriteActionService {
 class DefaultThreadFavoriteActionService
     implements ThreadFavoriteActionService {
   DefaultThreadFavoriteActionService({
-    required ThreadFavoriteRepository repository,
+    required FavoriteThreadCommand command,
     required ThreadFavoriteModuleRefresh refreshFavoriteModule,
     required ThreadFavoriteModuleRefreshNotifier notifyFavoriteModule,
-  }) : _repository = repository,
+  }) : _command = command,
        _refreshFavoriteModule = refreshFavoriteModule,
        _notifyFavoriteModule = notifyFavoriteModule;
 
-  final ThreadFavoriteRepository _repository;
+  final FavoriteThreadCommand _command;
   final ThreadFavoriteModuleRefresh _refreshFavoriteModule;
   final ThreadFavoriteModuleRefreshNotifier _notifyFavoriteModule;
 
   @override
-  Future<ApiResult<ThreadFavoriteActionResult>> favoriteThread({
+  Future<DataCommandResult<ThreadFavoriteActionResult>> favoriteThread({
     required String tid,
   }) async {
-    final result = await _repository.favoriteThread(
-      request: ThreadFavoriteRequest(tid: tid),
+    final result = await _command.execute(
+      SetThreadFavoriteRequest(
+        tid: tid,
+        targetState: FavoriteTargetState.favorited,
+      ),
     );
-    if (result case ApiFailure<ThreadFavoriteResult>(:final error)) {
-      return ApiFailure<ThreadFavoriteActionResult>(error);
+    if (result is! DataCommandApplied<ThreadFavoriteReceipt>) {
+      return _retypeFailure(result);
     }
 
-    final favoriteResult = (result as ApiSuccess<ThreadFavoriteResult>).data;
-    final favoriteMessage = favoriteResult.message.trim().isEmpty
-        ? '收藏成功'
-        : favoriteResult.message.trim();
+    final favoriteReceipt = result.receipt;
     var refreshed = false;
-    Object? refreshError;
 
     try {
       await _refreshFavoriteModule(tid: tid);
       refreshed = true;
-    } catch (error) {
-      refreshError = error;
+    } catch (_) {
+      // The remote command is already confirmed. Local ingest remains a
+      // separate App workflow and is reported through structured state.
     }
 
     // The favorite shelf listens to this signal and reloads its local snapshot.
@@ -61,14 +60,29 @@ class DefaultThreadFavoriteActionService
           : 'thread_favorite_added_sync_failed',
     );
 
-    return ApiSuccess<ThreadFavoriteActionResult>(
+    return DataCommandApplied<ThreadFavoriteActionResult>(
       ThreadFavoriteActionResult(
-        message: refreshed
-            ? favoriteMessage
-            : '$favoriteMessage；收藏列表刷新失败：$refreshError',
         refreshedFavoriteModule: refreshed,
-        alreadyFavorited: favoriteResult.alreadyFavorited,
+        alreadyFavorited:
+            favoriteReceipt.disposition ==
+            FavoriteMutationDisposition.alreadyApplied,
       ),
     );
   }
 }
+
+DataCommandResult<ThreadFavoriteActionResult> _retypeFailure(
+  DataCommandResult<ThreadFavoriteReceipt> result,
+) => switch (result) {
+  DataCommandRejected<ThreadFavoriteReceipt>(:final failure) =>
+    DataCommandRejected<ThreadFavoriteActionResult>(failure),
+  DataCommandNotSent<ThreadFavoriteReceipt>(:final failure) =>
+    DataCommandNotSent<ThreadFavoriteActionResult>(failure),
+  DataCommandOutcomeUnknown<ThreadFavoriteReceipt>(:final failure) =>
+    DataCommandOutcomeUnknown<ThreadFavoriteActionResult>(failure),
+  DataCommandUnsupported<ThreadFavoriteReceipt>(:final failure) =>
+    DataCommandUnsupported<ThreadFavoriteActionResult>(failure),
+  DataCommandApplied<ThreadFavoriteReceipt>() => throw StateError(
+    'Applied favorite results must be handled before failure retyping.',
+  ),
+};

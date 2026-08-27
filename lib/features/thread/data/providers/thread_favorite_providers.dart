@@ -1,27 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
+import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/thread/data/repositories/discuz_thread_favorite_api_repository.dart';
-import 'package:y300/features/thread/data/repositories/thread_favorite_repository.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
-
-final threadFavoriteRepositoryProvider = Provider<ThreadFavoriteRepository>((
-  ref,
-) {
-  return DiscuzThreadFavoriteApiRepository(
-    formhashProvider: ref.read(formhashProvider),
-    gateway: ref.read(yamiboHttpGatewayProvider),
-  );
-});
 
 final threadFavoriteActionServiceProvider =
     Provider<ThreadFavoriteActionService>((ref) {
       final shelfRefreshBus = ref.watch(libraryShelfRefreshBusProvider);
       return DefaultThreadFavoriteActionService(
-        repository: ref.watch(threadFavoriteRepositoryProvider),
+        command: ref.watch(favoriteThreadCommandProvider),
         refreshFavoriteModule: ({required String tid}) async {
           await ref
               .read(favoriteSyncServiceProvider)

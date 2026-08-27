@@ -15,9 +15,8 @@ import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_unused_image_management_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
+import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
-import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
-import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
@@ -25,6 +24,8 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
+
+import '../../../support/favorite_command_test_support.dart';
 
 void main() {
   testWidgets('MorePage builds dark theme chrome', (tester) async {
@@ -181,8 +182,8 @@ void main() {
           webViewCookieSyncServiceProvider.overrideWithValue(
             _FakeWebViewCookieSyncService(),
           ),
-          forumFavoriteRepositoryProvider.overrideWithValue(
-            const _FakeForumFavoriteRepository(),
+          favoriteForumCommandProvider.overrideWithValue(
+            FakeFavoriteForumCommand(),
           ),
         ],
         child: const LocalizedTestApp(home: MorePage()),
@@ -978,28 +979,6 @@ class _FakeWebViewCookieSyncService extends WebViewCookieSyncService {
   @override
   Future<Map<String, String>> syncToStore(Uri uri) async {
     return const <String, String>{};
-  }
-}
-
-class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
-  const _FakeForumFavoriteRepository();
-
-  @override
-  Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
-    required String fid,
-  }) async {
-    return const ApiSuccess<ForumFavoriteMutationResult>(
-      ForumFavoriteMutationResult(message: '收藏成功'),
-    );
-  }
-
-  @override
-  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForum({
-    required String favid,
-  }) async {
-    return const ApiSuccess<ForumFavoriteMutationResult>(
-      ForumFavoriteMutationResult(message: '取消收藏成功'),
-    );
   }
 }
 

@@ -7,7 +7,6 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/forum/data/services/forum_webview_redirect_resolver.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/data/services/forum_webview_cookie_bootstrapper.dart';
@@ -1225,8 +1224,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       builder: (_) {
         return ForumFavoriteForumPicker(
           loadFavoriteForums: controller.loadFavoriteForums,
-          onUnfavorite: (forum) =>
-              controller.unfavoriteForumByFavid(favid: forum.remoteFavoriteId!),
+          onUnfavorite: (forum) => controller.unfavoriteForum(forum: forum),
           onSuccess: (_, _) async {
             if (!mounted || !messenger.mounted) {
               return;
@@ -1255,7 +1253,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     required ForumWebViewDriver driver,
     required Uri reloadUri,
     required String successMessage,
-    required Future<ApiResult<ForumFavoriteMutationResult>> Function() action,
+    required Future<DataCommandResult<ForumFavoriteReceipt>> Function() action,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
     final l10n = AppLocalizations.of(context);
@@ -1263,17 +1261,14 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (!mounted || !messenger.mounted) {
       return;
     }
-    if (result case ApiSuccess<ForumFavoriteMutationResult>()) {
+    if (result case DataCommandApplied<ForumFavoriteReceipt>()) {
       _showSnackBar(messenger, successMessage);
       await _loadManagedUri(driver, reloadUri, referrerUri: reloadUri);
       return;
     }
     _showSnackBar(
       messenger,
-      ForumTextResolver.favoriteActionFailure(
-        l10n,
-        result.errorOrNull?.message,
-      ),
+      ForumTextResolver.favoriteActionFailure(l10n, result),
     );
   }
 

@@ -8,7 +8,24 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
-- Reserved for changes made after `0.3.0`.
+- Reserved for changes made after `0.4.0`.
+
+## 0.4.0 - 2026-08-27
+
+### Added
+
+- Source-neutral target-state commands for forum and thread favorites.
+- Discuz v4 favorite adapters with formhash preparation and authoritative
+  favorite-directory read-back confirmation.
+- Structured receipts distinguishing a changed state from an already-applied
+  state without exposing server messages or transport payloads.
+
+### Changed
+
+- Forum removal now resolves and verifies `fid → favid`; thread removal remains
+  keyed by stable `tid`.
+- Accepted mutations whose final state cannot be read back now return
+  `DataCommandOutcomeUnknown` and are never retried by the command adapter.
 
 ## 0.3.0 - 2026-08-26
 

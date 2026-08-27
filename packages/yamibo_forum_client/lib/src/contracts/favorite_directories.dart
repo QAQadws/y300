@@ -3,9 +3,12 @@ library;
 
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
+import '../network/forum_request.dart';
 
 final class FavoriteForumDirectoryQuery {
-  const FavoriteForumDirectoryQuery();
+  const FavoriteForumDirectoryQuery({this.cancellation});
+
+  final ForumRequestCancellation? cancellation;
 }
 
 final class FavoriteForumDirectoryData {
@@ -79,8 +82,9 @@ abstract interface class FavoriteForumDirectoryRepository {
 }
 
 final class FavoriteThreadDirectoryQuery {
-  const FavoriteThreadDirectoryQuery({this.page = 1});
+  const FavoriteThreadDirectoryQuery({this.page = 1, this.cancellation});
   final int page;
+  final ForumRequestCancellation? cancellation;
 }
 
 final class FavoriteThreadDirectoryData {

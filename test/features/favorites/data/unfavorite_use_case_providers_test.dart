@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
@@ -11,10 +11,9 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/work_purge_service.dart';
-import 'package:y300/features/thread/data/providers/thread_favorite_providers.dart';
-import 'package:y300/features/thread/data/repositories/thread_favorite_repository.dart';
-import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+
+import '../../../support/favorite_command_test_support.dart';
 
 void main() {
   test('unfavorite use case providers can construct both use cases', () {
@@ -23,8 +22,8 @@ void main() {
         localFavoriteRepositoryProvider.overrideWithValue(
           _FakeLocalFavoriteRepository(),
         ),
-        threadFavoriteRepositoryProvider.overrideWithValue(
-          _FakeThreadFavoriteRepository(),
+        favoriteThreadCommandProvider.overrideWithValue(
+          FakeFavoriteThreadCommand(),
         ),
         workPurgeServiceProvider.overrideWithValue(_FakeWorkPurgeService()),
         libraryShelfRefreshBusProvider.overrideWith((ref) {
@@ -176,26 +175,6 @@ class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
 
   @override
   Future<String?> pickRandomWorkId({required String categoryId}) async => null;
-}
-
-class _FakeThreadFavoriteRepository implements ThreadFavoriteRepository {
-  @override
-  Future<ApiResult<ThreadFavoriteResult>> favoriteThread({
-    required ThreadFavoriteRequest request,
-  }) async {
-    return const ApiSuccess<ThreadFavoriteResult>(
-      ThreadFavoriteResult(message: 'ok'),
-    );
-  }
-
-  @override
-  Future<ApiResult<ThreadUnfavoriteResult>> unfavoriteThread({
-    required ThreadUnfavoriteRequest request,
-  }) async {
-    return const ApiSuccess<ThreadUnfavoriteResult>(
-      ThreadUnfavoriteResult(message: 'ok'),
-    );
-  }
 }
 
 class _FakeWorkPurgeService implements WorkPurgeService {

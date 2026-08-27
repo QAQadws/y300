@@ -15,6 +15,7 @@ export 'src/adapters/discuz_api_client.dart';
 export 'src/adapters/discuz_authentication_adapter.dart';
 export 'src/adapters/discuz_comic_read_adapters.dart';
 export 'src/adapters/discuz_directory_adapters.dart';
+export 'src/adapters/discuz_favorite_commands.dart';
 export 'src/adapters/discuz_forum_tag_directory_repository.dart';
 export 'src/adapters/discuz_tag_directory_html_parser.dart';
 export 'src/adapters/discuz_forum_search_repository.dart';

@@ -1,5 +1,35 @@
 # Migration guide
 
+## 0.3.x to 0.4.0
+
+The standard client now installs independent `FavoriteForumCommand` and
+`FavoriteThreadCommand` slots. Applications should request a final state and
+handle `DataCommandResult` exhaustively:
+
+```dart
+final result = await client.setThreadFavorite(
+  const SetThreadFavoriteRequest(
+    tid: '10001',
+    targetState: FavoriteTargetState.unfavorited,
+  ),
+);
+```
+
+Do not delete local favorite state unless the result is
+`DataCommandApplied`. In particular, `DataCommandOutcomeUnknown` means the
+server may already have accepted the mutation but the directory could not
+prove its final state; retrying automatically could repeat a non-idempotent
+write.
+
+Forum removal callers may pass a known `remoteFavoriteId` only as an untrusted
+hint. The standard adapter always reloads the forum favorite directory and
+verifies that the `favid` belongs to the requested `fid`. Thread removal uses
+the stable `tid` protocol and does not require a `favid`.
+
+Custom source plans must install the two command contracts explicitly or they
+will fail closed as `unsupported`. Existing read, authentication, Cookie,
+formhash, and WAF ports are unchanged.
+
 ## 0.2.x to 0.3.0
 
 Use `buildStandardClient()` for new integrations:

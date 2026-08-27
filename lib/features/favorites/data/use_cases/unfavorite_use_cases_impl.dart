@@ -1,28 +1,26 @@
-import 'package:y300/core/network/api_result.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/services/favorite_link_service.dart';
 import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/work_purge_service.dart';
-import 'package:y300/features/thread/data/repositories/thread_favorite_repository.dart';
-import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 class DefaultUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
   const DefaultUnfavoriteWorkUseCase({
-    required ThreadFavoriteRepository threadFavoriteRepository,
+    required FavoriteThreadCommand favoriteThreadCommand,
     required FavoriteLinkService favoriteLinkService,
     required LocalFavoriteRepository localFavoriteRepository,
     required WorkPurgeService workPurgeService,
     required LibraryShelfRefreshBus shelfRefreshBus,
-  }) : _threadFavoriteRepository = threadFavoriteRepository,
+  }) : _favoriteThreadCommand = favoriteThreadCommand,
        _favoriteLinkService = favoriteLinkService,
        _localFavoriteRepository = localFavoriteRepository,
        _workPurgeService = workPurgeService,
        _shelfRefreshBus = shelfRefreshBus;
 
-  final ThreadFavoriteRepository _threadFavoriteRepository;
+  final FavoriteThreadCommand _favoriteThreadCommand;
   final FavoriteLinkService _favoriteLinkService;
   final LocalFavoriteRepository _localFavoriteRepository;
   final WorkPurgeService _workPurgeService;
@@ -53,10 +51,13 @@ class DefaultUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
     final failedTids = <String>[];
 
     for (final tid in requestedTids) {
-      final result = await _threadFavoriteRepository.unfavoriteThread(
-        request: ThreadUnfavoriteRequest(tid: tid),
+      final result = await _favoriteThreadCommand.execute(
+        SetThreadFavoriteRequest(
+          tid: tid,
+          targetState: FavoriteTargetState.unfavorited,
+        ),
       );
-      if (result case ApiSuccess<ThreadUnfavoriteResult>()) {
+      if (result case DataCommandApplied<ThreadFavoriteReceipt>()) {
         succeededTids.add(tid);
       } else {
         failedTids.add(tid);
@@ -136,18 +137,18 @@ class DefaultUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
 
 class DefaultUnfavoriteThreadUseCase implements UnfavoriteThreadUseCase {
   const DefaultUnfavoriteThreadUseCase({
-    required ThreadFavoriteRepository threadFavoriteRepository,
+    required FavoriteThreadCommand favoriteThreadCommand,
     required FavoriteLinkService favoriteLinkService,
     required LocalFavoriteRepository localFavoriteRepository,
     required WorkPurgeService workPurgeService,
     required LibraryShelfRefreshBus shelfRefreshBus,
-  }) : _threadFavoriteRepository = threadFavoriteRepository,
+  }) : _favoriteThreadCommand = favoriteThreadCommand,
        _favoriteLinkService = favoriteLinkService,
        _localFavoriteRepository = localFavoriteRepository,
        _workPurgeService = workPurgeService,
        _shelfRefreshBus = shelfRefreshBus;
 
-  final ThreadFavoriteRepository _threadFavoriteRepository;
+  final FavoriteThreadCommand _favoriteThreadCommand;
   final FavoriteLinkService _favoriteLinkService;
   final LocalFavoriteRepository _localFavoriteRepository;
   final WorkPurgeService _workPurgeService;
@@ -166,10 +167,13 @@ class DefaultUnfavoriteThreadUseCase implements UnfavoriteThreadUseCase {
       links = await _favoriteLinkService.linksForWork(workId);
     }
 
-    final result = await _threadFavoriteRepository.unfavoriteThread(
-      request: ThreadUnfavoriteRequest(tid: normalizedTid),
+    final result = await _favoriteThreadCommand.execute(
+      SetThreadFavoriteRequest(
+        tid: normalizedTid,
+        targetState: FavoriteTargetState.unfavorited,
+      ),
     );
-    if (result case ApiFailure<ThreadUnfavoriteResult>()) {
+    if (result is! DataCommandApplied<ThreadFavoriteReceipt>) {
       return UnfavoriteResult(
         requestedTids: <String>[normalizedTid],
         succeededTids: const <String>[],

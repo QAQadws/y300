@@ -1,3 +1,5 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+
 /// Stable UI-facing semantics emitted by the thread controller.
 ///
 /// These values deliberately do not contain localized text. Presentation
@@ -22,6 +24,7 @@ enum ThreadActionKind { favorite, vote, rate, comment, reply, ratings }
 
 enum ThreadActionNoticeCode {
   success,
+  partialSuccess,
   failure,
   loginRequired,
   permissionDenied,
@@ -52,6 +55,7 @@ final class ThreadActionNotice {
     this.action,
     this.detail,
     this.maxChoices,
+    this.commandFailure,
     @Deprecated('Use code and detail for presentation.') this.message,
   });
 
@@ -59,6 +63,7 @@ final class ThreadActionNotice {
   final ThreadActionKind? action;
   final String? detail;
   final int? maxChoices;
+  final DataCommandFailure? commandFailure;
 
   @Deprecated('Use code and detail for presentation.')
   final String? message;

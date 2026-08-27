@@ -16,6 +16,7 @@ import 'package:y300/features/thread/data/repositories/thread_post_ratings_repos
 import 'package:y300/features/thread/data/repositories/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 
@@ -326,32 +327,33 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       return;
     }
     final afterAction = state.value ?? snapshot;
-    state = result.when(
-      success: (data) => AsyncData(
+    state = switch (result) {
+      DataCommandApplied<ThreadFavoriteActionResult>(:final receipt) =>
+        AsyncData(
+          afterAction.copyWith(
+            isThreadFavoriteActionLoading: false,
+            isThreadFavorited: true,
+            clearThreadFavoriteHint: true,
+            threadFavoriteNotice: ThreadActionNotice(
+              code: receipt.refreshedFavoriteModule
+                  ? ThreadActionNoticeCode.success
+                  : ThreadActionNoticeCode.partialSuccess,
+              action: ThreadActionKind.favorite,
+            ),
+          ),
+        ),
+      _ => AsyncData(
         afterAction.copyWith(
           isThreadFavoriteActionLoading: false,
-          isThreadFavorited: true,
-          threadFavoriteHint: data.message,
+          clearThreadFavoriteHint: true,
           threadFavoriteNotice: ThreadActionNotice(
-            code: ThreadActionNoticeCode.success,
+            code: _noticeCodeForCommand(result.failureOrNull),
             action: ThreadActionKind.favorite,
-            detail: data.message,
+            commandFailure: result.failureOrNull,
           ),
         ),
       ),
-      failure: (error) => AsyncData(
-        afterAction.copyWith(
-          isThreadFavoriteActionLoading: false,
-          threadFavoriteHint: error.message,
-          threadFavoriteNotice: ThreadActionNotice(
-            code: _noticeCodeFor(error),
-            action: ThreadActionKind.favorite,
-            detail: error.message,
-            message: error.message,
-          ),
-        ),
-      ),
-    );
+    };
   }
 
   void togglePollOption(ThreadPoll poll, ThreadPollOption option) {
@@ -1178,6 +1180,17 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     return switch (error.type) {
       ApiErrorType.unauthorized => ThreadActionNoticeCode.loginRequired,
       ApiErrorType.business => ThreadActionNoticeCode.failure,
+      _ => ThreadActionNoticeCode.failure,
+    };
+  }
+
+  ThreadActionNoticeCode _noticeCodeForCommand(DataCommandFailure? failure) {
+    return switch (failure?.kind) {
+      DataCommandFailureKind.unauthenticated =>
+        ThreadActionNoticeCode.loginRequired,
+      DataCommandFailureKind.permissionDenied =>
+        ThreadActionNoticeCode.permissionDenied,
+      DataCommandFailureKind.unsupported => ThreadActionNoticeCode.unsupported,
       _ => ThreadActionNoticeCode.failure,
     };
   }

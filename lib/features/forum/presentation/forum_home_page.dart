@@ -8,7 +8,6 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
-import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
@@ -249,7 +248,7 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
     final directoryRepository = ref.read(
       favoriteForumDirectoryRepositoryProvider,
     );
-    final mutationRepository = ref.read(forumFavoriteRepositoryProvider);
+    final favoriteCommand = ref.read(favoriteForumCommandProvider);
     final messenger = ScaffoldMessenger.of(context);
     final l10n = AppLocalizations.of(context);
     return showModalBottomSheet<void>(
@@ -257,8 +256,13 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
       builder: (_) => ForumFavoriteForumPicker(
         loadFavoriteForums: () =>
             directoryRepository.load(const FavoriteForumDirectoryQuery()),
-        onUnfavorite: (forum) =>
-            mutationRepository.unfavoriteForum(favid: forum.remoteFavoriteId!),
+        onUnfavorite: (forum) => favoriteCommand.execute(
+          SetForumFavoriteRequest(
+            fid: forum.fid,
+            targetState: FavoriteTargetState.unfavorited,
+            knownRemoteFavoriteId: forum.remoteFavoriteId,
+          ),
+        ),
         onSuccess: (_, _) async {
           if (!mounted || !messenger.mounted) {
             return;

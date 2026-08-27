@@ -16,9 +16,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
-import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/services/forum_webview_redirect_resolver.dart';
-import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
@@ -47,6 +45,8 @@ import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+
+import '../../../support/favorite_command_test_support.dart';
 
 Matcher containsCssSelector(String selector) {
   final escapedSelector = RegExp.escape(selector);
@@ -2096,11 +2096,11 @@ Widget _buildTestApp({
       forumTagRepositoryProvider.overrideWithValue(
         tagRepository ?? _FakeForumTagRepository(),
       ),
-      forumFavoriteRepositoryProvider.overrideWithValue(
+      favoriteForumCommandProvider.overrideWithValue(
         resolvedFavoriteRepository,
       ),
       favoriteForumDirectoryRepositoryProvider.overrideWithValue(
-        resolvedFavoriteRepository,
+        resolvedFavoriteRepository.directory,
       ),
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
@@ -2163,11 +2163,11 @@ Widget _buildRoutedTestApp({
       forumTagRepositoryProvider.overrideWithValue(
         tagRepository ?? _FakeForumTagRepository(),
       ),
-      forumFavoriteRepositoryProvider.overrideWithValue(
+      favoriteForumCommandProvider.overrideWithValue(
         resolvedFavoriteRepository,
       ),
       favoriteForumDirectoryRepositoryProvider.overrideWithValue(
-        resolvedFavoriteRepository,
+        resolvedFavoriteRepository.directory,
       ),
       replyRepositoryProvider.overrideWithValue(
         replyRepository ?? _FakeReplyRepository(),
@@ -2730,52 +2730,76 @@ FavoriteForumEntry _favoriteForum({
   );
 }
 
-class _FakeForumFavoriteRepository
-    implements ForumFavoriteRepository, FavoriteForumDirectoryRepository {
+class _FakeForumFavoriteRepository implements FavoriteForumCommand {
   _FakeForumFavoriteRepository({
     List<FavoriteForumEntry>? favoriteForums,
     List<_FavoriteForumReadResult>? loadResults,
-    ApiResult<ForumFavoriteMutationResult>? favoriteResult,
-    ApiResult<ForumFavoriteMutationResult>? unfavoriteResult,
     FavoriteForumDirectorySourceCapabilities? sourceCapabilities,
-  }) : favoriteForums = List<FavoriteForumEntry>.from(
+  }) : directory = _FakeFavoriteForumDirectoryRepository(
          favoriteForums ?? const <FavoriteForumEntry>[],
-       ),
-       _loadResults = List<_FavoriteForumReadResult>.from(
          loadResults ?? const <_FavoriteForumReadResult>[],
-       ),
-       _favoriteResult = favoriteResult,
-       _unfavoriteResult = unfavoriteResult,
-       _capabilities = sourceCapabilities ?? _favoriteForumSourceCapabilities;
+         sourceCapabilities ?? _favoriteForumSourceCapabilities,
+       );
 
-  List<FavoriteForumEntry> favoriteForums;
-  final List<_FavoriteForumReadResult> _loadResults;
-  final ApiResult<ForumFavoriteMutationResult>? _favoriteResult;
-  final ApiResult<ForumFavoriteMutationResult>? _unfavoriteResult;
-  final FavoriteForumDirectorySourceCapabilities _capabilities;
+  final _FakeFavoriteForumDirectoryRepository directory;
 
   final List<String> favoriteCalls = <String>[];
   final List<String> unfavoriteCalls = <String>[];
-  int loadCallCount = 0;
+
+  int get loadCallCount => directory.loadCallCount;
 
   @override
-  Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
-    required String fid,
-  }) async {
-    favoriteCalls.add(fid);
-    final result =
-        _favoriteResult ??
-        const ApiSuccess<ForumFavoriteMutationResult>(
-          ForumFavoriteMutationResult(message: '收藏成功'),
-        );
-    if (result.isSuccess) {
-      favoriteForums = <FavoriteForumEntry>[
-        ...favoriteForums.where((item) => item.fid != fid),
-        _favoriteForum(fid: fid, favid: 'fav-$fid', title: '版块$fid'),
+  FavoriteMutationCapabilities get capabilities =>
+      allFavoriteMutationCapabilities;
+
+  @override
+  Future<DataCommandResult<ForumFavoriteReceipt>> execute(
+    SetForumFavoriteRequest request,
+  ) async {
+    if (request.targetState == FavoriteTargetState.favorited) {
+      favoriteCalls.add(request.fid);
+      directory.favoriteForums = <FavoriteForumEntry>[
+        ...directory.favoriteForums.where((item) => item.fid != request.fid),
+        _favoriteForum(
+          fid: request.fid,
+          favid: 'fav-${request.fid}',
+          title: '版块${request.fid}',
+        ),
       ];
+      return appliedForumFavorite(
+        fid: request.fid,
+        targetState: request.targetState,
+        remoteFavoriteId: 'fav-${request.fid}',
+      );
     }
-    return result;
+    final favid = request.knownRemoteFavoriteId ?? '';
+    unfavoriteCalls.add(favid);
+    directory.favoriteForums = directory.favoriteForums
+        .where(
+          (item) => item.fid != request.fid && item.remoteFavoriteId != favid,
+        )
+        .toList();
+    return appliedForumFavorite(
+      fid: request.fid,
+      targetState: request.targetState,
+      remoteFavoriteId: favid,
+    );
   }
+}
+
+class _FakeFavoriteForumDirectoryRepository
+    implements FavoriteForumDirectoryRepository {
+  _FakeFavoriteForumDirectoryRepository(
+    List<FavoriteForumEntry> favoriteForums,
+    List<_FavoriteForumReadResult> loadResults,
+    this._capabilities,
+  ) : favoriteForums = List<FavoriteForumEntry>.from(favoriteForums),
+      _loadResults = List<_FavoriteForumReadResult>.from(loadResults);
+
+  List<FavoriteForumEntry> favoriteForums;
+  final List<_FavoriteForumReadResult> _loadResults;
+  final FavoriteForumDirectorySourceCapabilities _capabilities;
+  int loadCallCount = 0;
 
   @override
   FavoriteForumDirectorySourceCapabilities get capabilities => _capabilities;
@@ -2805,24 +2829,6 @@ class _FakeForumFavoriteRepository
       capabilities: capabilities.toReadCapabilities(),
       metadata: const DataReadMetadata.network(),
     );
-  }
-
-  @override
-  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForum({
-    required String favid,
-  }) async {
-    unfavoriteCalls.add(favid);
-    final result =
-        _unfavoriteResult ??
-        const ApiSuccess<ForumFavoriteMutationResult>(
-          ForumFavoriteMutationResult(message: '取消收藏成功'),
-        );
-    if (result.isSuccess) {
-      favoriteForums = favoriteForums
-          .where((item) => item.remoteFavoriteId != favid)
-          .toList();
-    }
-    return result;
   }
 }
 

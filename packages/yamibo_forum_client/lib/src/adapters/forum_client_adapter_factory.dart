@@ -1,5 +1,6 @@
 import '../client/forum_client_config.dart';
 import '../contracts/favorite_directories.dart';
+import '../contracts/favorite_commands.dart';
 import '../contracts/forum_authentication.dart';
 import '../contracts/comic_contracts.dart';
 import '../contracts/forum_directory.dart';
@@ -24,6 +25,7 @@ import 'discuz_authentication_adapter.dart';
 import 'discuz_api_client.dart';
 import 'discuz_comic_read_adapters.dart';
 import 'discuz_directory_adapters.dart';
+import 'discuz_favorite_commands.dart';
 import 'discuz_forum_tag_directory_repository.dart';
 import 'discuz_forum_directory_html_repository.dart';
 import 'discuz_forum_home_html_repository.dart';
@@ -128,6 +130,16 @@ final class ForumClientAdapterFactory {
 
   FavoriteThreadDirectoryRepository createFavoriteThreadDirectory() =>
       DiscuzFavoriteThreadDirectoryRepository(_api);
+
+  FavoriteForumCommand createFavoriteForumCommand({
+    required ForumFormhashProvider formhash,
+    required FavoriteForumDirectoryRepository directory,
+  }) => DiscuzFavoriteForumCommandAdapter(_api, formhash, directory);
+
+  FavoriteThreadCommand createFavoriteThreadCommand({
+    required ForumFormhashProvider formhash,
+    required FavoriteThreadDirectoryRepository directory,
+  }) => DiscuzFavoriteThreadCommandAdapter(_api, formhash, directory);
 
   CurrentUserProfileRepository createCurrentUserProfile() =>
       DiscuzCurrentUserProfileRepository(_api);

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/use_cases/unfavorite_use_cases_impl.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
@@ -9,21 +9,17 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/work_purge_service.dart';
-import 'package:y300/features/thread/data/repositories/thread_favorite_repository.dart';
-import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+
+import '../../../support/favorite_command_test_support.dart';
 
 void main() {
   group('DefaultUnfavoriteWorkUseCase', () {
     test('all tids succeed then marks removed purges and notifies', () async {
       final repository = _FakeThreadFavoriteRepository(
-        results: <String, ApiResult<ThreadUnfavoriteResult>>{
-          '100': const ApiSuccess<ThreadUnfavoriteResult>(
-            ThreadUnfavoriteResult(message: 'ok'),
-          ),
-          '101': const ApiSuccess<ThreadUnfavoriteResult>(
-            ThreadUnfavoriteResult(message: 'already', alreadyRemoved: true),
-          ),
+        results: <String, DataCommandResult<ThreadFavoriteReceipt>>{
+          '100': _applied('100'),
+          '101': _applied('101', alreadyApplied: true),
         },
       );
       final favoriteLinkService = _FakeFavoriteLinkService(
@@ -44,7 +40,7 @@ void main() {
       final bus = LibraryShelfRefreshBus();
       addTearDown(bus.dispose);
       final useCase = DefaultUnfavoriteWorkUseCase(
-        threadFavoriteRepository: repository,
+        favoriteThreadCommand: repository,
         favoriteLinkService: favoriteLinkService,
         localFavoriteRepository: localRepository,
         workPurgeService: workPurgeService,
@@ -80,13 +76,9 @@ void main() {
       'partial failure marks only successful tids and skips purge',
       () async {
         final repository = _FakeThreadFavoriteRepository(
-          results: <String, ApiResult<ThreadUnfavoriteResult>>{
-            '100': const ApiSuccess<ThreadUnfavoriteResult>(
-              ThreadUnfavoriteResult(message: 'ok'),
-            ),
-            '101': const ApiFailure<ThreadUnfavoriteResult>(
-              ApiError(type: ApiErrorType.business, message: 'boom'),
-            ),
+          results: <String, DataCommandResult<ThreadFavoriteReceipt>>{
+            '100': _applied('100'),
+            '101': _failed(),
           },
         );
         final favoriteLinkService = _FakeFavoriteLinkService(
@@ -107,7 +99,7 @@ void main() {
         final bus = LibraryShelfRefreshBus();
         addTearDown(bus.dispose);
         final useCase = DefaultUnfavoriteWorkUseCase(
-          threadFavoriteRepository: repository,
+          favoriteThreadCommand: repository,
           favoriteLinkService: favoriteLinkService,
           localFavoriteRepository: localRepository,
           workPurgeService: workPurgeService,
@@ -136,10 +128,8 @@ void main() {
 
     test('already removed locally does not notify without purge', () async {
       final repository = _FakeThreadFavoriteRepository(
-        results: <String, ApiResult<ThreadUnfavoriteResult>>{
-          '100': const ApiSuccess<ThreadUnfavoriteResult>(
-            ThreadUnfavoriteResult(message: 'already', alreadyRemoved: true),
-          ),
+        results: <String, DataCommandResult<ThreadFavoriteReceipt>>{
+          '100': _applied('100', alreadyApplied: true),
         },
       );
       final favoriteLinkService = _FakeFavoriteLinkService(
@@ -157,7 +147,7 @@ void main() {
       final bus = LibraryShelfRefreshBus();
       addTearDown(bus.dispose);
       final useCase = DefaultUnfavoriteWorkUseCase(
-        threadFavoriteRepository: repository,
+        favoriteThreadCommand: repository,
         favoriteLinkService: favoriteLinkService,
         localFavoriteRepository: localRepository,
         workPurgeService: workPurgeService,
@@ -188,7 +178,7 @@ void main() {
       final bus = LibraryShelfRefreshBus();
       addTearDown(bus.dispose);
       final useCase = DefaultUnfavoriteWorkUseCase(
-        threadFavoriteRepository: repository,
+        favoriteThreadCommand: repository,
         favoriteLinkService: favoriteLinkService,
         localFavoriteRepository: localRepository,
         workPurgeService: workPurgeService,
@@ -209,13 +199,9 @@ void main() {
 
     test('callMany merges results in iteration order', () async {
       final repository = _FakeThreadFavoriteRepository(
-        results: <String, ApiResult<ThreadUnfavoriteResult>>{
-          '100': const ApiSuccess<ThreadUnfavoriteResult>(
-            ThreadUnfavoriteResult(message: 'ok'),
-          ),
-          '200': const ApiFailure<ThreadUnfavoriteResult>(
-            ApiError(type: ApiErrorType.business, message: 'bad'),
-          ),
+        results: <String, DataCommandResult<ThreadFavoriteReceipt>>{
+          '100': _applied('100'),
+          '200': _failed(),
         },
       );
       final favoriteLinkService = _FakeFavoriteLinkService(
@@ -234,7 +220,7 @@ void main() {
         activeByWorkId: <String, bool>{'yamibo:1': true, 'novel:1': true},
       );
       final useCase = DefaultUnfavoriteWorkUseCase(
-        threadFavoriteRepository: repository,
+        favoriteThreadCommand: repository,
         favoriteLinkService: favoriteLinkService,
         localFavoriteRepository: _FakeLocalFavoriteRepository(),
         workPurgeService: _FakeWorkPurgeService(),
@@ -255,30 +241,41 @@ void main() {
   });
 }
 
-class _FakeThreadFavoriteRepository implements ThreadFavoriteRepository {
+class _FakeThreadFavoriteRepository implements FavoriteThreadCommand {
   _FakeThreadFavoriteRepository({required this.results});
 
-  final Map<String, ApiResult<ThreadUnfavoriteResult>> results;
+  final Map<String, DataCommandResult<ThreadFavoriteReceipt>> results;
   final List<String> calledTids = <String>[];
 
   @override
-  Future<ApiResult<ThreadFavoriteResult>> favoriteThread({
-    required ThreadFavoriteRequest request,
-  }) {
-    throw UnimplementedError();
-  }
+  FavoriteMutationCapabilities get capabilities =>
+      allFavoriteMutationCapabilities;
 
   @override
-  Future<ApiResult<ThreadUnfavoriteResult>> unfavoriteThread({
-    required ThreadUnfavoriteRequest request,
-  }) async {
+  Future<DataCommandResult<ThreadFavoriteReceipt>> execute(
+    SetThreadFavoriteRequest request,
+  ) async {
     calledTids.add(request.tid);
     return results[request.tid] ??
-        const ApiFailure<ThreadUnfavoriteResult>(
-          ApiError(type: ApiErrorType.business, message: 'missing'),
+        DataCommandRejected<ThreadFavoriteReceipt>(
+          fixtureFavoriteFailure(code: 'fixture_missing_result'),
         );
   }
 }
+
+DataCommandApplied<ThreadFavoriteReceipt> _applied(
+  String tid, {
+  bool alreadyApplied = false,
+}) => appliedThreadFavorite(
+  tid: tid,
+  targetState: FavoriteTargetState.unfavorited,
+  disposition: alreadyApplied
+      ? FavoriteMutationDisposition.alreadyApplied
+      : FavoriteMutationDisposition.changed,
+);
+
+DataCommandRejected<ThreadFavoriteReceipt> _failed() =>
+    DataCommandRejected<ThreadFavoriteReceipt>(fixtureFavoriteFailure());
 
 class _FakeFavoriteLinkService implements FavoriteLinkService {
   _FakeFavoriteLinkService({

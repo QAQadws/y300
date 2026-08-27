@@ -19,9 +19,7 @@ import 'package:y300/features/cache/domain/services/forum_image_dimension_index.
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
-import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/providers/forum_display_repository_providers.dart';
-import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
@@ -35,6 +33,8 @@ import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
+
+import '../../../support/favorite_command_test_support.dart';
 
 void main() {
   group('ForumDisplayPage', () {
@@ -146,7 +146,7 @@ void main() {
       ]);
     });
 
-    testWidgets('unfavorite action resolves the current forum favid', (
+    testWidgets('unfavorite action delegates the target state command', (
       tester,
     ) async {
       final repository = _FakeForumDisplayRepository((fid, page, query) async {
@@ -177,7 +177,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(favoriteRepository.loadCallCount, 1);
+      expect(favoriteRepository.commandRequests, hasLength(1));
+      expect(
+        favoriteRepository.commandRequests.single.targetState,
+        FavoriteTargetState.unfavorited,
+      );
       expect(favoriteRepository.unfavoriteFavids, <String>['fav-2']);
       expect(find.text('已取消收藏本版'), findsOneWidget);
       expect(repository.cachePolicies, <CacheLoadPolicy>[
@@ -1608,7 +1612,7 @@ void main() {
 Widget _buildTestApp(
   ForumDisplayRepository repository, {
   ThreadRepository? threadRepository,
-  ForumFavoriteRepository? favoriteRepository,
+  _FakeForumFavoriteRepository? favoriteRepository,
   List<riverpod_misc.Override> extraOverrides =
       const <riverpod_misc.Override>[],
 }) {
@@ -1616,10 +1620,10 @@ Widget _buildTestApp(
     forumDisplayRepositoryProvider.overrideWithValue(repository),
     imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
     if (favoriteRepository != null)
-      forumFavoriteRepositoryProvider.overrideWithValue(favoriteRepository),
-    if (favoriteRepository is FavoriteForumDirectoryRepository)
+      favoriteForumCommandProvider.overrideWithValue(favoriteRepository),
+    if (favoriteRepository != null)
       favoriteForumDirectoryRepositoryProvider.overrideWithValue(
-        favoriteRepository as FavoriteForumDirectoryRepository,
+        favoriteRepository.directory,
       ),
     if (threadRepository != null)
       threadRepositoryProvider.overrideWithValue(threadRepository),
@@ -1847,14 +1851,57 @@ FavoriteForumEntry _favoriteForum({
   );
 }
 
-class _FakeForumFavoriteRepository
-    implements ForumFavoriteRepository, FavoriteForumDirectoryRepository {
+class _FakeForumFavoriteRepository implements FavoriteForumCommand {
   _FakeForumFavoriteRepository({List<FavoriteForumEntry>? favoriteForums})
-    : favoriteForums = favoriteForums ?? <FavoriteForumEntry>[];
+    : directory = _FakeFavoriteForumDirectoryRepository(
+        favoriteForums ?? <FavoriteForumEntry>[],
+      );
 
-  final List<FavoriteForumEntry> favoriteForums;
+  final _FakeFavoriteForumDirectoryRepository directory;
   final favoriteFids = <String>[];
   final unfavoriteFavids = <String>[];
+  final commandRequests = <SetForumFavoriteRequest>[];
+
+  @override
+  FavoriteMutationCapabilities get capabilities =>
+      allFavoriteMutationCapabilities;
+
+  @override
+  Future<DataCommandResult<ForumFavoriteReceipt>> execute(
+    SetForumFavoriteRequest request,
+  ) async {
+    commandRequests.add(request);
+    if (request.targetState == FavoriteTargetState.favorited) {
+      favoriteFids.add(request.fid);
+      return appliedForumFavorite(
+        fid: request.fid,
+        targetState: request.targetState,
+      );
+    }
+    FavoriteForumEntry? entry;
+    for (final item in directory.favoriteForums) {
+      if (item.fid == request.fid) {
+        entry = item;
+        break;
+      }
+    }
+    final favid = entry?.remoteFavoriteId;
+    if (favid != null) {
+      unfavoriteFavids.add(favid);
+    }
+    return appliedForumFavorite(
+      fid: request.fid,
+      targetState: request.targetState,
+      remoteFavoriteId: favid,
+    );
+  }
+}
+
+class _FakeFavoriteForumDirectoryRepository
+    implements FavoriteForumDirectoryRepository {
+  _FakeFavoriteForumDirectoryRepository(this.favoriteForums);
+
+  final List<FavoriteForumEntry> favoriteForums;
   int loadCallCount = 0;
 
   @override
@@ -1877,26 +1924,6 @@ class _FakeForumFavoriteRepository
       data: FavoriteForumDirectoryData(items: favoriteForums),
       capabilities: capabilities.toReadCapabilities(),
       metadata: const DataReadMetadata.network(),
-    );
-  }
-
-  @override
-  Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
-    required String fid,
-  }) async {
-    favoriteFids.add(fid);
-    return const ApiSuccess<ForumFavoriteMutationResult>(
-      ForumFavoriteMutationResult(),
-    );
-  }
-
-  @override
-  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForum({
-    required String favid,
-  }) async {
-    unfavoriteFavids.add(favid);
-    return const ApiSuccess<ForumFavoriteMutationResult>(
-      ForumFavoriteMutationResult(),
     );
   }
 }

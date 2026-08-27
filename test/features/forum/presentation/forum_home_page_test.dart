@@ -22,15 +22,14 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
-import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
-import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
+import '../../../support/favorite_command_test_support.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
@@ -101,11 +100,9 @@ void main() {
         _buildTestApp(
           homeRepository,
           extraOverrides: [
-            forumFavoriteRepositoryProvider.overrideWithValue(
-              favoriteRepository,
-            ),
+            favoriteForumCommandProvider.overrideWithValue(favoriteRepository),
             favoriteForumDirectoryRepositoryProvider.overrideWithValue(
-              favoriteRepository,
+              favoriteRepository.directory,
             ),
           ],
         ),
@@ -1417,13 +1414,46 @@ FavoriteForumEntry _favoriteDirectoryForum({
   );
 }
 
-class _FakeForumFavoriteRepository
-    implements ForumFavoriteRepository, FavoriteForumDirectoryRepository {
-  _FakeForumFavoriteRepository({required this.favoriteForums});
+class _FakeForumFavoriteRepository implements FavoriteForumCommand {
+  _FakeForumFavoriteRepository({
+    required List<FavoriteForumEntry> favoriteForums,
+  }) : directory = _FakeFavoriteForumDirectoryRepository(favoriteForums);
 
-  final List<FavoriteForumEntry> favoriteForums;
+  final _FakeFavoriteForumDirectoryRepository directory;
   final favoriteFids = <String>[];
   final unfavoriteFavids = <String>[];
+
+  int get loadCallCount => directory.loadCallCount;
+
+  @override
+  FavoriteMutationCapabilities get capabilities =>
+      allFavoriteMutationCapabilities;
+
+  @override
+  Future<DataCommandResult<ForumFavoriteReceipt>> execute(
+    SetForumFavoriteRequest request,
+  ) async {
+    if (request.targetState == FavoriteTargetState.favorited) {
+      favoriteFids.add(request.fid);
+    } else {
+      final favid = request.knownRemoteFavoriteId;
+      if (favid != null) {
+        unfavoriteFavids.add(favid);
+      }
+    }
+    return appliedForumFavorite(
+      fid: request.fid,
+      targetState: request.targetState,
+      remoteFavoriteId: request.knownRemoteFavoriteId,
+    );
+  }
+}
+
+class _FakeFavoriteForumDirectoryRepository
+    implements FavoriteForumDirectoryRepository {
+  _FakeFavoriteForumDirectoryRepository(this.favoriteForums);
+
+  final List<FavoriteForumEntry> favoriteForums;
   int loadCallCount = 0;
 
   @override
@@ -1446,26 +1476,6 @@ class _FakeForumFavoriteRepository
       data: FavoriteForumDirectoryData(items: favoriteForums),
       capabilities: capabilities.toReadCapabilities(),
       metadata: const DataReadMetadata.network(),
-    );
-  }
-
-  @override
-  Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
-    required String fid,
-  }) async {
-    favoriteFids.add(fid);
-    return const ApiSuccess<ForumFavoriteMutationResult>(
-      ForumFavoriteMutationResult(),
-    );
-  }
-
-  @override
-  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForum({
-    required String favid,
-  }) async {
-    unfavoriteFavids.add(favid);
-    return const ApiSuccess<ForumFavoriteMutationResult>(
-      ForumFavoriteMutationResult(),
     );
   }
 }

@@ -82,6 +82,10 @@ void main() {
       'lib/features/auth/data/services/auth_remote_data_source.dart',
       'lib/features/auth/data/services/session_verifier.dart',
       'lib/features/auth/data/models/auth_session_models.dart',
+      'lib/features/forum/data/repositories/forum_favorite_repository.dart',
+      'lib/features/forum/domain/models/forum_favorite_models.dart',
+      'lib/features/thread/data/repositories/thread_favorite_repository.dart',
+      'lib/features/thread/data/repositories/discuz_thread_favorite_api_repository.dart',
     ];
 
     expect(
@@ -150,6 +154,24 @@ void main() {
         })
         .map((file) => _normalized(file.path))
         .where((path) => !allowedReferenceBuilders.contains(path))
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
+  test('favorite mutations stay behind package commands', () {
+    const forbidden = <String>[
+      "module: 'favforum'",
+      "module: 'favthread'",
+      'ForumFavoriteMutationResult',
+      'ThreadUnfavoriteResult',
+    ];
+    final violations = _dartFiles(<String>['lib'])
+        .where((file) {
+          final source = file.readAsStringSync();
+          return forbidden.any(source.contains);
+        })
+        .map((file) => file.path)
         .toList();
 
     expect(violations, isEmpty);

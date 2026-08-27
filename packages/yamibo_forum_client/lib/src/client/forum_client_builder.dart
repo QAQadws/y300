@@ -108,6 +108,8 @@ final class YamiboForumClientBuilder {
         formhashProvider ?? factory.createStandardFormhashProvider(sessions);
     final forumHome = factory.createHtmlForumHome();
     final authentication = factory.createAuthentication(formhash, sessions);
+    final favoriteForumDirectory = factory.createFavoriteForumDirectory();
+    final favoriteThreadDirectory = factory.createFavoriteThreadDirectory();
     return YamiboForumClient(
       config: config,
       network: network,
@@ -118,8 +120,16 @@ final class YamiboForumClientBuilder {
         forumHome: forumHome,
         forumTagDirectory: factory.createForumTagDirectory(),
         forumDisplay: factory.createHtmlForumDisplay(),
-        favoriteForumDirectory: factory.createFavoriteForumDirectory(),
-        favoriteThreadDirectory: factory.createFavoriteThreadDirectory(),
+        favoriteForumDirectory: favoriteForumDirectory,
+        favoriteThreadDirectory: favoriteThreadDirectory,
+        favoriteForumCommand: factory.createFavoriteForumCommand(
+          formhash: formhash,
+          directory: favoriteForumDirectory,
+        ),
+        favoriteThreadCommand: factory.createFavoriteThreadCommand(
+          formhash: formhash,
+          directory: favoriteThreadDirectory,
+        ),
         currentUserProfile: factory.createCurrentUserProfile(),
         notifications: factory.createNotifications(),
         privateMessages: factory.createPrivateMessages(),

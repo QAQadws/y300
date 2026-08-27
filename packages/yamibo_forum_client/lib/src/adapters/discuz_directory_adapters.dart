@@ -77,7 +77,10 @@ final class DiscuzFavoriteForumDirectoryRepository
     FavoriteForumDirectoryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    final response = await _api.get(module: 'myfavforum');
+    final response = await _api.get(
+      module: 'myfavforum',
+      cancellation: query.cancellation,
+    );
     if (response case ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(
       :final failure,
     )) {
@@ -137,6 +140,7 @@ final class DiscuzFavoriteThreadDirectoryRepository
     final response = await _api.get(
       module: 'myfavthread',
       queryParameters: {'version': '4', 'page': query.page},
+      cancellation: query.cancellation,
     );
     if (response case ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(
       :final failure,

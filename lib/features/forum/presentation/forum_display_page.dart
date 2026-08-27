@@ -281,7 +281,7 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     setState(() {
       _isFavoriteMutationLoading = false;
     });
-    if (result.isSuccess) {
+    if (result case DataCommandApplied<ForumFavoriteReceipt>()) {
       messenger
         ?..hideCurrentSnackBar()
         ..showSnackBar(
@@ -300,12 +300,7 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
       ?..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(
-            ForumTextResolver.favoriteActionFailure(
-              l10n,
-              result.errorOrNull?.message,
-            ),
-          ),
+          content: Text(ForumTextResolver.favoriteActionFailure(l10n, result)),
         ),
       );
   }

@@ -10,6 +10,7 @@ export 'src/contracts/comic_contracts.dart';
 export 'src/contracts/data_read_contract.dart';
 export 'src/contracts/data_command_contract.dart';
 export 'src/contracts/favorite_directories.dart';
+export 'src/contracts/favorite_commands.dart';
 export 'src/contracts/forum_directory.dart';
 export 'src/contracts/forum_home.dart';
 export 'src/contracts/forum_authentication.dart';

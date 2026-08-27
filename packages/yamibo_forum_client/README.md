@@ -1,14 +1,14 @@
 # yamibo_forum_client
 
-`yamibo_forum_client` is an unofficial pure-Dart read and basic-authentication
-client used by Y300 for Yamibo forum data. It owns request descriptions,
+`yamibo_forum_client` is an unofficial pure-Dart read, basic-authentication,
+and favorite-command client used by Y300 for Yamibo forum data. It owns request descriptions,
 Discuz/HTML adapters, parsing, source-neutral models, capabilities, command
 outcomes, cache codecs, transport error mapping, and the protocol side of WAF
 recovery.
 
 The package remains unpublished (`publish_to: none`) and can be consumed using
 a local path or Git dependency targeting this monorepo subdirectory. Version
-`0.3.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
+`0.4.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
 [API_STABILITY.md](API_STABILITY.md). The package is licensed under
 `GPL-3.0-only`; see [LICENSE](LICENSE).
 
@@ -78,6 +78,7 @@ currently verified by Y300:
 | Author-filtered post pages | Discuz `viewthread version=1` |
 | Search | HTML with package-owned `profile`/`forumindex` formhash discovery |
 | Password login, session resolution, standard logout | Discuz v4 API |
+| Forum and thread favorite target-state commands | Discuz v4 API plus favorite-directory read-back |
 
 Authentication contracts are deliberately independent. A future source may
 implement session resolution without implementing password login or logout.
@@ -96,6 +97,14 @@ Command callers must distinguish five outcomes:
 No ordinary command request is retried automatically. A verified same-site
 HTTP 405 may still be replayed once by the shared WAF boundary before response
 bytes are exposed.
+
+Favorite changes use target-state commands rather than exposing Discuz
+mutation endpoints. Forum favorite creation uses stable `fid`; forum removal
+resolves and verifies the remote `favid` from the favorite directory. Thread
+favorite and removal both use stable `tid`. A mutation is `applied` only after
+the corresponding directory proves the requested final state. If submission
+succeeds but read-back fails or disagrees, the result is `outcomeUnknown` and
+the caller must not automatically submit the mutation again.
 
 Hosts with an existing authenticated session stack may override the standard
 formhash provider. Advanced hosts can import the adapters barrel and build a
@@ -186,21 +195,21 @@ fail closed as `unsupported`.
 
 ## Current capability boundary
 
-The package currently covers basic password authentication and authoritative
-session/logout handling, the forum home document, forum/thread directories
+The package currently covers basic password authentication, authoritative
+session/logout handling, forum/thread favorite target-state commands, the
+forum home document, forum/thread directories
 and details, Tag, search, remote favorite directories, profiles/blogs,
 notifications, private messages, stickers, full rating details, post location,
 author-filtered post pages, comic episode discovery, reply-page reads, and
-protected image transport. Login UI and write operations—including posting,
-replying, editing, favorite mutations, creating ratings/comments, voting, and
-uploads—remain application-owned and are not represented as read results.
+protected image transport. Login UI and remaining write operations—including
+posting, replying, editing, creating ratings/comments, voting, and uploads—
+remain application-owned.
 
 ## Y300 parity and unmigrated APIs
 
 This package is a read client core, not a complete Discuz SDK. The following
 forum protocol operations still live in Y300 and are not part of the package:
 
-- favorite/unfavorite mutations;
 - posting, thread reply, floor reply, and post-edit form preparation and
   submission;
 - rating, comment, and poll submissions;

@@ -11,3 +11,11 @@ final favoriteThreadDirectoryRepositoryProvider =
     Provider<FavoriteThreadDirectoryRepository>((ref) {
       return ref.watch(yamiboForumClientProvider).favoriteThreadDirectory!;
     });
+
+final favoriteForumCommandProvider = Provider<FavoriteForumCommand>((ref) {
+  return ref.watch(yamiboForumClientProvider).favoriteForumCommand!;
+});
+
+final favoriteThreadCommandProvider = Provider<FavoriteThreadCommand>((ref) {
+  return ref.watch(yamiboForumClientProvider).favoriteThreadCommand!;
+});

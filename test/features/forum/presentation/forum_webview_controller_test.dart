@@ -1,8 +1,5 @@
-import 'package:y300/core/network/api_result.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
-import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
-import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
@@ -11,6 +8,8 @@ import 'package:y300/features/tags/data/repositories/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
+
+import '../../../support/favorite_command_test_support.dart';
 
 void main() {
   test('build defaults to home loading state', () async {
@@ -399,7 +398,7 @@ void main() {
 
     final result = await controller.favoriteCurrentForum();
 
-    expect(result.isSuccess, isTrue);
+    expect(result, isA<DataCommandApplied<ForumFavoriteReceipt>>());
     expect(favoriteRepository.favoriteCalls, <String>['55']);
     final state = await container.read(forumWebViewControllerProvider.future);
     expect(state.currentFavoriteForum?.fid, '55');
@@ -432,7 +431,7 @@ void main() {
 
       final result = await controller.unfavoriteCurrentForum();
 
-      expect(result.isSuccess, isTrue);
+      expect(result, isA<DataCommandApplied<ForumFavoriteReceipt>>());
       expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
       final state = await container.read(forumWebViewControllerProvider.future);
       expect(state.currentFavoriteForum, isNull);
@@ -440,7 +439,7 @@ void main() {
     },
   );
 
-  test('unfavoriteForumByFavid refreshes cached favorite forums', () async {
+  test('unfavoriteForum refreshes cached favorite forums', () async {
     final favoriteRepository = _FakeForumFavoriteRepository(
       favoriteForums: <FavoriteForumEntry>[
         _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
@@ -454,40 +453,37 @@ void main() {
     final preload = await controller.loadFavoriteForums();
     expect(preload.isSuccess, isTrue);
 
-    final result = await controller.unfavoriteForumByFavid(favid: 'fav-55');
+    final result = await controller.unfavoriteForum(
+      forum: favoriteRepository.favoriteForums.first,
+    );
 
-    expect(result.isSuccess, isTrue);
+    expect(result, isA<DataCommandApplied<ForumFavoriteReceipt>>());
     expect(favoriteRepository.unfavoriteCalls, <String>['fav-55']);
     final state = await container.read(forumWebViewControllerProvider.future);
     expect(state.favoriteForums.map((item) => item.fid), <String>['66']);
   });
 
-  test(
-    'unfavoriteForumByFavid fails closed without identity capability',
-    () async {
-      final favoriteRepository = _FakeForumFavoriteRepository(
-        favoriteForums: <FavoriteForumEntry>[
-          _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
-        ],
-        sourceCapabilities: _unsupportedRemoteIdentityCapabilities,
-      );
-      final container = _createContainer(
-        favoriteRepository: favoriteRepository,
-      );
-      addTearDown(container.dispose);
+  test('unfavoriteForum fails closed without identity capability', () async {
+    final favoriteRepository = _FakeForumFavoriteRepository(
+      favoriteForums: <FavoriteForumEntry>[
+        _favoriteForum(fid: '55', favid: 'fav-55', title: '综合区'),
+      ],
+      sourceCapabilities: _unsupportedRemoteIdentityCapabilities,
+    );
+    final container = _createContainer(favoriteRepository: favoriteRepository);
+    addTearDown(container.dispose);
 
-      final controller = container.read(
-        forumWebViewControllerProvider.notifier,
-      );
-      final preload = await controller.loadFavoriteForums();
-      expect(preload.isSuccess, isTrue);
+    final controller = container.read(forumWebViewControllerProvider.notifier);
+    final preload = await controller.loadFavoriteForums();
+    expect(preload.isSuccess, isTrue);
 
-      final result = await controller.unfavoriteForumByFavid(favid: 'fav-55');
+    final result = await controller.unfavoriteForum(
+      forum: favoriteRepository.favoriteForums.first,
+    );
 
-      expect(result, isA<ApiFailure<ForumFavoriteMutationResult>>());
-      expect(favoriteRepository.unfavoriteCalls, isEmpty);
-    },
-  );
+    expect(result, isA<DataCommandNotSent<ForumFavoriteReceipt>>());
+    expect(favoriteRepository.unfavoriteCalls, isEmpty);
+  });
 }
 
 ProviderContainer _createContainer({
@@ -501,11 +497,11 @@ ProviderContainer _createContainer({
       forumTagRepositoryProvider.overrideWithValue(
         repository ?? _FakeForumTagRepository(_defaultBoards),
       ),
-      forumFavoriteRepositoryProvider.overrideWithValue(
+      favoriteForumCommandProvider.overrideWithValue(
         resolvedFavoriteRepository,
       ),
       favoriteForumDirectoryRepositoryProvider.overrideWithValue(
-        resolvedFavoriteRepository,
+        resolvedFavoriteRepository.directory,
       ),
     ],
   );
@@ -544,44 +540,78 @@ FavoriteForumEntry _favoriteForum({
   );
 }
 
-class _FakeForumFavoriteRepository
-    implements ForumFavoriteRepository, FavoriteForumDirectoryRepository {
+class _FakeForumFavoriteRepository implements FavoriteForumCommand {
   _FakeForumFavoriteRepository({
     List<FavoriteForumEntry>? favoriteForums,
     this.onFavorite,
     FavoriteForumDirectorySourceCapabilities? sourceCapabilities,
-  }) : favoriteForums = List<FavoriteForumEntry>.from(
+  }) : directory = _FakeFavoriteForumDirectoryRepository(
          favoriteForums ?? const <FavoriteForumEntry>[],
-       ),
-       _capabilities = sourceCapabilities ?? _sourceCapabilities;
+         sourceCapabilities ?? _sourceCapabilities,
+       );
 
-  List<FavoriteForumEntry> favoriteForums;
+  final _FakeFavoriteForumDirectoryRepository directory;
   final FavoriteForumEntry Function(String fid)? onFavorite;
-  final FavoriteForumDirectorySourceCapabilities _capabilities;
 
   final List<String> favoriteCalls = <String>[];
   final List<String> unfavoriteCalls = <String>[];
-  int loadCallCount = 0;
+
+  List<FavoriteForumEntry> get favoriteForums => directory.favoriteForums;
+
+  int get loadCallCount => directory.loadCallCount;
 
   @override
-  Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
-    required String fid,
-  }) async {
-    favoriteCalls.add(fid);
-    const result = ApiSuccess<ForumFavoriteMutationResult>(
-      ForumFavoriteMutationResult(message: '收藏成功'),
-    );
-    if (result.isSuccess) {
+  FavoriteMutationCapabilities get capabilities =>
+      allFavoriteMutationCapabilities;
+
+  @override
+  Future<DataCommandResult<ForumFavoriteReceipt>> execute(
+    SetForumFavoriteRequest request,
+  ) async {
+    if (request.targetState == FavoriteTargetState.favorited) {
+      favoriteCalls.add(request.fid);
       final forum =
-          onFavorite?.call(fid) ??
-          _favoriteForum(fid: fid, favid: 'fav-$fid', title: '版块$fid');
-      favoriteForums = <FavoriteForumEntry>[
+          onFavorite?.call(request.fid) ??
+          _favoriteForum(
+            fid: request.fid,
+            favid: 'fav-${request.fid}',
+            title: '版块${request.fid}',
+          );
+      directory.favoriteForums = <FavoriteForumEntry>[
         ...favoriteForums.where((item) => item.fid != forum.fid),
         forum,
       ];
+      return appliedForumFavorite(
+        fid: request.fid,
+        targetState: request.targetState,
+        remoteFavoriteId: forum.remoteFavoriteId,
+      );
     }
-    return result;
+    final favid = request.knownRemoteFavoriteId ?? '';
+    unfavoriteCalls.add(favid);
+    directory.favoriteForums = favoriteForums
+        .where(
+          (item) => item.fid != request.fid && item.remoteFavoriteId != favid,
+        )
+        .toList();
+    return appliedForumFavorite(
+      fid: request.fid,
+      targetState: request.targetState,
+      remoteFavoriteId: favid,
+    );
   }
+}
+
+class _FakeFavoriteForumDirectoryRepository
+    implements FavoriteForumDirectoryRepository {
+  _FakeFavoriteForumDirectoryRepository(
+    List<FavoriteForumEntry> favoriteForums,
+    this._capabilities,
+  ) : favoriteForums = List<FavoriteForumEntry>.from(favoriteForums);
+
+  List<FavoriteForumEntry> favoriteForums;
+  final FavoriteForumDirectorySourceCapabilities _capabilities;
+  int loadCallCount = 0;
 
   @override
   FavoriteForumDirectorySourceCapabilities get capabilities => _capabilities;
@@ -605,22 +635,6 @@ class _FakeForumFavoriteRepository
       capabilities: capabilities.toReadCapabilities(),
       metadata: const DataReadMetadata.network(),
     );
-  }
-
-  @override
-  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForum({
-    required String favid,
-  }) async {
-    unfavoriteCalls.add(favid);
-    const result = ApiSuccess<ForumFavoriteMutationResult>(
-      ForumFavoriteMutationResult(message: '取消收藏成功'),
-    );
-    if (result.isSuccess) {
-      favoriteForums = favoriteForums
-          .where((item) => item.remoteFavoriteId != favid)
-          .toList();
-    }
-    return result;
   }
 }
 

@@ -24,6 +24,14 @@ void main() {
         isA<DiscuzFavoriteThreadDirectoryRepository>(),
       );
       expect(
+        sources.favoriteForumCommand,
+        isA<DiscuzFavoriteForumCommandAdapter>(),
+      );
+      expect(
+        sources.favoriteThreadCommand,
+        isA<DiscuzFavoriteThreadCommandAdapter>(),
+      );
+      expect(
         sources.currentUserProfile,
         isA<DiscuzCurrentUserProfileRepository>(),
       );

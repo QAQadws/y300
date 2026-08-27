@@ -1,5 +1,6 @@
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/services/localized_error_summary.dart';
 
 /// Presentation-only mapping for thread UI text.
 ///
@@ -86,12 +87,23 @@ final class ThreadTextResolver {
     if (notice.code == ThreadActionNoticeCode.success) {
       final detail = _nonEmpty(notice.detail ?? notice.message);
       return switch (notice.action) {
+        ThreadActionKind.favorite => detail ?? l10n.threadFavoriteSuccess,
         ThreadActionKind.vote => detail ?? l10n.threadPollVoteSuccess,
         ThreadActionKind.rate => detail ?? l10n.threadRatingSuccess,
         ThreadActionKind.comment => detail ?? l10n.threadCommentSuccess,
         ThreadActionKind.reply => detail ?? l10n.threadReplySuccess,
         _ => detail ?? l10n.threadDetailTitle,
       };
+    }
+    if (notice.code == ThreadActionNoticeCode.partialSuccess &&
+        notice.action == ThreadActionKind.favorite) {
+      return l10n.threadFavoriteSuccessSyncFailed;
+    }
+    if (notice.commandFailure != null &&
+        notice.action == ThreadActionKind.favorite) {
+      return l10n.threadFavoriteFailed(
+        LocalizedErrorSummary.resolve(l10n, notice.commandFailure),
+      );
     }
     final failure = ThreadActionFailure(
       code: switch (notice.action) {

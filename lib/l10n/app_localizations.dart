@@ -4517,6 +4517,18 @@ abstract class AppLocalizations {
   /// **'用户 UID 缺失'**
   String get threadDetailUidMissing;
 
+  /// No description provided for @threadFavoriteSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏成功'**
+  String get threadFavoriteSuccess;
+
+  /// No description provided for @threadFavoriteSuccessSyncFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏成功，但收藏书架同步失败'**
+  String get threadFavoriteSuccessSyncFailed;
+
   /// No description provided for @threadFavoriteFailed.
   ///
   /// In zh, this message translates to:

@@ -2752,6 +2752,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadDetailUidMissing => '用户 UID 缺失';
 
   @override
+  String get threadFavoriteSuccess => '收藏成功';
+
+  @override
+  String get threadFavoriteSuccessSyncFailed => '收藏成功，但收藏书架同步失败';
+
+  @override
   String threadFavoriteFailed(String error) {
     return '收藏操作失败：$error';
   }
@@ -7037,6 +7043,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadDetailUidMissing => '使用者 UID 缺失';
+
+  @override
+  String get threadFavoriteSuccess => '收藏成功';
+
+  @override
+  String get threadFavoriteSuccessSyncFailed => '收藏成功，但收藏書架同步失敗';
 
   @override
   String threadFavoriteFailed(String error) {

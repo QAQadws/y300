@@ -805,6 +805,8 @@
   },
   "threadDetailFloorLocatorFailed": "樓層定位失敗，已開啟帖子",
   "threadDetailUidMissing": "使用者 UID 缺失",
+  "threadFavoriteSuccess": "收藏成功",
+  "threadFavoriteSuccessSyncFailed": "收藏成功，但收藏書架同步失敗",
   "threadFavoriteFailed": "收藏操作失敗：{error}",
   "@threadFavoriteFailed": {
     "placeholders": {"error": {"type": "String"}}

@@ -29,8 +29,7 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
-import 'package:y300/features/forum/data/repositories/forum_favorite_repository.dart';
-import 'package:y300/features/forum/domain/models/forum_favorite_models.dart';
+import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
@@ -43,6 +42,7 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
+import '../../../support/favorite_command_test_support.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
@@ -4961,9 +4961,7 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     webViewCookieSyncServiceProvider.overrideWithValue(
       _FakeWebViewCookieSyncService(),
     ),
-    forumFavoriteRepositoryProvider.overrideWithValue(
-      const _FakeForumFavoriteRepository(),
-    ),
+    favoriteForumCommandProvider.overrideWithValue(FakeFavoriteForumCommand()),
     forumTagRepositoryProvider.overrideWithValue(_FakeForumTagRepository()),
     forumTagDirectoryRepositoryProvider.overrideWithValue(
       tagDirectoryRepository ?? _FakeForumTagDirectoryRepository(),
@@ -5378,10 +5376,9 @@ class _FakeForumTagDirectoryRepository implements ForumTagDirectoryRepository {
 }
 
 class _FakeThreadFavoriteActionService implements ThreadFavoriteActionService {
-  final ApiResult<ThreadFavoriteActionResult> result =
-      const ApiSuccess<ThreadFavoriteActionResult>(
+  final DataCommandResult<ThreadFavoriteActionResult> result =
+      const DataCommandApplied<ThreadFavoriteActionResult>(
         ThreadFavoriteActionResult(
-          message: '收藏成功',
           refreshedFavoriteModule: true,
           alreadyFavorited: false,
         ),
@@ -5390,7 +5387,7 @@ class _FakeThreadFavoriteActionService implements ThreadFavoriteActionService {
   String? lastTid;
 
   @override
-  Future<ApiResult<ThreadFavoriteActionResult>> favoriteThread({
+  Future<DataCommandResult<ThreadFavoriteActionResult>> favoriteThread({
     required String tid,
   }) async {
     called = true;
@@ -5481,28 +5478,6 @@ class _FakeWebViewCookieSyncService extends WebViewCookieSyncService {
 
   @override
   Future<void> clearWebViewCookies() async {}
-}
-
-class _FakeForumFavoriteRepository implements ForumFavoriteRepository {
-  const _FakeForumFavoriteRepository();
-
-  @override
-  Future<ApiResult<ForumFavoriteMutationResult>> favoriteForum({
-    required String fid,
-  }) async {
-    return const ApiSuccess<ForumFavoriteMutationResult>(
-      ForumFavoriteMutationResult(message: '收藏成功'),
-    );
-  }
-
-  @override
-  Future<ApiResult<ForumFavoriteMutationResult>> unfavoriteForum({
-    required String favid,
-  }) async {
-    return const ApiSuccess<ForumFavoriteMutationResult>(
-      ForumFavoriteMutationResult(message: '取消收藏成功'),
-    );
-  }
 }
 
 class _FakeForumWebViewDriver implements ForumWebViewDriver {

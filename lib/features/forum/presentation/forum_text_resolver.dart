@@ -4,6 +4,7 @@ import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/services/localized_error_summary.dart';
 
 /// Presentation-only mapping for forum UI text.
 ///
@@ -96,7 +97,7 @@ final class ForumTextResolver {
   }
 
   static String favoriteActionFailure(AppLocalizations l10n, Object? error) {
-    return l10n.forumActionFailed(_detailOrUnknown(l10n, error));
+    return l10n.forumActionFailed(LocalizedErrorSummary.resolve(l10n, error));
   }
 
   static String favoriteForumsLoadFailure(
