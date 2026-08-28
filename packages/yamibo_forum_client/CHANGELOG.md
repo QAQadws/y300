@@ -8,7 +8,25 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
-- Reserved for changes made after `0.4.0`.
+- Reserved for changes made after `0.5.0`.
+
+## 0.5.0 - 2026-08-28
+
+### Added
+
+- Independent source-neutral preparation and command contracts for post
+  ratings and post comments.
+- Discuz HTML/AJAX adapters that validate dynamic forms, preserve opaque
+  submission state, and support all server-provided rating dimensions.
+- Structured rating/comment receipts and explicit rejected, not-sent, and
+  outcome-unknown results that never expose response bodies or server text.
+
+### Changed
+
+- Rating and comment success now requires a stable JSON message code or the
+  matching Discuz AJAX success callback; visible localized text and empty
+  responses are no longer treated as proof.
+- The standard builder installs rating/comment preparation and command slots.
 
 ## 0.4.0 - 2026-08-27
 

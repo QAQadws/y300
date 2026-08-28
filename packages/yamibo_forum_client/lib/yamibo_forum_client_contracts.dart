@@ -26,6 +26,7 @@ export 'src/contracts/sticker_catalog.dart';
 export 'src/contracts/thread_detail_models.dart';
 export 'src/contracts/thread_reply_page.dart';
 export 'src/contracts/thread_repository.dart';
+export 'src/contracts/thread_interaction_commands.dart';
 export 'src/contracts/thread_supplemental_reads.dart';
 export 'src/references/comic_thread_discovery_projector.dart';
 export 'src/references/forum_reference_resolver.dart';

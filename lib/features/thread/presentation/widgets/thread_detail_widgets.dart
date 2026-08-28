@@ -6,8 +6,6 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
-import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
@@ -18,6 +16,7 @@ import 'package:y300/features/thread/presentation/thread_detail_render_entries.d
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
+import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/services/thread_html_image_preload_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';

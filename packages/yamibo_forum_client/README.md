@@ -1,14 +1,14 @@
 # yamibo_forum_client
 
 `yamibo_forum_client` is an unofficial pure-Dart read, basic-authentication,
-and favorite-command client used by Y300 for Yamibo forum data. It owns request descriptions,
+and structured-command client used by Y300 for Yamibo forum data. It owns request descriptions,
 Discuz/HTML adapters, parsing, source-neutral models, capabilities, command
 outcomes, cache codecs, transport error mapping, and the protocol side of WAF
 recovery.
 
 The package remains unpublished (`publish_to: none`) and can be consumed using
 a local path or Git dependency targeting this monorepo subdirectory. Version
-`0.4.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
+`0.5.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
 [API_STABILITY.md](API_STABILITY.md). The package is licensed under
 `GPL-3.0-only`; see [LICENSE](LICENSE).
 
@@ -79,6 +79,7 @@ currently verified by Y300:
 | Search | HTML with package-owned `profile`/`forumindex` formhash discovery |
 | Password login, session resolution, standard logout | Discuz v4 API |
 | Forum and thread favorite target-state commands | Discuz v4 API plus favorite-directory read-back |
+| Post rating/comment preparation and commands | Discuz HTML forms plus JSON/AJAX callback proof |
 
 Authentication contracts are deliberately independent. A future source may
 implement session resolution without implementing password login or logout.
@@ -105,6 +106,14 @@ favorite and removal both use stable `tid`. A mutation is `applied` only after
 the corresponding directory proves the requested final state. If submission
 succeeds but read-back fails or disagrees, the result is `outcomeUnknown` and
 the caller must not automatically submit the mutation again.
+
+Post ratings and comments use separate preparation and command contracts. The
+prepared form carries an opaque token containing protocol state; applications
+render only the source-neutral fields and return the token unchanged when
+submitting. Rating forms preserve every server score dimension, while Y300's
+current UI intentionally edits its primary dimension. A command is applied
+only when a stable JSON message code or matching Discuz AJAX success callback
+proves success. Server text and raw response payloads never enter receipts.
 
 Hosts with an existing authenticated session stack may override the standard
 formhash provider. Advanced hosts can import the adapters barrel and build a
@@ -196,13 +205,14 @@ fail closed as `unsupported`.
 ## Current capability boundary
 
 The package currently covers basic password authentication, authoritative
-session/logout handling, forum/thread favorite target-state commands, the
+session/logout handling, forum/thread favorite target-state commands,
+post-rating/comment preparation and commands, the
 forum home document, forum/thread directories
 and details, Tag, search, remote favorite directories, profiles/blogs,
 notifications, private messages, stickers, full rating details, post location,
 author-filtered post pages, comic episode discovery, reply-page reads, and
 protected image transport. Login UI and remaining write operations—including
-posting, replying, editing, creating ratings/comments, voting, and uploads—
+posting, replying, editing, voting, and uploads—
 remain application-owned.
 
 ## Y300 parity and unmigrated APIs
@@ -212,7 +222,7 @@ forum protocol operations still live in Y300 and are not part of the package:
 
 - posting, thread reply, floor reply, and post-edit form preparation and
   submission;
-- rating, comment, and poll submissions;
+- poll submissions;
 - attachment upload/deletion, upload permission checks, and unused attachment
   cleanup;
 - notification state mutations and private-message sending.

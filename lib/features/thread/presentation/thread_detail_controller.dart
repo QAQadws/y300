@@ -10,8 +10,7 @@ import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/thread/data/providers/thread_favorite_providers.dart';
-import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
-import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
+import 'package:y300/features/thread/data/providers/thread_interaction_providers.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
@@ -19,6 +18,7 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 
 class ThreadDetailArgs {
   const ThreadDetailArgs({
@@ -568,24 +568,55 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     _ratingsLoadTokens.remove(pid);
   }
 
-  Future<ApiResult<ThreadPostRateForm>> loadRateForm(ThreadPost post) async {
+  Future<DataReadResult<ThreadPostRateForm, ThreadPostRatingCapabilities>>
+  loadRateForm(ThreadPost post) async {
     final current = state.value;
     final rateUrl = post.rateUrl?.trim();
     if (rateUrl == null || rateUrl.isEmpty) {
-      return const ApiFailure<ThreadPostRateForm>(
-        ApiError(type: ApiErrorType.business, message: '评分表单地址缺失'),
+      return const DataReadFailure(
+        kind: DataReadFailureKind.business,
+        code: 'thread_post_rating_entry_missing',
+        diagnosticMessage: 'thread_post_rating_entry_missing',
       );
     }
-    return ref
-        .read(threadPostRateRepositoryProvider)
-        .loadFormFromSeed(
-          ThreadPostRateFormSeed(
-            rateUrl: rateUrl,
+    final result = await ref
+        .read(threadPostRatingPreparationProvider)
+        .load(
+          ThreadPostRatingPreparationRequest(
             tid: current?.tid ?? _args.tid,
             pid: post.pid,
-            referer: _rateReferer(current, post),
+            referer: Uri.tryParse(_rateReferer(current, post)),
           ),
         );
+    return switch (result) {
+      DataReadFailure<
+        ThreadPostRatingPreparation,
+        ThreadPostRatingCapabilities
+      >() =>
+        result.failureOrNull!.retype(),
+      DataReadSuccess<
+        ThreadPostRatingPreparation,
+        ThreadPostRatingCapabilities
+      >(
+        :final data,
+        :final capabilities,
+        :final metadata,
+      ) =>
+        data.dimensions.isEmpty
+            ? const DataReadFailure(
+                kind: DataReadFailureKind.parse,
+                code: 'thread_post_rating_dimensions_missing',
+                diagnosticMessage: 'thread_post_rating_dimensions_missing',
+              )
+            : DataReadSuccess(
+                data: ThreadPostRateForm(
+                  preparation: data,
+                  dimension: data.dimensions.first,
+                ),
+                capabilities: capabilities,
+                metadata: metadata,
+              ),
+    };
   }
 
   ThreadPost? _findPostByPid(List<ThreadPost> posts, String pid) {
@@ -597,43 +628,28 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     return null;
   }
 
-  Future<ApiResult<ThreadPostRateResult>> submitPostRate(
+  Future<DataCommandResult<ThreadPostRatingReceipt>> submitPostRate(
     ThreadPostRateDraft draft,
   ) async {
     final result = await ref
-        .read(threadPostRateRepositoryProvider)
-        .submit(draft);
-    if (result case ApiFailure<ThreadPostRateResult>()) {
+        .read(threadPostRatingCommandProvider)
+        .execute(draft.toSubmission());
+    if (result is! DataCommandApplied<ThreadPostRatingReceipt>) {
       return result;
     }
-    final current = state.value;
-    if (current != null) {
-      await _invalidateCurrentThreadCache(current.tid);
-      final reloaded = await _loadPage(
-        page: current.currentPage <= 0 ? 1 : current.currentPage,
-        previous: const <ThreadPost>[],
-        queryParameters: current.queryParameters,
-      );
-      if (ref.mounted) {
-        state = AsyncData(
-          reloaded.copyWith(
-            isThreadFavorited: current.isThreadFavorited,
-            threadFavoriteHint: current.threadFavoriteHint,
-          ),
-        );
-      }
-    }
+    await _reloadAfterPostInteraction();
     return result;
   }
 
-  Future<ApiResult<ThreadPostCommentForm>> loadCommentForm(
-    ThreadPost post,
-  ) async {
+  Future<DataReadResult<ThreadPostCommentForm, ThreadPostCommentCapabilities>>
+  loadCommentForm(ThreadPost post) async {
     final current = state.value;
     final pid = post.pid.trim();
     if (pid.isEmpty) {
-      return const ApiFailure<ThreadPostCommentForm>(
-        ApiError(type: ApiErrorType.business, message: '点评楼层缺失'),
+      return const DataReadFailure(
+        kind: DataReadFailureKind.business,
+        code: 'thread_post_comment_pid_missing',
+        diagnosticMessage: 'thread_post_comment_pid_missing',
       );
     }
     final tid = current?.tid.trim().isNotEmpty == true
@@ -642,31 +658,58 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     final page = current?.currentPage ?? 1;
     final commentUrl = post.commentUrl?.trim();
     if (commentUrl == null || commentUrl.isEmpty) {
-      return const ApiFailure<ThreadPostCommentForm>(
-        ApiError(type: ApiErrorType.business, message: '点评入口缺失'),
+      return const DataReadFailure(
+        kind: DataReadFailureKind.business,
+        code: 'thread_post_comment_entry_missing',
+        diagnosticMessage: 'thread_post_comment_entry_missing',
       );
     }
-    return ref
-        .read(threadPostCommentRepositoryProvider)
-        .loadFormFromSeed(
-          ThreadPostCommentFormSeed(
-            commentUrl: commentUrl,
+    final result = await ref
+        .read(threadPostCommentPreparationProvider)
+        .load(
+          ThreadPostCommentPreparationRequest(
             tid: tid,
             pid: pid,
             page: page <= 0 ? 1 : page,
+            referer: Uri.tryParse(_rateReferer(current, post)),
           ),
         );
+    return switch (result) {
+      DataReadFailure<
+        ThreadPostCommentPreparation,
+        ThreadPostCommentCapabilities
+      >() =>
+        result.failureOrNull!.retype(),
+      DataReadSuccess<
+        ThreadPostCommentPreparation,
+        ThreadPostCommentCapabilities
+      >(
+        :final data,
+        :final capabilities,
+        :final metadata,
+      ) =>
+        DataReadSuccess(
+          data: ThreadPostCommentForm(preparation: data),
+          capabilities: capabilities,
+          metadata: metadata,
+        ),
+    };
   }
 
-  Future<ApiResult<ThreadPostCommentResult>> submitPostComment(
+  Future<DataCommandResult<ThreadPostCommentReceipt>> submitPostComment(
     ThreadPostCommentDraft draft,
   ) async {
     final result = await ref
-        .read(threadPostCommentRepositoryProvider)
-        .submit(draft);
-    if (result case ApiFailure<ThreadPostCommentResult>()) {
+        .read(threadPostCommentCommandProvider)
+        .execute(draft.toSubmission());
+    if (result is! DataCommandApplied<ThreadPostCommentReceipt>) {
       return result;
     }
+    await _reloadAfterPostInteraction();
+    return result;
+  }
+
+  Future<void> _reloadAfterPostInteraction() async {
     final current = state.value;
     if (current != null) {
       await _invalidateCurrentThreadCache(current.tid);
@@ -684,7 +727,6 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         );
       }
     }
-    return result;
   }
 
   void updateReplyText(String value) {

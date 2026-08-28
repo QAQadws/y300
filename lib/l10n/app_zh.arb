@@ -1235,6 +1235,7 @@
   "threadRatingExpand": "展开完整评分",
   "threadRatingUnknownUser": "用户",
   "threadRatingSuccess": "评分成功",
+  "threadRatingOutcomeUnknown": "评分结果暂时无法确认，请刷新后查看",
   "threadRatingFailed": "评分失败：{error}",
   "@threadRatingFailed": {
     "placeholders": {"error": {"type": "String"}}
@@ -1243,6 +1244,7 @@
   "threadCommentSubmit": "发布",
   "threadCommentContent": "点评内容",
   "threadCommentSuccess": "点评成功",
+  "threadCommentOutcomeUnknown": "点评结果暂时无法确认，请刷新后查看",
   "threadCommentFailed": "点评失败：{error}",
   "@threadCommentFailed": {
     "placeholders": {"error": {"type": "String"}}

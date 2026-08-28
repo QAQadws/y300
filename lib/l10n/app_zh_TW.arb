@@ -871,6 +871,7 @@
   "threadRatingExpand": "展開完整評分",
   "threadRatingUnknownUser": "使用者",
   "threadRatingSuccess": "評分成功",
+  "threadRatingOutcomeUnknown": "評分結果暫時無法確認，請重新整理後查看",
   "threadRatingFailed": "評分失敗：{error}",
   "@threadRatingFailed": {
     "placeholders": {"error": {"type": "String"}}
@@ -879,6 +880,7 @@
   "threadCommentSubmit": "發佈",
   "threadCommentContent": "點評內容",
   "threadCommentSuccess": "點評成功",
+  "threadCommentOutcomeUnknown": "點評結果暫時無法確認，請重新整理後查看",
   "threadCommentFailed": "點評失敗：{error}",
   "@threadCommentFailed": {
     "placeholders": {"error": {"type": "String"}}

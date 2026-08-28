@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
-import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 
@@ -26,20 +27,60 @@ void main() {
       expect(identical(projection.sourceForm, form), isTrue);
     });
 
-    test('does not B-convert application fallback reasons', () async {
+    test('keeps an empty server reason list without conversion', () async {
       final service = _PrefixPlainService();
 
       final projection =
           await ThreadPostRateFormProjector(
             plainTextBatchConversionService: service,
           ).project(
-            _form(origin: ThreadPostRateReasonOrigin.applicationFallback),
+            _form(reasonOptions: const <String>[]),
             converter: const _TestConverter(),
           );
 
       expect(service.callCount, 0);
       expect(projection.isConverted, isFalse);
-      expect(projection.reasons.single.displayLabel, '服务器理由');
+      expect(projection.reasons, isEmpty);
+    });
+
+    test('single-control UI preserves unexposed server score values', () {
+      const primary = ThreadPostRatingDimension(
+        id: 'score1',
+        label: '积分',
+        minimum: 0,
+        maximum: 5,
+        initialScore: 0,
+        todayRemaining: 10,
+      );
+      const secondary = ThreadPostRatingDimension(
+        id: 'score2',
+        label: '附加积分',
+        minimum: -1,
+        maximum: 1,
+        initialScore: 0,
+        todayRemaining: 2,
+      );
+      final form = ThreadPostRateForm(
+        preparation: const ThreadPostRatingPreparation(
+          tid: '100',
+          pid: '1',
+          dimensions: <ThreadPostRatingDimension>[primary, secondary],
+          reasonSuggestions: <String>['服务器理由'],
+          notificationPolicy: ThreadPostRatingNotificationPolicy.optional,
+          notifyAuthorByDefault: true,
+          token: _TestRatingToken(),
+        ),
+        dimension: primary,
+      );
+
+      final submission = ThreadPostRateDraft(
+        form: form,
+        score: 5,
+        reason: '服务器理由',
+        notifyAuthor: true,
+      ).toSubmission();
+
+      expect(submission.scores, <String, int>{'score1': 5, 'score2': 0});
     });
   });
 
@@ -86,8 +127,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(submitted?.reason, '服务器理由');
-    expect(submitted?.form.formHash, 'raw-formhash');
-    expect(submitted?.form.actionUrl, '/rate-submit');
+    expect(submitted?.form.preparation.tid, '100');
+    expect(submitted?.toSubmission().scores, <String, int>{'score1': 3});
   });
 
   testWidgets('editing a selected reason submits the exact user input', (
@@ -138,22 +179,32 @@ void main() {
 }
 
 ThreadPostRateForm _form({
-  ThreadPostRateReasonOrigin origin = ThreadPostRateReasonOrigin.serverForm,
+  List<String> reasonOptions = const <String>['服务器理由'],
 }) {
-  return ThreadPostRateForm(
-    actionUrl: '/rate-submit',
-    formHash: 'raw-formhash',
-    tid: '100',
-    pid: '1',
-    referer: '/thread-100-1-1.html',
-    scoreName: 'score1',
-    scoreMin: 1,
-    scoreMax: 3,
+  const dimension = ThreadPostRatingDimension(
+    id: 'score1',
+    label: '积分',
+    minimum: 1,
+    maximum: 3,
+    initialScore: 1,
     todayRemaining: 5,
-    reasonOptions: const <String>['服务器理由'],
-    notifyAuthorDefault: true,
-    reasonOrigin: origin,
   );
+  return ThreadPostRateForm(
+    preparation: ThreadPostRatingPreparation(
+      tid: '100',
+      pid: '1',
+      dimensions: const <ThreadPostRatingDimension>[dimension],
+      reasonSuggestions: reasonOptions,
+      notificationPolicy: ThreadPostRatingNotificationPolicy.optional,
+      notifyAuthorByDefault: true,
+      token: const _TestRatingToken(),
+    ),
+    dimension: dimension,
+  );
+}
+
+final class _TestRatingToken implements ThreadPostRatingPreparationToken {
+  const _TestRatingToken();
 }
 
 class _PrefixPlainService implements PlainTextBatchConversionService {

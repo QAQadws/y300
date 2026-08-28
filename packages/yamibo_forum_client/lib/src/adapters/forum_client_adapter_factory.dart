@@ -33,6 +33,7 @@ import 'discuz_forum_search_repository.dart';
 import 'discuz_forum_display_repositories.dart';
 import 'discuz_profile_html_adapters.dart';
 import 'discuz_thread_repositories.dart';
+import 'discuz_thread_interaction_commands.dart';
 import 'discuz_supplemental_read_adapters.dart';
 import '../session/forum_formhash_provider.dart';
 
@@ -103,6 +104,20 @@ final class ForumClientAdapterFactory {
 
   ThreadPostRatingsRepository createThreadPostRatings() =>
       DiscuzThreadPostRatingsRepository(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+      );
+
+  DiscuzThreadPostRatingAdapter createThreadPostRatingInteraction() =>
+      DiscuzThreadPostRatingAdapter(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+      );
+
+  DiscuzThreadPostCommentAdapter createThreadPostCommentInteraction() =>
+      DiscuzThreadPostCommentAdapter(
         config: config,
         network: network,
         requestProfiles: requestProfiles,

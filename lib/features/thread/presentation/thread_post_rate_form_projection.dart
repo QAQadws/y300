@@ -1,7 +1,7 @@
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
-import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
+import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 
 final class ThreadRateReasonPresentation {
   const ThreadRateReasonPresentation({
@@ -54,7 +54,6 @@ final class ThreadPostRateFormProjector {
     required TextConverter converter,
   }) async {
     if (converter.mode == TextConversionMode.none ||
-        source.reasonOrigin == ThreadPostRateReasonOrigin.applicationFallback ||
         source.reasonOptions.isEmpty) {
       return ThreadPostRateFormProjection.raw(source, mode: converter.mode);
     }

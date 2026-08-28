@@ -1568,7 +1568,7 @@ packages:
       path: "packages/yamibo_forum_client"
       relative: true
     source: path
-    version: "0.4.0"
+    version: "0.5.0"
   yaml:
     dependency: transitive
     description:

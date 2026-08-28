@@ -17,6 +17,7 @@ import '../contracts/message_directories.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_detail_models.dart';
+import '../contracts/thread_interaction_commands.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
@@ -168,6 +169,22 @@ final class YamiboForumClient {
   ThreadRepository? get threadIngestionDetail =>
       sourcePlan.threadIngestionDetail;
 
+  /// Configured post-rating preparation source, if installed.
+  ThreadPostRatingPreparationRepository? get postRatingPreparation =>
+      sourcePlan.postRatingPreparation;
+
+  /// Configured post-rating command, if installed.
+  ThreadPostRatingCommand? get postRatingCommand =>
+      sourcePlan.postRatingCommand;
+
+  /// Configured post-comment preparation source, if installed.
+  ThreadPostCommentPreparationRepository? get postCommentPreparation =>
+      sourcePlan.postCommentPreparation;
+
+  /// Configured post-comment command, if installed.
+  ThreadPostCommentCommand? get postCommentCommand =>
+      sourcePlan.postCommentCommand;
+
   /// Configured notification source, if installed.
   ForumNotificationRepository? get notifications => sourcePlan.notifications;
 
@@ -188,6 +205,39 @@ final class YamiboForumClient {
   /// Configured author-filtered post source, if installed.
   ThreadAuthorPostRepository? get threadAuthorPosts =>
       sourcePlan.threadAuthorPosts;
+
+  /// Loads and validates the current server-side rating form.
+  Future<
+    DataReadResult<ThreadPostRatingPreparation, ThreadPostRatingCapabilities>
+  >
+  preparePostRating(ThreadPostRatingPreparationRequest request) =>
+      sourcePlan.postRatingPreparation?.load(request) ??
+      unsupported<ThreadPostRatingPreparation, ThreadPostRatingCapabilities>();
+
+  /// Submits one previously prepared post rating.
+  Future<DataCommandResult<ThreadPostRatingReceipt>> ratePost(
+    ThreadPostRatingSubmission submission,
+  ) =>
+      sourcePlan.postRatingCommand?.execute(submission) ??
+      Future.value(const DataCommandUnsupported<ThreadPostRatingReceipt>());
+
+  /// Loads and validates the current server-side comment form.
+  Future<
+    DataReadResult<ThreadPostCommentPreparation, ThreadPostCommentCapabilities>
+  >
+  preparePostComment(ThreadPostCommentPreparationRequest request) =>
+      sourcePlan.postCommentPreparation?.load(request) ??
+      unsupported<
+        ThreadPostCommentPreparation,
+        ThreadPostCommentCapabilities
+      >();
+
+  /// Submits one previously prepared post comment.
+  Future<DataCommandResult<ThreadPostCommentReceipt>> commentOnPost(
+    ThreadPostCommentSubmission submission,
+  ) =>
+      sourcePlan.postCommentCommand?.execute(submission) ??
+      Future.value(const DataCommandUnsupported<ThreadPostCommentReceipt>());
 
   /// Loads the combined forum-home document.
   Future<DataReadResult<ForumHomeDocument, ForumHomeReadCapabilities>>

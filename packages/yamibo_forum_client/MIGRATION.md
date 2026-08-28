@@ -1,5 +1,23 @@
 # Migration guide
 
+## 0.4.x to 0.5.0
+
+The standard client now installs four independent post-interaction slots:
+`ThreadPostRatingPreparationRepository`, `ThreadPostRatingCommand`,
+`ThreadPostCommentPreparationRepository`, and `ThreadPostCommentCommand`.
+Always prepare the current server form before constructing a submission, and
+preserve its opaque token unchanged.
+
+Success receipts contain only stable thread/post identities. Server
+`messagestr`, AJAX markup, HTML, and XML are intentionally unavailable. Treat
+`DataCommandOutcomeUnknown` as a possibly applied command: refresh the thread
+or ask the user before any explicit retry.
+
+Custom source plans must install preparation and command contracts separately.
+This permits a future source to provide one capability without pretending to
+support the other. Existing read, authentication, favorite, Cookie, formhash,
+WAF, and cache ports are unchanged.
+
 ## 0.3.x to 0.4.0
 
 The standard client now installs independent `FavoriteForumCommand` and

@@ -86,6 +86,8 @@ void main() {
       'lib/features/forum/domain/models/forum_favorite_models.dart',
       'lib/features/thread/data/repositories/thread_favorite_repository.dart',
       'lib/features/thread/data/repositories/discuz_thread_favorite_api_repository.dart',
+      'lib/features/thread/data/repositories/thread_post_rate_repository.dart',
+      'lib/features/thread/data/repositories/thread_post_comment_repository.dart',
     ];
 
     expect(
@@ -165,6 +167,25 @@ void main() {
       "module: 'favthread'",
       'ForumFavoriteMutationResult',
       'ThreadUnfavoriteResult',
+    ];
+    final violations = _dartFiles(<String>['lib'])
+        .where((file) {
+          final source = file.readAsStringSync();
+          return forbidden.any(source.contains);
+        })
+        .map((file) => file.path)
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
+  test('rating and comment mutations stay behind package commands', () {
+    const forbidden = <String>[
+      'DiscuzThreadPostRateRepository',
+      'DiscuzThreadPostCommentRepository',
+      'ThreadPostRateFormFallbackBuilder',
+      'threadPostRateRepositoryProvider',
+      'threadPostCommentRepositoryProvider',
     ];
     final violations = _dartFiles(<String>['lib'])
         .where((file) {

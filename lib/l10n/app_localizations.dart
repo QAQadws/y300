@@ -4733,6 +4733,12 @@ abstract class AppLocalizations {
   /// **'评分成功'**
   String get threadRatingSuccess;
 
+  /// No description provided for @threadRatingOutcomeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'评分结果暂时无法确认，请刷新后查看'**
+  String get threadRatingOutcomeUnknown;
+
   /// No description provided for @threadRatingFailed.
   ///
   /// In zh, this message translates to:
@@ -4762,6 +4768,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'点评成功'**
   String get threadCommentSuccess;
+
+  /// No description provided for @threadCommentOutcomeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'点评结果暂时无法确认，请刷新后查看'**
+  String get threadCommentOutcomeUnknown;
 
   /// No description provided for @threadCommentFailed.
   ///

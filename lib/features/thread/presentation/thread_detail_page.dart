@@ -30,9 +30,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
-import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
@@ -62,6 +60,7 @@ import 'package:y300/features/thread/presentation/post_edit_composer_page.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 import 'package:y300/features/thread/presentation/post_edit_native_entry_gate.dart';
 import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
+import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_button.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -601,18 +600,27 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     if (!mounted) {
       return;
     }
-    if (formResult case ApiFailure<ThreadPostRateForm>(:final error)) {
+    if (formResult
+        case DataReadFailure<ThreadPostRateForm, ThreadPostRatingCapabilities>(
+          :final kind,
+        )) {
       _showActionFailure(
         ThreadActionFailure(
-          code: ThreadUiErrorCode.rateFailed,
+          code: kind == DataReadFailureKind.unauthorized
+              ? ThreadUiErrorCode.loginRequired
+              : ThreadUiErrorCode.rateFailed,
           action: ThreadActionKind.rate,
-          detail: error.message,
-          message: error.message,
         ),
       );
       return;
     }
-    final form = (formResult as ApiSuccess<ThreadPostRateForm>).data;
+    final form =
+        (formResult
+                as DataReadSuccess<
+                  ThreadPostRateForm,
+                  ThreadPostRatingCapabilities
+                >)
+            .data;
     final conversionMode = ref.read(appServerContentConversionModeProvider);
     final converter = ref.read(textConverterProvider(conversionMode));
     final formProjection = await ThreadPostRateFormProjector(
@@ -637,23 +645,23 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     if (!mounted) {
       return;
     }
-    submitResult.when(
-      success: (data) => _showActionNotice(
-        ThreadActionNotice(
-          code: ThreadActionNoticeCode.success,
-          action: ThreadActionKind.rate,
-          detail: data.message,
-        ),
-      ),
-      failure: (error) => _showActionFailure(
-        ThreadActionFailure(
-          code: ThreadUiErrorCode.rateFailed,
-          action: ThreadActionKind.rate,
-          detail: error.message,
-          message: error.message,
-        ),
-      ),
-    );
+    switch (submitResult) {
+      case DataCommandApplied<ThreadPostRatingReceipt>():
+        _showActionNotice(
+          ThreadActionNotice(
+            code: ThreadActionNoticeCode.success,
+            action: ThreadActionKind.rate,
+          ),
+        );
+      case final DataCommandResult<ThreadPostRatingReceipt> failure:
+        _showActionNotice(
+          ThreadActionNotice(
+            code: _noticeCodeForCommandResult(failure),
+            action: ThreadActionKind.rate,
+            commandFailure: failure.failureOrNull,
+          ),
+        );
+    }
   }
 
   Future<void> _openPostCommentSheet(
@@ -665,18 +673,29 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     if (!mounted) {
       return;
     }
-    if (formResult case ApiFailure<ThreadPostCommentForm>(:final error)) {
+    if (formResult case DataReadFailure<
+      ThreadPostCommentForm,
+      ThreadPostCommentCapabilities
+    >(
+      :final kind,
+    )) {
       _showActionFailure(
         ThreadActionFailure(
-          code: ThreadUiErrorCode.commentFailed,
+          code: kind == DataReadFailureKind.unauthorized
+              ? ThreadUiErrorCode.loginRequired
+              : ThreadUiErrorCode.commentFailed,
           action: ThreadActionKind.comment,
-          detail: error.message,
-          message: error.message,
         ),
       );
       return;
     }
-    final form = (formResult as ApiSuccess<ThreadPostCommentForm>).data;
+    final form =
+        (formResult
+                as DataReadSuccess<
+                  ThreadPostCommentForm,
+                  ThreadPostCommentCapabilities
+                >)
+            .data;
     final result = await showModalBottomSheet<ThreadPostCommentDraft>(
       context: context,
       isScrollControlled: true,
@@ -691,23 +710,23 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     if (!mounted) {
       return;
     }
-    submitResult.when(
-      success: (data) => _showActionNotice(
-        ThreadActionNotice(
-          code: ThreadActionNoticeCode.success,
-          action: ThreadActionKind.comment,
-          detail: data.message,
-        ),
-      ),
-      failure: (error) => _showActionFailure(
-        ThreadActionFailure(
-          code: ThreadUiErrorCode.commentFailed,
-          action: ThreadActionKind.comment,
-          detail: error.message,
-          message: error.message,
-        ),
-      ),
-    );
+    switch (submitResult) {
+      case DataCommandApplied<ThreadPostCommentReceipt>():
+        _showActionNotice(
+          ThreadActionNotice(
+            code: ThreadActionNoticeCode.success,
+            action: ThreadActionKind.comment,
+          ),
+        );
+      case final DataCommandResult<ThreadPostCommentReceipt> failure:
+        _showActionNotice(
+          ThreadActionNotice(
+            code: _noticeCodeForCommandResult(failure),
+            action: ThreadActionKind.comment,
+            commandFailure: failure.failureOrNull,
+          ),
+        );
+    }
   }
 
   Future<void> _handleReplyComposerResult(
@@ -1504,6 +1523,21 @@ Widget threadDetailPostCardPreview() {
     ),
   );
 }
+
+ThreadActionNoticeCode _noticeCodeForCommandResult<T>(
+  DataCommandResult<T> result,
+) => switch (result) {
+  DataCommandOutcomeUnknown<T>() => ThreadActionNoticeCode.unknown,
+  _ => switch (result.failureOrNull?.kind) {
+    DataCommandFailureKind.unauthenticated =>
+      ThreadActionNoticeCode.loginRequired,
+    DataCommandFailureKind.permissionDenied =>
+      ThreadActionNoticeCode.permissionDenied,
+    DataCommandFailureKind.validation => ThreadActionNoticeCode.validation,
+    DataCommandFailureKind.unsupported => ThreadActionNoticeCode.unsupported,
+    _ => ThreadActionNoticeCode.failure,
+  },
+};
 
 final ThreadPost _threadDetailPreviewPost = ThreadPost(
   pid: 'preview-post',

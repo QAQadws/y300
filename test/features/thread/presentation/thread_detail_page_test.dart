@@ -60,9 +60,8 @@ import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/providers/thread_favorite_providers.dart';
+import 'package:y300/features/thread/data/providers/thread_interaction_providers.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
-import 'package:y300/features/thread/data/repositories/thread_post_comment_repository.dart';
-import 'package:y300/features/thread/data/repositories/thread_post_rate_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/data/repositories/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
@@ -3618,13 +3617,13 @@ void main() {
           ),
         );
       });
-      final rateRepository = _FakeThreadPostRateRepository();
+      final rateRepository = _FakeThreadPostRatingInteraction();
       final invalidationService = _FakeNativePageCacheInvalidationService();
 
       await tester.pumpWidget(
         _buildTestApp(
           repository,
-          postRateRepository: rateRepository,
+          postRateInteraction: rateRepository,
           pageCacheInvalidationService: invalidationService,
         ),
       );
@@ -3637,7 +3636,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(rateRepository.loadedUrl, contains('action=rate'));
+      expect(rateRepository.loadedRequest?.tid, '100');
+      expect(rateRepository.loadedRequest?.pid, 'p1');
       expect(find.byKey(const Key('thread-post-rate-sheet')), findsOneWidget);
       expect(find.text('范围 0~5，今日剩余 10'), findsOneWidget);
 
@@ -3646,11 +3646,10 @@ void main() {
       await tester.tap(find.byKey(const Key('thread-post-rate-submit-button')));
       await tester.pumpAndSettle();
 
-      expect(rateRepository.lastDraft?.form.pid, 'p1');
-      expect(rateRepository.lastDraft?.form.referer, contains('#pidp1'));
-      expect(rateRepository.lastDraft?.score, 5);
-      expect(rateRepository.lastDraft?.reason, '我很赞同');
-      expect(rateRepository.lastDraft?.notifyAuthor, isFalse);
+      expect(rateRepository.loadedRequest?.referer?.fragment, 'pidp1');
+      expect(rateRepository.lastSubmission?.scores, <String, int>{'score1': 5});
+      expect(rateRepository.lastSubmission?.reason, '我很赞同');
+      expect(rateRepository.lastSubmission?.notifyAuthor, isFalse);
       expect(invalidationService.invalidatedThreadIds, <String>['100']);
       expect(loadCount, 2);
       expect(find.text('评分成功'), findsOneWidget);
@@ -3688,13 +3687,13 @@ void main() {
           ),
         );
       });
-      final commentRepository = _FakeThreadPostCommentRepository();
+      final commentRepository = _FakeThreadPostCommentInteraction();
       final invalidationService = _FakeNativePageCacheInvalidationService();
 
       await tester.pumpWidget(
         _buildTestApp(
           repository,
-          postCommentRepository: commentRepository,
+          postCommentInteraction: commentRepository,
           pageCacheInvalidationService: invalidationService,
         ),
       );
@@ -3707,7 +3706,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(commentRepository.loadedUrl, contains('action=comment'));
+      expect(commentRepository.loadedRequest?.tid, '100');
+      expect(commentRepository.loadedRequest?.pid, 'p1');
       expect(
         find.byKey(const Key('thread-post-comment-sheet')),
         findsOneWidget,
@@ -3722,8 +3722,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(commentRepository.lastDraft?.form.pid, 'p1');
-      expect(commentRepository.lastDraft?.message, '这是测试点评');
+      expect(commentRepository.lastSubmission?.preparation.pid, 'p1');
+      expect(commentRepository.lastSubmission?.message, '这是测试点评');
       expect(invalidationService.invalidatedThreadIds, <String>['100']);
       expect(loadCount, 2);
       expect(find.text('点评成功'), findsOneWidget);
@@ -3757,10 +3757,10 @@ void main() {
           ),
         );
       });
-      final commentRepository = _FakeThreadPostCommentRepository();
+      final commentRepository = _FakeThreadPostCommentInteraction();
 
       await tester.pumpWidget(
-        _buildTestApp(repository, postCommentRepository: commentRepository),
+        _buildTestApp(repository, postCommentInteraction: commentRepository),
       );
       await tester.pumpAndSettle();
 
@@ -3780,8 +3780,7 @@ void main() {
         find.descendant(of: actionSheet, matching: find.text('回复')),
         findsOneWidget,
       );
-      expect(commentRepository.loadedSeed, isNull);
-      expect(commentRepository.loadedUrl, isNull);
+      expect(commentRepository.loadedRequest, isNull);
     });
 
     testWidgets('post actions do not expose HTML-first comparison', (
@@ -4840,9 +4839,9 @@ Widget _buildTestApp(
   ReplyRepository? replyRepository,
   NovelRepository? novelRepository,
   ThreadFavoriteActionService? favoriteActionService,
-  ThreadPostRateRepository? postRateRepository,
+  _FakeThreadPostRatingInteraction? postRateInteraction,
   ThreadPostRatingsRepository? postRatingsRepository,
-  ThreadPostCommentRepository? postCommentRepository,
+  _FakeThreadPostCommentInteraction? postCommentInteraction,
   ThreadPollVoteRepository? pollVoteRepository,
   ForumTagDirectoryRepository? tagDirectoryRepository,
   ThreadPostLocator? threadPostLocator,
@@ -4865,9 +4864,9 @@ Widget _buildTestApp(
         replyRepository: replyRepository,
         novelRepository: novelRepository,
         favoriteActionService: favoriteActionService,
-        postRateRepository: postRateRepository,
+        postRateInteraction: postRateInteraction,
         postRatingsRepository: postRatingsRepository,
-        postCommentRepository: postCommentRepository,
+        postCommentInteraction: postCommentInteraction,
         pollVoteRepository: pollVoteRepository,
         tagDirectoryRepository: tagDirectoryRepository,
         threadPostLocator: threadPostLocator,
@@ -4894,9 +4893,9 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   ReplyRepository? replyRepository,
   NovelRepository? novelRepository,
   ThreadFavoriteActionService? favoriteActionService,
-  ThreadPostRateRepository? postRateRepository,
+  _FakeThreadPostRatingInteraction? postRateInteraction,
   ThreadPostRatingsRepository? postRatingsRepository,
-  ThreadPostCommentRepository? postCommentRepository,
+  _FakeThreadPostCommentInteraction? postCommentInteraction,
   ThreadPollVoteRepository? pollVoteRepository,
   ForumTagDirectoryRepository? tagDirectoryRepository,
   ThreadPostLocator? threadPostLocator,
@@ -4939,14 +4938,20 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     threadFavoriteActionServiceProvider.overrideWithValue(
       favoriteActionService ?? _FakeThreadFavoriteActionService(),
     ),
-    threadPostRateRepositoryProvider.overrideWithValue(
-      postRateRepository ?? _FakeThreadPostRateRepository(),
+    threadPostRatingPreparationProvider.overrideWithValue(
+      postRateInteraction ?? _FakeThreadPostRatingInteraction(),
+    ),
+    threadPostRatingCommandProvider.overrideWithValue(
+      postRateInteraction ?? _FakeThreadPostRatingInteraction(),
     ),
     threadPostRatingsRepositoryProvider.overrideWithValue(
       postRatingsRepository ?? _FakeThreadPostRatingsRepository(),
     ),
-    threadPostCommentRepositoryProvider.overrideWithValue(
-      postCommentRepository ?? _FakeThreadPostCommentRepository(),
+    threadPostCommentPreparationProvider.overrideWithValue(
+      postCommentInteraction ?? _FakeThreadPostCommentInteraction(),
+    ),
+    threadPostCommentCommandProvider.overrideWithValue(
+      postCommentInteraction ?? _FakeThreadPostCommentInteraction(),
     ),
     threadPollVoteRepositoryProvider.overrideWithValue(
       pollVoteRepository ?? _FakeThreadPollVoteRepository(),
@@ -5556,54 +5561,62 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   }) async {}
 }
 
-class _FakeThreadPostRateRepository implements ThreadPostRateRepository {
-  String? loadedUrl;
-  ThreadPostRateDraft? lastDraft;
+class _FakeThreadPostRatingInteraction
+    implements ThreadPostRatingPreparationRepository, ThreadPostRatingCommand {
+  ThreadPostRatingPreparationRequest? loadedRequest;
+  ThreadPostRatingSubmission? lastSubmission;
 
   @override
-  Future<ApiResult<ThreadPostRateForm>> loadForm(String rateUrl) async {
-    loadedUrl = rateUrl;
-    return _formResult();
+  ThreadPostRatingCapabilities get capabilities => ThreadPostRatingCapabilities(
+    values: DataCapabilitySet.supported(ThreadPostRatingCapability.values),
+  );
+
+  @override
+  Future<
+    DataReadResult<ThreadPostRatingPreparation, ThreadPostRatingCapabilities>
+  >
+  load(ThreadPostRatingPreparationRequest request) async {
+    loadedRequest = request;
+    return DataReadSuccess(
+      data: ThreadPostRatingPreparation(
+        tid: request.tid,
+        pid: request.pid,
+        dimensions: const <ThreadPostRatingDimension>[
+          ThreadPostRatingDimension(
+            id: 'score1',
+            label: '积分',
+            minimum: 0,
+            maximum: 5,
+            initialScore: 0,
+            todayRemaining: 10,
+          ),
+        ],
+        reasonSuggestions: const <String>['我很赞同', '精品文章'],
+        notificationPolicy: ThreadPostRatingNotificationPolicy.optional,
+        notifyAuthorByDefault: false,
+        token: const _FakeRatingToken(),
+      ),
+      capabilities: capabilities,
+      metadata: const DataReadMetadata.network(),
+    );
   }
 
   @override
-  Future<ApiResult<ThreadPostRateForm>> loadFormFromSeed(
-    ThreadPostRateFormSeed seed,
+  Future<DataCommandResult<ThreadPostRatingReceipt>> execute(
+    ThreadPostRatingSubmission submission,
   ) async {
-    loadedUrl = seed.rateUrl;
-    return _formResult(referer: seed.referer);
-  }
-
-  ApiResult<ThreadPostRateForm> _formResult({String? referer}) {
-    return ApiSuccess<ThreadPostRateForm>(
-      ThreadPostRateForm(
-        actionUrl:
-            'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&ratesubmit=yes',
-        formHash: 'fh_rate',
-        tid: '100',
-        pid: 'p1',
-        referer:
-            referer ??
-            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
-        scoreName: 'score1',
-        scoreMin: 0,
-        scoreMax: 5,
-        todayRemaining: 10,
-        reasonOptions: <String>['我很赞同', '精品文章'],
-        notifyAuthorDefault: false,
+    lastSubmission = submission;
+    return DataCommandApplied(
+      ThreadPostRatingReceipt(
+        tid: submission.preparation.tid,
+        pid: submission.preparation.pid,
       ),
     );
   }
+}
 
-  @override
-  Future<ApiResult<ThreadPostRateResult>> submit(
-    ThreadPostRateDraft draft,
-  ) async {
-    lastDraft = draft;
-    return const ApiSuccess<ThreadPostRateResult>(
-      ThreadPostRateResult(message: '评分成功'),
-    );
-  }
+final class _FakeRatingToken implements ThreadPostRatingPreparationToken {
+  const _FakeRatingToken();
 }
 
 class _FakeThreadPostRatingsRepository implements ThreadPostRatingsRepository {
@@ -5674,53 +5687,53 @@ class _ControlledThreadPostRatingsRepository
   }
 }
 
-class _FakeThreadPostCommentRepository implements ThreadPostCommentRepository {
-  String? loadedUrl;
-  ThreadPostCommentFormSeed? loadedSeed;
-  ThreadPostCommentDraft? lastDraft;
+class _FakeThreadPostCommentInteraction
+    implements
+        ThreadPostCommentPreparationRepository,
+        ThreadPostCommentCommand {
+  ThreadPostCommentPreparationRequest? loadedRequest;
+  ThreadPostCommentSubmission? lastSubmission;
 
   @override
-  Future<ApiResult<ThreadPostCommentForm>> loadForm(String commentUrl) async {
-    loadedUrl = commentUrl;
-    return _formResult(pid: 'p1');
-  }
+  ThreadPostCommentCapabilities get capabilities =>
+      ThreadPostCommentCapabilities(
+        values: DataCapabilitySet.supported(ThreadPostCommentCapability.values),
+      );
 
   @override
-  Future<ApiResult<ThreadPostCommentForm>> loadFormFromSeed(
-    ThreadPostCommentFormSeed seed,
-  ) async {
-    loadedSeed = seed;
-    loadedUrl = seed.commentUrl;
-    return _formResult(pid: seed.pid, tid: seed.tid);
-  }
-
-  ApiResult<ThreadPostCommentForm> _formResult({
-    required String pid,
-    String tid = '100',
-  }) {
-    return ApiSuccess<ThreadPostCommentForm>(
-      ThreadPostCommentForm(
-        actionUrl:
-            'https://bbs.yamibo.com/forum.php?mod=post&action=reply&comment=yes&tid=$tid&pid=$pid&commentsubmit=yes',
-        formHash: 'fh_comment',
-        handleKey: 'comment',
-        tid: tid,
-        pid: pid,
-        referer: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid',
+  Future<
+    DataReadResult<ThreadPostCommentPreparation, ThreadPostCommentCapabilities>
+  >
+  load(ThreadPostCommentPreparationRequest request) async {
+    loadedRequest = request;
+    return DataReadSuccess(
+      data: ThreadPostCommentPreparation(
+        tid: request.tid,
+        pid: request.pid,
         maxLength: 200,
+        token: const _FakeCommentToken(),
+      ),
+      capabilities: capabilities,
+      metadata: const DataReadMetadata.network(),
+    );
+  }
+
+  @override
+  Future<DataCommandResult<ThreadPostCommentReceipt>> execute(
+    ThreadPostCommentSubmission submission,
+  ) async {
+    lastSubmission = submission;
+    return DataCommandApplied(
+      ThreadPostCommentReceipt(
+        tid: submission.preparation.tid,
+        pid: submission.preparation.pid,
       ),
     );
   }
+}
 
-  @override
-  Future<ApiResult<ThreadPostCommentResult>> submit(
-    ThreadPostCommentDraft draft,
-  ) async {
-    lastDraft = draft;
-    return const ApiSuccess<ThreadPostCommentResult>(
-      ThreadPostCommentResult(message: '点评成功'),
-    );
-  }
+final class _FakeCommentToken implements ThreadPostCommentPreparationToken {
+  const _FakeCommentToken();
 }
 
 class _FakeReplyRepository implements ReplyRepository {

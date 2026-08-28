@@ -2894,6 +2894,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadRatingSuccess => '评分成功';
 
   @override
+  String get threadRatingOutcomeUnknown => '评分结果暂时无法确认，请刷新后查看';
+
+  @override
   String threadRatingFailed(String error) {
     return '评分失败：$error';
   }
@@ -2909,6 +2912,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get threadCommentSuccess => '点评成功';
+
+  @override
+  String get threadCommentOutcomeUnknown => '点评结果暂时无法确认，请刷新后查看';
 
   @override
   String threadCommentFailed(String error) {
@@ -7187,6 +7193,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get threadRatingSuccess => '評分成功';
 
   @override
+  String get threadRatingOutcomeUnknown => '評分結果暫時無法確認，請重新整理後查看';
+
+  @override
   String threadRatingFailed(String error) {
     return '評分失敗：$error';
   }
@@ -7202,6 +7211,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadCommentSuccess => '點評成功';
+
+  @override
+  String get threadCommentOutcomeUnknown => '點評結果暫時無法確認，請重新整理後查看';
 
   @override
   String threadCommentFailed(String error) {

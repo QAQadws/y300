@@ -99,11 +99,24 @@ final class ThreadTextResolver {
         notice.action == ThreadActionKind.favorite) {
       return l10n.threadFavoriteSuccessSyncFailed;
     }
-    if (notice.commandFailure != null &&
-        notice.action == ThreadActionKind.favorite) {
-      return l10n.threadFavoriteFailed(
-        LocalizedErrorSummary.resolve(l10n, notice.commandFailure),
-      );
+    if (notice.code == ThreadActionNoticeCode.unknown) {
+      if (notice.action == ThreadActionKind.rate) {
+        return l10n.threadRatingOutcomeUnknown;
+      }
+      if (notice.action == ThreadActionKind.comment) {
+        return l10n.threadCommentOutcomeUnknown;
+      }
+    }
+    if (notice.commandFailure != null) {
+      final detail = LocalizedErrorSummary.resolve(l10n, notice.commandFailure);
+      return switch (notice.action) {
+        ThreadActionKind.favorite => l10n.threadFavoriteFailed(detail),
+        ThreadActionKind.rate => l10n.threadRatingFailed(detail),
+        ThreadActionKind.comment => l10n.threadCommentFailed(detail),
+        ThreadActionKind.vote => l10n.threadPollVoteFailed(detail),
+        ThreadActionKind.reply => l10n.threadReplyFailed(detail),
+        _ => l10n.threadDetailLoadFailed(detail),
+      };
     }
     final failure = ThreadActionFailure(
       code: switch (notice.action) {
