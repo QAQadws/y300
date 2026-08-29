@@ -1,3 +1,4 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
@@ -93,7 +94,7 @@ class ReplyComposerState extends ComposerStateBase {
     ComposerTextMutation? lastMessageMutation,
     List<String> pendingAttachmentAids = const <String>[],
     ComposerPendingAttachmentNotice? pendingAttachmentNotice,
-    ReplyPreparation? preparation,
+    ThreadReplyPreparation? preparation,
     ComposerOperationFailure? preparationFailure,
     ComposerDraftAttachmentVerification draftAttachmentVerification =
         const ComposerDraftAttachmentVerification.notRequired(),
@@ -121,7 +122,7 @@ class ReplyComposerState extends ComposerStateBase {
 
   final ReplyTarget target;
   final bool isPreparing;
-  final ReplyPreparation? preparation;
+  final ThreadReplyPreparation? preparation;
   final ComposerOperationFailure? preparationFailure;
 
   bool get canPickImages => !isSubmitting && !isPreparing && !isUploadingImages;
@@ -150,7 +151,7 @@ class ReplyComposerState extends ComposerStateBase {
     ComposerTextMutation? lastMessageMutation,
     List<String>? pendingAttachmentAids,
     ComposerPendingAttachmentNotice? pendingAttachmentNotice,
-    ReplyPreparation? preparation,
+    ThreadReplyPreparation? preparation,
     ComposerOperationFailure? preparationFailure,
     ComposerFailure? failure,
     ComposerImageUploadFailure? imageUploadFailure,

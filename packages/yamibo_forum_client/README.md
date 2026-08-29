@@ -8,7 +8,7 @@ recovery.
 
 The package remains unpublished (`publish_to: none`) and can be consumed using
 a local path or Git dependency targeting this monorepo subdirectory. Version
-`0.5.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
+`0.6.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
 [API_STABILITY.md](API_STABILITY.md). The package is licensed under
 `GPL-3.0-only`; see [LICENSE](LICENSE).
 
@@ -80,6 +80,7 @@ currently verified by Y300:
 | Password login, session resolution, standard logout | Discuz v4 API |
 | Forum and thread favorite target-state commands | Discuz v4 API plus favorite-directory read-back |
 | Post rating/comment preparation and commands | Discuz HTML forms plus JSON/AJAX callback proof |
+| Thread creation and reply preparation/commands | Discuz v4 API plus HTML post-reply preparation |
 
 Authentication contracts are deliberately independent. A future source may
 implement session resolution without implementing password login or logout.
@@ -114,6 +115,15 @@ submitting. Rating forms preserve every server score dimension, while Y300's
 current UI intentionally edits its primary dimension. A command is applied
 only when a stable JSON message code or matching Discuz AJAX success callback
 proves success. Server text and raw response payloads never enter receipts.
+
+Thread creation and replies follow the same preparation/command boundary.
+Creation supports Y300's ordinary and poll fields, tags, attachment identities,
+signature/notification/parsing switches, and minimum read access. Post replies
+preserve dynamic hidden fields in an opaque preparation token; ordinary thread
+replies obtain formhash when submitted. Only positive, matching `tid`/`pid`
+values and an exact success code produce an applied receipt. A non-zero
+read-access request is read back without weakening already-proved creation
+success.
 
 Hosts with an existing authenticated session stack may override the standard
 formhash provider. Advanced hosts can import the adapters barrel and build a
@@ -206,23 +216,21 @@ fail closed as `unsupported`.
 
 The package currently covers basic password authentication, authoritative
 session/logout handling, forum/thread favorite target-state commands,
-post-rating/comment preparation and commands, the
+post-rating/comment and thread-creation/reply preparation and commands, the
 forum home document, forum/thread directories
 and details, Tag, search, remote favorite directories, profiles/blogs,
 notifications, private messages, stickers, full rating details, post location,
 author-filtered post pages, comic episode discovery, reply-page reads, and
 protected image transport. Login UI and remaining write operations—including
-posting, replying, editing, voting, and uploads—
+editing, voting, and uploads—
 remain application-owned.
 
 ## Y300 parity and unmigrated APIs
 
-This package is a read client core, not a complete Discuz SDK. The following
+This package is a forum client core, not a complete Discuz SDK. The following
 forum protocol operations still live in Y300 and are not part of the package:
 
-- posting, thread reply, floor reply, and post-edit form preparation and
-  submission;
-- poll submissions;
+- post-edit form preparation and submission;
 - attachment upload/deletion, upload permission checks, and unused attachment
   cleanup;
 - notification state mutations and private-message sending.

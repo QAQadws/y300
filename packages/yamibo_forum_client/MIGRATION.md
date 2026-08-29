@@ -1,5 +1,30 @@
 # Migration guide
 
+## 0.5.x to 0.6.0
+
+The standard client now installs independent thread-creation preparation,
+thread-creation command, post-reply preparation, and reply-command slots.
+Preserve preparation tokens unchanged and submit only against the preparation
+that produced them. Ordinary replies do not require an HTML preparation read;
+the command obtains formhash through the configured package provider.
+
+Creation supports ordinary and poll threads, tags, attachment identities, the
+existing parsing switches, and `minimumReadAccess`. The default is `0`.
+Non-zero access is read back when possible; inspect
+`ThreadCreationReceipt.readAccess` instead of treating a failed read-back as a
+failed creation. Once the response proves a positive `tid` and `pid`, an
+inconclusive read-back yields `unverified` evidence and must not cause a second
+thread submission.
+
+Thread/reply success receipts no longer contain server text or raw JSON. Only
+`DataCommandApplied` proves success. Preserve authored content and attachments
+for `DataCommandOutcomeUnknown`, and ask the user to inspect the thread before
+an explicit retry.
+
+Custom source plans must install all four slots they support. Existing read,
+authentication, favorite, rating/comment, Cookie, formhash, WAF, and cache
+ports are unchanged.
+
 ## 0.4.x to 0.5.0
 
 The standard client now installs four independent post-interaction slots:

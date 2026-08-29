@@ -42,8 +42,18 @@ abstract final class ComposerTextResolver {
         l10n.composerPermissionDenied(kind),
       ComposerSubmissionFailureCode.typeRequired =>
         l10n.composerSubmissionTypeRequired,
+      ComposerSubmissionFailureCode.subjectTooShort =>
+        l10n.composerSubmissionSubjectTooShort,
+      ComposerSubmissionFailureCode.subjectTooLong =>
+        l10n.composerSubmissionSubjectTooLong,
       ComposerSubmissionFailureCode.contentTooShort =>
         l10n.composerSubmissionContentTooShort(kind),
+      ComposerSubmissionFailureCode.contentTooLong =>
+        l10n.composerSubmissionContentTooLong(kind),
+      ComposerSubmissionFailureCode.targetUnavailable =>
+        l10n.composerSubmissionTargetUnavailable(kind),
+      ComposerSubmissionFailureCode.threadClosed =>
+        l10n.composerSubmissionThreadClosed,
       ComposerSubmissionFailureCode.captchaRequired =>
         l10n.composerCaptchaRequired,
       ComposerSubmissionFailureCode.pollInvalid => l10n.composerPollInvalid,
@@ -54,6 +64,8 @@ abstract final class ComposerTextResolver {
       ComposerSubmissionFailureCode.timeout => l10n.composerNetworkTimeout,
       ComposerSubmissionFailureCode.network => l10n.composerNetworkFailure,
       ComposerSubmissionFailureCode.server => l10n.composerServerFailure,
+      ComposerSubmissionFailureCode.outcomeUnknown =>
+        l10n.composerOutcomeUnknown(kind),
       ComposerSubmissionFailureCode.unknown =>
         ComposerErrorSummary.sanitize(failure.detail) ??
             l10n.composerUnknownFailure(kind),

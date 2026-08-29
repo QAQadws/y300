@@ -3310,14 +3310,43 @@ class AppLocalizationsZh extends AppLocalizations {
   String get composerSubmissionTypeRequired => '该版块要求选择主题分类，请先选择';
 
   @override
+  String get composerSubmissionSubjectTooShort => '标题过短，请补充后重试';
+
+  @override
+  String get composerSubmissionSubjectTooLong => '标题过长，请缩短后重试';
+
+  @override
   String composerSubmissionContentTooShort(String kind) {
     String _temp0 = intl.Intl.selectLogic(kind, {
-      'newThread': '标题或内容过短',
-      'reply': '回复内容过短',
-      'other': '提交内容过短',
+      'newThread': '正文内容过短，请补充后重试',
+      'reply': '回复内容过短，请补充后重试',
+      'other': '提交内容过短，请补充后重试',
     });
     return '$_temp0';
   }
+
+  @override
+  String composerSubmissionContentTooLong(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '正文内容过长，请缩短后重试',
+      'reply': '回复内容过长，请缩短后重试',
+      'other': '提交内容过长，请缩短后重试',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String composerSubmissionTargetUnavailable(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '目标版块不可用，请刷新后重试',
+      'reply': '目标帖子或楼层不可用，请刷新后重试',
+      'other': '提交目标不可用，请刷新后重试',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get composerSubmissionThreadClosed => '该帖子已关闭，无法继续回复';
 
   @override
   String get composerCaptchaRequired => '需要验证码，请暂时改用网页发布';
@@ -3346,6 +3375,16 @@ class AppLocalizationsZh extends AppLocalizations {
       'newThread': '发帖失败，请稍后重试',
       'reply': '发送回复失败，请稍后重试',
       'other': '提交失败，请稍后重试',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String composerOutcomeUnknown(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '发帖结果无法确认，请先检查版块，避免重复发送',
+      'reply': '回复结果无法确认，请先检查帖子，避免重复发送',
+      'other': '提交结果无法确认，请先检查目标内容，避免重复发送',
     });
     return '$_temp0';
   }
@@ -7610,14 +7649,43 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get composerSubmissionTypeRequired => '該看板要求選擇主題分類，請先選擇';
 
   @override
+  String get composerSubmissionSubjectTooShort => '標題過短，請補充後重試';
+
+  @override
+  String get composerSubmissionSubjectTooLong => '標題過長，請縮短後重試';
+
+  @override
   String composerSubmissionContentTooShort(String kind) {
     String _temp0 = intl.Intl.selectLogic(kind, {
-      'newThread': '標題或內容過短',
-      'reply': '回覆內容過短',
-      'other': '送出內容過短',
+      'newThread': '正文內容過短，請補充後重試',
+      'reply': '回覆內容過短，請補充後重試',
+      'other': '送出內容過短，請補充後重試',
     });
     return '$_temp0';
   }
+
+  @override
+  String composerSubmissionContentTooLong(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '正文內容過長，請縮短後重試',
+      'reply': '回覆內容過長，請縮短後重試',
+      'other': '送出內容過長，請縮短後重試',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String composerSubmissionTargetUnavailable(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '目標看板無法使用，請重新整理後再試',
+      'reply': '目標帖子或樓層無法使用，請重新整理後再試',
+      'other': '送出目標無法使用，請重新整理後再試',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get composerSubmissionThreadClosed => '該帖子已關閉，無法繼續回覆';
 
   @override
   String get composerCaptchaRequired => '需要驗證碼，請暫時改用網頁發佈';
@@ -7646,6 +7714,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       'newThread': '發帖失敗，請稍後重試',
       'reply': '送出回覆失敗，請稍後重試',
       'other': '送出失敗，請稍後重試',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String composerOutcomeUnknown(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'newThread': '發帖結果無法確認，請先檢查版塊，避免重複送出',
+      'reply': '回覆結果無法確認，請先檢查帖子，避免重複送出',
+      'other': '送出結果無法確認，請先檢查目標內容，避免重複送出',
     });
     return '$_temp0';
   }

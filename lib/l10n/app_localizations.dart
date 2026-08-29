@@ -5453,11 +5453,41 @@ abstract class AppLocalizations {
   /// **'该版块要求选择主题分类，请先选择'**
   String get composerSubmissionTypeRequired;
 
+  /// No description provided for @composerSubmissionSubjectTooShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'标题过短，请补充后重试'**
+  String get composerSubmissionSubjectTooShort;
+
+  /// No description provided for @composerSubmissionSubjectTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'标题过长，请缩短后重试'**
+  String get composerSubmissionSubjectTooLong;
+
   /// No description provided for @composerSubmissionContentTooShort.
   ///
   /// In zh, this message translates to:
-  /// **'{kind, select, newThread {标题或内容过短} reply {回复内容过短} other {提交内容过短}}'**
+  /// **'{kind, select, newThread {正文内容过短，请补充后重试} reply {回复内容过短，请补充后重试} other {提交内容过短，请补充后重试}}'**
   String composerSubmissionContentTooShort(String kind);
+
+  /// No description provided for @composerSubmissionContentTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'{kind, select, newThread {正文内容过长，请缩短后重试} reply {回复内容过长，请缩短后重试} other {提交内容过长，请缩短后重试}}'**
+  String composerSubmissionContentTooLong(String kind);
+
+  /// No description provided for @composerSubmissionTargetUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'{kind, select, newThread {目标版块不可用，请刷新后重试} reply {目标帖子或楼层不可用，请刷新后重试} other {提交目标不可用，请刷新后重试}}'**
+  String composerSubmissionTargetUnavailable(String kind);
+
+  /// No description provided for @composerSubmissionThreadClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'该帖子已关闭，无法继续回复'**
+  String get composerSubmissionThreadClosed;
 
   /// No description provided for @composerCaptchaRequired.
   ///
@@ -5506,6 +5536,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'{kind, select, newThread {发帖失败，请稍后重试} reply {发送回复失败，请稍后重试} other {提交失败，请稍后重试}}'**
   String composerUnknownFailure(String kind);
+
+  /// No description provided for @composerOutcomeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'{kind, select, newThread {发帖结果无法确认，请先检查版块，避免重复发送} reply {回复结果无法确认，请先检查帖子，避免重复发送} other {提交结果无法确认，请先检查目标内容，避免重复发送}}'**
+  String composerOutcomeUnknown(String kind);
 
   /// No description provided for @postingTitle.
   ///

@@ -7,7 +7,6 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
-import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/thread/data/providers/thread_favorite_providers.dart';
 import 'package:y300/features/thread/data/providers/thread_interaction_providers.dart';
@@ -760,44 +759,46 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     );
 
     final result = await ref
-        .read(replyRepositoryProvider)
-        .sendReply(
-          draft: ReplyDraft(
-            fid: current.fid,
-            tid: current.tid,
+        .read(threadReplyCommandProvider)
+        .execute(
+          ThreadReplySubmission(
+            target: ThreadReplyTarget.thread(
+              fid: current.fid,
+              tid: current.tid,
+            ),
             message: message,
+            useSignature: true,
           ),
         );
 
     final afterSubmit = state.value ?? current;
-    state = result.when(
-      success: (data) => AsyncData(
+    if (result case DataCommandApplied<ThreadReplyReceipt>()) {
+      state = AsyncData(
         afterSubmit.copyWith(
           isReplySubmitting: false,
           replyText: '',
-          replyHint: data.message.isEmpty ? null : data.message,
-          replyNotice: ThreadActionNotice(
+          replyNotice: const ThreadActionNotice(
             code: ThreadActionNoticeCode.success,
             action: ThreadActionKind.reply,
-            detail: data.message,
           ),
         ),
-      ),
-      failure: (error) => AsyncData(
+      );
+    } else {
+      state = AsyncData(
         afterSubmit.copyWith(
           isReplySubmitting: false,
-          replyHint: error.message,
           replyNotice: ThreadActionNotice(
-            code: _noticeCodeFor(error),
+            code: result is DataCommandOutcomeUnknown<ThreadReplyReceipt>
+                ? ThreadActionNoticeCode.unknown
+                : _noticeCodeForCommand(result.failureOrNull),
             action: ThreadActionKind.reply,
-            detail: error.message,
-            message: error.message,
+            commandFailure: result.failureOrNull,
           ),
         ),
-      ),
-    );
+      );
+    }
 
-    if (result.isSuccess) {
+    if (result is DataCommandApplied<ThreadReplyReceipt>) {
       final latest = state.value;
       if (latest == null) {
         return;

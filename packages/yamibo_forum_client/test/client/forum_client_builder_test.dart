@@ -74,6 +74,13 @@ void main() {
       expect(sources.session, isA<DiscuzAuthenticationAdapter>());
       expect(sources.passwordLogin, isA<DiscuzAuthenticationAdapter>());
       expect(sources.logout, isA<DiscuzLogoutCommandAdapter>());
+      expect(
+        sources.threadCreationPreparation,
+        isA<DiscuzThreadCreationAdapter>(),
+      );
+      expect(sources.threadCreationCommand, isA<DiscuzThreadCreationAdapter>());
+      expect(sources.threadReplyPreparation, isA<DiscuzThreadReplyAdapter>());
+      expect(sources.threadReplyCommand, isA<DiscuzThreadReplyAdapter>());
     });
 
     test('installs search without a host formhash provider', () {

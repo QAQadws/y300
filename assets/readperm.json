@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "defaultValue": 0,
+  "options": [
+    {
+      "value": 0,
+      "groupNames": [],
+      "specialLabel": "不限"
+    },
+    {
+      "value": 1,
+      "groupNames": [
+        "交流组",
+        "禁止发言",
+        "等待验证邮箱"
+      ]
+    },
+    {
+      "value": 10,
+      "groupNames": [
+        "百合種子"
+      ]
+    },
+    {
+      "value": 20,
+      "groupNames": [
+        "百合幼苗"
+      ]
+    },
+    {
+      "value": 30,
+      "groupNames": [
+        "百合花蕾"
+      ]
+    },
+    {
+      "value": 40,
+      "groupNames": [
+        "耕战组",
+        "百合花開"
+      ]
+    },
+    {
+      "value": 50,
+      "groupNames": [
+        "春风组",
+        "綻放百合"
+      ]
+    },
+    {
+      "value": 60,
+      "groupNames": [
+        "雨露组",
+        "百合素人"
+      ]
+    },
+    {
+      "value": 70,
+      "groupNames": [
+        "麦田组",
+        "宝石组",
+        "祝福组",
+        "百合達人"
+      ]
+    },
+    {
+      "value": 80,
+      "groupNames": [
+        "貴賓",
+        "山百合会会员",
+        "实习工作组",
+        "工作退休组",
+        "粮仓组",
+        "Discuz自动系统"
+      ]
+    },
+    {
+      "value": 90,
+      "groupNames": [
+        "工作组"
+      ]
+    },
+    {
+      "value": 100,
+      "groupNames": [
+        "版主"
+      ]
+    },
+    {
+      "value": 150,
+      "groupNames": [
+        "超級版主"
+      ]
+    },
+    {
+      "value": 255,
+      "groupNames": [
+        "管理員"
+      ],
+      "specialLabel": "最高权限"
+    }
+  ]
+}

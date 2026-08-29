@@ -1,5 +1,3 @@
-import 'package:y300/core/network/api_result.dart';
-
 final class ComposerUnusedImage {
   const ComposerUnusedImage({
     required this.aid,
@@ -31,5 +29,3 @@ final class ComposerUnusedImageDeleteResult {
 
   bool get deleted => outcome == ComposerUnusedImageDeleteOutcome.deleted;
 }
-
-typedef ComposerFormhashLoader = Future<ApiResult<String>> Function();

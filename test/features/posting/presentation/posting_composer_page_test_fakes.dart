@@ -4,22 +4,35 @@ PostingComposerArgs _args({String fid = '33'}) {
   return PostingComposerArgs(target: PostingTarget(fid: fid));
 }
 
-NewThreadFormMetadata _metadata({
+final class _TestThreadCreationToken implements ThreadCreationPreparationToken {
+  const _TestThreadCreationToken();
+}
+
+final ThreadCreationCapabilities _threadCreationCapabilities =
+    ThreadCreationCapabilities(
+      values: DataCapabilitySet<ThreadCreationCapability>.supported(
+        ThreadCreationCapability.values,
+      ),
+    );
+
+ThreadCreationPreparation _metadata({
   bool typeRequired = false,
   String forumName = '日常版',
-  List<ThreadType> types = const [
-    ThreadType(id: '111', name: '日常'),
-    ThreadType(id: '222', name: '汉化'),
+  List<ThreadCreationType> types = const [
+    ThreadCreationType(id: '111', name: '日常'),
+    ThreadCreationType(id: '222', name: '汉化'),
   ],
 }) {
-  return NewThreadFormMetadata(
+  return ThreadCreationPreparation(
     fid: '33',
     forumName: forumName,
-    formHash: 'fh',
     threadTypes: types,
-    threadSorts: const <ThreadSort>[],
+    threadSorts: const <ThreadCreationSort>[],
     typeRequired: typeRequired,
     sortRequired: false,
+    maxSubjectLength: 0,
+    maxMessageLength: 0,
+    token: const _TestThreadCreationToken(),
   );
 }
 
@@ -28,8 +41,8 @@ Widget _buildPage({
   PostingComposerArgs? args,
   ComposerDraftRepository? draftRepository,
   ComposerPreferencesRepository? preferencesRepository,
-  PostingFormMetadataRepository? metadataRepository,
-  NewThreadRepository? newThreadRepository,
+  ThreadCreationPreparationRepository? metadataRepository,
+  ThreadCreationCommand? threadCreationCommand,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
   ComposerDraftAttachmentVerificationService? draftVerificationService,
@@ -54,11 +67,11 @@ Widget _buildPage({
         draftVerificationService ??
             const _NoopPostingDraftAttachmentVerificationService(),
       ),
-      postingFormMetadataRepositoryProvider.overrideWithValue(
+      threadCreationPreparationProvider.overrideWithValue(
         metadataRepository ?? _FakeMetadataRepository.success(_metadata()),
       ),
-      newThreadRepositoryProvider.overrideWithValue(
-        newThreadRepository ?? _FakeNewThreadRepository(),
+      threadCreationCommandProvider.overrideWithValue(
+        threadCreationCommand ?? _FakeThreadCreationCommand(),
       ),
       forumBbCodeRendererProvider.overrideWithValue(
         const FlutterBbCodeForumRenderer(),
@@ -97,8 +110,8 @@ class _FakeComposerPreferencesRepository
 Widget _buildLauncher({
   PostingComposerArgs? args,
   ComposerDraftRepository? draftRepository,
-  PostingFormMetadataRepository? metadataRepository,
-  NewThreadRepository? newThreadRepository,
+  ThreadCreationPreparationRepository? metadataRepository,
+  ThreadCreationCommand? threadCreationCommand,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
   ThemeData? theme,
@@ -121,11 +134,11 @@ Widget _buildLauncher({
       composerDraftAttachmentVerificationServiceProvider.overrideWithValue(
         const _NoopPostingDraftAttachmentVerificationService(),
       ),
-      postingFormMetadataRepositoryProvider.overrideWithValue(
+      threadCreationPreparationProvider.overrideWithValue(
         metadataRepository ?? _FakeMetadataRepository.success(_metadata()),
       ),
-      newThreadRepositoryProvider.overrideWithValue(
-        newThreadRepository ?? _FakeNewThreadRepository(),
+      threadCreationCommandProvider.overrideWithValue(
+        threadCreationCommand ?? _FakeThreadCreationCommand(),
       ),
       forumBbCodeRendererProvider.overrideWithValue(
         const FlutterBbCodeForumRenderer(),
@@ -262,43 +275,63 @@ class _InvalidPostingDraftAttachmentVerificationService
   }
 }
 
-class _FakeMetadataRepository implements PostingFormMetadataRepository {
+class _FakeMetadataRepository implements ThreadCreationPreparationRepository {
   _FakeMetadataRepository._(this._queue, {this.holdUntil});
 
-  factory _FakeMetadataRepository.success(NewThreadFormMetadata metadata) {
+  factory _FakeMetadataRepository.success(ThreadCreationPreparation metadata) {
     return _FakeMetadataRepository._([
-      ApiSuccess<NewThreadFormMetadata>(metadata),
+      DataReadSuccess<ThreadCreationPreparation, ThreadCreationCapabilities>(
+        data: metadata,
+        capabilities: _threadCreationCapabilities,
+        metadata: const DataReadMetadata.network(),
+      ),
     ]);
   }
 
-  factory _FakeMetadataRepository.failure(ApiError error) {
-    return _FakeMetadataRepository._([
-      ApiFailure<NewThreadFormMetadata>(error),
-    ]);
+  factory _FakeMetadataRepository.failure(
+    DataReadFailure<ThreadCreationPreparation, ThreadCreationCapabilities>
+    failure,
+  ) {
+    return _FakeMetadataRepository._([failure]);
   }
 
   factory _FakeMetadataRepository.heldSuccess(
-    NewThreadFormMetadata metadata,
+    ThreadCreationPreparation metadata,
     Future<void> holdUntil,
   ) {
     return _FakeMetadataRepository._([
-      ApiSuccess<NewThreadFormMetadata>(metadata),
+      DataReadSuccess<ThreadCreationPreparation, ThreadCreationCapabilities>(
+        data: metadata,
+        capabilities: _threadCreationCapabilities,
+        metadata: const DataReadMetadata.network(),
+      ),
     ], holdUntil: holdUntil);
   }
 
-  final List<ApiResult<NewThreadFormMetadata>> _queue;
+  final List<
+    DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>
+  >
+  _queue;
   final Future<void>? holdUntil;
-  ApiResult<NewThreadFormMetadata>? _last;
+  DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>? _last;
   int callCount = 0;
 
-  void queueSuccess(NewThreadFormMetadata metadata) {
-    _queue.add(ApiSuccess<NewThreadFormMetadata>(metadata));
+  @override
+  ThreadCreationCapabilities get capabilities => _threadCreationCapabilities;
+
+  void queueSuccess(ThreadCreationPreparation metadata) {
+    _queue.add(
+      DataReadSuccess<ThreadCreationPreparation, ThreadCreationCapabilities>(
+        data: metadata,
+        capabilities: _threadCreationCapabilities,
+        metadata: const DataReadMetadata.network(),
+      ),
+    );
   }
 
   @override
-  Future<ApiResult<NewThreadFormMetadata>> getFormMetadata({
-    required String fid,
-  }) async {
+  Future<DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>>
+  load(ThreadCreationPreparationRequest request) async {
     callCount += 1;
     if (holdUntil != null && callCount == 1) {
       await holdUntil;
@@ -312,27 +345,35 @@ class _FakeMetadataRepository implements PostingFormMetadataRepository {
   }
 }
 
-class _FakeNewThreadRepository implements NewThreadRepository {
-  _FakeNewThreadRepository({ApiResult<NewThreadSubmissionResult>? result})
+class _FakeThreadCreationCommand implements ThreadCreationCommand {
+  _FakeThreadCreationCommand({DataCommandResult<ThreadCreationReceipt>? result})
     : _result =
           result ??
-          const ApiSuccess<NewThreadSubmissionResult>(
-            NewThreadSubmissionResult(
+          const DataCommandApplied<ThreadCreationReceipt>(
+            ThreadCreationReceipt(
               tid: '900001',
               pid: '910001',
-              message: '发布成功',
+              publicationState: ThreadPublicationState.published,
+              readAccess: ThreadReadAccessEvidence(
+                kind: ThreadReadAccessEvidenceKind.unrestricted,
+                requested: 0,
+                actual: 0,
+              ),
             ),
           );
 
-  final ApiResult<NewThreadSubmissionResult> _result;
-  final List<NewThreadDraftPayload> submittedPayloads =
-      <NewThreadDraftPayload>[];
+  final DataCommandResult<ThreadCreationReceipt> _result;
+  final List<ThreadCreationSubmission> submissions =
+      <ThreadCreationSubmission>[];
 
   @override
-  Future<ApiResult<NewThreadSubmissionResult>> submit({
-    required NewThreadDraftPayload payload,
-  }) async {
-    submittedPayloads.add(payload);
+  ThreadCreationCapabilities get capabilities => _threadCreationCapabilities;
+
+  @override
+  Future<DataCommandResult<ThreadCreationReceipt>> execute(
+    ThreadCreationSubmission submission,
+  ) async {
+    submissions.add(submission);
     return _result;
   }
 }

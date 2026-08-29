@@ -7,8 +7,8 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
-import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -30,10 +30,17 @@ import 'package:y300/features/composer_shared/domain/services/composer_draft_att
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
-import 'package:y300/features/reply/data/repositories/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
+
+const _replyApplied = DataCommandApplied<ThreadReplyReceipt>(
+  ThreadReplyReceipt(
+    tid: '572063',
+    pid: '41554318',
+    publicationState: ThreadPublicationState.published,
+  ),
+);
 
 void main() {
   testWidgets('ReplyComposerPage builds dark theme chrome', (tester) async {
@@ -656,11 +663,7 @@ void main() {
   testWidgets('ReplyComposerPage pops sent result after successful submit', (
     tester,
   ) async {
-    final replyRepository = _FakeReplyRepository(
-      result: const ApiSuccess<ReplySubmissionResult>(
-        ReplySubmissionResult(message: '回复发布成功'),
-      ),
-    );
+    final replyRepository = _FakeThreadReplyAdapter(result: _replyApplied);
     ReplyComposerResult? poppedResult;
 
     await tester.pumpWidget(
@@ -681,17 +684,13 @@ void main() {
 
     expect(replyRepository.sentDrafts.single.message, '提交内容');
     expect(poppedResult?.sent, isTrue);
-    expect(poppedResult?.rawSuccessDetail, '回复发布成功');
+    expect(poppedResult?.rawSuccessDetail, isNull);
   });
 
   testWidgets('ReplyComposerPage submits raw source message from source mode', (
     tester,
   ) async {
-    final replyRepository = _FakeReplyRepository(
-      result: const ApiSuccess<ReplySubmissionResult>(
-        ReplySubmissionResult(message: '回复发布成功'),
-      ),
-    );
+    final replyRepository = _FakeThreadReplyAdapter(result: _replyApplied);
 
     await tester.pumpWidget(_buildLauncher(replyRepository: replyRepository));
 
@@ -742,11 +741,7 @@ void main() {
   });
 
   testWidgets('ReplyComposerPage submits raw sticker code', (tester) async {
-    final replyRepository = _FakeReplyRepository(
-      result: const ApiSuccess<ReplySubmissionResult>(
-        ReplySubmissionResult(message: '回复发布成功'),
-      ),
-    );
+    final replyRepository = _FakeThreadReplyAdapter(result: _replyApplied);
 
     await tester.pumpWidget(
       _buildLauncher(
@@ -783,10 +778,15 @@ void main() {
   testWidgets('ReplyComposerPage shows post preparation failure and retry', (
     tester,
   ) async {
-    final replyRepository = _FakeReplyRepository(
-      preparationResult: const ApiFailure<ReplyPreparation>(
-        ApiError(type: ApiErrorType.parse, message: '表单解析失败'),
-      ),
+    final replyRepository = _FakeThreadReplyAdapter(
+      preparationResult:
+          const DataReadFailure<
+            ThreadReplyPreparation,
+            ThreadReplyCapabilities
+          >(
+            kind: DataReadFailureKind.parse,
+            diagnosticMessage: 'test_form_parse_failure',
+          ),
     );
 
     await tester.pumpWidget(
@@ -812,11 +812,14 @@ void main() {
   testWidgets('ReplyComposerPage disables image button while preparing post', (
     tester,
   ) async {
-    final preparationCompleter = Completer<ApiResult<ReplyPreparation>>();
+    final preparationCompleter =
+        Completer<
+          DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>
+        >();
     await tester.pumpWidget(
       _buildPage(
         args: _postArgs(),
-        replyRepository: _FakeReplyRepository(
+        replyRepository: _FakeThreadReplyAdapter(
           asyncPreparationResult: preparationCompleter.future,
         ),
       ),
@@ -831,11 +834,17 @@ void main() {
     );
     expect(imageButton.onPressed, isNull);
     preparationCompleter.complete(
-      const ApiSuccess<ReplyPreparation>(
-        ReplyPreparation(
-          target: ReplyTarget.post(fid: '33', tid: '572063', pid: '41554317'),
-          reference: ReplyReference(),
+      DataReadSuccess<ThreadReplyPreparation, ThreadReplyCapabilities>(
+        data: const ThreadReplyPreparation(
+          target: ThreadReplyTarget.post(
+            fid: '33',
+            tid: '572063',
+            pid: '41554317',
+          ),
+          token: _TestThreadReplyToken(),
         ),
+        capabilities: _threadReplyCapabilities,
+        metadata: const DataReadMetadata.network(),
       ),
     );
   });
@@ -875,7 +884,7 @@ void main() {
   testWidgets('ReplyComposerPage inserts image block at the captured cursor', (
     tester,
   ) async {
-    final replyRepository = _FakeReplyRepository();
+    final replyRepository = _FakeThreadReplyAdapter();
     await tester.pumpWidget(
       _buildPage(
         replyRepository: replyRepository,
@@ -935,7 +944,7 @@ void main() {
     'ReplyComposerPage shows uploaded image embed and submits raw attach code',
     (tester) async {
       const path = 'E:/test/reply/uploaded.png';
-      final replyRepository = _FakeReplyRepository();
+      final replyRepository = _FakeThreadReplyAdapter();
       await tester.pumpWidget(
         _buildPage(
           replyRepository: replyRepository,
@@ -1068,10 +1077,10 @@ void main() {
     },
   );
 
-  testWidgets('ReplyComposerPage submits post reply with reference fields', (
+  testWidgets('ReplyComposerPage submits post reply with prepared token', (
     tester,
   ) async {
-    final replyRepository = _FakeReplyRepository();
+    final replyRepository = _FakeThreadReplyAdapter();
     await tester.pumpWidget(
       _buildPage(args: _postArgs(), replyRepository: replyRepository),
     );
@@ -1083,9 +1092,9 @@ void main() {
     await tester.pumpAndSettle();
 
     final draft = replyRepository.sentDrafts.single;
-    expect(draft.formHash, 'prepared-formhash');
-    expect(draft.noticeTrimStr, '[quote]引用[/quote]');
-    expect(draft.repPost, '41554317');
+    expect(draft.target.pid, '41554317');
+    expect(draft.preparation?.token, isA<_TestThreadReplyToken>());
+    expect(draft.preparation?.quotePreview, '引用正文');
   });
 
   testWidgets('ReplyComposerPage confirms leaving with unsent input', (
@@ -1152,11 +1161,7 @@ void main() {
   testWidgets(
     'ReplyComposerPage successful submit does not show leave confirm',
     (tester) async {
-      final replyRepository = _FakeReplyRepository(
-        result: const ApiSuccess<ReplySubmissionResult>(
-          ReplySubmissionResult(message: '回复发布成功'),
-        ),
-      );
+      final replyRepository = _FakeThreadReplyAdapter(result: _replyApplied);
       await tester.pumpWidget(_buildLauncher(replyRepository: replyRepository));
       await tester.tap(find.byKey(const Key('open-reply-composer-page')));
       await tester.pumpAndSettle();
@@ -1358,7 +1363,7 @@ Widget _buildPage({
   ReplyComposerArgs? args,
   ComposerDraftRepository? draftRepository,
   ComposerPreferencesRepository? preferencesRepository,
-  ReplyRepository? replyRepository,
+  _FakeThreadReplyAdapter? replyRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
   ComposerDraftAttachmentVerificationService? draftVerificationService,
@@ -1374,8 +1379,11 @@ Widget _buildPage({
       composerPreferencesRepositoryProvider.overrideWithValue(
         preferencesRepository ?? _FakeComposerPreferencesRepository(),
       ),
-      replyRepositoryProvider.overrideWithValue(
-        replyRepository ?? _FakeReplyRepository(),
+      threadReplyPreparationProvider.overrideWithValue(
+        replyRepository ?? _FakeThreadReplyAdapter(),
+      ),
+      threadReplyCommandProvider.overrideWithValue(
+        replyRepository ?? _FakeThreadReplyAdapter(),
       ),
       composerImagePickerProvider.overrideWithValue(
         imagePicker ?? _FakeReplyImagePicker(),
@@ -1458,7 +1466,7 @@ Future<void> _openReplySourceEditor(WidgetTester tester) async {
 
 Widget _buildLauncher({
   ComposerDraftRepository? draftRepository,
-  ReplyRepository? replyRepository,
+  _FakeThreadReplyAdapter? replyRepository,
   List<StickerGroup> stickerGroups = const [],
   ThemeData? theme,
   ValueChanged<ReplyComposerResult>? onResult,
@@ -1471,8 +1479,11 @@ Widget _buildLauncher({
       composerPreferencesRepositoryProvider.overrideWithValue(
         _FakeComposerPreferencesRepository(),
       ),
-      replyRepositoryProvider.overrideWithValue(
-        replyRepository ?? _FakeReplyRepository(),
+      threadReplyPreparationProvider.overrideWithValue(
+        replyRepository ?? _FakeThreadReplyAdapter(),
+      ),
+      threadReplyCommandProvider.overrideWithValue(
+        replyRepository ?? _FakeThreadReplyAdapter(),
       ),
       composerImagePickerProvider.overrideWithValue(_FakeReplyImagePicker()),
       composerImageUploadCoordinatorProvider.overrideWithValue(
@@ -1947,53 +1958,71 @@ class _FakeReplyImageUploadCoordinator
   }
 }
 
-class _FakeReplyRepository implements ReplyRepository {
-  _FakeReplyRepository({
-    ApiResult<ReplySubmissionResult>? result,
-    ApiResult<ReplyPreparation>? preparationResult,
+final class _TestThreadReplyToken implements ThreadReplyPreparationToken {
+  const _TestThreadReplyToken();
+}
+
+final ThreadReplyCapabilities _threadReplyCapabilities =
+    ThreadReplyCapabilities(
+      values: DataCapabilitySet<ThreadReplyCapability>.supported(
+        ThreadReplyCapability.values,
+      ),
+    );
+
+class _FakeThreadReplyAdapter
+    implements ThreadReplyPreparationRepository, ThreadReplyCommand {
+  _FakeThreadReplyAdapter({
+    DataCommandResult<ThreadReplyReceipt>? result,
+    DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>?
+    preparationResult,
     this.asyncPreparationResult,
   }) : result =
            result ??
-           const ApiSuccess<ReplySubmissionResult>(
-             ReplySubmissionResult(message: '回复成功'),
+           const DataCommandApplied<ThreadReplyReceipt>(
+             ThreadReplyReceipt(
+               tid: '572063',
+               pid: '41554318',
+               publicationState: ThreadPublicationState.published,
+             ),
            ),
        preparationResult =
            preparationResult ??
-           const ApiSuccess<ReplyPreparation>(
-             ReplyPreparation(
-               target: ReplyTarget.post(
+           DataReadSuccess<ThreadReplyPreparation, ThreadReplyCapabilities>(
+             data: const ThreadReplyPreparation(
+               target: ThreadReplyTarget.post(
                  fid: '33',
                  tid: '572063',
                  pid: '41554317',
                ),
-               reference: ReplyReference(
-                 formHash: 'prepared-formhash',
-                 noticeAuthor: 'notice-token',
-                 noticeTrimStr: '[quote]引用[/quote]',
-                 noticeAuthorMsg: '引用正文',
-                 repPid: '41554317',
-                 repPost: '41554317',
-               ),
+               quotePreview: '引用正文',
+               token: _TestThreadReplyToken(),
              ),
+             capabilities: _threadReplyCapabilities,
+             metadata: const DataReadMetadata.network(),
            );
 
-  final ApiResult<ReplySubmissionResult> result;
-  final ApiResult<ReplyPreparation> preparationResult;
-  final Future<ApiResult<ReplyPreparation>>? asyncPreparationResult;
-  final List<ReplyDraft> sentDrafts = <ReplyDraft>[];
+  final DataCommandResult<ThreadReplyReceipt> result;
+  final DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>
+  preparationResult;
+  final Future<DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>>?
+  asyncPreparationResult;
+  final List<ThreadReplySubmission> sentDrafts = <ThreadReplySubmission>[];
 
   @override
-  Future<ApiResult<ReplySubmissionResult>> sendReply({
-    required ReplyDraft draft,
-  }) async {
-    sentDrafts.add(draft);
+  ThreadReplyCapabilities get capabilities => _threadReplyCapabilities;
+
+  @override
+  Future<DataCommandResult<ThreadReplyReceipt>> execute(
+    ThreadReplySubmission submission,
+  ) async {
+    sentDrafts.add(submission);
     return result;
   }
 
   @override
-  Future<ApiResult<ReplyPreparation>> preparePostReply({
-    required Uri replyFormUri,
-  }) async {
+  Future<DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>> load(
+    ThreadReplyPreparationRequest request,
+  ) async {
     final asyncPreparationResult = this.asyncPreparationResult;
     if (asyncPreparationResult != null) {
       return asyncPreparationResult;

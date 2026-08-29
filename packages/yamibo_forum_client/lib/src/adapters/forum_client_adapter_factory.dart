@@ -34,6 +34,7 @@ import 'discuz_forum_display_repositories.dart';
 import 'discuz_profile_html_adapters.dart';
 import 'discuz_thread_repositories.dart';
 import 'discuz_thread_interaction_commands.dart';
+import 'discuz_thread_composer_commands.dart';
 import 'discuz_supplemental_read_adapters.dart';
 import '../session/forum_formhash_provider.dart';
 
@@ -121,6 +122,23 @@ final class ForumClientAdapterFactory {
         config: config,
         network: network,
         requestProfiles: requestProfiles,
+      );
+
+  DiscuzThreadCreationAdapter createThreadCreation(
+    ForumFormhashProvider formhash,
+  ) => DiscuzThreadCreationAdapter(
+    api: _api,
+    config: config,
+    formhashProvider: formhash,
+  );
+
+  DiscuzThreadReplyAdapter createThreadReply(ForumFormhashProvider formhash) =>
+      DiscuzThreadReplyAdapter(
+        api: _api,
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+        formhashProvider: formhash,
       );
 
   ThreadPostLocatorRepository createThreadPostLocator() =>

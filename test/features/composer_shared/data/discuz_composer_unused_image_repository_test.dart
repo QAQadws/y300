@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
@@ -134,10 +135,10 @@ void main() {
       final repository = DiscuzComposerUnusedImageRepository(
         remoteDataSource: remote,
         sessionStore: sessionStore,
-        loadFormhash: () async {
-          formhashLoads += 1;
-          return const ApiSuccess<String>('hash');
-        },
+        formhashProvider: _FakeForumFormhashProvider(
+          value: 'hash',
+          onLoad: () => formhashLoads += 1,
+        ),
       );
 
       final result = await repository.deleteUnusedImage('0');
@@ -157,8 +158,24 @@ DiscuzComposerUnusedImageRepository _repository({
   return DiscuzComposerUnusedImageRepository(
     remoteDataSource: remote,
     sessionStore: sessionStore,
-    loadFormhash: () async => ApiSuccess<String>(formhash),
+    formhashProvider: _FakeForumFormhashProvider(value: formhash),
   );
+}
+
+final class _FakeForumFormhashProvider implements ForumFormhashProvider {
+  const _FakeForumFormhashProvider({required this.value, this.onLoad});
+
+  final String value;
+  final void Function()? onLoad;
+
+  @override
+  Future<ForumFormhashResult> loadFormhash({
+    bool preferProfile = true,
+    ForumRequestCancellation? cancellation,
+  }) async {
+    onLoad?.call();
+    return ForumFormhashSuccess(value);
+  }
 }
 
 String _catalogCell(String aid) {

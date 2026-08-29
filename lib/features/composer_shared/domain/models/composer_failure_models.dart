@@ -13,7 +13,12 @@ enum ComposerSubmissionFailureCode {
   rateLimited,
   permissionDenied,
   typeRequired,
+  subjectTooShort,
+  subjectTooLong,
   contentTooShort,
+  contentTooLong,
+  targetUnavailable,
+  threadClosed,
   captchaRequired,
   pollInvalid,
   pollOptionCountInvalid,
@@ -21,6 +26,7 @@ enum ComposerSubmissionFailureCode {
   timeout,
   network,
   server,
+  outcomeUnknown,
   unknown,
 }
 

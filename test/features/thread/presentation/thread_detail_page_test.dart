@@ -53,8 +53,6 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
-import 'package:y300/features/reply/data/repositories/reply_repository.dart';
-import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/tags/data/repositories/forum_tag_repository.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
@@ -4788,7 +4786,7 @@ void main() {
           ),
         );
       });
-      final replyRepo = _FakeReplyRepository();
+      final replyRepo = _FakeThreadReplyCommand();
       final invalidationService = _FakeNativePageCacheInvalidationService();
 
       await tester.pumpWidget(
@@ -4827,16 +4825,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(replyRepo.called, isTrue);
-      expect(replyRepo.lastDraft?.message, '这是测试回复');
+      expect(replyRepo.lastSubmission?.message, '这是测试回复');
       expect(invalidationService.invalidatedThreadIds, <String>['100']);
-      expect(find.text('回复成功：回复发布成功'), findsOneWidget);
+      expect(find.text('回复成功'), findsOneWidget);
     });
   });
 }
 
 Widget _buildTestApp(
   ThreadRepository repository, {
-  ReplyRepository? replyRepository,
+  ThreadReplyCommand? replyRepository,
   NovelRepository? novelRepository,
   ThreadFavoriteActionService? favoriteActionService,
   _FakeThreadPostRatingInteraction? postRateInteraction,
@@ -4890,7 +4888,7 @@ Widget _buildTestApp(
 
 List<riverpod_misc.Override> _threadDetailOverrides(
   ThreadRepository repository, {
-  ReplyRepository? replyRepository,
+  ThreadReplyCommand? replyRepository,
   NovelRepository? novelRepository,
   ThreadFavoriteActionService? favoriteActionService,
   _FakeThreadPostRatingInteraction? postRateInteraction,
@@ -4932,8 +4930,8 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     novelRepositoryProvider.overrideWithValue(
       novelRepository ?? _FakeNovelRepository(),
     ),
-    replyRepositoryProvider.overrideWithValue(
-      replyRepository ?? _FakeReplyRepository(),
+    threadReplyCommandProvider.overrideWithValue(
+      replyRepository ?? _FakeThreadReplyCommand(),
     ),
     threadFavoriteActionServiceProvider.overrideWithValue(
       favoriteActionService ?? _FakeThreadFavoriteActionService(),
@@ -5736,27 +5734,32 @@ final class _FakeCommentToken implements ThreadPostCommentPreparationToken {
   const _FakeCommentToken();
 }
 
-class _FakeReplyRepository implements ReplyRepository {
-  bool called = false;
-  ReplyDraft? lastDraft;
-
-  @override
-  Future<ApiResult<ReplySubmissionResult>> sendReply({
-    required ReplyDraft draft,
-  }) async {
-    called = true;
-    lastDraft = draft;
-    return const ApiSuccess<ReplySubmissionResult>(
-      ReplySubmissionResult(message: '回复发布成功'),
+final ThreadReplyCapabilities _threadReplyCapabilities =
+    ThreadReplyCapabilities(
+      values: DataCapabilitySet<ThreadReplyCapability>.supported(
+        ThreadReplyCapability.values,
+      ),
     );
-  }
+
+class _FakeThreadReplyCommand implements ThreadReplyCommand {
+  bool called = false;
+  ThreadReplySubmission? lastSubmission;
 
   @override
-  Future<ApiResult<ReplyPreparation>> preparePostReply({
-    required Uri replyFormUri,
-  }) async {
-    return const ApiFailure<ReplyPreparation>(
-      ApiError(type: ApiErrorType.business, message: '测试不支持楼层回复准备'),
+  ThreadReplyCapabilities get capabilities => _threadReplyCapabilities;
+
+  @override
+  Future<DataCommandResult<ThreadReplyReceipt>> execute(
+    ThreadReplySubmission submission,
+  ) async {
+    called = true;
+    lastSubmission = submission;
+    return const DataCommandApplied<ThreadReplyReceipt>(
+      ThreadReplyReceipt(
+        tid: '100',
+        pid: 'p2',
+        publicationState: ThreadPublicationState.published,
+      ),
     );
   }
 }

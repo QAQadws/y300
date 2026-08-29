@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -20,7 +20,6 @@ import 'package:y300/features/composer_shared/domain/services/composer_attach_bb
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_verification_service.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
-import 'package:y300/features/reply/data/repositories/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_controller.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -216,7 +215,7 @@ void main() {
     });
 
     test('empty input does not submit', () async {
-      final replyRepository = _FakeReplyRepository();
+      final replyRepository = _FakeThreadReplyAdapter();
       final args = _threadArgs(tid: '572063');
       final container = _buildContainer(replyRepository: replyRepository);
       addTearDown(container.dispose);
@@ -242,9 +241,13 @@ void main() {
 
     test('successful submit sends draft and deletes saved draft', () async {
       final draftRepository = _MemoryReplyDraftRepository();
-      final replyRepository = _FakeReplyRepository(
-        result: const ApiSuccess<ReplySubmissionResult>(
-          ReplySubmissionResult(message: '回复发布成功'),
+      final replyRepository = _FakeThreadReplyAdapter(
+        result: const DataCommandApplied<ThreadReplyReceipt>(
+          ThreadReplyReceipt(
+            tid: '572063',
+            pid: '41554318',
+            publicationState: ThreadPublicationState.published,
+          ),
         ),
       );
       final args = _threadArgs(tid: '572063');
@@ -274,8 +277,8 @@ void main() {
 
       expect(result.sent, isTrue);
       expect(replyRepository.sentDrafts, hasLength(1));
-      expect(replyRepository.sentDrafts.single.fid, '33');
-      expect(replyRepository.sentDrafts.single.tid, '572063');
+      expect(replyRepository.sentDrafts.single.target.fid, '33');
+      expect(replyRepository.sentDrafts.single.target.tid, '572063');
       expect(replyRepository.sentDrafts.single.message, '提交内容');
       expect(replyRepository.sentDrafts.single.useSignature, isFalse);
       expect(await draftRepository.loadDraft(args.identity), isNull);
@@ -285,7 +288,7 @@ void main() {
       'submit keeps a remote-valid aid after local retention elapses',
       () async {
         final draftRepository = _MemoryReplyDraftRepository();
-        final replyRepository = _FakeReplyRepository();
+        final replyRepository = _FakeThreadReplyAdapter();
         final args = _threadArgs(tid: '572063');
         await draftRepository.saveDraft(
           ReplyDraftSnapshot(
@@ -323,10 +326,9 @@ void main() {
           replyRepository.sentDrafts.single.message,
           '正文\n[attach]123456[/attach]',
         );
-        expect(
-          replyRepository.sentDrafts.single.uploadedAttachmentAids,
-          <String>['123456'],
-        );
+        expect(replyRepository.sentDrafts.single.attachmentIds, <String>[
+          '123456',
+        ]);
         final state = container
             .read(replyComposerControllerProvider(args))
             .value;
@@ -338,7 +340,7 @@ void main() {
       'submit binds uploaded attachment aid when attach code remains',
       () async {
         final draftRepository = _MemoryReplyDraftRepository();
-        final replyRepository = _FakeReplyRepository();
+        final replyRepository = _FakeThreadReplyAdapter();
         final args = _threadArgs(tid: '572063');
         await draftRepository.saveDraft(
           ReplyDraftSnapshot(
@@ -369,9 +371,7 @@ void main() {
             .submit();
 
         expect(result.sent, isTrue);
-        expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, [
-          '123456',
-        ]);
+        expect(replyRepository.sentDrafts.single.attachmentIds, ['123456']);
       },
     );
 
@@ -379,7 +379,7 @@ void main() {
       'submit skips uploaded attachment aid when attach code is removed',
       () async {
         final draftRepository = _MemoryReplyDraftRepository();
-        final replyRepository = _FakeReplyRepository();
+        final replyRepository = _FakeThreadReplyAdapter();
         final args = _threadArgs(tid: '572063');
         await draftRepository.saveDraft(
           ReplyDraftSnapshot(
@@ -410,16 +410,13 @@ void main() {
             .submit();
 
         expect(result.sent, isTrue);
-        expect(
-          replyRepository.sentDrafts.single.uploadedAttachmentAids,
-          isEmpty,
-        );
+        expect(replyRepository.sentDrafts.single.attachmentIds, isEmpty);
       },
     );
 
     test('submit skips non-uploaded attachment statuses', () async {
       final draftRepository = _MemoryReplyDraftRepository();
-      final replyRepository = _FakeReplyRepository();
+      final replyRepository = _FakeThreadReplyAdapter();
       final args = _threadArgs(tid: '572063');
       await draftRepository.saveDraft(
         ReplyDraftSnapshot(
@@ -455,14 +452,14 @@ void main() {
           .submit();
 
       expect(result.sent, isTrue);
-      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, isEmpty);
+      expect(replyRepository.sentDrafts.single.attachmentIds, isEmpty);
     });
 
     test(
       'submit binds multiple uploaded aids by attach code source order',
       () async {
         final draftRepository = _MemoryReplyDraftRepository();
-        final replyRepository = _FakeReplyRepository();
+        final replyRepository = _FakeThreadReplyAdapter();
         final args = _threadArgs(tid: '572063');
         await draftRepository.saveDraft(
           ReplyDraftSnapshot(
@@ -498,18 +495,19 @@ void main() {
             .submit();
 
         expect(result.sent, isTrue);
-        expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, [
-          '222',
-          '111',
-        ]);
+        expect(replyRepository.sentDrafts.single.attachmentIds, ['222', '111']);
       },
     );
 
     test('failed submit keeps draft and exposes error', () async {
       final draftRepository = _MemoryReplyDraftRepository();
-      final replyRepository = _FakeReplyRepository(
-        result: const ApiFailure<ReplySubmissionResult>(
-          ApiError(type: ApiErrorType.network, message: '网络失败'),
+      final replyRepository = _FakeThreadReplyAdapter(
+        result: const DataCommandOutcomeUnknown<ThreadReplyReceipt>(
+          DataCommandFailure(
+            kind: DataCommandFailureKind.network,
+            retryPolicy: DataCommandRetryPolicy.explicitOnly,
+            diagnosticMessage: 'test_network_failure',
+          ),
         ),
       );
       final args = _threadArgs(tid: '572063');
@@ -535,7 +533,7 @@ void main() {
             .having(
               (failure) => failure.code,
               'code',
-              ComposerSubmissionFailureCode.network,
+              ComposerSubmissionFailureCode.outcomeUnknown,
             )
             .having((failure) => failure.kind, 'kind', ComposerKind.reply),
       );
@@ -547,9 +545,13 @@ void main() {
 
     test('failed submit keeps uploaded attachment draft metadata', () async {
       final draftRepository = _MemoryReplyDraftRepository();
-      final replyRepository = _FakeReplyRepository(
-        result: const ApiFailure<ReplySubmissionResult>(
-          ApiError(type: ApiErrorType.network, message: '网络失败'),
+      final replyRepository = _FakeThreadReplyAdapter(
+        result: const DataCommandOutcomeUnknown<ThreadReplyReceipt>(
+          DataCommandFailure(
+            kind: DataCommandFailureKind.network,
+            retryPolicy: DataCommandRetryPolicy.explicitOnly,
+            diagnosticMessage: 'test_network_failure',
+          ),
         ),
       );
       final args = _threadArgs(tid: '572063');
@@ -582,9 +584,7 @@ void main() {
           .submit();
 
       expect(result.sent, isFalse);
-      expect(replyRepository.sentDrafts.single.uploadedAttachmentAids, [
-        '123456',
-      ]);
+      expect(replyRepository.sentDrafts.single.attachmentIds, ['123456']);
       final saved = await draftRepository.loadDraft(args.identity);
       expect(saved?.message, '正文\n[attach]123456[/attach]');
       expect(saved?.imageAttachments, hasLength(1));
@@ -921,8 +921,8 @@ void main() {
     test(
       'duplicate submit while submitting does not call repository twice',
       () async {
-        final completer = Completer<ApiResult<ReplySubmissionResult>>();
-        final replyRepository = _FakeReplyRepository(
+        final completer = Completer<DataCommandResult<ThreadReplyReceipt>>();
+        final replyRepository = _FakeThreadReplyAdapter(
           asyncResult: completer.future,
         );
         final args = _threadArgs(tid: '572063');
@@ -939,8 +939,12 @@ void main() {
         final first = controller.submit();
         final second = await controller.submit();
         completer.complete(
-          const ApiSuccess<ReplySubmissionResult>(
-            ReplySubmissionResult(message: '回复成功'),
+          const DataCommandApplied<ThreadReplyReceipt>(
+            ThreadReplyReceipt(
+              tid: '572063',
+              pid: '41554318',
+              publicationState: ThreadPublicationState.published,
+            ),
           ),
         );
         await first;
@@ -951,7 +955,7 @@ void main() {
     );
 
     test('submit sends BBCode source message unchanged', () async {
-      final replyRepository = _FakeReplyRepository();
+      final replyRepository = _FakeThreadReplyAdapter();
       final args = _threadArgs(tid: '572063');
       final container = _buildContainer(replyRepository: replyRepository);
       addTearDown(container.dispose);
@@ -971,7 +975,7 @@ void main() {
 
     test('post reply restores post draft and prepares reference', () async {
       final draftRepository = _MemoryReplyDraftRepository();
-      final replyRepository = _FakeReplyRepository();
+      final replyRepository = _FakeThreadReplyAdapter();
       final args = _postArgs();
       await draftRepository.saveDraft(
         ReplyDraftSnapshot(
@@ -1000,14 +1004,11 @@ void main() {
           .read(replyComposerControllerProvider(args))
           .value;
       expect(replyRepository.prepareCallCount, 1);
-      expect(
-        preparedState?.preparation?.reference.noticeTrimStr,
-        '[quote]引用[/quote]',
-      );
+      expect(preparedState?.preparation?.quotePreview, '[quote]引用[/quote]');
     });
 
-    test('post reply submit passes prepared reference fields', () async {
-      final replyRepository = _FakeReplyRepository();
+    test('post reply submit preserves prepared opaque token', () async {
+      final replyRepository = _FakeThreadReplyAdapter();
       final args = _postArgs();
       final container = _buildContainer(replyRepository: replyRepository);
       addTearDown(container.dispose);
@@ -1024,22 +1025,25 @@ void main() {
 
       expect(result.sent, isTrue);
       final draft = replyRepository.sentDrafts.single;
-      expect(draft.formHash, 'prepared-formhash');
-      expect(draft.repPid, '41554317');
-      expect(draft.repPost, '41554317');
-      expect(draft.noticeAuthor, 'notice-token');
-      expect(draft.noticeTrimStr, '[quote]引用[/quote]');
-      expect(draft.noticeAuthorMsg, '引用正文');
+      expect(draft.target.kind, ThreadReplyTargetKind.post);
+      expect(draft.target.pid, '41554317');
+      expect(draft.preparation?.token, isA<_TestThreadReplyToken>());
+      expect(draft.preparation?.quotePreview, '[quote]引用[/quote]');
     });
 
     test(
       'post reply preparation failure disables submit and keeps draft',
       () async {
         final draftRepository = _MemoryReplyDraftRepository();
-        final replyRepository = _FakeReplyRepository(
-          preparationResult: const ApiFailure<ReplyPreparation>(
-            ApiError(type: ApiErrorType.parse, message: '表单解析失败'),
-          ),
+        final replyRepository = _FakeThreadReplyAdapter(
+          preparationResult:
+              const DataReadFailure<
+                ThreadReplyPreparation,
+                ThreadReplyCapabilities
+              >(
+                kind: DataReadFailureKind.parse,
+                diagnosticMessage: 'test_form_parse_failure',
+              ),
         );
         final args = _postArgs();
         final container = _buildContainer(
@@ -1221,7 +1225,7 @@ ReplyComposerArgs _postArgs() {
 ProviderContainer _buildContainer({
   ComposerDraftRepository? draftRepository,
   ComposerPreferencesRepository? preferencesRepository,
-  ReplyRepository? replyRepository,
+  _FakeThreadReplyAdapter? replyRepository,
   ComposerImagePicker? imagePicker,
   ComposerImageUploadCoordinator? imageUploadCoordinator,
   ComposerDraftAttachmentVerificationService? draftVerificationService,
@@ -1234,8 +1238,11 @@ ProviderContainer _buildContainer({
       composerPreferencesRepositoryProvider.overrideWithValue(
         preferencesRepository ?? _MemoryComposerPreferencesRepository(),
       ),
-      replyRepositoryProvider.overrideWithValue(
-        replyRepository ?? _FakeReplyRepository(),
+      threadReplyPreparationProvider.overrideWithValue(
+        replyRepository ?? _FakeThreadReplyAdapter(),
+      ),
+      threadReplyCommandProvider.overrideWithValue(
+        replyRepository ?? _FakeThreadReplyAdapter(),
       ),
       composerImagePickerProvider.overrideWithValue(
         imagePicker ?? _FakeReplyImagePicker(),
@@ -1492,47 +1499,64 @@ class _FakeReplyImageUploadCoordinator
   }
 }
 
-class _FakeReplyRepository implements ReplyRepository {
-  _FakeReplyRepository({
-    ApiResult<ReplySubmissionResult>? result,
+final class _TestThreadReplyToken implements ThreadReplyPreparationToken {
+  const _TestThreadReplyToken();
+}
+
+final ThreadReplyCapabilities _threadReplyCapabilities =
+    ThreadReplyCapabilities(
+      values: DataCapabilitySet<ThreadReplyCapability>.supported(
+        ThreadReplyCapability.values,
+      ),
+    );
+
+class _FakeThreadReplyAdapter
+    implements ThreadReplyPreparationRepository, ThreadReplyCommand {
+  _FakeThreadReplyAdapter({
+    DataCommandResult<ThreadReplyReceipt>? result,
     this.asyncResult,
-    ApiResult<ReplyPreparation>? preparationResult,
+    DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>?
+    preparationResult,
   }) : result =
            result ??
-           const ApiSuccess<ReplySubmissionResult>(
-             ReplySubmissionResult(message: '回复成功'),
+           const DataCommandApplied<ThreadReplyReceipt>(
+             ThreadReplyReceipt(
+               tid: '572063',
+               pid: '41554318',
+               publicationState: ThreadPublicationState.published,
+             ),
            ),
        preparationResult =
            preparationResult ??
-           const ApiSuccess<ReplyPreparation>(
-             ReplyPreparation(
-               target: ReplyTarget.post(
+           DataReadSuccess<ThreadReplyPreparation, ThreadReplyCapabilities>(
+             data: const ThreadReplyPreparation(
+               target: ThreadReplyTarget.post(
                  fid: '33',
                  tid: '572063',
                  pid: '41554317',
                ),
-               reference: ReplyReference(
-                 formHash: 'prepared-formhash',
-                 noticeAuthor: 'notice-token',
-                 noticeTrimStr: '[quote]引用[/quote]',
-                 noticeAuthorMsg: '引用正文',
-                 repPid: '41554317',
-                 repPost: '41554317',
-               ),
+               quotePreview: '[quote]引用[/quote]',
+               token: _TestThreadReplyToken(),
              ),
+             capabilities: _threadReplyCapabilities,
+             metadata: const DataReadMetadata.network(),
            );
 
-  final ApiResult<ReplySubmissionResult> result;
-  final Future<ApiResult<ReplySubmissionResult>>? asyncResult;
-  final ApiResult<ReplyPreparation> preparationResult;
-  final List<ReplyDraft> sentDrafts = <ReplyDraft>[];
+  final DataCommandResult<ThreadReplyReceipt> result;
+  final Future<DataCommandResult<ThreadReplyReceipt>>? asyncResult;
+  final DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>
+  preparationResult;
+  final List<ThreadReplySubmission> sentDrafts = <ThreadReplySubmission>[];
   int prepareCallCount = 0;
 
   @override
-  Future<ApiResult<ReplySubmissionResult>> sendReply({
-    required ReplyDraft draft,
-  }) async {
-    sentDrafts.add(draft);
+  ThreadReplyCapabilities get capabilities => _threadReplyCapabilities;
+
+  @override
+  Future<DataCommandResult<ThreadReplyReceipt>> execute(
+    ThreadReplySubmission submission,
+  ) async {
+    sentDrafts.add(submission);
     final asyncResult = this.asyncResult;
     if (asyncResult != null) {
       return asyncResult;
@@ -1541,9 +1565,9 @@ class _FakeReplyRepository implements ReplyRepository {
   }
 
   @override
-  Future<ApiResult<ReplyPreparation>> preparePostReply({
-    required Uri replyFormUri,
-  }) async {
+  Future<DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>> load(
+    ThreadReplyPreparationRequest request,
+  ) async {
     prepareCallCount += 1;
     return preparationResult;
   }

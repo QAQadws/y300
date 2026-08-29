@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
@@ -13,7 +13,6 @@ import 'package:y300/features/composer_shared/presentation/controllers/composer_
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
-import 'package:y300/features/reply/data/repositories/reply_repository.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 
@@ -29,7 +28,8 @@ class ReplyComposerController
   ReplyComposerController(this._args);
 
   final ReplyComposerArgs _args;
-  ReplyRepository? _replyRepository;
+  ThreadReplyPreparationRepository? _preparationRepository;
+  ThreadReplyCommand? _replyCommand;
   ComposerSubmissionFailureClassifier? _failureClassifier;
 
   @override
@@ -40,7 +40,8 @@ class ReplyComposerController
 
   @override
   FutureOr<ReplyComposerState> build() async {
-    _replyRepository = ref.read(replyRepositoryProvider);
+    _preparationRepository = ref.read(threadReplyPreparationProvider);
+    _replyCommand = ref.read(threadReplyCommandProvider);
     _failureClassifier = ref.read(composerSubmissionFailureClassifierProvider);
     return super.build();
   }
@@ -129,35 +130,23 @@ class ReplyComposerController
     required ReplyComposerState state,
     required List<String> uploadedAids,
   }) async {
-    final reference = state.preparation?.reference;
-    final result = await _replyRepository!.sendReply(
-      draft: ReplyDraft(
-        fid: state.target.fid,
-        tid: state.target.tid,
+    final result = await _replyCommand!.execute(
+      ThreadReplySubmission(
+        target: _contractTarget(state.target),
+        preparation: state.preparation,
         message: state.message.trim(),
         useSignature: state.useSignature,
-        formHash: reference?.formHash,
-        repPid: reference?.repPid,
-        repPost: reference?.repPost,
-        noticeAuthor: reference?.noticeAuthor,
-        noticeTrimStr: reference?.noticeTrimStr,
-        noticeAuthorMsg: reference?.noticeAuthorMsg,
-        uploadedAttachmentAids: uploadedAids,
+        attachmentIds: uploadedAids,
       ),
     );
-    if (result case ApiSuccess<ReplySubmissionResult>(:final data)) {
-      return ComposerSubmissionOutcome.success(
-        rawDetail: data.message.isEmpty ? null : data.message,
-      );
+    if (result case DataCommandApplied<ThreadReplyReceipt>()) {
+      return const ComposerSubmissionOutcome.success();
     }
-    final error = (result as ApiFailure<ReplySubmissionResult>).error;
-    final failure =
-        _failureClassifier?.classify(error, kind: ComposerKind.reply) ??
-        ComposerSubmissionFailure(
-          code: ComposerSubmissionFailureCode.unknown,
-          kind: ComposerKind.reply,
-          detail: error.message,
-        );
+    final failure = _failureClassifier!.classifyCommand(
+      result.failureOrNull!,
+      kind: ComposerKind.reply,
+      outcomeUnknown: result is DataCommandOutcomeUnknown<ThreadReplyReceipt>,
+    );
     return ComposerSubmissionOutcome.failure(failure: failure);
   }
 
@@ -187,14 +176,21 @@ class ReplyComposerController
       );
     }
 
-    final result = await _replyRepository!.preparePostReply(
-      replyFormUri: replyFormUri,
+    final result = await _preparationRepository!.load(
+      ThreadReplyPreparationRequest(
+        target: _contractTarget(_args.target),
+        formUri: replyFormUri,
+        referer: _args.target.sourceUri,
+      ),
     );
     final latest = state.value ?? latestState;
     if (latest == null) {
       return;
     }
-    if (result case ApiSuccess<ReplyPreparation>(:final data)) {
+    if (result
+        case DataReadSuccess<ThreadReplyPreparation, ThreadReplyCapabilities>(
+          :final data,
+        )) {
       _setReplyState(
         latest.copyWith(
           isPreparing: false,
@@ -204,13 +200,13 @@ class ReplyComposerController
       );
       return;
     }
-    final error = (result as ApiFailure<ReplyPreparation>).error;
+    final error = result.failureOrNull!;
     _setReplyState(
       latest.copyWith(
         isPreparing: false,
         preparationFailure: ComposerOperationFailure(
           code: ComposerOperationFailureCode.replyPreparation,
-          detail: error.message.isEmpty ? null : error.message,
+          detail: error.diagnosticMessage,
         ),
       ),
     );
@@ -220,6 +216,13 @@ class ReplyComposerController
   /// 不经过 [ComposerStatePatch]，避免污染基类抽象。
   void _setReplyState(ReplyComposerState value) {
     setStateValue(value);
+  }
+
+  ThreadReplyTarget _contractTarget(ReplyTarget target) {
+    final pid = target.pid;
+    return target.isPostReply && pid != null
+        ? ThreadReplyTarget.post(fid: target.fid, tid: target.tid, pid: pid)
+        : ThreadReplyTarget.thread(fid: target.fid, tid: target.tid);
   }
 
   /// 将基类的通用调用结果窄化为 reply 路由结果。

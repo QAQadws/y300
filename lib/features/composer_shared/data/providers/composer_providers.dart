@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
-import 'package:y300/features/auth/data/providers/auth_formhash_provider.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_draft_providers.dart';
 import 'package:y300/features/composer_shared/data/repositories/discuz_composer_unused_image_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_attachment_remote_data_source.dart';
@@ -29,7 +28,7 @@ export 'package:y300/features/composer_shared/data/providers/composer_draft_prov
 /// composer_shared 模块的 Riverpod 接线集合。
 ///
 /// 这里的 provider 在 reply 与（后续阶段的）posting 之间共享。具体的回复/发帖
-/// 业务 provider（`replyRepositoryProvider`、`replyComposerControllerProvider` 等）
+/// 业务 provider（回复 command、`replyComposerControllerProvider` 等）
 /// 仍然留在各自的 feature 目录里，它们消费这里暴露的依赖。
 
 final stickerCatalogRepositoryProvider = Provider<StickerCatalogRepository>((
@@ -100,7 +99,7 @@ final composerUnusedImageRepositoryProvider =
           composerUnusedImageRemoteDataSourceProvider,
         ),
         sessionStore: ref.watch(yamiboSessionStoreProvider),
-        loadFormhash: () => ref.read(formhashProvider).loadFormhash(),
+        formhashProvider: ref.read(yamiboForumClientProvider).formhashProvider,
       );
     });
 

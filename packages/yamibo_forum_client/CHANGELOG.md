@@ -8,7 +8,34 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
-- Reserved for changes made after `0.5.0`.
+- Reserved for changes made after `0.6.0`.
+
+## 0.6.0 - 2026-08-29
+
+### Added
+
+- Independent source-neutral preparation and command contracts for thread
+  creation, ordinary replies, and prepared post replies.
+- Discuz v4 adapters for current Y300 ordinary-thread, poll, tag, attachment,
+  signature, notification, and reply fields.
+- Minimum read-access submission in the inclusive `0..255` range, with
+  optional v4 thread read-back evidence for non-zero values.
+
+### Changed
+
+- Creation and reply receipts expose only stable identities, moderation state,
+  and structured read-access evidence; raw server messages are no longer
+  returned to applications.
+- Prepared post-reply HTML requests keep the mobile request identity used by
+  their `mobile=2` endpoint instead of switching to the desktop profile.
+- Post-reply quote previews prefer Discuz's dedicated `noticeauthormsg` value,
+  preserving the quoted body without surrounding form title and author chrome.
+- Composer rejection handling now preserves the exact Discuz `messageval`,
+  recognizes optional `mobile:` and `//1` wrappers, and distinguishes input,
+  authentication, and permission failures instead of treating unknown codes as
+  permission failures.
+- A sent command whose final effect cannot be proved now returns
+  `DataCommandOutcomeUnknown` and is never retried by the adapter.
 
 ## 0.5.0 - 2026-08-28
 

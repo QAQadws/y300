@@ -112,6 +112,8 @@ final class YamiboForumClientBuilder {
     final favoriteThreadDirectory = factory.createFavoriteThreadDirectory();
     final postRating = factory.createThreadPostRatingInteraction();
     final postComment = factory.createThreadPostCommentInteraction();
+    final threadCreation = factory.createThreadCreation(formhash);
+    final threadReply = factory.createThreadReply(formhash);
     return YamiboForumClient(
       config: config,
       network: network,
@@ -151,6 +153,10 @@ final class YamiboForumClientBuilder {
         postRatingCommand: postRating,
         postCommentPreparation: postComment,
         postCommentCommand: postComment,
+        threadCreationPreparation: threadCreation,
+        threadCreationCommand: threadCreation,
+        threadReplyPreparation: threadReply,
+        threadReplyCommand: threadReply,
         postRatings: factory.createThreadPostRatings(),
         postLocator: factory.createThreadPostLocator(),
         threadAuthorPosts: factory.createThreadAuthorPosts(),

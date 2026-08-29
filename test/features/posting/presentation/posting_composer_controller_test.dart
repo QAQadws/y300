@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -15,8 +15,6 @@ import 'package:y300/features/composer_shared/domain/models/composer_preferences
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
-import 'package:y300/features/posting/data/repositories/new_thread_repository.dart';
-import 'package:y300/features/posting/data/repositories/posting_form_metadata_repository.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
@@ -49,14 +47,20 @@ void main() {
           .read(postingComposerControllerProvider(args))
           .value!;
       expect(state.isLoadingMetadata, isFalse);
-      expect(state.metadata?.formHash, 'fh');
+      expect(state.metadata?.fid, '33');
       expect(state.metadata?.threadTypes, hasLength(2));
       expect(metadataRepository.callCount, 1);
     });
 
     test('metadata failure exposes error and retry refetches', () async {
       final metadataRepository = _FakeMetadataRepository.failure(
-        const ApiError(type: ApiErrorType.network, message: '网络挂了'),
+        const DataReadFailure<
+          ThreadCreationPreparation,
+          ThreadCreationCapabilities
+        >(
+          kind: DataReadFailureKind.network,
+          diagnosticMessage: 'test_network_failure',
+        ),
       );
       final args = _args();
       final container = _buildContainer(metadataRepository: metadataRepository);
@@ -79,7 +83,11 @@ void main() {
               'code',
               ComposerOperationFailureCode.postingMetadataLoad,
             )
-            .having((failure) => failure.detail, 'detail', '网络挂了'),
+            .having(
+              (failure) => failure.detail,
+              'detail',
+              'test_network_failure',
+            ),
       );
       expect(failed.metadata, isNull);
 
@@ -92,7 +100,7 @@ void main() {
           .value!;
       expect(retried.isLoadingMetadata, isFalse);
       expect(retried.metadataFailure, isNull);
-      expect(retried.metadata?.formHash, 'fh');
+      expect(retried.metadata?.fid, '33');
       expect(metadataRepository.callCount, 2);
     });
 
@@ -172,13 +180,13 @@ void main() {
     test(
       'submit on required-type forum without typeid blocks repository call',
       () async {
-        final newThreadRepository = _FakeNewThreadRepository();
+        final threadCreationCommand = _FakeThreadCreationCommand();
         final args = _args();
         final container = _buildContainer(
           metadataRepository: _FakeMetadataRepository.success(
             _metadataWithTypes(typeRequired: true),
           ),
-          newThreadRepository: newThreadRepository,
+          threadCreationCommand: threadCreationCommand,
         );
         addTearDown(container.dispose);
         final subscription = _keepAlive(container, args);
@@ -195,7 +203,7 @@ void main() {
         final result = await controller.submit();
 
         expect(result.sent, isFalse);
-        expect(newThreadRepository.submittedPayloads, isEmpty);
+        expect(threadCreationCommand.submissions, isEmpty);
         expect(
           container
               .read(postingComposerControllerProvider(args))
@@ -212,14 +220,14 @@ void main() {
 
     test('successful submit deletes draft and clears state', () async {
       final draftRepository = _MemoryDraftRepository();
-      final newThreadRepository = _FakeNewThreadRepository();
+      final threadCreationCommand = _FakeThreadCreationCommand();
       final args = _args();
       final container = _buildContainer(
         draftRepository: draftRepository,
         metadataRepository: _FakeMetadataRepository.success(
           _metadataWithTypes(typeRequired: false),
         ),
-        newThreadRepository: newThreadRepository,
+        threadCreationCommand: threadCreationCommand,
       );
       addTearDown(container.dispose);
       final subscription = _keepAlive(container, args);
@@ -247,10 +255,10 @@ void main() {
       expect(result.sent, isTrue);
       expect(result.tid, '900001');
       expect(result.pid, '910001');
-      expect(newThreadRepository.submittedPayloads, hasLength(1));
-      expect(newThreadRepository.submittedPayloads.single.subject, '标题');
-      expect(newThreadRepository.submittedPayloads.single.message, '正文');
-      expect(newThreadRepository.submittedPayloads.single.typeid, '111');
+      expect(threadCreationCommand.submissions, hasLength(1));
+      expect(threadCreationCommand.submissions.single.subject, '标题');
+      expect(threadCreationCommand.submissions.single.message, '正文');
+      expect(threadCreationCommand.submissions.single.typeId, '111');
 
       final state = container
           .read(postingComposerControllerProvider(args))
@@ -328,12 +336,13 @@ void main() {
 
     test('failed submit keeps draft with subject and extras', () async {
       final draftRepository = _MemoryDraftRepository();
-      final newThreadRepository = _FakeNewThreadRepository(
-        result: const ApiFailure<NewThreadSubmissionResult>(
-          ApiError(
-            type: ApiErrorType.business,
+      final threadCreationCommand = _FakeThreadCreationCommand(
+        result: const DataCommandRejected<ThreadCreationReceipt>(
+          DataCommandFailure(
+            kind: DataCommandFailureKind.validation,
+            retryPolicy: DataCommandRetryPolicy.explicitOnly,
             code: 'post_flood_ctrl',
-            message: '发帖过快',
+            diagnosticMessage: 'test_rate_limited',
           ),
         ),
       );
@@ -343,7 +352,7 @@ void main() {
         metadataRepository: _FakeMetadataRepository.success(
           _metadataWithTypes(typeRequired: false),
         ),
-        newThreadRepository: newThreadRepository,
+        threadCreationCommand: threadCreationCommand,
       );
       addTearDown(container.dispose);
       final subscription = _keepAlive(container, args);
@@ -406,13 +415,13 @@ void main() {
             const ComposerImageUploadEvent.completed(total: 1),
           ],
         );
-        final newThreadRepository = _FakeNewThreadRepository();
+        final threadCreationCommand = _FakeThreadCreationCommand();
         final args = _args();
         final container = _buildContainer(
           metadataRepository: _FakeMetadataRepository.success(
             _metadataWithTypes(typeRequired: false),
           ),
-          newThreadRepository: newThreadRepository,
+          threadCreationCommand: threadCreationCommand,
           imagePicker: imagePicker,
           imageUploadCoordinator: uploadCoordinator,
         );
@@ -448,10 +457,7 @@ void main() {
 
         final result = await controller.submit();
         expect(result.sent, isTrue);
-        expect(
-          newThreadRepository.submittedPayloads.single.uploadedAttachmentAids,
-          ['777'],
-        );
+        expect(threadCreationCommand.submissions.single.attachmentIds, ['777']);
       },
     );
 
@@ -540,13 +546,13 @@ void main() {
     test(
       'preflight returns over-limit message when subject exceeds threshold',
       () async {
-        final newThreadRepository = _FakeNewThreadRepository();
+        final threadCreationCommand = _FakeThreadCreationCommand();
         final args = _args();
         final container = _buildContainer(
           metadataRepository: _FakeMetadataRepository.success(
             _metadataWithLengthLimits(maxSubjectLength: 5),
           ),
-          newThreadRepository: newThreadRepository,
+          threadCreationCommand: threadCreationCommand,
         );
         addTearDown(container.dispose);
         final subscription = _keepAlive(container, args);
@@ -563,7 +569,7 @@ void main() {
         final result = await controller.submit();
 
         expect(result.sent, isFalse);
-        expect(newThreadRepository.submittedPayloads, isEmpty);
+        expect(threadCreationCommand.submissions, isEmpty);
         expect(
           container
               .read(postingComposerControllerProvider(args))
@@ -649,13 +655,13 @@ void main() {
     test(
       'poll preflight blocks submit when fewer than 2 valid options',
       () async {
-        final newThreadRepository = _FakeNewThreadRepository();
+        final threadCreationCommand = _FakeThreadCreationCommand();
         final args = _args();
         final container = _buildContainer(
           metadataRepository: _FakeMetadataRepository.success(
             _metadataNoTypes(),
           ),
-          newThreadRepository: newThreadRepository,
+          threadCreationCommand: threadCreationCommand,
         );
         addTearDown(container.dispose);
         final subscription = _keepAlive(container, args);
@@ -673,7 +679,7 @@ void main() {
 
         final result = await controller.submit();
         expect(result.sent, isFalse);
-        expect(newThreadRepository.submittedPayloads, isEmpty);
+        expect(threadCreationCommand.submissions, isEmpty);
         expect(
           result.failure,
           isA<ComposerValidationFailure>().having(
@@ -686,11 +692,11 @@ void main() {
     );
 
     test('poll submit forwards normalized payload', () async {
-      final newThreadRepository = _FakeNewThreadRepository();
+      final threadCreationCommand = _FakeThreadCreationCommand();
       final args = _args();
       final container = _buildContainer(
         metadataRepository: _FakeMetadataRepository.success(_metadataNoTypes()),
-        newThreadRepository: newThreadRepository,
+        threadCreationCommand: threadCreationCommand,
       );
       addTearDown(container.dispose);
       final subscription = _keepAlive(container, args);
@@ -713,14 +719,13 @@ void main() {
       final result = await controller.submit();
       expect(result.sent, isTrue);
 
-      final payload = newThreadRepository.submittedPayloads.single;
-      expect(payload.special, NewThreadSpecial.poll);
+      final payload = threadCreationCommand.submissions.single;
+      expect(payload.kind, ThreadCreationKind.poll);
       expect(payload.poll, isNotNull);
       expect(payload.poll!.options, ['A', 'B', 'C']);
-      expect(payload.poll!.multiple, isTrue);
-      expect(payload.poll!.maxChoices, 2);
+      expect(payload.poll!.maximumChoices, 2);
       expect(payload.poll!.expirationDays, 7);
-      expect(payload.poll!.overt, isTrue);
+      expect(payload.poll!.publicVoters, isTrue);
 
       // 成功后业务字段被 reset。
       final state = container

@@ -631,12 +631,7 @@ class _ReplyReferenceStatus extends StatelessWidget {
       );
     }
 
-    final reference = state.preparation?.reference;
-    final noticeAuthorMsg = reference?.noticeAuthorMsg?.trim();
-    final rawQuotePreview = reference?.rawQuotePreview?.trim();
-    final preview = noticeAuthorMsg != null && noticeAuthorMsg.isNotEmpty
-        ? noticeAuthorMsg
-        : rawQuotePreview;
+    final preview = state.preparation?.quotePreview?.trim();
     if (preview == null || preview.isEmpty) {
       return const SizedBox.shrink();
     }

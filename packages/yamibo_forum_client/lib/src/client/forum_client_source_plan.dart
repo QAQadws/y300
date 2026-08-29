@@ -13,6 +13,7 @@ import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_interaction_commands.dart';
+import '../contracts/thread_composer_commands.dart';
 import '../contracts/thread_supplemental_reads.dart';
 
 /// Experimental per-contract source composition used by advanced hosts.
@@ -48,6 +49,10 @@ final class ForumClientSourcePlan {
     this.postRatingCommand,
     this.postCommentPreparation,
     this.postCommentCommand,
+    this.threadCreationPreparation,
+    this.threadCreationCommand,
+    this.threadReplyPreparation,
+    this.threadReplyCommand,
     this.postRatings,
     this.postLocator,
     this.threadAuthorPosts,
@@ -130,6 +135,18 @@ final class ForumClientSourcePlan {
 
   /// Command for submitting a prepared post comment.
   final ThreadPostCommentCommand? postCommentCommand;
+
+  /// Source for preparing a server-validated thread-creation form.
+  final ThreadCreationPreparationRepository? threadCreationPreparation;
+
+  /// Command for creating a prepared thread.
+  final ThreadCreationCommand? threadCreationCommand;
+
+  /// Source for preparing a server-validated post reply.
+  final ThreadReplyPreparationRepository? threadReplyPreparation;
+
+  /// Command for submitting thread and post replies.
+  final ThreadReplyCommand? threadReplyCommand;
 
   /// Source for complete post-rating details.
   final ThreadPostRatingsRepository? postRatings;

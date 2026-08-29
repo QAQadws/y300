@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:y300/features/posting/domain/models/posting_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/posting/presentation/widgets/composer_anchored_dropdown.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -25,13 +25,13 @@ class ThreadTypeSelector extends StatelessWidget {
     this.useDropdown = false,
   });
 
-  final List<ThreadType> types;
+  final List<ThreadCreationType> types;
   final bool typeRequired;
   final String? selectedTypeId;
   final ValueChanged<String?> onSelected;
   final bool enabled;
   final Key? containerKey;
-  final Key Function(ThreadType type)? chipKeyBuilder;
+  final Key Function(ThreadCreationType type)? chipKeyBuilder;
 
   /// "无分类"项的 widget key——仅在 `typeRequired == false` 时存在。
   final Key? noneChipKey;
@@ -39,7 +39,7 @@ class ThreadTypeSelector extends StatelessWidget {
   final Key? summaryKey;
   final bool useDropdown;
 
-  ThreadType? get _selectedType {
+  ThreadCreationType? get _selectedType {
     final selectedTypeId = this.selectedTypeId;
     if (selectedTypeId == null) {
       return null;

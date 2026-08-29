@@ -88,6 +88,19 @@ void main() {
       'lib/features/thread/data/repositories/discuz_thread_favorite_api_repository.dart',
       'lib/features/thread/data/repositories/thread_post_rate_repository.dart',
       'lib/features/thread/data/repositories/thread_post_comment_repository.dart',
+      'lib/features/auth/data/providers/auth_formhash_provider.dart',
+      'lib/features/auth/domain/services/formhash_provider.dart',
+      'lib/features/posting/data/repositories/new_thread_repository.dart',
+      'lib/features/posting/data/repositories/posting_form_metadata_repository.dart',
+      'lib/features/posting/data/services/new_thread_remote_data_source.dart',
+      'lib/features/posting/domain/services/new_thread_payload_builder.dart',
+      'lib/features/posting/domain/services/new_thread_response_parser.dart',
+      'lib/features/posting/domain/services/posting_form_metadata_parser.dart',
+      'lib/features/reply/data/repositories/reply_repository.dart',
+      'lib/features/reply/data/repositories/discuz_reply_api_repository.dart',
+      'lib/features/reply/data/services/discuz_reply_remote_data_source.dart',
+      'lib/features/reply/data/services/reply_form_preparation_data_source.dart',
+      'lib/features/reply/domain/services/reply_form_parser.dart',
     ];
 
     expect(
@@ -194,6 +207,30 @@ void main() {
         })
         .map((file) => file.path)
         .toList();
+
+    expect(violations, isEmpty);
+  });
+
+  test('thread creation and replies stay behind package commands', () {
+    const forbidden = <String>[
+      "module: 'newthread'",
+      "module: 'sendreply'",
+      'PackageBackedFormhashProvider',
+      'PostingFormMetadataRepository',
+      'NewThreadRepository',
+      'ReplyRepository',
+      'ReplyFormParser',
+    ];
+    final violations =
+        _dartFiles(<String>['lib/features/posting', 'lib/features/reply'])
+            .where((file) {
+              final source = file.readAsStringSync();
+              return forbidden.any(source.contains) ||
+                  source.contains('YamiboHttpGateway') ||
+                  source.contains('package:dio');
+            })
+            .map((file) => file.path)
+            .toList();
 
     expect(violations, isEmpty);
   });

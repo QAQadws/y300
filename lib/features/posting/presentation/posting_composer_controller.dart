@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
@@ -12,13 +12,11 @@ import 'package:y300/features/composer_shared/domain/services/composer_submissio
 import 'package:y300/features/composer_shared/presentation/controllers/composer_controller_base.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
-import 'package:y300/features/posting/data/repositories/new_thread_repository.dart';
-import 'package:y300/features/posting/data/repositories/posting_form_metadata_repository.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
-import 'package:y300/features/posting/domain/services/new_thread_payload_builder.dart';
 import 'package:y300/features/posting/domain/services/new_thread_tags_normalizer.dart';
 import 'package:y300/features/posting/domain/services/posting_draft_extras_codec.dart';
+import 'package:y300/features/posting/domain/services/thread_creation_submission_mapper.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
 
 final postingComposerControllerProvider = AsyncNotifierProvider.autoDispose
@@ -37,16 +35,16 @@ final postingComposerControllerProvider = AsyncNotifierProvider.autoDispose
 /// 2) 业务字段更新（subject / typeid / 选项 / tags / special / poll）+
 ///    草稿落盘。tags / poll 走单独的小型 setter，避免基类感知发帖独有字段。
 /// 3) `performSubmit`：把 state 翻译成 [NewThreadDraftInput]，喂给
-///    [NewThreadPayloadBuilder]，再交给 [NewThreadRepository] 提交，
+///    App 侧 mapper 先收口草稿、投票与附件，再交给 package command 提交，
 ///    成功 / 失败统一翻译为 [ComposerSubmissionOutcome]。
 class PostingComposerController
     extends ComposerControllerBase<PostingComposerState> {
   PostingComposerController(this._args);
 
   final PostingComposerArgs _args;
-  PostingFormMetadataRepository? _metadataRepository;
-  NewThreadRepository? _newThreadRepository;
-  NewThreadPayloadBuilder? _payloadBuilder;
+  ThreadCreationPreparationRepository? _preparationRepository;
+  ThreadCreationCommand? _creationCommand;
+  ThreadCreationSubmissionMapper? _submissionMapper;
   ComposerSubmissionFailureClassifier? _failureClassifier;
   PostingDraftExtrasCodec? _draftExtrasCodec;
   NewThreadTagsNormalizer? _tagsNormalizer;
@@ -59,9 +57,9 @@ class PostingComposerController
 
   @override
   FutureOr<PostingComposerState> build() async {
-    _metadataRepository = ref.read(postingFormMetadataRepositoryProvider);
-    _newThreadRepository = ref.read(newThreadRepositoryProvider);
-    _payloadBuilder = ref.read(newThreadPayloadBuilderProvider);
+    _preparationRepository = ref.read(threadCreationPreparationProvider);
+    _creationCommand = ref.read(threadCreationCommandProvider);
+    _submissionMapper = ref.read(threadCreationSubmissionMapperProvider);
     _failureClassifier = ref.read(composerSubmissionFailureClassifierProvider);
     _draftExtrasCodec = ref.read(postingDraftExtrasCodecProvider);
     _tagsNormalizer = ref.read(newThreadTagsNormalizerProvider);
@@ -332,14 +330,19 @@ class PostingComposerController
       );
     }
 
-    final result = await _metadataRepository!.getFormMetadata(
-      fid: _args.target.fid,
+    final result = await _preparationRepository!.load(
+      ThreadCreationPreparationRequest(fid: _args.target.fid),
     );
     final latest = state.value;
     if (latest == null) {
       return;
     }
-    if (result case ApiSuccess<NewThreadFormMetadata>(:final data)) {
+    if (result case DataReadSuccess<
+      ThreadCreationPreparation,
+      ThreadCreationCapabilities
+    >(
+      :final data,
+    )) {
       setStateValue(
         latest.copyWith(
           metadata: data,
@@ -359,13 +362,13 @@ class PostingComposerController
       );
       return;
     }
-    final error = (result as ApiFailure<NewThreadFormMetadata>).error;
+    final error = result.failureOrNull!;
     setStateValue(
       latest.copyWith(
         isLoadingMetadata: false,
         metadataFailure: ComposerOperationFailure(
           code: ComposerOperationFailureCode.postingMetadataLoad,
-          detail: error.message.isEmpty ? null : error.message,
+          detail: error.diagnosticMessage,
         ),
       ),
     );
@@ -373,7 +376,7 @@ class PostingComposerController
 
   String? _normalizeRestoredTypeId(
     String? selected, {
-    required NewThreadFormMetadata metadata,
+    required ThreadCreationPreparation metadata,
   }) {
     if (!_isTypeIdValid(selected, metadata: metadata)) {
       return null;
@@ -383,7 +386,7 @@ class PostingComposerController
 
   bool _isTypeIdValid(
     String? selected, {
-    required NewThreadFormMetadata metadata,
+    required ThreadCreationPreparation metadata,
   }) {
     final trimmed = selected?.trim();
     if (trimmed == null || trimmed.isEmpty) {
@@ -498,7 +501,7 @@ class PostingComposerController
         ),
       );
     }
-    final input = NewThreadDraftInput(
+    final input = ThreadCreationDraftInput(
       subject: state.subject,
       message: state.message,
       selectedTypeId: state.selectedTypeId,
@@ -513,22 +516,21 @@ class PostingComposerController
       special: state.special,
       poll: state.poll,
     );
-    final payload = _payloadBuilder!.build(input: input, metadata: metadata);
-    final result = await _newThreadRepository!.submit(payload: payload);
-    if (result case ApiSuccess<NewThreadSubmissionResult>(:final data)) {
-      _lastSuccess = data;
-      return ComposerSubmissionOutcome.success(
-        rawDetail: data.message.isEmpty ? null : data.message,
-      );
+    final submission = _submissionMapper!.map(
+      input: input,
+      preparation: metadata,
+    );
+    final result = await _creationCommand!.execute(submission);
+    if (result case DataCommandApplied<ThreadCreationReceipt>(:final receipt)) {
+      _lastSuccess = receipt;
+      return const ComposerSubmissionOutcome.success();
     }
-    final error = (result as ApiFailure<NewThreadSubmissionResult>).error;
-    final failure =
-        _failureClassifier?.classify(error, kind: ComposerKind.newThread) ??
-        ComposerSubmissionFailure(
-          code: ComposerSubmissionFailureCode.unknown,
-          kind: ComposerKind.newThread,
-          detail: error.message,
-        );
+    final failure = _failureClassifier!.classifyCommand(
+      result.failureOrNull!,
+      kind: ComposerKind.newThread,
+      outcomeUnknown:
+          result is DataCommandOutcomeUnknown<ThreadCreationReceipt>,
+    );
     return ComposerSubmissionOutcome.failure(failure: failure);
   }
 
@@ -548,5 +550,5 @@ class PostingComposerController
   // PLACEHOLDER_PHASE_4_HELPERS
   /// `performSubmit` 写入、`submit` 读取，最后封进 [PostingComposerResult]。
   /// 单线程运行，submit 之间不会重叠，所以一个普通字段足够。
-  NewThreadSubmissionResult? _lastSuccess;
+  ThreadCreationReceipt? _lastSuccess;
 }

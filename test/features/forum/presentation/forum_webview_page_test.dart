@@ -29,13 +29,8 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
-import 'package:y300/features/posting/data/repositories/new_thread_repository.dart';
-import 'package:y300/features/posting/data/repositories/posting_form_metadata_repository.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
-import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
-import 'package:y300/features/reply/data/repositories/reply_repository.dart';
-import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/tags/data/repositories/forum_tag_repository.dart';
@@ -1344,7 +1339,7 @@ void main() {
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver()..title = '主题标题';
-    final replyRepository = _FakeReplyRepository();
+    final replyRepository = _FakeThreadReplyAdapter();
 
     await tester.pumpWidget(
       _buildTestApp(driver: driver, replyRepository: replyRepository),
@@ -1404,18 +1399,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(replyRepository.sentDrafts, hasLength(1));
-    expect(replyRepository.sentDrafts.single.fid, '55');
-    expect(replyRepository.sentDrafts.single.tid, '123');
+    expect(replyRepository.sentDrafts.single.target.fid, '55');
+    expect(replyRepository.sentDrafts.single.target.tid, '123');
     expect(replyRepository.sentDrafts.single.message, '来自 WebView 的回复');
     expect(driver.reloadCallCount, 1);
-    expect(find.text('回复成功：回复发布成功'), findsOneWidget);
+    expect(find.text('回复成功'), findsOneWidget);
   });
 
   testWidgets(
     'ForumWebViewPage intercepts post reply navigation and reloads after sent',
     (tester) async {
       final driver = _FakeForumWebViewDriver()..title = '主题标题';
-      final replyRepository = _FakeReplyRepository();
+      final replyRepository = _FakeThreadReplyAdapter();
 
       await tester.pumpWidget(
         _buildTestApp(driver: driver, replyRepository: replyRepository),
@@ -1454,14 +1449,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(replyRepository.sentDrafts, hasLength(1));
-      expect(replyRepository.sentDrafts.single.fid, '55');
-      expect(replyRepository.sentDrafts.single.tid, '123');
-      expect(replyRepository.sentDrafts.single.formHash, 'prepared-formhash');
+      expect(replyRepository.sentDrafts.single.target.fid, '55');
+      expect(replyRepository.sentDrafts.single.target.tid, '123');
+      expect(replyRepository.sentDrafts.single.target.pid, '41554317');
       expect(
-        replyRepository.sentDrafts.single.noticeTrimStr,
-        '[quote]引用[/quote]',
+        replyRepository.sentDrafts.single.preparation?.token,
+        isA<_TestThreadReplyToken>(),
       );
-      expect(replyRepository.sentDrafts.single.repPost, '41554317');
       expect(driver.reloadCallCount, 1);
     },
   );
@@ -1470,16 +1464,18 @@ void main() {
     'ForumWebViewPage intercepts newthread navigation and reloads after sent',
     (tester) async {
       final driver = _FakeForumWebViewDriver()..title = '主题标题';
-      final newThreadRepository = _FakeNewThreadRepository();
-      final metadataRepository = _FakePostingFormMetadataRepository(
-        metadata: const NewThreadFormMetadata(
+      final newThreadRepository = _FakeThreadCreationCommand();
+      final metadataRepository = _FakeThreadCreationPreparationRepository(
+        metadata: const ThreadCreationPreparation(
           fid: '33',
           forumName: '日常版',
-          formHash: 'fh',
-          threadTypes: <ThreadType>[],
-          threadSorts: <ThreadSort>[],
+          threadTypes: <ThreadCreationType>[],
+          threadSorts: <ThreadCreationSort>[],
           typeRequired: false,
           sortRequired: false,
+          maxSubjectLength: 0,
+          maxMessageLength: 0,
+          token: _TestThreadCreationToken(),
         ),
       );
 
@@ -1526,7 +1522,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(newThreadRepository.submittedPayloads, hasLength(1));
-      expect(newThreadRepository.submittedPayloads.single.fid, '33');
+      expect(
+        newThreadRepository.submittedPayloads.single.preparation.fid,
+        '33',
+      );
       expect(
         newThreadRepository.submittedPayloads.single.subject,
         '来自 WebView 的标题',
@@ -1535,10 +1534,10 @@ void main() {
         newThreadRepository.submittedPayloads.single.message,
         '来自 WebView 的正文',
       );
-      expect(newThreadRepository.submittedPayloads.single.formHash, 'fh');
+      expect(newThreadRepository.submittedPayloads.single.minimumReadAccess, 0);
       // 提交成功 → SnackBar + WebView reload。
       expect(driver.reloadCallCount, 1);
-      expect(find.text('发布成功：发布成功'), findsOneWidget);
+      expect(find.text('发布成功'), findsOneWidget);
     },
   );
 
@@ -2071,10 +2070,10 @@ Widget _buildTestApp({
   ForumTagRepository? tagRepository,
   _FakeForumFavoriteRepository? favoriteRepository,
   ForumWebViewExternalLauncher? launcher,
-  ReplyRepository? replyRepository,
+  _FakeThreadReplyAdapter? replyRepository,
   ComposerDraftRepository? replyDraftRepository,
-  PostingFormMetadataRepository? postingFormMetadataRepository,
-  NewThreadRepository? newThreadRepository,
+  ThreadCreationPreparationRepository? postingFormMetadataRepository,
+  ThreadCreationCommand? newThreadRepository,
   ForumShellMode forumMode = ForumShellMode.webview,
   ThreadRepository? threadRepository,
   ThreadPostLocator? threadPostLocator,
@@ -2102,17 +2101,21 @@ Widget _buildTestApp({
       favoriteForumDirectoryRepositoryProvider.overrideWithValue(
         resolvedFavoriteRepository.directory,
       ),
-      replyRepositoryProvider.overrideWithValue(
-        replyRepository ?? _FakeReplyRepository(),
+      threadReplyPreparationProvider.overrideWithValue(
+        replyRepository ?? _FakeThreadReplyAdapter(),
+      ),
+      threadReplyCommandProvider.overrideWithValue(
+        replyRepository ?? _FakeThreadReplyAdapter(),
       ),
       composerDraftRepositoryProvider.overrideWithValue(
         replyDraftRepository ?? _MemoryComposerDraftRepository(),
       ),
-      postingFormMetadataRepositoryProvider.overrideWithValue(
-        postingFormMetadataRepository ?? _FakePostingFormMetadataRepository(),
+      threadCreationPreparationProvider.overrideWithValue(
+        postingFormMetadataRepository ??
+            _FakeThreadCreationPreparationRepository(),
       ),
-      newThreadRepositoryProvider.overrideWithValue(
-        newThreadRepository ?? _FakeNewThreadRepository(),
+      threadCreationCommandProvider.overrideWithValue(
+        newThreadRepository ?? _FakeThreadCreationCommand(),
       ),
       threadRepositoryProvider.overrideWithValue(
         threadRepository ?? _FakeThreadRepository(),
@@ -2138,10 +2141,10 @@ Widget _buildRoutedTestApp({
   ForumTagRepository? tagRepository,
   _FakeForumFavoriteRepository? favoriteRepository,
   ForumWebViewExternalLauncher? launcher,
-  ReplyRepository? replyRepository,
+  _FakeThreadReplyAdapter? replyRepository,
   ComposerDraftRepository? replyDraftRepository,
-  PostingFormMetadataRepository? postingFormMetadataRepository,
-  NewThreadRepository? newThreadRepository,
+  ThreadCreationPreparationRepository? postingFormMetadataRepository,
+  ThreadCreationCommand? newThreadRepository,
   ForumShellMode forumMode = ForumShellMode.webview,
   ThreadRepository? threadRepository,
   ThreadPostLocator? threadPostLocator,
@@ -2169,17 +2172,21 @@ Widget _buildRoutedTestApp({
       favoriteForumDirectoryRepositoryProvider.overrideWithValue(
         resolvedFavoriteRepository.directory,
       ),
-      replyRepositoryProvider.overrideWithValue(
-        replyRepository ?? _FakeReplyRepository(),
+      threadReplyPreparationProvider.overrideWithValue(
+        replyRepository ?? _FakeThreadReplyAdapter(),
+      ),
+      threadReplyCommandProvider.overrideWithValue(
+        replyRepository ?? _FakeThreadReplyAdapter(),
       ),
       composerDraftRepositoryProvider.overrideWithValue(
         replyDraftRepository ?? _MemoryComposerDraftRepository(),
       ),
-      postingFormMetadataRepositoryProvider.overrideWithValue(
-        postingFormMetadataRepository ?? _FakePostingFormMetadataRepository(),
+      threadCreationPreparationProvider.overrideWithValue(
+        postingFormMetadataRepository ??
+            _FakeThreadCreationPreparationRepository(),
       ),
-      newThreadRepositoryProvider.overrideWithValue(
-        newThreadRepository ?? _FakeNewThreadRepository(),
+      threadCreationCommandProvider.overrideWithValue(
+        newThreadRepository ?? _FakeThreadCreationCommand(),
       ),
       threadRepositoryProvider.overrideWithValue(
         threadRepository ?? _FakeThreadRepository(),
@@ -2617,48 +2624,69 @@ class _MemoryComposerDraftRepository implements ComposerDraftRepository {
   }
 }
 
-class _FakeReplyRepository implements ReplyRepository {
-  _FakeReplyRepository({
-    ApiResult<ReplySubmissionResult>? result,
-    ApiResult<ReplyPreparation>? preparationResult,
+final class _TestThreadReplyToken implements ThreadReplyPreparationToken {
+  const _TestThreadReplyToken();
+}
+
+final ThreadReplyCapabilities _threadReplyCapabilities =
+    ThreadReplyCapabilities(
+      values: DataCapabilitySet<ThreadReplyCapability>.supported(
+        ThreadReplyCapability.values,
+      ),
+    );
+
+class _FakeThreadReplyAdapter
+    implements ThreadReplyPreparationRepository, ThreadReplyCommand {
+  _FakeThreadReplyAdapter({
+    DataCommandResult<ThreadReplyReceipt>? result,
+    DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>?
+    preparationResult,
   }) : result =
            result ??
-           const ApiSuccess<ReplySubmissionResult>(
-             ReplySubmissionResult(message: '回复发布成功'),
+           const DataCommandApplied<ThreadReplyReceipt>(
+             ThreadReplyReceipt(
+               tid: '123',
+               pid: '41554318',
+               publicationState: ThreadPublicationState.published,
+             ),
            ),
        preparationResult =
            preparationResult ??
-           const ApiSuccess<ReplyPreparation>(
-             ReplyPreparation(
-               target: ReplyTarget.post(fid: '55', tid: '123', pid: '41554317'),
-               reference: ReplyReference(
-                 formHash: 'prepared-formhash',
-                 noticeAuthor: 'notice-token',
-                 noticeTrimStr: '[quote]引用[/quote]',
-                 noticeAuthorMsg: '引用正文',
-                 repPid: '41554317',
-                 repPost: '41554317',
+           DataReadSuccess<ThreadReplyPreparation, ThreadReplyCapabilities>(
+             data: const ThreadReplyPreparation(
+               target: ThreadReplyTarget.post(
+                 fid: '55',
+                 tid: '123',
+                 pid: '41554317',
                ),
+               quotePreview: '[quote]引用[/quote]',
+               token: _TestThreadReplyToken(),
              ),
+             capabilities: _threadReplyCapabilities,
+             metadata: const DataReadMetadata.network(),
            );
 
-  final ApiResult<ReplySubmissionResult> result;
-  final ApiResult<ReplyPreparation> preparationResult;
-  final List<ReplyDraft> sentDrafts = <ReplyDraft>[];
+  final DataCommandResult<ThreadReplyReceipt> result;
+  final DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>
+  preparationResult;
+  final List<ThreadReplySubmission> sentDrafts = <ThreadReplySubmission>[];
   int prepareCallCount = 0;
 
   @override
-  Future<ApiResult<ReplySubmissionResult>> sendReply({
-    required ReplyDraft draft,
-  }) async {
-    sentDrafts.add(draft);
+  ThreadReplyCapabilities get capabilities => _threadReplyCapabilities;
+
+  @override
+  Future<DataCommandResult<ThreadReplyReceipt>> execute(
+    ThreadReplySubmission submission,
+  ) async {
+    sentDrafts.add(submission);
     return result;
   }
 
   @override
-  Future<ApiResult<ReplyPreparation>> preparePostReply({
-    required Uri replyFormUri,
-  }) async {
+  Future<DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>> load(
+    ThreadReplyPreparationRequest request,
+  ) async {
     prepareCallCount += 1;
     return preparationResult;
   }
@@ -2856,54 +2884,84 @@ final _unsupportedRemoteIdentityCapabilities =
 final _favoriteForumReadCapabilities = _favoriteForumSourceCapabilities
     .toReadCapabilities();
 
-class _FakePostingFormMetadataRepository
-    implements PostingFormMetadataRepository {
-  _FakePostingFormMetadataRepository({this.metadata});
+final class _TestThreadCreationToken implements ThreadCreationPreparationToken {
+  const _TestThreadCreationToken();
+}
 
-  final NewThreadFormMetadata? metadata;
+final ThreadCreationCapabilities _threadCreationCapabilities =
+    ThreadCreationCapabilities(
+      values: DataCapabilitySet<ThreadCreationCapability>.supported(
+        ThreadCreationCapability.values,
+      ),
+    );
+
+class _FakeThreadCreationPreparationRepository
+    implements ThreadCreationPreparationRepository {
+  _FakeThreadCreationPreparationRepository({this.metadata});
+
+  final ThreadCreationPreparation? metadata;
   int callCount = 0;
 
   @override
-  Future<ApiResult<NewThreadFormMetadata>> getFormMetadata({
-    required String fid,
-  }) async {
+  ThreadCreationCapabilities get capabilities => _threadCreationCapabilities;
+
+  @override
+  Future<DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>>
+  load(ThreadCreationPreparationRequest request) async {
     callCount += 1;
     final value =
         metadata ??
-        NewThreadFormMetadata(
-          fid: fid,
+        ThreadCreationPreparation(
+          fid: request.fid,
           forumName: '集成测试版块',
-          formHash: 'fh-int',
-          threadTypes: const <ThreadType>[],
-          threadSorts: const <ThreadSort>[],
+          threadTypes: const <ThreadCreationType>[],
+          threadSorts: const <ThreadCreationSort>[],
           typeRequired: false,
           sortRequired: false,
+          maxSubjectLength: 0,
+          maxMessageLength: 0,
+          token: const _TestThreadCreationToken(),
         );
-    return ApiSuccess<NewThreadFormMetadata>(value);
+    return DataReadSuccess<
+      ThreadCreationPreparation,
+      ThreadCreationCapabilities
+    >(
+      data: value,
+      capabilities: _threadCreationCapabilities,
+      metadata: const DataReadMetadata.network(),
+    );
   }
 }
 
-class _FakeNewThreadRepository implements NewThreadRepository {
-  _FakeNewThreadRepository({ApiResult<NewThreadSubmissionResult>? result})
+class _FakeThreadCreationCommand implements ThreadCreationCommand {
+  _FakeThreadCreationCommand({DataCommandResult<ThreadCreationReceipt>? result})
     : _result =
           result ??
-          const ApiSuccess<NewThreadSubmissionResult>(
-            NewThreadSubmissionResult(
+          const DataCommandApplied<ThreadCreationReceipt>(
+            ThreadCreationReceipt(
               tid: '900001',
               pid: '910001',
-              message: '发布成功',
+              publicationState: ThreadPublicationState.published,
+              readAccess: ThreadReadAccessEvidence(
+                kind: ThreadReadAccessEvidenceKind.unrestricted,
+                requested: 0,
+                actual: 0,
+              ),
             ),
           );
 
-  final ApiResult<NewThreadSubmissionResult> _result;
-  final List<NewThreadDraftPayload> submittedPayloads =
-      <NewThreadDraftPayload>[];
+  final DataCommandResult<ThreadCreationReceipt> _result;
+  final List<ThreadCreationSubmission> submittedPayloads =
+      <ThreadCreationSubmission>[];
 
   @override
-  Future<ApiResult<NewThreadSubmissionResult>> submit({
-    required NewThreadDraftPayload payload,
-  }) async {
-    submittedPayloads.add(payload);
+  ThreadCreationCapabilities get capabilities => _threadCreationCapabilities;
+
+  @override
+  Future<DataCommandResult<ThreadCreationReceipt>> execute(
+    ThreadCreationSubmission submission,
+  ) async {
+    submittedPayloads.add(submission);
     return _result;
   }
 }

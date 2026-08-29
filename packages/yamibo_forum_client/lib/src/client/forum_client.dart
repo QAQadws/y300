@@ -18,6 +18,7 @@ import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_detail_models.dart';
 import '../contracts/thread_interaction_commands.dart';
+import '../contracts/thread_composer_commands.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
@@ -185,6 +186,21 @@ final class YamiboForumClient {
   ThreadPostCommentCommand? get postCommentCommand =>
       sourcePlan.postCommentCommand;
 
+  /// Configured thread-creation preparation source, if installed.
+  ThreadCreationPreparationRepository? get threadCreationPreparation =>
+      sourcePlan.threadCreationPreparation;
+
+  /// Configured thread-creation command, if installed.
+  ThreadCreationCommand? get threadCreationCommand =>
+      sourcePlan.threadCreationCommand;
+
+  /// Configured post-reply preparation source, if installed.
+  ThreadReplyPreparationRepository? get threadReplyPreparation =>
+      sourcePlan.threadReplyPreparation;
+
+  /// Configured thread/post reply command, if installed.
+  ThreadReplyCommand? get threadReplyCommand => sourcePlan.threadReplyCommand;
+
   /// Configured notification source, if installed.
   ForumNotificationRepository? get notifications => sourcePlan.notifications;
 
@@ -238,6 +254,32 @@ final class YamiboForumClient {
   ) =>
       sourcePlan.postCommentCommand?.execute(submission) ??
       Future.value(const DataCommandUnsupported<ThreadPostCommentReceipt>());
+
+  /// Loads and validates the current thread-creation preparation.
+  Future<DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>>
+  prepareThreadCreation(ThreadCreationPreparationRequest request) =>
+      sourcePlan.threadCreationPreparation?.load(request) ??
+      unsupported<ThreadCreationPreparation, ThreadCreationCapabilities>();
+
+  /// Creates one thread through a previously prepared server form.
+  Future<DataCommandResult<ThreadCreationReceipt>> createThread(
+    ThreadCreationSubmission submission,
+  ) =>
+      sourcePlan.threadCreationCommand?.execute(submission) ??
+      Future.value(const DataCommandUnsupported<ThreadCreationReceipt>());
+
+  /// Loads and validates a server form for replying to one post.
+  Future<DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>>
+  prepareThreadReply(ThreadReplyPreparationRequest request) =>
+      sourcePlan.threadReplyPreparation?.load(request) ??
+      unsupported<ThreadReplyPreparation, ThreadReplyCapabilities>();
+
+  /// Submits an ordinary thread reply or a prepared post reply.
+  Future<DataCommandResult<ThreadReplyReceipt>> replyToThread(
+    ThreadReplySubmission submission,
+  ) =>
+      sourcePlan.threadReplyCommand?.execute(submission) ??
+      Future.value(const DataCommandUnsupported<ThreadReplyReceipt>());
 
   /// Loads the combined forum-home document.
   Future<DataReadResult<ForumHomeDocument, ForumHomeReadCapabilities>>

@@ -1,3 +1,4 @@
+import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/discuz_ajax_cdata_parser.dart';
@@ -12,16 +13,16 @@ final class DiscuzComposerUnusedImageRepository
   const DiscuzComposerUnusedImageRepository({
     required ComposerUnusedImageRemoteDataSource remoteDataSource,
     required YamiboSessionStore sessionStore,
-    required ComposerFormhashLoader loadFormhash,
+    required ForumFormhashProvider formhashProvider,
     this.parser = const ComposerUnusedImageParser(),
     this.cdataParser = const DiscuzAjaxCdataParser(),
   }) : _remoteDataSource = remoteDataSource,
        _sessionStore = sessionStore,
-       _loadFormhash = loadFormhash;
+       _formhashProvider = formhashProvider;
 
   final ComposerUnusedImageRemoteDataSource _remoteDataSource;
   final YamiboSessionStore _sessionStore;
-  final ComposerFormhashLoader _loadFormhash;
+  final ForumFormhashProvider _formhashProvider;
   final ComposerUnusedImageParser parser;
   final DiscuzAjaxCdataParser cdataParser;
 
@@ -75,11 +76,27 @@ final class DiscuzComposerUnusedImageRepository
         ),
       );
     }
-    final formhashResult = await _loadFormhash();
-    if (formhashResult case ApiFailure<String>(:final error)) {
-      return ApiFailure(error);
+    final formhashResult = await _formhashProvider.loadFormhash();
+    if (formhashResult case ForumFormhashError(:final failure)) {
+      return ApiFailure(
+        ApiError(
+          type: switch (failure.kind) {
+            ForumTransportFailureKind.network => ApiErrorType.network,
+            ForumTransportFailureKind.timeout => ApiErrorType.timeout,
+            ForumTransportFailureKind.unauthorized => ApiErrorType.unauthorized,
+            ForumTransportFailureKind.server => ApiErrorType.server,
+            ForumTransportFailureKind.parse => ApiErrorType.parse,
+            ForumTransportFailureKind.business => ApiErrorType.business,
+            ForumTransportFailureKind.cancelled ||
+            ForumTransportFailureKind.unknown => ApiErrorType.unknown,
+          },
+          code: failure.code,
+          message: failure.code,
+          statusCode: failure.statusCode,
+        ),
+      );
     }
-    final formhash = formhashResult.dataOrNull!.trim();
+    final formhash = (formhashResult as ForumFormhashSuccess).value.trim();
     if (formhash.isEmpty) {
       return const ApiFailure(
         ApiError(

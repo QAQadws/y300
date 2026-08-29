@@ -1,3 +1,4 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
@@ -87,7 +88,7 @@ class PostingComposerState extends ComposerStateBase {
     List<String> pendingAttachmentAids = const <String>[],
     ComposerPendingAttachmentNotice? pendingAttachmentNotice,
     bool isLoadingMetadata = true,
-    NewThreadFormMetadata? metadata,
+    ThreadCreationPreparation? metadata,
     ComposerOperationFailure? metadataFailure,
     String? selectedTypeId,
     bool allowNoticeAuthor = false,
@@ -133,7 +134,7 @@ class PostingComposerState extends ComposerStateBase {
   final PostingTarget target;
   final String subject;
   final bool isLoadingMetadata;
-  final NewThreadFormMetadata? metadata;
+  final ThreadCreationPreparation? metadata;
   final ComposerOperationFailure? metadataFailure;
 
   /// 用户当前选择的 typeid。`null` 表示"未选择"或"无分类"。
@@ -229,7 +230,7 @@ class PostingComposerState extends ComposerStateBase {
     List<String>? pendingAttachmentAids,
     ComposerPendingAttachmentNotice? pendingAttachmentNotice,
     bool? isLoadingMetadata,
-    NewThreadFormMetadata? metadata,
+    ThreadCreationPreparation? metadata,
     ComposerOperationFailure? metadataFailure,
     String? selectedTypeId,
     bool? allowNoticeAuthor,

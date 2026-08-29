@@ -3,7 +3,10 @@ library;
 
 /// Stable failure categories for a command that can have side effects.
 enum DataCommandFailureKind {
-  /// The request failed local validation and was not sent.
+  /// The command input failed validation locally or at the remote endpoint.
+  ///
+  /// The surrounding result type distinguishes a local `notSent` validation
+  /// failure from a server-confirmed `rejected` validation failure.
   validation,
 
   /// The current session is explicitly unauthenticated.

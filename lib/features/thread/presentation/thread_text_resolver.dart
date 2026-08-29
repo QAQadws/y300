@@ -106,6 +106,9 @@ final class ThreadTextResolver {
       if (notice.action == ThreadActionKind.comment) {
         return l10n.threadCommentOutcomeUnknown;
       }
+      if (notice.action == ThreadActionKind.reply) {
+        return l10n.composerOutcomeUnknown('reply');
+      }
     }
     if (notice.commandFailure != null) {
       final detail = LocalizedErrorSummary.resolve(l10n, notice.commandFailure);

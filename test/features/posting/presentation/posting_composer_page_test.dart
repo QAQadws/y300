@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:y300/app/theme/app_theme.dart';
-import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -19,10 +19,7 @@ import 'package:y300/features/composer_shared/domain/repositories/composer_prefe
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_verification_service.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
-import 'package:y300/features/posting/data/repositories/new_thread_repository.dart';
-import 'package:y300/features/posting/data/repositories/posting_form_metadata_repository.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
-import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
@@ -624,7 +621,13 @@ void main() {
     tester,
   ) async {
     final metadataRepository = _FakeMetadataRepository.failure(
-      const ApiError(type: ApiErrorType.network, message: '网络挂了'),
+      const DataReadFailure<
+        ThreadCreationPreparation,
+        ThreadCreationCapabilities
+      >(
+        kind: DataReadFailureKind.network,
+        diagnosticMessage: 'test_network_failure',
+      ),
     );
 
     await tester.pumpWidget(_buildPage(metadataRepository: metadataRepository));
@@ -634,8 +637,6 @@ void main() {
       find.byKey(const Key('posting-composer-metadata-error')),
       findsOneWidget,
     );
-    expect(find.textContaining('网络挂了'), findsOneWidget);
-
     metadataRepository.queueSuccess(_metadata());
     await tester.tap(
       find.byKey(const Key('posting-composer-metadata-retry-button')),
@@ -944,10 +945,10 @@ void main() {
   testWidgets(
     'PostingComposerPage edits expandable poll config and submits payload',
     (tester) async {
-      final newThreadRepository = _FakeNewThreadRepository();
+      final threadCreationCommand = _FakeThreadCreationCommand();
       await tester.pumpWidget(
         _buildLauncher(
-          newThreadRepository: newThreadRepository,
+          threadCreationCommand: threadCreationCommand,
           metadataRepository: _FakeMetadataRepository.success(_metadata()),
         ),
       );
@@ -1017,15 +1018,14 @@ void main() {
       await tester.tap(find.byKey(const Key('posting-composer-send-button')));
       await tester.pumpAndSettle();
 
-      expect(newThreadRepository.submittedPayloads, hasLength(1));
-      final payload = newThreadRepository.submittedPayloads.single;
+      expect(threadCreationCommand.submissions, hasLength(1));
+      final payload = threadCreationCommand.submissions.single;
       expect(payload.subject, '投票标题');
       expect(payload.message, '投票正文');
-      expect(payload.special, NewThreadSpecial.poll);
+      expect(payload.kind, ThreadCreationKind.poll);
       expect(payload.poll, isNotNull);
       expect(payload.poll!.options, const ['选项 A', '选项 B']);
-      expect(payload.poll!.multiple, isTrue);
-      expect(payload.poll!.maxChoices, 2);
+      expect(payload.poll!.maximumChoices, 2);
       expect(payload.poll!.expirationDays, 7);
     },
   );
@@ -1036,16 +1036,16 @@ void main() {
       await tester.pumpWidget(
         _buildPage(
           metadataRepository: _FakeMetadataRepository.success(
-            const NewThreadFormMetadata(
+            const ThreadCreationPreparation(
               fid: '33',
               forumName: '日常版',
-              formHash: 'fh',
-              threadTypes: <ThreadType>[],
-              threadSorts: <ThreadSort>[],
+              threadTypes: <ThreadCreationType>[],
+              threadSorts: <ThreadCreationSort>[],
               typeRequired: false,
               sortRequired: false,
               maxSubjectLength: 5,
               maxMessageLength: 10,
+              token: _TestThreadCreationToken(),
             ),
           ),
         ),
@@ -1167,11 +1167,11 @@ void main() {
   testWidgets('PostingComposerPage submits and pops sent result', (
     tester,
   ) async {
-    final newThreadRepository = _FakeNewThreadRepository();
+    final threadCreationCommand = _FakeThreadCreationCommand();
     PostingComposerResult? popped;
     await tester.pumpWidget(
       _buildLauncher(
-        newThreadRepository: newThreadRepository,
+        threadCreationCommand: threadCreationCommand,
         metadataRepository: _FakeMetadataRepository.success(_metadata()),
         onResult: (r) => popped = r,
       ),
@@ -1193,9 +1193,9 @@ void main() {
     await tester.tap(find.byKey(const Key('posting-composer-send-button')));
     await tester.pumpAndSettle();
 
-    expect(newThreadRepository.submittedPayloads, hasLength(1));
-    expect(newThreadRepository.submittedPayloads.single.subject, '标题');
-    expect(newThreadRepository.submittedPayloads.single.message, '正文');
+    expect(threadCreationCommand.submissions, hasLength(1));
+    expect(threadCreationCommand.submissions.single.subject, '标题');
+    expect(threadCreationCommand.submissions.single.message, '正文');
     expect(popped?.sent, isTrue);
     expect(popped?.tid, '900001');
     expect(popped?.pid, '910001');

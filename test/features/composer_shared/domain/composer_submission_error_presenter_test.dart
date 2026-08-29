@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
@@ -86,6 +87,83 @@ void main() {
         expect(failure.code, expected, reason: code);
         expect(failure.kind, ComposerKind.newThread);
       }
+    });
+
+    test('classifies namespaced Discuz command codes precisely', () {
+      final cases = <(String, ComposerSubmissionFailureCode)>[
+        (
+          'mobile:post_message_tooshort',
+          ComposerSubmissionFailureCode.contentTooShort,
+        ),
+        (
+          'mobile:post_message_toolong',
+          ComposerSubmissionFailureCode.contentTooLong,
+        ),
+        (
+          'mobile:post_subject_tooshort',
+          ComposerSubmissionFailureCode.subjectTooShort,
+        ),
+        (
+          'mobile:post_subject_toolong',
+          ComposerSubmissionFailureCode.subjectTooLong,
+        ),
+        (
+          'mobile:post_flood_ctrl_posts_per_hour',
+          ComposerSubmissionFailureCode.rateLimited,
+        ),
+        (
+          'mobile:post_thread_closed',
+          ComposerSubmissionFailureCode.threadClosed,
+        ),
+        (
+          'mobile:targetpost_donotbelongto_thisthread',
+          ComposerSubmissionFailureCode.targetUnavailable,
+        ),
+        (
+          'mobile:replyperm_login_nopermission//1',
+          ComposerSubmissionFailureCode.authenticationRequired,
+        ),
+        (
+          'mobile:replyperm_none_nopermission',
+          ComposerSubmissionFailureCode.permissionDenied,
+        ),
+      ];
+
+      for (final (code, expected) in cases) {
+        final failure = classifier.classifyCommand(
+          DataCommandFailure(
+            kind: DataCommandFailureKind.unknown,
+            retryPolicy: DataCommandRetryPolicy.explicitOnly,
+            code: code,
+            diagnosticMessage: code,
+          ),
+          kind: ComposerKind.reply,
+          outcomeUnknown: false,
+        );
+        expect(failure.code, expected, reason: code);
+        expect(failure.detail, code, reason: code);
+      }
+    });
+
+    test('message-too-short no longer resolves as permission denied', () {
+      final failure = classifier.classifyCommand(
+        const DataCommandFailure(
+          kind: DataCommandFailureKind.validation,
+          retryPolicy: DataCommandRetryPolicy.afterInputChange,
+          code: 'mobile:post_message_tooshort',
+          diagnosticMessage: 'mobile:post_message_tooshort',
+        ),
+        kind: ComposerKind.reply,
+        outcomeUnknown: false,
+      );
+
+      final text = ComposerTextResolver.submissionFailure(
+        AppLocalizationsZh(),
+        failure,
+      );
+      expect(failure.code, ComposerSubmissionFailureCode.contentTooShort);
+      expect(text, contains('回复内容过短'));
+      expect(text, isNot(contains('权限不足')));
     });
 
     test('unknown server detail is retained only as diagnostic data', () {
