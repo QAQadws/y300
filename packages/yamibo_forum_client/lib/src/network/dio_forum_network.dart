@@ -9,13 +9,14 @@ import '../logging/forum_client_logger.dart';
 import '../session/forum_cookie_store.dart';
 import '../waf/forum_waf.dart';
 import 'forum_network.dart';
+import 'forum_multipart.dart';
 import 'forum_request.dart';
 import 'forum_request_profile.dart';
 import 'forum_response.dart';
 import 'forum_transport.dart';
 
 final class DioForumClientNetwork
-    implements ForumClientNetwork, ForumResourceClient {
+    implements ForumClientNetwork, ForumResourceClient, ForumMultipartClient {
   DioForumClientNetwork({
     required this.config,
     required this.cookies,
@@ -31,6 +32,148 @@ final class DioForumClientNetwork
   final ForumClientLogger logger;
   final Dio _dio;
   int _sequence = 0;
+
+  @override
+  Future<ForumTransportResult<ForumMultipartResponse>> sendMultipart(
+    ForumMultipartRequest request,
+  ) => _sendMultipart(request, recoveryAttempt: 0);
+
+  Future<ForumTransportResult<ForumMultipartResponse>> _sendMultipart(
+    ForumMultipartRequest request, {
+    required int recoveryAttempt,
+  }) async {
+    if (request.cancellation?.isCancelled ?? false) {
+      return const ForumTransportError(
+        ForumTransportFailure(
+          kind: ForumTransportFailureKind.cancelled,
+          code: 'cancelled',
+        ),
+      );
+    }
+    if (!_sameResourceAuthority(request.uri, config.siteOrigin)) {
+      return const ForumTransportError(
+        ForumTransportFailure(
+          kind: ForumTransportFailureKind.business,
+          code: 'multipart_cross_site_rejected',
+        ),
+      );
+    }
+    final headers = <String, String>{
+      'User-Agent': config.effectiveApiUserAgent,
+      'Accept': 'text/plain, */*',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      ...request.headers,
+    };
+    final stored = await cookies.read(request.uri);
+    if (stored.isNotEmpty) headers['Cookie'] = _cookieHeader(stored);
+    final cancelToken = CancelToken();
+    final cancellation = request.cancellation;
+    if (cancellation != null) {
+      unawaited(
+        cancellation.whenCancelled.then((_) {
+          if (!cancelToken.isCancelled) cancelToken.cancel('cancelled');
+        }),
+      );
+    }
+    final file = request.file;
+    try {
+      final data = FormData.fromMap(<String, Object>{
+        ...request.fields,
+        file.fieldName: MultipartFile.fromStream(
+          file.openRead,
+          file.contentLength,
+          filename: file.fileName,
+          contentType: DioMediaType.parse(file.contentType),
+        ),
+      });
+      final response = await _dio.requestUri<String>(
+        request.uri,
+        data: data,
+        options: Options(
+          method: 'POST',
+          headers: headers,
+          responseType: ResponseType.plain,
+          followRedirects: request.followRedirects,
+          connectTimeout: config.connectTimeout,
+          receiveTimeout: config.receiveTimeout,
+          validateStatus: (status) => status != null,
+        ),
+        cancelToken: cancelToken,
+        onSendProgress: request.onSendProgress,
+      );
+      final status = response.statusCode;
+      if (_detectChallenge(response.realUri, status) != null) {
+        if (recoveryAttempt > 0) {
+          return const ForumTransportError(
+            ForumTransportFailure(
+              kind: ForumTransportFailureKind.server,
+              code: 'security_challenge_persisted',
+              statusCode: 405,
+            ),
+          );
+        }
+        final recovery = waf == null
+            ? ForumWafRecoveryResult.unavailable
+            : await waf!.recover(
+                ForumWafRecoveryRequest(
+                  uri: request.uri,
+                  method: 'POST',
+                  evidence: ForumWafEvidence.httpStatus405,
+                  userAgent: headers['User-Agent']!,
+                ),
+              );
+        if (recovery != ForumWafRecoveryResult.verified) {
+          return ForumTransportError(
+            ForumTransportFailure(
+              kind: ForumTransportFailureKind.server,
+              code: 'waf_${recovery.name}',
+              statusCode: status,
+            ),
+          );
+        }
+        return _sendMultipart(request, recoveryAttempt: 1);
+      }
+      await cookies.mergeSetCookie(
+        request.uri,
+        response.headers.map['set-cookie'] ?? const <String>[],
+      );
+      if (status == null || status < 200 || status >= 300) {
+        return ForumTransportError(
+          ForumTransportFailure(
+            kind: status == 401 || status == 403
+                ? ForumTransportFailureKind.unauthorized
+                : ForumTransportFailureKind.server,
+            code: 'multipart_http_error',
+            statusCode: status,
+          ),
+        );
+      }
+      return ForumTransportSuccess(
+        ForumMultipartResponse(
+          uri: response.realUri,
+          statusCode: status,
+          headers: response.headers.map,
+          body: response.data ?? '',
+        ),
+      );
+    } on DioException catch (error) {
+      return ForumTransportError(_mapDioFailure(error));
+    } on FormatException {
+      return const ForumTransportError(
+        ForumTransportFailure(
+          kind: ForumTransportFailureKind.business,
+          code: 'multipart_content_type_invalid',
+        ),
+      );
+    } catch (_) {
+      return const ForumTransportError(
+        ForumTransportFailure(
+          kind: ForumTransportFailureKind.unknown,
+          code: 'multipart_unknown',
+        ),
+      );
+    }
+  }
 
   static const int _resourceSignatureLimit = 512;
   static const int _maxResourceRedirects = 5;

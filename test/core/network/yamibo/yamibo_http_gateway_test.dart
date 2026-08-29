@@ -582,6 +582,46 @@ void main() {
       expect(launchCount, 1);
     });
 
+    test('multipart WAF replay rebuilds the request body', () async {
+      final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
+        _ScriptedResponse(statusCode: 405, textBody: 'Method Not Allowed'),
+        _ScriptedResponse(textBody: '42'),
+      ]);
+      final coordinator = WafChallengeRecoveryCoordinator(
+        retryCooldown: Duration.zero,
+      )..attachLauncher((_) async => WafChallengeRecoveryResult.verified);
+      final gateway = _buildGateway(
+        adapter: adapter,
+        wafChallengeRecoveryCoordinator: coordinator,
+      );
+      var factoryCalls = 0;
+
+      final result = await gateway.postMultipartFactory(
+        Uri.parse(
+          'https://bbs.yamibo.com/api/mobile/index.php?module=forumupload',
+        ),
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.resource,
+          operation: 'attachment.upload',
+          module: 'forumupload',
+        ),
+        dataFactory: () {
+          factoryCalls += 1;
+          return FormData.fromMap(<String, Object>{
+            'attempt': factoryCalls.toString(),
+            'Filedata': MultipartFile.fromBytes(<int>[
+              factoryCalls,
+            ], filename: 'fixture.jpg'),
+          });
+        },
+        options: Options(responseType: ResponseType.plain),
+      );
+
+      expect(result.dataOrNull?.body, '42');
+      expect(adapter.fetchCount, 2);
+      expect(factoryCalls, 2);
+    });
+
     test(
       'does not loop when the retried request is still challenged',
       () async {

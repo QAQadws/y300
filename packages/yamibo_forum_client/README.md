@@ -125,6 +125,16 @@ values and an exact success code produce an applied receipt. A non-zero
 read-access request is read back without weakening already-proved creation
 success.
 
+Image attachments use a separate preparation/upload boundary. Preparation
+proves the forum identity, current image-extension limits, and remaining
+quota, while keeping Discuz uid/upload-hash state opaque. Upload content is a
+replay-safe stream factory: the Host may open it again only for the one WAF
+replay permitted after a verified HTTP 405. Positive attachment identities are
+applied; Discuz statuses `-1..-13` are stable structured rejections; empty,
+zero, malformed, or transport-indeterminate responses are outcome unknown.
+Unused-image deletion requires proof from the current authenticated directory
+and performs one read-back when the direct count cannot prove deletion.
+
 Hosts with an existing authenticated session stack may override the standard
 formhash provider. Advanced hosts can import the adapters barrel and build a
 custom `ForumClientSourcePlan` for individual contracts; this API is
@@ -216,14 +226,13 @@ fail closed as `unsupported`.
 
 The package currently covers basic password authentication, authoritative
 session/logout handling, forum/thread favorite target-state commands,
-post-rating/comment and thread-creation/reply preparation and commands, the
-forum home document, forum/thread directories
+post-rating/comment, thread-creation/reply, and image-attachment preparation
+and commands, the forum home document, forum/thread directories
 and details, Tag, search, remote favorite directories, profiles/blogs,
 notifications, private messages, stickers, full rating details, post location,
 author-filtered post pages, comic episode discovery, reply-page reads, and
 protected image transport. Login UI and remaining write operations—including
-editing, voting, and uploads—
-remain application-owned.
+full post editing and voting—remain application-owned.
 
 ## Y300 parity and unmigrated APIs
 
@@ -231,8 +240,8 @@ This package is a forum client core, not a complete Discuz SDK. The following
 forum protocol operations still live in Y300 and are not part of the package:
 
 - post-edit form preparation and submission;
-- attachment upload/deletion, upload permission checks, and unused attachment
-  cleanup;
+- non-image file attachments, attachment descriptions/read permissions/prices,
+  attachment replacement, and batch deletion;
 - notification state mutations and private-message sending.
 
 The following responsibilities are intentionally application-owned even when

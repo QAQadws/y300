@@ -2,7 +2,7 @@
 ///
 /// Discuz only treats a positive-integer aid wrapped by one of the two
 /// attachment tags as an inline attachment.
-/// 上传接口回传的 aid 也一定是正整数（见 `DiscuzComposerAttachmentRepository`），
+/// 上传 contract 确认的 aid 也一定是正整数，
 /// Every editor structure decision (Quill decoding, literal-token promotion
 /// and logical-offset mapping) must use this grammar instead of duplicating
 /// regular expressions.

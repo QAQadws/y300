@@ -105,22 +105,11 @@ class _FakeRemoteDataSource implements PostEditRemoteDataSource {
 
   final ApiResult<PostEditRemoteDocument> result;
   Uri? lastUri;
-  Uri? lastDeleteUri;
 
   @override
   Future<ApiResult<PostEditRemoteDocument>> get(Uri editUri) async {
     lastUri = editUri;
     return result;
-  }
-
-  @override
-  Future<ApiResult<PostEditRemoteDeleteDocument>> deleteImage(
-    Uri deleteUri,
-  ) async {
-    lastDeleteUri = deleteUri;
-    return ApiSuccess(
-      PostEditRemoteDeleteDocument(sourceUri: deleteUri, body: ''),
-    );
   }
 
   @override

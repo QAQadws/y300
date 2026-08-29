@@ -1,5 +1,30 @@
 # Migration guide
 
+## 0.6.x to 0.7.0
+
+The standard client now installs image-upload preparation/upload commands,
+the authenticated unused-image directory and delete command, and the
+post-bound image delete command. Use the source-neutral contracts instead of
+constructing `checkpost`, `forumupload`, `imagelist`, or `deleteattach`
+requests in application code.
+
+Upload content must provide its exact length and an `openRead` callback that
+returns a fresh single-subscription byte stream on every call. This is required
+because a verified HTTP 405 WAF recovery may replay the multipart request once.
+Do not reuse an already-consumed stream.
+
+Only `DataCommandApplied` proves a positive attachment identity or a completed
+deletion. Preserve local editor and attachment state for
+`DataCommandOutcomeUnknown`; ordinary transport failures are not retried by
+the adapter. Unused-image deletion additionally requires the opaque token from
+the directory that contained the attachment.
+
+Advanced Host transports that support upload must implement
+`ForumMultipartClient`. The standard Dio runtime already does so and shares
+its Cookie and WAF state with structured reads and protected resources. Hosts
+without multipart support continue to build, but upload fails closed as
+`unsupported`.
+
 ## 0.5.x to 0.6.0
 
 The standard client now installs independent thread-creation preparation,

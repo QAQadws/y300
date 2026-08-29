@@ -17,8 +17,8 @@ void main() {
       expect(packageLicense, contains('Version 3, 29 June 2007'));
     });
 
-    test('governance documents describe version 0.6.0 consistently', () {
-      const currentVersion = '0.6.0';
+    test('governance documents describe version 0.7.0 consistently', () {
+      const currentVersion = '0.7.0';
       final pubspec = File('pubspec.yaml').readAsStringSync();
       final changelog = File('CHANGELOG.md').readAsStringSync();
       final versioning = File('VERSIONING.md').readAsStringSync();
@@ -29,7 +29,7 @@ void main() {
       expect(pubspec, contains('publish_to: none'));
       expect(changelog, contains('## $currentVersion'));
       expect(versioning, contains('Semantic Versioning'));
-      expect(migration, contains('## 0.5.x to $currentVersion'));
+      expect(migration, contains('## 0.6.x to $currentVersion'));
       expect(stability, contains('## Supported within 0.x'));
       expect(stability, contains('## Experimental'));
       expect(stability, contains('## Internal'));
@@ -62,6 +62,7 @@ void main() {
       );
       expect(readme, isNot(contains('favorite/unfavorite mutations')));
       expect(readme, contains('Post rating/comment preparation and commands'));
+      expect(readme, contains('Image attachments use a separate'));
       expect(readme, contains('WebView login/browsing/fallback'));
       expect(readme, contains('ForumClientCachePorts'));
     });

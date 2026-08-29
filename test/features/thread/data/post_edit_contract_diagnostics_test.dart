@@ -113,15 +113,6 @@ final class _FakeRemoteDataSource implements PostEditRemoteDataSource {
   }
 
   @override
-  Future<ApiResult<PostEditRemoteDeleteDocument>> deleteImage(
-    Uri deleteUri,
-  ) async {
-    return ApiSuccess(
-      PostEditRemoteDeleteDocument(sourceUri: deleteUri, body: '<![CDATA[0]]>'),
-    );
-  }
-
-  @override
   Future<ApiResult<PostEditRemoteSubmitDocument>> submit({
     required Uri submitUri,
     required List<MapEntry<String, String>> fields,

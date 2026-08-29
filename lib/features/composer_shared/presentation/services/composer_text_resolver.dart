@@ -151,6 +151,19 @@ abstract final class ComposerTextResolver {
         l10n.composerImagePermissionExpired,
       ComposerImageUploadFailureCode.quotaExceeded =>
         l10n.composerImageQuotaExceeded,
+      ComposerImageUploadFailureCode.fileTooLarge =>
+        l10n.composerImageFileTooLarge,
+      ComposerImageUploadFailureCode.permissionDenied =>
+        l10n.composerImagePermissionDenied,
+      ComposerImageUploadFailureCode.invalidImage =>
+        l10n.composerImageInvalidContent,
+      ComposerImageUploadFailureCode.saveFailed => l10n.composerImageSaveFailed,
+      ComposerImageUploadFailureCode.fileNameRejected =>
+        l10n.composerImageFileNameRejected,
+      ComposerImageUploadFailureCode.dimensionsExceeded =>
+        l10n.composerImageDimensionsExceeded,
+      ComposerImageUploadFailureCode.outcomeUnknown =>
+        l10n.composerImageUploadOutcomeUnknown,
       ComposerImageUploadFailureCode.timeout => l10n.composerImageUploadTimeout,
       ComposerImageUploadFailureCode.network => l10n.composerImageUploadNetwork,
       ComposerImageUploadFailureCode.server => l10n.composerImageUploadServer,

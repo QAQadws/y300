@@ -468,17 +468,18 @@ final class DiscuzThreadReplyAdapter
     if (request.cancellation?.isCancelled ?? false) {
       return _cancelledRead();
     }
-    final referer = _safeReferer(request.referer, target.tid);
+    final desktopFormUri = _withoutMobileMode(formUri);
+    final referer = _safeDesktopReferer(request.referer, target.tid);
     final response = await network.send(
       ForumRequest(
         method: ForumRequestMethod.get,
-        uri: formUri,
+        uri: desktopFormUri,
         context: const ForumRequestContext(
           operation: 'thread.reply.prepare',
           pageKind: 'thread.reply.form',
         ),
         headers: requestProfiles
-            .resolve(ForumRequestProfileKind.mobileHtml, referer: referer)
+            .resolve(ForumRequestProfileKind.desktopHtml, referer: referer)
             .headers,
         cancellation: request.cancellation,
       ),
@@ -494,9 +495,13 @@ final class DiscuzThreadReplyAdapter
       if (value.body is! String) {
         throw const FormatException('thread_reply_form_text_expected');
       }
+      final responseUri = _sameSiteUri(value.uri);
+      if (responseUri == null || !_isDesktopReplyFormUri(responseUri)) {
+        throw const FormatException('thread_reply_desktop_form_uri_invalid');
+      }
       final preparation = _parseReplyForm(
         value.body as String,
-        sourceUri: formUri,
+        sourceUri: desktopFormUri,
         expected: target,
         referer: referer,
       );
@@ -566,7 +571,7 @@ final class DiscuzThreadReplyAdapter
         if (token != null) ...token.hiddenFields,
       },
       treatMessageAsBusinessError: false,
-      referer: _safeReferer(token?.referer, target.tid),
+      referer: _safeDesktopReferer(token?.referer, target.tid),
       cancellation: submission.cancellation,
     );
     if (result case ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(
@@ -655,6 +660,11 @@ final class DiscuzThreadReplyAdapter
     _verifyIdentityValues(identities['fid']!, expected.fid, 'fid');
     _verifyIdentityValues(identities['tid']!, expected.tid, 'tid');
     _verifyIdentityValues(identities['pid']!, expected.pid!, 'pid');
+    _verifyDesktopQuoteReference(
+      hidden['noticetrimstr'] ?? '',
+      sourceUri: sourceUri,
+      expected: expected,
+    );
     final hiddenFields = <String, String>{
       for (final name in const <String>[
         'reppid',
@@ -719,22 +729,59 @@ final class DiscuzThreadReplyAdapter
     return mod == 'post' && action == 'reply';
   }
 
+  bool _isDesktopReplyFormUri(Uri uri) {
+    if (!_isReplyFormUri(uri)) return false;
+    final modes = _queryValues(uri, 'mobile');
+    return modes.isEmpty || (modes.length == 1 && modes.single == 'no');
+  }
+
   Uri? _sameSiteUri(Uri uri) {
     final resolved = uri.hasScheme ? uri : config.siteOrigin.resolveUri(uri);
     return _sameOrigin(resolved, config.siteOrigin) ? resolved : null;
   }
 
-  Uri _safeReferer(Uri? source, String tid) {
+  Uri _safeDesktopReferer(Uri? source, String tid) {
     final value = source == null ? null : _sameSiteUri(source);
-    return value ??
-        config.siteOrigin.replace(
-          path: '/forum.php',
-          queryParameters: <String, String>{
-            'mod': 'viewthread',
-            'tid': tid,
-            'mobile': '2',
-          },
-        );
+    return value == null
+        ? config.siteOrigin.replace(
+            path: '/forum.php',
+            queryParameters: <String, String>{'mod': 'viewthread', 'tid': tid},
+          )
+        : _withoutMobileMode(value);
+  }
+
+  Uri _withoutMobileMode(Uri uri) {
+    final parameters = <String, Object>{
+      for (final entry in uri.queryParametersAll.entries)
+        if (entry.key.toLowerCase() != 'mobile')
+          entry.key: entry.value.length == 1 ? entry.value.single : entry.value,
+    };
+    return uri.replace(queryParameters: parameters, fragment: '');
+  }
+
+  void _verifyDesktopQuoteReference(
+    String raw, {
+    required Uri sourceUri,
+    required ThreadReplyTarget expected,
+  }) {
+    final match = RegExp(
+      r'\[url=([^\]]+)\]',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    if (match == null) {
+      throw const FormatException('thread_reply_quote_reference_missing');
+    }
+    final reference = _sameSiteUri(
+      sourceUri.resolve(match.group(1)!.replaceAll('&amp;', '&')),
+    );
+    if (reference == null ||
+        reference.path != '/forum.php' ||
+        _singleQuery(reference, 'mod') != 'redirect' ||
+        _singleQuery(reference, 'goto') != 'findpost' ||
+        _singleQuery(reference, 'pid') != expected.pid ||
+        _singleQuery(reference, 'ptid') != expected.tid) {
+      throw const FormatException('thread_reply_quote_reference_invalid');
+    }
   }
 
   Future<ForumFormhashResult> _resolveReplyFormhash(

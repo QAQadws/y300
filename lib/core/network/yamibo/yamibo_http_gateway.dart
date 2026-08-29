@@ -545,6 +545,35 @@ class YamiboHttpGateway {
     );
   }
 
+  /// Sends replay-safe multipart data built afresh for each transport attempt.
+  ///
+  /// The factory is invoked again only for the single verified HTTP 405 WAF
+  /// replay. Ordinary network failures are never retried here.
+  Future<ApiResult<YamiboHttpResponse<Object?>>> postMultipartFactory(
+    Uri uri, {
+    required YamiboRequestContext context,
+    required FormData Function() dataFactory,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+    Options? options,
+    ProgressCallback? onSendProgress,
+  }) async {
+    return _request<Object?>(
+      uri,
+      method: 'POST',
+      context: context,
+      headers: headers,
+      responseType: options?.responseType ?? ResponseType.json,
+      cancelToken: cancelToken,
+      dataFactory: dataFactory,
+      contentType: options?.contentType,
+      followRedirects: options?.followRedirects,
+      validateStatus: options?.validateStatus,
+      onSendProgress: onSendProgress,
+      normalizeBody: (responseData) => responseData,
+    );
+  }
+
   Future<ApiResult<YamiboHttpResponse<T>>> _request<T>(
     Uri uri, {
     required String method,
@@ -554,6 +583,7 @@ class YamiboHttpGateway {
     Map<String, String>? headers,
     CancelToken? cancelToken,
     Object? data,
+    Object? Function()? dataFactory,
     String? contentType,
     bool? followRedirects,
     ValidateStatus? validateStatus,
@@ -579,7 +609,7 @@ class YamiboHttpGateway {
     try {
       final response = await _dio.requestUri<dynamic>(
         uri,
-        data: data,
+        data: dataFactory?.call() ?? data,
         options: Options(
           method: method,
           headers: requestHeaders,
@@ -626,7 +656,8 @@ class YamiboHttpGateway {
             normalizeBody: normalizeBody,
             headers: headers,
             cancelToken: cancelToken,
-            data: _cloneRequestData(data),
+            data: dataFactory == null ? _cloneRequestData(data) : null,
+            dataFactory: dataFactory,
             contentType: contentType,
             followRedirects: followRedirects,
             validateStatus: validateStatus,
@@ -699,7 +730,8 @@ class YamiboHttpGateway {
             normalizeBody: normalizeBody,
             headers: headers,
             cancelToken: cancelToken,
-            data: _cloneRequestData(data),
+            data: dataFactory == null ? _cloneRequestData(data) : null,
+            dataFactory: dataFactory,
             contentType: contentType,
             followRedirects: followRedirects,
             validateStatus: validateStatus,

@@ -1,5 +1,5 @@
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/thread/data/services/discuz_post_edit_delete_response_parser.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:y300/features/thread/data/services/post_edit_form_parser.dart';
 import 'package:y300/features/thread/data/services/post_edit_remote_data_source.dart';
 import 'package:y300/features/thread/data/services/post_edit_submit_response_parser.dart';
@@ -8,25 +8,23 @@ import 'package:y300/features/thread/domain/models/post_edit_diagnostic_models.d
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
 import 'package:y300/features/thread/domain/repositories/post_edit_repository.dart';
-import 'package:y300/features/thread/domain/services/post_edit_attachment_delete_uri_builder.dart';
 import 'package:y300/features/thread/domain/services/post_edit_native_capability_classifier.dart';
 
 class DiscuzPostEditRepository implements PostEditRepository {
   const DiscuzPostEditRepository({
     required PostEditRemoteDataSource remoteDataSource,
+    ForumPostImageAttachmentDeleteCommand? attachmentDeleteCommand,
     this.formParser = const PostEditFormParser(),
     this.capabilityClassifier = const PostEditNativeCapabilityClassifier(),
-    this.deleteUriBuilder = const PostEditAttachmentDeleteUriBuilder(),
-    this.deleteResponseParser = const DiscuzPostEditDeleteResponseParser(),
     this.submitResponseParser = const PostEditSubmitResponseParser(),
     this.diagnosticRecorder = const NoopPostEditContractDiagnosticRecorder(),
-  }) : _remoteDataSource = remoteDataSource;
+  }) : _remoteDataSource = remoteDataSource,
+       _attachmentDeleteCommand = attachmentDeleteCommand;
 
   final PostEditRemoteDataSource _remoteDataSource;
+  final ForumPostImageAttachmentDeleteCommand? _attachmentDeleteCommand;
   final PostEditFormParser formParser;
   final PostEditNativeCapabilityClassifier capabilityClassifier;
-  final PostEditAttachmentDeleteUriBuilder deleteUriBuilder;
-  final DiscuzPostEditDeleteResponseParser deleteResponseParser;
   final PostEditSubmitResponseParser submitResponseParser;
   final PostEditContractDiagnosticRecorder diagnosticRecorder;
 
@@ -93,38 +91,50 @@ class DiscuzPostEditRepository implements PostEditRepository {
   Future<ApiResult<PostEditAttachmentDeleteResult>> deleteImage(
     PostEditAttachmentDeleteCommand command,
   ) async {
-    final startedAt = DateTime.now();
-    final remoteResult = await _remoteDataSource.deleteImage(
-      deleteUriBuilder.build(command),
-    );
-    if (remoteResult case ApiFailure<PostEditRemoteDeleteDocument>(
-      :final error,
-    )) {
-      _record(
-        target: command.target,
-        operation: 'delete_attachment',
-        reasonCode: _reasonForApiError(error),
-        statusCode: error.statusCode,
-        elapsedMs: _elapsedMs(startedAt),
-      );
-      return ApiFailure(error);
-    }
-    final remote = remoteResult.dataOrNull!;
-    final parsed = deleteResponseParser.parse(
-      body: remote.body,
-      aid: command.aid,
-    );
-    if (parsed.outcome != PostEditAttachmentDeleteOutcome.deleted) {
-      _record(
-        target: command.target,
-        operation: 'delete_attachment',
-        reasonCode: parsed.outcome == PostEditAttachmentDeleteOutcome.notDeleted
-            ? PostEditContractReasonCode.unconfirmed
-            : PostEditContractReasonCode.readbackFailure,
-        elapsedMs: _elapsedMs(startedAt),
+    final adapter = _attachmentDeleteCommand;
+    if (adapter == null) {
+      return const ApiFailure(
+        ApiError(
+          type: ApiErrorType.business,
+          code: 'post_attachment_delete_not_installed',
+          message: 'post_attachment_delete_not_installed',
+        ),
       );
     }
-    return ApiSuccess(parsed);
+    final result = await adapter.execute(
+      DeletePostImageAttachmentRequest(
+        tid: command.target.tid,
+        pid: command.target.pid,
+        aid: command.aid,
+      ),
+    );
+    return switch (result) {
+      DataCommandApplied<ForumImageAttachmentDeleteReceipt>(:final receipt) =>
+        ApiSuccess(
+          PostEditAttachmentDeleteResult(
+            aid: receipt.aid,
+            outcome: PostEditAttachmentDeleteOutcome.deleted,
+            deletedCount: receipt.deletedCount,
+          ),
+        ),
+      DataCommandRejected<ForumImageAttachmentDeleteReceipt>() => ApiSuccess(
+        PostEditAttachmentDeleteResult(
+          aid: command.aid,
+          outcome: PostEditAttachmentDeleteOutcome.notDeleted,
+        ),
+      ),
+      final DataCommandResult<ForumImageAttachmentDeleteReceipt> failure =>
+        ApiFailure(
+          ApiError(
+            type: ApiErrorType.business,
+            code: failure.failureOrNull?.code,
+            statusCode: failure.failureOrNull?.statusCode,
+            message:
+                failure.failureOrNull?.diagnosticMessage ??
+                'post_attachment_delete_unconfirmed',
+          ),
+        ),
+    };
   }
 
   @override

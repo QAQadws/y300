@@ -15,6 +15,7 @@ export 'yamibo_forum_client_contracts.dart';
 export 'src/cache/forum_cache.dart';
 export 'src/cache/forum_cache_key_canonicalizer.dart';
 export 'src/network/forum_network.dart';
+export 'src/network/forum_multipart.dart';
 export 'src/network/dio_forum_network.dart';
 export 'src/network/forum_request.dart';
 export 'src/network/forum_response.dart';

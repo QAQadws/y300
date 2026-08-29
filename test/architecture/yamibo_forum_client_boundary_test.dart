@@ -101,6 +101,13 @@ void main() {
       'lib/features/reply/data/services/discuz_reply_remote_data_source.dart',
       'lib/features/reply/data/services/reply_form_preparation_data_source.dart',
       'lib/features/reply/domain/services/reply_form_parser.dart',
+      'lib/features/composer_shared/data/repositories/discuz_composer_attachment_repository.dart',
+      'lib/features/composer_shared/data/repositories/discuz_composer_unused_image_repository.dart',
+      'lib/features/composer_shared/data/services/composer_attachment_remote_data_source.dart',
+      'lib/features/composer_shared/data/services/composer_unused_image_parser.dart',
+      'lib/features/composer_shared/data/services/composer_unused_image_remote_data_source.dart',
+      'lib/features/thread/data/services/discuz_post_edit_delete_response_parser.dart',
+      'lib/features/thread/domain/services/post_edit_attachment_delete_uri_builder.dart',
     ];
 
     expect(
@@ -231,6 +238,28 @@ void main() {
             })
             .map((file) => file.path)
             .toList();
+
+    expect(violations, isEmpty);
+  });
+
+  test('image attachment protocols stay behind package contracts', () {
+    const forbidden = <String>[
+      "module: 'checkpost'",
+      "module: 'forumupload'",
+      "'action': 'imagelist'",
+      "'action': 'deleteattach'",
+      'ComposerAttachmentRemoteDataSource',
+      'ComposerUnusedImageParser',
+      'PostEditAttachmentDeleteUriBuilder',
+      'DiscuzPostEditDeleteResponseParser',
+    ];
+    final violations = _dartFiles(<String>['lib'])
+        .where((file) {
+          final source = file.readAsStringSync();
+          return forbidden.any(source.contains);
+        })
+        .map((file) => file.path)
+        .toList();
 
     expect(violations, isEmpty);
   });

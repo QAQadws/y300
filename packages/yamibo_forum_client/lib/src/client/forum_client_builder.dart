@@ -5,6 +5,7 @@ import '../contracts/sticker_catalog.dart';
 import '../logging/forum_client_logger.dart';
 import '../network/dio_forum_network.dart';
 import '../network/forum_network.dart';
+import '../network/forum_multipart.dart';
 import '../session/forum_cookie_store.dart';
 import '../session/forum_formhash_provider.dart';
 import '../session/forum_session_store.dart';
@@ -33,6 +34,7 @@ final class YamiboForumClientBuilder {
     this.formhashProvider,
     this.cookieStore,
     this.resourceClient,
+    this.multipartClient,
     this.stickerCatalogStore,
   });
 
@@ -61,6 +63,7 @@ final class YamiboForumClientBuilder {
       documentStore: caches.documents,
       snapshotStore: caches.snapshots,
       resourceClient: network,
+      multipartClient: network,
       cookieStore: cookies,
       stickerCatalogStore: caches.stickers,
     );
@@ -90,6 +93,9 @@ final class YamiboForumClientBuilder {
   /// Optional protected-resource transport override.
   final ForumResourceClient? resourceClient;
 
+  /// Optional streamed multipart transport used by attachment commands.
+  final ForumMultipartClient? multipartClient;
+
   /// Optional persistent sticker catalog store.
   final ForumStickerCatalogStore? stickerCatalogStore;
 
@@ -114,10 +120,18 @@ final class YamiboForumClientBuilder {
     final postComment = factory.createThreadPostCommentInteraction();
     final threadCreation = factory.createThreadCreation(formhash);
     final threadReply = factory.createThreadReply(formhash);
+    final imageUpload = factory.createImageAttachmentUpload(
+      multipartClient ??
+          (network is ForumMultipartClient
+              ? network as ForumMultipartClient
+              : null),
+    );
+    final unusedImages = factory.createUnusedImageAttachments(formhash);
     return YamiboForumClient(
       config: config,
       network: network,
       resources: resourceClient,
+      multipart: multipartClient,
       formhashProvider: formhash,
       sourcePlan: ForumClientSourcePlan(
         forumDirectory: forumHome,
@@ -157,6 +171,13 @@ final class YamiboForumClientBuilder {
         threadCreationCommand: threadCreation,
         threadReplyPreparation: threadReply,
         threadReplyCommand: threadReply,
+        imageAttachmentUploadPreparation: imageUpload,
+        imageAttachmentUploadCommand: imageUpload,
+        unusedImageAttachments: unusedImages,
+        unusedImageAttachmentDelete: unusedImages,
+        postImageAttachmentDelete: factory.createPostImageAttachmentDelete(
+          formhash,
+        ),
         postRatings: factory.createThreadPostRatings(),
         postLocator: factory.createThreadPostLocator(),
         threadAuthorPosts: factory.createThreadAuthorPosts(),

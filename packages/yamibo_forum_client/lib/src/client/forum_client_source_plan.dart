@@ -4,6 +4,7 @@ import '../contracts/favorite_commands.dart';
 import '../contracts/forum_directory.dart';
 import '../contracts/forum_authentication.dart';
 import '../contracts/forum_home.dart';
+import '../contracts/forum_image_attachments.dart';
 import '../contracts/forum_display_repository.dart';
 import '../contracts/forum_search.dart';
 import '../contracts/forum_tag_directory.dart';
@@ -53,6 +54,11 @@ final class ForumClientSourcePlan {
     this.threadCreationCommand,
     this.threadReplyPreparation,
     this.threadReplyCommand,
+    this.imageAttachmentUploadPreparation,
+    this.imageAttachmentUploadCommand,
+    this.unusedImageAttachments,
+    this.unusedImageAttachmentDelete,
+    this.postImageAttachmentDelete,
     this.postRatings,
     this.postLocator,
     this.threadAuthorPosts,
@@ -147,6 +153,22 @@ final class ForumClientSourcePlan {
 
   /// Command for submitting thread and post replies.
   final ThreadReplyCommand? threadReplyCommand;
+
+  /// Source for current image attachment upload permission.
+  final ForumImageAttachmentUploadPreparationRepository?
+  imageAttachmentUploadPreparation;
+
+  /// Command for streaming one image attachment upload.
+  final ForumImageAttachmentUploadCommand? imageAttachmentUploadCommand;
+
+  /// Source for the authenticated user's unused image attachments.
+  final ForumUnusedImageAttachmentDirectoryRepository? unusedImageAttachments;
+
+  /// Command for deleting an unused image attachment.
+  final ForumUnusedImageAttachmentDeleteCommand? unusedImageAttachmentDelete;
+
+  /// Command for deleting an existing post image attachment.
+  final ForumPostImageAttachmentDeleteCommand? postImageAttachmentDelete;
 
   /// Source for complete post-rating details.
   final ThreadPostRatingsRepository? postRatings;

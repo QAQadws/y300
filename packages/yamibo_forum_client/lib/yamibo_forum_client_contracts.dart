@@ -17,7 +17,14 @@ export 'src/contracts/forum_authentication.dart';
 export 'src/contracts/forum_display_models.dart';
 export 'src/contracts/forum_display_repository.dart';
 export 'src/contracts/forum_resource.dart';
+export 'src/contracts/forum_image_attachments.dart';
 export 'src/network/forum_request.dart' show ForumRequestCancellation;
+export 'src/network/forum_multipart.dart'
+    show
+        ForumMultipartClient,
+        ForumMultipartFile,
+        ForumMultipartRequest,
+        ForumMultipartResponse;
 export 'src/contracts/forum_search.dart';
 export 'src/contracts/forum_tag_directory.dart';
 export 'src/contracts/profile_and_blog.dart';

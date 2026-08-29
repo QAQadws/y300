@@ -3162,6 +3162,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get composerImageQuotaExceeded => '附件额度不足，无法上传图片';
 
   @override
+  String get composerImageFileTooLarge => '图片超过当前用户组或文件类型的大小限制';
+
+  @override
+  String get composerImagePermissionDenied => '当前账号没有上传图片的权限';
+
+  @override
+  String get composerImageInvalidContent => '服务器未能识别该图片，请检查文件后重试';
+
+  @override
+  String get composerImageSaveFailed => '服务器保存图片失败，请稍后重试';
+
+  @override
+  String get composerImageFileNameRejected => '图片文件名包含不允许的内容，请重命名后重试';
+
+  @override
+  String get composerImageDimensionsExceeded => '图片宽高超过服务器限制，请缩小后重试';
+
+  @override
+  String get composerImageUploadOutcomeUnknown =>
+      '无法确认图片是否上传成功，请先检查未使用图片，避免重复上传';
+
+  @override
   String get composerImageUploadTimeout => '图片上传超时，请重试';
 
   @override
@@ -7499,6 +7521,28 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get composerImageQuotaExceeded => '附件額度不足，無法上傳圖片';
+
+  @override
+  String get composerImageFileTooLarge => '圖片超過目前使用者群組或檔案類型的大小限制';
+
+  @override
+  String get composerImagePermissionDenied => '目前帳號沒有上傳圖片的權限';
+
+  @override
+  String get composerImageInvalidContent => '伺服器無法識別該圖片，請檢查檔案後重試';
+
+  @override
+  String get composerImageSaveFailed => '伺服器儲存圖片失敗，請稍後重試';
+
+  @override
+  String get composerImageFileNameRejected => '圖片檔名包含不允許的內容，請重新命名後再試';
+
+  @override
+  String get composerImageDimensionsExceeded => '圖片寬高超過伺服器限制，請縮小後再試';
+
+  @override
+  String get composerImageUploadOutcomeUnknown =>
+      '無法確認圖片是否上傳成功，請先檢查未使用圖片，避免重複上傳';
 
   @override
   String get composerImageUploadTimeout => '圖片上傳逾時，請重試';

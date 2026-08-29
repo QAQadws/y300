@@ -81,6 +81,32 @@ void main() {
       expect(sources.threadCreationCommand, isA<DiscuzThreadCreationAdapter>());
       expect(sources.threadReplyPreparation, isA<DiscuzThreadReplyAdapter>());
       expect(sources.threadReplyCommand, isA<DiscuzThreadReplyAdapter>());
+      expect(
+        sources.imageAttachmentUploadPreparation,
+        isA<DiscuzImageAttachmentUploadAdapter>(),
+      );
+      expect(
+        identical(
+          sources.imageAttachmentUploadPreparation,
+          sources.imageAttachmentUploadCommand,
+        ),
+        isTrue,
+      );
+      expect(
+        sources.unusedImageAttachments,
+        isA<DiscuzUnusedImageAttachmentAdapter>(),
+      );
+      expect(
+        identical(
+          sources.unusedImageAttachments,
+          sources.unusedImageAttachmentDelete,
+        ),
+        isTrue,
+      );
+      expect(
+        sources.postImageAttachmentDelete,
+        isA<DiscuzPostImageAttachmentDeleteAdapter>(),
+      );
     });
 
     test('installs search without a host formhash provider', () {
@@ -131,6 +157,7 @@ void main() {
 
       expect(client.network, isA<DioForumClientNetwork>());
       expect(identical(client.resources, client.network), isTrue);
+      expect(identical(client.multipart, client.network), isTrue);
       expect(client.sourcePlan.forumSearch, isNotNull);
     });
 

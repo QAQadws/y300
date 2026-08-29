@@ -187,63 +187,101 @@ void main() {
       },
     );
 
-    test(
-      'post reply preserves hidden fields and isolates the quote body',
-      () async {
-        final network = _QueueNetwork(<Object?>[
-          _replyForm,
-          _commandEnvelope(
-            code: 'post_reply_succeed',
-            tid: '10001',
-            pid: '20002',
-          ),
-        ]);
-        final adapter = _factory(
-          network,
-        ).createThreadReply(const _FixtureFormhashProvider());
-        final target = const ThreadReplyTarget.post(
-          fid: '30',
+    test('post reply preserves hidden fields and isolates the quote body', () async {
+      final network = _QueueNetwork(<Object?>[
+        _replyForm,
+        _commandEnvelope(
+          code: 'post_reply_succeed',
           tid: '10001',
-          pid: '20001',
-        );
-        final preparation = (await adapter.load(
-          ThreadReplyPreparationRequest(
-            target: target,
-            formUri: Uri.parse(
-              'https://example.test/forum.php?mod=post&action=reply&fid=30&tid=10001&repquote=20001&mobile=2',
-            ),
+          pid: '20002',
+        ),
+      ]);
+      final adapter = _factory(
+        network,
+      ).createThreadReply(const _FixtureFormhashProvider());
+      final target = const ThreadReplyTarget.post(
+        fid: '30',
+        tid: '10001',
+        pid: '20001',
+      );
+      final preparation = (await adapter.load(
+        ThreadReplyPreparationRequest(
+          target: target,
+          formUri: Uri.parse(
+            'https://example.test/forum.php?mod=post&action=reply&fid=30&tid=10001&repquote=20001&extra=&page=231&mobile=2',
           ),
-        )).dataOrNull!;
-
-        expect(network.requests.first.headers['User-Agent'], 'fixture-mobile');
-        expect(
-          network.requests.first.headers['User-Agent'],
-          isNot('fixture-desktop'),
-        );
-
-        final result = await adapter.execute(
-          ThreadReplySubmission(
-            target: target,
-            preparation: preparation,
-            message: 'Fixture post reply',
-            useSignature: false,
-            attachmentIds: const <String>['60001'],
+          referer: Uri.parse(
+            'https://example.test/forum.php?mod=viewthread&tid=10001&page=231&mobile=2',
           ),
-        );
+        ),
+      )).dataOrNull!;
 
-        expect(preparation.quotePreview, 'Fixture quote body');
-        expect(result, isA<DataCommandApplied<ThreadReplyReceipt>>());
-        final form = network.requests.last.body!;
-        expect(form, containsPair('reppid', '20001'));
-        expect(form, containsPair('noticeauthor', 'fixture-notice'));
-        expect(form, containsPair('noticeauthormsg', 'Fixture quote body'));
-        expect(
-          form,
-          containsPair('noticetrimstr', '[quote]Fixture quote body[/quote]'),
-        );
-        expect(form, containsPair('attachnew[60001][description]', ''));
-      },
-    );
+      expect(network.requests.first.uri.queryParameters['mobile'], isNull);
+      expect(network.requests.first.uri.queryParameters['extra'], '');
+      expect(network.requests.first.uri.queryParameters['page'], '231');
+      expect(network.requests.first.headers['User-Agent'], 'fixture-desktop');
+      final preparationReferer = Uri.parse(
+        network.requests.first.headers['Referer']!,
+      );
+      expect(preparationReferer.queryParameters['mobile'], isNull);
+      expect(preparationReferer.queryParameters['page'], '231');
+
+      final result = await adapter.execute(
+        ThreadReplySubmission(
+          target: target,
+          preparation: preparation,
+          message: 'Fixture post reply',
+          useSignature: false,
+          attachmentIds: const <String>['60001'],
+        ),
+      );
+
+      expect(preparation.quotePreview, 'Fixture quote body');
+      expect(result, isA<DataCommandApplied<ThreadReplyReceipt>>());
+      final form = network.requests.last.body!;
+      expect(form, containsPair('reppid', '20001'));
+      expect(form, containsPair('noticeauthor', 'fixture-notice'));
+      expect(form, containsPair('noticeauthormsg', 'Fixture quote body'));
+      expect(
+        form,
+        containsPair(
+          'noticetrimstr',
+          '[quote][size=2][url=forum.php?mod=redirect&goto=findpost&pid=20001&ptid=10001]Fixture author[/url][/size]\nFixture quote body[/quote]',
+        ),
+      );
+      expect(form, containsPair('attachnew[60001][description]', ''));
+    });
+
+    test('post reply rejects a mobile form with a truncated quote', () async {
+      final network = _QueueNetwork(<Object?>[_mobileReplyForm]);
+      final adapter = _factory(
+        network,
+      ).createThreadReply(const _FixtureFormhashProvider());
+
+      final result = await adapter.load(
+        ThreadReplyPreparationRequest(
+          target: const ThreadReplyTarget.post(
+            fid: '30',
+            tid: '10001',
+            pid: '20001',
+          ),
+          formUri: Uri.parse(
+            'https://example.test/forum.php?mod=post&action=reply&fid=30&tid=10001&repquote=20001&mobile=2',
+          ),
+        ),
+      );
+
+      expect(network.requests.single.uri.queryParameters['mobile'], isNull);
+      expect(network.requests.single.headers['User-Agent'], 'fixture-desktop');
+      expect(
+        result,
+        isA<DataReadFailure<ThreadReplyPreparation, ThreadReplyCapabilities>>(),
+      );
+      expect(
+        result.failureOrNull?.code,
+        'thread_reply_preparation_parse_failed',
+      );
+    });
 
     test('success code without positive pid remains outcome unknown', () async {
       final network = _QueueNetwork(<Object?>[
@@ -387,15 +425,16 @@ final _preparationEnvelope = <String, Object?>{
 };
 
 const _replyForm = '''
-<html><body>
-<form id="postform">
+<html><body id="nv_forum" class="pg_post">
+<form id="postform" action="forum.php?mod=post&amp;action=reply&amp;fid=30&amp;tid=10001&amp;replysubmit=yes">
   <input name="formhash" value="fixture-prepared-formhash">
   <input name="fid" value="30">
   <input name="tid" value="10001">
   <input name="reppid" value="20001">
   <input name="reppost" value="20001">
   <input name="noticeauthor" value="fixture-notice">
-  <input name="noticetrimstr" value="[quote]Fixture quote body[/quote]">
+  <input name="noticetrimstr" value="[quote][size=2][url=forum.php?mod=redirect&amp;goto=findpost&amp;pid=20001&amp;ptid=10001]Fixture author[/url][/size]
+Fixture quote body[/quote]">
   <input name="noticeauthormsg" value="Fixture quote body">
   <div class="post_from">
     RE: Fixture subject
@@ -403,6 +442,21 @@ const _replyForm = '''
       fixture-user posted at fixture-time<br>Fixture quote body
     </blockquote></div>
   </div>
+</form>
+</body></html>
+''';
+
+const _mobileReplyForm = '''
+<html><body id="forum" class="pg_post">
+<form id="postform" action="forum.php?mod=post&amp;action=reply&amp;fid=30&amp;tid=10001&amp;replysubmit=yes&amp;mobile=2">
+  <input name="formhash" value="fixture-prepared-formhash">
+  <input name="fid" value="30">
+  <input name="tid" value="10001">
+  <input name="reppid" value="20001">
+  <input name="reppost" value="20001">
+  <input name="noticeauthor" value="fixture-notice">
+  <input name="noticetrimstr" value="[quote]Fixture author\nFixture quote body[/quote]">
+  <input name="noticeauthormsg" value="Fixture quote body">
 </form>
 </body></html>
 ''';

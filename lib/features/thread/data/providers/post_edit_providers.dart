@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/thread/data/repositories/discuz_post_edit_repository.dart';
 import 'package:y300/features/thread/data/services/post_edit_contract_diagnostic_recorder.dart';
 import 'package:y300/features/thread/data/services/post_edit_form_parser.dart';
@@ -34,6 +35,9 @@ final postEditFormParserProvider = Provider<PostEditFormParser>((ref) {
 final postEditRepositoryProvider = Provider<PostEditRepository>((ref) {
   return DiscuzPostEditRepository(
     remoteDataSource: ref.watch(postEditRemoteDataSourceProvider),
+    attachmentDeleteCommand: ref
+        .watch(yamiboForumClientProvider)
+        .postImageAttachmentDelete,
     formParser: ref.watch(postEditFormParserProvider),
     capabilityClassifier: ref.watch(postEditNativeCapabilityClassifierProvider),
     diagnosticRecorder: ref.watch(postEditContractDiagnosticRecorderProvider),

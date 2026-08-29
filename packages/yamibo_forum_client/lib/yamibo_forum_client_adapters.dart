@@ -30,6 +30,7 @@ export 'src/adapters/discuz_search_html_parser.dart';
 export 'src/adapters/discuz_thread_repositories.dart';
 export 'src/adapters/discuz_thread_interaction_commands.dart';
 export 'src/adapters/discuz_thread_composer_commands.dart';
+export 'src/adapters/discuz_image_attachment_adapters.dart';
 export 'src/adapters/discuz_supplemental_read_adapters.dart';
 export 'src/adapters/forum_display_api_mapper.dart';
 export 'src/adapters/forum_display_html_parser.dart';

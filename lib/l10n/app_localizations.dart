@@ -5225,6 +5225,48 @@ abstract class AppLocalizations {
   /// **'附件额度不足，无法上传图片'**
   String get composerImageQuotaExceeded;
 
+  /// No description provided for @composerImageFileTooLarge.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片超过当前用户组或文件类型的大小限制'**
+  String get composerImageFileTooLarge;
+
+  /// No description provided for @composerImagePermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号没有上传图片的权限'**
+  String get composerImagePermissionDenied;
+
+  /// No description provided for @composerImageInvalidContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器未能识别该图片，请检查文件后重试'**
+  String get composerImageInvalidContent;
+
+  /// No description provided for @composerImageSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器保存图片失败，请稍后重试'**
+  String get composerImageSaveFailed;
+
+  /// No description provided for @composerImageFileNameRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片文件名包含不允许的内容，请重命名后重试'**
+  String get composerImageFileNameRejected;
+
+  /// No description provided for @composerImageDimensionsExceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片宽高超过服务器限制，请缩小后重试'**
+  String get composerImageDimensionsExceeded;
+
+  /// No description provided for @composerImageUploadOutcomeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法确认图片是否上传成功，请先检查未使用图片，避免重复上传'**
+  String get composerImageUploadOutcomeUnknown;
+
   /// No description provided for @composerImageUploadTimeout.
   ///
   /// In zh, this message translates to:

@@ -264,6 +264,9 @@ class SerialComposerImageUploadCoordinator
   @override
   void cancel() {
     _cancelled = true;
+    if (_repository case final ComposerAttachmentUploadCancellation value) {
+      value.cancelActiveUpload();
+    }
   }
 
   bool _isCancelled(int runId) {

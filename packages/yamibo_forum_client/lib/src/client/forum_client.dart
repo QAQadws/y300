@@ -6,6 +6,7 @@ import '../contracts/favorite_directories.dart';
 import '../contracts/favorite_commands.dart';
 import '../contracts/forum_directory.dart';
 import '../contracts/forum_home.dart';
+import '../contracts/forum_image_attachments.dart';
 import '../contracts/forum_authentication.dart';
 import '../contracts/forum_display_models.dart';
 import '../contracts/forum_display_repository.dart';
@@ -22,6 +23,7 @@ import '../contracts/thread_composer_commands.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
+import '../network/forum_multipart.dart';
 import '../network/forum_request.dart';
 import '../network/forum_transport.dart';
 import '../session/forum_formhash_provider.dart';
@@ -38,6 +40,7 @@ final class YamiboForumClient {
     required this.config,
     required this.network,
     ForumResourceClient? resources,
+    ForumMultipartClient? multipart,
     ForumFormhashProvider? formhashProvider,
     this.sourcePlan = const ForumClientSourcePlan(),
   }) : resources =
@@ -46,7 +49,12 @@ final class YamiboForumClient {
                ? network as ForumResourceClient
                : const UnsupportedForumResourceClient()),
        formhashProvider =
-           formhashProvider ?? const _UnsupportedForumFormhashProvider();
+           formhashProvider ?? const _UnsupportedForumFormhashProvider(),
+       multipart =
+           multipart ??
+           (network is ForumMultipartClient
+               ? network as ForumMultipartClient
+               : null);
 
   /// Client origins and request configuration.
   final ForumClientConfig config;
@@ -56,6 +64,9 @@ final class YamiboForumClient {
 
   /// Protected image streaming client.
   final ForumResourceClient resources;
+
+  /// Optional streamed multipart transport used by attachment uploads.
+  final ForumMultipartClient? multipart;
 
   /// Canonical formhash source shared with Host commands still being migrated.
   final ForumFormhashProvider formhashProvider;
@@ -200,6 +211,83 @@ final class YamiboForumClient {
 
   /// Configured thread/post reply command, if installed.
   ThreadReplyCommand? get threadReplyCommand => sourcePlan.threadReplyCommand;
+
+  /// Configured image upload preparation source.
+  ForumImageAttachmentUploadPreparationRepository?
+  get imageAttachmentUploadPreparation =>
+      sourcePlan.imageAttachmentUploadPreparation;
+
+  /// Configured image upload command.
+  ForumImageAttachmentUploadCommand? get imageAttachmentUploadCommand =>
+      sourcePlan.imageAttachmentUploadCommand;
+
+  /// Configured unused image attachment directory.
+  ForumUnusedImageAttachmentDirectoryRepository? get unusedImageAttachments =>
+      sourcePlan.unusedImageAttachments;
+
+  /// Configured unused image deletion command.
+  ForumUnusedImageAttachmentDeleteCommand? get unusedImageAttachmentDelete =>
+      sourcePlan.unusedImageAttachmentDelete;
+
+  /// Configured existing-post image deletion command.
+  ForumPostImageAttachmentDeleteCommand? get postImageAttachmentDelete =>
+      sourcePlan.postImageAttachmentDelete;
+
+  /// Loads current image attachment upload permission.
+  Future<
+    DataReadResult<
+      ForumImageAttachmentUploadPreparation,
+      ForumImageAttachmentUploadCapabilities
+    >
+  >
+  prepareImageAttachmentUpload(
+    ForumImageAttachmentUploadPreparationRequest request,
+  ) =>
+      sourcePlan.imageAttachmentUploadPreparation?.load(request) ??
+      unsupported<
+        ForumImageAttachmentUploadPreparation,
+        ForumImageAttachmentUploadCapabilities
+      >();
+
+  /// Uploads one prepared image attachment.
+  Future<DataCommandResult<ForumImageAttachmentUploadReceipt>>
+  uploadImageAttachment(ForumImageAttachmentUploadSubmission submission) =>
+      sourcePlan.imageAttachmentUploadCommand?.execute(submission) ??
+      Future.value(
+        const DataCommandUnsupported<ForumImageAttachmentUploadReceipt>(),
+      );
+
+  /// Loads the current unused image attachment directory.
+  Future<
+    DataReadResult<
+      ForumUnusedImageAttachmentDirectory,
+      ForumUnusedImageAttachmentCapabilities
+    >
+  >
+  loadUnusedImageAttachments(
+    ForumUnusedImageAttachmentDirectoryRequest request,
+  ) =>
+      sourcePlan.unusedImageAttachments?.load(request) ??
+      unsupported<
+        ForumUnusedImageAttachmentDirectory,
+        ForumUnusedImageAttachmentCapabilities
+      >();
+
+  /// Deletes one unused image attachment.
+  Future<DataCommandResult<ForumImageAttachmentDeleteReceipt>>
+  deleteUnusedImageAttachment(DeleteUnusedImageAttachmentRequest request) =>
+      sourcePlan.unusedImageAttachmentDelete?.execute(request) ??
+      Future.value(
+        const DataCommandUnsupported<ForumImageAttachmentDeleteReceipt>(),
+      );
+
+  /// Deletes one image attachment bound to an existing post.
+  Future<DataCommandResult<ForumImageAttachmentDeleteReceipt>>
+  deletePostImageAttachment(DeletePostImageAttachmentRequest request) =>
+      sourcePlan.postImageAttachmentDelete?.execute(request) ??
+      Future.value(
+        const DataCommandUnsupported<ForumImageAttachmentDeleteReceipt>(),
+      );
 
   /// Configured notification source, if installed.
   ForumNotificationRepository? get notifications => sourcePlan.notifications;

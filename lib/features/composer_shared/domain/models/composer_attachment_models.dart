@@ -1,4 +1,5 @@
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 /// 附件相关领域模型，在自制回复页与（后续）发帖页之间共享。
 ///
@@ -100,12 +101,13 @@ class ComposerAttachRemain {
 
 class ComposerImageUploadPermission {
   const ComposerImageUploadPermission({
-    required this.uid,
-    required this.uploadHash,
     required this.allowedExtensions,
     required this.attachRemain,
+    this.uid = '',
+    this.uploadHash = '',
     this.username,
     this.formHash,
+    this.packagePreparation,
   });
 
   final String uid;
@@ -114,6 +116,7 @@ class ComposerImageUploadPermission {
   final ComposerAttachRemain attachRemain;
   final String? username;
   final String? formHash;
+  final ForumImageAttachmentUploadPreparation? packagePreparation;
 
   bool canUploadExtension(String extension) {
     final normalized = extension.trim().toLowerCase();

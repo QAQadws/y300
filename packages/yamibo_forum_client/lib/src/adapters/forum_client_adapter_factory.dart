@@ -2,6 +2,7 @@ import '../client/forum_client_config.dart';
 import '../contracts/favorite_directories.dart';
 import '../contracts/favorite_commands.dart';
 import '../contracts/forum_authentication.dart';
+import '../contracts/forum_image_attachments.dart';
 import '../contracts/comic_contracts.dart';
 import '../contracts/forum_directory.dart';
 import '../contracts/forum_display_repository.dart';
@@ -14,6 +15,7 @@ import '../contracts/thread_repository.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
+import '../network/forum_multipart.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
@@ -22,6 +24,7 @@ import '../cache/forum_cache.dart';
 import '../session/forum_session_store.dart';
 import '../session/forum_cookie_store.dart';
 import 'discuz_authentication_adapter.dart';
+import 'discuz_image_attachment_adapters.dart';
 import 'discuz_api_client.dart';
 import 'discuz_comic_read_adapters.dart';
 import 'discuz_directory_adapters.dart';
@@ -140,6 +143,35 @@ final class ForumClientAdapterFactory {
         requestProfiles: requestProfiles,
         formhashProvider: formhash,
       );
+
+  DiscuzImageAttachmentUploadAdapter createImageAttachmentUpload(
+    ForumMultipartClient? multipart,
+  ) => DiscuzImageAttachmentUploadAdapter(
+    _api,
+    config,
+    multipart,
+    sessionStore,
+    requestProfiles,
+  );
+
+  DiscuzUnusedImageAttachmentAdapter createUnusedImageAttachments(
+    ForumFormhashProvider formhash,
+  ) => DiscuzUnusedImageAttachmentAdapter(
+    config,
+    network,
+    requestProfiles,
+    sessionStore,
+    formhash,
+  );
+
+  ForumPostImageAttachmentDeleteCommand createPostImageAttachmentDelete(
+    ForumFormhashProvider formhash,
+  ) => DiscuzPostImageAttachmentDeleteAdapter(
+    config: config,
+    network: network,
+    requestProfiles: requestProfiles,
+    formhash: formhash,
+  );
 
   ThreadPostLocatorRepository createThreadPostLocator() =>
       DiscuzThreadPostLocatorRepository(

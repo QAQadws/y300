@@ -8,7 +8,28 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
-- Reserved for changes made after `0.6.0`.
+- Reserved for changes made after `0.7.0`.
+
+## 0.7.0 - 2026-08-29
+
+### Added
+
+- Source-neutral preparation and command contracts for image attachment
+  upload, unused-image directory reads, unused-image deletion, and post-bound
+  image deletion.
+- A replay-safe streaming multipart Host port with progress and cooperative
+  cancellation.
+- Discuz adapters for `checkpost` v1, `forumupload` v4, `imagelist`, and
+  `deleteattach`, including stable mappings for upload statuses `-1..-13`.
+
+### Changed
+
+- Multipart WAF recovery reconstructs the complete form and opens a fresh file
+  stream for the single verified HTTP 405 replay.
+- Unused-image deletion requires an opaque directory proof and performs one
+  read-back when the direct deletion count is inconclusive.
+- Upload and deletion results no longer expose upload hashes, formhash values,
+  response bodies, or source-specific result models.
 
 ## 0.6.0 - 2026-08-29
 

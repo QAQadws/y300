@@ -14,7 +14,10 @@ import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 
 /// Routes package reads through Y300's single Cookie/session/WAF transport.
 final class Y300ForumClientNetworkAdapter
-    implements forum.ForumClientNetwork, forum.ForumResourceClient {
+    implements
+        forum.ForumClientNetwork,
+        forum.ForumResourceClient,
+        forum.ForumMultipartClient {
   const Y300ForumClientNetworkAdapter({
     required YamiboHttpGateway gateway,
     required Uri apiOrigin,
@@ -29,6 +32,80 @@ final class Y300ForumClientNetworkAdapter
   final Uri _apiOrigin;
   final Uri _siteOrigin;
   final String _resourceUserAgent;
+
+  @override
+  Future<forum.ForumTransportResult<forum.ForumMultipartResponse>>
+  sendMultipart(forum.ForumMultipartRequest request) async {
+    if (request.cancellation?.isCancelled ?? false) {
+      return const forum.ForumTransportError(
+        forum.ForumTransportFailure(
+          kind: forum.ForumTransportFailureKind.cancelled,
+          code: 'cancelled',
+        ),
+      );
+    }
+    if (request.uri.scheme.toLowerCase() != _apiOrigin.scheme.toLowerCase() ||
+        request.uri.host.toLowerCase() != _apiOrigin.host.toLowerCase() ||
+        request.uri.port != _apiOrigin.port) {
+      return const forum.ForumTransportError(
+        forum.ForumTransportFailure(
+          kind: forum.ForumTransportFailureKind.business,
+          code: 'multipart_cross_site_rejected',
+        ),
+      );
+    }
+    final cancelToken = CancelToken();
+    final cancellation = request.cancellation;
+    if (cancellation != null) {
+      unawaited(
+        cancellation.whenCancelled.then((_) {
+          if (!cancelToken.isCancelled) {
+            cancelToken.cancel('request_cancelled');
+          }
+        }),
+      );
+    }
+    final file = request.file;
+    final result = await _gateway.postMultipartFactory(
+      request.uri,
+      context: YamiboRequestContext(
+        kind: YamiboRequestKind.resource,
+        operation: request.context.operation,
+        module: request.context.module,
+        pageKind: request.context.pageKind,
+        silent: request.context.silent,
+      ),
+      dataFactory: () => FormData.fromMap(<String, Object>{
+        ...request.fields,
+        file.fieldName: MultipartFile.fromStream(
+          file.openRead,
+          file.contentLength,
+          filename: file.fileName,
+          contentType: DioMediaType.parse(file.contentType),
+        ),
+      }),
+      headers: request.headers,
+      cancelToken: cancelToken,
+      options: Options(
+        responseType: ResponseType.plain,
+        followRedirects: request.followRedirects,
+      ),
+      onSendProgress: request.onSendProgress,
+    );
+    return switch (result) {
+      ApiSuccess<YamiboHttpResponse<Object?>>(:final data) =>
+        forum.ForumTransportSuccess(
+          forum.ForumMultipartResponse(
+            uri: data.uri,
+            statusCode: data.statusCode,
+            headers: data.headers,
+            body: data.body?.toString() ?? '',
+          ),
+        ),
+      ApiFailure<YamiboHttpResponse<Object?>>(:final error) =>
+        forum.ForumTransportError(_mapError(error)),
+    };
+  }
 
   @override
   Future<forum.ForumResourceResult> open(
