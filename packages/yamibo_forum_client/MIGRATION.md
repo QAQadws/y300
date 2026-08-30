@@ -1,5 +1,26 @@
 # Migration guide
 
+## 0.8.x to 0.9.0
+
+The standard client now installs `ThreadPostEditPreparationRepository` and
+`ThreadPostEditCommand`. Load the exact same-site edit form discovered on the
+thread page, preserve its opaque token, and submit changes through the command
+instead of parsing or rebuilding Discuz controls in application code.
+
+Only ordinary first posts and server-permitted ordinary replies are supported.
+Special threads, thread-sort/plugin fields, HTML mode, ordinary file
+attachments, and unknown destructive controls return `unsupported` and should
+continue through a WebView fallback.
+
+Only `DataCommandApplied` proves the edit. An ambiguous callback or transport
+failure is checked by one fresh preparation read and never causes a second
+edit POST. Preserve authored content for `DataCommandOutcomeUnknown`.
+
+Custom Host transports must preserve `ForumMultipartFields` in order,
+including repeated scalar names, and rebuild the multipart body for the single
+verified HTTP 405 replay. The package Dio runtime and Y300 Host adapter already
+implement this behavior.
+
 ## 0.7.x to 0.8.0
 
 The standard client now installs `ThreadPollVoteCommand`. Submit stable forum,

@@ -109,6 +109,15 @@ void main() {
       'lib/features/thread/data/services/discuz_post_edit_delete_response_parser.dart',
       'lib/features/thread/domain/services/post_edit_attachment_delete_uri_builder.dart',
       'lib/features/thread/data/repositories/thread_poll_vote_repository.dart',
+      'lib/features/thread/data/repositories/discuz_post_edit_repository.dart',
+      'lib/features/thread/data/services/discuz_successful_control_extractor.dart',
+      'lib/features/thread/data/services/post_edit_form_parser.dart',
+      'lib/features/thread/data/services/post_edit_remote_data_source.dart',
+      'lib/features/thread/data/services/post_edit_submit_response_parser.dart',
+      'lib/features/thread/domain/repositories/post_edit_repository.dart',
+      'lib/features/thread/domain/services/post_edit_baseline_fingerprint_service.dart',
+      'lib/features/thread/domain/services/post_edit_native_capability_classifier.dart',
+      'lib/features/thread/domain/services/post_edit_submit_payload_builder.dart',
     ];
 
     expect(
@@ -227,6 +236,27 @@ void main() {
       'threadPollVoteRepositoryProvider',
     ];
     final violations = _dartFiles(<String>['lib'])
+        .where((file) {
+          final source = file.readAsStringSync();
+          return forbidden.any(source.contains);
+        })
+        .map((file) => file.path)
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
+  test('post-edit protocols stay behind package contracts', () {
+    const forbidden = <String>[
+      'editsubmit',
+      'DiscuzPostEditRepository',
+      'PostEditRemoteDataSource',
+      'PostEditFormParser',
+      'PostEditSubmitResponseParser',
+      'YamiboHttpGateway',
+      'package:dio',
+    ];
+    final violations = _dartFiles(<String>['lib/features/thread'])
         .where((file) {
           final source = file.readAsStringSync();
           return forbidden.any(source.contains);

@@ -253,6 +253,33 @@ final class Y300ForumClientNetworkAdapter
     }
 
     final body = request.body;
+    if (body is forum.ForumMultipartFields) {
+      if (request.responseType != forum.ForumResponseType.text) {
+        return const forum.ForumTransportError(
+          forum.ForumTransportFailure(
+            kind: forum.ForumTransportFailureKind.business,
+            code: 'unsupported_response_type',
+          ),
+        );
+      }
+      return _mapResult(
+        await _gateway.postMultipartFactory(
+          request.uri,
+          context: context,
+          dataFactory: () {
+            final data = FormData();
+            data.fields.addAll(body.entries);
+            return data;
+          },
+          headers: request.headers,
+          cancelToken: cancelToken,
+          options: Options(
+            responseType: ResponseType.plain,
+            followRedirects: request.followRedirects,
+          ),
+        ),
+      );
+    }
     if (body is forum.ForumFormFields) {
       if (request.responseType == forum.ForumResponseType.bytes) {
         return const forum.ForumTransportError(

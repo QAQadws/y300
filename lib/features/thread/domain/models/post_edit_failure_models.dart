@@ -1,22 +1,3 @@
-enum PostEditFallbackReason {
-  invalidTarget,
-  missingForm,
-  invalidSubmitAction,
-  missingCriticalControl,
-  duplicateCriticalControl,
-  targetMismatch,
-  unsupportedSpecialThread,
-  unsupportedThreadSort,
-  unsupportedPluginField,
-  unsupportedRegularAttachment,
-  unsupportedHtmlMode,
-  unknownSuccessfulControl,
-  authenticationRequired,
-  permissionDenied,
-  postDeleted,
-  contractChanged,
-}
-
 enum PostEditTargetParseFailure {
   emptyUrl,
   invalidUrl,
@@ -28,20 +9,4 @@ enum PostEditTargetParseFailure {
   invalidAction,
   invalidIdentifier,
   targetMismatch,
-}
-
-enum PostEditFormParseFailureReason {
-  missingForm,
-  authenticationRequired,
-  permissionDenied,
-  postDeleted,
-  duplicateForm,
-  invalidMethod,
-  invalidEnctype,
-  invalidSubmitAction,
-  missingCriticalControl,
-  duplicateCriticalControl,
-  targetMismatch,
-  malformedAttachment,
-  contractChanged,
 }

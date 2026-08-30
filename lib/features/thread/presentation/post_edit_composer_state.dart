@@ -1,4 +1,5 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
@@ -8,13 +9,12 @@ import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
 
 final class PostEditComposerArgs {
-  PostEditComposerArgs({required this.preparation})
-    : assert(preparation.isNativeSupported && preparation.snapshot != null);
+  const PostEditComposerArgs({required this.target, required this.preparation});
 
-  final PostEditPreparation preparation;
+  final PostEditTarget target;
+  final ThreadPostEditPreparation preparation;
 
-  PostEditTarget get target => preparation.target;
-  PostEditFormSnapshot get snapshot => preparation.snapshot!;
+  ThreadPostEditPreparation get snapshot => preparation;
 }
 
 final class PostEditComposerState extends ComposerStateBase {
@@ -55,7 +55,7 @@ final class PostEditComposerState extends ComposerStateBase {
 
   factory PostEditComposerState.initial({
     required PostEditTarget target,
-    required PostEditFormSnapshot snapshot,
+    required ThreadPostEditPreparation snapshot,
     String? subject,
     String? message,
     bool useSignature = true,
@@ -69,12 +69,12 @@ final class PostEditComposerState extends ComposerStateBase {
     return PostEditComposerState(
       target: target,
       snapshot: snapshot,
-      baselineSubject: snapshot.originalSubject,
-      baselineMessage: snapshot.rawMessage,
-      baselineFingerprint: snapshot.baselineFingerprint,
+      baselineSubject: snapshot.subject,
+      baselineMessage: snapshot.message,
+      baselineFingerprint: snapshot.revision,
       nativeSupported: nativeSupported,
-      subject: subject ?? snapshot.originalSubject,
-      message: message ?? snapshot.rawMessage,
+      subject: subject ?? snapshot.subject,
+      message: message ?? snapshot.message,
       useSignature: useSignature,
       isSubmitting: false,
       restoredDraft: restoredDraft,
@@ -91,7 +91,7 @@ final class PostEditComposerState extends ComposerStateBase {
   }
 
   final PostEditTarget target;
-  final PostEditFormSnapshot snapshot;
+  final ThreadPostEditPreparation snapshot;
   final String baselineSubject;
   final String baselineMessage;
   final String subject;
@@ -163,21 +163,7 @@ final class PostEditComposerState extends ComposerStateBase {
   }
 
   bool get hasValidSubmitContract {
-    if (snapshot.target != target) {
-      return false;
-    }
-    final values = snapshot.submitUri.queryParametersAll;
-    return _singleQueryValue(values, 'mod')?.toLowerCase() == 'post' &&
-        _singleQueryValue(values, 'action')?.toLowerCase() == 'edit' &&
-        _singleQueryValue(values, 'editsubmit')?.toLowerCase() == 'yes';
-  }
-
-  String? _singleQueryValue(Map<String, List<String>> values, String name) {
-    final entries = values[name];
-    if (entries == null || entries.length != 1) {
-      return null;
-    }
-    return entries.single;
+    return snapshot.target == target.toClientTarget();
   }
 
   PostEditComposerState copyWith({
@@ -198,7 +184,7 @@ final class PostEditComposerState extends ComposerStateBase {
     ComposerFailure? failure,
     ComposerImageUploadFailure? imageUploadFailure,
     ComposerDraftAttachmentVerification? draftAttachmentVerification,
-    PostEditFormSnapshot? snapshot,
+    ThreadPostEditPreparation? snapshot,
     String? baselineSubject,
     String? baselineMessage,
     String? baselineFingerprint,

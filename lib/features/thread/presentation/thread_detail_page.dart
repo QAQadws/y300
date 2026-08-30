@@ -915,19 +915,27 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       return;
     }
 
-    PostEditPreparation? preparation;
+    ThreadPostEditPreparation? preparation;
     try {
       // Opening an editor is an explicit freshness boundary. Do not rely on
       // auto-dispose timing when the same post is reopened quickly.
       ref.invalidate(postEditPreparationProvider(target));
-      preparation = await ref.read(postEditPreparationProvider(target).future);
+      final result = await ref.read(postEditPreparationProvider(target).future);
+      if (result case DataReadSuccess<
+        ThreadPostEditPreparation,
+        ThreadPostEditCapabilities
+      >(
+        :final data,
+      )) {
+        preparation = data;
+      }
     } catch (_) {
       // A failed preparation remains safely recoverable through WebView.
     }
     if (!mounted) {
       return;
     }
-    if (preparation == null || preparation.isWebViewOnly) {
+    if (preparation == null) {
       final routeResult = await _openPostEditFallback(target);
       if (routeResult?.serverMutationPossible == true && mounted) {
         await controller.refreshAfterMutation();
@@ -938,7 +946,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final result = await Navigator.of(context).push<Object?>(
       MaterialPageRoute<Object?>(
         builder: (_) => PostEditComposerPage(
-          args: PostEditComposerArgs(preparation: preparation!),
+          args: PostEditComposerArgs(target: target, preparation: preparation!),
         ),
       ),
     );

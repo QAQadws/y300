@@ -735,8 +735,15 @@ final class DioForumClientNetwork
     );
   }
 
-  Object? _requestBody(Object? body) =>
-      body is ForumFormFields ? body.encode() : body;
+  Object? _requestBody(Object? body) {
+    if (body is ForumFormFields) return body.encode();
+    if (body is ForumMultipartFields) {
+      final data = FormData();
+      data.fields.addAll(body.entries);
+      return data;
+    }
+    return body;
+  }
 
   ForumWafEvidence? _detectChallenge(Uri uri, int? status) {
     if (!_isManagedForumUri(uri) || status != 405) {

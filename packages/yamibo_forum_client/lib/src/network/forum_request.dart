@@ -27,6 +27,20 @@ final class ForumFormFields {
       .join('&');
 }
 
+/// Ordered scalar multipart fields that may contain duplicate names.
+///
+/// Unlike [ForumFormFields], this body is encoded as `multipart/form-data`.
+/// Transports must create a fresh multipart container for every attempt so a
+/// verified WAF replay never reuses consumed request state.
+final class ForumMultipartFields {
+  /// Creates immutable replay-safe multipart fields.
+  ForumMultipartFields(Iterable<MapEntry<String, String>> entries)
+    : entries = List<MapEntry<String, String>>.unmodifiable(entries);
+
+  /// Ordered scalar fields, including duplicate names.
+  final List<MapEntry<String, String>> entries;
+}
+
 final class ForumRequestContext {
   const ForumRequestContext({
     required this.operation,

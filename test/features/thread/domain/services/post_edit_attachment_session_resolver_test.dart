@@ -1,11 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/services/post_edit_attachment_session_resolver.dart';
 
 void main() {
-  final remote = PostEditExistingImage(
+  final remote = ThreadPostEditImageAttachment(
     aid: '1',
     imageUri: Uri.parse('https://bbs.yamibo.com/image.jpg'),
     isAssociated: true,
@@ -51,7 +52,7 @@ void main() {
   test('tombstone wins over a local upload with the same aid', () {
     final resolver = PostEditAttachmentSessionResolver(
       session: PostEditAttachmentSession.fromImages(
-        const <PostEditExistingImage>[],
+        const <ThreadPostEditImageAttachment>[],
         deletedAidTombstones: const {'2'},
       ),
       localAttachments: [local],

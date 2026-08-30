@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
@@ -11,8 +11,6 @@ import 'package:y300/features/composer_shared/domain/services/composer_image_upl
 import 'package:y300/features/thread/data/providers/post_edit_providers.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
-import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
-import 'package:y300/features/thread/domain/repositories/post_edit_repository.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_controller.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_page.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
@@ -21,6 +19,7 @@ import 'package:y300/features/image_loading/presentation/app_image.dart';
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../test_support/post_edit_test_support.dart';
 
 void main() {
   testWidgets('dirty message leaves immediately without a draft dialog', (
@@ -65,7 +64,7 @@ void main() {
       _snapshot(
         message: '服务器正文',
         images: [
-          PostEditExistingImage(
+          ThreadPostEditImageAttachment(
             aid: '12',
             imageUri: Uri.parse('https://bbs.yamibo.com/12.jpg'),
             isAssociated: true,
@@ -115,13 +114,11 @@ void main() {
 
   testWidgets('message updates keep remote attachment referer', (tester) async {
     final results = <Object?>[];
-    const referer =
-        'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=5&tid=20&pid=30';
     final args = _args(
       _snapshot(
         message: '[attachimg]12[/attachimg]',
         images: [
-          PostEditExistingImage(
+          ThreadPostEditImageAttachment(
             aid: '12',
             imageUri: Uri.parse('https://bbs.yamibo.com/12.jpg'),
             isAssociated: true,
@@ -129,6 +126,7 @@ void main() {
         ],
       ),
     );
+    final referer = args.snapshot.sourceUri.toString();
     await tester.pumpWidget(_buildApp(args: args, results: results));
     await _openEditor(tester);
     await tester.pump();
@@ -194,7 +192,7 @@ void main() {
       _snapshot(
         message: '服务器正文',
         images: [
-          PostEditExistingImage(
+          ThreadPostEditImageAttachment(
             aid: '12',
             imageUri: Uri.parse('https://bbs.yamibo.com/12.jpg'),
             isAssociated: true,
@@ -229,8 +227,14 @@ Widget _buildApp({
 }) {
   return ProviderScope(
     overrides: [
-      postEditRepositoryProvider.overrideWithValue(
-        const _ImmediatePostEditRepository(),
+      threadPostEditPreparationRepositoryProvider.overrideWithValue(
+        const _UnusedPreparationRepository(),
+      ),
+      threadPostEditCommandProvider.overrideWithValue(
+        const _UnusedEditCommand(),
+      ),
+      postEditImageAttachmentDeleteCommandProvider.overrideWithValue(
+        const _AppliedAttachmentDeleteCommand(),
       ),
       composerPreferencesRepositoryProvider.overrideWithValue(
         const _MemoryComposerPreferencesRepository(),
@@ -283,92 +287,95 @@ class _PostEditLauncher extends StatelessWidget {
   }
 }
 
-PostEditComposerArgs _args(PostEditFormSnapshot snapshot) {
+PostEditComposerArgs _args(ThreadPostEditPreparation snapshot) {
   return PostEditComposerArgs(
-    preparation: PostEditPreparation(
-      target: snapshot.target,
-      decision: const PostEditNativeSupported(profileVersion: 1),
-      snapshot: snapshot,
-    ),
+    target: _targetFromPreparation(snapshot),
+    preparation: snapshot,
   );
 }
 
-PostEditFormSnapshot _snapshot({
+ThreadPostEditPreparation _snapshot({
   required String message,
-  List<PostEditExistingImage> images = const <PostEditExistingImage>[],
+  List<ThreadPostEditImageAttachment> images =
+      const <ThreadPostEditImageAttachment>[],
   bool isFirstPost = false,
   String subject = 'subject',
 }) {
-  final target = PostEditTarget(
-    editUri: Uri.parse(
-      'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=5&tid=20&pid=30',
-    ),
+  final target = buildPostEditTarget(
     fid: '5',
     tid: '20',
     pid: '30',
-    page: 1,
     isFirstPost: isFirstPost,
   );
-  return PostEditFormSnapshot(
+  return buildPostEditPreparation(
     target: target,
-    sourceUri: target.editUri,
-    submitUri: Uri.parse(
-      'https://bbs.yamibo.com/forum.php?mod=post&action=edit&editsubmit=yes',
-    ),
-    formHash: 'test-formhash',
-    postTime: '1700000000',
-    rawMessage: message,
-    originalSubject: subject,
-    successfulControls: [
-      PostEditFormField(
-        name: 'subject',
-        value: subject,
-        controlKind: PostEditFormControlKind.text,
-      ),
-      PostEditFormField(
-        name: 'message',
-        value: message,
-        controlKind: PostEditFormControlKind.textarea,
-      ),
-    ],
+    isFirstPost: isFirstPost,
+    subject: subject,
+    message: message,
     existingImages: images,
-    structureEvidence: PostEditFormStructureEvidence(
-      allNamedControlNamesInDomOrder: const <String>['subject', 'message'],
-    ),
-    baselineFingerprint: 'baseline',
+    revision: 'baseline',
   );
 }
 
-class _ImmediatePostEditRepository implements PostEditRepository {
-  const _ImmediatePostEditRepository();
+PostEditTarget _targetFromPreparation(ThreadPostEditPreparation preparation) {
+  final target = preparation.target;
+  return PostEditTarget(
+    editUri: target.formUri,
+    fid: target.fid,
+    tid: target.tid,
+    pid: target.pid,
+    page: target.page,
+    isFirstPost: target.isFirstPost,
+  );
+}
+
+class _AppliedAttachmentDeleteCommand
+    implements ForumPostImageAttachmentDeleteCommand {
+  const _AppliedAttachmentDeleteCommand();
 
   @override
-  Future<ApiResult<PostEditAttachmentDeleteResult>> deleteImage(
-    PostEditAttachmentDeleteCommand command,
+  Future<DataCommandResult<ForumImageAttachmentDeleteReceipt>> execute(
+    DeletePostImageAttachmentRequest request,
   ) async {
-    return ApiSuccess(
-      PostEditAttachmentDeleteResult(
-        aid: command.aid,
-        outcome: PostEditAttachmentDeleteOutcome.deleted,
-        deletedCount: 1,
+    return DataCommandApplied(
+      ForumImageAttachmentDeleteReceipt(aid: request.aid, deletedCount: 1),
+    );
+  }
+}
+
+class _UnusedPreparationRepository
+    implements ThreadPostEditPreparationRepository {
+  const _UnusedPreparationRepository();
+
+  @override
+  ThreadPostEditCapabilities get capabilities => buildPostEditCapabilities();
+
+  @override
+  Future<DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>>
+  load(ThreadPostEditPreparationRequest request) async {
+    return DataReadFailure(
+      kind: DataReadFailureKind.network,
+      diagnosticMessage: 'not_used',
+    );
+  }
+}
+
+class _UnusedEditCommand implements ThreadPostEditCommand {
+  const _UnusedEditCommand();
+
+  @override
+  ThreadPostEditCapabilities get capabilities => buildPostEditCapabilities();
+
+  @override
+  Future<DataCommandResult<ThreadPostEditReceipt>> execute(
+    ThreadPostEditSubmission submission,
+  ) async {
+    return const DataCommandNotSent(
+      DataCommandFailure(
+        kind: DataCommandFailureKind.validation,
+        retryPolicy: DataCommandRetryPolicy.never,
+        diagnosticMessage: 'not_used',
       ),
-    );
-  }
-
-  @override
-  Future<ApiResult<PostEditPreparation>> loadForm(PostEditTarget target) async {
-    return const ApiFailure(
-      ApiError(type: ApiErrorType.network, message: 'not used'),
-    );
-  }
-
-  @override
-  Future<ApiResult<PostEditSubmitResponse>> submit(
-    PostEditSubmitPayload payload, {
-    required PostEditTarget target,
-  }) async {
-    return const ApiFailure(
-      ApiError(type: ApiErrorType.network, message: 'not used'),
     );
   }
 }

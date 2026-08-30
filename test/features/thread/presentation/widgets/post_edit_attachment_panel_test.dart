@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
-import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 import 'package:y300/features/thread/presentation/widgets/post_edit_attachment_panel.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import '../../../../test_support/localized_test_app.dart';
+import '../../test_support/post_edit_test_support.dart';
 
 void main() {
   testWidgets('shows an image card and confirms explicit deletion', (
@@ -16,7 +17,7 @@ void main() {
       target: _target,
       snapshot: _snapshot(
         images: [
-          PostEditExistingImage(
+          ThreadPostEditImageAttachment(
             aid: '12',
             imageUri: Uri.parse('https://bbs.yamibo.com/image.jpg'),
             isAssociated: true,
@@ -107,7 +108,7 @@ void main() {
       snapshot: _snapshot(
         images: [
           for (var index = 1; index <= 20; index += 1)
-            PostEditExistingImage(
+            ThreadPostEditImageAttachment(
               aid: '$index',
               imageUri: Uri.parse('https://bbs.yamibo.com/$index.jpg'),
               isAssociated: true,
@@ -153,33 +154,16 @@ final class _MissingResolver implements ComposerAttachmentPreviewResolver {
   }
 }
 
-final _target = PostEditTarget(
-  editUri: Uri.parse(
-    'https://bbs.yamibo.com/forum.php?mod=post&action=edit&tid=20&pid=30',
-  ),
-  fid: '5',
-  tid: '20',
-  pid: '30',
-  page: 1,
-  isFirstPost: false,
-);
+final _target = buildPostEditTarget(fid: '5', tid: '20', pid: '30');
 
-PostEditFormSnapshot _snapshot({
-  List<PostEditExistingImage> images = const <PostEditExistingImage>[],
+ThreadPostEditPreparation _snapshot({
+  List<ThreadPostEditImageAttachment> images =
+      const <ThreadPostEditImageAttachment>[],
 }) {
-  return PostEditFormSnapshot(
+  return buildPostEditPreparation(
     target: _target,
-    sourceUri: _target.editUri,
-    submitUri: _target.editUri,
-    formHash: 'hash',
-    postTime: 'time',
-    rawMessage: '[attach]12[/attach]',
-    originalSubject: '',
-    successfulControls: const <PostEditFormField>[],
+    message: '[attach]12[/attach]',
     existingImages: images,
-    structureEvidence: PostEditFormStructureEvidence(
-      allNamedControlNamesInDomOrder: const <String>[],
-    ),
-    baselineFingerprint: 'baseline',
+    revision: 'baseline',
   );
 }

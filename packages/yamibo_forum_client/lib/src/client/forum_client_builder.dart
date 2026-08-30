@@ -120,6 +120,7 @@ final class YamiboForumClientBuilder {
     final postComment = factory.createThreadPostCommentInteraction();
     final threadCreation = factory.createThreadCreation(formhash);
     final threadReply = factory.createThreadReply(formhash);
+    final threadPostEdit = factory.createThreadPostEdit();
     final imageUpload = factory.createImageAttachmentUpload(
       multipartClient ??
           (network is ForumMultipartClient
@@ -172,6 +173,8 @@ final class YamiboForumClientBuilder {
         threadCreationCommand: threadCreation,
         threadReplyPreparation: threadReply,
         threadReplyCommand: threadReply,
+        threadPostEditPreparation: threadPostEdit,
+        threadPostEditCommand: threadPostEdit,
         imageAttachmentUploadPreparation: imageUpload,
         imageAttachmentUploadCommand: imageUpload,
         unusedImageAttachments: unusedImages,

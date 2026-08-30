@@ -1,5 +1,6 @@
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 enum PostEditWebReturnVerificationState {
   idle,
@@ -25,7 +26,7 @@ final class PostEditConflictState {
   final bool localUseSignature;
   final List<ComposerImageAttachment> localImageAttachments;
   final PostEditAttachmentSession localAttachmentSession;
-  final PostEditFormSnapshot latestSnapshot;
+  final ThreadPostEditPreparation latestSnapshot;
 }
 
 enum PostEditSubmitState {

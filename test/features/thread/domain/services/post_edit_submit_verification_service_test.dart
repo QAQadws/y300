@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/thread/domain/models/post_edit_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
 import 'package:y300/features/thread/domain/services/post_edit_submit_verification_service.dart';
+
+import '../../test_support/post_edit_test_support.dart';
 
 void main() {
   const service = PostEditSubmitVerificationService();
@@ -57,7 +59,7 @@ void main() {
     );
 
     expect(result.kind, PostEditSubmitResponseKind.ambiguous);
-    expect(result.snapshot, isNotNull);
+    expect(result.detail, 'message_mismatch');
   });
 
   test('reports a conflict when the server subject differs', () {
@@ -66,7 +68,7 @@ void main() {
       after: _snapshot(
         message: 'new',
         fingerprint: 'after',
-        originalSubject: 'server title',
+        subject: 'server title',
       ),
       submittedSubject: 'local title',
       submittedMessage: 'new',
@@ -75,52 +77,34 @@ void main() {
 
     expect(result.kind, PostEditSubmitResponseKind.ambiguous);
     expect(result.detail, 'subject_mismatch');
-    expect(result.snapshot, isNotNull);
   });
 }
 
-PostEditFormSnapshot _snapshot({
+ThreadPostEditPreparation _snapshot({
   required String message,
   required String fingerprint,
-  String originalSubject = 'subject',
+  String subject = 'subject',
   List<String> aids = const [],
 }) {
-  final target = PostEditTarget(
-    editUri: Uri.parse(
-      'https://bbs.yamibo.com/forum.php?mod=post&action=edit&tid=20&pid=30',
-    ),
+  final target = buildPostEditTarget(
     fid: '5',
     tid: '20',
     pid: '30',
-    page: 1,
-    isFirstPost: false,
+    isFirstPost: true,
   );
-  return PostEditFormSnapshot(
+  return buildPostEditPreparation(
     target: target,
-    sourceUri: target.editUri,
-    submitUri: target.editUri,
-    formHash: 'hash',
-    postTime: 'post-time',
-    rawMessage: message,
-    originalSubject: originalSubject,
-    successfulControls: [
-      PostEditFormField(
-        name: 'message',
-        value: message,
-        controlKind: PostEditFormControlKind.textarea,
-      ),
-    ],
+    isFirstPost: true,
+    subject: subject,
+    message: message,
+    revision: fingerprint,
     existingImages: [
       for (final aid in aids)
-        PostEditExistingImage(
+        ThreadPostEditImageAttachment(
           aid: aid,
           imageUri: Uri.parse('https://bbs.yamibo.com/$aid.jpg'),
           isAssociated: true,
         ),
     ],
-    structureEvidence: PostEditFormStructureEvidence(
-      allNamedControlNamesInDomOrder: const ['message'],
-    ),
-    baselineFingerprint: fingerprint,
   );
 }

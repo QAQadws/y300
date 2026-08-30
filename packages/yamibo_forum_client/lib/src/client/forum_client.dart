@@ -21,6 +21,7 @@ import '../contracts/thread_detail_models.dart';
 import '../contracts/thread_interaction_commands.dart';
 import '../contracts/thread_poll_vote_command.dart';
 import '../contracts/thread_composer_commands.dart';
+import '../contracts/thread_post_edit.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
@@ -217,6 +218,14 @@ final class YamiboForumClient {
   /// Configured thread/post reply command, if installed.
   ThreadReplyCommand? get threadReplyCommand => sourcePlan.threadReplyCommand;
 
+  /// Configured ordinary post-edit preparation source, if installed.
+  ThreadPostEditPreparationRepository? get threadPostEditPreparation =>
+      sourcePlan.threadPostEditPreparation;
+
+  /// Configured ordinary post-edit command, if installed.
+  ThreadPostEditCommand? get threadPostEditCommand =>
+      sourcePlan.threadPostEditCommand;
+
   /// Configured image upload preparation source.
   ForumImageAttachmentUploadPreparationRepository?
   get imageAttachmentUploadPreparation =>
@@ -380,6 +389,19 @@ final class YamiboForumClient {
   ) =>
       sourcePlan.threadReplyCommand?.execute(submission) ??
       Future.value(const DataCommandUnsupported<ThreadReplyReceipt>());
+
+  /// Loads and validates a server form for editing an ordinary post.
+  Future<DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>>
+  prepareThreadPostEdit(ThreadPostEditPreparationRequest request) =>
+      sourcePlan.threadPostEditPreparation?.load(request) ??
+      unsupported<ThreadPostEditPreparation, ThreadPostEditCapabilities>();
+
+  /// Submits one previously prepared ordinary post edit.
+  Future<DataCommandResult<ThreadPostEditReceipt>> editThreadPost(
+    ThreadPostEditSubmission submission,
+  ) =>
+      sourcePlan.threadPostEditCommand?.execute(submission) ??
+      Future.value(const DataCommandUnsupported<ThreadPostEditReceipt>());
 
   /// Loads the combined forum-home document.
   Future<DataReadResult<ForumHomeDocument, ForumHomeReadCapabilities>>

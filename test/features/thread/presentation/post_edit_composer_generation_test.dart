@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
@@ -11,18 +11,17 @@ import 'package:y300/features/composer_shared/domain/repositories/composer_prefe
 import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
 import 'package:y300/features/thread/data/providers/post_edit_providers.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
-import 'package:y300/features/thread/domain/models/post_edit_models.dart';
-import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
-import 'package:y300/features/thread/domain/repositories/post_edit_repository.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_controller.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
+
+import '../test_support/post_edit_test_support.dart';
 
 void main() {
   test(
     'drops an older WebView readback after a newer readback completes',
     () async {
-      final repository = _DelayedPostEditRepository();
-      final args = _args(_snapshot(message: 'server-1', fingerprint: 'fp-1'));
+      final repository = _DelayedPreparationRepository();
+      final args = _args(_preparation(message: 'server-1', revision: 'fp-1'));
       final container = _buildContainer(repository);
       addTearDown(container.dispose);
       final subscription = _keepAlive(container, args);
@@ -40,23 +39,19 @@ void main() {
 
       repository.completeLoad(
         1,
-        ApiSuccess(
-          _preparation(_snapshot(message: 'server-2', fingerprint: 'fp-2')),
-        ),
+        _success(_preparation(message: 'server-2', revision: 'fp-2')),
       );
       await newer;
       repository.completeLoad(
         0,
-        ApiSuccess(
-          _preparation(_snapshot(message: 'stale-server', fingerprint: 'fp-3')),
-        ),
+        _success(_preparation(message: 'stale-server', revision: 'fp-3')),
       );
       await older;
 
       final state = container
           .read(postEditComposerControllerProvider(args))
           .value!;
-      expect(state.snapshot.baselineFingerprint, 'fp-2');
+      expect(state.snapshot.revision, 'fp-2');
       expect(state.message, 'server-2');
       expect(
         state.webReturnVerificationState,
@@ -68,23 +63,12 @@ void main() {
   test(
     'keeps independent delete generations from polluting each other',
     () async {
-      final repository = _DelayedPostEditRepository();
+      final repository = _DelayedPreparationRepository();
       final args = _args(
-        _snapshot(
+        _preparation(
           message: 'server',
-          fingerprint: 'fp-1',
-          images: <PostEditExistingImage>[
-            PostEditExistingImage(
-              aid: '1',
-              imageUri: Uri.parse('https://bbs.yamibo.com/1.jpg'),
-              isAssociated: true,
-            ),
-            PostEditExistingImage(
-              aid: '2',
-              imageUri: Uri.parse('https://bbs.yamibo.com/2.jpg'),
-              isAssociated: true,
-            ),
-          ],
+          revision: 'fp-1',
+          images: [_image('1'), _image('2')],
         ),
       );
       final container = _buildContainer(repository);
@@ -103,37 +87,21 @@ void main() {
 
       repository.completeLoad(
         1,
-        ApiSuccess(
+        _success(
           _preparation(
-            _snapshot(
-              message: 'server',
-              fingerprint: 'fp-2',
-              images: <PostEditExistingImage>[
-                PostEditExistingImage(
-                  aid: '1',
-                  imageUri: Uri.parse('https://bbs.yamibo.com/1.jpg'),
-                  isAssociated: true,
-                ),
-              ],
-            ),
+            message: 'server',
+            revision: 'fp-2',
+            images: [_image('1')],
           ),
         ),
       );
       repository.completeLoad(
         0,
-        ApiSuccess(
+        _success(
           _preparation(
-            _snapshot(
-              message: 'server',
-              fingerprint: 'fp-3',
-              images: <PostEditExistingImage>[
-                PostEditExistingImage(
-                  aid: '2',
-                  imageUri: Uri.parse('https://bbs.yamibo.com/2.jpg'),
-                  isAssociated: true,
-                ),
-              ],
-            ),
+            message: 'server',
+            revision: 'fp-3',
+            images: [_image('2')],
           ),
         ),
       );
@@ -148,15 +116,20 @@ void main() {
       );
       expect(state.attachmentSession.existingImagesByAid, isEmpty);
       expect(state.attachmentSession.deletingAids, isEmpty);
-      expect(state.message, 'server');
     },
   );
 }
 
-ProviderContainer _buildContainer(_DelayedPostEditRepository repository) {
+ProviderContainer _buildContainer(_DelayedPreparationRepository repository) {
   return ProviderContainer(
     overrides: [
-      postEditRepositoryProvider.overrideWithValue(repository),
+      threadPostEditPreparationRepositoryProvider.overrideWithValue(repository),
+      threadPostEditCommandProvider.overrideWithValue(
+        const _UnusedEditCommand(),
+      ),
+      postEditImageAttachmentDeleteCommandProvider.overrideWithValue(
+        const _AppliedAttachmentDeleteCommand(),
+      ),
       composerPreferencesRepositoryProvider.overrideWithValue(
         _MemoryComposerPreferencesRepository(),
       ),
@@ -171,12 +144,7 @@ ProviderContainer _buildContainer(_DelayedPostEditRepository repository) {
 ProviderSubscription<AsyncValue<PostEditComposerState>> _keepAlive(
   ProviderContainer container,
   PostEditComposerArgs args,
-) {
-  return container.listen<AsyncValue<PostEditComposerState>>(
-    postEditComposerControllerProvider(args),
-    (_, _) {},
-  );
-}
+) => container.listen(postEditComposerControllerProvider(args), (_, _) {});
 
 Future<void> _drain({int rounds = 6}) async {
   for (var index = 0; index < rounds; index += 1) {
@@ -184,93 +152,93 @@ Future<void> _drain({int rounds = 6}) async {
   }
 }
 
-PostEditComposerArgs _args(PostEditFormSnapshot snapshot) {
-  return PostEditComposerArgs(preparation: _preparation(snapshot));
+PostEditComposerArgs _args(ThreadPostEditPreparation preparation) {
+  final target = buildPostEditTarget();
+  return PostEditComposerArgs(target: target, preparation: preparation);
 }
 
-PostEditPreparation _preparation(PostEditFormSnapshot snapshot) {
-  return PostEditPreparation(
-    target: snapshot.target,
-    decision: const PostEditNativeSupported(profileVersion: 1),
-    snapshot: snapshot,
-  );
-}
-
-PostEditFormSnapshot _snapshot({
+ThreadPostEditPreparation _preparation({
   required String message,
-  required String fingerprint,
-  List<PostEditExistingImage> images = const <PostEditExistingImage>[],
-}) {
-  final target = PostEditTarget(
-    editUri: Uri.parse(
-      'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=5&tid=557857&pid=41587383',
-    ),
-    fid: '5',
-    tid: '557857',
-    pid: '41587383',
-    page: 1,
-    isFirstPost: false,
-  );
-  return PostEditFormSnapshot(
-    target: target,
-    sourceUri: target.editUri,
-    submitUri: target.editUri,
-    formHash: 'formhash-not-logged',
-    postTime: '1700000000',
-    rawMessage: message,
-    originalSubject: 'subject-not-used',
-    successfulControls: [
-      PostEditFormField(
-        name: 'message',
-        value: message,
-        controlKind: PostEditFormControlKind.textarea,
-      ),
-    ],
-    existingImages: images,
-    structureEvidence: PostEditFormStructureEvidence(
-      allNamedControlNamesInDomOrder: const <String>['message'],
-    ),
-    baselineFingerprint: fingerprint,
+  required String revision,
+  List<ThreadPostEditImageAttachment> images =
+      const <ThreadPostEditImageAttachment>[],
+}) => buildPostEditPreparation(
+  target: buildPostEditTarget(),
+  message: message,
+  revision: revision,
+  existingImages: images,
+);
+
+ThreadPostEditImageAttachment _image(String aid) =>
+    ThreadPostEditImageAttachment(
+      aid: aid,
+      imageUri: Uri.parse('https://bbs.yamibo.com/$aid.jpg'),
+      isAssociated: true,
+    );
+
+DataReadSuccess<ThreadPostEditPreparation, ThreadPostEditCapabilities> _success(
+  ThreadPostEditPreparation preparation,
+) => DataReadSuccess(
+  data: preparation,
+  capabilities: buildPostEditCapabilities(),
+  metadata: const DataReadMetadata(
+    origin: DataReadOrigin.network,
+    freshness: DataReadFreshness.current,
+  ),
+);
+
+class _DelayedPreparationRepository
+    implements ThreadPostEditPreparationRepository {
+  final List<
+    Completer<
+      DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>
+    >
+  >
+  loadRequests = [];
+
+  @override
+  ThreadPostEditCapabilities get capabilities => buildPostEditCapabilities();
+
+  @override
+  Future<DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>>
+  load(ThreadPostEditPreparationRequest request) {
+    final completer =
+        Completer<
+          DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>
+        >();
+    loadRequests.add(completer);
+    return completer.future;
+  }
+
+  void completeLoad(
+    int index,
+    DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>
+    result,
+  ) => loadRequests[index].complete(result);
+}
+
+class _AppliedAttachmentDeleteCommand
+    implements ForumPostImageAttachmentDeleteCommand {
+  const _AppliedAttachmentDeleteCommand();
+
+  @override
+  Future<DataCommandResult<ForumImageAttachmentDeleteReceipt>> execute(
+    DeletePostImageAttachmentRequest request,
+  ) async => DataCommandApplied(
+    ForumImageAttachmentDeleteReceipt(aid: request.aid, deletedCount: 1),
   );
 }
 
-class _DelayedPostEditRepository implements PostEditRepository {
-  final List<Completer<ApiResult<PostEditPreparation>>> loadRequests =
-      <Completer<ApiResult<PostEditPreparation>>>[];
+class _UnusedEditCommand implements ThreadPostEditCommand {
+  const _UnusedEditCommand();
 
   @override
-  Future<ApiResult<PostEditPreparation>> loadForm(PostEditTarget target) {
-    final request = Completer<ApiResult<PostEditPreparation>>();
-    loadRequests.add(request);
-    return request.future;
-  }
-
-  void completeLoad(int index, ApiResult<PostEditPreparation> result) {
-    loadRequests[index].complete(result);
-  }
+  ThreadPostEditCapabilities get capabilities => buildPostEditCapabilities();
 
   @override
-  Future<ApiResult<PostEditAttachmentDeleteResult>> deleteImage(
-    PostEditAttachmentDeleteCommand command,
-  ) async {
-    return ApiSuccess(
-      PostEditAttachmentDeleteResult(
-        aid: command.aid,
-        outcome: PostEditAttachmentDeleteOutcome.deleted,
-        deletedCount: 1,
-      ),
-    );
-  }
-
-  @override
-  Future<ApiResult<PostEditSubmitResponse>> submit(
-    PostEditSubmitPayload payload, {
-    required PostEditTarget target,
-  }) async {
-    return const ApiFailure(
-      ApiError(type: ApiErrorType.network, message: 'test-only'),
-    );
-  }
+  Future<DataCommandResult<ThreadPostEditReceipt>> execute(
+    ThreadPostEditSubmission submission,
+  ) async => const DataCommandUnsupported();
 }
 
 class _MemoryComposerPreferencesRepository
@@ -284,9 +252,7 @@ class _MemoryComposerPreferencesRepository
 
 class _NoopImagePicker implements ComposerImagePicker {
   @override
-  Future<List<ComposerPickedImage>> pickImagesInOrder() async {
-    return const <ComposerPickedImage>[];
-  }
+  Future<List<ComposerPickedImage>> pickImagesInOrder() async => const [];
 }
 
 class _NoopUploadCoordinator implements ComposerImageUploadCoordinator {
@@ -297,7 +263,5 @@ class _NoopUploadCoordinator implements ComposerImageUploadCoordinator {
   Stream<ComposerImageUploadEvent> uploadInOrder({
     required String fid,
     required List<ComposerImageAttachment> attachments,
-  }) {
-    return const Stream<ComposerImageUploadEvent>.empty();
-  }
+  }) => const Stream.empty();
 }

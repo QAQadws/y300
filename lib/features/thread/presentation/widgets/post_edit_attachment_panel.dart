@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_attachment_preview.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_image_delete_button.dart';
-import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -77,7 +77,7 @@ final class _PostEditAttachmentCardData {
   const _PostEditAttachmentCardData.local(this.localAttachment)
     : remoteImage = null;
 
-  final PostEditExistingImage? remoteImage;
+  final ThreadPostEditImageAttachment? remoteImage;
   final ComposerImageAttachment? localAttachment;
 
   String get aid => remoteImage?.aid ?? localAttachment?.aid?.trim() ?? '';

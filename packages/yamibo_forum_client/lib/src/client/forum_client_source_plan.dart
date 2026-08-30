@@ -16,6 +16,7 @@ import '../contracts/thread_repository.dart';
 import '../contracts/thread_interaction_commands.dart';
 import '../contracts/thread_poll_vote_command.dart';
 import '../contracts/thread_composer_commands.dart';
+import '../contracts/thread_post_edit.dart';
 import '../contracts/thread_supplemental_reads.dart';
 
 /// Experimental per-contract source composition used by advanced hosts.
@@ -56,6 +57,8 @@ final class ForumClientSourcePlan {
     this.threadCreationCommand,
     this.threadReplyPreparation,
     this.threadReplyCommand,
+    this.threadPostEditPreparation,
+    this.threadPostEditCommand,
     this.imageAttachmentUploadPreparation,
     this.imageAttachmentUploadCommand,
     this.unusedImageAttachments,
@@ -158,6 +161,12 @@ final class ForumClientSourcePlan {
 
   /// Command for submitting thread and post replies.
   final ThreadReplyCommand? threadReplyCommand;
+
+  /// Source for preparing an ordinary post edit.
+  final ThreadPostEditPreparationRepository? threadPostEditPreparation;
+
+  /// Command for submitting a prepared ordinary post edit.
+  final ThreadPostEditCommand? threadPostEditCommand;
 
   /// Source for current image attachment upload permission.
   final ForumImageAttachmentUploadPreparationRepository?

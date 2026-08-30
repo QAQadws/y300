@@ -40,6 +40,7 @@ import 'discuz_thread_repositories.dart';
 import 'discuz_thread_interaction_commands.dart';
 import 'discuz_thread_poll_vote_command.dart';
 import 'discuz_thread_composer_commands.dart';
+import 'discuz_thread_post_edit_adapter.dart';
 import 'discuz_supplemental_read_adapters.dart';
 import '../session/forum_formhash_provider.dart';
 
@@ -151,6 +152,13 @@ final class ForumClientAdapterFactory {
         network: network,
         requestProfiles: requestProfiles,
         formhashProvider: formhash,
+      );
+
+  DiscuzThreadPostEditAdapter createThreadPostEdit() =>
+      DiscuzThreadPostEditAdapter(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
       );
 
   DiscuzImageAttachmentUploadAdapter createImageAttachmentUpload(

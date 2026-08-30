@@ -1,15 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
-import 'package:y300/features/thread/data/repositories/discuz_post_edit_repository.dart';
 import 'package:y300/features/thread/data/services/post_edit_contract_diagnostic_recorder.dart';
-import 'package:y300/features/thread/data/services/post_edit_form_parser.dart';
-import 'package:y300/features/thread/data/services/post_edit_remote_data_source.dart';
 import 'package:y300/features/thread/domain/models/post_edit_diagnostic_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
-import 'package:y300/features/thread/domain/repositories/post_edit_repository.dart';
-import 'package:y300/features/thread/domain/services/post_edit_baseline_fingerprint_service.dart';
-import 'package:y300/features/thread/domain/services/post_edit_native_capability_classifier.dart';
 
 final postEditContractDiagnosticRecorderProvider =
     Provider<PostEditContractDiagnosticRecorder>((ref) {
@@ -18,39 +13,28 @@ final postEditContractDiagnosticRecorderProvider =
       );
     });
 
-final postEditRemoteDataSourceProvider = Provider<PostEditRemoteDataSource>((
-  ref,
-) {
-  return DiscuzPostEditRemoteDataSource(
-    gateway: ref.watch(yamiboHttpGatewayProvider),
-  );
+final threadPostEditPreparationRepositoryProvider =
+    Provider<ThreadPostEditPreparationRepository>((ref) {
+      return ref.watch(yamiboForumClientProvider).threadPostEditPreparation!;
+    });
+
+final threadPostEditCommandProvider = Provider<ThreadPostEditCommand>((ref) {
+  return ref.watch(yamiboForumClientProvider).threadPostEditCommand!;
 });
 
-final postEditFormParserProvider = Provider<PostEditFormParser>((ref) {
-  return PostEditFormParser(
-    fingerprintService: ref.watch(postEditBaselineFingerprintServiceProvider),
-  );
-});
-
-final postEditRepositoryProvider = Provider<PostEditRepository>((ref) {
-  return DiscuzPostEditRepository(
-    remoteDataSource: ref.watch(postEditRemoteDataSourceProvider),
-    attachmentDeleteCommand: ref
-        .watch(yamiboForumClientProvider)
-        .postImageAttachmentDelete,
-    formParser: ref.watch(postEditFormParserProvider),
-    capabilityClassifier: ref.watch(postEditNativeCapabilityClassifierProvider),
-    diagnosticRecorder: ref.watch(postEditContractDiagnosticRecorderProvider),
-  );
-});
+final postEditImageAttachmentDeleteCommandProvider =
+    Provider<ForumPostImageAttachmentDeleteCommand>((ref) {
+      return ref.watch(yamiboForumClientProvider).postImageAttachmentDelete!;
+    });
 
 final postEditPreparationProvider = FutureProvider.autoDispose
-    .family<PostEditPreparation, PostEditTarget>((ref, target) async {
-      final result = await ref
-          .watch(postEditRepositoryProvider)
-          .loadForm(target);
-      return result.when(
-        success: (preparation) => preparation,
-        failure: (error) => throw error,
-      );
+    .family<
+      DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>,
+      PostEditTarget
+    >((ref, target) {
+      return ref
+          .watch(threadPostEditPreparationRepositoryProvider)
+          .load(
+            ThreadPostEditPreparationRequest(target: target.toClientTarget()),
+          );
     });

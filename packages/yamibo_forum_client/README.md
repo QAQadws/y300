@@ -235,20 +235,21 @@ fail closed as `unsupported`.
 
 The package currently covers basic password authentication, authoritative
 session/logout handling, forum/thread favorite target-state commands,
-post-rating/comment, thread-creation/reply, thread poll voting, and
+post-rating/comment, thread-creation/reply, thread poll voting, thread editing, and
 image-attachment preparation and commands, the forum home document, forum/thread directories
 and details, Tag, search, remote favorite directories, profiles/blogs,
 notifications, private messages, stickers, full rating details, post location,
 author-filtered post pages, comic episode discovery, reply-page reads, and
 protected image transport. Login UI and remaining write operations—including
-full post editing—remain application-owned.
+complex post-edit WebView fallback—remain application-owned.
 
 ## Y300 parity and unmigrated APIs
 
 This package is a forum client core, not a complete Discuz SDK. The following
 forum protocol operations still live in Y300 and are not part of the package:
 
-- post-edit form preparation and submission;
+- special-thread, thread-sort, plugin-field, HTML-mode, and other complex
+  post-edit forms that require WebView fallback;
 - non-image file attachments, attachment descriptions/read permissions/prices,
   attachment replacement, and batch deletion;
 - notification state mutations and private-message sending.

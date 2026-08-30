@@ -8,7 +8,28 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
-- Reserved for changes made after `0.8.0`.
+- Reserved for changes made after `0.9.0`.
+
+## 0.9.0 - 2026-08-30
+
+### Added
+
+- Source-neutral preparation and command contracts for editing ordinary thread
+  first posts and ordinary replies.
+- A strict Discuz HTML adapter that preserves successful form controls in
+  order, keeps dynamic fields opaque, and submits replay-safe scalar multipart
+  bodies.
+- One-read edit confirmation for ambiguous submissions without repeating the
+  mutation request.
+
+### Changed
+
+- Mobile edit forms use the mobile request identity and desktop edit forms use
+  the desktop identity; submission preserves the preparation mode and Referer.
+- Complex or unproved edit forms fail closed instead of leaking Discuz form
+  details into the host application.
+- Edit receipts and failures no longer expose HTML, formhash, server text, or
+  raw callback payloads.
 
 ## 0.8.0 - 2026-08-30
 

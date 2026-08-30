@@ -248,7 +248,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
     final result = await Navigator.of(context).push<Object?>(
       routeFactory(
         ForumWebViewLaunchConfig(
-          initialUri: widget.args.snapshot.target.editUri,
+          initialUri: widget.args.target.editUri,
           popOnRootBack: true,
           purpose: ForumWebViewHostPurpose.postEditFallback,
           completionTarget: ForumWebViewCompletionTarget(

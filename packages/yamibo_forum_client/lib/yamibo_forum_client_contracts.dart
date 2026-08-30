@@ -36,6 +36,7 @@ export 'src/contracts/thread_repository.dart';
 export 'src/contracts/thread_interaction_commands.dart';
 export 'src/contracts/thread_poll_vote_command.dart';
 export 'src/contracts/thread_composer_commands.dart';
+export 'src/contracts/thread_post_edit.dart';
 export 'src/contracts/thread_supplemental_reads.dart';
 export 'src/references/comic_thread_discovery_projector.dart';
 export 'src/references/forum_reference_resolver.dart';

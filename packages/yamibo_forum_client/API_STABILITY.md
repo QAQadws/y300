@@ -12,7 +12,7 @@ The following APIs are covered by the compatibility policy in
 - `yamibo_forum_client_contracts.dart`: source-neutral queries, data models,
   repository contracts, capabilities, `DataReadResult`, `DataCommandResult`,
   authentication/session, favorite-command, post-rating, post-comment,
-  thread-creation, thread-reply, thread-poll-vote, and image-attachment
+  thread-creation, thread-reply, thread-poll-vote, thread-post-edit, and image-attachment
   preparation/command contracts, cache policy, cancellation, resource
   contracts, and reference/image helpers;
 - `yamibo_forum_client.dart`: `YamiboForumClient`,
@@ -23,10 +23,10 @@ The following APIs are covered by the compatibility policy in
   supported third-party composition path.
 
 Command outcome categories, favorite target-state requests/receipts,
-rating/comment/thread-creation/thread-reply/thread-poll-vote/image-attachment
+rating/comment/thread-creation/thread-reply/thread-poll-vote/thread-post-edit/image-attachment
 preparation and receipts, and their fail-closed meanings are supported within
 `0.x`. Concrete Discuz authentication, favorite, rating, comment, creation,
-reply, poll-vote, and attachment endpoint parsing remains experimental.
+reply, poll-vote, post-edit, and attachment endpoint parsing remains experimental.
 
 Supported does not mean that every source provides every capability. Callers
 must still gate behavior on the returned capability set and treat `unknown` or
@@ -42,7 +42,7 @@ experimental:
 - concrete Discuz/HTML parsers, mappers, repositories, snapshot codecs, and
   `ForumClientAdapterFactory`, including `DiscuzAuthenticationAdapter` and
   the Discuz favorite, rating, comment, thread-creation, thread-reply,
-  thread-poll-vote, and image-attachment command adapters;
+  thread-poll-vote, thread-post-edit, and image-attachment command adapters;
 - direct multipart runtime composition through `ForumMultipartClient`;
 - source-specific behavior that has not yet been validated by a second
   production adapter.

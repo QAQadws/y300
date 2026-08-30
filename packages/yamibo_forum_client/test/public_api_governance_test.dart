@@ -17,8 +17,8 @@ void main() {
       expect(packageLicense, contains('Version 3, 29 June 2007'));
     });
 
-    test('governance documents describe version 0.8.0 consistently', () {
-      const currentVersion = '0.8.0';
+    test('governance documents describe version 0.9.0 consistently', () {
+      const currentVersion = '0.9.0';
       final pubspec = File('pubspec.yaml').readAsStringSync();
       final changelog = File('CHANGELOG.md').readAsStringSync();
       final versioning = File('VERSIONING.md').readAsStringSync();
@@ -29,7 +29,7 @@ void main() {
       expect(pubspec, contains('publish_to: none'));
       expect(changelog, contains('## $currentVersion'));
       expect(versioning, contains('Semantic Versioning'));
-      expect(migration, contains('## 0.7.x to $currentVersion'));
+      expect(migration, contains('## 0.8.x to $currentVersion'));
       expect(stability, contains('## Supported within 0.x'));
       expect(stability, contains('## Experimental'));
       expect(stability, contains('## Internal'));
