@@ -2807,6 +2807,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadPollVoteSuccess => '投票成功';
 
   @override
+  String get threadPollVoteAlreadyVoted => '已经投过票';
+
+  @override
+  String get threadPollVoteClosed => '投票已关闭';
+
+  @override
+  String get threadPollVoteExpired => '投票已过期';
+
+  @override
+  String get threadPollVoteTooMany => '选择的选项超过投票上限';
+
+  @override
+  String get threadPollVoteUnavailable => '当前投票不可用';
+
+  @override
+  String get threadPollVoteInvalidSelection => '投票选项无效，请重新选择';
+
+  @override
+  String get threadPollVoteSessionExpired => '会话已过期，请刷新后重试';
+
+  @override
+  String get threadPollVoteOutcomeUnknown => '无法确认投票结果，请刷新帖子后再决定是否重试';
+
+  @override
   String threadPollVoteFailed(String error) {
     return '投票失败：$error';
   }
@@ -7165,6 +7189,30 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadPollVoteSuccess => '投票成功';
+
+  @override
+  String get threadPollVoteAlreadyVoted => '已經投過票';
+
+  @override
+  String get threadPollVoteClosed => '投票已關閉';
+
+  @override
+  String get threadPollVoteExpired => '投票已過期';
+
+  @override
+  String get threadPollVoteTooMany => '選擇的選項超過投票上限';
+
+  @override
+  String get threadPollVoteUnavailable => '目前投票不可用';
+
+  @override
+  String get threadPollVoteInvalidSelection => '投票選項無效，請重新選擇';
+
+  @override
+  String get threadPollVoteSessionExpired => '工作階段已過期，請重新整理後再試';
+
+  @override
+  String get threadPollVoteOutcomeUnknown => '無法確認投票結果，請重新整理帖子後再決定是否重試';
 
   @override
   String threadPollVoteFailed(String error) {

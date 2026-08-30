@@ -19,6 +19,7 @@ import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_detail_models.dart';
 import '../contracts/thread_interaction_commands.dart';
+import '../contracts/thread_poll_vote_command.dart';
 import '../contracts/thread_composer_commands.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_supplemental_reads.dart';
@@ -197,6 +198,10 @@ final class YamiboForumClient {
   ThreadPostCommentCommand? get postCommentCommand =>
       sourcePlan.postCommentCommand;
 
+  /// Configured thread poll-vote command, if installed.
+  ThreadPollVoteCommand? get threadPollVoteCommand =>
+      sourcePlan.threadPollVoteCommand;
+
   /// Configured thread-creation preparation source, if installed.
   ThreadCreationPreparationRepository? get threadCreationPreparation =>
       sourcePlan.threadCreationPreparation;
@@ -342,6 +347,13 @@ final class YamiboForumClient {
   ) =>
       sourcePlan.postCommentCommand?.execute(submission) ??
       Future.value(const DataCommandUnsupported<ThreadPostCommentReceipt>());
+
+  /// Submits one thread poll vote through the configured command source.
+  Future<DataCommandResult<ThreadPollVoteReceipt>> voteInThreadPoll(
+    ThreadPollVoteSubmission submission,
+  ) =>
+      sourcePlan.threadPollVoteCommand?.execute(submission) ??
+      Future.value(const DataCommandUnsupported<ThreadPollVoteReceipt>());
 
   /// Loads and validates the current thread-creation preparation.
   Future<DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>>

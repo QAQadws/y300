@@ -9,6 +9,7 @@ class ThreadPollCard extends StatefulWidget {
     required this.poll,
     required this.selectedOptionIds,
     required this.isSubmitting,
+    required this.commandAvailable,
     required this.hint,
     required this.onToggleOption,
     required this.onSubmit,
@@ -19,6 +20,7 @@ class ThreadPollCard extends StatefulWidget {
   final ThreadPoll poll;
   final Set<String> selectedOptionIds;
   final bool isSubmitting;
+  final bool commandAvailable;
   final String? hint;
   final ValueChanged<ThreadPollOption> onToggleOption;
   final VoidCallback onSubmit;
@@ -37,9 +39,9 @@ class _ThreadPollCardState extends State<ThreadPollCard> {
     final textTheme = Theme.of(context).textTheme;
     final canSubmit =
         widget.poll.canVote &&
+        widget.commandAvailable &&
         widget.selectedOptionIds.isNotEmpty &&
-        !widget.isSubmitting &&
-        (widget.poll.actionUrl?.trim().isNotEmpty ?? false);
+        !widget.isSubmitting;
     final statusText = widget.poll.statusText?.trim();
     final localizedHint = widget.notice == null
         ? widget.hint?.trim()

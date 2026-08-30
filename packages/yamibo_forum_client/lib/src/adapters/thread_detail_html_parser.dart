@@ -562,8 +562,7 @@ class ThreadDetailHtmlParser {
     );
     final options = _parseMobilePollOptions(pollRoot);
     final statusText = _parseMobilePollStatusText(pollRoot);
-    final hasVoteInputs =
-        pollRoot.querySelector('input[name="pollanswers[]"]') != null;
+    final hasVoteInputs = _hasValidPollVoteInputs(pollRoot, options);
     if (summary.isEmpty && options.isEmpty) {
       return null;
     }
@@ -576,13 +575,6 @@ class ThreadDetailHtmlParser {
       maxChoices: int.tryParse(maxMatch?.group(1) ?? ''),
       summary: summary,
       deadlineText: deadlineText.isEmpty ? null : deadlineText,
-      actionUrl: _resolve(
-        pollRoot.querySelector('form#poll')?.attributes['action'],
-      ),
-      formHash: pollRoot
-          .querySelector('input[name="formhash"]')
-          ?.attributes['value']
-          ?.trim(),
       statusText: statusText.isEmpty ? null : statusText,
       options: List<ThreadPollOption>.unmodifiable(options),
     );
@@ -815,8 +807,7 @@ class ThreadDetailHtmlParser {
       return null;
     }
     final statusText = _parseDesktopPollStatusText(pollRoot);
-    final hasVoteInputs =
-        pollRoot.querySelector('input[name="pollanswers[]"]') != null;
+    final hasVoteInputs = _hasValidPollVoteInputs(pollRoot, options);
     final canVote = hasVoteInputs && !_isAlreadyVotedStatus(statusText);
     final maxMatch = RegExp(r'最多可选\s*(\d+)\s*项').firstMatch(summary);
     return ThreadPoll(
@@ -827,11 +818,6 @@ class ThreadDetailHtmlParser {
       maxChoices: int.tryParse(maxMatch?.group(1) ?? ''),
       summary: summary,
       deadlineText: deadlineText.isEmpty ? null : deadlineText,
-      actionUrl: _resolve(pollRoot.attributes['action']),
-      formHash: pollRoot
-          .querySelector('input[name="formhash"]')
-          ?.attributes['value']
-          ?.trim(),
       statusText: statusText.isEmpty ? null : statusText,
       options: List<ThreadPollOption>.unmodifiable(options),
     );
@@ -865,6 +851,21 @@ class ThreadDetailHtmlParser {
       );
     }
     return output;
+  }
+
+  bool _hasValidPollVoteInputs(
+    html_dom.Element pollRoot,
+    List<ThreadPollOption> options,
+  ) {
+    final inputs = pollRoot.querySelectorAll('input[name="pollanswers[]"]');
+    if (inputs.isEmpty || inputs.length != options.length) {
+      return false;
+    }
+    final seen = <String>{};
+    return options.every(
+      (option) =>
+          RegExp(r'^[1-9]\d*$').hasMatch(option.id) && seen.add(option.id),
+    );
   }
 
   String _parsePollOptionId({

@@ -828,6 +828,14 @@
   },
   "threadPollSelectOption": "請選擇投票選項",
   "threadPollVoteSuccess": "投票成功",
+  "threadPollVoteAlreadyVoted": "已經投過票",
+  "threadPollVoteClosed": "投票已關閉",
+  "threadPollVoteExpired": "投票已過期",
+  "threadPollVoteTooMany": "選擇的選項超過投票上限",
+  "threadPollVoteUnavailable": "目前投票不可用",
+  "threadPollVoteInvalidSelection": "投票選項無效，請重新選擇",
+  "threadPollVoteSessionExpired": "工作階段已過期，請重新整理後再試",
+  "threadPollVoteOutcomeUnknown": "無法確認投票結果，請重新整理帖子後再決定是否重試",
   "threadPollVoteFailed": "投票失敗：{error}",
   "@threadPollVoteFailed": {
     "placeholders": {"error": {"type": "String"}}

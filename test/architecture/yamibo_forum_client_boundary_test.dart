@@ -108,6 +108,7 @@ void main() {
       'lib/features/composer_shared/data/services/composer_unused_image_remote_data_source.dart',
       'lib/features/thread/data/services/discuz_post_edit_delete_response_parser.dart',
       'lib/features/thread/domain/services/post_edit_attachment_delete_uri_builder.dart',
+      'lib/features/thread/data/repositories/thread_poll_vote_repository.dart',
     ];
 
     expect(
@@ -206,6 +207,24 @@ void main() {
       'ThreadPostRateFormFallbackBuilder',
       'threadPostRateRepositoryProvider',
       'threadPostCommentRepositoryProvider',
+    ];
+    final violations = _dartFiles(<String>['lib'])
+        .where((file) {
+          final source = file.readAsStringSync();
+          return forbidden.any(source.contains);
+        })
+        .map((file) => file.path)
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
+  test('poll mutations stay behind the package command', () {
+    const forbidden = <String>[
+      "module: 'pollvote'",
+      "'action': 'votepoll'",
+      'ThreadPollVoteRepository',
+      'threadPollVoteRepositoryProvider',
     ];
     final violations = _dartFiles(<String>['lib'])
         .where((file) {

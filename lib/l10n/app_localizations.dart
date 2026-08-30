@@ -4619,6 +4619,54 @@ abstract class AppLocalizations {
   /// **'投票成功'**
   String get threadPollVoteSuccess;
 
+  /// No description provided for @threadPollVoteAlreadyVoted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已经投过票'**
+  String get threadPollVoteAlreadyVoted;
+
+  /// No description provided for @threadPollVoteClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票已关闭'**
+  String get threadPollVoteClosed;
+
+  /// No description provided for @threadPollVoteExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票已过期'**
+  String get threadPollVoteExpired;
+
+  /// No description provided for @threadPollVoteTooMany.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择的选项超过投票上限'**
+  String get threadPollVoteTooMany;
+
+  /// No description provided for @threadPollVoteUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前投票不可用'**
+  String get threadPollVoteUnavailable;
+
+  /// No description provided for @threadPollVoteInvalidSelection.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票选项无效，请重新选择'**
+  String get threadPollVoteInvalidSelection;
+
+  /// No description provided for @threadPollVoteSessionExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话已过期，请刷新后重试'**
+  String get threadPollVoteSessionExpired;
+
+  /// No description provided for @threadPollVoteOutcomeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法确认投票结果，请刷新帖子后再决定是否重试'**
+  String get threadPollVoteOutcomeUnknown;
+
   /// No description provided for @threadPollVoteFailed.
   ///
   /// In zh, this message translates to:

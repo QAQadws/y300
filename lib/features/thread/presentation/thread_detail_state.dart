@@ -83,6 +83,7 @@ class ThreadDetailPageState {
     required this.selectedPollOptionIds,
     required this.isPollVoteSubmitting,
     required this.pollVoteHint,
+    this.pollVoteCommandAvailable = false,
     this.ratingsByPostId = const <String, ThreadPostRatingsViewState>{},
     required this.replyText,
     required this.isReplySubmitting,
@@ -128,6 +129,7 @@ class ThreadDetailPageState {
   final Set<String> selectedPollOptionIds;
   final bool isPollVoteSubmitting;
   final String? pollVoteHint;
+  final bool pollVoteCommandAvailable;
   final Map<String, ThreadPostRatingsViewState> ratingsByPostId;
   final String replyText;
   final bool isReplySubmitting;
@@ -232,6 +234,7 @@ class ThreadDetailPageState {
     Set<String>? selectedPollOptionIds,
     bool? isPollVoteSubmitting,
     String? pollVoteHint,
+    bool? pollVoteCommandAvailable,
     Map<String, ThreadPostRatingsViewState>? ratingsByPostId,
     String? replyText,
     bool? isReplySubmitting,
@@ -312,6 +315,8 @@ class ThreadDetailPageState {
       pollVoteHint: clearPollVoteHint
           ? null
           : (pollVoteHint ?? this.pollVoteHint),
+      pollVoteCommandAvailable:
+          pollVoteCommandAvailable ?? this.pollVoteCommandAvailable,
       ratingsByPostId: ratingsByPostId ?? this.ratingsByPostId,
       replyText: replyText ?? this.replyText,
       isReplySubmitting: isReplySubmitting ?? this.isReplySubmitting,

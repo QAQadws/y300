@@ -1,3 +1,4 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
@@ -70,6 +71,13 @@ final class ThreadTextResolver {
   }
 
   static String actionNotice(AppLocalizations l10n, ThreadActionNotice notice) {
+    if (notice.action == ThreadActionKind.vote &&
+        notice.commandFailure != null) {
+      final pollFailure = _pollFailureText(l10n, notice.commandFailure!);
+      if (pollFailure != null) {
+        return pollFailure;
+      }
+    }
     if (notice.code == ThreadActionNoticeCode.validation) {
       return notice.action == ThreadActionKind.vote && notice.maxChoices != null
           ? pollMaxChoices(l10n, notice.maxChoices!)
@@ -100,6 +108,9 @@ final class ThreadTextResolver {
       return l10n.threadFavoriteSuccessSyncFailed;
     }
     if (notice.code == ThreadActionNoticeCode.unknown) {
+      if (notice.action == ThreadActionKind.vote) {
+        return l10n.threadPollVoteOutcomeUnknown;
+      }
       if (notice.action == ThreadActionKind.rate) {
         return l10n.threadRatingOutcomeUnknown;
       }
@@ -143,6 +154,28 @@ final class ThreadTextResolver {
 
   static String pollVotes(AppLocalizations l10n, int count) {
     return l10n.threadPollVotes(count);
+  }
+
+  static String? _pollFailureText(
+    AppLocalizations l10n,
+    DataCommandFailure failure,
+  ) {
+    return switch (failure.code?.trim().toLowerCase()) {
+      'thread_poll_voted' => l10n.threadPollVoteAlreadyVoted,
+      'thread_poll_closed' => l10n.threadPollVoteClosed,
+      'poll_overdue' => l10n.threadPollVoteExpired,
+      'poll_choose_most' => l10n.threadPollVoteTooMany,
+      'thread_poll_invalid' ||
+      'poll_not_found' => l10n.threadPollVoteUnavailable,
+      'parameters_error' ||
+      'thread_poll_vote_options_invalid' ||
+      'thread_poll_vote_identity_invalid' =>
+        l10n.threadPollVoteInvalidSelection,
+      'submit_invalid' ||
+      'formhash_unavailable' => l10n.threadPollVoteSessionExpired,
+      'group_nopermission' => l10n.threadPermissionDenied,
+      _ => null,
+    };
   }
 
   static String ratingRange(

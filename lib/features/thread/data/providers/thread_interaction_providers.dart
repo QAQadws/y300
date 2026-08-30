@@ -23,3 +23,7 @@ final threadPostCommentCommandProvider = Provider<ThreadPostCommentCommand>((
 ) {
   return ref.watch(yamiboForumClientProvider).postCommentCommand!;
 });
+
+final threadPollVoteCommandProvider = Provider<ThreadPollVoteCommand>((ref) {
+  return ref.watch(yamiboForumClientProvider).threadPollVoteCommand!;
+});

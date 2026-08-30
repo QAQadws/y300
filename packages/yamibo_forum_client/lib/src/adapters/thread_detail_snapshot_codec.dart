@@ -147,8 +147,6 @@ class ThreadDetailSnapshotCodec
       'maxChoices': value.maxChoices,
       'summary': value.summary,
       'deadlineText': value.deadlineText,
-      'actionUrl': value.actionUrl,
-      'formHash': value.formHash,
       'statusText': value.statusText,
       'options': value.options.map(_encodePollOption).toList(growable: false),
     };
@@ -165,8 +163,6 @@ class ThreadDetailSnapshotCodec
       maxChoices: _nullableInt(map['maxChoices']),
       summary: LooseJson.string(map['summary']),
       deadlineText: _nullableString(map['deadlineText']),
-      actionUrl: _nullableString(map['actionUrl']),
-      formHash: _nullableString(map['formHash']),
       statusText: _nullableString(map['statusText']),
       options: LooseJson.list(map['options'])
           .map((item) => _decodePollOption(LooseJson.map(item)))

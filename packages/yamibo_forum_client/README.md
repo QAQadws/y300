@@ -8,7 +8,7 @@ recovery.
 
 The package remains unpublished (`publish_to: none`) and can be consumed using
 a local path or Git dependency targeting this monorepo subdirectory. Version
-`0.6.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
+`0.8.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
 [API_STABILITY.md](API_STABILITY.md). The package is licensed under
 `GPL-3.0-only`; see [LICENSE](LICENSE).
 
@@ -81,6 +81,7 @@ currently verified by Y300:
 | Forum and thread favorite target-state commands | Discuz v4 API plus favorite-directory read-back |
 | Post rating/comment preparation and commands | Discuz HTML forms plus JSON/AJAX callback proof |
 | Thread creation and reply preparation/commands | Discuz v4 API plus HTML post-reply preparation |
+| Thread poll-vote command | Discuz `pollvote version=2` API |
 
 Authentication contracts are deliberately independent. A future source may
 implement session resolution without implementing password login or logout.
@@ -124,6 +125,14 @@ replies obtain formhash when submitted. Only positive, matching `tid`/`pid`
 values and an exact success code produce an applied receipt. A non-zero
 read-access request is read back without weakening already-proved creation
 success.
+
+Thread poll voting is an independent command rather than a field on the HTML
+thread adapter. Callers submit stable `fid`, `tid`, and ordered option IDs; the
+adapter obtains current formhash internally and preserves duplicate
+`pollanswers[]` fields. It accepts only an API v2 envelope with the exact
+`thread_poll_succeed` code. Explicit Discuz business codes are rejected, while
+unrecognized, malformed, or transport-indeterminate sent results are outcome
+unknown and are never automatically resubmitted.
 
 Image attachments use a separate preparation/upload boundary. Preparation
 proves the forum identity, current image-extension limits, and remaining
@@ -226,13 +235,13 @@ fail closed as `unsupported`.
 
 The package currently covers basic password authentication, authoritative
 session/logout handling, forum/thread favorite target-state commands,
-post-rating/comment, thread-creation/reply, and image-attachment preparation
-and commands, the forum home document, forum/thread directories
+post-rating/comment, thread-creation/reply, thread poll voting, and
+image-attachment preparation and commands, the forum home document, forum/thread directories
 and details, Tag, search, remote favorite directories, profiles/blogs,
 notifications, private messages, stickers, full rating details, post location,
 author-filtered post pages, comic episode discovery, reply-page reads, and
 protected image transport. Login UI and remaining write operations—including
-full post editing and voting—remain application-owned.
+full post editing—remain application-owned.
 
 ## Y300 parity and unmigrated APIs
 

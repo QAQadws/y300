@@ -471,7 +471,7 @@ final class DioForumClientNetwork
       final cancellation = request.cancellation;
       final responseFuture = _dio.requestUri<Object?>(
         request.uri,
-        data: request.body,
+        data: _requestBody(request.body),
         options: Options(
           method: request.method.name.toUpperCase(),
           headers: headers,
@@ -614,7 +614,7 @@ final class DioForumClientNetwork
     try {
       final response = await _dio.requestUri<Object?>(
         request.uri,
-        data: request.body,
+        data: _requestBody(request.body),
         options: Options(
           method: request.method.name.toUpperCase(),
           headers: headers,
@@ -734,6 +734,9 @@ final class DioForumClientNetwork
       statusCode: status,
     );
   }
+
+  Object? _requestBody(Object? body) =>
+      body is ForumFormFields ? body.encode() : body;
 
   ForumWafEvidence? _detectChallenge(Uri uri, int? status) {
     if (!_isManagedForumUri(uri) || status != 405) {

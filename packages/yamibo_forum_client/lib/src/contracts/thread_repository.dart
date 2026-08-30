@@ -25,6 +25,7 @@ enum ThreadDetailCapability {
   comments,
   commentAction,
   pollContent,
+  @Deprecated('Poll mutation capability belongs to ThreadPollVoteCommand.')
   pollVoteAction,
   tagLinks,
   favoriteEntry,

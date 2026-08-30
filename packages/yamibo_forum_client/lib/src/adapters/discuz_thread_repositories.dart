@@ -375,9 +375,16 @@ DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities> _validated(
 final _htmlCapabilities = ThreadDetailSourceCapabilities(
   values: DataCapabilitySet.from(
     supported: ThreadDetailCapability.values
-        .where((value) => value != ThreadDetailCapability.attachmentMetadata)
+        .where(
+          (value) =>
+              value != ThreadDetailCapability.attachmentMetadata &&
+              value != ThreadDetailCapability.pollVoteAction,
+        )
         .toList(growable: false),
-    unsupported: const [ThreadDetailCapability.attachmentMetadata],
+    unsupported: const [
+      ThreadDetailCapability.attachmentMetadata,
+      ThreadDetailCapability.pollVoteAction,
+    ],
   ),
   paginationPrecision: PaginationPrecision.exact,
 );

@@ -11,7 +11,6 @@ import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/thread/data/providers/thread_favorite_providers.dart';
 import 'package:y300/features/thread/data/providers/thread_interaction_providers.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
-import 'package:y300/features/thread/data/repositories/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
@@ -404,8 +403,12 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   Future<void> submitPollVote(ThreadPoll poll) async {
     final current = state.value;
+    final command = ref.read(threadPollVoteCommandProvider);
     if (current == null ||
-        !current.supports(ThreadDetailCapability.pollVoteAction) ||
+        !current.pollVoteCommandAvailable ||
+        !command.capabilities.supports(
+          ThreadPollVoteCapability.commandSubmission,
+        ) ||
         current.isPollVoteSubmitting ||
         !poll.canVote) {
       return;
@@ -430,38 +433,41 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         clearError: true,
       ),
     );
-    final result = await ref
-        .read(threadPollVoteRepositoryProvider)
-        .vote(
-          ThreadPollVoteRequest(
-            tid: current.tid,
-            actionUrl: poll.actionUrl ?? '',
-            formHash: poll.formHash ?? '',
-            optionIds: selected,
-          ),
-        );
+    final result = await command.execute(
+      ThreadPollVoteSubmission(
+        fid: current.fid,
+        tid: current.tid,
+        optionIds: selected,
+      ),
+    );
     if (!ref.mounted) {
       return;
     }
-    final afterSubmit = state.value ?? current;
-    if (result case ApiFailure<ThreadPollVoteResult>(:final error)) {
+    final afterSubmit = state.value;
+    if (afterSubmit == null ||
+        afterSubmit.tid != current.tid ||
+        afterSubmit.fid != current.fid) {
+      return;
+    }
+    if (result is! DataCommandApplied<ThreadPollVoteReceipt>) {
+      final noticeCode =
+          result is DataCommandOutcomeUnknown<ThreadPollVoteReceipt>
+          ? ThreadActionNoticeCode.unknown
+          : _noticeCodeForCommand(result.failureOrNull);
       state = AsyncData(
         afterSubmit.copyWith(
           isPollVoteSubmitting: false,
-          pollVoteHint: error.message,
+          clearPollVoteHint: true,
           pollVoteNotice: ThreadActionNotice(
-            code: _noticeCodeFor(error),
+            code: noticeCode,
             action: ThreadActionKind.vote,
-            detail: error.message,
-            message: error.message,
+            commandFailure: result.failureOrNull,
           ),
         ),
       );
       return;
     }
 
-    final message = (result as ApiSuccess<ThreadPollVoteResult>).data.message
-        .trim();
     await _invalidateCurrentThreadCache(afterSubmit.tid);
     final reloaded = await _loadPage(
       page: afterSubmit.currentPage <= 0 ? 1 : afterSubmit.currentPage,
@@ -475,11 +481,10 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       reloaded.copyWith(
         isThreadFavorited: afterSubmit.isThreadFavorited,
         threadFavoriteHint: afterSubmit.threadFavoriteHint,
-        pollVoteHint: message.isEmpty ? null : message,
-        pollVoteNotice: ThreadActionNotice(
+        clearPollVoteHint: true,
+        pollVoteNotice: const ThreadActionNotice(
           code: ThreadActionNoticeCode.success,
           action: ThreadActionKind.vote,
-          detail: message,
         ),
         selectedPollOptionIds: const <String>{},
         isPollVoteSubmitting: false,
@@ -959,6 +964,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           selectedPollOptionIds: const <String>{},
           isPollVoteSubmitting: false,
           pollVoteHint: null,
+          pollVoteCommandAvailable: _pollVoteCommandAvailable(),
           replyText: '',
           isReplySubmitting: false,
           replyHint: null,
@@ -1066,6 +1072,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       selectedPollOptionIds: const <String>{},
       isPollVoteSubmitting: false,
       pollVoteHint: null,
+      pollVoteCommandAvailable: false,
       replyText: '',
       isReplySubmitting: false,
       replyHint: null,
@@ -1219,13 +1226,10 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     return ref.read(threadRepositoryProvider);
   }
 
-  ThreadActionNoticeCode _noticeCodeFor(ApiError error) {
-    return switch (error.type) {
-      ApiErrorType.unauthorized => ThreadActionNoticeCode.loginRequired,
-      ApiErrorType.business => ThreadActionNoticeCode.failure,
-      _ => ThreadActionNoticeCode.failure,
-    };
-  }
+  bool _pollVoteCommandAvailable() => ref
+      .read(threadPollVoteCommandProvider)
+      .capabilities
+      .supports(ThreadPollVoteCapability.commandSubmission);
 
   ThreadActionNoticeCode _noticeCodeForCommand(DataCommandFailure? failure) {
     return switch (failure?.kind) {

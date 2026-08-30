@@ -44,6 +44,15 @@ void main() {
     await store.mergeSetCookie(uri, <String>['sid=deleted; Max-Age=0']);
     expect(await store.read(uri), <String, String>{'keep': 'yes'});
   });
+
+  test('ordered form fields preserve duplicate names', () {
+    final fields = ForumFormFields(const <MapEntry<String, String>>[
+      MapEntry<String, String>('pollanswers[]', '7'),
+      MapEntry<String, String>('pollanswers[]', '9'),
+    ]);
+
+    expect(fields.encode(), 'pollanswers%5B%5D=7&pollanswers%5B%5D=9');
+  });
 }
 
 final class _UnusedNetwork implements ForumClientNetwork {

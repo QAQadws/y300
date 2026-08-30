@@ -43,7 +43,9 @@ class ThreadPoll {
     this.canVote = true,
     this.maxChoices,
     this.deadlineText,
+    @Deprecated('Poll submission now uses ThreadPollVoteCommand.')
     this.actionUrl,
+    @Deprecated('Poll submission now uses ThreadPollVoteCommand.')
     this.formHash,
     this.statusText,
   });
@@ -53,7 +55,10 @@ class ThreadPoll {
   final int? maxChoices;
   final String summary;
   final String? deadlineText;
+  @Deprecated('Poll submission now uses ThreadPollVoteCommand.')
   final String? actionUrl;
+
+  @Deprecated('Poll submission now uses ThreadPollVoteCommand.')
   final String? formHash;
   final String? statusText;
   final List<ThreadPollOption> options;

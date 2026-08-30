@@ -8,7 +8,27 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
-- Reserved for changes made after `0.7.0`.
+- Reserved for changes made after `0.8.0`.
+
+## 0.8.0 - 2026-08-30
+
+### Added
+
+- A source-neutral thread poll-vote command with fail-closed capability and
+  structured command outcomes.
+- Ordered URL-encoded form fields for protocols that require duplicate field
+  names such as repeated `pollanswers[]` values.
+- A Discuz `pollvote` v2 adapter with exact response-version and message-code
+  validation.
+
+### Changed
+
+- Thread poll submission no longer depends on HTML action URLs or formhash
+  values embedded in cached thread documents.
+- Only exact `thread_poll_succeed` evidence produces an applied receipt;
+  explicit Discuz rejections remain structured and all unproved sent outcomes
+  remain unknown without automatic retry.
+- Poll receipts no longer expose response text, HTML, or JSON payloads.
 
 ## 0.7.0 - 2026-08-29
 

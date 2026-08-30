@@ -107,6 +107,7 @@ void main() {
         sources.postImageAttachmentDelete,
         isA<DiscuzPostImageAttachmentDeleteAdapter>(),
       );
+      expect(sources.threadPollVoteCommand, isA<DiscuzThreadPollVoteCommand>());
     });
 
     test('installs search without a host formhash provider', () {

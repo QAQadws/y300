@@ -262,6 +262,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
                 poll: post.poll!,
                 selectedOptionIds: state.selectedPollOptionIds,
                 isSubmitting: state.isPollVoteSubmitting,
+                commandAvailable: state.pollVoteCommandAvailable,
                 hint: state.pollVoteHint,
                 notice: state.pollVoteNotice,
                 onToggleOption: (option) {
@@ -728,6 +729,7 @@ class ThreadPostCard extends StatelessWidget {
               selectedOptionIds:
                   detailState?.selectedPollOptionIds ?? const <String>{},
               isSubmitting: detailState?.isPollVoteSubmitting ?? false,
+              commandAvailable: detailState?.pollVoteCommandAvailable ?? false,
               hint: detailState?.pollVoteHint,
               notice: detailState?.pollVoteNotice,
               onToggleOption: (option) =>

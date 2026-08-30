@@ -167,6 +167,7 @@ final class YamiboForumClientBuilder {
         postRatingCommand: postRating,
         postCommentPreparation: postComment,
         postCommentCommand: postComment,
+        threadPollVoteCommand: factory.createThreadPollVote(formhash),
         threadCreationPreparation: threadCreation,
         threadCreationCommand: threadCreation,
         threadReplyPreparation: threadReply,

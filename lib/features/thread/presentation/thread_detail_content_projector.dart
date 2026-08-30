@@ -193,8 +193,6 @@ final class ThreadDetailContentProjector {
       yield _textHash(poll.summary);
       yield _textHash(poll.deadlineText);
       yield _textHash(poll.statusText);
-      yield _textHash(poll.actionUrl);
-      yield _textHash(poll.formHash);
       for (final option in poll.options) {
         yield option.id;
         yield _textHash(option.label);
@@ -441,8 +439,6 @@ final class _PollSlots {
       canVote: source.canVote,
       maxChoices: source.maxChoices,
       deadlineText: deadlineText?.value(values),
-      actionUrl: source.actionUrl,
-      formHash: source.formHash,
       statusText: statusText?.value(values),
     );
   }

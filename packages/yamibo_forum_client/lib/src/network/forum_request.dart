@@ -4,6 +4,29 @@ enum ForumRequestMethod { get, post }
 
 enum ForumResponseType { text, json, bytes }
 
+/// Ordered URL-encoded form fields that may contain duplicate names.
+///
+/// A map cannot represent protocols such as Discuz poll submission where one
+/// `pollanswers[]` field is emitted for every selected option. Transports must
+/// preserve [entries] in order and encode every entry exactly once.
+final class ForumFormFields {
+  /// Creates an immutable ordered form body.
+  ForumFormFields(Iterable<MapEntry<String, String>> entries)
+    : entries = List<MapEntry<String, String>>.unmodifiable(entries);
+
+  /// Ordered form fields, including duplicate field names.
+  final List<MapEntry<String, String>> entries;
+
+  /// Encodes these fields as `application/x-www-form-urlencoded` data.
+  String encode() => entries
+      .map(
+        (entry) =>
+            '${Uri.encodeQueryComponent(entry.key)}='
+            '${Uri.encodeQueryComponent(entry.value)}',
+      )
+      .join('&');
+}
+
 final class ForumRequestContext {
   const ForumRequestContext({
     required this.operation,

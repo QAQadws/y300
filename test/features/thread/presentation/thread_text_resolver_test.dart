@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
@@ -59,6 +60,69 @@ void main() {
     );
   });
 
+  test('maps stable poll rejection codes without exposing server payloads', () {
+    const cases = <String, String Function(AppLocalizationsZh)>{
+      'thread_poll_voted': _alreadyVoted,
+      'thread_poll_closed': _closed,
+      'poll_overdue': _expired,
+      'poll_choose_most': _tooMany,
+      'thread_poll_invalid': _unavailable,
+      'parameters_error': _invalidSelection,
+      'submit_invalid': _sessionExpired,
+      'group_nopermission': _permissionDenied,
+    };
+
+    for (final entry in cases.entries) {
+      final text = ThreadTextResolver.actionNotice(
+        zh,
+        ThreadActionNotice(
+          code: ThreadActionNoticeCode.failure,
+          action: ThreadActionKind.vote,
+          commandFailure: DataCommandFailure(
+            kind: DataCommandFailureKind.validation,
+            retryPolicy: DataCommandRetryPolicy.explicitOnly,
+            code: entry.key,
+            diagnosticMessage: 'private server payload',
+          ),
+        ),
+      );
+      expect(text, entry.value(zh), reason: entry.key);
+      expect(text, isNot(contains('private server payload')));
+    }
+  });
+
+  test('keeps an unproved sent poll result explicitly unknown', () {
+    expect(
+      ThreadTextResolver.actionNotice(
+        zhTw,
+        const ThreadActionNotice(
+          code: ThreadActionNoticeCode.unknown,
+          action: ThreadActionKind.vote,
+        ),
+      ),
+      zhTw.threadPollVoteOutcomeUnknown,
+    );
+  });
+
+  test('prefers a stable poll code over a generic login suffix category', () {
+    expect(
+      ThreadTextResolver.actionNotice(
+        zh,
+        const ThreadActionNotice(
+          code: ThreadActionNoticeCode.loginRequired,
+          action: ThreadActionKind.vote,
+          commandFailure: DataCommandFailure(
+            kind: DataCommandFailureKind.unauthenticated,
+            retryPolicy: DataCommandRetryPolicy.afterSessionRefresh,
+            code: 'thread_poll_voted',
+            diagnosticMessage: 'thread_poll_voted',
+          ),
+        ),
+      ),
+      zh.threadPollVoteAlreadyVoted,
+    );
+  });
+
   test('redacts sensitive details before exposing an error summary', () {
     final summary = ThreadTextResolver.safeErrorSummary(
       'Cookie=secret https://bbs.yamibo.com/forum.php?formhash=token\nnext',
@@ -84,3 +148,16 @@ void main() {
     expect(result, raw);
   });
 }
+
+String _alreadyVoted(AppLocalizationsZh l10n) =>
+    l10n.threadPollVoteAlreadyVoted;
+String _closed(AppLocalizationsZh l10n) => l10n.threadPollVoteClosed;
+String _expired(AppLocalizationsZh l10n) => l10n.threadPollVoteExpired;
+String _tooMany(AppLocalizationsZh l10n) => l10n.threadPollVoteTooMany;
+String _unavailable(AppLocalizationsZh l10n) => l10n.threadPollVoteUnavailable;
+String _invalidSelection(AppLocalizationsZh l10n) =>
+    l10n.threadPollVoteInvalidSelection;
+String _sessionExpired(AppLocalizationsZh l10n) =>
+    l10n.threadPollVoteSessionExpired;
+String _permissionDenied(AppLocalizationsZh l10n) =>
+    l10n.threadPermissionDenied;

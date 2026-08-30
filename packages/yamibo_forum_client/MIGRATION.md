@@ -1,5 +1,22 @@
 # Migration guide
 
+## 0.7.x to 0.8.0
+
+The standard client now installs `ThreadPollVoteCommand`. Submit stable forum,
+thread, and ordered poll-option identities through this command instead of
+using an action URL or formhash parsed from thread HTML.
+
+Only `DataCommandApplied` proves that Discuz accepted a vote. Explicit server
+codes such as `thread_poll_voted`, `thread_poll_closed`, and
+`poll_choose_most` are rejected outcomes. A timeout, malformed response,
+unexpected API version, or unrecognized message after submission is
+`DataCommandOutcomeUnknown`; refresh the thread before deciding whether the
+user should explicitly retry.
+
+Custom Host transports must preserve `ForumFormFields` entries in order,
+including duplicate names. The package Dio runtime and Y300 Host adapter
+already implement this boundary.
+
 ## 0.6.x to 0.7.0
 
 The standard client now installs image-upload preparation/upload commands,

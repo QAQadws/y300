@@ -14,6 +14,7 @@ import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_interaction_commands.dart';
+import '../contracts/thread_poll_vote_command.dart';
 import '../contracts/thread_composer_commands.dart';
 import '../contracts/thread_supplemental_reads.dart';
 
@@ -50,6 +51,7 @@ final class ForumClientSourcePlan {
     this.postRatingCommand,
     this.postCommentPreparation,
     this.postCommentCommand,
+    this.threadPollVoteCommand,
     this.threadCreationPreparation,
     this.threadCreationCommand,
     this.threadReplyPreparation,
@@ -141,6 +143,9 @@ final class ForumClientSourcePlan {
 
   /// Command for submitting a prepared post comment.
   final ThreadPostCommentCommand? postCommentCommand;
+
+  /// Command for submitting a thread poll vote.
+  final ThreadPollVoteCommand? threadPollVoteCommand;
 
   /// Source for preparing a server-validated thread-creation form.
   final ThreadCreationPreparationRepository? threadCreationPreparation;

@@ -94,8 +94,6 @@ void main() {
         expect(display.poll?.statusText, 'P:投票状态');
         expect(display.poll?.options.single.label, 'P:投票选项');
         expect(display.poll?.options.single.id, 'option-1');
-        expect(display.poll?.actionUrl, '/poll');
-        expect(display.poll?.formHash, 'raw-formhash');
 
         expect(display.comments.single.author, '点评用户名');
         expect(display.comments.single.message, 'P:点评正文');
@@ -328,8 +326,6 @@ ThreadDetailPageState _source({String? message}) {
       summary: '投票摘要',
       deadlineText: '截止时间',
       statusText: '投票状态',
-      actionUrl: '/poll',
-      formHash: 'raw-formhash',
       options: <ThreadPollOption>[
         ThreadPollOption(
           id: 'option-1',

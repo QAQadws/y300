@@ -61,7 +61,6 @@ import 'package:y300/features/thread/data/providers/thread_favorite_providers.da
 import 'package:y300/features/thread/data/providers/thread_interaction_providers.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
-import 'package:y300/features/thread/data/repositories/thread_poll_vote_repository.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
@@ -557,9 +556,6 @@ void main() {
                   poll: const ThreadPoll(
                     isMultipleChoice: false,
                     summary: '单选投票 , 投票后结果可见, 共有 2 人参与投票',
-                    actionUrl:
-                        'https://bbs.yamibo.com/forum.php?mod=misc&action=votepoll&tid=100',
-                    formHash: 'fh_poll',
                     options: <ThreadPollOption>[
                       ThreadPollOption(id: '1', label: '选项A'),
                       ThreadPollOption(id: '2', label: '选项B'),
@@ -2412,9 +2408,6 @@ void main() {
                 poll: ThreadPoll(
                   isMultipleChoice: false,
                   summary: '单选投票 , 投票后结果可见',
-                  actionUrl:
-                      'https://bbs.yamibo.com/forum.php?mod=misc&action=votepoll&tid=100',
-                  formHash: 'fh_poll',
                   options: <ThreadPollOption>[
                     ThreadPollOption(
                       id: '1',
@@ -2430,13 +2423,13 @@ void main() {
           ),
         );
       });
-      final pollVoteRepository = _FakeThreadPollVoteRepository();
+      final pollVoteCommand = _FakeThreadPollVoteCommand();
       final invalidationService = _FakeNativePageCacheInvalidationService();
 
       await tester.pumpWidget(
         _buildTestApp(
           repository,
-          pollVoteRepository: pollVoteRepository,
+          pollVoteCommand: pollVoteCommand,
           pageCacheInvalidationService: invalidationService,
         ),
       );
@@ -2454,11 +2447,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      expect(pollVoteRepository.called, isTrue);
-      expect(pollVoteRepository.lastRequest?.tid, '100');
-      expect(pollVoteRepository.lastRequest?.actionUrl, contains('votepoll'));
-      expect(pollVoteRepository.lastRequest?.formHash, 'fh_poll');
-      expect(pollVoteRepository.lastRequest?.optionIds, <String>['1']);
+      expect(pollVoteCommand.called, isTrue);
+      expect(pollVoteCommand.lastSubmission?.fid, '33');
+      expect(pollVoteCommand.lastSubmission?.tid, '100');
+      expect(pollVoteCommand.lastSubmission?.optionIds, <String>['1']);
       expect(invalidationService.invalidatedThreadIds, <String>['100']);
       expect(callCount, 2);
       expect(find.text('投票成功'), findsOneWidget);
@@ -2518,10 +2510,10 @@ void main() {
           ),
         );
       });
-      final pollVoteRepository = _FakeThreadPollVoteRepository();
+      final pollVoteCommand = _FakeThreadPollVoteCommand();
 
       await tester.pumpWidget(
-        _buildTestApp(repository, pollVoteRepository: pollVoteRepository),
+        _buildTestApp(repository, pollVoteCommand: pollVoteCommand),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
@@ -2535,7 +2527,7 @@ void main() {
       await tester.tap(find.byKey(const Key('thread-poll-option-1')));
       await tester.pump();
 
-      expect(pollVoteRepository.called, isFalse);
+      expect(pollVoteCommand.called, isFalse);
       expect(find.byIcon(Icons.check_box), findsNothing);
       expect(find.byIcon(Icons.check_box_outline_blank), findsNothing);
     });
@@ -4840,7 +4832,7 @@ Widget _buildTestApp(
   _FakeThreadPostRatingInteraction? postRateInteraction,
   ThreadPostRatingsRepository? postRatingsRepository,
   _FakeThreadPostCommentInteraction? postCommentInteraction,
-  ThreadPollVoteRepository? pollVoteRepository,
+  ThreadPollVoteCommand? pollVoteCommand,
   ForumTagDirectoryRepository? tagDirectoryRepository,
   ThreadPostLocator? threadPostLocator,
   NativePageCacheInvalidationService? pageCacheInvalidationService,
@@ -4865,7 +4857,7 @@ Widget _buildTestApp(
         postRateInteraction: postRateInteraction,
         postRatingsRepository: postRatingsRepository,
         postCommentInteraction: postCommentInteraction,
-        pollVoteRepository: pollVoteRepository,
+        pollVoteCommand: pollVoteCommand,
         tagDirectoryRepository: tagDirectoryRepository,
         threadPostLocator: threadPostLocator,
         pageCacheInvalidationService: pageCacheInvalidationService,
@@ -4894,7 +4886,7 @@ List<riverpod_misc.Override> _threadDetailOverrides(
   _FakeThreadPostRatingInteraction? postRateInteraction,
   ThreadPostRatingsRepository? postRatingsRepository,
   _FakeThreadPostCommentInteraction? postCommentInteraction,
-  ThreadPollVoteRepository? pollVoteRepository,
+  ThreadPollVoteCommand? pollVoteCommand,
   ForumTagDirectoryRepository? tagDirectoryRepository,
   ThreadPostLocator? threadPostLocator,
   NativePageCacheInvalidationService? pageCacheInvalidationService,
@@ -4951,8 +4943,8 @@ List<riverpod_misc.Override> _threadDetailOverrides(
     threadPostCommentCommandProvider.overrideWithValue(
       postCommentInteraction ?? _FakeThreadPostCommentInteraction(),
     ),
-    threadPollVoteRepositoryProvider.overrideWithValue(
-      pollVoteRepository ?? _FakeThreadPollVoteRepository(),
+    threadPollVoteCommandProvider.overrideWithValue(
+      pollVoteCommand ?? _FakeThreadPollVoteCommand(),
     ),
     threadPostLocatorProvider.overrideWithValue(
       threadPostLocator ?? _FakeThreadPostLocator(null),
@@ -5399,20 +5391,24 @@ class _FakeThreadFavoriteActionService implements ThreadFavoriteActionService {
   }
 }
 
-class _FakeThreadPollVoteRepository implements ThreadPollVoteRepository {
+class _FakeThreadPollVoteCommand implements ThreadPollVoteCommand {
   bool called = false;
-  ThreadPollVoteRequest? lastRequest;
-  ApiResult<ThreadPollVoteResult> result =
-      const ApiSuccess<ThreadPollVoteResult>(
-        ThreadPollVoteResult(message: '投票成功'),
-      );
+  ThreadPollVoteSubmission? lastSubmission;
+  DataCommandResult<ThreadPollVoteReceipt> result = const DataCommandApplied(
+    ThreadPollVoteReceipt(fid: '33', tid: '100', optionIds: <String>['1']),
+  );
 
   @override
-  Future<ApiResult<ThreadPollVoteResult>> vote(
-    ThreadPollVoteRequest request,
+  ThreadPollVoteCapabilities get capabilities => ThreadPollVoteCapabilities(
+    values: DataCapabilitySet.supported(ThreadPollVoteCapability.values),
+  );
+
+  @override
+  Future<DataCommandResult<ThreadPollVoteReceipt>> execute(
+    ThreadPollVoteSubmission submission,
   ) async {
     called = true;
-    lastRequest = request;
+    lastSubmission = submission;
     return result;
   }
 }

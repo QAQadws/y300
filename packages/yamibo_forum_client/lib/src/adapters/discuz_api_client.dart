@@ -153,6 +153,69 @@ final class DiscuzApiClient {
     return decoded;
   }
 
+  /// Posts ordered form fields while preserving duplicate names.
+  Future<ForumTransportResult<ForumResponse<DiscuzApiEnvelope>>>
+  postFormFields({
+    required String module,
+    required ForumFormFields form,
+    Map<String, Object?> queryParameters = const <String, Object?>{},
+    bool treatMessageAsBusinessError = true,
+    Uri? referer,
+    ForumRequestCancellation? cancellation,
+  }) async {
+    final apiOrigin = config.apiOrigin;
+    if (apiOrigin == null) {
+      return const ForumTransportError(
+        ForumTransportFailure(
+          kind: ForumTransportFailureKind.business,
+          code: 'api_origin_unavailable',
+        ),
+      );
+    }
+    final uri = apiOrigin.replace(
+      queryParameters: <String, String>{
+        'module': module,
+        ...{
+          for (final entry in queryParameters.entries)
+            entry.key: entry.value.toString(),
+        },
+        if (!queryParameters.containsKey('version')) 'version': '4',
+      },
+    );
+    final profile = requestProfiles.resolve(
+      ForumRequestProfileKind.discuzApi,
+      referer: referer,
+    );
+    final result = await network.send(
+      ForumRequest(
+        method: ForumRequestMethod.post,
+        uri: uri,
+        context: ForumRequestContext(operation: module, module: module),
+        headers: <String, String>{
+          ...profile.headers,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: form,
+        responseType: ForumResponseType.json,
+        cancellation: cancellation,
+      ),
+    );
+    final decoded = switch (result) {
+      ForumTransportError<ForumResponse<Object?>>(:final failure) =>
+        ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(failure),
+      ForumTransportSuccess<ForumResponse<Object?>>(:final response) => _decode(
+        response,
+        treatMessageAsBusinessError: treatMessageAsBusinessError,
+      ),
+    };
+    if (decoded case ForumTransportSuccess<ForumResponse<DiscuzApiEnvelope>>(
+      :final response,
+    )) {
+      await _mergeSession(response.body.variables, source: 'api:$module');
+    }
+    return decoded;
+  }
+
   Future<void> _mergeSession(
     Map<String, Object?> variables, {
     required String source,

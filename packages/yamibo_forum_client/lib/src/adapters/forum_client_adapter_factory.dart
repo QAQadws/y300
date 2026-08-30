@@ -13,6 +13,7 @@ import '../contracts/message_directories.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_reply_page.dart';
+import '../contracts/thread_poll_vote_command.dart';
 import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
 import '../network/forum_multipart.dart';
@@ -37,6 +38,7 @@ import 'discuz_forum_display_repositories.dart';
 import 'discuz_profile_html_adapters.dart';
 import 'discuz_thread_repositories.dart';
 import 'discuz_thread_interaction_commands.dart';
+import 'discuz_thread_poll_vote_command.dart';
 import 'discuz_thread_composer_commands.dart';
 import 'discuz_supplemental_read_adapters.dart';
 import '../session/forum_formhash_provider.dart';
@@ -125,6 +127,13 @@ final class ForumClientAdapterFactory {
         config: config,
         network: network,
         requestProfiles: requestProfiles,
+      );
+
+  ThreadPollVoteCommand createThreadPollVote(ForumFormhashProvider formhash) =>
+      DiscuzThreadPollVoteCommand(
+        api: _api,
+        config: config,
+        formhash: formhash,
       );
 
   DiscuzThreadCreationAdapter createThreadCreation(
