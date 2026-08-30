@@ -1,8 +1,11 @@
-export 'diagnostics/continuous_image_diagnostics.dart';
+export 'diagnostics/continuous_image_diagnostic_event.dart';
+export 'diagnostics/continuous_image_diagnostic_recorder.dart';
 export 'continuous_image_extent_registry.dart';
 export 'continuous_image_layout_resolver.dart';
 export 'continuous_image_models.dart';
 export 'continuous_image_prefetch_coordinator.dart';
 export 'continuous_image_scroll_anchor_coordinator.dart';
 export '../reader_flow/reader_sequence_position.dart';
-export 'tall_image/tall_image.dart';
+export 'tall_image/tall_image_policy.dart';
+export 'tall_image/tall_image_slice_manifest.dart';
+export 'tall_image/tall_image_slice_planner.dart';

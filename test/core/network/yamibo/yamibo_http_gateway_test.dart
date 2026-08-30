@@ -9,8 +9,6 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
-import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
-import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -695,78 +693,6 @@ void main() {
       );
       expect(adapter.lastHeaders['Cookie'], contains('confirmed-auth'));
     });
-
-    test('getText stores session snapshot extracted from HTML', () async {
-      final sessionStore = YamiboSessionStore();
-      final gateway = _buildGateway(
-        adapter: _GatewayTestAdapter(
-          textBody: '''
-<html>
-  <body>
-    <input type="hidden" name="formhash" value="fh_html">
-    <script>var discuz_uid = '597454';</script>
-  </body>
-</html>
-''',
-        ),
-        sessionStore: sessionStore,
-        sessionExtractor: const YamiboSessionExtractor(),
-      );
-
-      final result = await gateway.getText(
-        Uri.parse('https://bbs.yamibo.com/index.php?mobile=2'),
-        context: const YamiboRequestContext(
-          kind: YamiboRequestKind.html,
-          operation: 'forum.home.html',
-        ),
-      );
-
-      expect(result.isSuccess, isTrue);
-      expect(sessionStore.readCurrent()?.uid, '597454');
-      expect(sessionStore.readFreshFormhash(), 'fh_html');
-      expect(sessionStore.readCurrent()?.source, 'html:forum.home.html');
-    });
-
-    test(
-      'getJson stores session snapshot extracted from API variables',
-      () async {
-        final sessionStore = YamiboSessionStore();
-        final gateway = _buildGateway(
-          adapter: _GatewayTestAdapter(
-            textBody: '''
-{
-  "Version": "4",
-  "Charset": "utf-8",
-  "Variables": {
-    "formhash": "fh_api",
-    "member_uid": "597454",
-    "member_username": "tester"
-  }
-}
-''',
-          ),
-          sessionStore: sessionStore,
-          sessionExtractor: const YamiboSessionExtractor(),
-        );
-
-        final result = await gateway.getJson(
-          Uri.parse(
-            'https://bbs.yamibo.com/api/mobile/index.php?module=profile&version=4',
-          ),
-          context: const YamiboRequestContext(
-            kind: YamiboRequestKind.api,
-            operation: 'profile',
-            module: 'profile',
-          ),
-        );
-
-        expect(result.isSuccess, isTrue);
-        expect(sessionStore.readCurrent()?.uid, '597454');
-        expect(sessionStore.readCurrent()?.username, 'tester');
-        expect(sessionStore.readFreshFormhash(), 'fh_api');
-        expect(sessionStore.readCurrent()?.source, 'api:profile');
-      },
-    );
   });
 }
 
@@ -774,8 +700,6 @@ YamiboHttpGateway _buildGateway({
   required _GatewayTestAdapter adapter,
   CookieStore? cookieStore,
   _MemoryLogOutput? logOutput,
-  YamiboSessionStore? sessionStore,
-  YamiboSessionExtractor? sessionExtractor,
   WafChallengeRecoveryCoordinator? wafChallengeRecoveryCoordinator,
 }) {
   final dio = Dio(
@@ -793,8 +717,6 @@ YamiboHttpGateway _buildGateway({
       filter: ProductionFilter(),
       level: Level.trace,
     ),
-    sessionStore: sessionStore,
-    sessionExtractor: sessionExtractor,
     wafChallengeRecoveryCoordinator: wafChallengeRecoveryCoordinator,
     dio: dio,
   );

@@ -57,9 +57,54 @@ void main() {
     expect(violations, isEmpty);
   });
 
+  test('Gateway stays transport-only and cannot parse forum sessions', () {
+    final source = File(
+      'lib/core/network/yamibo/yamibo_http_gateway.dart',
+    ).readAsStringSync();
+    const forbidden = <String>[
+      'YamiboSessionExtractor',
+      'YamiboSessionStore',
+      'YamiboSessionSnapshot',
+      '_saveExtractedSession',
+      'saveExtracted(',
+    ];
+
+    expect(
+      forbidden.where(source.contains).toList(),
+      isEmpty,
+      reason: 'Gateway must remain transport/Cookie/WAF-only.',
+    );
+  });
+
+  test('only the package Host adapter writes the App session projection', () {
+    const allowed = <String>{
+      'lib/core/network/yamibo/yamibo_session_store.dart',
+      'lib/core/network/yamibo_forum_client_host_adapters.dart',
+    };
+    final violations = _dartFiles(<String>['lib'])
+        .where((file) => file.readAsStringSync().contains('saveExtracted('))
+        .map((file) => _normalized(file.path))
+        .where((path) => !allowed.contains(path))
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
   test('migrated compatibility shims and duplicate adapters stay removed', () {
     const removedPaths = <String>[
       'lib/core/data_source/data_read_contract.dart',
+      'lib/core/network/api_client.dart',
+      'lib/core/network/yamibo/yamibo_api_client.dart',
+      'lib/core/network/yamibo/yamibo_html_client.dart',
+      'lib/core/network/yamibo/yamibo_resource_client.dart',
+      'lib/core/network/yamibo/yamibo_session_extractor.dart',
+      'lib/core/network/discuz_response.dart',
+      'lib/core/network/discuz_ajax_cdata_parser.dart',
+      'lib/features/reader_shared/domain/export/export.dart',
+      'lib/features/reader_shared/data/export/export.dart',
+      'lib/features/reader_shared/domain/metrics/metrics.dart',
+      'lib/features/reader_shared/domain/continuous_image/tall_image/tall_image.dart',
+      'lib/features/reader_shared/domain/continuous_image/diagnostics/continuous_image_diagnostics.dart',
       'lib/features/cache/domain/services/cache_load_policy.dart',
       'lib/features/thread/data/repositories/thread_repository.dart',
       'lib/features/thread/data/services/thread_detail_html_parser.dart',

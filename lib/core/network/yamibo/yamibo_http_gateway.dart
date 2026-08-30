@@ -12,25 +12,17 @@ import 'package:y300/core/network/yamibo/yamibo_http_response.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_logger.dart';
 import 'package:y300/core/network/yamibo/yamibo_resource_stream.dart';
-import 'package:y300/core/network/yamibo/yamibo_session_extractor.dart';
-import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
-import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
-import 'package:y300/core/utils/parse_utils.dart';
 
 class YamiboHttpGateway {
   YamiboHttpGateway({
     required CookieStore cookieStore,
     required Logger logger,
-    YamiboSessionStore? sessionStore,
-    YamiboSessionExtractor? sessionExtractor,
     WafChallengeRecoveryCoordinator? wafChallengeRecoveryCoordinator,
     Dio? dio,
     bool enableLog = true,
     String defaultUserAgent = BrowserUserAgents.mobile,
     Uri? siteUri,
   }) : _cookieStore = cookieStore,
-       _sessionStore = sessionStore,
-       _sessionExtractor = sessionExtractor,
        _wafChallengeRecoveryCoordinator = wafChallengeRecoveryCoordinator,
        _defaultUserAgent = defaultUserAgent,
        _siteUri = siteUri ?? Uri.parse(AppConfig.siteBaseUrl),
@@ -52,8 +44,6 @@ class YamiboHttpGateway {
            );
 
   final CookieStore _cookieStore;
-  final YamiboSessionStore? _sessionStore;
-  final YamiboSessionExtractor? _sessionExtractor;
   final WafChallengeRecoveryCoordinator? _wafChallengeRecoveryCoordinator;
   final String _defaultUserAgent;
   final Uri _siteUri;
@@ -675,7 +665,6 @@ class YamiboHttpGateway {
 
       await _saveCookies(response);
 
-      _saveExtractedSession(body: body, context: context);
       final elapsedMs = _elapsedMs(startedAt);
       _requestLogger.logSuccess(
         context: context,
@@ -833,82 +822,6 @@ class YamiboHttpGateway {
       response.requestOptions.uri,
       setCookie,
     );
-  }
-
-  void _saveExtractedSession({
-    required Object? body,
-    required YamiboRequestContext context,
-  }) {
-    final store = _sessionStore;
-    final extractor = _sessionExtractor;
-    if (store == null || extractor == null) {
-      return;
-    }
-    final snapshot = switch (context.kind) {
-      YamiboRequestKind.api => _extractApiSession(
-        body: body,
-        context: context,
-        extractor: extractor,
-      ),
-      YamiboRequestKind.html =>
-        body is String
-            ? extractor.extractFromHtml(
-                body,
-                source: 'html:${context.operation}',
-              )
-            : null,
-      YamiboRequestKind.resource || YamiboRequestKind.imageProbe => null,
-    };
-    if (snapshot != null) {
-      store.saveExtracted(snapshot);
-    }
-  }
-
-  YamiboSessionSnapshot? _extractApiSession({
-    required Object? body,
-    required YamiboRequestContext context,
-    required YamiboSessionExtractor extractor,
-  }) {
-    try {
-      final decoded = body is String
-          ? jsonDecode(_normalizeJsonText(body))
-          : body;
-      final variables = ParseUtils.asMap(
-        ParseUtils.asMap(decoded)['Variables'],
-      );
-      if (variables.isEmpty) {
-        return null;
-      }
-      return extractor.extractFromApiVariables(
-        variables,
-        source: 'api:${context.module ?? context.operation}',
-      );
-    } catch (_) {
-      // Session extraction is best-effort; API parsing still belongs to YamiboApiClient.
-      return null;
-    }
-  }
-
-  String _normalizeJsonText(String data) {
-    var text = data;
-    while (text.isNotEmpty) {
-      final trimmed = text.trimLeft();
-      if (trimmed.length != text.length) {
-        text = trimmed;
-        continue;
-      }
-      if (text.startsWith('\uFEFF')) {
-        text = text.substring(1);
-        continue;
-      }
-      // Some servers/proxies expose UTF-8 BOM bytes after a lossy decode.
-      if (text.startsWith('ï»¿')) {
-        text = text.substring(3);
-        continue;
-      }
-      break;
-    }
-    return text;
   }
 
   ApiError _mapDioError(DioException error) {

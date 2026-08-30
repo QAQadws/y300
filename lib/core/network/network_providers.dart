@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/api_client.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
@@ -37,26 +36,10 @@ final yamiboSessionStoreProvider = Provider<YamiboSessionStore>((ref) {
   return YamiboSessionStore();
 });
 
-final yamiboSessionExtractorProvider = Provider<YamiboSessionExtractor>((ref) {
-  return const YamiboSessionExtractor();
-});
-
-final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(
-    cookieStore: ref.watch(cookieStoreProvider),
-    logger: ref.watch(loggerProvider),
-    sessionStore: ref.watch(yamiboSessionStoreProvider),
-    sessionExtractor: ref.watch(yamiboSessionExtractorProvider),
-    yamiboApiClient: ref.watch(yamiboApiClientProvider),
-  );
-});
-
 final yamiboHttpGatewayProvider = Provider<YamiboHttpGateway>((ref) {
   return YamiboHttpGateway(
     cookieStore: ref.watch(cookieStoreProvider),
     logger: ref.watch(loggerProvider),
-    sessionStore: ref.watch(yamiboSessionStoreProvider),
-    sessionExtractor: ref.watch(yamiboSessionExtractorProvider),
     wafChallengeRecoveryCoordinator: ref.watch(
       wafChallengeRecoveryCoordinatorProvider,
     ),
@@ -83,18 +66,6 @@ final wafChallengeVerificationServiceProvider =
         probe: ref.watch(wafChallengeClearanceProbeProvider),
       );
     });
-
-final yamiboApiClientProvider = Provider<YamiboApiClient>((ref) {
-  return YamiboApiClient(gateway: ref.watch(yamiboHttpGatewayProvider));
-});
-
-final yamiboHtmlClientProvider = Provider<YamiboHtmlClient>((ref) {
-  return YamiboHtmlClient(gateway: ref.watch(yamiboHttpGatewayProvider));
-});
-
-final yamiboResourceClientProvider = Provider<YamiboResourceClient>((ref) {
-  return YamiboResourceClient(gateway: ref.watch(yamiboHttpGatewayProvider));
-});
 
 final forumImageRefererProvider = Provider<String>((ref) {
   return '${AppConfig.siteBaseUrl}/';

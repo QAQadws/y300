@@ -1,12 +1,6 @@
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/network_providers.dart';
-import 'package:y300/core/network/yamibo/yamibo_html_client.dart';
-import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
     as forum_adapters;
 import 'package:y300/features/forum/data/providers/forum_display_repository_providers.dart';
@@ -19,19 +13,7 @@ void main() {
   });
 
   test('production forum display provider remains HTML-first', () {
-    final gateway = YamiboHttpGateway(
-      cookieStore: CookieStore(),
-      logger: Logger(level: Level.off),
-      dio: Dio(BaseOptions(baseUrl: 'https://bbs.yamibo.com')),
-      enableLog: false,
-    );
-    final container = ProviderContainer(
-      overrides: [
-        yamiboHtmlClientProvider.overrideWithValue(
-          YamiboHtmlClient(gateway: gateway),
-        ),
-      ],
-    );
+    final container = ProviderContainer();
     addTearDown(container.dispose);
 
     final repository = container.read(forumDisplayRepositoryProvider);

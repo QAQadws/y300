@@ -28,6 +28,5 @@ void main() {
     expect(snapshot.formhash, 'fh');
     expect(response.body, '<html></html>');
     expect(YamiboSessionStore().readCurrent(), isNull);
-    expect(const YamiboSessionExtractor(), isA<YamiboSessionExtractor>());
   });
 }
