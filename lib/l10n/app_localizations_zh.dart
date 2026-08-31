@@ -3962,37 +3962,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileLoginRequired => '请先登录后查看个人资料';
 
   @override
-  String get profileMyThreads => '我的主题';
-
-  @override
   String get profileMyBlogs => '我的日志';
 
   @override
-  String get profileMyFavorites => '我的收藏';
-
-  @override
   String get profileMessages => '消息提醒';
-
-  @override
-  String get profileMyFriends => '我的好友';
-
-  @override
-  String get profileDailyCheckIn => '每日签到';
-
-  @override
-  String get profileTheirThreads => 'Ta的主题';
-
-  @override
-  String get profileTheirBlogs => 'Ta的日志';
-
-  @override
-  String get profileSendMessage => '发短消息';
-
-  @override
-  String get profileAddFriend => '加为好友';
-
-  @override
-  String get profileActionUnavailable => '暂未接入该操作';
 
   @override
   String get profileSignature => '个人签名';
@@ -8347,37 +8320,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileLoginRequired => '請先登入後查看個人資料';
 
   @override
-  String get profileMyThreads => '我的主題';
-
-  @override
   String get profileMyBlogs => '我的日誌';
 
   @override
-  String get profileMyFavorites => '我的收藏';
-
-  @override
   String get profileMessages => '訊息提醒';
-
-  @override
-  String get profileMyFriends => '我的好友';
-
-  @override
-  String get profileDailyCheckIn => '每日簽到';
-
-  @override
-  String get profileTheirThreads => 'Ta 的主題';
-
-  @override
-  String get profileTheirBlogs => 'Ta 的日誌';
-
-  @override
-  String get profileSendMessage => '傳送短訊息';
-
-  @override
-  String get profileAddFriend => '加為好友';
-
-  @override
-  String get profileActionUnavailable => '目前尚未支援此操作';
 
   @override
   String get profileSignature => '個人簽名';

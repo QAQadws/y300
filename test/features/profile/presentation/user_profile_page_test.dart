@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/network_providers.dart';
-import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/profile/data/models/my_message_models.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
+import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 
+import '../../../support/forum_auth_test_support.dart';
 import '../../../test_support/localized_test_app.dart';
 
 void main() {
@@ -31,8 +34,9 @@ void main() {
     expect(find.text('alice'), findsOneWidget);
     expect(find.byKey(const Key('user-profile-metrics')), findsOneWidget);
     expect(find.text('5263'), findsOneWidget);
-    expect(find.text('Ta的主题'), findsOneWidget);
-    expect(find.text('发短消息'), findsOneWidget);
+    expect(find.byKey(const Key('user-profile-actions')), findsNothing);
+    expect(find.text('Ta的主题'), findsNothing);
+    expect(find.text('发短消息'), findsNothing);
     expect(find.byKey(const Key('user-profile-signature')), findsOneWidget);
     expect(_richTextContaining('Make a deal'), findsOneWidget);
     expect(find.byKey(const Key('user-profile-details')), findsOneWidget);
@@ -97,8 +101,9 @@ void main() {
       );
 
       expect(find.text('alice 的資料'), findsOneWidget);
-      expect(find.text('Ta 的主題'), findsOneWidget);
-      expect(find.text('傳送短訊息'), findsOneWidget);
+      expect(find.byKey(const Key('user-profile-actions')), findsNothing);
+      expect(find.text('Ta 的主題'), findsNothing);
+      expect(find.text('傳送短訊息'), findsNothing);
       expect(find.text('百合達人'), findsOneWidget);
     },
   );
@@ -145,9 +150,11 @@ void main() {
 
     expect(profileRepository.queries.single.view, ForumUserProfileView.self);
     expect(find.text('我的资料'), findsWidgets);
-    expect(find.text('我的收藏'), findsOneWidget);
+    expect(find.byKey(const Key('user-profile-actions')), findsOneWidget);
+    expect(find.text('我的日志'), findsOneWidget);
     expect(find.text('消息提醒'), findsOneWidget);
-    expect(find.text('每日签到'), findsOneWidget);
+    expect(find.text('我的收藏'), findsNothing);
+    expect(find.text('每日签到'), findsNothing);
 
     await tester.tap(find.text('我的日志'));
     await tester.pumpAndSettle();
@@ -156,6 +163,35 @@ void main() {
     expect(find.text('还没有相关的日志'), findsOneWidget);
     expect(blogRepository.queries.single.scope, UserBlogFeedScope.self);
     expect(blogRepository.queries.single.order, isNull);
+  });
+
+  testWidgets('MyProfilePage opens the structured message center', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...forumAuthOverrides(const _FakeAuthRepository()),
+          forumUserProfileRepositoryProvider.overrideWithValue(
+            _FakeProfileRepository(data: _myProfile),
+          ),
+          myMessageRepositoryProvider.overrideWithValue(
+            const _EmptyMyMessageRepository(),
+          ),
+          forumImageRefererProvider.overrideWithValue(
+            'https://bbs.yamibo.com/',
+          ),
+        ],
+        child: const LocalizedTestApp(home: MyProfilePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('消息提醒'));
+    await tester.tap(find.text('消息提醒'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MyMessageCenterPage), findsOneWidget);
   });
 
   testWidgets('profile layout remains usable at 300dp with large text', (
@@ -187,6 +223,44 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('user-profile-page-list')), findsOneWidget);
   });
+}
+
+class _EmptyMyMessageRepository implements MyMessageRepository {
+  const _EmptyMyMessageRepository();
+
+  @override
+  Future<ApiResult<MyMessageCenterData>> getMessageCenter() async {
+    return ApiSuccess<MyMessageCenterData>(
+      MyMessageCenterData(
+        notifications: (await getNotifications()).dataOrNull!,
+        privateMessages: (await getPrivateMessages()).dataOrNull!,
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResult<MyNotificationPage>> getNotifications() async {
+    return const ApiSuccess<MyNotificationPage>(
+      MyNotificationPage(
+        count: 0,
+        page: 1,
+        perPage: 30,
+        items: <MyNotificationItem>[],
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResult<MyPrivateMessagePage>> getPrivateMessages() async {
+    return const ApiSuccess<MyPrivateMessagePage>(
+      MyPrivateMessagePage(
+        count: 0,
+        page: 1,
+        perPage: 30,
+        items: <MyPrivateMessageItem>[],
+      ),
+    );
+  }
 }
 
 Future<void> _pumpPublicProfile(

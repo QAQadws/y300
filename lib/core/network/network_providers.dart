@@ -4,7 +4,8 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
-import 'package:y300/core/network/yamibo/yamibo.dart';
+import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 
 final loggerProvider = Provider<Logger>((ref) {
   return Logger();

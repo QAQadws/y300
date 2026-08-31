@@ -1,7 +1,8 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
-import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_viewport_resolver.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_viewport_tracker.dart';
 
 void main() {
   group('ContinuousImageViewportTracker', () {

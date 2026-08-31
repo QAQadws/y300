@@ -11,7 +11,8 @@ import 'package:y300/features/reader_shared/domain/continuous_image/continuous_i
 import 'package:y300/features/reader_shared/domain/export/reader_image_export.dart';
 import 'package:y300/features/reader_shared/domain/metrics/reader_performance_metrics.dart';
 import 'package:y300/features/reader_shared/domain/reader_preferences/reader_preferences.dart';
-import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_reader_view.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_viewport_tracker.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_capability.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_display_settings_sheet.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_page_indicator_overlay.dart';

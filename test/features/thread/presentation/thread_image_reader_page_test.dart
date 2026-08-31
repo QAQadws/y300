@@ -12,7 +12,7 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
-import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_reader_view.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';

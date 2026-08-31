@@ -14,7 +14,7 @@ import 'package:y300/core/network/network_providers.dart';
 import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
-import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
+import 'package:y300/features/comic/data/providers/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';

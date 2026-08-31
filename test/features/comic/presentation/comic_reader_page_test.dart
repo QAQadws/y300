@@ -25,7 +25,7 @@ import 'package:y300/features/comic/domain/services/comic_reading_state_writer.d
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/presentation/comic_reader_page.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
-import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart';
+import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_reader_view.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/widgets/reader_session_image.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';

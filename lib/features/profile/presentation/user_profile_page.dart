@@ -329,7 +329,10 @@ class _UserProfileContent extends StatelessWidget {
     required this.isMyProfile,
     this.onOpenMessages,
     this.onOpenBlogs,
-  });
+  }) : assert(
+         !isMyProfile || (onOpenMessages != null && onOpenBlogs != null),
+         'My profile actions require both navigation callbacks.',
+       );
 
   final ForumUserProfileData profile;
   final ForumUserProfileReadCapabilities? capabilities;
@@ -342,6 +345,16 @@ class _UserProfileContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final showMetrics =
+        capabilities?.supports(ForumUserProfileCapability.orderedMetrics) ==
+        true;
+    final showSignature =
+        capabilities?.supports(ForumUserProfileCapability.signatureMarkup) ==
+            true &&
+        profile.signatureHtml?.trim().isNotEmpty == true;
+    final showDetails =
+        capabilities?.supports(ForumUserProfileCapability.orderedDetails) ==
+        true;
     return ListView(
       key: const Key('user-profile-page-list'),
       padding: EdgeInsets.zero,
@@ -366,10 +379,7 @@ class _UserProfileContent extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (capabilities?.supports(
-                    ForumUserProfileCapability.orderedMetrics,
-                  ) ==
-                  true)
+              if (showMetrics)
                 Transform.translate(
                   offset: const Offset(0, -30),
                   child: _MetricCard(profile: profile, palette: palette),
@@ -379,30 +389,23 @@ class _UserProfileContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _ActionGrid(
-                      profile: profile,
-                      palette: palette,
-                      isMyProfile: isMyProfile,
-                      onOpenMessages: onOpenMessages,
-                      onOpenBlogs: onOpenBlogs,
-                    ),
-                    if (capabilities?.supports(
-                              ForumUserProfileCapability.signatureMarkup,
-                            ) ==
-                            true &&
-                        profile.signatureHtml?.trim().isNotEmpty == true) ...[
-                      const SizedBox(height: 12),
+                    if (isMyProfile)
+                      _ActionGrid(
+                        palette: palette,
+                        onOpenMessages: onOpenMessages!,
+                        onOpenBlogs: onOpenBlogs!,
+                      ),
+                    if (showSignature) ...[
+                      if (isMyProfile) const SizedBox(height: 12),
                       _SignatureSection(
                         profile: profile,
                         palette: palette,
                         imageReferer: imageReferer,
                       ),
                     ],
-                    if (capabilities?.supports(
-                          ForumUserProfileCapability.orderedDetails,
-                        ) ==
-                        true) ...[
-                      const SizedBox(height: 12),
+                    if (showDetails) ...[
+                      if (isMyProfile || showSignature)
+                        const SizedBox(height: 12),
                       _DetailsSection(profile: profile, palette: palette),
                     ],
                   ],
@@ -541,18 +544,14 @@ class _MetricCard extends StatelessWidget {
 
 class _ActionGrid extends StatelessWidget {
   const _ActionGrid({
-    required this.profile,
     required this.palette,
-    required this.isMyProfile,
-    this.onOpenMessages,
-    this.onOpenBlogs,
+    required this.onOpenMessages,
+    required this.onOpenBlogs,
   });
 
-  final ForumUserProfileData profile;
   final _UserProfilePalette palette;
-  final bool isMyProfile;
-  final VoidCallback? onOpenMessages;
-  final VoidCallback? onOpenBlogs;
+  final VoidCallback onOpenMessages;
+  final VoidCallback onOpenBlogs;
 
   @override
   Widget build(BuildContext context) {
@@ -581,44 +580,12 @@ class _ActionGrid extends StatelessWidget {
 
   List<_ProfileAction> _buildActions(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    if (isMyProfile) {
-      return <_ProfileAction>[
-        _ProfileAction(
-          l10n.profileMyThreads,
-          Icons.chat_bubble,
-          unavailable: true,
-        ),
-        _ProfileAction(l10n.profileMyBlogs, Icons.sms, onTap: onOpenBlogs),
-        _ProfileAction(l10n.profileMyFavorites, Icons.star, unavailable: true),
-        _ProfileAction(
-          l10n.profileMessages,
-          Icons.notifications,
-          onTap: onOpenMessages,
-        ),
-        _ProfileAction(
-          l10n.profileMyFriends,
-          Icons.people_alt,
-          unavailable: true,
-        ),
-        _ProfileAction(
-          l10n.profileDailyCheckIn,
-          Icons.edit_note,
-          unavailable: true,
-        ),
-      ];
-    }
     return <_ProfileAction>[
+      _ProfileAction(l10n.profileMyBlogs, Icons.sms, onTap: onOpenBlogs),
       _ProfileAction(
-        l10n.profileTheirThreads,
-        Icons.chat_bubble,
-        unavailable: true,
-      ),
-      _ProfileAction(l10n.profileTheirBlogs, Icons.sms, unavailable: true),
-      _ProfileAction(l10n.profileSendMessage, Icons.message, unavailable: true),
-      _ProfileAction(
-        l10n.profileAddFriend,
-        Icons.person_add_alt_1,
-        unavailable: true,
+        l10n.profileMessages,
+        Icons.notifications,
+        onTap: onOpenMessages,
       ),
     ];
   }
@@ -637,17 +604,7 @@ class _ActionTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap:
-            action.onTap ??
-            (action.unavailable
-                ? () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppLocalizations.of(context).profileActionUnavailable,
-                      ),
-                    ),
-                  )
-                : null),
+        onTap: action.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
@@ -849,17 +806,11 @@ class _UserProfileError extends StatelessWidget {
 }
 
 class _ProfileAction {
-  const _ProfileAction(
-    this.label,
-    this.icon, {
-    this.onTap,
-    this.unavailable = false,
-  });
+  const _ProfileAction(this.label, this.icon, {required this.onTap});
 
   final String label;
   final IconData icon;
-  final VoidCallback? onTap;
-  final bool unavailable;
+  final VoidCallback onTap;
 }
 
 String _profileErrorText(BuildContext context, Object? error) {

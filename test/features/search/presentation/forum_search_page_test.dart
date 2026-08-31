@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/comic/data/providers/comic_search_refresh_queue_providers.dart';
+import 'package:y300/features/comic/data/providers/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';

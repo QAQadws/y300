@@ -9,7 +9,9 @@ void main() {
     () async {
       final store = YamiboSessionStore();
       final adapter = Y300ForumSessionAdapter(store);
-      final updatedAt = DateTime.utc(2026, 8, 30, 12);
+      final updatedAt = DateTime.now().toUtc().subtract(
+        const Duration(minutes: 1),
+      );
 
       await adapter.merge(
         forum.ForumSessionSnapshot(

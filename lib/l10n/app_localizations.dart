@@ -6489,71 +6489,17 @@ abstract class AppLocalizations {
   /// **'请先登录后查看个人资料'**
   String get profileLoginRequired;
 
-  /// No description provided for @profileMyThreads.
-  ///
-  /// In zh, this message translates to:
-  /// **'我的主题'**
-  String get profileMyThreads;
-
   /// No description provided for @profileMyBlogs.
   ///
   /// In zh, this message translates to:
   /// **'我的日志'**
   String get profileMyBlogs;
 
-  /// No description provided for @profileMyFavorites.
-  ///
-  /// In zh, this message translates to:
-  /// **'我的收藏'**
-  String get profileMyFavorites;
-
   /// No description provided for @profileMessages.
   ///
   /// In zh, this message translates to:
   /// **'消息提醒'**
   String get profileMessages;
-
-  /// No description provided for @profileMyFriends.
-  ///
-  /// In zh, this message translates to:
-  /// **'我的好友'**
-  String get profileMyFriends;
-
-  /// No description provided for @profileDailyCheckIn.
-  ///
-  /// In zh, this message translates to:
-  /// **'每日签到'**
-  String get profileDailyCheckIn;
-
-  /// No description provided for @profileTheirThreads.
-  ///
-  /// In zh, this message translates to:
-  /// **'Ta的主题'**
-  String get profileTheirThreads;
-
-  /// No description provided for @profileTheirBlogs.
-  ///
-  /// In zh, this message translates to:
-  /// **'Ta的日志'**
-  String get profileTheirBlogs;
-
-  /// No description provided for @profileSendMessage.
-  ///
-  /// In zh, this message translates to:
-  /// **'发短消息'**
-  String get profileSendMessage;
-
-  /// No description provided for @profileAddFriend.
-  ///
-  /// In zh, this message translates to:
-  /// **'加为好友'**
-  String get profileAddFriend;
-
-  /// No description provided for @profileActionUnavailable.
-  ///
-  /// In zh, this message translates to:
-  /// **'暂未接入该操作'**
-  String get profileActionUnavailable;
 
   /// No description provided for @profileSignature.
   ///
