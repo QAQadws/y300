@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_prewarmer.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
@@ -14,7 +14,7 @@ void main() {
       var notifications = 0;
       store.addListener(() => notifications += 1);
 
-      const block = ThreadPostImageBlock(
+      const block = RichImageBlock(
         url: 'https://bbs.yamibo.com/a.jpg',
         rawUrl: 'a.jpg',
         index: 0,
@@ -60,14 +60,12 @@ void main() {
 
   group('ThreadPostImageDimensionPrewarmer', () {
     test('records cached dimensions for images lacking HTML size', () async {
-      const block = ThreadPostImageBlock(
+      const block = RichImageBlock(
         url: 'https://bbs.yamibo.com/page.jpg',
         rawUrl: 'page.jpg',
         index: 0,
       );
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[block],
-      );
+      const document = RichDocument(blocks: <RichBlock>[block]);
       final store = ThreadPostImageDimensionStore();
       final prewarmer = ThreadPostImageDimensionPrewarmer(
         imageCacheService: _SizedImageCacheService(<String, CachedImageResult>{
@@ -81,7 +79,7 @@ void main() {
         store: store,
       );
 
-      await prewarmer.prewarmDocuments(<ThreadPostBodyDocument>[
+      await prewarmer.prewarmDocuments(<RichDocument>[
         document,
       ], cacheKeyResolver: (_) => 'cache-0');
 
@@ -89,7 +87,7 @@ void main() {
     });
 
     test('skips images that already carry HTML dimensions', () async {
-      const block = ThreadPostImageBlock(
+      const block = RichImageBlock(
         url: 'https://bbs.yamibo.com/page.jpg',
         rawUrl: 'page.jpg',
         index: 0,
@@ -105,8 +103,8 @@ void main() {
         store: store,
       );
 
-      await prewarmer.prewarmDocuments(const <ThreadPostBodyDocument>[
-        ThreadPostBodyDocument(blocks: <ThreadPostBodyBlock>[block]),
+      await prewarmer.prewarmDocuments(const <RichDocument>[
+        RichDocument(blocks: <RichBlock>[block]),
       ], cacheKeyResolver: (_) => 'cache-0');
 
       expect(cacheService.lookups, isEmpty);

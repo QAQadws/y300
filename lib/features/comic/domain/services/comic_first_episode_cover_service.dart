@@ -3,7 +3,7 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 
 typedef ComicEpisodeImageFetcher =
     Future<ComicEpisodeImagesFetchResult> Function(String tid);
@@ -12,7 +12,7 @@ abstract class ComicFirstEpisodeCoverPromoter {
   Future<bool> promoteIfPossible({
     required String comicId,
     ComicThreadDiscoveryCache? threadCache,
-    FavoriteFirstSyncRequestGovernor? governor,
+    FavoriteSyncRequestGovernor? governor,
   });
 }
 
@@ -33,7 +33,7 @@ class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
   Future<bool> promoteIfPossible({
     required String comicId,
     ComicThreadDiscoveryCache? threadCache,
-    FavoriteFirstSyncRequestGovernor? governor,
+    FavoriteSyncRequestGovernor? governor,
   }) async {
     final detail = await _repository.getComicDetail(comicId: comicId);
     if (detail == null || _hasCustomCover(detail)) {
@@ -97,14 +97,14 @@ class ComicFirstEpisodeCoverService implements ComicFirstEpisodeCoverPromoter {
   }
 
   Future<ComicEpisodeImagesFetchResult> _runFetch(
-    FavoriteFirstSyncRequestGovernor? governor,
+    FavoriteSyncRequestGovernor? governor,
     Future<ComicEpisodeImagesFetchResult> Function() action,
   ) {
     if (governor == null) {
       return action();
     }
     return governor.run(
-      kind: FavoriteFirstSyncRequestKind.comicThreadDetail,
+      kind: FavoriteSyncRequestKind.comicThreadDetail,
       action: action,
     );
   }

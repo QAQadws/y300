@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 
 enum ThreadPostResourceLayoutHintSource {
   htmlAttribute,
@@ -94,11 +94,11 @@ class ThreadPostResourceLayoutHints {
   final Map<String, ThreadPostBlockImageLayoutHint> blockImages;
   final Map<String, ThreadPostInlineImageLayoutHint> inlineImages;
 
-  ThreadPostBlockImageLayoutHint? blockImage(ThreadPostImageBlock image) {
+  ThreadPostBlockImageLayoutHint? blockImage(RichImageBlock image) {
     return blockImages[blockImageKey(image)];
   }
 
-  ThreadPostInlineImageLayoutHint? inlineImage(ThreadPostInlineImage image) {
+  ThreadPostInlineImageLayoutHint? inlineImage(RichInlineImage image) {
     return inlineImages[inlineImageKey(image)];
   }
 
@@ -116,7 +116,7 @@ class ThreadPostResourceLayoutHints {
     return parts.join(';');
   }
 
-  static String blockImageKey(ThreadPostImageBlock image) {
+  static String blockImageKey(RichImageBlock image) {
     final anchorId = image.anchorId.trim();
     if (anchorId.isNotEmpty) {
       return 'anchor:$anchorId';
@@ -124,7 +124,7 @@ class ThreadPostResourceLayoutHints {
     return 'block:${image.index}|${image.url}|${image.rawUrl}';
   }
 
-  static String inlineImageKey(ThreadPostInlineImage image) {
+  static String inlineImageKey(RichInlineImage image) {
     final width = image.originalWidth;
     final height = image.originalHeight;
     return 'inline:${image.url}|${image.rawUrl}|$width|$height';

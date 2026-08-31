@@ -101,6 +101,7 @@ void main() {
       'lib/core/network/discuz_response.dart',
       'lib/core/network/discuz_ajax_cdata_parser.dart',
       'lib/core/network/yamibo/yamibo.dart',
+      'lib/core/network/network_providers.dart',
       'lib/features/reader_shared/domain/export/export.dart',
       'lib/features/reader_shared/data/export/export.dart',
       'lib/features/reader_shared/domain/metrics/metrics.dart',
@@ -109,6 +110,7 @@ void main() {
       'lib/features/reader_shared/presentation/continuous_image/continuous_image_presentation.dart',
       'lib/features/comic/data/providers/comic_refresh_outcome_providers.dart',
       'lib/features/comic/data/providers/comic_search_refresh_queue_providers.dart',
+      'lib/features/favorites/data/services/favorite_first_sync_request_governor.dart',
       'lib/features/profile/data/services/discuz_profile_auth_page_detector.dart',
       'lib/features/more/presentation/cache_settings_page.dart',
       'lib/features/more/presentation/cache_settings_controller.dart',
@@ -171,12 +173,65 @@ void main() {
       'lib/features/thread/domain/services/post_edit_baseline_fingerprint_service.dart',
       'lib/features/thread/domain/services/post_edit_native_capability_classifier.dart',
       'lib/features/thread/domain/services/post_edit_submit_payload_builder.dart',
+      'lib/features/thread/domain/models/thread_post_body_document.dart',
     ];
 
     expect(
       removedPaths.where((path) => File(path).existsSync()).toList(),
       isEmpty,
     );
+  });
+
+  test('retired governor and model aliases stay removed', () {
+    const retiredSymbols = <String>[
+      'FavoriteFirstSyncRequestKind',
+      'FavoriteFirstSyncRequestGovernor',
+      'DefaultFavoriteFirstSyncRequestGovernor',
+      'favoriteFirstSyncGovernorCooldown',
+      'ThreadPostBodyBlock',
+      'ThreadPostBodyDocument',
+      'ThreadPostTextBlock',
+      'ThreadPostQuoteBlock',
+      'ThreadPostImageBlock',
+      'ThreadPostTextRun',
+      'ThreadPostInlineImage',
+      'ReplyImageAttachment',
+      'ReplyImageAttachmentStatus',
+      'ReplyAttachRemain',
+      'ReplyImageUploadPermission',
+      'ReplyPickedImage',
+      'ReplyLocalImageFile',
+      'ReplyImageUploadResponse',
+      'ReplyUploadedImage',
+      'ReplyDraftIdentity',
+      'ReplyDraftSnapshot',
+    ];
+    final violations = _dartFiles(<String>['lib', 'test'])
+        .where(
+          (file) =>
+              _normalized(file.path) !=
+              'test/architecture/yamibo_forum_client_boundary_test.dart',
+        )
+        .where((file) {
+          final source = file.readAsStringSync();
+          return retiredSymbols.any(
+            (symbol) =>
+                RegExp('\\b${RegExp.escape(symbol)}\\b').hasMatch(source),
+          );
+        })
+        .map((file) => file.path)
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
+  test('transport providers cannot depend on full-client or cache wiring', () {
+    final source = File(
+      'lib/core/network/yamibo_forum_transport_providers.dart',
+    ).readAsStringSync();
+
+    expect(source, isNot(contains('yamibo_forum_client_provider.dart')));
+    expect(source, isNot(contains('image_cache_providers.dart')));
   });
 
   test('auth feature cannot restore source-specific authentication calls', () {

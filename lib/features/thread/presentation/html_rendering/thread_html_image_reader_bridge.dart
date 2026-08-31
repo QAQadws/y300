@@ -1,6 +1,6 @@
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
@@ -152,9 +152,9 @@ class ThreadHtmlImageReaderBridge {
     return null;
   }
 
-  ThreadPostImageBlock? _matchLegacyImage(
+  RichImageBlock? _matchLegacyImage(
     ForumHtmlImageRequest request,
-    List<ThreadPostImageBlock> images,
+    List<RichImageBlock> images,
   ) {
     final attachmentId = request.attachmentId?.trim();
     if (attachmentId != null && attachmentId.isNotEmpty) {
@@ -174,7 +174,7 @@ class ThreadHtmlImageReaderBridge {
     return null;
   }
 
-  List<ThreadPostImageBlock> _imageBlocksFor(
+  List<RichImageBlock> _imageBlocksFor(
     ForumHtmlReadableImageSequence sequence,
   ) {
     return sequence.entries

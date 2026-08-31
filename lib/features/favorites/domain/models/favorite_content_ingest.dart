@@ -1,5 +1,5 @@
 import 'package:y300/features/favorites/domain/models/favorite_detail_context.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';

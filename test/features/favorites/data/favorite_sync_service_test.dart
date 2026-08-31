@@ -22,7 +22,7 @@ import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/services/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
@@ -249,9 +249,9 @@ void main() {
 
       expect(
         governor.kinds,
-        containsAll(<FavoriteFirstSyncRequestKind>[
-          FavoriteFirstSyncRequestKind.favoriteListPage,
-          FavoriteFirstSyncRequestKind.favoriteThreadDetail,
+        containsAll(<FavoriteSyncRequestKind>[
+          FavoriteSyncRequestKind.favoriteListPage,
+          FavoriteSyncRequestKind.favoriteThreadDetail,
         ]),
       );
     },
@@ -327,9 +327,9 @@ void main() {
       // Manual recent-add must also be paced through the governor.
       expect(
         governor.kinds,
-        containsAll(<FavoriteFirstSyncRequestKind>[
-          FavoriteFirstSyncRequestKind.favoriteListPage,
-          FavoriteFirstSyncRequestKind.favoriteThreadDetail,
+        containsAll(<FavoriteSyncRequestKind>[
+          FavoriteSyncRequestKind.favoriteListPage,
+          FavoriteSyncRequestKind.favoriteThreadDetail,
         ]),
       );
     },
@@ -372,9 +372,7 @@ void main() {
       expect(governorCreated, 1);
       expect(
         governor.kinds
-            .where(
-              (kind) => kind == FavoriteFirstSyncRequestKind.favoriteListPage,
-            )
+            .where((kind) => kind == FavoriteSyncRequestKind.favoriteListPage)
             .length,
         1,
       );
@@ -1571,7 +1569,7 @@ NetworkFavoriteSyncService _service({
   LibraryShelfRefreshBus? shelfRefreshBus,
   DownloadStorageService? downloadStorageService,
   int detailBatchLimit = 20,
-  FavoriteFirstSyncRequestGovernor Function()? governorFactory,
+  FavoriteSyncRequestGovernor Function()? governorFactory,
 }) {
   final resolvedComicIngestService =
       comicIngestService ?? _FakeComicIngestService();
@@ -2016,13 +2014,12 @@ class _ThrowingRefreshService implements ComicEpisodeRefreshService {
   }
 }
 
-class _RecordingGovernor implements FavoriteFirstSyncRequestGovernor {
-  final List<FavoriteFirstSyncRequestKind> kinds =
-      <FavoriteFirstSyncRequestKind>[];
+class _RecordingGovernor implements FavoriteSyncRequestGovernor {
+  final List<FavoriteSyncRequestKind> kinds = <FavoriteSyncRequestKind>[];
 
   @override
   Future<T> run<T>({
-    required FavoriteFirstSyncRequestKind kind,
+    required FavoriteSyncRequestKind kind,
     required Future<T> Function() action,
   }) async {
     kinds.add(kind);
@@ -2071,7 +2068,7 @@ class _RecordingCoverPromoter implements ComicFirstEpisodeCoverPromoter {
   Future<bool> promoteIfPossible({
     required String comicId,
     ComicThreadDiscoveryCache? threadCache,
-    FavoriteFirstSyncRequestGovernor? governor,
+    FavoriteSyncRequestGovernor? governor,
   }) async {
     return true;
   }

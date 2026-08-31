@@ -1,27 +1,27 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 
 void main() {
   test('default favorite sync cooldown is 700ms (all sync modes)', () {
     expect(favoriteSyncGovernorCooldown, const Duration(milliseconds: 700));
     // Default governor (used by the provider) inherits the 700ms pacing.
     expect(
-      DefaultFavoriteFirstSyncRequestGovernor().cooldown,
+      DefaultFavoriteSyncRequestGovernor().cooldown,
       const Duration(milliseconds: 700),
     );
   });
 
   test('governor runs requests strictly serially across kinds', () async {
-    final governor = DefaultFavoriteFirstSyncRequestGovernor(
+    final governor = DefaultFavoriteSyncRequestGovernor(
       cooldown: Duration.zero,
     );
     final events = <String>[];
     final firstGate = Completer<void>();
 
     final first = governor.run<void>(
-      kind: FavoriteFirstSyncRequestKind.favoriteListPage,
+      kind: FavoriteSyncRequestKind.favoriteListPage,
       action: () async {
         events.add('first-start');
         await firstGate.future;
@@ -29,7 +29,7 @@ void main() {
       },
     );
     final second = governor.run<void>(
-      kind: FavoriteFirstSyncRequestKind.comicCatalogHtml,
+      kind: FavoriteSyncRequestKind.comicCatalogHtml,
       action: () async {
         events.add('second-start');
         events.add('second-end');
@@ -53,7 +53,7 @@ void main() {
   test('governor waits cooldown after each governed request', () async {
     var now = DateTime(2026, 6, 14, 12, 0, 0);
     final waits = <Duration>[];
-    final governor = DefaultFavoriteFirstSyncRequestGovernor(
+    final governor = DefaultFavoriteSyncRequestGovernor(
       cooldown: const Duration(seconds: 1),
       nowProvider: () => now,
       delay: (duration) async {
@@ -63,12 +63,12 @@ void main() {
     );
 
     await governor.run<void>(
-      kind: FavoriteFirstSyncRequestKind.favoriteListPage,
+      kind: FavoriteSyncRequestKind.favoriteListPage,
       action: () async {},
     );
     now = now.add(const Duration(milliseconds: 250));
     await governor.run<void>(
-      kind: FavoriteFirstSyncRequestKind.novelEpisodePage,
+      kind: FavoriteSyncRequestKind.novelEpisodePage,
       action: () async {},
     );
 

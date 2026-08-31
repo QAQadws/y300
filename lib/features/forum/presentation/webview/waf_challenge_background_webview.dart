@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/browser_user_agents.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/waf/waf.dart';
 
 /// Runs the same ordinary WebView challenge used by the original foreground

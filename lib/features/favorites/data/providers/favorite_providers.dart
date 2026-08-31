@@ -3,7 +3,7 @@ import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/providers/favorite_ingest_providers.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/use_cases/favorite_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/favorites/data/services/favorite_link_service_impl.dart';
 import 'package:y300/features/favorites/data/services/favorite_shelf_bootstrapper.dart';
@@ -47,7 +47,7 @@ final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
     postIngestTaskRunner: ref.watch(libraryPostIngestTaskRunnerProvider),
     shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
     downloadStorageService: ref.watch(downloadStorageServiceProvider),
-    governorFactory: DefaultFavoriteFirstSyncRequestGovernor.new,
+    governorFactory: DefaultFavoriteSyncRequestGovernor.new,
   );
 });
 

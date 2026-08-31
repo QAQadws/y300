@@ -8,7 +8,7 @@ import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_pa
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_eligibility_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 enum EpisodeDiscoveryStrategy { direct, recursive, catalog }
@@ -88,7 +88,7 @@ class ComicEpisodeDiscoveryService {
   /// 不需要先请求帖子详情。可独立调用，用于 catalog 快速路径。
   Future<List<ComicEpisodeLink>> discoverFromCatalogUrl(
     String catalogUrl, {
-    FavoriteFirstSyncRequestGovernor? governor,
+    FavoriteSyncRequestGovernor? governor,
   }) {
     return _discoverFromCatalog(catalogUrl, governor: governor);
   }
@@ -99,7 +99,7 @@ class ComicEpisodeDiscoveryService {
     // Search/current-only refresh needs current-post links without letting the
     // same catalog fallback run twice. The default keeps legacy discovery.
     bool allowCatalogFallback = true,
-    FavoriteFirstSyncRequestGovernor? governor,
+    FavoriteSyncRequestGovernor? governor,
     ComicThreadDiscoveryDocument? preloadedRootDetail,
     ComicThreadDiscoveryCache? threadCache,
   }) async {
@@ -283,7 +283,7 @@ class ComicEpisodeDiscoveryService {
 
   Future<List<ComicEpisodeLink>> _discoverFromCatalog(
     String? catalogUrl, {
-    FavoriteFirstSyncRequestGovernor? governor,
+    FavoriteSyncRequestGovernor? governor,
   }) async {
     if (catalogUrl == null || catalogUrl.isEmpty) {
       return const <ComicEpisodeLink>[];
@@ -305,7 +305,7 @@ class ComicEpisodeDiscoveryService {
 
   Future<_ParsedThreadRoot?> _fetchAndParse(
     String tid, {
-    FavoriteFirstSyncRequestGovernor? governor,
+    FavoriteSyncRequestGovernor? governor,
     ComicThreadDiscoveryDocument? preloadedDetail,
     ComicThreadDiscoveryCache? threadCache,
     bool isRecursiveRequest = false,
@@ -422,7 +422,7 @@ class ComicEpisodeDiscoveryService {
   }
 
   Future<T> _runThreadRequest<T>({
-    required FavoriteFirstSyncRequestGovernor? governor,
+    required FavoriteSyncRequestGovernor? governor,
     required bool isRecursiveRequest,
     required Future<T> Function() action,
   }) {
@@ -431,7 +431,7 @@ class ComicEpisodeDiscoveryService {
         return action();
       }
       return governor.run(
-        kind: FavoriteFirstSyncRequestKind.comicThreadDetail,
+        kind: FavoriteSyncRequestKind.comicThreadDetail,
         action: action,
       );
     }
@@ -446,11 +446,11 @@ class ComicEpisodeDiscoveryService {
 final class _FavoriteCatalogRequestGate implements ComicCatalogRequestGate {
   const _FavoriteCatalogRequestGate(this._governor);
 
-  final FavoriteFirstSyncRequestGovernor _governor;
+  final FavoriteSyncRequestGovernor _governor;
 
   @override
   Future<T> run<T>(Future<T> Function() action) => _governor.run(
-    kind: FavoriteFirstSyncRequestKind.comicCatalogHtml,
+    kind: FavoriteSyncRequestKind.comicCatalogHtml,
     action: action,
   );
 }

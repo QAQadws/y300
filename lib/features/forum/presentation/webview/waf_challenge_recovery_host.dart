@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/features/forum/presentation/webview/waf_challenge_background_webview.dart';
 

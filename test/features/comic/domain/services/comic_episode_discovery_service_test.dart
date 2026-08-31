@@ -9,7 +9,7 @@ import 'package:y300/features/comic/domain/services/comic_episode_discovery_serv
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 
 import '../../../../support/fixture_comic_thread_discovery_repository.dart';
 
@@ -354,9 +354,9 @@ void main() {
 
       expect(result.strategy, EpisodeDiscoveryStrategy.recursive);
       expect(recursiveGovernor.scheduledCount, 1);
-      expect(favoriteGovernor.kinds, <FavoriteFirstSyncRequestKind>[
-        FavoriteFirstSyncRequestKind.comicThreadDetail,
-        FavoriteFirstSyncRequestKind.comicThreadDetail,
+      expect(favoriteGovernor.kinds, <FavoriteSyncRequestKind>[
+        FavoriteSyncRequestKind.comicThreadDetail,
+        FavoriteSyncRequestKind.comicThreadDetail,
       ]);
     });
 
@@ -766,14 +766,12 @@ class _RecordingRecursiveRequestGovernor
   }
 }
 
-class _RecordingFavoriteRequestGovernor
-    implements FavoriteFirstSyncRequestGovernor {
-  final List<FavoriteFirstSyncRequestKind> kinds =
-      <FavoriteFirstSyncRequestKind>[];
+class _RecordingFavoriteRequestGovernor implements FavoriteSyncRequestGovernor {
+  final List<FavoriteSyncRequestKind> kinds = <FavoriteSyncRequestKind>[];
 
   @override
   Future<T> run<T>({
-    required FavoriteFirstSyncRequestKind kind,
+    required FavoriteSyncRequestKind kind,
     required Future<T> Function() action,
   }) {
     kinds.add(kind);

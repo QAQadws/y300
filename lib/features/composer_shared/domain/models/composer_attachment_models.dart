@@ -1,11 +1,7 @@
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
-/// 附件相关领域模型，在自制回复页与（后续）发帖页之间共享。
-///
-/// Phase 1 仅做迁移：把原 `ReplyImageAttachment` 等类型从 reply 模块抽到 composer_shared。
-/// 字段含义保持不变，由对应的旧 `Reply*` 名称通过 typedef 别名继续暴露给现有调用方，
-/// 避免一次性改动所有引用点。后续阶段再做"二次提纯"。
+/// 发帖、回复与帖子编辑共享的附件领域模型。
 enum ComposerImageAttachmentStatus {
   local,
   uploading,

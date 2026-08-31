@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/yamibo/yamibo_auth_cookie.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 

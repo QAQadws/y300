@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/media/device_memory_profile.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';

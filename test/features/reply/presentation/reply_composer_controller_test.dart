@@ -30,7 +30,7 @@ void main() {
       final draftRepository = _MemoryReplyDraftRepository();
       final args = _threadArgs(tid: '572063');
       await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
+        ComposerDraftSnapshot(
           identity: args.identity,
           message: '恢复的草稿',
           useSignature: false,
@@ -54,7 +54,7 @@ void main() {
       final draftRepository = _MemoryReplyDraftRepository();
       final args = _threadArgs(tid: '572063');
       await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
+        ComposerDraftSnapshot(
           identity: args.identity,
           message: '正文\n[attach]123456[/attach]',
           useSignature: true,
@@ -82,15 +82,15 @@ void main() {
       expect(state.imageAttachments.single.localId, 'image-1');
       expect(
         state.imageAttachments.single.status,
-        ReplyImageAttachmentStatus.uploaded,
+        ComposerImageAttachmentStatus.uploaded,
       );
     });
 
     test('different thread does not reuse draft', () async {
       final draftRepository = _MemoryReplyDraftRepository();
       await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
-          identity: ReplyDraftIdentity.thread(fid: '33', tid: '572063'),
+        ComposerDraftSnapshot(
+          identity: ComposerDraftIdentity.thread(fid: '33', tid: '572063'),
           message: '旧帖子草稿',
           useSignature: true,
           updatedAt: DateTime.utc(2026, 6, 6),
@@ -157,7 +157,7 @@ void main() {
       final draftRepository = _MemoryReplyDraftRepository();
       final imagePicker = _FakeReplyImagePicker(
         images: const [
-          ReplyPickedImage(
+          ComposerPickedImage(
             path: '/gallery/first.jpg',
             fileName: 'first.jpg',
             mimeType: 'image/jpeg',
@@ -171,7 +171,7 @@ void main() {
             localId: '',
             current: 1,
             total: 1,
-            uploadedImage: ReplyUploadedImage(
+            uploadedImage: ComposerUploadedImage(
               localId: '',
               aid: '123456',
               uploadedAt: DateTime.utc(2026, 6, 8, 10),
@@ -252,7 +252,7 @@ void main() {
       );
       final args = _threadArgs(tid: '572063');
       await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
+        ComposerDraftSnapshot(
           identity: args.identity,
           message: '旧草稿',
           useSignature: true,
@@ -291,7 +291,7 @@ void main() {
         final replyRepository = _FakeThreadReplyAdapter();
         final args = _threadArgs(tid: '572063');
         await draftRepository.saveDraft(
-          ReplyDraftSnapshot(
+          ComposerDraftSnapshot(
             identity: args.identity,
             message: '正文\n[attach]123456[/attach]',
             useSignature: true,
@@ -343,7 +343,7 @@ void main() {
         final replyRepository = _FakeThreadReplyAdapter();
         final args = _threadArgs(tid: '572063');
         await draftRepository.saveDraft(
-          ReplyDraftSnapshot(
+          ComposerDraftSnapshot(
             identity: args.identity,
             message: '正文\n[attach]123456[/attach]',
             useSignature: true,
@@ -382,7 +382,7 @@ void main() {
         final replyRepository = _FakeThreadReplyAdapter();
         final args = _threadArgs(tid: '572063');
         await draftRepository.saveDraft(
-          ReplyDraftSnapshot(
+          ComposerDraftSnapshot(
             identity: args.identity,
             message: '正文',
             useSignature: true,
@@ -419,7 +419,7 @@ void main() {
       final replyRepository = _FakeThreadReplyAdapter();
       final args = _threadArgs(tid: '572063');
       await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
+        ComposerDraftSnapshot(
           identity: args.identity,
           message: '正文\n[attach]123[/attach]\n[attach]456[/attach]',
           useSignature: true,
@@ -428,12 +428,12 @@ void main() {
             _attachmentWithStatus(
               localId: 'local',
               aid: '123',
-              status: ReplyImageAttachmentStatus.local,
+              status: ComposerImageAttachmentStatus.local,
             ),
             _attachmentWithStatus(
               localId: 'failed',
               aid: '456',
-              status: ReplyImageAttachmentStatus.failed,
+              status: ComposerImageAttachmentStatus.failed,
             ),
           ],
         ),
@@ -462,7 +462,7 @@ void main() {
         final replyRepository = _FakeThreadReplyAdapter();
         final args = _threadArgs(tid: '572063');
         await draftRepository.saveDraft(
-          ReplyDraftSnapshot(
+          ComposerDraftSnapshot(
             identity: args.identity,
             message: '[attach]222[/attach]\n正文\n[attach]111[/attach]',
             useSignature: true,
@@ -556,7 +556,7 @@ void main() {
       );
       final args = _threadArgs(tid: '572063');
       await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
+        ComposerDraftSnapshot(
           identity: args.identity,
           message: '正文\n[attach]123456[/attach]',
           useSignature: true,
@@ -611,7 +611,7 @@ void main() {
       final draftRepository = _MemoryReplyDraftRepository();
       final args = _threadArgs(tid: '572063');
       await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
+        ComposerDraftSnapshot(
           identity: args.identity,
           message: '旧草稿',
           useSignature: true,
@@ -635,13 +635,13 @@ void main() {
       () async {
         final imagePicker = _FakeReplyImagePicker(
           images: const [
-            ReplyPickedImage(
+            ComposerPickedImage(
               path: '/gallery/first.jpg',
               fileName: 'first.jpg',
               mimeType: 'image/jpeg',
               originalIndex: 0,
             ),
-            ReplyPickedImage(
+            ComposerPickedImage(
               path: '/gallery/second.png',
               fileName: 'second.png',
               mimeType: 'image/png',
@@ -656,7 +656,7 @@ void main() {
               localId: '',
               current: 1,
               total: 2,
-              uploadedImage: ReplyUploadedImage(
+              uploadedImage: ComposerUploadedImage(
                 localId: '',
                 aid: '111',
                 uploadedAt: DateTime.utc(2026, 6, 8),
@@ -667,7 +667,7 @@ void main() {
               localId: '',
               current: 2,
               total: 2,
-              uploadedImage: ReplyUploadedImage(
+              uploadedImage: ComposerUploadedImage(
                 localId: '',
                 aid: '222',
                 uploadedAt: DateTime.utc(2026, 6, 8),
@@ -708,8 +708,8 @@ void main() {
           'second.png',
         ]);
         expect(state.imageAttachments.map((item) => item.status), [
-          ReplyImageAttachmentStatus.uploaded,
-          ReplyImageAttachmentStatus.uploaded,
+          ComposerImageAttachmentStatus.uploaded,
+          ComposerImageAttachmentStatus.uploaded,
         ]);
         expect(state.message, '[attach]111[/attach]\n[attach]222[/attach]\n');
       },
@@ -747,13 +747,13 @@ void main() {
       () async {
         final imagePicker = _FakeReplyImagePicker(
           images: const [
-            ReplyPickedImage(
+            ComposerPickedImage(
               path: '/gallery/first.jpg',
               fileName: 'first.jpg',
               mimeType: 'image/jpeg',
               originalIndex: 0,
             ),
-            ReplyPickedImage(
+            ComposerPickedImage(
               path: '/gallery/second.jpg',
               fileName: 'second.jpg',
               mimeType: 'image/jpeg',
@@ -776,7 +776,7 @@ void main() {
               localId: '',
               current: 2,
               total: 2,
-              uploadedImage: ReplyUploadedImage(
+              uploadedImage: ComposerUploadedImage(
                 localId: '',
                 aid: '222',
                 uploadedAt: DateTime.utc(2026, 6, 8),
@@ -811,8 +811,8 @@ void main() {
             .read(replyComposerControllerProvider(args))
             .value!;
         expect(state.imageAttachments.map((attachment) => attachment.status), [
-          ReplyImageAttachmentStatus.failed,
-          ReplyImageAttachmentStatus.uploaded,
+          ComposerImageAttachmentStatus.failed,
+          ComposerImageAttachmentStatus.uploaded,
         ]);
         expect(state.message, '[attach]222[/attach]\n');
         expect(
@@ -826,7 +826,7 @@ void main() {
       final uploadCompleter = Completer<void>();
       final imagePicker = _FakeReplyImagePicker(
         images: const [
-          ReplyPickedImage(
+          ComposerPickedImage(
             path: '/gallery/first.jpg',
             fileName: 'first.jpg',
             mimeType: 'image/jpeg',
@@ -889,7 +889,7 @@ void main() {
     test('pickImages does not run while preparing post reply', () async {
       final imagePicker = _FakeReplyImagePicker(
         images: const [
-          ReplyPickedImage(
+          ComposerPickedImage(
             path: '/gallery/first.jpg',
             fileName: 'first.jpg',
             mimeType: 'image/jpeg',
@@ -978,7 +978,7 @@ void main() {
       final replyRepository = _FakeThreadReplyAdapter();
       final args = _postArgs();
       await draftRepository.saveDraft(
-        ReplyDraftSnapshot(
+        ComposerDraftSnapshot(
           identity: args.identity,
           message: '楼层草稿',
           useSignature: false,
@@ -1166,7 +1166,7 @@ void main() {
   });
 }
 
-ReplyImageAttachment _uploadedAttachment({
+ComposerImageAttachment _uploadedAttachment({
   required String localId,
   required String aid,
   required DateTime uploadedAt,
@@ -1175,20 +1175,20 @@ ReplyImageAttachment _uploadedAttachment({
   return _attachmentWithStatus(
     localId: localId,
     aid: aid,
-    status: ReplyImageAttachmentStatus.uploaded,
+    status: ComposerImageAttachmentStatus.uploaded,
     uploadedAt: uploadedAt,
     cachePath: cachePath,
   );
 }
 
-ReplyImageAttachment _attachmentWithStatus({
+ComposerImageAttachment _attachmentWithStatus({
   required String localId,
   required String aid,
-  required ReplyImageAttachmentStatus status,
+  required ComposerImageAttachmentStatus status,
   DateTime? uploadedAt,
   String? cachePath,
 }) {
-  return ReplyImageAttachment(
+  return ComposerImageAttachment(
     localId: localId,
     localPath: '/gallery/$localId.jpg',
     fileName: '$localId.jpg',

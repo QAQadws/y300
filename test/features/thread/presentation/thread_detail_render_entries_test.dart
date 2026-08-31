@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
@@ -355,13 +355,12 @@ void main() {
       expect(defaultKey, isNot(transformedKey));
       expect(transformedPlan.displayTransformerSignature, 'replace-body-text');
       expect(
-        (transformedPlan.displayDocument.blocks.single as ThreadPostTextBlock)
+        (transformedPlan.displayDocument.blocks.single as RichTextBlock)
             .plainText,
         '显示正文',
       );
       expect(
-        (transformedPlan.document.blocks.single as ThreadPostTextBlock)
-            .plainText,
+        (transformedPlan.document.blocks.single as RichTextBlock).plainText,
         '正文',
       );
     });
@@ -401,8 +400,7 @@ void main() {
       expect(identical(entry.sourcePost, source), isTrue);
       expect(identical(entry.displayPost, display), isTrue);
       expect(
-        (entry.requirePlan().document.blocks.single as ThreadPostTextBlock)
-            .plainText,
+        (entry.requirePlan().document.blocks.single as RichTextBlock).plainText,
         '显示正文',
       );
     });
@@ -413,7 +411,7 @@ class _CountingThreadPostBodyParser extends ThreadPostBodyParser {
   var parseCount = 0;
 
   @override
-  ThreadPostBodyDocument parse(String html) {
+  RichDocument parse(String html) {
     parseCount += 1;
     return super.parse(html);
   }

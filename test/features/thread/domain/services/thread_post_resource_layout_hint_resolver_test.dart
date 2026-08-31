@@ -1,31 +1,31 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 
 void main() {
   group('ThreadPostResourceLayoutHintResolver', () {
     test('uses html dimensions for block images and inline images', () {
-      const blockImage = ThreadPostImageBlock(
+      const blockImage = RichImageBlock(
         url: 'https://bbs.yamibo.com/a.jpg',
         rawUrl: 'a.jpg',
         index: 0,
         originalWidth: 800,
         originalHeight: 400,
       );
-      const inlineImage = ThreadPostInlineImage(
+      const inlineImage = RichInlineImage(
         url: 'https://bbs.yamibo.com/static/image/smiley/default/1.gif',
         rawUrl: 'static/image/smiley/default/1.gif',
         originalWidth: 32,
         originalHeight: 18,
       );
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
+      const document = RichDocument(
+        blocks: <RichBlock>[
           blockImage,
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[
-              ThreadPostTextRun(text: '表情 '),
-              ThreadPostTextRun(text: '', inlineImage: inlineImage),
+          RichTextBlock(
+            runs: <RichRun>[
+              RichRun(text: '表情 '),
+              RichRun(text: '', inlineImage: inlineImage),
             ],
           ),
         ],
@@ -55,14 +55,12 @@ void main() {
     });
 
     test('uses content default for block image without dimensions', () {
-      const blockImage = ThreadPostImageBlock(
+      const blockImage = RichImageBlock(
         url: 'https://bbs.yamibo.com/a.jpg',
         rawUrl: 'a.jpg',
         index: 0,
       );
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[blockImage],
-      );
+      const document = RichDocument(blocks: <RichBlock>[blockImage]);
 
       const resolver = ThreadPostResourceLayoutHintResolver(
         defaultBlockImageAspectRatio: 0.7,
@@ -75,16 +73,16 @@ void main() {
     });
 
     test('collects resource hints inside quote blocks', () {
-      const image = ThreadPostImageBlock(
+      const image = RichImageBlock(
         url: 'https://bbs.yamibo.com/quote.jpg',
         rawUrl: 'quote.jpg',
         index: 1,
         originalWidth: 300,
         originalHeight: 600,
       );
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostQuoteBlock(blocks: <ThreadPostBodyBlock>[image]),
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichQuoteBlock(blocks: <RichBlock>[image]),
         ],
       );
 

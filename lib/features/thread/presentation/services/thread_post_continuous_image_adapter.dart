@@ -1,5 +1,5 @@
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 
 class ThreadPostContinuousImageAdapter {
@@ -7,7 +7,7 @@ class ThreadPostContinuousImageAdapter {
 
   ContinuousImageItem mapBlockImage({
     required String ownerId,
-    required ThreadPostImageBlock image,
+    required RichImageBlock image,
     required double fallbackAspectRatio,
     required double spacingAfter,
     ThreadPostBlockImageLayoutHint? layoutHint,
@@ -43,7 +43,7 @@ class ThreadPostContinuousImageAdapter {
   }
 
   _ThreadImageDimensions? _dimensionsFor({
-    required ThreadPostImageBlock image,
+    required RichImageBlock image,
     required ThreadPostBlockImageLayoutHint? layoutHint,
     required bool includeContentDefaultHint,
   }) {
@@ -94,7 +94,7 @@ class ThreadPostContinuousImageAdapter {
   }
 
   String _effectiveCacheKey({
-    required ThreadPostImageBlock image,
+    required RichImageBlock image,
     required String? cacheKey,
   }) {
     final explicit = cacheKey?.trim();

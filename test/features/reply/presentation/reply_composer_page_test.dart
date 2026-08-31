@@ -23,6 +23,7 @@ import 'package:y300/features/composer_shared/domain/models/composer_draft_attac
 import 'package:y300/features/composer_shared/domain/models/composer_unused_image_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_preferences.dart';
+import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_preferences_repository.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_draft_attachment_sanitizer.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_service.dart';
@@ -263,7 +264,7 @@ void main() {
     final args = _threadArgs();
     final draftRepository = _MemoryReplyDraftRepository();
     await draftRepository.saveDraft(
-      ReplyDraftSnapshot(
+      ComposerDraftSnapshot(
         identity: args.identity,
         message: '恢复的草稿',
         useSignature: false,
@@ -313,7 +314,7 @@ void main() {
     final args = _threadArgs();
     final draftRepository = _MemoryReplyDraftRepository();
     await draftRepository.saveDraft(
-      ReplyDraftSnapshot(
+      ComposerDraftSnapshot(
         identity: args.identity,
         message: '正文\n[attach]123456[/attach]',
         useSignature: true,
@@ -347,7 +348,7 @@ void main() {
     final args = _threadArgs();
     final draftRepository = _MemoryReplyDraftRepository();
     await draftRepository.saveDraft(
-      ReplyDraftSnapshot(
+      ComposerDraftSnapshot(
         identity: args.identity,
         message: '正文\n[attach]123456[/attach]',
         useSignature: false,
@@ -427,7 +428,7 @@ void main() {
     final args = _threadArgs();
     final draftRepository = _MemoryReplyDraftRepository();
     await draftRepository.saveDraft(
-      ReplyDraftSnapshot(
+      ComposerDraftSnapshot(
         identity: args.identity,
         message: '正文\n[attach]123456[/attach]',
         useSignature: true,
@@ -466,7 +467,7 @@ void main() {
       now: () => DateTime.utc(2026, 6, 8, 12),
     );
     await draftRepository.saveDraft(
-      ReplyDraftSnapshot(
+      ComposerDraftSnapshot(
         identity: args.identity,
         message: '正文\n[attach]123456[/attach]',
         useSignature: true,
@@ -508,7 +509,7 @@ void main() {
     final args = _threadArgs();
     final draftRepository = _MemoryReplyDraftRepository();
     await draftRepository.saveDraft(
-      ReplyDraftSnapshot(
+      ComposerDraftSnapshot(
         identity: args.identity,
         message: '正文\n[attach]123456[/attach]',
         useSignature: true,
@@ -554,7 +555,7 @@ void main() {
     final args = _threadArgs();
     final draftRepository = _MemoryReplyDraftRepository();
     await draftRepository.saveDraft(
-      ReplyDraftSnapshot(
+      ComposerDraftSnapshot(
         identity: args.identity,
         message: '正文\n[attach]123456[/attach]',
         useSignature: true,
@@ -856,7 +857,7 @@ void main() {
       _buildPage(
         imagePicker: _FakeReplyImagePicker(
           images: const [
-            ReplyPickedImage(
+            ComposerPickedImage(
               path: '/gallery/first.jpg',
               fileName: 'first.jpg',
               mimeType: 'image/jpeg',
@@ -890,7 +891,7 @@ void main() {
         replyRepository: replyRepository,
         imagePicker: _FakeReplyImagePicker(
           images: const [
-            ReplyPickedImage(
+            ComposerPickedImage(
               path: '/gallery/first.jpg',
               fileName: 'first.jpg',
               mimeType: 'image/jpeg',
@@ -904,7 +905,7 @@ void main() {
               localId: '',
               current: 1,
               total: 1,
-              uploadedImage: ReplyUploadedImage(
+              uploadedImage: ComposerUploadedImage(
                 localId: '',
                 aid: '123456',
                 uploadedAt: DateTime.now(),
@@ -950,7 +951,7 @@ void main() {
           replyRepository: replyRepository,
           imagePicker: _FakeReplyImagePicker(
             images: [
-              ReplyPickedImage(
+              ComposerPickedImage(
                 path: path,
                 fileName: 'uploaded.png',
                 mimeType: 'image/png',
@@ -964,7 +965,7 @@ void main() {
                 localId: '',
                 current: 1,
                 total: 1,
-                uploadedImage: ReplyUploadedImage(
+                uploadedImage: ComposerUploadedImage(
                   localId: '',
                   aid: '123456',
                   uploadedAt: DateTime.now(),
@@ -1032,7 +1033,7 @@ void main() {
         _buildPage(
           imagePicker: _FakeReplyImagePicker(
             images: const [
-              ReplyPickedImage(
+              ComposerPickedImage(
                 path: '/gallery/first.jpg',
                 fileName: 'first.jpg',
                 mimeType: 'image/jpeg',
@@ -1188,7 +1189,7 @@ void main() {
           ),
           imagePicker: _FakeReplyImagePicker(
             images: const [
-              ReplyPickedImage(
+              ComposerPickedImage(
                 path: '/gallery/first.jpg',
                 fileName: 'first.jpg',
                 mimeType: 'image/jpeg',
@@ -1231,7 +1232,7 @@ void main() {
         _buildPage(
           imagePicker: _FakeReplyImagePicker(
             images: const [
-              ReplyPickedImage(
+              ComposerPickedImage(
                 path: '/gallery/first.jpg',
                 fileName: 'first.jpg',
                 mimeType: 'image/jpeg',
@@ -1286,7 +1287,7 @@ void main() {
           ),
           imagePicker: _FakeReplyImagePicker(
             images: const [
-              ReplyPickedImage(
+              ComposerPickedImage(
                 path: '/gallery/first.jpg',
                 fileName: 'first.jpg',
                 mimeType: 'image/jpeg',
@@ -1348,7 +1349,7 @@ _FakeReplyImageUploadCoordinator _uploadedAidCoordinator(
         localId: '',
         current: 1,
         total: 1,
-        uploadedImage: ReplyUploadedImage(
+        uploadedImage: ComposerUploadedImage(
           localId: '',
           aid: aid,
           uploadedAt: DateTime(2026, 7, 26),
@@ -1663,20 +1664,20 @@ class _MemoryReplyDraftRepository implements ComposerDraftRepository {
   }
 }
 
-ReplyImageAttachment _uploadedAttachment({
+ComposerImageAttachment _uploadedAttachment({
   required String localId,
   required String aid,
   required DateTime uploadedAt,
   String? localPath,
   String? cachePath,
 }) {
-  return ReplyImageAttachment(
+  return ComposerImageAttachment(
     localId: localId,
     localPath: localPath ?? '/gallery/$localId.jpg',
     fileName: '$localId.jpg',
     mimeType: 'image/jpeg',
     order: 0,
-    status: ReplyImageAttachmentStatus.uploaded,
+    status: ComposerImageAttachmentStatus.uploaded,
     aid: aid,
     uploadedAt: uploadedAt,
     cachePath: cachePath,
@@ -1724,7 +1725,7 @@ class _InvalidDraftAttachmentVerificationService
     ComposerDraftSnapshot draft,
   ) async {
     return ComposerDraftAttachmentVerificationResult(
-      draft: ReplyDraftSnapshot(
+      draft: ComposerDraftSnapshot(
         identity: draft.identity,
         message: draft.message,
         subject: draft.subject,

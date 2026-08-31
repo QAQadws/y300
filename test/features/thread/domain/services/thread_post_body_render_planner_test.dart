@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
@@ -10,17 +10,11 @@ void main() {
   group('ThreadPostBodyRenderPlanner', () {
     test('splits text bodies around the configured text length', () {
       const planner = ThreadPostBodyRenderPlanner(maxSegmentTextLength: 6);
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: 'abcdef')],
-          ),
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: 'ghijkl')],
-          ),
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: 'mnop')],
-          ),
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(runs: <RichRun>[RichRun(text: 'abcdef')]),
+          RichTextBlock(runs: <RichRun>[RichRun(text: 'ghijkl')]),
+          RichTextBlock(runs: <RichRun>[RichRun(text: 'mnop')]),
         ],
       );
 
@@ -31,7 +25,7 @@ void main() {
       expect(
         plan.segments.map((segment) {
           return segment.blocks
-              .whereType<ThreadPostTextBlock>()
+              .whereType<RichTextBlock>()
               .map((block) => block.plainText)
               .join();
         }),
@@ -40,7 +34,7 @@ void main() {
       expect(
         plan.segments
             .expand((segment) => segment.blocks)
-            .whereType<ThreadPostTextBlock>()
+            .whereType<RichTextBlock>()
             .map((block) => block.plainText)
             .join(),
         'abcdefghijklmnop',
@@ -49,25 +43,21 @@ void main() {
 
     test('keeps image blocks as standalone segments', () {
       const planner = ThreadPostBodyRenderPlanner(maxSegmentTextLength: 900);
-      const firstImage = ThreadPostImageBlock(
+      const firstImage = RichImageBlock(
         url: 'https://bbs.yamibo.com/a.jpg',
         rawUrl: 'a.jpg',
         index: 0,
       );
-      const secondImage = ThreadPostImageBlock(
+      const secondImage = RichImageBlock(
         url: 'https://bbs.yamibo.com/b.jpg',
         rawUrl: 'b.jpg',
         index: 1,
       );
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '前文')],
-          ),
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(runs: <RichRun>[RichRun(text: '前文')]),
           firstImage,
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '后文')],
-          ),
+          RichTextBlock(runs: <RichRun>[RichRun(text: '后文')]),
           secondImage,
         ],
       );
@@ -75,10 +65,10 @@ void main() {
       final plan = planner.planDocument(document);
 
       expect(plan.usesListSegments, isTrue);
-      expect(plan.images, <ThreadPostImageBlock>[firstImage, secondImage]);
+      expect(plan.images, <RichImageBlock>[firstImage, secondImage]);
       expect(plan.segments, hasLength(4));
-      expect(plan.segments[1].blocks, <ThreadPostBodyBlock>[firstImage]);
-      expect(plan.segments[3].blocks, <ThreadPostBodyBlock>[secondImage]);
+      expect(plan.segments[1].blocks, <RichBlock>[firstImage]);
+      expect(plan.segments[3].blocks, <RichBlock>[secondImage]);
       expect(
         plan.resourceLayoutHints.blockImage(firstImage)?.source,
         ThreadPostResourceLayoutHintSource.contentDefault,
@@ -87,26 +77,24 @@ void main() {
 
     test('adds resource layout hints to render plans', () {
       const planner = ThreadPostBodyRenderPlanner();
-      const image = ThreadPostImageBlock(
+      const image = RichImageBlock(
         url: 'https://bbs.yamibo.com/a.jpg',
         rawUrl: 'a.jpg',
         index: 0,
         originalWidth: 1200,
         originalHeight: 800,
       );
-      const inlineImage = ThreadPostInlineImage(
+      const inlineImage = RichInlineImage(
         url: 'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
         rawUrl: 'static/image/smiley/comcom/2.gif',
         originalWidth: 28,
         originalHeight: 20,
       );
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
+      const document = RichDocument(
+        blocks: <RichBlock>[
           image,
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[
-              ThreadPostTextRun(text: '', inlineImage: inlineImage),
-            ],
+          RichTextBlock(
+            runs: <RichRun>[RichRun(text: '', inlineImage: inlineImage)],
           ),
         ],
       );
@@ -125,9 +113,9 @@ void main() {
           lockForCurrentBuild: true,
         ),
       );
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostImageBlock(
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichImageBlock(
             url: 'https://bbs.yamibo.com/a.jpg',
             rawUrl: 'a.jpg',
             index: 0,
@@ -155,14 +143,14 @@ void main() {
           signature: 'replace-original-text',
         ),
       );
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[
-              ThreadPostTextRun(text: '原文'),
-              ThreadPostTextRun(
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
+            runs: <RichRun>[
+              RichRun(text: '原文'),
+              RichRun(
                 text: '',
-                inlineImage: ThreadPostInlineImage(
+                inlineImage: RichInlineImage(
                   url: 'https://bbs.yamibo.com/static/image/smiley/a.gif',
                   rawUrl: 'static/image/smiley/a.gif',
                   altText: '[笑]',
@@ -174,11 +162,9 @@ void main() {
       );
 
       final plan = planner.planDocument(document);
-      final sourceBlock = plan.document.blocks.single as ThreadPostTextBlock;
-      final displayBlock =
-          plan.displayDocument.blocks.single as ThreadPostTextBlock;
-      final segmentBlock =
-          plan.segments.single.blocks.single as ThreadPostTextBlock;
+      final sourceBlock = plan.document.blocks.single as RichTextBlock;
+      final displayBlock = plan.displayDocument.blocks.single as RichTextBlock;
+      final segmentBlock = plan.segments.single.blocks.single as RichTextBlock;
 
       expect(sourceBlock.plainText, '原文');
       expect(displayBlock.plainText, '显示文');
@@ -189,22 +175,16 @@ void main() {
 
     test('keeps quote blocks intact', () {
       const planner = ThreadPostBodyRenderPlanner(maxSegmentTextLength: 4);
-      const quote = ThreadPostQuoteBlock(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: 'quoted text')],
-          ),
+      const quote = RichQuoteBlock(
+        blocks: <RichBlock>[
+          RichTextBlock(runs: <RichRun>[RichRun(text: 'quoted text')]),
         ],
       );
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: 'lead')],
-          ),
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(runs: <RichRun>[RichRun(text: 'lead')]),
           quote,
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: 'tail')],
-          ),
+          RichTextBlock(runs: <RichRun>[RichRun(text: 'tail')]),
         ],
       );
 
@@ -212,16 +192,14 @@ void main() {
 
       expect(plan.usesListSegments, isTrue);
       expect(plan.segments, hasLength(3));
-      expect(plan.segments[1].blocks, <ThreadPostBodyBlock>[quote]);
+      expect(plan.segments[1].blocks, <RichBlock>[quote]);
     });
 
     test('short body still creates one segment', () {
       const planner = ThreadPostBodyRenderPlanner();
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '短正文')],
-          ),
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(runs: <RichRun>[RichRun(text: '短正文')]),
         ],
       );
 
@@ -234,16 +212,12 @@ void main() {
 
     test('defaults to roughly 600 text characters per segment', () {
       const planner = ThreadPostBodyRenderPlanner();
-      final document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[
-              ThreadPostTextRun(text: List.filled(600, 'a').join()),
-            ],
+      final document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
+            runs: <RichRun>[RichRun(text: List.filled(600, 'a').join())],
           ),
-          const ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: 'b')],
-          ),
+          const RichTextBlock(runs: <RichRun>[RichRun(text: 'b')]),
         ],
       );
 
@@ -253,7 +227,7 @@ void main() {
       expect(plan.segments, hasLength(2));
       expect(
         plan.segments.first.blocks.single,
-        isA<ThreadPostTextBlock>().having(
+        isA<RichTextBlock>().having(
           (block) => block.plainText.length,
           'length',
           600,

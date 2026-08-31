@@ -1,5 +1,6 @@
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_attachment_verification_models.dart';
@@ -18,16 +19,16 @@ class ReplyComposerArgs {
   final String? title;
   final Uri? replyFormUri;
 
-  ReplyDraftIdentity get identity {
+  ComposerDraftIdentity get identity {
     final pid = target.pid;
     if (target.isPostReply && pid != null && pid.trim().isNotEmpty) {
-      return ReplyDraftIdentity.post(
+      return ComposerDraftIdentity.post(
         fid: target.fid,
         tid: target.tid,
         repquote: pid,
       );
     }
-    return ReplyDraftIdentity.thread(fid: target.fid, tid: target.tid);
+    return ComposerDraftIdentity.thread(fid: target.fid, tid: target.tid);
   }
 
   @override

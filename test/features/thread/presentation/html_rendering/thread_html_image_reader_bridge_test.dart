@@ -12,7 +12,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'forum_html_test_theme.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 
 void main() {
   group('DefaultForumHtmlRenderPreparer', () {
@@ -235,7 +235,7 @@ ForumHtmlPreparedRenderDocument _prepared(String html) {
 ThreadPostBodyRenderPlan get _emptyPlan => ThreadPostBodyRenderPlan(
   document: const RichDocument(blocks: <RichBlock>[]),
   displayDocument: const RichDocument(blocks: <RichBlock>[]),
-  images: const <ThreadPostImageBlock>[],
+  images: const <RichImageBlock>[],
   segments: const <ThreadPostBodySegment>[],
   usesListSegments: false,
   renderKey: _renderKey,
@@ -249,7 +249,7 @@ ThreadPostBodyRenderPlan _planWithLegacyImage({
   return ThreadPostBodyRenderPlan(
     document: RichDocument(blocks: <RichBlock>[image]),
     displayDocument: RichDocument(blocks: <RichBlock>[image]),
-    images: <ThreadPostImageBlock>[image],
+    images: <RichImageBlock>[image],
     segments: const <ThreadPostBodySegment>[],
     usesListSegments: false,
     renderKey: _renderKey,

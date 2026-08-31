@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/presentation/services/thread_html_image_preload_coordinator.dart';
@@ -20,10 +20,10 @@ void main() {
     );
     final posts = <ThreadPost>[_post('1'), _post('2'), _post('3'), _post('4')];
     final plans = <String, ThreadPostBodyRenderPlan>{
-      '1': _plan(<ThreadPostImageBlock>[_image(0), _image(1)]),
-      '2': _plan(<ThreadPostImageBlock>[_image(2), _image(3)]),
-      '3': _plan(<ThreadPostImageBlock>[_image(4)]),
-      '4': _plan(<ThreadPostImageBlock>[_image(5)]),
+      '1': _plan(<RichImageBlock>[_image(0), _image(1)]),
+      '2': _plan(<RichImageBlock>[_image(2), _image(3)]),
+      '3': _plan(<RichImageBlock>[_image(4)]),
+      '4': _plan(<RichImageBlock>[_image(5)]),
     };
 
     await _withContext(tester, (context) {
@@ -54,9 +54,9 @@ void main() {
       );
       final posts = <ThreadPost>[_post('1'), _post('2'), _post('3')];
       final plans = <String, ThreadPostBodyRenderPlan>{
-        '1': _plan(<ThreadPostImageBlock>[_image(0)]),
-        '2': _plan(<ThreadPostImageBlock>[_image(1), _image(2)]),
-        '3': _plan(<ThreadPostImageBlock>[_image(3)]),
+        '1': _plan(<RichImageBlock>[_image(0)]),
+        '2': _plan(<RichImageBlock>[_image(1), _image(2)]),
+        '3': _plan(<RichImageBlock>[_image(3)]),
       };
 
       await _withContext(tester, (context) {
@@ -83,7 +83,7 @@ void main() {
     );
     final posts = <ThreadPost>[_post('1')];
     final plans = <String, ThreadPostBodyRenderPlan>{
-      '1': _plan(<ThreadPostImageBlock>[_image(0), _image(1)]),
+      '1': _plan(<RichImageBlock>[_image(0), _image(1)]),
     };
 
     await _withContext(tester, (context) {
@@ -157,14 +157,14 @@ Future<List<ForumImagePrecacheResult>> _withContext(
   return future;
 }
 
-ThreadPostBodyRenderPlan _plan(List<ThreadPostImageBlock> images) {
+ThreadPostBodyRenderPlan _plan(List<RichImageBlock> images) {
   return const ThreadPostBodyRenderPlanner().planDocument(
-    ThreadPostBodyDocument(blocks: images),
+    RichDocument(blocks: images),
   );
 }
 
-ThreadPostImageBlock _image(int index) {
-  return ThreadPostImageBlock(
+RichImageBlock _image(int index) {
+  return RichImageBlock(
     url: 'https://bbs.yamibo.com/data/attachment/forum/page-$index.jpg',
     rawUrl: 'data/attachment/forum/page-$index.jpg',
     index: index,

@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projector.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_content_projection_controller.dart';

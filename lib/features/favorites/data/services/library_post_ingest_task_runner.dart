@@ -1,6 +1,6 @@
 import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
 import 'package:y300/features/favorites/domain/services/library_post_ingest_task_runner.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';

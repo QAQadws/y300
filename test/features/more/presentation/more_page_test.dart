@@ -9,7 +9,7 @@ import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_palette.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';

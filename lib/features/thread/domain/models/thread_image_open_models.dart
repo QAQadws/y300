@@ -1,4 +1,4 @@
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 
@@ -77,7 +77,7 @@ class ThreadImageOpenContext {
   final String pid;
   final int postNumber;
   final String referer;
-  final String Function(ThreadPostImageBlock image) cacheKeyForImage;
+  final String Function(RichImageBlock image) cacheKeyForImage;
 }
 
 class ThreadPostImageOpenRequest {
@@ -89,9 +89,9 @@ class ThreadPostImageOpenRequest {
     this.readerRequest,
   });
 
-  final ThreadPostBodyDocument document;
-  final List<ThreadPostImageBlock> images;
-  final ThreadPostImageBlock image;
+  final RichDocument document;
+  final List<RichImageBlock> images;
+  final RichImageBlock image;
   final int initialIndex;
   final ThreadImageOpenRequest? readerRequest;
 

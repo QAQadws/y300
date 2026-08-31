@@ -4,7 +4,6 @@ import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
-import 'package:y300/core/network/network_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 
 export 'yamibo_forum_transport_providers.dart';

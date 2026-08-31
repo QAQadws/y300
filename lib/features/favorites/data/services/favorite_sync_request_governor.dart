@@ -6,24 +6,19 @@ import 'dart:async';
 // previous one completes, to avoid tripping the site's temporary IP ban.
 const Duration favoriteSyncGovernorCooldown = Duration(milliseconds: 700);
 
-@Deprecated(
-  'Renamed to favoriteSyncGovernorCooldown (now covers all sync modes).',
-)
-const Duration favoriteFirstSyncGovernorCooldown = favoriteSyncGovernorCooldown;
-
 enum FavoriteSyncExecutionMode {
   bootstrapInitial,
   automaticResume,
   manualRecentAdd,
 }
 
-enum FavoriteFirstSyncRequestKind {
+enum FavoriteSyncRequestKind {
   favoriteListPage,
   favoriteThreadDetail,
   comicThreadDetail,
   comicCatalogHtml,
   // 注意：漫画论坛搜索由 ForumSearchReadScheduler（~10.5s 节奏）独立管控，
-  // 不再走 favorite first-sync governor 的槽。这里删掉旧的 comicForumSearch
+  // 不再走 favorite sync governor 的槽。这里删掉旧的 comicForumSearch
   // 枚举项以避免误用。
   novelSeedDetail,
   novelEpisodePage,
@@ -33,7 +28,7 @@ class FavoriteSyncExecutionContext {
   const FavoriteSyncExecutionContext({required this.mode, this.governor});
 
   const FavoriteSyncExecutionContext.bootstrapInitial({
-    required FavoriteFirstSyncRequestGovernor governor,
+    required FavoriteSyncRequestGovernor governor,
   }) : this(
          mode: FavoriteSyncExecutionMode.bootstrapInitial,
          governor: governor,
@@ -42,36 +37,36 @@ class FavoriteSyncExecutionContext {
   // Subsequent syncs are governed too: the same request pacing must apply so a
   // resume / manual add can't burst-fire parse requests and trip an IP ban.
   const FavoriteSyncExecutionContext.automaticResume({
-    FavoriteFirstSyncRequestGovernor? governor,
+    FavoriteSyncRequestGovernor? governor,
   }) : this(
          mode: FavoriteSyncExecutionMode.automaticResume,
          governor: governor,
        );
 
   const FavoriteSyncExecutionContext.manualRecentAdd({
-    FavoriteFirstSyncRequestGovernor? governor,
+    FavoriteSyncRequestGovernor? governor,
   }) : this(
          mode: FavoriteSyncExecutionMode.manualRecentAdd,
          governor: governor,
        );
 
   final FavoriteSyncExecutionMode mode;
-  final FavoriteFirstSyncRequestGovernor? governor;
+  final FavoriteSyncRequestGovernor? governor;
 
   bool get isBootstrapInitial =>
       mode == FavoriteSyncExecutionMode.bootstrapInitial;
 }
 
-abstract interface class FavoriteFirstSyncRequestGovernor {
+abstract interface class FavoriteSyncRequestGovernor {
   Future<T> run<T>({
-    required FavoriteFirstSyncRequestKind kind,
+    required FavoriteSyncRequestKind kind,
     required Future<T> Function() action,
   });
 }
 
-class DefaultFavoriteFirstSyncRequestGovernor
-    implements FavoriteFirstSyncRequestGovernor {
-  DefaultFavoriteFirstSyncRequestGovernor({
+class DefaultFavoriteSyncRequestGovernor
+    implements FavoriteSyncRequestGovernor {
+  DefaultFavoriteSyncRequestGovernor({
     this.cooldown = favoriteSyncGovernorCooldown,
     DateTime Function()? nowProvider,
     Future<void> Function(Duration duration)? delay,
@@ -87,7 +82,7 @@ class DefaultFavoriteFirstSyncRequestGovernor
 
   @override
   Future<T> run<T>({
-    required FavoriteFirstSyncRequestKind kind,
+    required FavoriteSyncRequestKind kind,
     required Future<T> Function() action,
   }) {
     final completer = Completer<T>();

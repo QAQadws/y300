@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_continuous_image_adapter.dart';
 
@@ -93,13 +93,13 @@ void main() {
   });
 }
 
-ThreadPostImageBlock _image({
+RichImageBlock _image({
   required String url,
   required int index,
   double? originalWidth,
   double? originalHeight,
 }) {
-  return ThreadPostImageBlock(
+  return RichImageBlock(
     url: url,
     rawUrl: url,
     index: index,

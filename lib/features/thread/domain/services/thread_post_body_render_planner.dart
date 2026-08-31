@@ -1,5 +1,5 @@
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
@@ -61,7 +61,7 @@ class ThreadPostBodyRenderPlanner {
   }
 
   ThreadPostBodyRenderPlan planDocument(
-    ThreadPostBodyDocument document, {
+    RichDocument document, {
     ThreadPostBodyRenderSettings renderSettings =
         ThreadPostBodyRenderSettings.defaults,
     String converterId = 'conv:none',
@@ -69,7 +69,7 @@ class ThreadPostBodyRenderPlanner {
   }) {
     final displayDocument = displayTransformer.transform(document);
     final segments = <ThreadPostBodySegment>[];
-    var pendingBlocks = <ThreadPostBodyBlock>[];
+    var pendingBlocks = <RichBlock>[];
     var pendingTextLength = 0;
     var segmentIndex = 0;
 
@@ -80,26 +80,24 @@ class ThreadPostBodyRenderPlanner {
       segments.add(
         ThreadPostBodySegment(
           index: segmentIndex,
-          blocks: List<ThreadPostBodyBlock>.unmodifiable(pendingBlocks),
+          blocks: List<RichBlock>.unmodifiable(pendingBlocks),
           anchorId: _segmentAnchorId(segmentIndex, pendingBlocks),
         ),
       );
       segmentIndex += 1;
-      pendingBlocks = <ThreadPostBodyBlock>[];
+      pendingBlocks = <RichBlock>[];
       pendingTextLength = 0;
     }
 
     for (final sourceBlock in displayDocument.blocks) {
       for (final block in _segmentableBlocks(sourceBlock)) {
-        if (block is ThreadPostImageBlock) {
+        if (block is RichImageBlock) {
           flushPending();
           segments.add(
             ThreadPostBodySegment(
               index: segmentIndex,
-              blocks: <ThreadPostBodyBlock>[block],
-              anchorId: _segmentAnchorId(segmentIndex, <ThreadPostBodyBlock>[
-                block,
-              ]),
+              blocks: <RichBlock>[block],
+              anchorId: _segmentAnchorId(segmentIndex, <RichBlock>[block]),
             ),
           );
           segmentIndex += 1;
@@ -138,10 +136,8 @@ class ThreadPostBodyRenderPlanner {
     );
   }
 
-  Iterable<ThreadPostBodyBlock> _segmentableBlocks(
-    ThreadPostBodyBlock block,
-  ) sync* {
-    if (block is ThreadPostTextBlock &&
+  Iterable<RichBlock> _segmentableBlocks(RichBlock block) sync* {
+    if (block is RichTextBlock &&
         _blockTextWeight(block) > maxSegmentTextLength) {
       yield* _splitTextBlock(block);
       return;
@@ -149,9 +145,9 @@ class ThreadPostBodyRenderPlanner {
     yield block;
   }
 
-  List<ThreadPostTextBlock> _splitTextBlock(ThreadPostTextBlock block) {
-    final result = <ThreadPostTextBlock>[];
-    var currentRuns = <ThreadPostTextRun>[];
+  List<RichTextBlock> _splitTextBlock(RichTextBlock block) {
+    final result = <RichTextBlock>[];
+    var currentRuns = <RichRun>[];
     var currentLength = 0;
     var splitIndex = 0;
 
@@ -160,17 +156,17 @@ class ThreadPostBodyRenderPlanner {
         return;
       }
       result.add(
-        ThreadPostTextBlock(
+        RichTextBlock(
           anchorId: threadPostBodyAnchorId(
             'segment-text',
             '${block.anchorId}|$splitIndex|${currentRuns.map(_runAnchorSeed).join('|')}',
           ),
           continuesPrevious: block.continuesPrevious || splitIndex > 0,
-          runs: List<ThreadPostTextRun>.unmodifiable(currentRuns),
+          runs: List<RichRun>.unmodifiable(currentRuns),
         ),
       );
       splitIndex += 1;
-      currentRuns = <ThreadPostTextRun>[];
+      currentRuns = <RichRun>[];
       currentLength = 0;
     }
 
@@ -203,11 +199,11 @@ class ThreadPostBodyRenderPlanner {
       }
     }
     flush();
-    return List<ThreadPostTextBlock>.unmodifiable(result);
+    return List<RichTextBlock>.unmodifiable(result);
   }
 
-  ThreadPostTextRun _copyRun(ThreadPostTextRun source, String text) {
-    return ThreadPostTextRun(
+  RichRun _copyRun(RichRun source, String text) {
+    return RichRun(
       text: text,
       linkUrl: source.linkUrl,
       isBold: source.isBold,
@@ -217,7 +213,7 @@ class ThreadPostBodyRenderPlanner {
     );
   }
 
-  String _runAnchorSeed(ThreadPostTextRun run) {
+  String _runAnchorSeed(RichRun run) {
     final image = run.inlineImage;
     if (image != null) {
       return 'image:${image.url}|${run.linkUrl}|${run.isBold}|${run.isItalic}|${run.isUnderline}';
@@ -225,13 +221,13 @@ class ThreadPostBodyRenderPlanner {
     return '${run.text}|${run.linkUrl}|${run.isBold}|${run.isItalic}|${run.isUnderline}';
   }
 
-  int _blockTextWeight(ThreadPostBodyBlock block) {
-    if (block is ThreadPostTextBlock) {
+  int _blockTextWeight(RichBlock block) {
+    if (block is RichTextBlock) {
       return block.runs.fold<int>(0, (total, run) {
         return total + (run.inlineImage == null ? run.text.length : 1);
       });
     }
-    if (block is ThreadPostQuoteBlock) {
+    if (block is RichQuoteBlock) {
       return block.blocks.fold<int>(
         0,
         (total, child) => total + _blockTextWeight(child),
@@ -240,7 +236,7 @@ class ThreadPostBodyRenderPlanner {
     return 0;
   }
 
-  String _segmentAnchorId(int index, List<ThreadPostBodyBlock> blocks) {
+  String _segmentAnchorId(int index, List<RichBlock> blocks) {
     final seed = blocks
         .map((block) => block.anchorId)
         .where((id) => id.trim().isNotEmpty)

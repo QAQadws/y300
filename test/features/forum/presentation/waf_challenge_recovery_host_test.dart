@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/waf/waf.dart';
 import 'package:y300/features/forum/presentation/webview/waf_challenge_background_webview.dart';
 import 'package:y300/features/forum/presentation/webview/waf_challenge_recovery_host.dart';

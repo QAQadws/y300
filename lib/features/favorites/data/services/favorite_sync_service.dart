@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
@@ -87,7 +87,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     LibraryShelfRefreshBus? shelfRefreshBus,
     DownloadStorageService? downloadStorageService,
     int detailBatchLimit = 20,
-    FavoriteFirstSyncRequestGovernor Function()? governorFactory,
+    FavoriteSyncRequestGovernor Function()? governorFactory,
   }) : _remoteRepository = remoteRepository,
        _localRepository = localRepository,
        _detailContextLoader = detailContextLoader,
@@ -97,7 +97,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
        _downloadStorageService = downloadStorageService,
        _detailBatchLimit = detailBatchLimit,
        _governorFactory =
-           governorFactory ?? (() => DefaultFavoriteFirstSyncRequestGovernor());
+           governorFactory ?? (() => DefaultFavoriteSyncRequestGovernor());
 
   final FavoriteThreadDirectoryRepository _remoteRepository;
   final LocalFavoriteRepository _localRepository;
@@ -107,7 +107,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final LibraryShelfRefreshBus? _shelfRefreshBus;
   final DownloadStorageService? _downloadStorageService;
   final int _detailBatchLimit;
-  final FavoriteFirstSyncRequestGovernor Function() _governorFactory;
+  final FavoriteSyncRequestGovernor Function() _governorFactory;
   final ValueNotifier<FavoriteSyncProgress> _progress =
       ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
   Future<FavoriteSyncResult>? _inflightSync;
@@ -1041,7 +1041,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       );
     }
     return governor.run(
-      kind: FavoriteFirstSyncRequestKind.favoriteListPage,
+      kind: FavoriteSyncRequestKind.favoriteListPage,
       action: () => _remoteRepository.load(
         FavoriteThreadDirectoryQuery(page: page),
         cachePolicy: CacheLoadPolicy.networkFirst,

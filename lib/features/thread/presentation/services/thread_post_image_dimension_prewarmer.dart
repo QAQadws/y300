@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 
 /// 把"图片块 → 缓存键"的策略与尺寸预热解耦，便于复用页面既有的缓存键规则。
 typedef ThreadPostBlockImageCacheKeyResolver =
-    String Function(ThreadPostImageBlock image);
+    String Function(RichImageBlock image);
 
 /// 在进入阅读态前，用持久化缓存里的真实尺寸预热 [ThreadPostImageDimensionStore]。
 ///
@@ -32,7 +32,7 @@ class ThreadPostImageDimensionPrewarmer {
   /// [documents] 与 [cacheKeyResolver] 一起决定查询哪些缓存键；命中后批量写回
   /// store（一次 notify），把多次异步结果合并成尽量少的重建。
   Future<void> prewarmDocuments(
-    Iterable<ThreadPostBodyDocument> documents, {
+    Iterable<RichDocument> documents, {
     required ThreadPostBlockImageCacheKeyResolver cacheKeyResolver,
   }) async {
     final pending = <_PendingImage>[];
@@ -88,7 +88,7 @@ class ThreadPostImageDimensionPrewarmer {
     }
   }
 
-  bool _hasHtmlDimension(ThreadPostImageBlock image) {
+  bool _hasHtmlDimension(RichImageBlock image) {
     final width = image.originalWidth;
     final height = image.originalHeight;
     return width != null &&

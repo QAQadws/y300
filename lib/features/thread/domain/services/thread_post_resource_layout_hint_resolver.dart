@@ -1,4 +1,4 @@
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 
 /// 只读、同步的图片真实尺寸来源。
@@ -11,12 +11,10 @@ abstract interface class ThreadPostImageDimensionLookup {
   String get signature;
 
   /// 按 [ThreadPostResourceLayoutHints.blockImageKey] 查询块级图片真实尺寸。
-  ThreadPostResourceDimension? blockImageDimension(ThreadPostImageBlock image);
+  ThreadPostResourceDimension? blockImageDimension(RichImageBlock image);
 
   /// 按 [ThreadPostResourceLayoutHints.inlineImageKey] 查询行内图片真实尺寸。
-  ThreadPostResourceDimension? inlineImageDimension(
-    ThreadPostInlineImage image,
-  );
+  ThreadPostResourceDimension? inlineImageDimension(RichInlineImage image);
 }
 
 class ThreadPostResourceLayoutHintResolver {
@@ -67,16 +65,16 @@ class ThreadPostResourceLayoutHintResolver {
     dimensionLookup?.signature ?? 'noLookup',
   );
 
-  ThreadPostResourceLayoutHints resolve(ThreadPostBodyDocument document) {
+  ThreadPostResourceLayoutHints resolve(RichDocument document) {
     final blockImages = <String, ThreadPostBlockImageLayoutHint>{};
     final inlineImages = <String, ThreadPostInlineImageLayoutHint>{};
 
-    void collect(List<ThreadPostBodyBlock> blocks) {
+    void collect(List<RichBlock> blocks) {
       for (final block in blocks) {
-        if (block is ThreadPostImageBlock) {
+        if (block is RichImageBlock) {
           final key = ThreadPostResourceLayoutHints.blockImageKey(block);
           blockImages[key] = _blockImageHint(block);
-        } else if (block is ThreadPostTextBlock) {
+        } else if (block is RichTextBlock) {
           for (final run in block.runs) {
             final image = run.inlineImage;
             if (image == null) {
@@ -89,7 +87,7 @@ class ThreadPostResourceLayoutHintResolver {
             final key = ThreadPostResourceLayoutHints.inlineImageKey(image);
             inlineImages[key] = hint;
           }
-        } else if (block is ThreadPostQuoteBlock) {
+        } else if (block is RichQuoteBlock) {
           collect(block.blocks);
         }
       }
@@ -106,7 +104,7 @@ class ThreadPostResourceLayoutHintResolver {
     );
   }
 
-  ThreadPostBlockImageLayoutHint _blockImageHint(ThreadPostImageBlock image) {
+  ThreadPostBlockImageLayoutHint _blockImageHint(RichImageBlock image) {
     // 优先级：HTML 宽高 → 持久化缓存尺寸 → 内容默认。前两者为"可信尺寸"，
     // 在 lockTrustedDimensions 模式下锁定首帧高度；默认值不锁，留给受 above-viewport
     // 保护的一次性 decode 回填。
@@ -142,9 +140,7 @@ class ThreadPostResourceLayoutHintResolver {
     );
   }
 
-  ThreadPostInlineImageLayoutHint? _inlineImageHint(
-    ThreadPostInlineImage image,
-  ) {
+  ThreadPostInlineImageLayoutHint? _inlineImageHint(RichInlineImage image) {
     final htmlDimension = _dimension(image.originalWidth, image.originalHeight);
     if (htmlDimension != null) {
       return _trustedInlineHint(

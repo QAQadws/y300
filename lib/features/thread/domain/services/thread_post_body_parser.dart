@@ -1,7 +1,7 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_anchor.dart';
 
@@ -22,18 +22,18 @@ class ThreadPostBodyParser {
     'tr',
   };
 
-  ThreadPostBodyDocument parse(String html) {
+  RichDocument parse(String html) {
     final fragment = html_parser.parseFragment(html);
     final buildContext = _ThreadPostBodyBuildContext(parser: this);
     buildContext.visitChildren(fragment, const _InlineStyle());
     buildContext.flushText();
 
-    return ThreadPostBodyDocument(
-      blocks: List<ThreadPostBodyBlock>.unmodifiable(buildContext.blocks),
+    return RichDocument(
+      blocks: List<RichBlock>.unmodifiable(buildContext.blocks),
     );
   }
 
-  ThreadPostImageBlock? _parseImage(html_dom.Element image, int index) {
+  RichImageBlock? _parseImage(html_dom.Element image, int index) {
     final rawUrl =
         DefaultForumImageSourcePipeline.firstDomImageSourceFromElement(
           image,
@@ -57,7 +57,7 @@ class ThreadPostBodyParser {
         DefaultForumImageSourcePipeline.isForumChromeImage(normalized)) {
       return null;
     }
-    return ThreadPostImageBlock(
+    return RichImageBlock(
       anchorId: threadPostBodyAnchorId('image', '$index|$normalized|$rawUrl'),
       url: normalized,
       rawUrl: rawUrl,
@@ -68,7 +68,7 @@ class ThreadPostBodyParser {
     );
   }
 
-  ThreadPostInlineImage? _parseInlineSmiley(html_dom.Element image) {
+  RichInlineImage? _parseInlineSmiley(html_dom.Element image) {
     final rawUrl =
         DefaultForumImageSourcePipeline.firstDomImageSourceFromElement(
           image,
@@ -86,7 +86,7 @@ class ThreadPostBodyParser {
         !normalized.toLowerCase().contains('/static/image/smiley/')) {
       return null;
     }
-    return ThreadPostInlineImage(
+    return RichInlineImage(
       url: normalized,
       rawUrl: rawUrl,
       altText: image.attributes['alt']?.trim(),
@@ -114,7 +114,7 @@ class _ThreadPostBodyBuildContext {
   _ThreadPostBodyBuildContext({required this.parser});
 
   final ThreadPostBodyParser parser;
-  final List<ThreadPostBodyBlock> blocks = <ThreadPostBodyBlock>[];
+  final List<RichBlock> blocks = <RichBlock>[];
   final _TextBlockBuffer textBuffer = _TextBlockBuffer();
   var imageIndex = 0;
 
@@ -177,7 +177,7 @@ class _ThreadPostBodyBuildContext {
       imageIndex = quoteContext.imageIndex;
       if (quoteContext.blocks.isNotEmpty) {
         blocks.add(
-          ThreadPostQuoteBlock(
+          RichQuoteBlock(
             anchorId: threadPostBodyAnchorId(
               'quote',
               quoteContext.blocks
@@ -185,7 +185,7 @@ class _ThreadPostBodyBuildContext {
                   .where((value) => value.isNotEmpty)
                   .join('|'),
             ),
-            blocks: List<ThreadPostBodyBlock>.unmodifiable(quoteContext.blocks),
+            blocks: List<RichBlock>.unmodifiable(quoteContext.blocks),
           ),
         );
       }
@@ -210,7 +210,7 @@ class _ThreadPostBodyBuildContext {
 }
 
 class _TextBlockBuffer {
-  final List<ThreadPostTextRun> _runs = <ThreadPostTextRun>[];
+  final List<RichRun> _runs = <RichRun>[];
 
   bool get hasContent =>
       _runs.any((run) => run.inlineImage != null || run.text.trim().isNotEmpty);
@@ -221,7 +221,7 @@ class _TextBlockBuffer {
       return;
     }
     _runs.add(
-      ThreadPostTextRun(
+      RichRun(
         text: text,
         linkUrl: style.linkUrl,
         isBold: style.isBold,
@@ -231,9 +231,9 @@ class _TextBlockBuffer {
     );
   }
 
-  void addInlineImage(ThreadPostInlineImage image, _InlineStyle style) {
+  void addInlineImage(RichInlineImage image, _InlineStyle style) {
     _runs.add(
-      ThreadPostTextRun(
+      RichRun(
         text: image.altText?.isNotEmpty == true ? image.altText! : '',
         linkUrl: style.linkUrl,
         isBold: style.isBold,
@@ -244,7 +244,7 @@ class _TextBlockBuffer {
     );
   }
 
-  ThreadPostTextBlock? takeBlock() {
+  RichTextBlock? takeBlock() {
     if (!hasContent) {
       _runs.clear();
       return null;
@@ -256,7 +256,7 @@ class _TextBlockBuffer {
     if (normalized.isEmpty) {
       return null;
     }
-    return ThreadPostTextBlock(
+    return RichTextBlock(
       anchorId: threadPostBodyAnchorId(
         'text',
         normalized.map(_anchorSeedForRun).join('|'),
@@ -265,13 +265,13 @@ class _TextBlockBuffer {
     );
   }
 
-  List<ThreadPostTextRun> _mergeAdjacentRuns(List<ThreadPostTextRun> runs) {
-    final output = <ThreadPostTextRun>[];
+  List<RichRun> _mergeAdjacentRuns(List<RichRun> runs) {
+    final output = <RichRun>[];
     for (final run in runs) {
       if (output.isNotEmpty && _sameStyle(output.last, run)) {
         final previous = output.removeLast();
         output.add(
-          ThreadPostTextRun(
+          RichRun(
             text: '${previous.text}${run.text}',
             linkUrl: previous.linkUrl,
             isBold: previous.isBold,
@@ -286,7 +286,7 @@ class _TextBlockBuffer {
     return output;
   }
 
-  bool _sameStyle(ThreadPostTextRun a, ThreadPostTextRun b) {
+  bool _sameStyle(RichRun a, RichRun b) {
     return a.inlineImage == null &&
         b.inlineImage == null &&
         a.linkUrl == b.linkUrl &&
@@ -295,7 +295,7 @@ class _TextBlockBuffer {
         a.isUnderline == b.isUnderline;
   }
 
-  String _anchorSeedForRun(ThreadPostTextRun run) {
+  String _anchorSeedForRun(RichRun run) {
     final image = run.inlineImage;
     return image == null
         ? '${run.text}|${run.linkUrl}|${run.isBold}|${run.isItalic}|${run.isUnderline}'

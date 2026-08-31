@@ -3,7 +3,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/ide
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/opencc_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 
@@ -73,11 +73,9 @@ void main() {
   });
 
   group('ThreadPostBodyRenderPlanner converterId', () {
-    const document = ThreadPostBodyDocument(
-      blocks: <ThreadPostBodyBlock>[
-        ThreadPostTextBlock(
-          runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '正文')],
-        ),
+    const document = RichDocument(
+      blocks: <RichBlock>[
+        RichTextBlock(runs: <RichRun>[RichRun(text: '正文')]),
       ],
     );
     const planner = ThreadPostBodyRenderPlanner();

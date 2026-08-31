@@ -1,4 +1,4 @@
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_anchor.dart';
 
 class ThreadPostBodyDocumentNormalizer {
@@ -7,12 +7,12 @@ class ThreadPostBodyDocumentNormalizer {
 
   final int maxTextRunLength;
 
-  ThreadPostBodyDocument normalize(ThreadPostBodyDocument document) {
-    return ThreadPostBodyDocument(blocks: _normalizeBlocks(document.blocks));
+  RichDocument normalize(RichDocument document) {
+    return RichDocument(blocks: _normalizeBlocks(document.blocks));
   }
 
-  List<ThreadPostBodyBlock> _normalizeBlocks(List<ThreadPostBodyBlock> blocks) {
-    final output = <ThreadPostBodyBlock>[];
+  List<RichBlock> _normalizeBlocks(List<RichBlock> blocks) {
+    final output = <RichBlock>[];
     for (final block in blocks) {
       final normalized = _normalizeBlock(block);
       for (final item in normalized) {
@@ -22,26 +22,26 @@ class ThreadPostBodyDocumentNormalizer {
         output.add(item);
       }
     }
-    return List<ThreadPostBodyBlock>.unmodifiable(output);
+    return List<RichBlock>.unmodifiable(output);
   }
 
-  List<ThreadPostBodyBlock> _normalizeBlock(ThreadPostBodyBlock block) {
-    if (block is ThreadPostTextBlock) {
+  List<RichBlock> _normalizeBlock(RichBlock block) {
+    if (block is RichTextBlock) {
       final runs = _mergeAdjacentRuns(block.runs)
           .where((run) => run.inlineImage != null || run.text.trim().isNotEmpty)
           .toList(growable: false);
       if (runs.isEmpty) {
-        return const <ThreadPostBodyBlock>[];
+        return const <RichBlock>[];
       }
       return _splitTextBlock(block, runs);
     }
-    if (block is ThreadPostQuoteBlock) {
+    if (block is RichQuoteBlock) {
       final children = _normalizeBlocks(block.blocks);
       if (children.isEmpty) {
-        return const <ThreadPostBodyBlock>[];
+        return const <RichBlock>[];
       }
-      return <ThreadPostBodyBlock>[
-        ThreadPostQuoteBlock(
+      return <RichBlock>[
+        RichQuoteBlock(
           anchorId: block.anchorId.isEmpty
               ? threadPostBodyAnchorId(
                   'quote',
@@ -53,15 +53,12 @@ class ThreadPostBodyDocumentNormalizer {
         ),
       ];
     }
-    return <ThreadPostBodyBlock>[block];
+    return <RichBlock>[block];
   }
 
-  List<ThreadPostBodyBlock> _splitTextBlock(
-    ThreadPostTextBlock block,
-    List<ThreadPostTextRun> runs,
-  ) {
-    final result = <ThreadPostTextBlock>[];
-    var currentRuns = <ThreadPostTextRun>[];
+  List<RichBlock> _splitTextBlock(RichTextBlock block, List<RichRun> runs) {
+    final result = <RichTextBlock>[];
+    var currentRuns = <RichRun>[];
     var currentLength = 0;
     var segmentIndex = 0;
 
@@ -70,14 +67,14 @@ class ThreadPostBodyDocumentNormalizer {
         return;
       }
       result.add(
-        ThreadPostTextBlock(
+        RichTextBlock(
           anchorId: _segmentAnchorId(block, segmentIndex, currentRuns),
           continuesPrevious: block.continuesPrevious || segmentIndex > 0,
-          runs: List<ThreadPostTextRun>.unmodifiable(currentRuns),
+          runs: List<RichRun>.unmodifiable(currentRuns),
         ),
       );
       segmentIndex += 1;
-      currentRuns = <ThreadPostTextRun>[];
+      currentRuns = <RichRun>[];
       currentLength = 0;
     }
 
@@ -112,13 +109,13 @@ class ThreadPostBodyDocumentNormalizer {
       }
     }
     flush();
-    return List<ThreadPostBodyBlock>.unmodifiable(result);
+    return List<RichBlock>.unmodifiable(result);
   }
 
   String _segmentAnchorId(
-    ThreadPostTextBlock block,
+    RichTextBlock block,
     int segmentIndex,
-    List<ThreadPostTextRun> runs,
+    List<RichRun> runs,
   ) {
     final prefix = block.anchorId.isEmpty ? 'text' : block.anchorId;
     return threadPostBodyAnchorId(
@@ -127,8 +124,8 @@ class ThreadPostBodyDocumentNormalizer {
     );
   }
 
-  List<ThreadPostTextRun> _mergeAdjacentRuns(List<ThreadPostTextRun> runs) {
-    final output = <ThreadPostTextRun>[];
+  List<RichRun> _mergeAdjacentRuns(List<RichRun> runs) {
+    final output = <RichRun>[];
     for (final run in runs) {
       if (output.isNotEmpty && _sameTextStyle(output.last, run)) {
         final previous = output.removeLast();
@@ -137,10 +134,10 @@ class ThreadPostBodyDocumentNormalizer {
         output.add(run);
       }
     }
-    return List<ThreadPostTextRun>.unmodifiable(output);
+    return List<RichRun>.unmodifiable(output);
   }
 
-  bool _sameTextStyle(ThreadPostTextRun a, ThreadPostTextRun b) {
+  bool _sameTextStyle(RichRun a, RichRun b) {
     return a.inlineImage == null &&
         b.inlineImage == null &&
         a.linkUrl == b.linkUrl &&
@@ -149,8 +146,8 @@ class ThreadPostBodyDocumentNormalizer {
         a.isUnderline == b.isUnderline;
   }
 
-  ThreadPostTextRun _copyRun(ThreadPostTextRun source, String text) {
-    return ThreadPostTextRun(
+  RichRun _copyRun(RichRun source, String text) {
+    return RichRun(
       text: text,
       linkUrl: source.linkUrl,
       isBold: source.isBold,
@@ -160,14 +157,14 @@ class ThreadPostBodyDocumentNormalizer {
     );
   }
 
-  bool _isEmptyTextBlock(ThreadPostBodyBlock block) {
-    return block is ThreadPostTextBlock &&
+  bool _isEmptyTextBlock(RichBlock block) {
+    return block is RichTextBlock &&
         block.runs.every(
           (run) => run.inlineImage == null && run.text.trim().isEmpty,
         );
   }
 
-  String _anchorSeedForRun(ThreadPostTextRun run) {
+  String _anchorSeedForRun(RichRun run) {
     final image = run.inlineImage;
     return image == null
         ? '${run.text}|${run.linkUrl}|${run.isBold}|${run.isItalic}|${run.isUnderline}'

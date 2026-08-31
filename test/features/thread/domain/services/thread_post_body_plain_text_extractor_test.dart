@@ -1,31 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 
 void main() {
   group('ThreadPostBodyPlainTextExtractor', () {
     test('extracts text, link text and quote text in order', () {
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[
-              ThreadPostTextRun(text: '第一段 '),
-              ThreadPostTextRun(
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
+            runs: <RichRun>[
+              RichRun(text: '第一段 '),
+              RichRun(
                 text: '链接文本',
                 linkUrl: 'https://bbs.yamibo.com/thread-1-1-1.html',
               ),
             ],
           ),
-          ThreadPostQuoteBlock(
-            blocks: <ThreadPostBodyBlock>[
-              ThreadPostTextBlock(
-                runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '引用正文')],
-              ),
+          RichQuoteBlock(
+            blocks: <RichBlock>[
+              RichTextBlock(runs: <RichRun>[RichRun(text: '引用正文')]),
             ],
           ),
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '尾段')],
-          ),
+          RichTextBlock(runs: <RichRun>[RichRun(text: '尾段')]),
         ],
       );
 
@@ -35,36 +31,34 @@ void main() {
     });
 
     test('omits block images and keeps inline smiley alt text', () {
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[
-              ThreadPostTextRun(text: '喜欢'),
-              ThreadPostTextRun(
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
+            runs: <RichRun>[
+              RichRun(text: '喜欢'),
+              RichRun(
                 text: '',
-                inlineImage: ThreadPostInlineImage(
+                inlineImage: RichInlineImage(
                   url: 'https://bbs.yamibo.com/static/image/smiley/a.gif',
                   rawUrl: 'static/image/smiley/a.gif',
                   altText: '[笑]',
                 ),
               ),
-              ThreadPostTextRun(
+              RichRun(
                 text: '',
-                inlineImage: ThreadPostInlineImage(
+                inlineImage: RichInlineImage(
                   url: 'https://bbs.yamibo.com/static/image/smiley/b.gif',
                   rawUrl: 'static/image/smiley/b.gif',
                 ),
               ),
             ],
           ),
-          ThreadPostImageBlock(
+          RichImageBlock(
             url: 'https://bbs.yamibo.com/data/attachment/forum/page.jpg',
             rawUrl: 'data/attachment/forum/page.jpg',
             index: 0,
           ),
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '尾巴')],
-          ),
+          RichTextBlock(runs: <RichRun>[RichRun(text: '尾巴')]),
         ],
       );
 
@@ -74,19 +68,15 @@ void main() {
     });
 
     test('can copy block image placeholders or urls', () {
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '前文')],
-          ),
-          ThreadPostImageBlock(
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(runs: <RichRun>[RichRun(text: '前文')]),
+          RichImageBlock(
             url: 'https://bbs.yamibo.com/data/attachment/forum/page.jpg',
             rawUrl: 'data/attachment/forum/page.jpg',
             index: 0,
           ),
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '后文')],
-          ),
+          RichTextBlock(runs: <RichRun>[RichRun(text: '后文')]),
         ],
       );
 
@@ -113,20 +103,20 @@ void main() {
     });
 
     test('supports inline image title fallback and url policy', () {
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[
-              ThreadPostTextRun(text: 'A'),
-              ThreadPostTextRun(
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
+            runs: <RichRun>[
+              RichRun(text: 'A'),
+              RichRun(
                 text: '',
-                inlineImage: ThreadPostInlineImage(
+                inlineImage: RichInlineImage(
                   url: 'https://bbs.yamibo.com/static/image/smiley/a.gif',
                   rawUrl: 'static/image/smiley/a.gif',
                   titleText: '开心',
                 ),
               ),
-              ThreadPostTextRun(text: 'B'),
+              RichRun(text: 'B'),
             ],
           ),
         ],
@@ -156,11 +146,11 @@ void main() {
     });
 
     test('uses link url only when display text is empty', () {
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[
-              ThreadPostTextRun(
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
+            runs: <RichRun>[
+              RichRun(
                 text: '',
                 linkUrl: 'https://bbs.yamibo.com/thread-1-1-1.html',
               ),
@@ -175,16 +165,12 @@ void main() {
     });
 
     test('can prefix quote lines', () {
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostQuoteBlock(
-            blocks: <ThreadPostBodyBlock>[
-              ThreadPostTextBlock(
-                runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '引用一')],
-              ),
-              ThreadPostTextBlock(
-                runs: <ThreadPostTextRun>[ThreadPostTextRun(text: '引用二')],
-              ),
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichQuoteBlock(
+            blocks: <RichBlock>[
+              RichTextBlock(runs: <RichRun>[RichRun(text: '引用一')]),
+              RichTextBlock(runs: <RichRun>[RichRun(text: '引用二')]),
             ],
           ),
         ],

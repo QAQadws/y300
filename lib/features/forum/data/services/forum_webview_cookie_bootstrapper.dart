@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/network_providers.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 
 final forumWebViewCookieBootstrapperProvider =
     Provider<ForumWebViewCookieBootstrapper>((ref) {

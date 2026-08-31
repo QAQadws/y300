@@ -1,16 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 
 void main() {
   group('ThreadPostResourceLayoutHintResolver dimension hydration', () {
-    const imageNoDimension = ThreadPostImageBlock(
+    const imageNoDimension = RichImageBlock(
       url: 'https://bbs.yamibo.com/data/attachment/forum/a.jpg',
       rawUrl: 'data/attachment/forum/a.jpg',
       index: 0,
     );
-    const imageWithHtml = ThreadPostImageBlock(
+    const imageWithHtml = RichImageBlock(
       url: 'https://bbs.yamibo.com/data/attachment/forum/b.jpg',
       rawUrl: 'data/attachment/forum/b.jpg',
       index: 1,
@@ -31,9 +31,7 @@ void main() {
       );
       final hydrated = resolver.copyWithLookup(lookup);
       final hints = hydrated.resolve(
-        const ThreadPostBodyDocument(
-          blocks: <ThreadPostBodyBlock>[imageNoDimension],
-        ),
+        const RichDocument(blocks: <RichBlock>[imageNoDimension]),
       );
 
       final hint = hints.blockImage(imageNoDimension);
@@ -56,11 +54,7 @@ void main() {
       );
       final hints = resolver
           .copyWithLookup(lookup)
-          .resolve(
-            const ThreadPostBodyDocument(
-              blocks: <ThreadPostBodyBlock>[imageWithHtml],
-            ),
-          );
+          .resolve(const RichDocument(blocks: <RichBlock>[imageWithHtml]));
 
       final hint = hints.blockImage(imageWithHtml)!;
       expect(hint.aspectRatio, closeTo(2.0, 0.0001));
@@ -74,9 +68,7 @@ void main() {
           lockTrustedDimensions: true,
         );
         final hints = resolver.resolve(
-          const ThreadPostBodyDocument(
-            blocks: <ThreadPostBodyBlock>[imageNoDimension],
-          ),
+          const RichDocument(blocks: <RichBlock>[imageNoDimension]),
         );
         final hint = hints.blockImage(imageNoDimension)!;
         expect(hint.source, ThreadPostResourceLayoutHintSource.contentDefault);
@@ -123,14 +115,12 @@ class _FakeDimensionLookup implements ThreadPostImageDimensionLookup {
   final Map<String, ThreadPostResourceDimension> blockDimensions;
 
   @override
-  ThreadPostResourceDimension? blockImageDimension(ThreadPostImageBlock image) {
+  ThreadPostResourceDimension? blockImageDimension(RichImageBlock image) {
     return blockDimensions[ThreadPostResourceLayoutHints.blockImageKey(image)];
   }
 
   @override
-  ThreadPostResourceDimension? inlineImageDimension(
-    ThreadPostInlineImage image,
-  ) {
+  ThreadPostResourceDimension? inlineImageDimension(RichInlineImage image) {
     return null;
   }
 }

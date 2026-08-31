@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
@@ -31,7 +31,7 @@ void main() {
         threadId: '100',
         imageCacheOwnerId: '100',
       );
-      final legacyPlan = _planWithImages(<ThreadPostImageBlock>[
+      final legacyPlan = _planWithImages(<RichImageBlock>[
         RichImageBlock(
           url: 'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
           rawUrl: 'data/attachment/forum/page-1.jpg',
@@ -75,7 +75,7 @@ void main() {
 
       final report = service.buildReport(
         post: _post,
-        legacyPlan: _planWithImages(const <ThreadPostImageBlock>[]),
+        legacyPlan: _planWithImages(const <RichImageBlock>[]),
         preparedDocument: prepared,
         lastImageRequest: const ForumHtmlImageRequest(
           url: 'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
@@ -95,7 +95,7 @@ void main() {
   });
 }
 
-ThreadPostBodyRenderPlan _planWithImages(List<ThreadPostImageBlock> images) {
+ThreadPostBodyRenderPlan _planWithImages(List<RichImageBlock> images) {
   return ThreadPostBodyRenderPlan(
     document: RichDocument(blocks: images),
     displayDocument: RichDocument(blocks: images),

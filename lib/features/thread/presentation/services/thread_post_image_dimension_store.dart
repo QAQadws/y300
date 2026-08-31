@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 
@@ -27,14 +27,12 @@ class ThreadPostImageDimensionStore extends ChangeNotifier
   String get signature => 'rev:$_revision';
 
   @override
-  ThreadPostResourceDimension? blockImageDimension(ThreadPostImageBlock image) {
+  ThreadPostResourceDimension? blockImageDimension(RichImageBlock image) {
     return _blockDimensions[ThreadPostResourceLayoutHints.blockImageKey(image)];
   }
 
   @override
-  ThreadPostResourceDimension? inlineImageDimension(
-    ThreadPostInlineImage image,
-  ) {
+  ThreadPostResourceDimension? inlineImageDimension(RichInlineImage image) {
     return _inlineDimensions[ThreadPostResourceLayoutHints.inlineImageKey(
       image,
     )];

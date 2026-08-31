@@ -1,5 +1,5 @@
 import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 
 /// 任务执行结果。
 ///

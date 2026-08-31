@@ -1,17 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_document_normalizer.dart';
 
 void main() {
   group('ThreadPostBodyDocumentNormalizer', () {
     test('splits long text blocks without changing text or style', () {
       const normalizer = ThreadPostBodyDocumentNormalizer(maxTextRunLength: 5);
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
             anchorId: 'text-original',
-            runs: <ThreadPostTextRun>[
-              ThreadPostTextRun(
+            runs: <RichRun>[
+              RichRun(
                 text: 'abcdefghijk',
                 linkUrl: 'https://bbs.yamibo.com/thread-1-1-1.html',
                 isBold: true,
@@ -26,7 +26,7 @@ void main() {
       final normalized = normalizer.normalize(document);
 
       expect(normalized.blocks, hasLength(3));
-      final blocks = normalized.blocks.cast<ThreadPostTextBlock>();
+      final blocks = normalized.blocks.cast<RichTextBlock>();
       expect(blocks.map((block) => block.plainText).join(), 'abcdefghijk');
       expect(blocks.first.continuesPrevious, isFalse);
       expect(blocks.skip(1).every((block) => block.continuesPrevious), isTrue);
@@ -43,19 +43,19 @@ void main() {
 
     test('keeps inline smiley image dimensions untouched', () {
       const normalizer = ThreadPostBodyDocumentNormalizer(maxTextRunLength: 4);
-      const smiley = ThreadPostInlineImage(
+      const smiley = RichInlineImage(
         url: 'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
         rawUrl: 'static/image/smiley/comcom/2.gif',
         originalWidth: 32,
         originalHeight: 18,
       );
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostTextBlock(
-            runs: <ThreadPostTextRun>[
-              ThreadPostTextRun(text: '喜欢'),
-              ThreadPostTextRun(text: '', inlineImage: smiley),
-              ThreadPostTextRun(text: '表情'),
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
+            runs: <RichRun>[
+              RichRun(text: '喜欢'),
+              RichRun(text: '', inlineImage: smiley),
+              RichRun(text: '表情'),
             ],
           ),
         ],
@@ -64,7 +64,7 @@ void main() {
       final normalized = normalizer.normalize(document);
 
       final runs = normalized.blocks
-          .whereType<ThreadPostTextBlock>()
+          .whereType<RichTextBlock>()
           .expand((block) => block.runs)
           .toList(growable: false);
       final inlineImage = runs.singleWhere((run) => run.inlineImage != null);
@@ -74,14 +74,12 @@ void main() {
 
     test('normalizes quote children recursively', () {
       const normalizer = ThreadPostBodyDocumentNormalizer(maxTextRunLength: 3);
-      const document = ThreadPostBodyDocument(
-        blocks: <ThreadPostBodyBlock>[
-          ThreadPostQuoteBlock(
+      const document = RichDocument(
+        blocks: <RichBlock>[
+          RichQuoteBlock(
             anchorId: 'quote-original',
-            blocks: <ThreadPostBodyBlock>[
-              ThreadPostTextBlock(
-                runs: <ThreadPostTextRun>[ThreadPostTextRun(text: 'abcdef')],
-              ),
+            blocks: <RichBlock>[
+              RichTextBlock(runs: <RichRun>[RichRun(text: 'abcdef')]),
             ],
           ),
         ],
@@ -89,11 +87,11 @@ void main() {
 
       final normalized = normalizer.normalize(document);
 
-      final quote = normalized.blocks.single as ThreadPostQuoteBlock;
+      final quote = normalized.blocks.single as RichQuoteBlock;
       expect(quote.anchorId, 'quote-original');
       expect(quote.blocks, hasLength(2));
       expect(
-        quote.blocks.whereType<ThreadPostTextBlock>().map((block) {
+        quote.blocks.whereType<RichTextBlock>().map((block) {
           return block.plainText;
         }).join(),
         'abcdef',

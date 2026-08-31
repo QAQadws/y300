@@ -1,4 +1,4 @@
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 
 enum ThreadPostBlockImageTextPolicy { omit, placeholder, url }
 
@@ -37,7 +37,7 @@ class ThreadPostBodyPlainTextExtractor {
   final ThreadPostPlainTextExtractOptions options;
 
   String extract(
-    ThreadPostBodyDocument document, {
+    RichDocument document, {
     ThreadPostPlainTextExtractOptions? options,
   }) {
     final resolvedOptions = options ?? this.options;
@@ -45,7 +45,7 @@ class ThreadPostBodyPlainTextExtractor {
   }
 
   List<String> _extractBlocks(
-    List<ThreadPostBodyBlock> blocks,
+    List<RichBlock> blocks,
     ThreadPostPlainTextExtractOptions options,
   ) {
     final lines = <String>[];
@@ -65,14 +65,14 @@ class ThreadPostBodyPlainTextExtractor {
   }
 
   List<String> _extractBlock(
-    ThreadPostBodyBlock block,
+    RichBlock block,
     ThreadPostPlainTextExtractOptions options,
   ) {
-    if (block is ThreadPostTextBlock) {
+    if (block is RichTextBlock) {
       final text = _extractTextRuns(block.runs, options);
       return text.trim().isEmpty ? const <String>[] : <String>[text];
     }
-    if (block is ThreadPostQuoteBlock) {
+    if (block is RichQuoteBlock) {
       final lines = _extractBlocks(block.blocks, options);
       return switch (options.quotePolicy) {
         ThreadPostQuoteTextPolicy.keepTextWithBlankLines =>
@@ -83,7 +83,7 @@ class ThreadPostBodyPlainTextExtractor {
               .toList(growable: false),
       };
     }
-    if (block is ThreadPostImageBlock) {
+    if (block is RichImageBlock) {
       return switch (options.blockImagePolicy) {
         ThreadPostBlockImageTextPolicy.omit => const <String>[],
         ThreadPostBlockImageTextPolicy.placeholder => <String>[
@@ -96,7 +96,7 @@ class ThreadPostBodyPlainTextExtractor {
   }
 
   String _extractTextRuns(
-    List<ThreadPostTextRun> runs,
+    List<RichRun> runs,
     ThreadPostPlainTextExtractOptions options,
   ) {
     final buffer = StringBuffer();
@@ -120,7 +120,7 @@ class ThreadPostBodyPlainTextExtractor {
   }
 
   String _inlineImageText(
-    ThreadPostInlineImage image,
+    RichInlineImage image,
     ThreadPostPlainTextExtractOptions options,
   ) {
     return switch (options.inlineImagePolicy) {

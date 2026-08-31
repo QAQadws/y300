@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
@@ -199,33 +199,27 @@ void main() {
     expect(repository.lastRefreshMode, isNull);
   });
 
-  test(
-    'loadHeader exposes source asset without synchronous caching',
-    () async {
-      final repository = _FakeNovelRepositoryWithCoverWriter(
-        coverImageUrl: 'https://img.test/novel-cover.jpg',
-      );
-      final adapter = NovelDetailAdapter(
-        repository,
-        stateRepository: _RecordingLibraryStateRepository(),
-      );
+  test('loadHeader exposes source asset without synchronous caching', () async {
+    final repository = _FakeNovelRepositoryWithCoverWriter(
+      coverImageUrl: 'https://img.test/novel-cover.jpg',
+    );
+    final adapter = NovelDetailAdapter(
+      repository,
+      stateRepository: _RecordingLibraryStateRepository(),
+    );
 
-      final header = await adapter.loadHeader(workId: 'novel:1');
+    final header = await adapter.loadHeader(workId: 'novel:1');
 
-      expect(header.coverLocalPath, isNull);
-      expect(header.coverAsset?.assetId, 'novel/novel:1/source');
-      expect(header.coverAsset?.kind, LibraryCoverAssetKind.source);
-      expect(
-        header.coverAsset?.sourceUrl,
-        'https://img.test/novel-cover.jpg',
-      );
-      expect(header.sourceTitle, 'Novel');
-      expect(header.sourceAuthor, isNull);
-      expect(header.publisherName, 'Novel Author');
-      expect(repository.lastCoverImageUrl, isNull);
-      expect(repository.lastCoverLocalPath, isNull);
-    },
-  );
+    expect(header.coverLocalPath, isNull);
+    expect(header.coverAsset?.assetId, 'novel/novel:1/source');
+    expect(header.coverAsset?.kind, LibraryCoverAssetKind.source);
+    expect(header.coverAsset?.sourceUrl, 'https://img.test/novel-cover.jpg');
+    expect(header.sourceTitle, 'Novel');
+    expect(header.sourceAuthor, isNull);
+    expect(header.publisherName, 'Novel Author');
+    expect(repository.lastCoverImageUrl, isNull);
+    expect(repository.lastCoverLocalPath, isNull);
+  });
 
   test(
     'loadHeader exposes publisher name and source intro without UID',

@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -648,7 +648,7 @@ class LocalNovelRepository
     final threadGateway = _requireLegacyThreadGateway();
     final detail = await _runThreadRequest(
       executionContext: executionContext,
-      kind: FavoriteFirstSyncRequestKind.novelSeedDetail,
+      kind: FavoriteSyncRequestKind.novelSeedDetail,
       action: () => threadGateway.getThreadDetail(tid: seed.tid, page: 1),
     );
     final db = await _dbFuture;
@@ -1448,7 +1448,7 @@ class LocalNovelRepository
     for (var page = startPage; page <= endPage; page++) {
       final detail = await _runThreadRequest(
         executionContext: executionContext,
-        kind: FavoriteFirstSyncRequestKind.novelEpisodePage,
+        kind: FavoriteSyncRequestKind.novelEpisodePage,
         action: () => threadGateway.getThreadDetail(tid: tid, page: page),
       );
       if (detail.posts.isEmpty) {
@@ -1539,7 +1539,7 @@ class LocalNovelRepository
 
   Future<T> _runThreadRequest<T>({
     required FavoriteSyncExecutionContext? executionContext,
-    required FavoriteFirstSyncRequestKind kind,
+    required FavoriteSyncRequestKind kind,
     required Future<T> Function() action,
   }) {
     final governor = executionContext?.governor;

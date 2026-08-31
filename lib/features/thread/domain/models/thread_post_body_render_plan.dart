@@ -1,4 +1,4 @@
-import 'package:y300/features/thread/domain/models/thread_post_body_document.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 
@@ -13,9 +13,9 @@ class ThreadPostBodyRenderPlan {
     this.resourceLayoutHints = ThreadPostResourceLayoutHints.empty,
   });
 
-  final ThreadPostBodyDocument document;
-  final ThreadPostBodyDocument displayDocument;
-  final List<ThreadPostImageBlock> images;
+  final RichDocument document;
+  final RichDocument displayDocument;
+  final List<RichImageBlock> images;
   final List<ThreadPostBodySegment> segments;
 
   /// True when body blocks are split into multiple outer list entries.
@@ -49,6 +49,6 @@ class ThreadPostBodySegment {
   });
 
   final int index;
-  final List<ThreadPostBodyBlock> blocks;
+  final List<RichBlock> blocks;
   final String anchorId;
 }

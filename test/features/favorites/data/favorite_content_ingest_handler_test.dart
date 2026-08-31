@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_ingest_service.dart';
 import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
-import 'package:y300/features/favorites/data/services/favorite_first_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';
 import 'package:y300/features/favorites/domain/models/favorite_detail_context.dart';
@@ -295,13 +295,12 @@ class _FakeNovelIngestService implements NovelFavoriteIngestService {
   }
 }
 
-class _RecordingGovernor implements FavoriteFirstSyncRequestGovernor {
-  final List<FavoriteFirstSyncRequestKind> kinds =
-      <FavoriteFirstSyncRequestKind>[];
+class _RecordingGovernor implements FavoriteSyncRequestGovernor {
+  final List<FavoriteSyncRequestKind> kinds = <FavoriteSyncRequestKind>[];
 
   @override
   Future<T> run<T>({
-    required FavoriteFirstSyncRequestKind kind,
+    required FavoriteSyncRequestKind kind,
     required Future<T> Function() action,
   }) async {
     kinds.add(kind);
