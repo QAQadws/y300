@@ -10,6 +10,8 @@ import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
+enum LibraryImageFrameSource { localFile, remote, override }
+
 /// Shared image widget for library surfaces.
 ///
 /// It always prefers an existing local file.  Network URLs are treated as a
@@ -36,8 +38,7 @@ class LibraryCachedImage extends ConsumerStatefulWidget {
     this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
     this.errorPlaceholder,
-    this.onImageResolved,
-    this.onRemoteImageResolved,
+    this.onFirstFrameRendered,
     this.onImageFailed,
     this.onLocalImageDecodeFailed,
     this.fadeInDuration = Duration.zero,
@@ -62,8 +63,7 @@ class LibraryCachedImage extends ConsumerStatefulWidget {
   final ImageDownscalePolicy downscalePolicy;
   final Widget placeholder;
   final Widget? errorPlaceholder;
-  final ValueChanged<Size>? onImageResolved;
-  final VoidCallback? onRemoteImageResolved;
+  final ValueChanged<LibraryImageFrameSource>? onFirstFrameRendered;
   final VoidCallback? onImageFailed;
   final void Function(Object error, StackTrace? stackTrace)?
   onLocalImageDecodeFailed;
@@ -87,7 +87,7 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
 
   bool _remoteResolved = false;
   bool _remoteResolveScheduled = false;
-  String? _reportedImageIdentity;
+  String? _reportedFirstFrameIdentity;
   String? _reportedFailureIdentity;
   String? _reportedDecodeFailureIdentity;
   String? _evictedFailureIdentity;
@@ -120,7 +120,7 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
   void _resetLoadState() {
     _remoteResolved = false;
     _remoteResolveScheduled = false;
-    _reportedImageIdentity = null;
+    _reportedFirstFrameIdentity = null;
     _reportedFailureIdentity = null;
     _reportedDecodeFailureIdentity = null;
     _evictedFailureIdentity = null;
@@ -180,9 +180,9 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           final isResolved = frame != null || wasSynchronouslyLoaded;
           if (isResolved) {
-            _reportImageResolved(
-              testProvider,
+            _reportFirstFrameRendered(
               'override:${identityHashCode(testProvider)}',
+              LibraryImageFrameSource.override,
             );
           }
           return _buildFirstFrameTransition(
@@ -206,7 +206,6 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
     if (local != null && local.isNotEmpty) {
       final file = io.File(local);
       if (file.existsSync()) {
-        final fileProvider = FileImage(file);
         // cover 用 cover 感知降采样修复横长竖短图模糊；其它 fit 走宽度优先策略。
         final displayProvider = resolveDownscaledFileImageProvider(
           localPath: file.path,
@@ -225,7 +224,10 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             final isResolved = frame != null || wasSynchronouslyLoaded;
             if (isResolved) {
-              _reportImageResolved(fileProvider, 'file:${file.path}');
+              _reportFirstFrameRendered(
+                'file:${file.path}',
+                LibraryImageFrameSource.localFile,
+              );
             }
             return _buildFirstFrameTransition(
               context: context,
@@ -310,12 +312,11 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
         final isResolved = frame != null || wasSynchronouslyLoaded;
         if (isResolved) {
-          final isFirstFrame = !_remoteResolved && !_remoteResolveScheduled;
           _markRemoteResolved();
-          if (isFirstFrame) {
-            widget.onRemoteImageResolved?.call();
-          }
-          _reportImageResolved(provider, 'remote:$remote');
+          _reportFirstFrameRendered(
+            'remote:$remote',
+            LibraryImageFrameSource.remote,
+          );
         }
         return _buildFirstFrameTransition(
           context: context,
@@ -382,34 +383,16 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
     unawaited(provider.evict().catchError((Object _) => false));
   }
 
-  void _reportImageResolved(ImageProvider provider, String identity) {
-    final callback = widget.onImageResolved;
-    if (callback == null || _reportedImageIdentity == identity) {
+  void _reportFirstFrameRendered(
+    String identity,
+    LibraryImageFrameSource source,
+  ) {
+    final callback = widget.onFirstFrameRendered;
+    if (callback == null || _reportedFirstFrameIdentity == identity) {
       return;
     }
-    _reportedImageIdentity = identity;
-    final stream = provider.resolve(const ImageConfiguration());
-    late final ImageStreamListener listener;
-    listener = ImageStreamListener(
-      (imageInfo, _) {
-        stream.removeListener(listener);
-        final image = imageInfo.image;
-        final size = Size(image.width.toDouble(), image.height.toDouble());
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            callback(size);
-          }
-        });
-      },
-      onError: (error, stackTrace) {
-        stream.removeListener(listener);
-        if (_reportedImageIdentity == identity) {
-          _reportedImageIdentity = null;
-        }
-        _markImageFailed(identity);
-      },
-    );
-    stream.addListener(listener);
+    _reportedFirstFrameIdentity = identity;
+    callback(source);
   }
 
   void _markImageFailed(String identity) {

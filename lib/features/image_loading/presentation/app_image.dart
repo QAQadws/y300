@@ -32,7 +32,6 @@ class AppImage extends ConsumerStatefulWidget {
     this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
     this.errorPlaceholder,
-    this.onImageResolved,
     this.onImageFailed,
   });
 
@@ -53,8 +52,6 @@ class AppImage extends ConsumerStatefulWidget {
   final Widget placeholder;
   final Widget? errorPlaceholder;
 
-  /// 解析出原始像素尺寸时回调（用于帖子图布局占位等）。
-  final ValueChanged<Size>? onImageResolved;
   final VoidCallback? onImageFailed;
 
   @override
@@ -69,7 +66,6 @@ class _AppImageState extends ConsumerState<AppImage> {
   Size _displaySize = Size.zero;
   double _devicePixelRatio = 1;
   bool _networkResolved = false;
-  String? _reportedImageIdentity;
   String? _reportedFailureIdentity;
 
   @override
@@ -81,7 +77,6 @@ class _AppImageState extends ConsumerState<AppImage> {
           widget.networkSource,
         )) {
       _networkResolved = false;
-      _reportedImageIdentity = null;
       _reportedFailureIdentity = null;
     }
   }
@@ -126,12 +121,6 @@ class _AppImageState extends ConsumerState<AppImage> {
           height: widget.height,
           alignment: widget.alignment,
           gaplessPlayback: true,
-          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-            if (frame != null || wasSynchronouslyLoaded) {
-              _reportImageResolved(fileProvider, 'file:${file.path}');
-            }
-            return child;
-          },
           errorBuilder: (context, error, stackTrace) {
             _markImageFailed('file:${file.path}');
             return _effectiveErrorPlaceholder;
@@ -197,7 +186,6 @@ class _AppImageState extends ConsumerState<AppImage> {
           loadingBuilder: (context, child, loadingProgress) {
             if (loadingProgress == null) {
               _markNetworkResolved();
-              _reportImageResolved(provider, 'net:${source.cacheKey}');
               return child;
             }
             return const SizedBox.shrink();
@@ -240,37 +228,6 @@ class _AppImageState extends ConsumerState<AppImage> {
         setState(() => _networkResolved = true);
       }
     });
-  }
-
-  /// 上报原始像素尺寸。用未降采样的逻辑 provider 解析尺寸，保证布局提示用原图尺寸。
-  void _reportImageResolved(ImageProvider provider, String identity) {
-    final callback = widget.onImageResolved;
-    if (callback == null || _reportedImageIdentity == identity) {
-      return;
-    }
-    _reportedImageIdentity = identity;
-    final stream = provider.resolve(const ImageConfiguration());
-    late final ImageStreamListener listener;
-    listener = ImageStreamListener(
-      (imageInfo, _) {
-        stream.removeListener(listener);
-        final image = imageInfo.image;
-        final size = Size(image.width.toDouble(), image.height.toDouble());
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            callback(size);
-          }
-        });
-      },
-      onError: (error, stackTrace) {
-        stream.removeListener(listener);
-        if (_reportedImageIdentity == identity) {
-          _reportedImageIdentity = null;
-        }
-        _markImageFailed(identity);
-      },
-    );
-    stream.addListener(listener);
   }
 
   void _markImageFailed(String identity) {

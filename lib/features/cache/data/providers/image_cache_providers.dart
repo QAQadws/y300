@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
+import 'package:y300/core/media/encoded_image_dimension_probe.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
@@ -74,6 +75,12 @@ final imageCacheDiagnosticRecorderProvider =
       }
       return LoggerImageCacheDiagnosticRecorder(ref.watch(loggerProvider));
     });
+
+final encodedImageDimensionProbeProvider = Provider<EncodedImageDimensionProbe>(
+  (ref) {
+    return SerialEncodedImageDimensionProbe();
+  },
+);
 
 final cacheMutationBusProvider = Provider<CacheMutationBus>((ref) {
   final bus = CacheMutationBus();

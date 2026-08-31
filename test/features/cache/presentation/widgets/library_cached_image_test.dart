@@ -52,22 +52,28 @@ void main() {
     expect(find.byType(Image), findsNothing);
   });
 
-  testWidgets('local image reports decoded dimensions', (tester) async {
+  testWidgets('reports the first display frame once without a second resolve', (
+    tester,
+  ) async {
     final image = await tester.runAsync(
       () => createTestImage(width: 3, height: 5, cache: false),
     );
     final testImage = image!;
     addTearDown(testImage.dispose);
-    final provider = _SynchronousImageProvider(testImage);
+    final provider = _CountingImageProvider(testImage);
 
-    Size? resolvedSize;
+    var firstFrameCount = 0;
+    LibraryImageFrameSource? frameSource;
     await tester.pumpWidget(
       LocalizedTestApp(
         home: LibraryCachedImage(
           imageProviderOverride: provider,
           fit: BoxFit.cover,
           placeholder: const SizedBox(key: Key('placeholder')),
-          onImageResolved: (size) => resolvedSize = size,
+          onFirstFrameRendered: (source) {
+            firstFrameCount += 1;
+            frameSource = source;
+          },
         ),
       ),
     );
@@ -75,7 +81,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(resolvedSize, const Size(3, 5));
+    expect(firstFrameCount, 1);
+    expect(frameSource, LibraryImageFrameSource.override);
+    expect(provider.loadCount, 1);
   });
 
   testWidgets('keeps the placeholder until an override emits its first frame', (

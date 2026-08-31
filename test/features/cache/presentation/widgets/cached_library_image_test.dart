@@ -9,6 +9,7 @@ import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/media/cover_aware_resize_image.dart';
+import 'package:y300/core/media/encoded_image_dimension_probe.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
@@ -182,6 +183,172 @@ void main() {
     await tester.pump(const Duration(milliseconds: 301));
 
     expect(_loadingIndicator, findsNothing);
+  });
+
+  testWidgets(
+    'eager remote first frame settles before cache-backed dimensions exist',
+    (tester) async {
+      final image = await tester.runAsync(
+        () => createTestImage(width: 4, height: 3, cache: false),
+      );
+      final testImage = image!;
+      addTearDown(testImage.dispose);
+      final localFile = _createTempPng(tester);
+      final cacheService = _ControlledImageCacheService();
+      final dimensionProbe = _ControlledDimensionProbe();
+      Size? resolvedSize;
+      cacheService.completeGetCached('thread-image', null);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(cacheService),
+            encodedImageDimensionProbeProvider.overrideWithValue(
+              dimensionProbe,
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: CachedLibraryImage(
+              request: _request('thread-image'),
+              fit: BoxFit.cover,
+              placeholder: const SizedBox(key: Key('placeholder')),
+              showDelayedLoadingIndicator: true,
+              remoteImageProviderOverride: _SynchronousImageProvider(testImage),
+              onImageResolved: (size) => resolvedSize = size,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(Image), findsOneWidget);
+      expect(_loadingIndicator, findsNothing);
+      expect(dimensionProbe.calls, 0);
+
+      cacheService.completeEnsure(
+        'thread-image',
+        CachedImageResult(
+          success: true,
+          cacheKey: 'thread-image',
+          localPath: localFile.path,
+        ),
+      );
+      await tester.pump();
+
+      expect(dimensionProbe.calls, 1);
+      expect(resolvedSize, isNull);
+      dimensionProbe.complete(const Size(900, 600));
+      await tester.pump();
+
+      expect(resolvedSize, const Size(900, 600));
+      expect(_loadingIndicator, findsNothing);
+    },
+  );
+
+  testWidgets(
+    'local first frame settles before intrinsic dimension probing completes',
+    (tester) async {
+      final localFile = _createTempPng(tester);
+      final image = await tester.runAsync(
+        () => createTestImage(width: 4, height: 3, cache: false),
+      );
+      final testImage = image!;
+      addTearDown(testImage.dispose);
+      final cacheService = _ControlledImageCacheService();
+      final dimensionProbe = _ControlledDimensionProbe();
+      Size? resolvedSize;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(cacheService),
+            encodedImageDimensionProbeProvider.overrideWithValue(
+              dimensionProbe,
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: SizedBox(
+              width: 240,
+              height: 240,
+              child: CachedLibraryImage(
+                request: _request('thread-image'),
+                preferredLocalPath: localFile.path,
+                imageProviderOverride: _SynchronousImageProvider(testImage),
+                fit: BoxFit.contain,
+                placeholder: const SizedBox(key: Key('placeholder')),
+                showDelayedLoadingIndicator: true,
+                onImageResolved: (size) => resolvedSize = size,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(Image), findsOneWidget);
+      expect(_loadingIndicator, findsNothing);
+      expect(dimensionProbe.calls, 1);
+      expect(resolvedSize, isNull);
+
+      dimensionProbe.complete(const Size(1200, 1800));
+      await tester.pump();
+
+      expect(resolvedSize, const Size(1200, 1800));
+      expect(
+        cacheService.recordedDimensions['thread-image'],
+        const Size(1200, 1800),
+      );
+      expect(_loadingIndicator, findsNothing);
+    },
+  );
+
+  testWidgets('dimension probe failure does not turn display into an error', (
+    tester,
+  ) async {
+    final localFile = _createTempPng(tester);
+    final image = await tester.runAsync(
+      () => createTestImage(width: 4, height: 3, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final cacheService = _ControlledImageCacheService();
+    var imageFailed = false;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(cacheService),
+          encodedImageDimensionProbeProvider.overrideWithValue(
+            const _FailingDimensionProbe(),
+          ),
+        ],
+        child: LocalizedTestApp(
+          home: CachedLibraryImage(
+            request: _request('thread-image'),
+            preferredLocalPath: localFile.path,
+            imageProviderOverride: _SynchronousImageProvider(testImage),
+            fit: BoxFit.contain,
+            placeholder: const SizedBox(key: Key('placeholder')),
+            errorPlaceholder: const SizedBox(key: Key('error-placeholder')),
+            showDelayedLoadingIndicator: true,
+            onImageResolved: (_) {},
+            onImageFailed: () => imageFailed = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.byKey(const Key('error-placeholder')), findsNothing);
+    expect(_loadingIndicator, findsNothing);
+    expect(imageFailed, isFalse);
   });
 
   testWidgets('uses cached local result before starting a new cache request', (
@@ -499,6 +666,58 @@ void main() {
     expect(provider, isA<FileImage>());
     expect((provider as FileImage).file.path, newFile.path);
   });
+
+  testWidgets('ignores stale intrinsic dimensions after request changes', (
+    tester,
+  ) async {
+    final oldFile = _createTempPng(tester);
+    final newFile = _createTempPng(tester);
+    final image = await tester.runAsync(
+      () => createTestImage(width: 4, height: 3, cache: false),
+    );
+    final testImage = image!;
+    addTearDown(testImage.dispose);
+    final cacheService = _ControlledImageCacheService();
+    final dimensionProbe = _KeyedControlledDimensionProbe();
+    final resolvedSizes = <Size>[];
+
+    Widget build(String cacheKey, String localPath) {
+      return ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(cacheService),
+          encodedImageDimensionProbeProvider.overrideWithValue(dimensionProbe),
+        ],
+        child: LocalizedTestApp(
+          home: CachedLibraryImage(
+            request: _request(cacheKey),
+            preferredLocalPath: localPath,
+            imageProviderOverride: _SynchronousImageProvider(testImage),
+            fit: BoxFit.contain,
+            placeholder: const SizedBox(key: Key('placeholder')),
+            onImageResolved: resolvedSizes.add,
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(build('old-image', oldFile.path));
+    await tester.pump();
+    await tester.pump();
+    expect(dimensionProbe.startedKeys, contains('old-image'));
+
+    await tester.pumpWidget(build('new-image', newFile.path));
+    await tester.pump();
+    await tester.pump();
+    expect(dimensionProbe.startedKeys, contains('new-image'));
+
+    dimensionProbe.complete('old-image', const Size(100, 200));
+    await tester.pump();
+    expect(resolvedSizes, isEmpty);
+
+    dimensionProbe.complete('new-image', const Size(300, 400));
+    await tester.pump();
+    expect(resolvedSizes, <Size>[const Size(300, 400)]);
+  });
 }
 
 ImageCacheRequest _request(String cacheKey) {
@@ -572,13 +791,17 @@ ImageProvider _underlyingProvider(ImageProvider provider) {
 }
 
 class _ControlledImageCacheService
-    implements ImageCacheService, ImageCacheDecodeFailureReporter {
+    implements
+        ImageCacheService,
+        ImageCacheDecodeFailureReporter,
+        ImageCacheDimensionRecorder {
   final Map<String, Completer<CachedImageResult?>> _getCachedCompleters =
       <String, Completer<CachedImageResult?>>{};
   final Map<String, Completer<CachedImageResult>> _ensureCompleters =
       <String, Completer<CachedImageResult>>{};
   final Map<String, int> _getCachedCounts = <String, int>{};
   final List<ImageCacheRequest> decodeFailures = <ImageCacheRequest>[];
+  final Map<String, Size> recordedDimensions = <String, Size>{};
 
   int getCachedCount(String cacheKey) => _getCachedCounts[cacheKey] ?? 0;
 
@@ -660,6 +883,53 @@ class _ControlledImageCacheService
     StackTrace? stackTrace,
   }) {
     decodeFailures.add(request);
+  }
+
+  @override
+  Future<void> recordResolvedDimensions({
+    required String cacheKey,
+    required Size size,
+  }) async {
+    recordedDimensions[cacheKey] = size;
+  }
+}
+
+class _ControlledDimensionProbe implements EncodedImageDimensionProbe {
+  final Completer<Size> _completer = Completer<Size>();
+  int calls = 0;
+
+  void complete(Size size) {
+    _completer.complete(size);
+  }
+
+  @override
+  Future<Size> probe({required String cacheKey, required String localPath}) {
+    calls += 1;
+    return _completer.future;
+  }
+}
+
+class _FailingDimensionProbe implements EncodedImageDimensionProbe {
+  const _FailingDimensionProbe();
+
+  @override
+  Future<Size> probe({required String cacheKey, required String localPath}) {
+    return Future<Size>.error(StateError('synthetic dimension failure'));
+  }
+}
+
+class _KeyedControlledDimensionProbe implements EncodedImageDimensionProbe {
+  final Map<String, Completer<Size>> _completers = <String, Completer<Size>>{};
+
+  Iterable<String> get startedKeys => _completers.keys;
+
+  void complete(String cacheKey, Size size) {
+    _completers[cacheKey]!.complete(size);
+  }
+
+  @override
+  Future<Size> probe({required String cacheKey, required String localPath}) {
+    return _completers.putIfAbsent(cacheKey, Completer<Size>.new).future;
   }
 }
 

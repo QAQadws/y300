@@ -82,7 +82,10 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   bool _displayedRemoteImage = false;
   bool _cacheWriteFailed = false;
   bool _displaySettled = false;
+  bool _firstFrameRendered = false;
   bool _settledRebuildScheduled = false;
+  String? _dimensionLocalPath;
+  String? _scheduledDimensionIdentity;
   int _generation = 0;
 
   @override
@@ -107,6 +110,10 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
         oldWidget.remoteDisplayPolicy != widget.remoteDisplayPolicy ||
         oldWidget.retryToken != widget.retryToken) {
       _restartCacheFlow();
+      return;
+    }
+    if (oldWidget.onImageResolved == null && widget.onImageResolved != null) {
+      _scheduleDimensionProbe(widget.request, _generation);
     }
   }
 
@@ -139,10 +146,8 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
               errorPlaceholder: widget.errorPlaceholder,
               fadeInDuration: widget.fadeInDuration,
               retryToken: widget.retryToken,
-              onImageResolved: (size) =>
-                  _handleImageResolved(request, size, generation),
-              onRemoteImageResolved: () =>
-                  _handleRemoteImageResolved(generation),
+              onFirstFrameRendered: (source) =>
+                  _handleFirstFrameRendered(request, source, generation),
               onLocalImageDecodeFailed: (error, stackTrace) =>
                   _handleLocalImageDecodeFailed(
                     request,
@@ -155,32 +160,20 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     );
   }
 
-  void _handleImageResolved(
+  void _handleFirstFrameRendered(
     ImageCacheRequest? request,
-    Size size,
+    LibraryImageFrameSource source,
     int generation,
   ) {
     if (generation != _generation) {
       return;
     }
-    _markDisplaySettled(generation);
-    final cacheKey = request?.cacheKey.trim();
-    if (cacheKey != null && cacheKey.isNotEmpty) {
-      final service = ref.read(imageCacheServiceProvider);
-      if (service is ImageCacheDimensionRecorder) {
-        final recorder = service as ImageCacheDimensionRecorder;
-        unawaited(_recordDimensions(recorder, cacheKey, size));
-      }
+    _firstFrameRendered = true;
+    if (source == LibraryImageFrameSource.remote) {
+      _displayedRemoteImage = true;
     }
-    widget.onImageResolved?.call(size);
-  }
-
-  void _handleRemoteImageResolved(int generation) {
-    if (generation != _generation) {
-      return;
-    }
-    _displayedRemoteImage = true;
     _markDisplaySettled(generation);
+    _scheduleDimensionProbe(request, generation);
   }
 
   void _handleImageFailed(int generation) {
@@ -250,7 +243,14 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     _displayedRemoteImage = false;
     _cacheWriteFailed = false;
     _displaySettled = !_hasDisplaySource;
+    _firstFrameRendered = false;
     _settledRebuildScheduled = false;
+    _dimensionLocalPath = null;
+    _scheduledDimensionIdentity = null;
+    final preferredLocalPath = widget.preferredLocalPath?.trim();
+    if (preferredLocalPath != null && preferredLocalPath.isNotEmpty) {
+      _dimensionLocalPath = preferredLocalPath;
+    }
     if (widget.imageProviderOverride != null) {
       return;
     }
@@ -258,7 +258,6 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     if (request == null) {
       return;
     }
-    final preferredLocalPath = widget.preferredLocalPath?.trim();
     if (preferredLocalPath != null && preferredLocalPath.isNotEmpty) {
       _localPath = preferredLocalPath;
       _allowRemoteFallback = true;
@@ -290,6 +289,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
         return;
       }
       widget.onLocalPathResolved?.call(cachedLocalPath);
+      _dimensionLocalPath = cachedLocalPath;
       setState(() {
         _localPath = cachedLocalPath;
         _allowRemoteFallback = false;
@@ -318,7 +318,9 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       return;
     }
     widget.onLocalPathResolved?.call(result.localPath!.trim());
+    _dimensionLocalPath = result.localPath!.trim();
     if (_displayedRemoteImage) {
+      _scheduleDimensionProbe(request, generation);
       return;
     }
     setState(() {
@@ -355,5 +357,47 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     return widget.imageProviderOverride != null ||
         widget.request != null ||
         (preferredLocalPath != null && preferredLocalPath.isNotEmpty);
+  }
+
+  void _scheduleDimensionProbe(ImageCacheRequest? request, int generation) {
+    final callback = widget.onImageResolved;
+    final localPath = _dimensionLocalPath?.trim();
+    final cacheKey = request?.cacheKey.trim();
+    if (callback == null ||
+        !_firstFrameRendered ||
+        localPath == null ||
+        localPath.isEmpty ||
+        cacheKey == null ||
+        cacheKey.isEmpty) {
+      return;
+    }
+    final identity = '$cacheKey\u0000$localPath';
+    if (_scheduledDimensionIdentity == identity) {
+      return;
+    }
+    _scheduledDimensionIdentity = identity;
+    final probe = ref.read(encodedImageDimensionProbeProvider);
+    unawaited(
+      probe
+          .probe(cacheKey: cacheKey, localPath: localPath)
+          .then((size) {
+            if (!_isActive(generation) ||
+                _scheduledDimensionIdentity != identity ||
+                _dimensionLocalPath?.trim() != localPath ||
+                widget.request?.cacheKey.trim() != cacheKey) {
+              return;
+            }
+            final service = ref.read(imageCacheServiceProvider);
+            if (service is ImageCacheDimensionRecorder) {
+              final recorder = service as ImageCacheDimensionRecorder;
+              unawaited(_recordDimensions(recorder, cacheKey, size));
+            }
+            widget.onImageResolved?.call(size);
+          })
+          .catchError((Object _, StackTrace _) {
+            // Intrinsic dimensions only improve layout hints. Display success
+            // and its loading state are independent from metadata failures.
+          }),
+    );
   }
 }

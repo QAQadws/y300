@@ -14,7 +14,7 @@ import 'package:y300/core/media/image_downscale_policy.dart';
 ///   [ResizeImage]，缩进框内即可。
 ///
 /// 注意：返回的是**用于显示**的 provider。需要上报原始分辨率（如帖子图布局提示）
-/// 时，应对未包裹的 [base] provider 解析尺寸，而非这里的返回值。
+/// 时，应从编码文件元数据读取，不能再次解析未降采样的 [base] provider。
 ImageProvider resolveDownscaledImageProvider({
   required ImageProvider base,
   required BoxFit fit,
