@@ -37,7 +37,7 @@ void main() {
           network: network,
         ).createThreadPostEdit();
 
-        final result = await adapter.load(
+        final result = await adapter.preparation.load(
           ThreadPostEditPreparationRequest(target: target(mobile: mobile)),
         );
 
@@ -74,11 +74,11 @@ void main() {
         config: config,
         network: network,
       ).createThreadPostEdit();
-      final preparation = (await adapter.load(
+      final preparation = (await adapter.preparation.load(
         ThreadPostEditPreparationRequest(target: target()),
       )).dataOrNull!;
 
-      final result = await adapter.execute(
+      final result = await adapter.command.execute(
         ThreadPostEditSubmission(
           preparation: preparation,
           subject: 'updated subject',
@@ -116,11 +116,11 @@ void main() {
       config: config,
       network: network,
     ).createThreadPostEdit();
-    final preparation = (await adapter.load(
+    final preparation = (await adapter.preparation.load(
       ThreadPostEditPreparationRequest(target: target()),
     )).dataOrNull!;
 
-    final result = await adapter.execute(
+    final result = await adapter.command.execute(
       ThreadPostEditSubmission(
         preparation: preparation,
         subject: 'fixture subject',
@@ -149,11 +149,11 @@ void main() {
         config: config,
         network: network,
       ).createThreadPostEdit();
-      final preparation = (await adapter.load(
+      final preparation = (await adapter.preparation.load(
         ThreadPostEditPreparationRequest(target: target()),
       )).dataOrNull!;
 
-      final result = await adapter.execute(
+      final result = await adapter.command.execute(
         ThreadPostEditSubmission(
           preparation: preparation,
           subject: 'updated subject',
@@ -185,7 +185,7 @@ void main() {
       network: network,
     ).createThreadPostEdit();
 
-    final result = await adapter.load(
+    final result = await adapter.preparation.load(
       ThreadPostEditPreparationRequest(target: target()),
     );
 
@@ -208,7 +208,7 @@ void main() {
         network: network,
       ).createThreadPostEdit();
 
-      final result = await adapter.load(
+      final result = await adapter.preparation.load(
         ThreadPostEditPreparationRequest(target: target()),
       );
 

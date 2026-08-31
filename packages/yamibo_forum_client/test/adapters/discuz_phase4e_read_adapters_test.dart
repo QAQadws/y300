@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
+import 'package:yamibo_forum_client/src/adapters/forum_home_snapshot_codec.dart';
 
 import '../support/data_source_contracts/repository_contract_suites.dart';
 
@@ -24,7 +25,7 @@ void main() {
       createRepository: () => ForumClientAdapterFactory(
         config: config,
         network: _FixtureNetwork((_) => _forumHomeHtml),
-      ).createHtmlForumHome(),
+      ).createHtmlForumHome().home,
     ),
   );
 
@@ -106,7 +107,7 @@ void main() {
     final repository = ForumClientAdapterFactory(
       config: config,
       network: network,
-    ).createHtmlForumHome();
+    ).createHtmlForumHome().home;
 
     final home = await repository.loadHome(const ForumHomeQuery());
 

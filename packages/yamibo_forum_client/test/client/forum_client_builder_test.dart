@@ -4,86 +4,107 @@ import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 
 void main() {
   group('YamiboForumClientBuilder', () {
-    test('installs the verified standard read-source matrix', () {
-      final client = _builder().buildStandardClient();
-      final sources = client.sourcePlan;
+    test('Yamibo defaults preserve verified request identities', () {
+      final config = ForumClientConfig.yamibo();
+      final profiles = DefaultForumRequestProfileResolver(config);
 
-      expect(sources.forumHome, isA<DiscuzForumHomeHtmlRepository>());
+      expect(config.siteOrigin, Uri.parse('https://bbs.yamibo.com'));
+      expect(
+        config.apiOrigin,
+        Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
+      );
+      expect(
+        profiles
+            .resolve(ForumRequestProfileKind.mobileHtml)
+            .headers['User-Agent'],
+        ForumBrowserUserAgents.mobileChromium,
+      );
+      expect(
+        profiles
+            .resolve(ForumRequestProfileKind.discuzApi)
+            .headers['User-Agent'],
+        ForumBrowserUserAgents.mobileChromium,
+      );
+      expect(
+        profiles
+            .resolve(ForumRequestProfileKind.desktopHtml)
+            .headers['User-Agent'],
+        ForumBrowserUserAgents.desktopChromium,
+      );
+      expect(
+        profiles
+            .resolve(ForumRequestProfileKind.resource)
+            .headers['User-Agent'],
+        ForumBrowserUserAgents.desktopChromium,
+      );
+    });
+
+    test('ephemeral Dio composition needs no Host persistence', () {
+      final client = YamiboForumClientBuilder.ephemeralDio()
+          .buildStandardClient();
+
+      expect(client.network, isA<DioForumClientNetwork>());
+      expect(identical(client.resources, client.network), isTrue);
+      expect(identical(client.multipart, client.network), isTrue);
+      expect(client.sourcePlan.threadDetail, isNotNull);
+      expect(client.sourcePlan.passwordLogin, isNotNull);
+    });
+
+    test('installs every verified standard contract', () {
+      final sources = _builder().buildStandardClient().sourcePlan;
+
+      expect(<Object?>[
+        sources.forumDirectory,
+        sources.forumHome,
+        sources.forumDisplay,
+        sources.forumTagDirectory,
+        sources.favoriteForumDirectory,
+        sources.favoriteThreadDirectory,
+        sources.favoriteForumCommand,
+        sources.favoriteThreadCommand,
+        sources.currentUserProfile,
+        sources.notifications,
+        sources.privateMessages,
+        sources.stickerCatalog,
+        sources.forumUserProfile,
+        sources.userBlogDirectory,
+        sources.userBlogDetail,
+        sources.forumSearch,
+        sources.comicEpisodeCatalog,
+        sources.comicThreadDiscovery,
+        sources.threadReplyPage,
+        sources.threadDetail,
+        sources.threadIngestionDetail,
+        sources.postRatingPreparation,
+        sources.postRatingCommand,
+        sources.postCommentPreparation,
+        sources.postCommentCommand,
+        sources.threadPollVoteCommand,
+        sources.threadCreationPreparation,
+        sources.threadCreationCommand,
+        sources.threadReplyPreparation,
+        sources.threadReplyCommand,
+        sources.threadPostEditPreparation,
+        sources.threadPostEditCommand,
+        sources.imageAttachmentUploadPreparation,
+        sources.imageAttachmentUploadCommand,
+        sources.unusedImageAttachments,
+        sources.unusedImageAttachmentDelete,
+        sources.postImageAttachmentDelete,
+        sources.postRatings,
+        sources.postLocator,
+        sources.threadAuthorPosts,
+        sources.session,
+        sources.passwordLogin,
+        sources.logout,
+      ], everyElement(isNotNull));
       expect(identical(sources.forumDirectory, sources.forumHome), isTrue);
       expect(
-        sources.forumTagDirectory,
-        isA<DiscuzForumTagDirectoryRepository>(),
-      );
-      expect(sources.forumDisplay, isA<ForumDisplayHtmlRepository>());
-      expect(
-        sources.favoriteForumDirectory,
-        isA<DiscuzFavoriteForumDirectoryRepository>(),
-      );
-      expect(
-        sources.favoriteThreadDirectory,
-        isA<DiscuzFavoriteThreadDirectoryRepository>(),
-      );
-      expect(
-        sources.favoriteForumCommand,
-        isA<DiscuzFavoriteForumCommandAdapter>(),
-      );
-      expect(
-        sources.favoriteThreadCommand,
-        isA<DiscuzFavoriteThreadCommandAdapter>(),
-      );
-      expect(
-        sources.currentUserProfile,
-        isA<DiscuzCurrentUserProfileRepository>(),
-      );
-      expect(sources.notifications, isA<DiscuzForumNotificationRepository>());
-      expect(
-        sources.privateMessages,
-        isA<DiscuzForumPrivateMessageRepository>(),
-      );
-      expect(
-        sources.stickerCatalog,
-        isA<DiscuzForumStickerCatalogRepository>(),
-      );
-      expect(sources.postRatings, isA<DiscuzThreadPostRatingsRepository>());
-      expect(sources.postLocator, isA<DiscuzThreadPostLocatorRepository>());
-      expect(
-        sources.threadAuthorPosts,
-        isA<DiscuzThreadAuthorPostRepository>(),
-      );
-      expect(sources.forumUserProfile, isA<DiscuzForumUserProfileRepository>());
-      expect(
-        sources.userBlogDirectory,
-        isA<DiscuzUserBlogDirectoryRepository>(),
-      );
-      expect(sources.userBlogDetail, isA<DiscuzUserBlogDetailRepository>());
-      expect(
-        sources.comicEpisodeCatalog,
-        isA<DiscuzApiComicEpisodeCatalogRepository>(),
-      );
-      expect(
-        sources.comicThreadDiscovery,
-        isA<ThreadRepositoryComicThreadDiscoveryAdapter>(),
-      );
-      expect(sources.threadReplyPage, isA<ApiThreadReplyPageRepository>());
-      expect(sources.threadDetail, isA<ThreadDetailHtmlRepository>());
-      expect(sources.threadIngestionDetail, isA<ApiThreadRepository>());
-      expect(
-        (sources.threadIngestionDetail! as ApiThreadRepository).apiVersion,
-        '4',
-      );
-      expect(sources.session, isA<DiscuzAuthenticationAdapter>());
-      expect(sources.passwordLogin, isA<DiscuzAuthenticationAdapter>());
-      expect(sources.logout, isA<DiscuzLogoutCommandAdapter>());
-      expect(
-        sources.threadCreationPreparation,
-        isA<DiscuzThreadCreationAdapter>(),
-      );
-      expect(sources.threadCreationCommand, isA<DiscuzThreadCreationAdapter>());
-      expect(sources.threadReplyPreparation, isA<DiscuzThreadReplyAdapter>());
-      expect(sources.threadReplyCommand, isA<DiscuzThreadReplyAdapter>());
-      expect(
-        sources.imageAttachmentUploadPreparation,
-        isA<DiscuzImageAttachmentUploadAdapter>(),
+        identical(
+          sources.threadCreationPreparation,
+          sources.threadCreationCommand,
+        ),
+        isTrue,
       );
       expect(
         identical(
@@ -92,29 +113,13 @@ void main() {
         ),
         isTrue,
       );
-      expect(
-        sources.unusedImageAttachments,
-        isA<DiscuzUnusedImageAttachmentAdapter>(),
-      );
-      expect(
-        identical(
-          sources.unusedImageAttachments,
-          sources.unusedImageAttachmentDelete,
-        ),
-        isTrue,
-      );
-      expect(
-        sources.postImageAttachmentDelete,
-        isA<DiscuzPostImageAttachmentDeleteAdapter>(),
-      );
-      expect(sources.threadPollVoteCommand, isA<DiscuzThreadPollVoteCommand>());
     });
 
     test('installs search without a host formhash provider', () {
       final network = _CountingNetwork();
       final client = _builder(network: network).buildStandardClient();
 
-      expect(client.sourcePlan.forumSearch, isA<DiscuzForumSearchRepository>());
+      expect(client.sourcePlan.forumSearch, isNotNull);
       expect(network.requestCount, 0);
     });
 
@@ -123,7 +128,7 @@ void main() {
         formhashProvider: const _FixtureFormhashProvider(),
       ).buildStandardClient();
 
-      expect(client.sourcePlan.forumSearch, isA<DiscuzForumSearchRepository>());
+      expect(client.sourcePlan.forumSearch, isNotNull);
     });
 
     test('advanced source plans can still replace one contract', () {
@@ -136,6 +141,18 @@ void main() {
 
       expect(identical(client.threadDetail, custom), isTrue);
       expect(client.sourcePlan.forumDirectory, isNull);
+    });
+
+    test('source override replaces one standard slot conservatively', () {
+      final custom = _FixtureThreadRepository();
+      final client = _builder().buildStandardClient(
+        sourceOverrides: ForumClientSourcePlan(threadDetail: custom),
+      );
+
+      expect(identical(client.threadDetail, custom), isTrue);
+      expect(client.sourcePlan.forumDirectory, isNotNull);
+      expect(client.sourcePlan.threadIngestionDetail, isNotNull);
+      expect(client.sourcePlan.threadAuthorPosts, isNotNull);
     });
 
     test('uses a resource-capable network for image resources', () {

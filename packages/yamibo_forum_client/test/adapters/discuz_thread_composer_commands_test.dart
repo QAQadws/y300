@@ -10,7 +10,7 @@ void main() {
         network,
       ).createThreadCreation(const _FixtureFormhashProvider());
 
-      final result = await adapter.load(
+      final result = await adapter.preparation.load(
         const ThreadCreationPreparationRequest(fid: '30'),
       );
 
@@ -45,11 +45,11 @@ void main() {
         final adapter = _factory(
           network,
         ).createThreadCreation(const _FixtureFormhashProvider());
-        final preparation = (await adapter.load(
+        final preparation = (await adapter.preparation.load(
           const ThreadCreationPreparationRequest(fid: '30'),
         )).dataOrNull!;
 
-        final result = await adapter.execute(
+        final result = await adapter.command.execute(
           ThreadCreationSubmission(
             preparation: preparation,
             subject: 'Fixture subject',
@@ -109,11 +109,11 @@ void main() {
         final adapter = _factory(
           network,
         ).createThreadCreation(const _FixtureFormhashProvider());
-        final preparation = (await adapter.load(
+        final preparation = (await adapter.preparation.load(
           const ThreadCreationPreparationRequest(fid: '30'),
         )).dataOrNull!;
 
-        final result = await adapter.execute(
+        final result = await adapter.command.execute(
           _ordinarySubmission(preparation, minimumReadAccess: 40),
         );
 
@@ -139,11 +139,11 @@ void main() {
       final adapter = _factory(
         network,
       ).createThreadCreation(const _FixtureFormhashProvider());
-      final preparation = (await adapter.load(
+      final preparation = (await adapter.preparation.load(
         const ThreadCreationPreparationRequest(fid: '30'),
       )).dataOrNull!;
 
-      final result = await adapter.execute(
+      final result = await adapter.command.execute(
         _ordinarySubmission(preparation, minimumReadAccess: 256),
       );
 
@@ -167,7 +167,7 @@ void main() {
           network,
         ).createThreadReply(const _FixtureFormhashProvider());
 
-        final result = await adapter.execute(
+        final result = await adapter.command.execute(
           const ThreadReplySubmission(
             target: ThreadReplyTarget.thread(fid: '30', tid: '10001'),
             message: 'Fixture reply',
@@ -204,7 +204,7 @@ void main() {
         tid: '10001',
         pid: '20001',
       );
-      final preparation = (await adapter.load(
+      final preparation = (await adapter.preparation.load(
         ThreadReplyPreparationRequest(
           target: target,
           formUri: Uri.parse(
@@ -226,7 +226,7 @@ void main() {
       expect(preparationReferer.queryParameters['mobile'], isNull);
       expect(preparationReferer.queryParameters['page'], '231');
 
-      final result = await adapter.execute(
+      final result = await adapter.command.execute(
         ThreadReplySubmission(
           target: target,
           preparation: preparation,
@@ -258,7 +258,7 @@ void main() {
         network,
       ).createThreadReply(const _FixtureFormhashProvider());
 
-      final result = await adapter.load(
+      final result = await adapter.preparation.load(
         ThreadReplyPreparationRequest(
           target: const ThreadReplyTarget.post(
             fid: '30',
@@ -291,7 +291,7 @@ void main() {
         network,
       ).createThreadReply(const _FixtureFormhashProvider());
 
-      final result = await adapter.execute(
+      final result = await adapter.command.execute(
         const ThreadReplySubmission(
           target: ThreadReplyTarget.thread(fid: '30', tid: '10001'),
           message: 'Fixture reply',
@@ -341,7 +341,7 @@ void main() {
             network,
           ).createThreadReply(const _FixtureFormhashProvider());
 
-          final result = await adapter.execute(
+          final result = await adapter.command.execute(
             const ThreadReplySubmission(
               target: ThreadReplyTarget.thread(fid: '30', tid: '10001'),
               message: 'Fixture reply',

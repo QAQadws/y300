@@ -1,17 +1,40 @@
 /// Evidence accepted by the package WAF coordinator.
-enum ForumWafEvidence { httpStatus405 }
+/// Values describing forum waf evidence.
+enum ForumWafEvidence {
+  /// Http status405.
+  httpStatus405,
+}
 
 /// Result returned by a Host WAF recovery implementation.
 enum ForumWafRecoveryResult {
+  /// Verified.
   verified,
+
+  /// Cancelled.
   cancelled,
+
+  /// Unavailable.
   unavailable,
+
+  /// Cooling down.
   coolingDown,
+
+  /// Failed.
   failed,
 }
 
 /// Native probe outcome after a Host challenge attempt.
-enum ForumWafClearance { cleared, challenged, inconclusive }
+/// Values describing forum waf clearance.
+enum ForumWafClearance {
+  /// Cleared.
+  cleared,
+
+  /// Challenged.
+  challenged,
+
+  /// Inconclusive.
+  inconclusive,
+}
 
 /// Synchronizes challenge Cookies into the native transport.
 typedef ForumWafCookieSync = Future<void> Function(Uri uri);

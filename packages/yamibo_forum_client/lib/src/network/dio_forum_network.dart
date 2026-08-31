@@ -15,8 +15,10 @@ import 'forum_request_profile.dart';
 import 'forum_response.dart';
 import 'forum_transport.dart';
 
+/// Source-neutral dio forum client network.
 final class DioForumClientNetwork
     implements ForumClientNetwork, ForumResourceClient, ForumMultipartClient {
+  /// Creates a [DioForumClientNetwork].
   DioForumClientNetwork({
     required this.config,
     required this.cookies,
@@ -26,9 +28,16 @@ final class DioForumClientNetwork
   }) : logger = logger ?? const NoopForumClientLogger(),
        _dio = dio ?? Dio();
 
+  /// Config.
   final ForumClientConfig config;
+
+  /// Cookies.
   final ForumCookieStore cookies;
+
+  /// Waf.
   final ForumWafRecoveryDelegate? waf;
+
+  /// Logger.
   final ForumClientLogger logger;
   final Dio _dio;
   int _sequence = 0;

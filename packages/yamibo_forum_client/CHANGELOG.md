@@ -8,7 +8,37 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
-- Reserved for changes made after `0.9.0`.
+- Reserved for changes made after `0.10.0`.
+
+## 0.10.0 - 2026-08-31
+
+### Added
+
+- Verified Yamibo origins and browser identities through
+  `ForumClientConfig.yamibo()` and `ForumBrowserUserAgents`.
+- `YamiboForumClientBuilder.ephemeralDio()` and
+  `ForumClientCachePorts.memory()` for evaluation, tests, and short-lived
+  tools.
+- Conservative per-contract source overlays for the standard client.
+- Chinese onboarding, contribution, and release-check documentation.
+
+### Changed
+
+- The adapters entry point now exports only the adapter factory, the two
+  thread-detail decoders required by composition roots, and the safe parse
+  exception.
+- Multi-role adapter factory methods return named records of source-neutral
+  contracts instead of concrete Discuz types.
+- `html` was updated to `0.15.7`; the package lockfile is no longer tracked for
+  this unpublished library.
+
+### Removed
+
+- Deprecated `buildStandardReads()`.
+- Deprecated poll transport fields `ThreadPoll.actionUrl` and
+  `ThreadPoll.formHash`.
+- Deprecated `ThreadDetailCapability.pollVoteAction`; poll mutation capability
+  belongs to `ThreadPollVoteCommand`.
 
 ## 0.9.0 - 2026-08-30
 

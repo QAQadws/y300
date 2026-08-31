@@ -3,20 +3,9 @@ import 'dart:io';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 
 Future<void> main() async {
-  final config = ForumClientConfig(
-    siteOrigin: Uri.parse('https://bbs.yamibo.com'),
-    apiOrigin: Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
-    userAgent: 'YamiboForumClientExample/0.1',
-  );
-  final cookies = MemoryForumCookieStore();
-  final network = DioForumClientNetwork(config: config, cookies: cookies);
-  final client = YamiboForumClientBuilder(
-    config: config,
-    network: network,
-    sessionStore: MemoryForumSessionStore(),
-    documentStore: MemoryForumDocumentStore(),
-    snapshotStore: MemoryForumSnapshotStore(),
-  ).buildStandardClient();
+  // This runtime intentionally discards cookies and caches on process exit.
+  // Production apps should use standardDio() with persistent Host ports.
+  final client = YamiboForumClientBuilder.ephemeralDio().buildStandardClient();
 
   final result = await client.loadForumDirectory(const ForumDirectoryQuery());
   switch (result) {

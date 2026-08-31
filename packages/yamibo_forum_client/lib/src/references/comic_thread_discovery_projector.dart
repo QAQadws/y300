@@ -5,13 +5,15 @@ import 'forum_post_image_extractor.dart';
 /// Projects a thread document into the source-neutral subset used by comic
 /// discovery without exposing an API or HTML DTO to consumers.
 final class ComicThreadDiscoveryProjector {
+  /// Creates a [ComicThreadDiscoveryProjector].
   const ComicThreadDiscoveryProjector({
-    this.imageSourcePipeline =
-        const DefaultForumImageSourcePipeline(),
+    this.imageSourcePipeline = const DefaultForumImageSourcePipeline(),
   });
 
+  /// Image source pipeline.
   final ForumImageSourcePipeline imageSourcePipeline;
 
+  /// Projects a validated thread document into comic discovery data.
   ComicThreadDiscoveryDocument project(ThreadDetailData detail) {
     final posts = detail.posts.toList(growable: false)
       ..sort((left, right) => left.number.compareTo(right.number));

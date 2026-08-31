@@ -28,7 +28,7 @@ final class ForumFormhashError extends ForumFormhashResult {
 
 /// Override point for hosts that already manage formhash acquisition.
 abstract interface class ForumFormhashProvider {
-  /// Loads a usable formhash, optionally preferring the profile endpoint.
+  /// Loads formhash and returns a structured result.
   Future<ForumFormhashResult> loadFormhash({
     bool preferProfile = true,
     ForumRequestCancellation? cancellation,

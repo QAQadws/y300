@@ -1,6 +1,7 @@
 import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
-import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
+import 'package:yamibo_forum_client/src/adapters/discuz_api_client.dart';
+import 'package:yamibo_forum_client/src/adapters/discuz_image_attachment_adapters.dart';
 
 void main() {
   group('Discuz image attachment upload', () {

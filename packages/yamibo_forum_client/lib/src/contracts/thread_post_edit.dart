@@ -261,12 +261,12 @@ final class ThreadPostEditReceipt {
   final ThreadPostEditConfirmation confirmation;
 }
 
-/// Loads and validates the current server form for editing a post.
+/// Loads thread post edit preparation data through a source-neutral contract.
 abstract interface class ThreadPostEditPreparationRepository {
   /// Capabilities proved by this source.
   ThreadPostEditCapabilities get capabilities;
 
-  /// Loads a fresh preparation without exposing dynamic server fields.
+  /// Loads data and returns a structured result.
   Future<DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>>
   load(ThreadPostEditPreparationRequest request);
 }
@@ -276,7 +276,7 @@ abstract interface class ThreadPostEditCommand {
   /// Capabilities proved by this source.
   ThreadPostEditCapabilities get capabilities;
 
-  /// Executes [submission] without retrying ordinary transport failures.
+  /// Executes the command without exposing source payloads.
   Future<DataCommandResult<ThreadPostEditReceipt>> execute(
     ThreadPostEditSubmission submission,
   );

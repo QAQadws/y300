@@ -1,9 +1,12 @@
 import '../contracts/thread_detail_models.dart';
 import '../parsing/loose_json.dart';
 
+/// Maps Discuz thread API variables into source-neutral thread models.
 final class ThreadDetailApiMapper {
+  /// Creates a stateless API mapper.
   const ThreadDetailApiMapper();
 
+  /// Maps one `Variables` object for the requested [page].
   ThreadDetailData mapVariables(JsonMap variables, {required int page}) {
     final thread = LooseJson.map(variables['thread']);
     final perPage = LooseJson.integer(variables['ppp'], fallback: 20);
@@ -29,6 +32,7 @@ final class ThreadDetailApiMapper {
     );
   }
 
+  /// Maps one Discuz post object without retaining the source DTO.
   ThreadPost mapPost(JsonMap json) {
     return ThreadPost(
       pid: LooseJson.string(json['pid']),

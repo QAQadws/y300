@@ -4,10 +4,21 @@ library;
 import '../network/forum_request.dart';
 
 /// Resource kinds supported by the package streaming boundary.
-enum ForumResourceKind { image }
+/// Values describing forum resource kind.
+enum ForumResourceKind {
+  /// Image.
+  image,
+}
 
 /// Whether a resource shares the managed forum's authority.
-enum ForumResourceOrigin { sameSite, thirdParty }
+/// Values describing forum resource origin.
+enum ForumResourceOrigin {
+  /// Same site.
+  sameSite,
+
+  /// Third party.
+  thirdParty,
+}
 
 /// Validated resource identity and privacy-safe referer.
 final class ForumResourceReference {
@@ -53,17 +64,40 @@ final class ForumResourceRequest {
 
 /// Stable failure categories for protected resource reads.
 enum ForumResourceFailureKind {
+  /// Invalid reference.
   invalidReference,
+
+  /// Unsupported.
   unsupported,
+
+  /// Network.
   network,
+
+  /// Timeout.
   timeout,
+
+  /// Unauthorized.
   unauthorized,
+
+  /// Not found.
   notFound,
+
+  /// Server.
   server,
+
+  /// Security challenge.
   securityChallenge,
+
+  /// Invalid content.
   invalidContent,
+
+  /// Redirect rejected.
   redirectRejected,
+
+  /// Cancelled.
   cancelled,
+
+  /// Unknown.
   unknown,
 }
 
@@ -187,7 +221,7 @@ final class ForumResourceReferenceResolver {
   /// Canonical managed forum origin.
   final Uri siteOrigin;
 
-  /// Resolves [value] and sanitizes its referer, or returns `null` if unsafe.
+  /// Resolves the reference using the configured forum boundary.
   ForumResourceReference? resolve(
     String value, {
     Uri? referer,

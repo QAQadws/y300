@@ -1,27 +1,47 @@
 /// Models describing a forum display page and its server-provided actions.
 library;
 
-enum ForumDisplayFavoriteAction { favorite, unfavorite, unknown }
+/// Values describing forum display favorite action.
+enum ForumDisplayFavoriteAction {
+  /// Favorite.
+  favorite,
 
+  /// Unfavorite.
+  unfavorite,
+
+  /// Unknown.
+  unknown,
+}
+
+/// Query parameters for forum display.
 class ForumDisplayQuery {
+  /// Creates a [ForumDisplayQuery].
   const ForumDisplayQuery({
     required this.fid,
     this.page = 1,
     this.parameters = const <String, String>{},
   });
 
+  /// Stable forum identifier.
   final String fid;
+
+  /// Requested or current one-based page.
   final int page;
+
+  /// Parameters.
   final Map<String, String> parameters;
 
+  /// Source-neutral thread-type filter, if one is selected.
   String? get typeId {
     final value = parameters['typeid']?.trim();
     return value == null || value.isEmpty ? null : value;
   }
 
+  /// Whether the query requests last-post ordering.
   bool get ordersByLastPost =>
       parameters['orderby']?.trim().toLowerCase() == 'lastpost';
 
+  /// Whether unclassified source parameters remain.
   bool get hasOpaqueParameters => parameters.keys.any(
     (key) =>
         key != 'fid' &&
@@ -31,10 +51,12 @@ class ForumDisplayQuery {
         key != 'orderby',
   );
 
+  /// Creates a [ForumDisplayQuery].
   factory ForumDisplayQuery.initial({required String fid}) {
     return ForumDisplayQuery(fid: fid);
   }
 
+  /// Creates a [ForumDisplayQuery].
   factory ForumDisplayQuery.fromUrl(
     String url, {
     required String fallbackFid,
@@ -51,6 +73,7 @@ class ForumDisplayQuery {
     );
   }
 
+  /// Returns a copy targeting [page].
   ForumDisplayQuery copyWithPage(int nextPage) {
     final normalized = nextPage < 1 ? 1 : nextPage;
     return ForumDisplayQuery(
@@ -63,6 +86,7 @@ class ForumDisplayQuery {
     );
   }
 
+  /// Converts this value to request parameters.
   Map<String, String> toRequestParameters() {
     final output = <String, String>{
       ...parameters,
@@ -111,6 +135,7 @@ class ForumDisplayQuery {
 
 /// 帖子摘要信息，用于 forumdisplay 列表渲染。
 class ForumThreadSummary {
+  /// Creates a [ForumThreadSummary].
   ForumThreadSummary({
     required this.tid,
     this.typeid = '',
@@ -131,24 +156,58 @@ class ForumThreadSummary {
     this.isLocked = false,
   });
 
+  /// Stable thread identifier.
   final String tid;
+
+  /// Stable Discuz thread-type identifier, or an empty string when absent.
   final String typeid;
+
+  /// Source tag name.
   final String? sourceTagName;
+
+  /// Subject.
   final String subject;
+
+  /// Author.
   final String author;
+
+  /// Replies.
   final int replies;
+
+  /// Views.
   final int views;
+
+  /// Dateline.
   final String dateline;
+
+  /// Stable user identifier.
   final String uid;
+
+  /// Avatar url.
   final String? avatarUrl;
+
+  /// Author url.
   final String? authorUrl;
+
+  /// Thread url.
   final String? threadUrl;
+
+  /// Excerpt.
   final String excerpt;
+
+  /// Source tag url.
   final String? sourceTagUrl;
+
+  /// Badge label.
   final String? badgeLabel;
+
+  /// Title color hex.
   final String? titleColorHex;
+
+  /// Is locked.
   final bool isLocked;
 
+  /// Returns a copy with the supplied changes.
   ForumThreadSummary copyWith({
     String? tid,
     String? typeid,
@@ -193,7 +252,9 @@ class ForumThreadSummary {
   }
 }
 
+/// Source-neutral forum display filter item.
 class ForumDisplayFilterItem {
+  /// Creates a [ForumDisplayFilterItem].
   const ForumDisplayFilterItem({
     required this.label,
     required this.url,
@@ -201,13 +262,22 @@ class ForumDisplayFilterItem {
     this.typeid = '',
   });
 
+  /// Label.
   final String label;
+
+  /// Source-provided URL after validation.
   final String url;
+
+  /// Is selected.
   final bool isSelected;
+
+  /// Stable Discuz thread-type identifier represented by this filter.
   final String typeid;
 }
 
+/// Source-neutral forum display top entry.
 class ForumDisplayTopEntry {
+  /// Creates a [ForumDisplayTopEntry].
   const ForumDisplayTopEntry({
     required this.title,
     required this.url,
@@ -217,15 +287,28 @@ class ForumDisplayTopEntry {
     this.isAnnouncement = false,
   });
 
+  /// Title.
   final String title;
+
+  /// Source-provided URL after validation.
   final String url;
+
+  /// Stable thread identifier.
   final String tid;
+
+  /// Badge label.
   final String badgeLabel;
+
+  /// Title color hex.
   final String? titleColorHex;
+
+  /// Is announcement.
   final bool isAnnouncement;
 }
 
+/// Source-neutral forum display sub forum.
 class ForumDisplaySubForum {
+  /// Creates a [ForumDisplaySubForum].
   const ForumDisplaySubForum({
     required this.fid,
     required this.title,
@@ -233,13 +316,22 @@ class ForumDisplaySubForum {
     this.iconUrl,
   });
 
+  /// Stable forum identifier.
   final String fid;
+
+  /// Title.
   final String title;
+
+  /// Source-provided URL after validation.
   final String url;
+
+  /// Icon url.
   final String? iconUrl;
 }
 
+/// Source-neutral forum display data.
 class ForumDisplayData {
+  /// Creates a [ForumDisplayData].
   ForumDisplayData({
     required this.fid,
     required this.forumName,
@@ -265,27 +357,70 @@ class ForumDisplayData {
     this.hasMoreOverride,
   });
 
+  /// Stable forum identifier.
   final String fid;
+
+  /// Forum name.
   final String forumName;
+
+  /// Current one-based server page.
   final int currentPage;
+
+  /// Per page.
   final int perPage;
+
+  /// Total threads.
   final int totalThreads;
+
+  /// Threads.
   final List<ForumThreadSummary> threads;
+
+  /// Head image url.
   final String? headImageUrl;
+
+  /// Forum icon url.
   final String? forumIconUrl;
+
+  /// Today posts.
   final int todayPosts;
+
+  /// Rank.
   final int rank;
+
+  /// Primary filters.
   final List<ForumDisplayFilterItem> primaryFilters;
+
+  /// Type filters.
   final List<ForumDisplayFilterItem> typeFilters;
+
+  /// Sub forums.
   final List<ForumDisplaySubForum> subForums;
+
+  /// Top entries.
   final List<ForumDisplayTopEntry> topEntries;
+
+  /// Post url.
   final String? postUrl;
+
+  /// Search url.
   final String? searchUrl;
+
+  /// Favorite url.
   final String? favoriteUrl;
+
+  /// Favorite action.
   final ForumDisplayFavoriteAction favoriteAction;
+
+  /// Previous page url.
   final String? previousPageUrl;
+
+  /// Next page url.
   final String? nextPageUrl;
+
+  /// Last page.
   final int? lastPage;
+
+  /// Has more override.
   final bool? hasMoreOverride;
 
   /// 当总数不可用时，退化为“本页数量达到 perPage”作为继续翻页依据

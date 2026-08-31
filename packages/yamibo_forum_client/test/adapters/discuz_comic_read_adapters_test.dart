@@ -1,6 +1,6 @@
 import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
-import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
+import 'package:yamibo_forum_client/src/adapters/discuz_comic_read_adapters.dart';
 
 import '../support/data_source_contracts/repository_contract_suites.dart';
 

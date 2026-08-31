@@ -3,7 +3,9 @@ import 'package:html/parser.dart' as html_parser;
 import '../contracts/thread_detail_models.dart';
 import '../url/forum_uri_resolver.dart';
 
+/// Source-neutral thread detail html parser.
 class ThreadDetailHtmlParser {
+  /// Creates a parser restricted to same-site references under [siteOrigin].
   ThreadDetailHtmlParser({required Uri siteOrigin})
     : _urlResolver = ForumUriResolver(siteOrigin: siteOrigin);
 
@@ -11,6 +13,7 @@ class ThreadDetailHtmlParser {
 
   final ForumUriResolver _urlResolver;
 
+  /// Parses the payload from validated source data.
   ThreadDetailData parse(
     String html, {
     required String fallbackTid,

@@ -69,6 +69,23 @@ final class YamiboForumClientBuilder {
     );
   }
 
+  /// Creates a completely in-memory Dio runtime for evaluation and tests.
+  ///
+  /// Cookies, parsed snapshots, source documents, and stickers are discarded
+  /// with the process. Production applications should use [standardDio] with
+  /// persistent Host stores.
+  factory YamiboForumClientBuilder.ephemeralDio({
+    ForumClientConfig? config,
+    ForumWafRecoveryDelegate? waf,
+    ForumClientLogger? logger,
+  }) => YamiboForumClientBuilder.standardDio(
+    config: config ?? ForumClientConfig.yamibo(),
+    cookies: MemoryForumCookieStore(),
+    caches: ForumClientCachePorts.memory(),
+    waf: waf,
+    logger: logger,
+  );
+
   /// Forum origins, request identities, and timeout configuration.
   final ForumClientConfig config;
 
@@ -100,7 +117,9 @@ final class YamiboForumClientBuilder {
   final ForumStickerCatalogStore? stickerCatalogStore;
 
   /// Builds the currently verified read and basic-authentication matrix.
-  YamiboForumClient buildStandardClient() {
+  YamiboForumClient buildStandardClient({
+    ForumClientSourcePlan sourceOverrides = const ForumClientSourcePlan(),
+  }) {
     final sessions = sessionStore ?? MemoryForumSessionStore();
     final factory = ForumClientAdapterFactory(
       config: config,
@@ -128,74 +147,66 @@ final class YamiboForumClientBuilder {
               : null),
     );
     final unusedImages = factory.createUnusedImageAttachments(formhash);
+    final standardPlan = ForumClientSourcePlan(
+      forumDirectory: forumHome.directory,
+      forumHome: forumHome.home,
+      forumTagDirectory: factory.createForumTagDirectory(),
+      forumDisplay: factory.createHtmlForumDisplay(),
+      favoriteForumDirectory: favoriteForumDirectory,
+      favoriteThreadDirectory: favoriteThreadDirectory,
+      favoriteForumCommand: factory.createFavoriteForumCommand(
+        formhash: formhash,
+        directory: favoriteForumDirectory,
+      ),
+      favoriteThreadCommand: factory.createFavoriteThreadCommand(
+        formhash: formhash,
+        directory: favoriteThreadDirectory,
+      ),
+      currentUserProfile: factory.createCurrentUserProfile(),
+      notifications: factory.createNotifications(),
+      privateMessages: factory.createPrivateMessages(),
+      stickerCatalog: factory.createStickerCatalog(store: stickerCatalogStore),
+      forumUserProfile: factory.createForumUserProfile(),
+      userBlogDirectory: factory.createUserBlogDirectory(),
+      userBlogDetail: factory.createUserBlogDetail(),
+      forumSearch: factory.createForumSearch(formhash),
+      comicEpisodeCatalog: factory.createApiComicEpisodeCatalog(),
+      comicThreadDiscovery: factory.createApiComicThreadDiscovery(),
+      threadReplyPage: factory.createApiThreadReplyPage(),
+      threadDetail: factory.createHtmlThreadDetail(),
+      threadIngestionDetail: factory.createApiThreadDetail(apiVersion: '4'),
+      postRatingPreparation: postRating.preparation,
+      postRatingCommand: postRating.command,
+      postCommentPreparation: postComment.preparation,
+      postCommentCommand: postComment.command,
+      threadPollVoteCommand: factory.createThreadPollVote(formhash),
+      threadCreationPreparation: threadCreation.preparation,
+      threadCreationCommand: threadCreation.command,
+      threadReplyPreparation: threadReply.preparation,
+      threadReplyCommand: threadReply.command,
+      threadPostEditPreparation: threadPostEdit.preparation,
+      threadPostEditCommand: threadPostEdit.command,
+      imageAttachmentUploadPreparation: imageUpload.preparation,
+      imageAttachmentUploadCommand: imageUpload.command,
+      unusedImageAttachments: unusedImages.directory,
+      unusedImageAttachmentDelete: unusedImages.delete,
+      postImageAttachmentDelete: factory.createPostImageAttachmentDelete(
+        formhash,
+      ),
+      postRatings: factory.createThreadPostRatings(),
+      postLocator: factory.createThreadPostLocator(),
+      threadAuthorPosts: factory.createThreadAuthorPosts(),
+      session: authentication.session,
+      passwordLogin: authentication.login,
+      logout: authentication.logout,
+    );
     return YamiboForumClient(
       config: config,
       network: network,
       resources: resourceClient,
       multipart: multipartClient,
       formhashProvider: formhash,
-      sourcePlan: ForumClientSourcePlan(
-        forumDirectory: forumHome,
-        forumHome: forumHome,
-        forumTagDirectory: factory.createForumTagDirectory(),
-        forumDisplay: factory.createHtmlForumDisplay(),
-        favoriteForumDirectory: favoriteForumDirectory,
-        favoriteThreadDirectory: favoriteThreadDirectory,
-        favoriteForumCommand: factory.createFavoriteForumCommand(
-          formhash: formhash,
-          directory: favoriteForumDirectory,
-        ),
-        favoriteThreadCommand: factory.createFavoriteThreadCommand(
-          formhash: formhash,
-          directory: favoriteThreadDirectory,
-        ),
-        currentUserProfile: factory.createCurrentUserProfile(),
-        notifications: factory.createNotifications(),
-        privateMessages: factory.createPrivateMessages(),
-        stickerCatalog: factory.createStickerCatalog(
-          store: stickerCatalogStore,
-        ),
-        forumUserProfile: factory.createForumUserProfile(),
-        userBlogDirectory: factory.createUserBlogDirectory(),
-        userBlogDetail: factory.createUserBlogDetail(),
-        forumSearch: factory.createForumSearch(formhash),
-        comicEpisodeCatalog: factory.createApiComicEpisodeCatalog(),
-        comicThreadDiscovery: factory.createApiComicThreadDiscovery(),
-        threadReplyPage: factory.createApiThreadReplyPage(),
-        threadDetail: factory.createHtmlThreadDetail(),
-        threadIngestionDetail: factory.createApiThreadDetail(apiVersion: '4'),
-        postRatingPreparation: postRating,
-        postRatingCommand: postRating,
-        postCommentPreparation: postComment,
-        postCommentCommand: postComment,
-        threadPollVoteCommand: factory.createThreadPollVote(formhash),
-        threadCreationPreparation: threadCreation,
-        threadCreationCommand: threadCreation,
-        threadReplyPreparation: threadReply,
-        threadReplyCommand: threadReply,
-        threadPostEditPreparation: threadPostEdit,
-        threadPostEditCommand: threadPostEdit,
-        imageAttachmentUploadPreparation: imageUpload,
-        imageAttachmentUploadCommand: imageUpload,
-        unusedImageAttachments: unusedImages,
-        unusedImageAttachmentDelete: unusedImages,
-        postImageAttachmentDelete: factory.createPostImageAttachmentDelete(
-          formhash,
-        ),
-        postRatings: factory.createThreadPostRatings(),
-        postLocator: factory.createThreadPostLocator(),
-        threadAuthorPosts: factory.createThreadAuthorPosts(),
-        session: authentication,
-        passwordLogin: authentication,
-        logout: factory.createLogoutCommand(authentication),
-      ),
+      sourcePlan: standardPlan.overlay(sourceOverrides),
     );
   }
-
-  /// Builds the standard client.
-  ///
-  /// Deprecated because the standard matrix now also contains basic
-  /// authentication commands. Existing integrations remain source-compatible.
-  @Deprecated('Use buildStandardClient() instead.')
-  YamiboForumClient buildStandardReads() => buildStandardClient();
 }

@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import '../contracts/forum_display_models.dart';
 import '../parsing/loose_json.dart';
 

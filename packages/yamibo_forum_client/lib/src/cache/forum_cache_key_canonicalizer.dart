@@ -1,14 +1,23 @@
 import 'forum_cache.dart';
 
+/// Source-neutral forum cache key canonicalizer.
 final class ForumCacheKeyCanonicalizer {
+  /// Creates a [ForumCacheKeyCanonicalizer].
   const ForumCacheKeyCanonicalizer({required this.siteOrigin});
 
+  /// Forum display snapshot type.
   static const forumDisplaySnapshotType = 'forum.display';
+
+  /// Forum home snapshot type.
   static const forumHomeSnapshotType = 'forum.home';
+
+  /// Thread detail snapshot type.
   static const threadDetailSnapshotType = 'thread.detail';
 
+  /// Site origin.
   final Uri siteOrigin;
 
+  /// Builds the canonical forum-home document descriptor.
   ForumDocumentDescriptor forumHome({
     ForumDocumentRequestProfile requestProfile =
         ForumDocumentRequestProfile.loggedIn,
@@ -25,6 +34,7 @@ final class ForumCacheKeyCanonicalizer {
     );
   }
 
+  /// Builds a canonical forum-display document descriptor.
   ForumDocumentDescriptor forumDisplay({
     required String fid,
     required int page,
@@ -54,6 +64,7 @@ final class ForumCacheKeyCanonicalizer {
     );
   }
 
+  /// Builds a canonical thread-detail document descriptor.
   ForumDocumentDescriptor threadDetail({
     required String tid,
     required int page,
@@ -84,6 +95,7 @@ final class ForumCacheKeyCanonicalizer {
     );
   }
 
+  /// Builds the snapshot descriptor paired with the forum-home document.
   ForumSnapshotDescriptor forumHomeSnapshot({
     ForumDocumentRequestProfile requestProfile =
         ForumDocumentRequestProfile.loggedIn,
@@ -92,6 +104,7 @@ final class ForumCacheKeyCanonicalizer {
     forumHomeSnapshotType,
   );
 
+  /// Builds the snapshot descriptor paired with a forum-display document.
   ForumSnapshotDescriptor forumDisplaySnapshot({
     required String fid,
     required int page,
@@ -108,6 +121,7 @@ final class ForumCacheKeyCanonicalizer {
     forumDisplaySnapshotType,
   );
 
+  /// Builds the snapshot descriptor paired with a thread-detail document.
   ForumSnapshotDescriptor threadDetailSnapshot({
     required String tid,
     required int page,

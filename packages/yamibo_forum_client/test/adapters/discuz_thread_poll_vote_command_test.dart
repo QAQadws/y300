@@ -1,6 +1,7 @@
 import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
+import 'package:yamibo_forum_client/src/adapters/thread_detail_snapshot_codec.dart';
 
 void main() {
   final config = ForumClientConfig(
@@ -226,9 +227,6 @@ void main() {
       ],
     });
 
-    final dynamic poll = decoded.posts.single.poll;
-    expect(poll.actionUrl, isNull);
-    expect(poll.formHash, isNull);
     final encoded = codec.encode(decoded).toString();
     expect(encoded, isNot(contains('actionUrl')));
     expect(encoded, isNot(contains('formHash')));

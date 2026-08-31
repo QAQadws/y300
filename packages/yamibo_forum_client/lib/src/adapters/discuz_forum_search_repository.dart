@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import '../client/forum_client_config.dart';
 import '../contracts/cache_load_policy.dart';
 import '../contracts/data_read_contract.dart';

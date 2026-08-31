@@ -141,7 +141,7 @@ abstract interface class FavoriteForumCommand {
   /// Capabilities proved by this source.
   FavoriteMutationCapabilities get capabilities;
 
-  /// Executes [request] and returns only after read-back confirmation.
+  /// Executes the command without exposing source payloads.
   Future<DataCommandResult<ForumFavoriteReceipt>> execute(
     SetForumFavoriteRequest request,
   );
@@ -152,7 +152,7 @@ abstract interface class FavoriteThreadCommand {
   /// Capabilities proved by this source.
   FavoriteMutationCapabilities get capabilities;
 
-  /// Executes [request] and returns only after read-back confirmation.
+  /// Executes the command without exposing source payloads.
   Future<DataCommandResult<ThreadFavoriteReceipt>> execute(
     SetThreadFavoriteRequest request,
   );

@@ -193,7 +193,7 @@ abstract interface class ThreadPostRatingPreparationRepository {
   /// Capabilities proved by this source.
   ThreadPostRatingCapabilities get capabilities;
 
-  /// Loads the current form without fabricating fallback fields.
+  /// Loads data and returns a structured result.
   Future<
     DataReadResult<ThreadPostRatingPreparation, ThreadPostRatingCapabilities>
   >
@@ -205,7 +205,7 @@ abstract interface class ThreadPostRatingCommand {
   /// Capabilities proved by this source.
   ThreadPostRatingCapabilities get capabilities;
 
-  /// Executes [submission] without automatically retrying ordinary failures.
+  /// Executes the command without exposing source payloads.
   Future<DataCommandResult<ThreadPostRatingReceipt>> execute(
     ThreadPostRatingSubmission submission,
   );
@@ -330,7 +330,7 @@ abstract interface class ThreadPostCommentPreparationRepository {
   /// Capabilities proved by this source.
   ThreadPostCommentCapabilities get capabilities;
 
-  /// Loads the current form without inventing unsupported fields.
+  /// Loads data and returns a structured result.
   Future<
     DataReadResult<ThreadPostCommentPreparation, ThreadPostCommentCapabilities>
   >
@@ -342,7 +342,7 @@ abstract interface class ThreadPostCommentCommand {
   /// Capabilities proved by this source.
   ThreadPostCommentCapabilities get capabilities;
 
-  /// Executes [submission] without automatically retrying ordinary failures.
+  /// Executes the command without exposing source payloads.
   Future<DataCommandResult<ThreadPostCommentReceipt>> execute(
     ThreadPostCommentSubmission submission,
   );

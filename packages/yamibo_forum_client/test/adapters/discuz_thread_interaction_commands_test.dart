@@ -19,7 +19,7 @@ void main() {
           network: network,
         ).createThreadPostRatingInteraction();
 
-        final result = await adapter.load(
+        final result = await adapter.preparation.load(
           const ThreadPostRatingPreparationRequest(tid: '10001', pid: '20001'),
         );
 
@@ -54,11 +54,11 @@ void main() {
           config: config,
           network: network,
         ).createThreadPostRatingInteraction();
-        final preparation = (await adapter.load(
+        final preparation = (await adapter.preparation.load(
           const ThreadPostRatingPreparationRequest(tid: '10001', pid: '20001'),
         )).dataOrNull!;
 
-        final result = await adapter.execute(
+        final result = await adapter.command.execute(
           ThreadPostRatingSubmission(
             preparation: preparation,
             scores: const <String, int>{'score1': 5, 'score2': 1},
@@ -85,11 +85,11 @@ void main() {
         config: config,
         network: network,
       ).createThreadPostRatingInteraction();
-      final preparation = (await adapter.load(
+      final preparation = (await adapter.preparation.load(
         const ThreadPostRatingPreparationRequest(tid: '10001', pid: '20001'),
       )).dataOrNull!;
 
-      final result = await adapter.execute(
+      final result = await adapter.command.execute(
         ThreadPostRatingSubmission(
           preparation: preparation,
           scores: const <String, int>{'score1': 5, 'score2': 1},
@@ -108,11 +108,11 @@ void main() {
         config: config,
         network: network,
       ).createThreadPostRatingInteraction();
-      final preparation = (await adapter.load(
+      final preparation = (await adapter.preparation.load(
         const ThreadPostRatingPreparationRequest(tid: '10001', pid: '20001'),
       )).dataOrNull!;
 
-      final result = await adapter.execute(
+      final result = await adapter.command.execute(
         ThreadPostRatingSubmission(
           preparation: preparation,
           scores: const <String, int>{'score1': 5, 'score2': 1},
@@ -139,12 +139,12 @@ void main() {
           config: config,
           network: network,
         ).createThreadPostCommentInteraction();
-        final prepared = await adapter.load(
+        final prepared = await adapter.preparation.load(
           const ThreadPostCommentPreparationRequest(tid: '10001', pid: '20001'),
         );
         final preparation = prepared.dataOrNull!;
 
-        final result = await adapter.execute(
+        final result = await adapter.command.execute(
           ThreadPostCommentSubmission(
             preparation: preparation,
             message: 'fixture comment',
@@ -171,11 +171,11 @@ void main() {
         config: config,
         network: network,
       ).createThreadPostCommentInteraction();
-      final preparation = (await adapter.load(
+      final preparation = (await adapter.preparation.load(
         const ThreadPostCommentPreparationRequest(tid: '10001', pid: '20001'),
       )).dataOrNull!;
 
-      final result = await adapter.execute(
+      final result = await adapter.command.execute(
         ThreadPostCommentSubmission(
           preparation: preparation,
           message: 'fixture comment',
@@ -204,11 +204,11 @@ void main() {
           config: config,
           network: network,
         ).createThreadPostCommentInteraction();
-        final preparation = (await adapter.load(
+        final preparation = (await adapter.preparation.load(
           const ThreadPostCommentPreparationRequest(tid: '10001', pid: '20001'),
         )).dataOrNull!;
 
-        final result = await adapter.execute(
+        final result = await adapter.command.execute(
           ThreadPostCommentSubmission(
             preparation: preparation,
             message: 'fixture comment',
@@ -238,7 +238,7 @@ void main() {
           network: network,
         ).createThreadPostCommentInteraction();
 
-        final result = await adapter.load(
+        final result = await adapter.preparation.load(
           const ThreadPostCommentPreparationRequest(tid: '10001', pid: '20001'),
         );
 

@@ -8,10 +8,19 @@ import 'forum_resource.dart';
 
 /// Capabilities exposed by image attachment upload sources.
 enum ForumImageAttachmentUploadCapability {
+  /// Preparation.
   preparation,
+
+  /// Streamed upload.
   streamedUpload,
+
+  /// Progress.
   progress,
+
+  /// Cancellation.
   cancellation,
+
+  /// Precise server rejection.
   preciseServerRejection,
 }
 
@@ -143,12 +152,12 @@ final class ForumImageAttachmentUploadReceipt {
   final String aid;
 }
 
-/// Loads current image upload permission.
+/// Loads forum image attachment upload preparation data through a source-neutral contract.
 abstract interface class ForumImageAttachmentUploadPreparationRepository {
   /// Capabilities proved by this source.
   ForumImageAttachmentUploadCapabilities get capabilities;
 
-  /// Loads current server permission and an opaque upload token.
+  /// Forum image attachment upload preparation.
   Future<
     DataReadResult<
       ForumImageAttachmentUploadPreparation,
@@ -163,7 +172,7 @@ abstract interface class ForumImageAttachmentUploadCommand {
   /// Capabilities proved by this source.
   ForumImageAttachmentUploadCapabilities get capabilities;
 
-  /// Executes one image upload.
+  /// Executes the command without exposing source payloads.
   Future<DataCommandResult<ForumImageAttachmentUploadReceipt>> execute(
     ForumImageAttachmentUploadSubmission submission,
   );
@@ -171,9 +180,16 @@ abstract interface class ForumImageAttachmentUploadCommand {
 
 /// Capabilities of the unused image attachment directory.
 enum ForumUnusedImageAttachmentCapability {
+  /// Stable attachment identity.
   stableAttachmentIdentity,
+
+  /// Ordered attachments.
   orderedAttachments,
+
+  /// Thumbnail reference.
   thumbnailReference,
+
+  /// Deletion proof.
   deletionProof,
 }
 
@@ -245,7 +261,7 @@ abstract interface class ForumUnusedImageAttachmentDirectoryRepository {
   /// Effective source capabilities.
   ForumUnusedImageAttachmentCapabilities get capabilities;
 
-  /// Loads the current uncached directory.
+  /// Forum unused image attachment directory.
   Future<
     DataReadResult<
       ForumUnusedImageAttachmentDirectory,
@@ -323,7 +339,7 @@ abstract interface class ForumUnusedImageAttachmentDeleteCommand {
 
 /// Command for deleting an image attachment bound to an existing post.
 abstract interface class ForumPostImageAttachmentDeleteCommand {
-  /// Executes the delete request. The Host may perform a richer edit-form
+  /// Executes the command without exposing source payloads.
   /// read-back when the result is inconclusive.
   Future<DataCommandResult<ForumImageAttachmentDeleteReceipt>> execute(
     DeletePostImageAttachmentRequest request,

@@ -7,10 +7,11 @@ outcomes, cache codecs, transport error mapping, and the protocol side of WAF
 recovery.
 
 The package remains unpublished (`publish_to: none`) and can be consumed using
-a local path or Git dependency targeting this monorepo subdirectory. Version
-`0.8.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed in
-[API_STABILITY.md](API_STABILITY.md). The package is licensed under
-`GPL-3.0-only`; see [LICENSE](LICENSE).
+a local path or a Git dependency targeting this monorepo subdirectory. Version
+`0.10.x` is governed by [VERSIONING.md](VERSIONING.md); API maturity is listed
+in [API_STABILITY.md](API_STABILITY.md). The package is licensed under
+`GPL-3.0-only`; see [LICENSE](LICENSE). A Chinese guide is available in
+[README.zh-CN.md](README.zh-CN.md).
 
 ## Public boundaries
 
@@ -18,24 +19,55 @@ a local path or Git dependency targeting this monorepo subdirectory. Version
   ports, stores, and configuration;
 - `yamibo_forum_client_contracts.dart`: source-neutral contracts, models,
   capabilities, read results, and stable reference/image helpers;
-- `yamibo_forum_client_adapters.dart`: advanced adapter construction and
-  source parsers, intended only for composition roots and package tests.
+- `yamibo_forum_client_adapters.dart`: the experimental adapter factory and
+  the small parser/mapper surface required by advanced composition roots.
 
 Applications should consume the facade or contracts barrel. Do not import
 package `src/` files.
 
+## Installation
+
+Use a local path inside this repository:
+
+```yaml
+dependencies:
+  yamibo_forum_client:
+    path: packages/yamibo_forum_client
+```
+
+External repositories can depend on the package subdirectory and should pin a
+reviewed commit until formal tags are available:
+
+```yaml
+dependencies:
+  yamibo_forum_client:
+    git:
+      url: https://github.com/QAQadws/y300.git
+      ref: <verified-commit>
+      path: packages/yamibo_forum_client
+```
+
 ## Quick start
 
 ```dart
-final config = ForumClientConfig(
-  siteOrigin: Uri.parse('https://bbs.yamibo.com'),
-  apiOrigin: Uri.parse(
-    'https://bbs.yamibo.com/api/mobile/index.php',
-  ),
-  userAgent: 'MyThirdPartyApp/1.0',
+final client = YamiboForumClientBuilder.ephemeralDio()
+    .buildStandardClient();
+
+final result = await client.loadForumDirectory(
+  const ForumDirectoryQuery(),
 );
+```
+
+`ephemeralDio()` supplies the verified Yamibo origins and browser identities,
+plus in-memory Cookie, session, document, snapshot, and sticker stores. It is
+appropriate for evaluation, tests, and short-lived command-line tools. All
+state disappears when the process exits.
+
+## Production composition
+
+```dart
 final client = YamiboForumClientBuilder.standardDio(
-  config: config,
+  config: ForumClientConfig.yamibo(),
   cookies: persistentCookieStore,
   caches: ForumClientCachePorts(
     documents: persistentDocumentStore,
@@ -43,6 +75,7 @@ final client = YamiboForumClientBuilder.standardDio(
     stickers: persistentStickerStore,
   ),
   waf: platformWafDelegate,
+  logger: applicationLogger,
 ).buildStandardClient();
 
 final result = await client.loadForumDirectory(
@@ -57,10 +90,16 @@ switch (result) {
 }
 ```
 
-The identifiers named `persistent...` and `platformWafDelegate` above are Host
+The identifiers named `persistent...`, `platformWafDelegate`, and
+`applicationLogger` above are Host
 implementations. The package supplies the Dio transport, request profiles,
 session projection, standard formhash discovery, adapters, and source plan.
 Package tests never contact the live forum.
+
+`ForumClientConfig.yamibo()` deliberately assigns a mobile Chromium identity
+to mobile HTML and Discuz API requests, and a desktop Chromium identity to
+desktop HTML and protected resources. Hosts that override a user agent must
+also use that exact identity inside their WAF recovery delegate.
 
 ## Standard source matrix
 
@@ -145,9 +184,21 @@ Unused-image deletion requires proof from the current authenticated directory
 and performs one read-back when the direct count cannot prove deletion.
 
 Hosts with an existing authenticated session stack may override the standard
-formhash provider. Advanced hosts can import the adapters barrel and build a
-custom `ForumClientSourcePlan` for individual contracts; this API is
-experimental and there is deliberately no global HTML/API switch.
+formhash provider. A single source can be replaced without rebuilding or
+switching the rest of the matrix:
+
+```dart
+final client = builder.buildStandardClient(
+  sourceOverrides: ForumClientSourcePlan(
+    threadDetail: newApiThreadRepository,
+  ),
+);
+```
+
+Non-null override slots replace the corresponding standard source; every null
+slot retains the verified default. Advanced hosts can import the adapters
+barrel to construct those replacements. This API is experimental and there is
+deliberately no global HTML/API switch.
 
 The standard client exposes the source-neutral author-post page used by Y300's
 novel synchronization and permanently fixes that adapter to `version=1`.
@@ -184,8 +235,8 @@ The package intentionally does not depend on Flutter or a WebView plugin.
 
 Y300 uses the same package through Host Adapters backed by its process-wide
 `YamiboHttpGateway`, Cookie/session/formhash stores, WAF coordinator, and
-document/snapshot cache. This keeps package reads and still-unmigrated writes
-on one authenticated transport path.
+document/snapshot cache. Reads, commands, and resources therefore share one
+authenticated transport path.
 
 ## Protected image resources
 

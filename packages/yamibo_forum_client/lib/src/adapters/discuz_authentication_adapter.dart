@@ -161,7 +161,7 @@ final class DiscuzAuthenticationAdapter
     };
   }
 
-  /// Performs the standard Discuz logout for [DiscuzLogoutCommandAdapter].
+  /// Executes the standard Discuz logout for [DiscuzLogoutCommandAdapter].
   Future<DataCommandResult<ForumLogoutReceipt>> performLogout([
     ForumLogoutRequest request = const ForumLogoutRequest(),
   ]) async {

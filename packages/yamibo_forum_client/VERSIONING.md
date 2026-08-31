@@ -23,6 +23,10 @@ Experimental APIs may change in a minor release without a deprecation cycle.
 Such changes must still be documented in the changelog and migration guide.
 Patch releases do not intentionally break them.
 
+The package remains Git/path-only while `publish_to: none` is present. A
+version bump documents compatibility for those consumers and does not imply a
+pub.dev release, Git tag, or GitHub release.
+
 ## Reaching 1.0
 
 The package will be considered for `1.0.0` after the supported contracts have

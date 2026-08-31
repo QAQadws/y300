@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import '../cache/forum_cache.dart';
 import '../cache/forum_cache_key_canonicalizer.dart';
 import '../client/forum_client_config.dart';
@@ -375,16 +377,9 @@ DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities> _validated(
 final _htmlCapabilities = ThreadDetailSourceCapabilities(
   values: DataCapabilitySet.from(
     supported: ThreadDetailCapability.values
-        .where(
-          (value) =>
-              value != ThreadDetailCapability.attachmentMetadata &&
-              value != ThreadDetailCapability.pollVoteAction,
-        )
+        .where((value) => value != ThreadDetailCapability.attachmentMetadata)
         .toList(growable: false),
-    unsupported: const [
-      ThreadDetailCapability.attachmentMetadata,
-      ThreadDetailCapability.pollVoteAction,
-    ],
+    unsupported: const [ThreadDetailCapability.attachmentMetadata],
   ),
   paginationPrecision: PaginationPrecision.exact,
 );
@@ -414,7 +409,6 @@ final _apiCapabilities = ThreadDetailSourceCapabilities(
       ThreadDetailCapability.comments,
       ThreadDetailCapability.commentAction,
       ThreadDetailCapability.pollContent,
-      ThreadDetailCapability.pollVoteAction,
       ThreadDetailCapability.tagLinks,
       ThreadDetailCapability.favoriteEntry,
     ],

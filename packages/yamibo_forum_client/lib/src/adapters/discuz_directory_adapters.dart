@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import '../contracts/cache_load_policy.dart';
 import '../contracts/data_read_contract.dart';
 import '../contracts/favorite_directories.dart';

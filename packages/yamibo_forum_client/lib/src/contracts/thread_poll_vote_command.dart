@@ -77,7 +77,7 @@ abstract interface class ThreadPollVoteCommand {
   /// Capabilities proved by this command source.
   ThreadPollVoteCapabilities get capabilities;
 
-  /// Executes [submission] without retrying ordinary failures.
+  /// Executes the command without exposing source payloads.
   Future<DataCommandResult<ThreadPollVoteReceipt>> execute(
     ThreadPollVoteSubmission submission,
   );

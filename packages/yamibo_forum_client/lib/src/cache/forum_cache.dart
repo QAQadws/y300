@@ -1,9 +1,14 @@
 /// Authentication partition used by cached HTML documents.
 enum ForumDocumentRequestProfile {
+  /// Anonymous request partition.
   anonymous('anonymous'),
+
+  /// Authenticated request partition.
   loggedIn('logged_in');
 
   const ForumDocumentRequestProfile(this.id);
+
+  /// Stable value used in cache keys.
   final String id;
 }
 
@@ -18,10 +23,19 @@ final class ForumDocumentDescriptor {
     required this.requestProfile,
   });
 
+  /// Cache key.
   final String cacheKey;
+
+  /// Owner type.
   final String ownerType;
+
+  /// Owner id.
   final String ownerId;
+
+  /// Source uri.
   final Uri sourceUri;
+
+  /// Request profile.
   final ForumDocumentRequestProfile requestProfile;
 }
 
@@ -38,12 +52,25 @@ final class ForumCachedDocument {
     this.lastAccessedAt,
   });
 
+  /// Descriptor.
   final ForumDocumentDescriptor descriptor;
+
+  /// Response or request body in the declared representation.
   final String body;
+
+  /// Content type.
   final String? contentType;
+
+  /// HTTP status code when safely available.
   final int? statusCode;
+
+  /// Fetched at.
   final DateTime fetchedAt;
+
+  /// Updated at.
   final DateTime updatedAt;
+
+  /// Last accessed at.
   final DateTime? lastAccessedAt;
 }
 
@@ -70,10 +97,19 @@ final class ForumSnapshotDescriptor {
     this.sourceDocumentKey,
   });
 
+  /// Cache key.
   final String cacheKey;
+
+  /// Owner type.
   final String ownerType;
+
+  /// Owner id.
   final String ownerId;
+
+  /// Snapshot type.
   final String snapshotType;
+
+  /// Source document key.
   final String? sourceDocumentKey;
 }
 
@@ -85,7 +121,10 @@ final class ForumSnapshotPolicy {
     required this.keepStaleFor,
   });
 
+  /// Fresh for.
   final Duration freshFor;
+
+  /// Keep stale for.
   final Duration keepStaleFor;
 }
 
@@ -129,14 +168,31 @@ final class ForumCachedSnapshot<T> {
     this.expiresAt,
   });
 
+  /// Descriptor.
   final ForumSnapshotDescriptor descriptor;
+
+  /// Codec version.
   final int codecVersion;
+
+  /// Parser version.
   final int parserVersion;
+
+  /// Value.
   final T value;
+
+  /// Created at.
   final DateTime createdAt;
+
+  /// Updated at.
   final DateTime updatedAt;
+
+  /// Last accessed at.
   final DateTime? lastAccessedAt;
+
+  /// Stale at.
   final DateTime? staleAt;
+
+  /// Expires at.
   final DateTime? expiresAt;
 
   /// Whether the snapshot is still within its fresh period.

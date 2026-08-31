@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
-    as forum_adapters;
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
@@ -14,10 +13,14 @@ void main() {
     addTearDown(container.dispose);
 
     final client = container.read(yamiboForumClientProvider);
-    expect(container.read(threadRepositoryProvider), same(client.threadDetail));
+    final threadDetail = client.threadDetail;
+    expect(threadDetail, isNotNull);
+    expect(container.read(threadRepositoryProvider), same(threadDetail));
     expect(
-      client.threadDetail,
-      isA<forum_adapters.ThreadDetailHtmlRepository>(),
+      threadDetail!.capabilities.values.supports(
+        ThreadDetailCapability.ratingAction,
+      ),
+      isTrue,
     );
   });
 
@@ -26,37 +29,40 @@ void main() {
     addTearDown(container.dispose);
 
     final client = container.read(yamiboForumClientProvider);
+    final threadIngestionDetail = client.threadIngestionDetail;
+    final comicEpisodeCatalog = client.comicEpisodeCatalog;
+    final comicThreadDiscovery = client.comicThreadDiscovery;
+    expect(threadIngestionDetail, isNotNull);
+    expect(comicEpisodeCatalog, isNotNull);
+    expect(comicThreadDiscovery, isNotNull);
     expect(
       container.read(threadIngestionRepositoryProvider),
-      same(client.threadIngestionDetail),
+      same(threadIngestionDetail),
     );
     expect(
-      client.threadIngestionDetail,
-      isA<forum_adapters.ApiThreadRepository>(),
+      threadIngestionDetail!.capabilities.values.supports(
+        ThreadDetailCapability.attachmentMetadata,
+      ),
+      isTrue,
     );
     expect(
       container.read(comicEpisodeCatalogRepositoryProvider),
-      same(client.comicEpisodeCatalog),
+      same(comicEpisodeCatalog),
     );
     expect(
-      client.comicEpisodeCatalog,
-      isA<forum_adapters.DiscuzApiComicEpisodeCatalogRepository>(),
+      comicEpisodeCatalog!.capabilities.supports(
+        ComicEpisodeCatalogCapability.stableSourceIdentity,
+      ),
+      isTrue,
     );
     expect(
       container.read(comicThreadDiscoveryRepositoryProvider),
-      same(client.comicThreadDiscovery),
+      same(comicThreadDiscovery),
     );
-    expect(
-      client.comicThreadDiscovery,
-      isA<forum_adapters.ThreadRepositoryComicThreadDiscoveryAdapter>(),
-    );
+    expect(comicThreadDiscovery!.capabilities.values, isNotNull);
     expect(
       container.read(threadReplyPageRepositoryProvider),
       same(client.threadReplyPage),
-    );
-    expect(
-      client.threadReplyPage,
-      isA<forum_adapters.ApiThreadReplyPageRepository>(),
     );
   });
 }

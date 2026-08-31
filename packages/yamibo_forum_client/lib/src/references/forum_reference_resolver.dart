@@ -1,10 +1,14 @@
 import 'package:html/parser.dart' as html_parser;
 
-/// Parses stable forum identities without exposing adapter-specific URL rules
-/// to application domain or presentation code.
+/// Resolves and normalizes supported same-site thread and tag references.
+///
+/// Cross-site, malformed, or identity-ambiguous values fail closed instead of
+/// leaking source-specific URL handling into application code.
 class ForumReferenceResolver {
+  /// Creates a [ForumReferenceResolver].
   const ForumReferenceResolver({this.siteOrigin = 'https://bbs.yamibo.com'});
 
+  /// Site origin.
   final String siteOrigin;
 
   static final RegExp _numericId = RegExp(r'^\d+$');
@@ -17,6 +21,7 @@ class ForumReferenceResolver {
     caseSensitive: false,
   );
 
+  /// Resolves same site using the configured forum boundary.
   Uri? resolveSameSite(String value, {String? baseUrl}) {
     final decoded = (html_parser.parseFragment(value).text ?? '').trim();
     if (decoded.isEmpty) return null;
@@ -27,6 +32,7 @@ class ForumReferenceResolver {
     return _isSameSite(resolved) ? resolved : null;
   }
 
+  /// Extracts a stable thread identifier from a supported same-site reference.
   String? extractTid(String value, {String? baseUrl}) {
     final damaged = _damagedTid.firstMatch(value)?.group(2);
     if ((value.trim().startsWith(';tid=') || value.trim().startsWith('tid=')) &&
@@ -54,6 +60,7 @@ class ForumReferenceResolver {
     return null;
   }
 
+  /// Normalizes a supported same-site reference without unsafe parameters.
   String? normalizeHref(String value, {String? baseUrl}) {
     final trimmed = value.trim();
     final damaged = _damagedTid.firstMatch(trimmed)?.group(2);
@@ -98,8 +105,10 @@ class ForumReferenceResolver {
         .toString();
   }
 
+  /// Extracts a stable thread identifier from a supported same-site reference.
   bool isThreadUrl(String value) => extractTid(value) != null;
 
+  /// Whether the reference has a supported same-site thread shape.
   bool isSupportedThreadUrl(String value) {
     final uri = resolveSameSite(value);
     if (uri == null) return false;
@@ -113,6 +122,7 @@ class ForumReferenceResolver {
         _queryValue(uri, 'tid')?.trim().isNotEmpty == true;
   }
 
+  /// Extracts a stable tag identifier from a supported same-site reference.
   String? extractTagId(String value, {String? baseUrl}) {
     final uri = resolveSameSite(value, baseUrl: baseUrl);
     if (uri == null || !_endsWithPath(uri, 'misc.php')) return null;
@@ -125,6 +135,7 @@ class ForumReferenceResolver {
     return id;
   }
 
+  /// Extracts a one-based tag page, defaulting safely to page one.
   int extractTagPage(String value, {String? baseUrl}) {
     final uri = resolveSameSite(value, baseUrl: baseUrl);
     if (uri == null || extractTagId(uri.toString()) == null) return 1;
@@ -132,9 +143,11 @@ class ForumReferenceResolver {
     return page == null || page < 1 ? 1 : page;
   }
 
+  /// Whether the value identifies a supported same-site tag catalog.
   bool isTagCatalogUrl(String value, {String? baseUrl}) =>
       extractTagId(value, baseUrl: baseUrl) != null;
 
+  /// Normalizes a tag catalog reference to one explicit page.
   String? normalizeTagPageReference(
     String value, {
     int? page,

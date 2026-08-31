@@ -72,6 +72,78 @@ final class ForumClientSourcePlan {
     this.logout,
   });
 
+  /// Overlays non-null [overrides] on this source plan.
+  ///
+  /// This supports replacing one business source without introducing a global
+  /// HTML/API mode. Null entries deliberately retain the existing source.
+  ForumClientSourcePlan overlay(
+    ForumClientSourcePlan overrides,
+  ) => ForumClientSourcePlan(
+    forumDirectory: overrides.forumDirectory ?? forumDirectory,
+    forumHome: overrides.forumHome ?? forumHome,
+    forumDisplay: overrides.forumDisplay ?? forumDisplay,
+    forumTagDirectory: overrides.forumTagDirectory ?? forumTagDirectory,
+    favoriteForumDirectory:
+        overrides.favoriteForumDirectory ?? favoriteForumDirectory,
+    favoriteThreadDirectory:
+        overrides.favoriteThreadDirectory ?? favoriteThreadDirectory,
+    favoriteForumCommand:
+        overrides.favoriteForumCommand ?? favoriteForumCommand,
+    favoriteThreadCommand:
+        overrides.favoriteThreadCommand ?? favoriteThreadCommand,
+    currentUserProfile: overrides.currentUserProfile ?? currentUserProfile,
+    notifications: overrides.notifications ?? notifications,
+    privateMessages: overrides.privateMessages ?? privateMessages,
+    stickerCatalog: overrides.stickerCatalog ?? stickerCatalog,
+    forumUserProfile: overrides.forumUserProfile ?? forumUserProfile,
+    userBlogDirectory: overrides.userBlogDirectory ?? userBlogDirectory,
+    userBlogDetail: overrides.userBlogDetail ?? userBlogDetail,
+    forumSearch: overrides.forumSearch ?? forumSearch,
+    comicEpisodeCatalog: overrides.comicEpisodeCatalog ?? comicEpisodeCatalog,
+    comicThreadDiscovery:
+        overrides.comicThreadDiscovery ?? comicThreadDiscovery,
+    threadReplyPage: overrides.threadReplyPage ?? threadReplyPage,
+    threadDetail: overrides.threadDetail ?? threadDetail,
+    threadIngestionDetail:
+        overrides.threadIngestionDetail ?? threadIngestionDetail,
+    postRatingPreparation:
+        overrides.postRatingPreparation ?? postRatingPreparation,
+    postRatingCommand: overrides.postRatingCommand ?? postRatingCommand,
+    postCommentPreparation:
+        overrides.postCommentPreparation ?? postCommentPreparation,
+    postCommentCommand: overrides.postCommentCommand ?? postCommentCommand,
+    threadPollVoteCommand:
+        overrides.threadPollVoteCommand ?? threadPollVoteCommand,
+    threadCreationPreparation:
+        overrides.threadCreationPreparation ?? threadCreationPreparation,
+    threadCreationCommand:
+        overrides.threadCreationCommand ?? threadCreationCommand,
+    threadReplyPreparation:
+        overrides.threadReplyPreparation ?? threadReplyPreparation,
+    threadReplyCommand: overrides.threadReplyCommand ?? threadReplyCommand,
+    threadPostEditPreparation:
+        overrides.threadPostEditPreparation ?? threadPostEditPreparation,
+    threadPostEditCommand:
+        overrides.threadPostEditCommand ?? threadPostEditCommand,
+    imageAttachmentUploadPreparation:
+        overrides.imageAttachmentUploadPreparation ??
+        imageAttachmentUploadPreparation,
+    imageAttachmentUploadCommand:
+        overrides.imageAttachmentUploadCommand ?? imageAttachmentUploadCommand,
+    unusedImageAttachments:
+        overrides.unusedImageAttachments ?? unusedImageAttachments,
+    unusedImageAttachmentDelete:
+        overrides.unusedImageAttachmentDelete ?? unusedImageAttachmentDelete,
+    postImageAttachmentDelete:
+        overrides.postImageAttachmentDelete ?? postImageAttachmentDelete,
+    postRatings: overrides.postRatings ?? postRatings,
+    postLocator: overrides.postLocator ?? postLocator,
+    threadAuthorPosts: overrides.threadAuthorPosts ?? threadAuthorPosts,
+    session: overrides.session ?? session,
+    passwordLogin: overrides.passwordLogin ?? passwordLogin,
+    logout: overrides.logout ?? logout,
+  );
+
   /// Source for the forum hierarchy.
   final ForumDirectoryRepository? forumDirectory;
 

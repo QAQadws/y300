@@ -6,7 +6,7 @@ abstract interface class ForumCookieStore {
   /// Merges normalized Cookie name/value pairs for [uri].
   Future<void> merge(Uri uri, Map<String, String> cookies);
 
-  /// Parses and merges response `Set-Cookie` header values.
+  /// Applies Set-Cookie values using browser deletion semantics.
   Future<void> mergeSetCookie(Uri uri, List<String> headers);
 
   /// Removes all forum cookies managed by this store.

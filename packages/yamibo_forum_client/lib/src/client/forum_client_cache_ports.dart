@@ -14,6 +14,15 @@ final class ForumClientCachePorts {
     required this.stickers,
   });
 
+  /// Creates ephemeral cache ports for tests and short-lived tools.
+  ///
+  /// Production applications should provide persistent stores instead.
+  factory ForumClientCachePorts.memory() => ForumClientCachePorts(
+    documents: MemoryForumDocumentStore(),
+    snapshots: MemoryForumSnapshotStore(),
+    stickers: MemoryForumStickerCatalogStore(),
+  );
+
   /// Stores source documents used by HTML-first adapters and stale fallback.
   final ForumDocumentStore documents;
 

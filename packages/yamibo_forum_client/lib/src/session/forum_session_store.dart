@@ -38,10 +38,10 @@ final class ForumSessionSnapshot {
 
 /// Store for reproducible session and formhash projections.
 abstract interface class ForumSessionStore {
-  /// Returns the current projection synchronously when available.
+  /// Reads the current reproducible session projection.
   ForumSessionSnapshot? readCurrent();
 
-  /// Returns a non-expired formhash when available.
+  /// Reads a formhash only when its independent TTL is still fresh.
   String? readFreshFormhash();
 
   /// Conservatively merges a newly extracted projection.

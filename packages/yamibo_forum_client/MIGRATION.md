@@ -1,5 +1,35 @@
 # Migration guide
 
+## 0.9.x to 0.10.0
+
+Use `ForumClientConfig.yamibo()` instead of manually duplicating Yamibo
+origins and request identities. For an in-memory evaluation runtime, replace
+manual memory-store construction with:
+
+```dart
+final client = YamiboForumClientBuilder.ephemeralDio()
+    .buildStandardClient();
+```
+
+Production applications should continue using `standardDio()` with persistent
+Cookie and cache ports. `buildStandardReads()` has been removed; use
+`buildStandardClient()`.
+
+To replace one standard source without rebuilding the matrix, pass a sparse
+`ForumClientSourcePlan` through `sourceOverrides`. Null slots retain the
+verified standard source.
+
+`ThreadPoll.actionUrl`, `ThreadPoll.formHash`, and
+`ThreadDetailCapability.pollVoteAction` have been removed after their
+deprecation cycle. Use `ThreadPollVoteCommand` for mutation and its own
+capability contract for availability.
+
+The experimental adapters barrel is now an explicit allowlist. Code that used
+concrete Discuz repositories, low-level parsers, or snapshot codecs must move
+inside the package, depend on source-neutral contracts, or construct sources
+through `ForumClientAdapterFactory`. Multi-role factory methods now return
+named records such as `.preparation`/`.command` and `.home`/`.directory`.
+
 ## 0.8.x to 0.9.0
 
 The standard client now installs `ThreadPostEditPreparationRepository` and

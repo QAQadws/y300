@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import 'package:html/dom.dart' as html_dom;
 
 class YamiboTagPagePagination {

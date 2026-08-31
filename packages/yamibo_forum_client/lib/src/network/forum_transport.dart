@@ -2,13 +2,28 @@ import '../contracts/data_read_contract.dart';
 
 /// Stable transport failure categories mapped into read failures by adapters.
 enum ForumTransportFailureKind {
+  /// Network.
   network,
+
+  /// Timeout.
   timeout,
+
+  /// Server.
   server,
+
+  /// Unauthorized.
   unauthorized,
+
+  /// Parse.
   parse,
+
+  /// Business.
   business,
+
+  /// Cancelled.
   cancelled,
+
+  /// Unknown.
   unknown,
 }
 

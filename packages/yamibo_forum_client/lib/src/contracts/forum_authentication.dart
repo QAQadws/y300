@@ -53,7 +53,7 @@ final class ForumSessionRequest {
 
 /// Source-neutral current-session contract.
 abstract interface class ForumSessionRepository {
-  /// Resolves the Cookie-backed session without guessing from cached identity.
+  /// Resolves the reference using the configured forum boundary.
   Future<ForumSessionResult> resolve([
     ForumSessionRequest request = const ForumSessionRequest(),
   ]);

@@ -85,7 +85,7 @@ final class YamiboForumClient {
   /// Configured standard-logout command, if installed.
   ForumLogoutCommand? get logout => sourcePlan.logout;
 
-  /// Resolves the current Cookie-backed session.
+  /// Resolves session using the configured forum boundary.
   Future<ForumSessionResult> resolveSession([
     ForumSessionRequest request = const ForumSessionRequest(),
   ]) =>
@@ -101,14 +101,14 @@ final class YamiboForumClient {
         ),
       );
 
-  /// Executes password login through the configured command source.
+  /// Attempts password login and verifies the resulting authenticated session.
   Future<DataCommandResult<ForumLoginReceipt>> loginWithPassword(
     ForumPasswordLoginRequest request,
   ) =>
       sourcePlan.passwordLogin?.execute(request) ??
       Future.value(const DataCommandUnsupported<ForumLoginReceipt>());
 
-  /// Executes the configured standard logout command.
+  /// Attempts logout without clearing Host state unless success is proved.
   Future<DataCommandResult<ForumLogoutReceipt>> logoutSession([
     ForumLogoutRequest request = const ForumLogoutRequest(),
   ]) =>
@@ -247,7 +247,7 @@ final class YamiboForumClient {
   ForumPostImageAttachmentDeleteCommand? get postImageAttachmentDelete =>
       sourcePlan.postImageAttachmentDelete;
 
-  /// Loads current image attachment upload permission.
+  /// Forum image attachment upload preparation.
   Future<
     DataReadResult<
       ForumImageAttachmentUploadPreparation,
@@ -271,7 +271,7 @@ final class YamiboForumClient {
         const DataCommandUnsupported<ForumImageAttachmentUploadReceipt>(),
       );
 
-  /// Loads the current unused image attachment directory.
+  /// Forum unused image attachment directory.
   Future<
     DataReadResult<
       ForumUnusedImageAttachmentDirectory,
@@ -324,7 +324,7 @@ final class YamiboForumClient {
   ThreadAuthorPostRepository? get threadAuthorPosts =>
       sourcePlan.threadAuthorPosts;
 
-  /// Loads and validates the current server-side rating form.
+  /// Loads the current rating form for [request].
   Future<
     DataReadResult<ThreadPostRatingPreparation, ThreadPostRatingCapabilities>
   >
@@ -339,7 +339,7 @@ final class YamiboForumClient {
       sourcePlan.postRatingCommand?.execute(submission) ??
       Future.value(const DataCommandUnsupported<ThreadPostRatingReceipt>());
 
-  /// Loads and validates the current server-side comment form.
+  /// Loads the current comment form for [request].
   Future<
     DataReadResult<ThreadPostCommentPreparation, ThreadPostCommentCapabilities>
   >
@@ -364,7 +364,7 @@ final class YamiboForumClient {
       sourcePlan.threadPollVoteCommand?.execute(submission) ??
       Future.value(const DataCommandUnsupported<ThreadPollVoteReceipt>());
 
-  /// Loads and validates the current thread-creation preparation.
+  /// Loads current thread-creation metadata for [request].
   Future<DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>>
   prepareThreadCreation(ThreadCreationPreparationRequest request) =>
       sourcePlan.threadCreationPreparation?.load(request) ??
@@ -377,7 +377,7 @@ final class YamiboForumClient {
       sourcePlan.threadCreationCommand?.execute(submission) ??
       Future.value(const DataCommandUnsupported<ThreadCreationReceipt>());
 
-  /// Loads and validates a server form for replying to one post.
+  /// Loads current reply metadata for [request].
   Future<DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>>
   prepareThreadReply(ThreadReplyPreparationRequest request) =>
       sourcePlan.threadReplyPreparation?.load(request) ??
@@ -390,7 +390,7 @@ final class YamiboForumClient {
       sourcePlan.threadReplyCommand?.execute(submission) ??
       Future.value(const DataCommandUnsupported<ThreadReplyReceipt>());
 
-  /// Loads and validates a server form for editing an ordinary post.
+  /// Loads and validates the current edit form for [request].
   Future<DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>>
   prepareThreadPostEdit(ThreadPostEditPreparationRequest request) =>
       sourcePlan.threadPostEditPreparation?.load(request) ??
@@ -403,7 +403,7 @@ final class YamiboForumClient {
       sourcePlan.threadPostEditCommand?.execute(submission) ??
       Future.value(const DataCommandUnsupported<ThreadPostEditReceipt>());
 
-  /// Loads the combined forum-home document.
+  /// Loads forum home and returns a structured result.
   Future<DataReadResult<ForumHomeDocument, ForumHomeReadCapabilities>>
   loadForumHome(
     ForumHomeQuery query, {
@@ -416,7 +416,7 @@ final class YamiboForumClient {
   Future<ForumHomeCachedRead?> readCachedForumHome(ForumHomeQuery query) =>
       sourcePlan.forumHome?.readCached(query) ?? Future.value(null);
 
-  /// Loads a page of forum notifications.
+  /// Loads notifications and returns a structured result.
   Future<
     DataReadResult<ForumNotificationPage, ForumNotificationReadCapabilities>
   >
@@ -424,7 +424,7 @@ final class YamiboForumClient {
       sourcePlan.notifications?.load(query) ??
       unsupported<ForumNotificationPage, ForumNotificationReadCapabilities>();
 
-  /// Loads a page of private messages.
+  /// Loads private messages and returns a structured result.
   Future<
     DataReadResult<ForumPrivateMessagePage, ForumPrivateMessageReadCapabilities>
   >
@@ -435,7 +435,7 @@ final class YamiboForumClient {
         ForumPrivateMessageReadCapabilities
       >();
 
-  /// Loads the ordered forum sticker catalog.
+  /// Loads sticker catalog and returns a structured result.
   Future<
     DataReadResult<ForumStickerCatalogData, ForumStickerCatalogReadCapabilities>
   >
@@ -446,7 +446,7 @@ final class YamiboForumClient {
         ForumStickerCatalogReadCapabilities
       >();
 
-  /// Loads complete rating details for one post.
+  /// Loads post ratings and returns a structured result.
   Future<
     DataReadResult<ThreadPostRatingsData, ThreadPostRatingsReadCapabilities>
   >
@@ -454,7 +454,7 @@ final class YamiboForumClient {
       sourcePlan.postRatings?.load(query) ??
       unsupported<ThreadPostRatingsData, ThreadPostRatingsReadCapabilities>();
 
-  /// Resolves the exact page containing a post.
+  /// Resolves the exact page and URI containing the requested post.
   Future<
     DataReadResult<ThreadPostLocationData, ThreadPostLocatorReadCapabilities>
   >
@@ -462,13 +462,13 @@ final class YamiboForumClient {
       sourcePlan.postLocator?.locate(query) ??
       unsupported<ThreadPostLocationData, ThreadPostLocatorReadCapabilities>();
 
-  /// Loads a page containing only posts by the requested author.
+  /// Loads author posts and returns a structured result.
   Future<DataReadResult<ThreadAuthorPostPage, ThreadAuthorPostReadCapabilities>>
   loadAuthorPosts(ThreadAuthorPostQuery query) =>
       sourcePlan.threadAuthorPosts?.load(query) ??
       unsupported<ThreadAuthorPostPage, ThreadAuthorPostReadCapabilities>();
 
-  /// Loads the forum hierarchy using the selected cache policy.
+  /// Loads forum directory and returns a structured result.
   Future<DataReadResult<ForumDirectoryData, ForumDirectoryReadCapabilities>>
   loadForumDirectory(
     ForumDirectoryQuery query, {
@@ -477,7 +477,7 @@ final class YamiboForumClient {
       sourcePlan.forumDirectory?.load(query, cachePolicy: cachePolicy) ??
       unsupported<ForumDirectoryData, ForumDirectoryReadCapabilities>();
 
-  /// Loads the Tag directory using the selected cache policy.
+  /// Loads forum tag directory and returns a structured result.
   Future<
     DataReadResult<ForumTagDirectoryData, ForumTagDirectoryReadCapabilities>
   >
@@ -488,7 +488,7 @@ final class YamiboForumClient {
       sourcePlan.forumTagDirectory?.load(query, cachePolicy: cachePolicy) ??
       unsupported<ForumTagDirectoryData, ForumTagDirectoryReadCapabilities>();
 
-  /// Loads the authenticated user's favorite forums.
+  /// Favorite forum directory data.
   Future<
     DataReadResult<
       FavoriteForumDirectoryData,
@@ -508,7 +508,7 @@ final class YamiboForumClient {
         FavoriteForumDirectoryReadCapabilities
       >();
 
-  /// Loads the authenticated user's favorite threads.
+  /// Favorite thread directory data.
   Future<
     DataReadResult<
       FavoriteThreadDirectoryData,
@@ -528,7 +528,7 @@ final class YamiboForumClient {
         FavoriteThreadDirectoryReadCapabilities
       >();
 
-  /// Loads the authenticated user's source-neutral profile projection.
+  /// Loads current user profile and returns a structured result.
   Future<
     DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
   >
@@ -539,7 +539,7 @@ final class YamiboForumClient {
       sourcePlan.currentUserProfile?.load(query, cachePolicy: cachePolicy) ??
       unsupported<CurrentUserProfileData, CurrentUserProfileReadCapabilities>();
 
-  /// Loads a public forum profile.
+  /// Loads forum user profile and returns a structured result.
   Future<DataReadResult<ForumUserProfileData, ForumUserProfileReadCapabilities>>
   loadForumUserProfile(
     ForumUserProfileQuery query, {
@@ -548,7 +548,7 @@ final class YamiboForumClient {
       sourcePlan.forumUserProfile?.load(query, cachePolicy: cachePolicy) ??
       unsupported<ForumUserProfileData, ForumUserProfileReadCapabilities>();
 
-  /// Loads a user's blog directory.
+  /// Loads user blogs and returns a structured result.
   Future<
     DataReadResult<UserBlogDirectoryData, UserBlogDirectoryReadCapabilities>
   >
@@ -559,7 +559,7 @@ final class YamiboForumClient {
       sourcePlan.userBlogDirectory?.load(query, cachePolicy: cachePolicy) ??
       unsupported<UserBlogDirectoryData, UserBlogDirectoryReadCapabilities>();
 
-  /// Loads one user blog entry.
+  /// Loads user blog detail and returns a structured result.
   Future<DataReadResult<UserBlogDetailData, UserBlogDetailReadCapabilities>>
   loadUserBlogDetail(
     UserBlogDetailQuery query, {
@@ -577,7 +577,7 @@ final class YamiboForumClient {
       sourcePlan.forumSearch?.load(query, cachePolicy: cachePolicy) ??
       unsupported<ForumSearchData, ForumSearchReadCapabilities>();
 
-  /// Loads a previously proved next search-result page.
+  /// Loads next forum search page and returns a structured result.
   Future<DataReadResult<ForumSearchData, ForumSearchReadCapabilities>>
   loadNextForumSearchPage(
     ForumSearchQuery query,
@@ -599,7 +599,7 @@ final class YamiboForumClient {
         diagnosticMessage: 'source_not_installed',
       );
 
-  /// Loads a forum thread listing.
+  /// Loads forum display and returns a structured result.
   Future<DataReadResult<ForumDisplayData, ForumDisplayReadCapabilities>>
   loadForumDisplay(
     ForumDisplayQuery query, {
@@ -611,7 +611,7 @@ final class YamiboForumClient {
       ) ??
       unsupported<ForumDisplayData, ForumDisplayReadCapabilities>();
 
-  /// Loads one page of a thread detail.
+  /// Loads thread detail and returns a structured result.
   Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
   loadThreadDetail({
     required String tid,
@@ -636,7 +636,7 @@ final class YamiboForumClient {
   /// Configured thread-reply page source, if installed.
   ThreadReplyPageRepository? get threadReplyPage => sourcePlan.threadReplyPage;
 
-  /// Loads the ordered image catalog for one comic episode.
+  /// Loads comic episode catalog and returns a structured result.
   Future<
     DataReadResult<ComicEpisodeImageCatalog, ComicEpisodeCatalogCapabilities>
   >
@@ -644,7 +644,7 @@ final class YamiboForumClient {
       sourcePlan.comicEpisodeCatalog?.loadCatalog(request) ??
       unsupported<ComicEpisodeImageCatalog, ComicEpisodeCatalogCapabilities>();
 
-  /// Loads a source-neutral comic discovery document.
+  /// Comic thread discovery document.
   Future<
     DataReadResult<
       ComicThreadDiscoveryDocument,
@@ -658,7 +658,7 @@ final class YamiboForumClient {
         ComicThreadDiscoveryCapabilities
       >();
 
-  /// Loads a page of thread replies.
+  /// Loads thread replies and returns a structured result.
   Future<DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>
   loadThreadReplies({required String tid, required int page}) =>
       sourcePlan.threadReplyPage?.loadPage(tid: tid, page: page) ??

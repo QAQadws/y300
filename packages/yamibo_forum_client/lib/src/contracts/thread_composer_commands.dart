@@ -322,7 +322,7 @@ abstract interface class ThreadCreationPreparationRepository {
   /// Capabilities proved by this source.
   ThreadCreationCapabilities get capabilities;
 
-  /// Loads the preparation without exposing formhash or transport fields.
+  /// Loads data and returns a structured result.
   Future<DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>>
   load(ThreadCreationPreparationRequest request);
 }
@@ -332,7 +332,7 @@ abstract interface class ThreadCreationCommand {
   /// Capabilities proved by this source.
   ThreadCreationCapabilities get capabilities;
 
-  /// Executes [submission] without retrying ordinary transport failures.
+  /// Executes the command without exposing source payloads.
   Future<DataCommandResult<ThreadCreationReceipt>> execute(
     ThreadCreationSubmission submission,
   );
@@ -510,7 +510,7 @@ abstract interface class ThreadReplyPreparationRepository {
   /// Capabilities proved by this source.
   ThreadReplyCapabilities get capabilities;
 
-  /// Loads a post-reply form and preserves its hidden fields in an opaque token.
+  /// Loads data and returns a structured result.
   Future<DataReadResult<ThreadReplyPreparation, ThreadReplyCapabilities>> load(
     ThreadReplyPreparationRequest request,
   );
@@ -521,7 +521,7 @@ abstract interface class ThreadReplyCommand {
   /// Capabilities proved by this source.
   ThreadReplyCapabilities get capabilities;
 
-  /// Executes [submission] without retrying ordinary transport failures.
+  /// Executes the command without exposing source payloads.
   Future<DataCommandResult<ThreadReplyReceipt>> execute(
     ThreadReplySubmission submission,
   );

@@ -16,11 +16,14 @@ The following APIs are covered by the compatibility policy in
   preparation/command contracts, cache policy, cancellation, resource
   contracts, and reference/image helpers;
 - `yamibo_forum_client.dart`: `YamiboForumClient`,
-  `YamiboForumClientBuilder`, `ForumClientConfig`, the standard Dio runtime,
+  `YamiboForumClientBuilder`, `ForumClientConfig`, verified browser identities,
+  the standard and ephemeral Dio runtimes,
   Cookie/session/formhash/cache/WAF/network/resource ports, and logging ports;
 - in-memory store implementations, for tests and ephemeral development use;
-- `ForumClientCachePorts` and `YamiboForumClientBuilder.standardDio` as the
-  supported third-party composition path.
+- `ForumClientCachePorts`, `YamiboForumClientBuilder.standardDio`, and
+  `YamiboForumClientBuilder.ephemeralDio` as supported third-party composition
+  paths, with the ephemeral path explicitly excluded from persistence
+  guarantees.
 
 Command outcome categories, favorite target-state requests/receipts,
 rating/comment/thread-creation/thread-reply/thread-poll-vote/thread-post-edit/image-attachment
@@ -37,12 +40,12 @@ must still gate behavior on the returned capability set and treat `unknown` or
 The following composition APIs are public for advanced integrations but remain
 experimental:
 
-- the complete `yamibo_forum_client_adapters.dart` entry point;
+- the allowlisted `yamibo_forum_client_adapters.dart` entry point;
 - `ForumClientSourcePlan` and direct construction of concrete source plans;
-- concrete Discuz/HTML parsers, mappers, repositories, snapshot codecs, and
-  `ForumClientAdapterFactory`, including `DiscuzAuthenticationAdapter` and
-  the Discuz favorite, rating, comment, thread-creation, thread-reply,
-  thread-poll-vote, thread-post-edit, and image-attachment command adapters;
+- `ForumClientAdapterFactory`, `ThreadDetailHtmlParser`,
+  `ThreadDetailApiMapper`, and `DataParseException`;
+- concrete Discuz/HTML parsers, mappers, repositories, and snapshot codecs
+  used internally by the factory;
 - direct multipart runtime composition through `ForumMultipartClient`;
 - source-specific behavior that has not yet been validated by a second
   production adapter.

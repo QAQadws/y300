@@ -3,25 +3,70 @@ library;
 
 /// Describes where a successful read was assembled.
 enum DataReadOrigin {
+  /// Network.
   network,
+
+  /// Fresh snapshot.
   freshSnapshot,
+
+  /// Cached document fallback.
   cachedDocumentFallback,
+
+  /// Mixed.
   mixed,
+
+  /// Unknown.
   unknown,
 }
 
 /// Describes the weakest known freshness of a successful result.
-enum DataReadFreshness { current, freshCache, staleOrUnknown }
+/// Values describing data read freshness.
+enum DataReadFreshness {
+  /// Current.
+  current,
+
+  /// Fresh cache.
+  freshCache,
+
+  /// Stale or unknown.
+  staleOrUnknown,
+}
 
 /// Whether a source can prove support for a business capability.
-enum DataCapabilitySupport { supported, unsupported, unknown }
+/// Values describing data capability support.
+enum DataCapabilitySupport {
+  /// Supported.
+  supported,
+
+  /// Unsupported.
+  unsupported,
+
+  /// Unknown.
+  unknown,
+}
 
 /// How precisely a source can describe available pages.
-enum PaginationPrecision { exact, directional, totalBased, heuristic, unknown }
+/// Values describing pagination precision.
+enum PaginationPrecision {
+  /// Exact.
+  exact,
+
+  /// Directional.
+  directional,
+
+  /// Total based.
+  totalBased,
+
+  /// Heuristic.
+  heuristic,
+
+  /// Unknown.
+  unknown,
+}
 
 /// Conservative pagination precision composition.
 extension PaginationPrecisionMerge on PaginationPrecision {
-  /// Returns the weaker precision supported by both values.
+  /// Returns the conservative intersection with another value.
   PaginationPrecision intersect(PaginationPrecision other) {
     if (this == other) return this;
     return _rank(this) >= _rank(other) ? this : other;
@@ -38,14 +83,31 @@ extension PaginationPrecisionMerge on PaginationPrecision {
 
 /// Stable, transport-neutral read failure categories.
 enum DataReadFailureKind {
+  /// Network.
   network,
+
+  /// Timeout.
   timeout,
+
+  /// Unauthorized.
   unauthorized,
+
+  /// Server.
   server,
+
+  /// Parse.
   parse,
+
+  /// Business.
   business,
+
+  /// Unsupported.
   unsupported,
+
+  /// Cancelled.
   cancelled,
+
+  /// Unknown.
   unknown,
 }
 
@@ -109,7 +171,7 @@ final class DataCapabilitySet<T extends Enum> {
 
   final Map<T, DataCapabilitySupport> _values;
 
-  /// Returns support for [capability], defaulting to unknown.
+  /// Returns the explicit support state, defaulting to unknown.
   DataCapabilitySupport supportOf(T capability) =>
       _values[capability] ?? DataCapabilitySupport.unknown;
 
@@ -120,7 +182,7 @@ final class DataCapabilitySet<T extends Enum> {
   /// Unmodifiable explicit support values.
   Map<T, DataCapabilitySupport> get values => _values;
 
-  /// Returns the fail-closed intersection with [other].
+  /// Returns the conservative intersection with another value.
   DataCapabilitySet<T> intersect(DataCapabilitySet<T> other) {
     final keys = <T>{..._values.keys, ...other._values.keys};
     return DataCapabilitySet<T>({
@@ -129,7 +191,7 @@ final class DataCapabilitySet<T extends Enum> {
     });
   }
 
-  /// Returns a copy with one support value replaced.
+  /// Returns a copy with one capability support value replaced.
   DataCapabilitySet<T> withSupport(
     T capability,
     DataCapabilitySupport support,

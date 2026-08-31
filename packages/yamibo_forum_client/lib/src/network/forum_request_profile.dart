@@ -1,22 +1,45 @@
 import '../client/forum_client_config.dart';
 
-enum ForumRequestProfileKind { mobileHtml, desktopHtml, discuzApi, resource }
+/// Browser identity profiles used by forum requests.
+enum ForumRequestProfileKind {
+  /// Mobile-layout HTML request.
+  mobileHtml,
 
+  /// Desktop-layout HTML request.
+  desktopHtml,
+
+  /// Discuz mobile API request.
+  discuzApi,
+
+  /// Protected image resource request.
+  resource,
+}
+
+/// Sanitized request headers for one [ForumRequestProfileKind].
 final class ForumRequestProfile {
+  /// Creates a [ForumRequestProfile].
   const ForumRequestProfile({required this.kind, required this.headers});
 
+  /// Identity category represented by these headers.
   final ForumRequestProfileKind kind;
+
+  /// Headers safe to attach to the matching request category.
   final Map<String, String> headers;
 }
 
+/// Resolves browser identity headers at the transport boundary.
 abstract interface class ForumRequestProfileResolver {
+  /// Resolves headers for [kind], optionally using [referer].
   ForumRequestProfile resolve(ForumRequestProfileKind kind, {Uri? referer});
 }
 
+/// Default resolver backed by [ForumClientConfig].
 final class DefaultForumRequestProfileResolver
     implements ForumRequestProfileResolver {
+  /// Creates a [DefaultForumRequestProfileResolver].
   const DefaultForumRequestProfileResolver(this.config);
 
+  /// Client origins and browser identities used to build request headers.
   final ForumClientConfig config;
 
   @override
