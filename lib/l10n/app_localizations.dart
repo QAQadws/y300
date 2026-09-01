@@ -6882,12 +6882,6 @@ abstract class AppLocalizations {
   /// **'保存'**
   String get postEditSave;
 
-  /// No description provided for @postEditSwitchToWebView.
-  ///
-  /// In zh, this message translates to:
-  /// **'切换到网页编辑'**
-  String get postEditSwitchToWebView;
-
   /// No description provided for @postEditSwitchToNative.
   ///
   /// In zh, this message translates to:

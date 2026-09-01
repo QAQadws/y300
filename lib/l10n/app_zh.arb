@@ -1688,7 +1688,6 @@
   "postEditTitle": "编辑帖子",
   "postEditMessageHint": "帖子内容",
   "postEditSave": "保存",
-  "postEditSwitchToWebView": "切换到网页编辑",
   "postEditSwitchToNative": "返回原生编辑",
   "postEditConflictTitle": "服务器内容已变化",
   "postEditConflictBody": "网页编辑或其他设备已经修改了这条帖子，请选择要保留的版本。",

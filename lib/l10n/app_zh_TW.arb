@@ -1323,7 +1323,6 @@
   "postEditTitle": "編輯帖子",
   "postEditMessageHint": "帖子內容",
   "postEditSave": "儲存",
-  "postEditSwitchToWebView": "切換到網頁編輯",
   "postEditSwitchToNative": "返回原生編輯",
   "postEditConflictTitle": "伺服器內容已變更",
   "postEditConflictBody": "網頁編輯或其他裝置已修改這則帖子，請選擇要保留的版本。",

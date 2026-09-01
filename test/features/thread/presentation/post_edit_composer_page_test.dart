@@ -22,6 +22,134 @@ import '../../../test_support/localized_test_app.dart';
 import '../test_support/post_edit_test_support.dart';
 
 void main() {
+  testWidgets('source action edits raw BBCode without opening WebView', (
+    tester,
+  ) async {
+    final results = <Object?>[];
+    final args = _args(
+      _snapshot(
+        message: '[b]服务器正文[/b][attachimg]12[/attachimg]',
+        isFirstPost: true,
+        images: [
+          ThreadPostEditImageAttachment(
+            aid: '12',
+            imageUri: Uri.parse('https://bbs.yamibo.com/12.jpg'),
+            isAssociated: true,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(_buildApp(args: args, results: results));
+    await _openEditor(tester);
+
+    expect(
+      find.byKey(const Key('post-edit-composer-source-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('post-edit-composer-quill-editor')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('post-edit-composer-source-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('post-edit-composer-quill-editor')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('post-edit-composer-source-view')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('post-edit-subject-input')), findsOneWidget);
+    expect(
+      find.byKey(const Key('post-edit-manage-images-button')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('post-edit-manage-images-button')));
+    await tester.pumpAndSettle();
+    expect(find.byType(PostEditAttachmentPanel), findsOneWidget);
+    Navigator.of(tester.element(find.byType(PostEditAttachmentPanel))).pop();
+    await tester.pumpAndSettle();
+
+    final sourceInput = find.byKey(
+      const Key('post-edit-composer-message-input'),
+    );
+    expect(
+      tester.widget<TextField>(sourceInput).controller!.text,
+      contains('12'),
+    );
+
+    await tester.enterText(sourceInput, '[i]源码修改[/i][attachimg]12[/attachimg]');
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(PostEditComposerPage)),
+    );
+    expect(
+      container.read(postEditComposerControllerProvider(args)).value!.message,
+      '[i]源码修改[/i][attachimg]12[/attachimg]',
+    );
+
+    await tester.tap(find.byKey(const Key('post-edit-composer-source-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('post-edit-composer-quill-editor')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('post-edit-composer-source-view')),
+      findsNothing,
+    );
+    expect(
+      container.read(postEditComposerControllerProvider(args)).value!.message,
+      '[i]源码修改[/i][attachimg]12[/attachimg]',
+    );
+  });
+
+  testWidgets('uses and updates the shared composer surface preference', (
+    tester,
+  ) async {
+    final results = <Object?>[];
+    final preferencesRepository = _MemoryComposerPreferencesRepository(
+      const ComposerPreferences(
+        defaultSurface: ComposerSurfacePreference.source,
+        newDraftUseSignature: true,
+      ),
+    );
+    final args = _args(_snapshot(message: '服务器正文'));
+    await tester.pumpWidget(
+      _buildApp(
+        args: args,
+        results: results,
+        preferencesRepository: preferencesRepository,
+      ),
+    );
+    await _openEditor(tester);
+
+    expect(
+      find.byKey(const Key('post-edit-composer-source-view')),
+      findsOneWidget,
+    );
+    final scaffold = tester.widget<Scaffold>(
+      find.byKey(const Key('post-edit-composer-page')),
+    );
+    expect(scaffold.resizeToAvoidBottomInset, isTrue);
+
+    await tester.tap(find.byKey(const Key('post-edit-composer-source-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('post-edit-composer-quill-editor')),
+      findsOneWidget,
+    );
+    expect(
+      preferencesRepository.preferences.defaultSurface,
+      ComposerSurfacePreference.quill,
+    );
+  });
+
   testWidgets('dirty message leaves immediately without a draft dialog', (
     tester,
   ) async {
@@ -224,6 +352,7 @@ void main() {
 Widget _buildApp({
   required PostEditComposerArgs args,
   required List<Object?> results,
+  ComposerPreferencesRepository? preferencesRepository,
 }) {
   return ProviderScope(
     overrides: [
@@ -237,7 +366,7 @@ Widget _buildApp({
         const _AppliedAttachmentDeleteCommand(),
       ),
       composerPreferencesRepositoryProvider.overrideWithValue(
-        const _MemoryComposerPreferencesRepository(),
+        preferencesRepository ?? _MemoryComposerPreferencesRepository(),
       ),
       composerImagePickerProvider.overrideWithValue(const _NoopImagePicker()),
       composerImageUploadCoordinatorProvider.overrideWithValue(
@@ -382,13 +511,19 @@ class _UnusedEditCommand implements ThreadPostEditCommand {
 
 class _MemoryComposerPreferencesRepository
     implements ComposerPreferencesRepository {
-  const _MemoryComposerPreferencesRepository();
+  _MemoryComposerPreferencesRepository([
+    ComposerPreferences? initialPreferences,
+  ]) : preferences = initialPreferences ?? ComposerPreferences.defaults();
+
+  ComposerPreferences preferences;
 
   @override
-  Future<ComposerPreferences> load() async => ComposerPreferences.defaults();
+  Future<ComposerPreferences> load() async => preferences;
 
   @override
-  Future<void> save(ComposerPreferences preferences) async {}
+  Future<void> save(ComposerPreferences preferences) async {
+    this.preferences = preferences;
+  }
 }
 
 class _NoopImagePicker implements ComposerImagePicker {

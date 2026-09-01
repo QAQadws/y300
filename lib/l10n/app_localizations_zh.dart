@@ -4262,9 +4262,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get postEditSave => '保存';
 
   @override
-  String get postEditSwitchToWebView => '切换到网页编辑';
-
-  @override
   String get postEditSwitchToNative => '返回原生编辑';
 
   @override
@@ -8618,9 +8615,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get postEditSave => '儲存';
-
-  @override
-  String get postEditSwitchToWebView => '切換到網頁編輯';
 
   @override
   String get postEditSwitchToNative => '返回原生編輯';

@@ -14,8 +14,6 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_load
 import 'package:y300/features/composer_shared/presentation/widgets/composer_message_editor_surface.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
-import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
@@ -41,7 +39,9 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
   late final TextEditingController _messageController;
   bool _didApplySubject = false;
   bool _didApplyMessage = false;
+  bool _didApplySurfacePreference = false;
   bool _allowRoutePop = false;
+  ComposerSurfacePreference _editorSurface = ComposerSurfacePreference.quill;
   String? _lastAppliedSubject;
   String? _lastAppliedMessage;
 
@@ -66,6 +66,13 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
     final asyncState = ref.watch(provider);
     final controller = ref.read(provider.notifier);
     final state = asyncState.value;
+    final composerPreferences = ref.watch(
+      composerPreferencesControllerProvider,
+    );
+    if (!_didApplySurfacePreference && composerPreferences.hasValue) {
+      _didApplySurfacePreference = true;
+      _editorSurface = composerPreferences.value!.defaultSurface;
+    }
     final stickerGroups = ref
         .watch(stickerGroupsProvider)
         .maybeWhen(
@@ -91,16 +98,27 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
       },
       child: Scaffold(
         key: const Key('post-edit-composer-page'),
-        resizeToAvoidBottomInset: false,
+        resizeToAvoidBottomInset:
+            _editorSurface != ComposerSurfacePreference.quill,
         appBar: AppBar(
           title: Text(l10n.postEditTitle),
           actions: [
             IconButton(
-              key: const Key('post-edit-switch-webview-button'),
-              tooltip: l10n.postEditSwitchToWebView,
-              onPressed: state == null ? null : () => _openWebView(controller),
+              key: const Key('post-edit-composer-source-button'),
+              tooltip: _editorSurface == ComposerSurfacePreference.quill
+                  ? l10n.composerSourceMode
+                  : l10n.composerVisualMode,
+              onPressed: state == null
+                  ? null
+                  : () {
+                      _toggleEditorSurface(state);
+                    },
               style: composerAppBarActionStyle(context),
-              icon: const Icon(Icons.swap_horiz),
+              icon: Icon(
+                _editorSurface == ComposerSurfacePreference.quill
+                    ? Icons.code
+                    : Icons.edit_outlined,
+              ),
             ),
             IconButton(
               key: const Key('post-edit-save-button'),
@@ -123,6 +141,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
             state: value,
             subjectController: _subjectController,
             messageController: _messageController,
+            editorSurface: _editorSurface,
             bbCodeRenderer: ref.watch(forumBbCodeRendererProvider),
             stickerGroups: stickerGroups,
             initialStickerGroupId: lastStickerGroupId,
@@ -243,45 +262,34 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
     _lastAppliedSubject = state.subject;
   }
 
-  Future<void> _openWebView(PostEditComposerController controller) async {
-    final routeFactory = ref.read(forumWebViewRouteFactoryProvider);
-    final result = await Navigator.of(context).push<Object?>(
-      routeFactory(
-        ForumWebViewLaunchConfig(
-          initialUri: widget.args.target.editUri,
-          popOnRootBack: true,
-          purpose: ForumWebViewHostPurpose.postEditFallback,
-          completionTarget: ForumWebViewCompletionTarget(
-            tid: widget.args.target.tid,
-            pid: widget.args.target.pid,
-          ),
-        ),
-      ),
-    );
-    if (!mounted) {
-      return;
+  void _toggleEditorSurface(PostEditComposerState state) {
+    final previous = _editorSurface;
+    final next = previous == ComposerSurfacePreference.quill
+        ? ComposerSurfacePreference.source
+        : ComposerSurfacePreference.quill;
+    setState(() {
+      if (previous == ComposerSurfacePreference.quill) {
+        _messageController.text = state.message;
+        _lastAppliedMessage = state.message;
+      }
+      _editorSurface = next;
+    });
+    unawaited(_persistEditorSurface(previous: previous, next: next));
+  }
+
+  Future<void> _persistEditorSurface({
+    required ComposerSurfacePreference previous,
+    required ComposerSurfacePreference next,
+  }) async {
+    try {
+      await ref
+          .read(composerPreferencesControllerProvider.notifier)
+          .setDefaultSurface(next);
+    } catch (_) {
+      if (mounted && _editorSurface == next) {
+        setState(() => _editorSurface = previous);
+      }
     }
-    await controller.reconcileWebViewReturn();
-    if (!mounted) {
-      return;
-    }
-    final state = ref
-        .read(postEditComposerControllerProvider(widget.args))
-        .value;
-    if (state?.webReturnVerificationState ==
-        PostEditWebReturnVerificationState.changedClean) {
-      _allowRoutePop = true;
-      Navigator.of(context).pop(
-        PostEditRouteResult(
-          target: widget.args.target,
-          outcome: PostEditRouteOutcome.serverChanged,
-          serverMutationPossible: true,
-        ),
-      );
-    }
-    // The route result is intentionally only a hint. The authoritative state
-    // is the fresh edit-form read performed by the controller above.
-    assert(result == null || result is ForumWebViewRouteResult);
   }
 
   void _popDismissed(PostEditComposerState? state) {
@@ -304,6 +312,7 @@ class _PostEditComposerBody extends StatelessWidget {
     required this.state,
     required this.subjectController,
     required this.messageController,
+    required this.editorSurface,
     required this.bbCodeRenderer,
     required this.stickerGroups,
     required this.initialStickerGroupId,
@@ -321,6 +330,7 @@ class _PostEditComposerBody extends StatelessWidget {
   final PostEditComposerState state;
   final TextEditingController subjectController;
   final TextEditingController messageController;
+  final ComposerSurfacePreference editorSurface;
   final ForumBbCodeRenderer bbCodeRenderer;
   final List<StickerGroup> stickerGroups;
   final String? initialStickerGroupId;
@@ -344,7 +354,7 @@ class _PostEditComposerBody extends StatelessWidget {
         )
         .isNotEmpty;
     final editor = ComposerMessageEditorSurface(
-      surface: ComposerSurfacePreference.quill,
+      surface: editorSurface,
       message: state.message,
       sourceController: messageController,
       enabled: !state.isSubmitting,
@@ -373,101 +383,113 @@ class _PostEditComposerBody extends StatelessWidget {
         ),
       ],
     );
+    final leadingChildren = <Widget>[
+      if (state.pendingConflict != null)
+        _PostEditConflictBanner(
+          onUseServerVersion: onUseServerVersion,
+          onKeepLocalVersion: onKeepLocalVersion,
+        ),
+      if (state.webReturnVerificationState ==
+          PostEditWebReturnVerificationState.unconfirmed)
+        ComposerStatusBanner.error(
+          key: const Key('post-edit-unconfirmed-banner'),
+          text: l10n.postEditVerificationFailed,
+          retryButtonKey: const Key('post-edit-retry-verification'),
+          retryLabel: l10n.postEditRetryVerification,
+          onRetry: onRetryVerification,
+        ),
+      if (state.submitState == PostEditSubmitState.submitting)
+        ComposerStatusBanner.info(
+          key: const Key('post-edit-submit-progress-banner'),
+          text: l10n.postEditSubmitInProgress,
+        ),
+      if (state.submitState == PostEditSubmitState.partialSuccess)
+        ComposerStatusBanner.info(
+          key: const Key('post-edit-partial-success-banner'),
+          text: l10n.postEditPartialSuccess,
+        ),
+      if (state.submitState == PostEditSubmitState.unconfirmed)
+        ComposerStatusBanner.error(
+          key: const Key('post-edit-submit-unconfirmed-banner'),
+          text: l10n.postEditSubmitUnconfirmed,
+          retryButtonKey: const Key('post-edit-submit-retry-button'),
+          retryLabel: l10n.postEditRetryVerification,
+          onRetry: onRetryVerification,
+        ),
+      if (state.lastSubmitOutcome ==
+          PostEditSubmitResponseKind.authenticationFailure)
+        ComposerStatusBanner.error(
+          key: const Key('post-edit-authentication-failure-banner'),
+          text: l10n.postEditAuthenticationRequired,
+          retryButtonKey: const Key('post-edit-authentication-retry-button'),
+          retryLabel: l10n.postEditRetryVerification,
+          onRetry: onRetryVerification,
+        ),
+      if (state.lastSubmitOutcome ==
+          PostEditSubmitResponseKind.permissionFailure)
+        ComposerStatusBanner.info(
+          key: const Key('post-edit-permission-failure-banner'),
+          text: l10n.postEditPermissionDenied,
+        ),
+      if (state.lastSubmitOutcome == PostEditSubmitResponseKind.businessFailure)
+        ComposerStatusBanner.info(
+          key: const Key('post-edit-submit-failure-banner'),
+          text: l10n.postEditSubmitFailed,
+        ),
+      if (state.lastAttachmentDeleteOutcome ==
+          PostEditAttachmentDeleteOutcome.notDeleted)
+        ComposerStatusBanner.info(
+          key: const Key('post-edit-delete-image-failed-banner'),
+          text: l10n.postEditDeleteImageFailed,
+        ),
+      if (state.attachmentVerificationUnconfirmed)
+        ComposerStatusBanner.info(
+          key: const Key('post-edit-delete-image-unconfirmed-banner'),
+          text: l10n.postEditDeleteImageUnconfirmed,
+        ),
+      if (deletedReferences)
+        ComposerStatusBanner.info(
+          key: const Key('post-edit-deleted-image-reference-banner'),
+          text: l10n.postEditDeletedImageReferenceWarning,
+        ),
+      if (state.target.isFirstPost) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            ForumContentSpacing.composerPageHorizontal,
+            ForumContentSpacing.composerPageVertical,
+            ForumContentSpacing.composerPageHorizontal,
+            0,
+          ),
+          child: ThreadSubjectField(
+            fieldKey: const Key('post-edit-subject-input'),
+            controller: subjectController,
+            enabled: !state.isSubmitting,
+            onChanged: onSubjectChanged,
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    ];
+    if (editorSurface == ComposerSurfacePreference.quill) {
+      return SafeArea(
+        key: const Key('post-edit-composer-safe-area'),
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ...leadingChildren,
+            Expanded(child: editor),
+          ],
+        ),
+      );
+    }
     return SafeArea(
       key: const Key('post-edit-composer-safe-area'),
-      bottom: false,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: ListView(
         children: [
-          if (state.pendingConflict != null)
-            _PostEditConflictBanner(
-              onUseServerVersion: onUseServerVersion,
-              onKeepLocalVersion: onKeepLocalVersion,
-            ),
-          if (state.webReturnVerificationState ==
-              PostEditWebReturnVerificationState.unconfirmed)
-            ComposerStatusBanner.error(
-              key: const Key('post-edit-unconfirmed-banner'),
-              text: l10n.postEditVerificationFailed,
-              retryButtonKey: const Key('post-edit-retry-verification'),
-              retryLabel: l10n.postEditRetryVerification,
-              onRetry: onRetryVerification,
-            ),
-          if (state.submitState == PostEditSubmitState.submitting)
-            ComposerStatusBanner.info(
-              key: const Key('post-edit-submit-progress-banner'),
-              text: l10n.postEditSubmitInProgress,
-            ),
-          if (state.submitState == PostEditSubmitState.partialSuccess)
-            ComposerStatusBanner.info(
-              key: const Key('post-edit-partial-success-banner'),
-              text: l10n.postEditPartialSuccess,
-            ),
-          if (state.submitState == PostEditSubmitState.unconfirmed)
-            ComposerStatusBanner.error(
-              key: const Key('post-edit-submit-unconfirmed-banner'),
-              text: l10n.postEditSubmitUnconfirmed,
-              retryButtonKey: const Key('post-edit-submit-retry-button'),
-              retryLabel: l10n.postEditRetryVerification,
-              onRetry: onRetryVerification,
-            ),
-          if (state.lastSubmitOutcome ==
-              PostEditSubmitResponseKind.authenticationFailure)
-            ComposerStatusBanner.error(
-              key: const Key('post-edit-authentication-failure-banner'),
-              text: l10n.postEditAuthenticationRequired,
-              retryButtonKey: const Key(
-                'post-edit-authentication-retry-button',
-              ),
-              retryLabel: l10n.postEditRetryVerification,
-              onRetry: onRetryVerification,
-            ),
-          if (state.lastSubmitOutcome ==
-              PostEditSubmitResponseKind.permissionFailure)
-            ComposerStatusBanner.info(
-              key: const Key('post-edit-permission-failure-banner'),
-              text: l10n.postEditPermissionDenied,
-            ),
-          if (state.lastSubmitOutcome ==
-              PostEditSubmitResponseKind.businessFailure)
-            ComposerStatusBanner.info(
-              key: const Key('post-edit-submit-failure-banner'),
-              text: l10n.postEditSubmitFailed,
-            ),
-          if (state.lastAttachmentDeleteOutcome ==
-              PostEditAttachmentDeleteOutcome.notDeleted)
-            ComposerStatusBanner.info(
-              key: const Key('post-edit-delete-image-failed-banner'),
-              text: l10n.postEditDeleteImageFailed,
-            ),
-          if (state.attachmentVerificationUnconfirmed)
-            ComposerStatusBanner.info(
-              key: const Key('post-edit-delete-image-unconfirmed-banner'),
-              text: l10n.postEditDeleteImageUnconfirmed,
-            ),
-          if (deletedReferences)
-            ComposerStatusBanner.info(
-              key: const Key('post-edit-deleted-image-reference-banner'),
-              text: l10n.postEditDeletedImageReferenceWarning,
-            ),
-          if (state.target.isFirstPost) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                ForumContentSpacing.composerPageHorizontal,
-                ForumContentSpacing.composerPageVertical,
-                ForumContentSpacing.composerPageHorizontal,
-                0,
-              ),
-              child: ThreadSubjectField(
-                fieldKey: const Key('post-edit-subject-input'),
-                controller: subjectController,
-                enabled: !state.isSubmitting,
-                onChanged: onSubjectChanged,
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          Expanded(child: editor),
+          ...leadingChildren,
+          editor,
+          const SizedBox(height: ForumContentSpacing.composerPageVertical),
         ],
       ),
     );
