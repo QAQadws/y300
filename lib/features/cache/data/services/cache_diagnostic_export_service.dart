@@ -5,19 +5,31 @@ import 'package:path/path.dart' as p;
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
+import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
 
 class JsonCacheDiagnosticExportService implements CacheDiagnosticExportService {
   const JsonCacheDiagnosticExportService({
     required DownloadStorageService storageService,
+    required StorageRootAccessGate storageRootAccessGate,
     DateTime Function()? now,
   }) : _storageService = storageService,
+       _storageRootAccessGate = storageRootAccessGate,
        _now = now ?? DateTime.now;
 
   final DownloadStorageService _storageService;
+  final StorageRootAccessGate _storageRootAccessGate;
   final DateTime Function() _now;
 
   @override
   Future<CacheDiagnosticExportResult> exportUsageReport(
+    StorageUsageReport report,
+  ) {
+    return _storageRootAccessGate.runWithAccess(
+      () => _exportUsageReport(report),
+    );
+  }
+
+  Future<CacheDiagnosticExportResult> _exportUsageReport(
     StorageUsageReport report,
   ) async {
     final exportedAt = _now();

@@ -1007,6 +1007,15 @@
   "moreStorageCustomLocation": "自定义位置",
   "moreStorageChooseDirectory": "选择自定义目录",
   "moreStorageRestoreDefault": "恢复默认",
+  "moreStorageMigrationTitle": "存储位置迁移",
+  "moreStorageMigrationInProgress": "正在将离线内容迁移到默认存储位置",
+  "moreStorageMigrationDataSafe": "迁移完成前仍会保留并使用原位置的数据，请勿移动相关文件。",
+  "moreStorageMigrationInsufficientSpace": "默认存储位置空间不足。原位置的数据仍然可用，请释放空间后重试。",
+  "moreStorageMigrationLocationUnavailable": "无法访问原位置或默认存储位置。原位置的数据仍然保留，请检查存储权限后重试。",
+  "moreStorageMigrationConflict": "默认存储位置存在冲突内容或目录结构无法安全迁移。原位置的数据仍然可用，请处理冲突后重试。",
+  "moreStorageMigrationFailed": "存储位置迁移未完成。原位置的数据仍然可用，请稍后重试。",
+  "moreStorageMigrationCleanupPending": "默认存储位置已经生效，但原位置的已验证副本尚未清理完成。缓存功能可正常使用。",
+  "moreStorageMigrationRetry": "重试迁移",
   "moreStorageMaximumCache": "最大缓存：{size}",
   "@moreStorageMaximumCache": {
     "placeholders": {"size": {"type": "String"}}

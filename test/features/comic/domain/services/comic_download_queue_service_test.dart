@@ -12,8 +12,41 @@ import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
+import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
+import 'package:y300/features/storage/domain/storage_root_migration.dart';
 
 void main() {
+  test('start and enqueue wait for shared-root readiness', () async {
+    final repository = _MemoryQueueRepository();
+    final gate = _BlockingStorageRootAccessGate();
+    final refreshBus = LibraryShelfRefreshBus();
+    addTearDown(refreshBus.dispose);
+    final service = ComicDownloadQueueService(
+      queueRepository: repository,
+      downloadService: _RecordingDownloadService(),
+      libraryStateRepository: _RecordingLibraryStateRepository(),
+      shelfRefreshBus: refreshBus,
+      storageRootAccessGate: gate,
+    );
+    addTearDown(service.dispose);
+
+    final start = service.start();
+    final enqueue = service.enqueueTargets(<ComicDownloadTarget>[
+      _target('episode:1'),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.recoverInterruptedCalls, 0);
+    expect(repository.entries, isEmpty);
+
+    gate.release();
+    await start;
+    await enqueue;
+    await service.drainForTest();
+
+    expect(repository.recoverInterruptedCalls, 1);
+  });
+
   test(
     'runs FIFO, keeps failures, and continues with the next entry',
     () async {
@@ -35,6 +68,7 @@ void main() {
         downloadService: downloadService,
         libraryStateRepository: stateRepository,
         shelfRefreshBus: refreshBus,
+        storageRootAccessGate: const _ReadyStorageRootAccessGate(),
         nowProvider: () => now,
       );
       addTearDown(service.dispose);
@@ -78,6 +112,7 @@ void main() {
       downloadService: downloadService,
       libraryStateRepository: stateRepository,
       shelfRefreshBus: refreshBus,
+      storageRootAccessGate: const _ReadyStorageRootAccessGate(),
       nowProvider: () => now,
     );
     addTearDown(service.dispose);
@@ -117,6 +152,7 @@ void main() {
       downloadService: downloadService,
       libraryStateRepository: stateRepository,
       shelfRefreshBus: refreshBus,
+      storageRootAccessGate: const _ReadyStorageRootAccessGate(),
       nowProvider: () => now,
     );
     addTearDown(service.dispose);
@@ -145,6 +181,7 @@ void main() {
       downloadService: downloadService,
       libraryStateRepository: stateRepository,
       shelfRefreshBus: refreshBus,
+      storageRootAccessGate: const _ReadyStorageRootAccessGate(),
       nowProvider: () => now,
     );
     addTearDown(service.dispose);
@@ -176,6 +213,7 @@ ComicDownloadTarget _target(String episodeId) {
 final class _MemoryQueueRepository implements ComicDownloadQueueRepository {
   final List<ComicDownloadQueueEntry> _entries = <ComicDownloadQueueEntry>[];
   var _nextId = 1;
+  var recoverInterruptedCalls = 0;
 
   List<ComicDownloadQueueEntry> get entries => List.unmodifiable(_entries);
 
@@ -231,6 +269,7 @@ final class _MemoryQueueRepository implements ComicDownloadQueueRepository {
 
   @override
   Future<void> recoverInterrupted({required DateTime now}) async {
+    recoverInterruptedCalls += 1;
     _entries.removeWhere(
       (entry) => entry.status == ComicDownloadQueueStatus.cancelRequested,
     );
@@ -375,6 +414,52 @@ final class _MemoryQueueRepository implements ComicDownloadQueueRepository {
   }
 
   int _indexOf(int id) => _entries.indexWhere((entry) => entry.id == id);
+}
+
+final class _ReadyStorageRootAccessGate implements StorageRootAccessGate {
+  const _ReadyStorageRootAccessGate();
+
+  static const _result = StorageRootMigrationResult(
+    disposition: StorageRootMigrationDisposition.notRequired,
+    status: StorageRootMigrationStatus(
+      phase: StorageRootMigrationPhase.completed,
+      blocksStorageAccess: false,
+    ),
+  );
+
+  @override
+  Future<StorageRootMigrationResult> ensureReady() async => _result;
+
+  @override
+  Future<StorageRootMigrationResult> retry() async => _result;
+
+  @override
+  Future<T> runWithAccess<T>(Future<T> Function() operation) => operation();
+}
+
+final class _BlockingStorageRootAccessGate implements StorageRootAccessGate {
+  final Completer<void> _ready = Completer<void>();
+
+  void release() {
+    if (!_ready.isCompleted) {
+      _ready.complete();
+    }
+  }
+
+  @override
+  Future<StorageRootMigrationResult> ensureReady() async {
+    await _ready.future;
+    return _ReadyStorageRootAccessGate._result;
+  }
+
+  @override
+  Future<StorageRootMigrationResult> retry() => ensureReady();
+
+  @override
+  Future<T> runWithAccess<T>(Future<T> Function() operation) async {
+    await ensureReady();
+    return operation();
+  }
 }
 
 ComicDownloadQueueEntry _copyEntry(

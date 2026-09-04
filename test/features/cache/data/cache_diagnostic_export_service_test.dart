@@ -7,6 +7,8 @@ import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
+import '../../storage/test_support/ready_storage_root_access_gate.dart';
+
 void main() {
   test('exports storage usage report as diagnostics json', () async {
     final root = await io.Directory.systemTemp.createTemp(
@@ -19,6 +21,7 @@ void main() {
     });
     final service = JsonCacheDiagnosticExportService(
       storageService: _FakeDownloadStorageService(root.path),
+      storageRootAccessGate: const ReadyStorageRootAccessGate(),
       now: () => DateTime.utc(2026, 6, 27, 12),
     );
     final report = StorageUsageReport.fromSections(

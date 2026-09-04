@@ -168,6 +168,7 @@ final cacheDiagnosticExportServiceProvider =
     Provider<CacheDiagnosticExportService>((ref) {
       return JsonCacheDiagnosticExportService(
         storageService: ref.watch(downloadStorageServiceProvider),
+        storageRootAccessGate: ref.watch(storageRootAccessGateProvider),
       );
     });
 
@@ -219,6 +220,7 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
       ),
       DownloadStorageAccountingAdapter(
         storageService: ref.watch(downloadStorageServiceProvider),
+        storageRootAccessGate: ref.watch(storageRootAccessGateProvider),
       ),
       const LibraryMetadataStorageAccountingAdapter(),
       HistoryStorageAccountingAdapter(

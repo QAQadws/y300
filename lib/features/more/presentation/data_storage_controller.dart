@@ -98,6 +98,29 @@ final dataStorageSettingsRepositoryProvider =
       );
     });
 
+final dataStoragePathPreviewProvider =
+    FutureProvider.autoDispose<DataStoragePathPreview>((ref) async {
+      final repository = ref.watch(dataStorageSettingsRepositoryProvider);
+      final values = await Future.wait<Object?>(<Future<Object?>>[
+        repository.getDefaultStoragePath(),
+        repository.getCustomStoragePath(),
+      ]);
+      return DataStoragePathPreview(
+        defaultStoragePath: values[0]! as String,
+        customStoragePath: values[1] as String?,
+      );
+    });
+
+final class DataStoragePathPreview {
+  const DataStoragePathPreview({
+    required this.defaultStoragePath,
+    required this.customStoragePath,
+  });
+
+  final String defaultStoragePath;
+  final String? customStoragePath;
+}
+
 final dataStorageControllerProvider =
     AsyncNotifierProvider.autoDispose<
       DataStorageController,

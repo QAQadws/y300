@@ -3881,6 +3881,60 @@ abstract class AppLocalizations {
   /// **'恢复默认'**
   String get moreStorageRestoreDefault;
 
+  /// No description provided for @moreStorageMigrationTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'存储位置迁移'**
+  String get moreStorageMigrationTitle;
+
+  /// No description provided for @moreStorageMigrationInProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在将离线内容迁移到默认存储位置'**
+  String get moreStorageMigrationInProgress;
+
+  /// No description provided for @moreStorageMigrationDataSafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'迁移完成前仍会保留并使用原位置的数据，请勿移动相关文件。'**
+  String get moreStorageMigrationDataSafe;
+
+  /// No description provided for @moreStorageMigrationInsufficientSpace.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认存储位置空间不足。原位置的数据仍然可用，请释放空间后重试。'**
+  String get moreStorageMigrationInsufficientSpace;
+
+  /// No description provided for @moreStorageMigrationLocationUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法访问原位置或默认存储位置。原位置的数据仍然保留，请检查存储权限后重试。'**
+  String get moreStorageMigrationLocationUnavailable;
+
+  /// No description provided for @moreStorageMigrationConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认存储位置存在冲突内容或目录结构无法安全迁移。原位置的数据仍然可用，请处理冲突后重试。'**
+  String get moreStorageMigrationConflict;
+
+  /// No description provided for @moreStorageMigrationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'存储位置迁移未完成。原位置的数据仍然可用，请稍后重试。'**
+  String get moreStorageMigrationFailed;
+
+  /// No description provided for @moreStorageMigrationCleanupPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认存储位置已经生效，但原位置的已验证副本尚未清理完成。缓存功能可正常使用。'**
+  String get moreStorageMigrationCleanupPending;
+
+  /// No description provided for @moreStorageMigrationRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试迁移'**
+  String get moreStorageMigrationRetry;
+
   /// No description provided for @moreStorageMaximumCache.
   ///
   /// In zh, this message translates to:

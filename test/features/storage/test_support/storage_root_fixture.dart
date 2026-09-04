@@ -121,7 +121,7 @@ final class StorageRootFixture {
   }
 
   Future<void> copyManagedSourceToTarget() async {
-    for (final name in const <String>['comics', 'novels']) {
+    for (final name in const <String>['comics', 'novels', 'diagnostics']) {
       final source = io.Directory(p.join(sourceRoot.path, name));
       if (await source.exists()) {
         await _copyDirectory(
@@ -140,6 +140,18 @@ final class StorageRootFixture {
     return io.File(
       p.join(sourceRoot.path, 'unrelated-user-file.txt'),
     ).writeAsString('must not migrate');
+  }
+
+  Future<void> writeDiagnosticsExport() async {
+    final diagnostics = io.Directory(p.join(sourceRoot.path, 'diagnostics'));
+    await diagnostics.create(recursive: true);
+    await io.File(
+      p.join(diagnostics.path, 'cache-diagnostics-fixture.json'),
+    ).writeAsString(
+      jsonEncode(<String, Object?>{'schemaVersion': 1, 'totalBytes': 0}),
+      encoding: utf8,
+      flush: true,
+    );
   }
 
   Future<void> writeTargetConflict() async {

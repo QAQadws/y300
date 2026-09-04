@@ -236,6 +236,37 @@ void main() {
     expect(location.customRoot, fixture.sourceRoot.path);
   });
 
+  test(
+    'known diagnostics exports migrate without weakening root safety',
+    () async {
+      await fixture.populateMixedSource(includeTransientFiles: false);
+      await fixture.writeDiagnosticsExport();
+      final location = _FakeStorageLocationRepository(
+        customRoot: fixture.sourceRoot.path,
+        defaultRoot: fixture.targetRoot.path,
+      );
+
+      final result = await _coordinator(
+        location,
+        checkpoints: _MemoryCheckpointStore(),
+      ).migrateToDefault();
+
+      expect(result.disposition, StorageRootMigrationDisposition.migrated);
+      expect(
+        await fixture.targetContains(
+          p.join('diagnostics', 'cache-diagnostics-fixture.json'),
+        ),
+        isTrue,
+      );
+      expect(
+        await fixture.sourceContains(
+          p.join('diagnostics', 'cache-diagnostics-fixture.json'),
+        ),
+        isFalse,
+      );
+    },
+  );
+
   test('link-like entity inside managed storage fails closed', () async {
     await fixture.populateMixedSource(includeTransientFiles: false);
     final location = _FakeStorageLocationRepository(

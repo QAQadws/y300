@@ -573,7 +573,7 @@ final class TransactionalStorageRootMigrationCoordinator
         entries.add(await _manifestEntry(sourceRoot, entity.path));
         continue;
       }
-      if (name == 'comics' || name == 'novels') {
+      if (name == 'comics' || name == 'novels' || name == 'diagnostics') {
         if (entity.type != StorageRootMigrationEntityType.directory) {
           throw const _StorageRootMigrationAbort(
             StorageRootMigrationFailureCode.unsafeEntity,

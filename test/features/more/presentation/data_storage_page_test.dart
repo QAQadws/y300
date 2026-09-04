@@ -18,7 +18,11 @@ import 'package:y300/features/more/presentation/data_storage_page.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
+import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
+import 'package:y300/features/storage/domain/storage_root_migration.dart';
 import 'package:y300/features/more/presentation/data_storage_formatters.dart';
+
+import '../../storage/test_support/ready_storage_root_access_gate.dart';
 
 void main() {
   testWidgets('DataStoragePage builds dark theme chrome', (tester) async {
@@ -31,6 +35,9 @@ void main() {
       ProviderScope(
         overrides: [
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          storageRootAccessGateProvider.overrideWithValue(
+            const ReadyStorageRootAccessGate(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           cacheMaintenanceServiceProvider.overrideWithValue(
             _FakeCacheMaintenanceService(),
@@ -59,14 +66,9 @@ void main() {
       find.byKey(const Key('data-storage-cache-max-slider')),
       findsOneWidget,
     );
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('data-storage-choose-directory-button')),
-      120,
-      scrollable: find.byType(Scrollable).first,
-    );
     expect(
       find.byKey(const Key('data-storage-choose-directory-button')),
-      findsOneWidget,
+      findsNothing,
     );
   });
 
@@ -82,6 +84,9 @@ void main() {
       ProviderScope(
         overrides: [
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          storageRootAccessGateProvider.overrideWithValue(
+            const ReadyStorageRootAccessGate(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           cacheMaintenanceServiceProvider.overrideWithValue(
             _FakeCacheMaintenanceService(),
@@ -114,7 +119,7 @@ void main() {
   });
 
   testWidgets(
-    'DataStoragePage renders default and effective storage directory',
+    'DataStoragePage hides path controls after migration is complete',
     (tester) async {
       final repo = _FakeDataStorageSettingsRepository(
         defaultPath: '/tmp/default-downloads',
@@ -125,6 +130,9 @@ void main() {
         ProviderScope(
           overrides: [
             dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+            storageRootAccessGateProvider.overrideWithValue(
+              const ReadyStorageRootAccessGate(),
+            ),
             imageCacheServiceProvider.overrideWithValue(
               _FakeImageCacheService(),
             ),
@@ -148,12 +156,23 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const Key('data-storage-default-directory')),
-        findsOneWidget,
+        find.byKey(const Key('data-storage-effective-directory')),
+        findsNothing,
       );
-      expect(find.text('/tmp/default-downloads'), findsNWidgets(2));
+      expect(
+        find.byKey(const Key('data-storage-default-directory')),
+        findsNothing,
+      );
       expect(
         find.byKey(const Key('data-storage-custom-directory')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('data-storage-choose-directory-button')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('data-storage-restore-default-button')),
         findsNothing,
       );
     },
@@ -171,6 +190,9 @@ void main() {
       ProviderScope(
         overrides: [
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          storageRootAccessGateProvider.overrideWithValue(
+            const ReadyStorageRootAccessGate(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           cacheMaintenanceServiceProvider.overrideWithValue(
             _FakeCacheMaintenanceService(clearableBytes: 1024),
@@ -356,85 +378,21 @@ void main() {
     );
   });
 
-  testWidgets(
-    'DataStoragePage chooses custom storage directory and shows hint',
-    (tester) async {
-      final repo = _FakeDataStorageSettingsRepository(
-        defaultPath: '/tmp/default-downloads',
-        customPath: null,
-        pickedPath: '/mnt/y300-downloads',
-      );
-      final storage = _FakeDownloadStorageService(repo: repo);
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-            imageCacheServiceProvider.overrideWithValue(
-              _FakeImageCacheService(),
-            ),
-            cacheMaintenanceServiceProvider.overrideWithValue(
-              _FakeCacheMaintenanceService(),
-            ),
-            storageAccountingServiceProvider.overrideWithValue(
-              _FakeStorageAccountingService(),
-            ),
-            cacheDiagnosticExportServiceProvider.overrideWithValue(
-              _FakeCacheDiagnosticExportService(),
-            ),
-            downloadStorageServiceProvider.overrideWithValue(storage),
-          ],
-          child: const LocalizedTestApp(home: DataStoragePage()),
-        ),
-      );
-
-      await tester.pumpAndSettle();
-      final chooseButton = find.byKey(
-        const Key('data-storage-choose-directory-button'),
-      );
-      await tester.scrollUntilVisible(
-        chooseButton,
-        120,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.ensureVisible(chooseButton);
-      await _tapVisibleCenter(tester, chooseButton);
-      await tester.pumpAndSettle();
-
-      final customDirectory = find.byKey(
-        const Key('data-storage-custom-directory'),
-      );
-      await tester.scrollUntilVisible(
-        customDirectory,
-        -120,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(customDirectory, findsOneWidget);
-      expect(find.text('/mnt/y300-downloads'), findsAtLeastNWidgets(1));
-      expect(storage.prepareRootCalls, 2);
-
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('data-storage-hint-text')),
-        120,
-        scrollable: find.byType(Scrollable).first,
-      );
-
-      expect(find.text('存储位置已更新'), findsOneWidget);
-    },
-  );
-
-  testWidgets('DataStoragePage restores default storage directory', (
+  testWidgets('DataStoragePage does not mount custom path mutation controls', (
     tester,
   ) async {
     final repo = _FakeDataStorageSettingsRepository(
       defaultPath: '/tmp/default-downloads',
-      customPath: '/mnt/y300-downloads',
+      customPath: null,
+      pickedPath: '/mnt/y300-downloads',
     );
-
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          storageRootAccessGateProvider.overrideWithValue(
+            const ReadyStorageRootAccessGate(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           cacheMaintenanceServiceProvider.overrideWithValue(
             _FakeCacheMaintenanceService(),
@@ -454,37 +412,158 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    final restoreButton = find.byKey(
-      const Key('data-storage-restore-default-button'),
+    expect(
+      find.byKey(const Key('data-storage-choose-directory-button')),
+      findsNothing,
     );
-    await tester.scrollUntilVisible(
-      restoreButton,
-      120,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.ensureVisible(restoreButton);
-    await _tapVisibleCenter(tester, restoreButton);
-    await tester.pumpAndSettle();
     expect(repo.customPath, isNull);
+  });
 
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('data-storage-default-directory')),
-      -120,
-      scrollable: find.byType(Scrollable).first,
+  testWidgets('DataStoragePage keeps legacy custom path controls hidden', (
+    tester,
+  ) async {
+    final repo = _FakeDataStorageSettingsRepository(
+      defaultPath: '/tmp/default-downloads',
+      customPath: '/mnt/y300-downloads',
     );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          storageRootAccessGateProvider.overrideWithValue(
+            const ReadyStorageRootAccessGate(),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          cacheMaintenanceServiceProvider.overrideWithValue(
+            _FakeCacheMaintenanceService(),
+          ),
+          storageAccountingServiceProvider.overrideWithValue(
+            _FakeStorageAccountingService(),
+          ),
+          cacheDiagnosticExportServiceProvider.overrideWithValue(
+            _FakeCacheDiagnosticExportService(),
+          ),
+          downloadStorageServiceProvider.overrideWithValue(
+            _FakeDownloadStorageService(repo: repo),
+          ),
+        ],
+        child: const LocalizedTestApp(home: DataStoragePage()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(repo.customPath, '/mnt/y300-downloads');
     expect(
       find.byKey(const Key('data-storage-custom-directory')),
       findsNothing,
     );
-    expect(find.text('/tmp/default-downloads'), findsAtLeastNWidgets(1));
+    expect(
+      find.byKey(const Key('data-storage-restore-default-button')),
+      findsNothing,
+    );
+  });
 
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('data-storage-hint-text')),
-      120,
-      scrollable: find.byType(Scrollable).first,
+  testWidgets('blocked migration keeps paths read-only and can be retried', (
+    tester,
+  ) async {
+    final repo = _FakeDataStorageSettingsRepository(
+      defaultPath: '/tmp/default-downloads',
+      customPath: '/mnt/y300-downloads',
+    );
+    final gate = _FixedStorageRootAccessGate(
+      initial: _blockedMigrationResult,
+      retryResult: ReadyStorageRootAccessGate.result,
     );
 
-    expect(find.text('已恢复默认存储位置'), findsOneWidget);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          storageRootAccessGateProvider.overrideWithValue(gate),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          cacheMaintenanceServiceProvider.overrideWithValue(
+            _FakeCacheMaintenanceService(),
+          ),
+          storageAccountingServiceProvider.overrideWithValue(
+            _FakeStorageAccountingService(),
+          ),
+          cacheDiagnosticExportServiceProvider.overrideWithValue(
+            _FakeCacheDiagnosticExportService(),
+          ),
+          downloadStorageServiceProvider.overrideWithValue(
+            _FakeDownloadStorageService(repo: repo),
+          ),
+        ],
+        child: const LocalizedTestApp(home: DataStoragePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('data-storage-migration-card')),
+      findsOneWidget,
+    );
+    expect(find.text('/mnt/y300-downloads'), findsOneWidget);
+    expect(find.text('/tmp/default-downloads'), findsOneWidget);
+    expect(
+      find.byKey(const Key('data-storage-choose-directory-button')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const Key('data-storage-migration-retry')));
+    await tester.pumpAndSettle();
+
+    expect(gate.retryCalls, 1);
+    expect(find.byKey(const Key('data-storage-migration-card')), findsNothing);
+  });
+
+  testWidgets('cleanup pending does not block the other storage controls', (
+    tester,
+  ) async {
+    final repo = _FakeDataStorageSettingsRepository(
+      defaultPath: '/tmp/default-downloads',
+      customPath: null,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          storageRootAccessGateProvider.overrideWithValue(
+            _FixedStorageRootAccessGate(
+              initial: _cleanupPendingMigrationResult,
+              retryResult: ReadyStorageRootAccessGate.result,
+            ),
+          ),
+          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+          cacheMaintenanceServiceProvider.overrideWithValue(
+            _FakeCacheMaintenanceService(),
+          ),
+          storageAccountingServiceProvider.overrideWithValue(
+            _FakeStorageAccountingService(),
+          ),
+          cacheDiagnosticExportServiceProvider.overrideWithValue(
+            _FakeCacheDiagnosticExportService(),
+          ),
+          downloadStorageServiceProvider.overrideWithValue(
+            _FakeDownloadStorageService(repo: repo),
+          ),
+        ],
+        child: const LocalizedTestApp(home: DataStoragePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('data-storage-migration-card')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('data-storage-cache-max-slider')),
+      findsOneWidget,
+    );
+    expect(find.text('/tmp/default-downloads'), findsNothing);
   });
 
   testWidgets('DataStoragePage reloads usage report', (tester) async {
@@ -510,6 +589,9 @@ void main() {
       ProviderScope(
         overrides: [
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          storageRootAccessGateProvider.overrideWithValue(
+            const ReadyStorageRootAccessGate(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           cacheMaintenanceServiceProvider.overrideWithValue(maintenance),
           storageAccountingServiceProvider.overrideWithValue(accounting),
@@ -569,6 +651,9 @@ void main() {
       ProviderScope(
         overrides: [
           dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
+          storageRootAccessGateProvider.overrideWithValue(
+            const ReadyStorageRootAccessGate(),
+          ),
           imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
           cacheMaintenanceServiceProvider.overrideWithValue(
             _FakeCacheMaintenanceService(),
@@ -625,22 +710,6 @@ StorageUsageReport _usageReport({
   );
 }
 
-Future<void> _tapVisibleCenter(WidgetTester tester, Finder finder) async {
-  final renderBox = tester.renderObject<RenderBox>(finder);
-  final topLeft = renderBox.localToGlobal(Offset.zero);
-  final bottomRight = renderBox.localToGlobal(
-    renderBox.size.bottomRight(Offset.zero),
-  );
-  final rootSize = tester.view.physicalSize / tester.view.devicePixelRatio;
-  final visibleLeft = topLeft.dx.clamp(0.0, rootSize.width).toDouble();
-  final visibleTop = topLeft.dy.clamp(0.0, rootSize.height).toDouble();
-  final visibleRight = bottomRight.dx.clamp(0.0, rootSize.width).toDouble();
-  final visibleBottom = bottomRight.dy.clamp(0.0, rootSize.height).toDouble();
-  await tester.tapAt(
-    Offset((visibleLeft + visibleRight) / 2, (visibleTop + visibleBottom) / 2),
-  );
-}
-
 class _FakeDataStorageSettingsRepository
     implements DataStorageSettingsRepository {
   _FakeDataStorageSettingsRepository({
@@ -680,6 +749,47 @@ class _FakeDataStorageSettingsRepository
     setCacheMaxBytesCalls += 1;
     _maxBytes = bytes;
   }
+}
+
+const _blockedMigrationResult = StorageRootMigrationResult(
+  disposition: StorageRootMigrationDisposition.blocked,
+  status: StorageRootMigrationStatus(
+    phase: StorageRootMigrationPhase.blocked,
+    failureCode: StorageRootMigrationFailureCode.targetConflict,
+    blocksStorageAccess: true,
+  ),
+);
+
+const _cleanupPendingMigrationResult = StorageRootMigrationResult(
+  disposition: StorageRootMigrationDisposition.cleanupPending,
+  status: StorageRootMigrationStatus(
+    phase: StorageRootMigrationPhase.cleanupPending,
+    failureCode: StorageRootMigrationFailureCode.cleanupFailed,
+    blocksStorageAccess: false,
+  ),
+);
+
+final class _FixedStorageRootAccessGate implements StorageRootAccessGate {
+  _FixedStorageRootAccessGate({
+    required this.initial,
+    required this.retryResult,
+  });
+
+  final StorageRootMigrationResult initial;
+  final StorageRootMigrationResult retryResult;
+  int retryCalls = 0;
+
+  @override
+  Future<StorageRootMigrationResult> ensureReady() async => initial;
+
+  @override
+  Future<StorageRootMigrationResult> retry() async {
+    retryCalls += 1;
+    return retryResult;
+  }
+
+  @override
+  Future<T> runWithAccess<T>(Future<T> Function() operation) => operation();
 }
 
 class _FakeDownloadStorageService implements DownloadStorageService {

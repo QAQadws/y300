@@ -2406,6 +2406,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreStorageRestoreDefault => '恢复默认';
 
   @override
+  String get moreStorageMigrationTitle => '存储位置迁移';
+
+  @override
+  String get moreStorageMigrationInProgress => '正在将离线内容迁移到默认存储位置';
+
+  @override
+  String get moreStorageMigrationDataSafe => '迁移完成前仍会保留并使用原位置的数据，请勿移动相关文件。';
+
+  @override
+  String get moreStorageMigrationInsufficientSpace =>
+      '默认存储位置空间不足。原位置的数据仍然可用，请释放空间后重试。';
+
+  @override
+  String get moreStorageMigrationLocationUnavailable =>
+      '无法访问原位置或默认存储位置。原位置的数据仍然保留，请检查存储权限后重试。';
+
+  @override
+  String get moreStorageMigrationConflict =>
+      '默认存储位置存在冲突内容或目录结构无法安全迁移。原位置的数据仍然可用，请处理冲突后重试。';
+
+  @override
+  String get moreStorageMigrationFailed => '存储位置迁移未完成。原位置的数据仍然可用，请稍后重试。';
+
+  @override
+  String get moreStorageMigrationCleanupPending =>
+      '默认存储位置已经生效，但原位置的已验证副本尚未清理完成。缓存功能可正常使用。';
+
+  @override
+  String get moreStorageMigrationRetry => '重试迁移';
+
+  @override
   String moreStorageMaximumCache(String size) {
     return '最大缓存：$size';
   }
@@ -6758,6 +6789,37 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreStorageRestoreDefault => '恢復預設';
+
+  @override
+  String get moreStorageMigrationTitle => '儲存位置遷移';
+
+  @override
+  String get moreStorageMigrationInProgress => '正在將離線內容遷移到預設儲存位置';
+
+  @override
+  String get moreStorageMigrationDataSafe => '遷移完成前仍會保留並使用原位置的資料，請勿移動相關檔案。';
+
+  @override
+  String get moreStorageMigrationInsufficientSpace =>
+      '預設儲存位置空間不足。原位置的資料仍然可用，請釋放空間後重試。';
+
+  @override
+  String get moreStorageMigrationLocationUnavailable =>
+      '無法存取原位置或預設儲存位置。原位置的資料仍然保留，請檢查儲存權限後重試。';
+
+  @override
+  String get moreStorageMigrationConflict =>
+      '預設儲存位置存在衝突內容或目錄結構無法安全遷移。原位置的資料仍然可用，請處理衝突後重試。';
+
+  @override
+  String get moreStorageMigrationFailed => '儲存位置遷移尚未完成。原位置的資料仍然可用，請稍後重試。';
+
+  @override
+  String get moreStorageMigrationCleanupPending =>
+      '預設儲存位置已經生效，但原位置的已驗證副本尚未清理完成。快取功能可正常使用。';
+
+  @override
+  String get moreStorageMigrationRetry => '重試遷移';
 
   @override
   String moreStorageMaximumCache(String size) {
