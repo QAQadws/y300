@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/presentation/services/library_detail_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -121,10 +122,10 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                             strokeWidth: 2.2,
                           ),
                         )
-                      : Icon(
+                      : FaIcon(
                           chapter.isDownloaded
-                              ? Icons.check_circle_outline
-                              : Icons.arrow_circle_down,
+                              ? FontAwesomeIcons.solidCircleDown
+                              : FontAwesomeIcons.circleDown,
                           size: downloadIconSize,
                         ),
                 ),

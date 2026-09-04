@@ -61,10 +61,7 @@ void main() {
     expect(items.single.coverLocalPath, isNull);
     expect(items.single.coverAsset?.assetId, 'comic/comic-1/source');
     expect(items.single.coverAsset?.kind, LibraryCoverAssetKind.source);
-    expect(
-      items.single.coverAsset?.sourceUrl,
-      'https://img.test/comic-1.jpg',
-    );
+    expect(items.single.coverAsset?.sourceUrl, 'https://img.test/comic-1.jpg');
     expect(repository.lastCoverLocalPath, isNull);
   });
 
@@ -297,7 +294,6 @@ void main() {
         SelectionActionIds.assignCategory,
         SelectionActionIds.markAllRead,
         SelectionActionIds.markAllUnread,
-        SelectionActionIds.download,
         SelectionActionIds.unfavorite,
       ],
     );

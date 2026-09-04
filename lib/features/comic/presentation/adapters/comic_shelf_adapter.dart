@@ -91,6 +91,10 @@ class ComicShelfAdapter
   final bool _supportsBulkDownload;
   final bool _supportsUnfavorite;
 
+  // Bulk caching remains callable for compatibility and recovery, while the
+  // current shelf presentation deliberately omits its selection entry.
+  bool get _showsBulkDownloadSelectionAction => false;
+
   @override
   LibraryModuleKey get moduleKey => LibraryModuleKey.comic;
 
@@ -139,7 +143,7 @@ class ComicShelfAdapter
         ),
       );
     }
-    if (_supportsBulkDownload) {
+    if (_supportsBulkDownload && _showsBulkDownloadSelectionAction) {
       actions.add(
         const SelectionAction(
           id: SelectionActionIds.download,

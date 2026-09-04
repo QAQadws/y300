@@ -147,7 +147,7 @@ class _MorePageState extends ConsumerState<MorePage> {
             builder: (context, snapshot, _) {
               return ListTile(
                 key: const Key('more-download-queue-entry'),
-                leading: const Icon(Icons.downloading_outlined),
+                leading: const Icon(Icons.offline_pin_outlined),
                 title: Text(l10n.moreDownloadQueue),
                 subtitle: Text(_downloadQueueSummary(l10n, snapshot)),
                 onTap: () {

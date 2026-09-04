@@ -319,7 +319,7 @@ final class TransactionalStorageRootMigrationCoordinator
     }
 
     try {
-      final manifest = await _buildManifest(sourceRoot, strictRoot: true);
+      final manifest = await _buildManifest(sourceRoot);
       await _ensureTargetBaseline(
         targetRoot: targetRoot,
         sourceManifest: manifest,
@@ -372,7 +372,7 @@ final class TransactionalStorageRootMigrationCoordinator
         failure: StorageRootMigrationFailureCode.sourceUnavailable,
       );
       await _ensureTargetDirectory(targetRoot);
-      final manifest = await _buildManifest(sourceRoot, strictRoot: true);
+      final manifest = await _buildManifest(sourceRoot);
       final missingBytes = await _validateTargetAndCountMissing(
         manifest: manifest,
         targetRoot: targetRoot,
@@ -477,7 +477,7 @@ final class TransactionalStorageRootMigrationCoordinator
     required String targetRoot,
   }) async {
     try {
-      final manifest = await _buildManifest(sourceRoot, strictRoot: false);
+      final manifest = await _buildManifest(sourceRoot);
       for (final entry in manifest.entries) {
         final targetPath = _targetPath(targetRoot, entry.relativePath);
         if (await _fileOperations.type(targetPath) !=
@@ -544,10 +544,7 @@ final class TransactionalStorageRootMigrationCoordinator
     );
   }
 
-  Future<_StorageRootManifest> _buildManifest(
-    String sourceRoot, {
-    required bool strictRoot,
-  }) async {
+  Future<_StorageRootManifest> _buildManifest(String sourceRoot) async {
     final sourceType = await _fileOperations.type(sourceRoot);
     if (sourceType != StorageRootMigrationEntityType.directory) {
       throw const _StorageRootMigrationAbort(
@@ -588,11 +585,9 @@ final class TransactionalStorageRootMigrationCoordinator
         );
         continue;
       }
-      if (strictRoot) {
-        throw const _StorageRootMigrationAbort(
-          StorageRootMigrationFailureCode.unsupportedLayout,
-        );
-      }
+      // A custom root may be a shared public folder such as Movies. Only the
+      // well-known Y300 entries are owned by this migration; unrelated
+      // top-level content must remain untouched and must not block the move.
     }
     entries.sort(
       (left, right) => left.relativePath.compareTo(right.relativePath),
@@ -758,7 +753,7 @@ final class TransactionalStorageRootMigrationCoordinator
     required String targetRoot,
     required _StorageRootManifest originalManifest,
   }) async {
-    final currentManifest = await _buildManifest(sourceRoot, strictRoot: true);
+    final currentManifest = await _buildManifest(sourceRoot);
     if (!originalManifest.hasSameContent(currentManifest)) {
       throw const _StorageRootMigrationAbort(
         StorageRootMigrationFailureCode.sourceChanged,

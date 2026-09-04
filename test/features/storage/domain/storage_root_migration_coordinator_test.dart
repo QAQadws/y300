@@ -215,26 +215,53 @@ void main() {
     expect(location.customRoot, fixture.sourceRoot.path);
   });
 
-  test('unknown source top-level entity fails closed', () async {
-    await fixture.populateMixedSource(includeTransientFiles: false);
-    await fixture.writeUnknownTopLevelEntity();
-    final location = _FakeStorageLocationRepository(
-      customRoot: fixture.sourceRoot.path,
-      defaultRoot: fixture.targetRoot.path,
-    );
+  test(
+    'unmanaged source top-level content stays in a shared custom root',
+    () async {
+      await fixture.populateMixedSource(includeTransientFiles: false);
+      await fixture.writeUnknownTopLevelEntity();
+      final userMovie = io.File(
+        p.join(fixture.sourceRoot.path, 'user-movies', 'movie.mp4'),
+      );
+      await userMovie.parent.create(recursive: true);
+      await userMovie.writeAsString('unmanaged user content');
+      final location = _FakeStorageLocationRepository(
+        customRoot: fixture.sourceRoot.path,
+        defaultRoot: fixture.targetRoot.path,
+      );
+      final checkpoints = _MemoryCheckpointStore(
+        StorageRootMigrationCheckpoint(
+          phase: StorageRootMigrationPhase.blocked,
+          sourceRoot: fixture.sourceRoot.path,
+          targetRoot: fixture.targetRoot.path,
+          failureCode: StorageRootMigrationFailureCode.unsupportedLayout,
+        ),
+      );
 
-    final result = await _coordinator(
-      location,
-      checkpoints: _MemoryCheckpointStore(),
-    ).migrateToDefault();
+      final result = await _coordinator(
+        location,
+        checkpoints: checkpoints,
+      ).migrateToDefault();
 
-    expect(result.disposition, StorageRootMigrationDisposition.blocked);
-    expect(
-      result.status.failureCode,
-      StorageRootMigrationFailureCode.unsupportedLayout,
-    );
-    expect(location.customRoot, fixture.sourceRoot.path);
-  });
+      expect(result.disposition, StorageRootMigrationDisposition.migrated);
+      expect(result.status.phase, StorageRootMigrationPhase.completed);
+      expect(checkpoints.value, StorageRootMigrationCheckpoint.completed);
+      expect(location.customRoot, isNull);
+      expect(
+        await fixture.targetContains(
+          p.join(fixture.relativeComicDirectory, 'meta.json'),
+        ),
+        isTrue,
+      );
+      expect(await fixture.sourceContains('unrelated-user-file.txt'), isTrue);
+      expect(await userMovie.exists(), isTrue);
+      expect(await fixture.targetContains('unrelated-user-file.txt'), isFalse);
+      expect(
+        await fixture.targetContains(p.join('user-movies', 'movie.mp4')),
+        isFalse,
+      );
+    },
+  );
 
   test(
     'known diagnostics exports migrate without weakening root safety',

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -138,7 +139,10 @@ void main() {
     expect(find.textContaining('Pid:5001'), findsOneWidget);
 
     expect(find.text('继续'), findsOneWidget);
-    expect(find.byIcon(Icons.file_download), findsAtLeastNWidgets(1));
+    expect(
+      _findFaIcon(FontAwesomeIcons.solidCircleDown),
+      findsAtLeastNWidgets(1),
+    );
     expect(find.byIcon(Icons.filter_list), findsAtLeastNWidgets(1));
     expect(find.byKey(const Key('unified-detail-tag-strip')), findsOneWidget);
     expect(find.text('韩国漫画'), findsOneWidget);
@@ -160,7 +164,7 @@ void main() {
       find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
     );
     await tester.pumpAndSettle();
-    expect(find.text('删除该章节下载'), findsOneWidget);
+    expect(find.text('删除该章节缓存'), findsOneWidget);
   });
 
   testWidgets(
@@ -763,7 +767,7 @@ void main() {
       find.byKey(const Key('unified-detail-header-section')),
       findsOneWidget,
     );
-    expect(find.byType(PopupMenuButton<String>), findsAtLeastNWidgets(2));
+    expect(find.byType(PopupMenuButton<String>), findsOneWidget);
 
     await tester.tap(
       find.descendant(
@@ -1001,8 +1005,8 @@ void main() {
         ),
         findsNothing,
       );
-      expect(find.text('已下载'), findsNothing);
-      expect(find.byTooltip('已下载，点击删除下载'), findsOneWidget);
+      expect(find.text('已缓存'), findsNothing);
+      expect(find.byTooltip('已缓存，点击删除缓存'), findsOneWidget);
       expect(find.text('已读'), findsNothing);
     },
   );
@@ -1191,7 +1195,7 @@ void main() {
     );
     expect(
       find.byKey(const Key('unified-detail-appbar-download')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('unified-detail-appbar-filter')),
@@ -1307,6 +1311,8 @@ void main() {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
     await tester.pumpAndSettle();
 
+    expect(_findFaIcon(FontAwesomeIcons.circleDown), findsOneWidget);
+    expect(_findFaIcon(FontAwesomeIcons.solidCircleDown), findsNothing);
     expect(
       find.byKey(
         const ValueKey<String>('unified-detail-chapter-bookmark-indicator-e1'),
@@ -1637,7 +1643,7 @@ void main() {
     expect(adapter.isRead, isFalse);
   });
 
-  testWidgets('UnifiedDetailPage keeps download action without status badge', (
+  testWidgets('UnifiedDetailPage keeps chapter cache action without badge', (
     tester,
   ) async {
     final adapter = _FakeDetailAdapter();
@@ -1655,7 +1661,7 @@ void main() {
 
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.byTooltip('下载该章节'),
+      find.byTooltip('缓存该章节'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
@@ -1669,7 +1675,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.tap(find.byTooltip('下载该章节'));
+    await tester.tap(find.byTooltip('缓存该章节'));
     await tester.pumpAndSettle();
 
     expect(adapter.isDownloaded, isTrue);
@@ -1680,10 +1686,12 @@ void main() {
       ),
       findsNothing,
     );
-    expect(find.text('已下载'), findsNothing);
-    expect(find.byTooltip('已下载，点击删除下载'), findsOneWidget);
+    expect(find.text('已缓存'), findsNothing);
+    expect(find.byTooltip('已缓存，点击删除缓存'), findsOneWidget);
+    expect(_findFaIcon(FontAwesomeIcons.solidCircleDown), findsOneWidget);
+    expect(_findFaIcon(FontAwesomeIcons.circleDown), findsNothing);
 
-    await tester.tap(find.byTooltip('已下载，点击删除下载'));
+    await tester.tap(find.byTooltip('已缓存，点击删除缓存'));
     await tester.pumpAndSettle();
 
     expect(adapter.isDownloaded, isFalse);
@@ -1719,20 +1727,20 @@ void main() {
 
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.byTooltip('下载该章节'),
+        find.byTooltip('缓存该章节'),
         300,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('下载该章节'));
+      await tester.tap(find.byTooltip('缓存该章节'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.byTooltip('正在下载'), findsOneWidget);
+      expect(find.byTooltip('正在缓存'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(find.text('已加入下载队列'), findsNothing);
+      expect(find.text('已加入缓存队列'), findsNothing);
 
       adapter.complete('e1');
       refreshBus.notify(
@@ -1743,8 +1751,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip('正在下载'), findsNothing);
-      expect(find.byTooltip('已下载，点击删除下载'), findsOneWidget);
+      expect(find.byTooltip('正在缓存'), findsNothing);
+      expect(find.byTooltip('已缓存，点击删除缓存'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
     },
   );
@@ -2071,17 +2079,17 @@ void main() {
 
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.byTooltip('下载该章节'),
+        find.byTooltip('缓存该章节'),
         300,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('下载该章节'));
+      await tester.tap(find.byTooltip('缓存该章节'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('下载失败'), findsOneWidget);
+      expect(find.textContaining('缓存失败'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(
         find.byKey(
@@ -2184,25 +2192,25 @@ void main() {
 
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.byTooltip('已下载，点击删除下载'),
+        find.byTooltip('已缓存，点击删除缓存'),
         300,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('已下载，点击删除下载'));
+      await tester.tap(find.byTooltip('已缓存，点击删除缓存'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('删除下载失败'), findsOneWidget);
+      expect(find.textContaining('删除缓存失败'), findsOneWidget);
       expect(
         find.byKey(
           const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
         ),
         findsNothing,
       );
-      expect(find.text('已下载'), findsNothing);
-      expect(find.byTooltip('已下载，点击删除下载'), findsOneWidget);
+      expect(find.text('已缓存'), findsNothing);
+      expect(find.byTooltip('已缓存，点击删除缓存'), findsOneWidget);
     },
   );
 }
@@ -2750,4 +2758,10 @@ LinearGradient _headerGradient(WidgetTester tester) {
   );
   final decoration = gradientBox.decoration as BoxDecoration;
   return decoration.gradient! as LinearGradient;
+}
+
+Finder _findFaIcon(FaIconData icon) {
+  return find.byWidgetPredicate(
+    (widget) => widget is FaIcon && widget.icon == icon.data,
+  );
 }

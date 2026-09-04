@@ -49,11 +49,11 @@ void main() {
       ),
     );
 
-    expect(find.text('正在下载'), findsOneWidget);
+    expect(find.text('正在缓存'), findsOneWidget);
     expect(find.text('第 1 话 · 2/30'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.text('第 2 话 · 第 1 位'), findsOneWidget);
-    expect(find.text('第 3 话 · 下载失败，请重试'), findsOneWidget);
+    expect(find.text('第 3 话 · 缓存失败，请重试'), findsOneWidget);
 
     await tester.tap(
       find.byKey(const ValueKey<String>('comic-download-cancel-1')),
@@ -92,7 +92,56 @@ void main() {
     );
 
     expect(find.byKey(const Key('comic-download-queue-empty')), findsOneWidget);
-    expect(find.text('暂无下载任务'), findsOneWidget);
+    expect(find.text('暂无缓存任务'), findsOneWidget);
+  });
+
+  testWidgets('supports Traditional Chinese cache terms at large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final snapshot = ValueNotifier<ComicDownloadQueueSnapshot>(
+      ComicDownloadQueueSnapshot(
+        entries: <ComicDownloadQueueEntry>[
+          _entry(
+            id: 1,
+            episodeTitle: '第一話',
+            status: ComicDownloadQueueStatus.running,
+            completed: 2,
+            total: 30,
+          ),
+        ],
+      ),
+    );
+    addTearDown(snapshot.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          comicDownloadQueueProvider.overrideWithValue(
+            _RecordingQueue(snapshot),
+          ),
+          comicDownloadQueueSnapshotProvider.overrideWithValue(snapshot),
+        ],
+        child: LocalizedTestApp(
+          locale: const Locale('zh', 'TW'),
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(360, 720),
+              textScaler: TextScaler.linear(1.6),
+            ),
+            child: const ComicDownloadQueuePage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('快取佇列'), findsOneWidget);
+    expect(find.text('正在快取'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
 
