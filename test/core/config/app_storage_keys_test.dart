@@ -22,6 +22,10 @@ void main() {
       TechnicalStorageKeys.searchLastSearchAtMs,
       'search.last_search_at_ms',
     );
+    expect(
+      TechnicalStorageKeys.downloadStorageRootMigrationV1,
+      'storage.download_root_migration.v1',
+    );
   });
 
   test('typed registry owns scalar, legacy, and snapshot names', () {
