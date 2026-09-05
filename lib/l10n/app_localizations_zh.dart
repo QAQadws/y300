@@ -2373,9 +2373,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreDebugHtmlRendererSubtitle => '验证复杂正文 HTML 的原生渲染';
 
   @override
-  String get moreStorageTitle => '数据与存储';
-
-  @override
   String moreStorageLoadFailed(String error) {
     return '加载数据与存储设置失败：$error';
   }
@@ -6756,9 +6753,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreDebugHtmlRendererSubtitle => '驗證複雜正文 HTML 的原生渲染';
-
-  @override
-  String get moreStorageTitle => '資料與儲存空間';
 
   @override
   String moreStorageLoadFailed(String error) {

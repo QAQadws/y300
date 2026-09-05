@@ -468,7 +468,6 @@
   "moreDebugQuillComposerSubtitle": "驗證所見即所得的 Discuz BBCode 轉換",
   "moreDebugHtmlRenderer": "HTML 正文渲染原型",
   "moreDebugHtmlRendererSubtitle": "驗證複雜正文 HTML 的原生渲染",
-  "moreStorageTitle": "資料與儲存空間",
   "moreStorageLoadFailed": "載入資料與儲存設定失敗：{error}",
   "moreStorageClearCache": "清理快取",
   "moreStorageClear": "清理",

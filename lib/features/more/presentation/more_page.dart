@@ -19,7 +19,7 @@ import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/more/data/about_providers.dart';
 import 'package:y300/features/more/presentation/about_page.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
-import 'package:y300/features/more/presentation/data_storage_page.dart';
+import 'package:y300/features/more/presentation/data_storage_sheet.dart';
 import 'package:y300/features/more/presentation/more_debug_tools.dart';
 import 'package:y300/features/more/presentation/more_text_resolver.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
@@ -134,13 +134,7 @@ class _MorePageState extends ConsumerState<MorePage> {
             leading: const Icon(Icons.storage_outlined),
             title: Text(l10n.moreDataAndStorage),
             subtitle: Text(l10n.moreDataAndStorageSubtitle),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const DataStoragePage(),
-                ),
-              );
-            },
+            onTap: () => _showDataStorageSheet(context),
           ),
           ValueListenableBuilder<ComicDownloadQueueSnapshot>(
             valueListenable: downloadQueueSnapshot,
@@ -212,6 +206,15 @@ class _MorePageState extends ConsumerState<MorePage> {
     return showModalBottomSheet<void>(
       context: context,
       builder: (_) => const AppearanceSettingsSheet(),
+    );
+  }
+
+  // 内容含迁移状态卡与总览，可能超过默认半屏高度，允许抽屉撑满。
+  Future<void> _showDataStorageSheet(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const DataStorageSheet(),
     );
   }
 

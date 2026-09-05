@@ -9,8 +9,8 @@ import 'package:y300/features/storage/domain/storage_root_migration.dart';
 import 'package:y300/features/storage/presentation/storage_root_migration_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
-class DataStoragePage extends ConsumerWidget {
-  const DataStoragePage({super.key});
+class DataStorageSheet extends ConsumerWidget {
+  const DataStorageSheet({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -19,9 +19,8 @@ class DataStoragePage extends ConsumerWidget {
     final pathPreview = ref.watch(dataStoragePathPreviewProvider);
     final l10n = AppLocalizations.of(context);
 
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.moreStorageTitle)),
-      body: migration.when(
+    return SafeArea(
+      child: migration.when(
         loading: () =>
             _StorageMigrationOnlyView(pathPreview: pathPreview, l10n: l10n),
         error: (_, _) => _StorageMigrationOnlyView(
@@ -32,19 +31,23 @@ class DataStoragePage extends ConsumerWidget {
               ref.read(storageRootMigrationControllerProvider.notifier).retry(),
         ),
         data: (migrationResult) => state.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                l10n.moreStorageLoadFailed('$error'),
-                textAlign: TextAlign.center,
-              ),
+          // 抽屉按内容收缩，加载态用固定高度避免撑满全屏。
+          loading: () => const SizedBox(
+            height: 96,
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (error, _) => Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              l10n.moreStorageLoadFailed('$error'),
+              textAlign: TextAlign.center,
             ),
           ),
           data: (viewState) {
             return ListView(
-              padding: const EdgeInsets.all(16),
+              key: const Key('data-storage-sheet'),
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               children: [
                 if (migrationResult.status.phase ==
                         StorageRootMigrationPhase.blocked ||
@@ -117,14 +120,6 @@ class DataStoragePage extends ConsumerWidget {
                   key: const Key('data-storage-cache-hint'),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (viewState.notice != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    MoreTextResolver.storageNotice(l10n, viewState.notice!),
-                    key: const Key('data-storage-hint-text'),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
               ],
             );
           },
@@ -151,6 +146,7 @@ class _StorageMigrationOnlyView extends StatelessWidget {
   Widget build(BuildContext context) {
     final paths = pathPreview.value;
     return ListView(
+      shrinkWrap: true,
       padding: const EdgeInsets.all(16),
       children: [
         _StorageMigrationStatusCard(

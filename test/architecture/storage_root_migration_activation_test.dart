@@ -60,8 +60,8 @@ void main() {
   });
 
   test('custom path UI is hidden while rollback implementation remains', () {
-    final page = File(
-      'lib/features/more/presentation/data_storage_page.dart',
+    final sheet = File(
+      'lib/features/more/presentation/data_storage_sheet.dart',
     ).readAsStringSync();
     final controller = File(
       'lib/features/more/presentation/data_storage_controller.dart',
@@ -70,8 +70,8 @@ void main() {
       'lib/features/more/data/data_storage_settings_repository.dart',
     ).readAsStringSync();
 
-    expect(page, isNot(contains('chooseStorageDirectory()')));
-    expect(page, isNot(contains('restoreDefaultStorageDirectory()')));
+    expect(sheet, isNot(contains('chooseStorageDirectory()')));
+    expect(sheet, isNot(contains('restoreDefaultStorageDirectory()')));
     expect(controller, contains('chooseStorageDirectory()'));
     expect(controller, contains('restoreDefaultStorageDirectory()'));
     expect(repository, contains('pickDirectory()'));

@@ -3,65 +3,35 @@ import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/more/data/data_storage_settings_repository.dart';
 import 'package:y300/features/more/presentation/data_storage_controller.dart';
-import 'package:y300/features/more/presentation/data_storage_page.dart';
+import 'package:y300/features/more/presentation/data_storage_formatters.dart';
+import 'package:y300/features/more/presentation/data_storage_sheet.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
 import 'package:y300/features/storage/domain/storage_root_migration.dart';
-import 'package:y300/features/more/presentation/data_storage_formatters.dart';
 
 import '../../storage/test_support/ready_storage_root_access_gate.dart';
 
 void main() {
-  testWidgets('DataStoragePage builds dark theme chrome', (tester) async {
-    final repo = _FakeDataStorageSettingsRepository(
-      defaultPath: '/tmp/default-downloads',
-      customPath: null,
+  testWidgets('DataStorageSheet builds dark theme chrome', (tester) async {
+    await pumpDataStorageSheet(
+      tester,
+      overrides: _overridesWith(),
     );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-          storageRootAccessGateProvider.overrideWithValue(
-            const ReadyStorageRootAccessGate(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          cacheMaintenanceServiceProvider.overrideWithValue(
-            _FakeCacheMaintenanceService(),
-          ),
-          storageAccountingServiceProvider.overrideWithValue(
-            _FakeStorageAccountingService(),
-          ),
-          cacheDiagnosticExportServiceProvider.overrideWithValue(
-            _FakeCacheDiagnosticExportService(),
-          ),
-          downloadStorageServiceProvider.overrideWithValue(
-            _FakeDownloadStorageService(repo: repo),
-          ),
-        ],
-        child: LocalizedTestApp(
-          theme: AppTheme.dark(),
-          home: const DataStoragePage(),
-        ),
-      ),
-    );
-
-    await tester.pumpAndSettle();
-
-    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.byKey(const Key('data-storage-sheet')), findsOneWidget);
     expect(
       find.byKey(const Key('data-storage-cache-max-slider')),
       findsOneWidget,
@@ -72,7 +42,7 @@ void main() {
     );
   });
 
-  testWidgets('DataStoragePage commits cache limit once after slider release', (
+  testWidgets('DataStorageSheet commits cache limit once after slider release', (
     tester,
   ) async {
     final repo = _FakeDataStorageSettingsRepository(
@@ -80,31 +50,10 @@ void main() {
       customPath: null,
     );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-          storageRootAccessGateProvider.overrideWithValue(
-            const ReadyStorageRootAccessGate(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          cacheMaintenanceServiceProvider.overrideWithValue(
-            _FakeCacheMaintenanceService(),
-          ),
-          storageAccountingServiceProvider.overrideWithValue(
-            _FakeStorageAccountingService(),
-          ),
-          cacheDiagnosticExportServiceProvider.overrideWithValue(
-            _FakeCacheDiagnosticExportService(),
-          ),
-          downloadStorageServiceProvider.overrideWithValue(
-            _FakeDownloadStorageService(repo: repo),
-          ),
-        ],
-        child: const LocalizedTestApp(home: DataStoragePage()),
-      ),
+    await pumpDataStorageSheet(
+      tester,
+      overrides: _overridesWith(repo: repo),
     );
-    await tester.pumpAndSettle();
 
     final slider = find.byKey(const Key('data-storage-cache-max-slider'));
     final gesture = await tester.startGesture(tester.getCenter(slider));
@@ -119,41 +68,17 @@ void main() {
   });
 
   testWidgets(
-    'DataStoragePage hides path controls after migration is complete',
+    'DataStorageSheet hides path controls after migration is complete',
     (tester) async {
       final repo = _FakeDataStorageSettingsRepository(
         defaultPath: '/tmp/default-downloads',
         customPath: null,
       );
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-            storageRootAccessGateProvider.overrideWithValue(
-              const ReadyStorageRootAccessGate(),
-            ),
-            imageCacheServiceProvider.overrideWithValue(
-              _FakeImageCacheService(),
-            ),
-            cacheMaintenanceServiceProvider.overrideWithValue(
-              _FakeCacheMaintenanceService(),
-            ),
-            storageAccountingServiceProvider.overrideWithValue(
-              _FakeStorageAccountingService(),
-            ),
-            cacheDiagnosticExportServiceProvider.overrideWithValue(
-              _FakeCacheDiagnosticExportService(),
-            ),
-            downloadStorageServiceProvider.overrideWithValue(
-              _FakeDownloadStorageService(repo: repo),
-            ),
-          ],
-          child: const LocalizedTestApp(home: DataStoragePage()),
-        ),
+      await pumpDataStorageSheet(
+        tester,
+        overrides: _overridesWith(repo: repo),
       );
-
-      await tester.pumpAndSettle();
 
       expect(
         find.byKey(const Key('data-storage-effective-directory')),
@@ -178,7 +103,7 @@ void main() {
     },
   );
 
-  testWidgets('DataStoragePage separates clearable cache from total storage', (
+  testWidgets('DataStorageSheet separates clearable cache from total storage', (
     tester,
   ) async {
     final repo = _FakeDataStorageSettingsRepository(
@@ -186,128 +111,110 @@ void main() {
       customPath: null,
     );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-          storageRootAccessGateProvider.overrideWithValue(
-            const ReadyStorageRootAccessGate(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          cacheMaintenanceServiceProvider.overrideWithValue(
-            _FakeCacheMaintenanceService(clearableBytes: 1024),
-          ),
-          storageAccountingServiceProvider.overrideWithValue(
-            _FakeStorageAccountingService(
-              report: _usageReport(
-                sections: const <StorageUsageSection>[
-                  StorageUsageSection(
-                    bucket: StorageBucket.imageCache,
+    await pumpDataStorageSheet(
+      tester,
+      overrides: _overridesWith(
+        repo: repo,
+        maintenance: _FakeCacheMaintenanceService(clearableBytes: 1024),
+        accounting: _FakeStorageAccountingService(
+          report: _usageReport(
+            sections: const <StorageUsageSection>[
+              StorageUsageSection(
+                bucket: StorageBucket.imageCache,
+                labelRef: StorageUsageLabelRef(
+                  kind: StorageUsageLabelKind.bucket,
+                  code: 'image_cache',
+                ),
+                bytes: 4096,
+                clearable: true,
+                categories: <StorageUsageCategory>[
+                  StorageUsageCategory(
+                    id: 'clearable',
                     labelRef: StorageUsageLabelRef(
-                      kind: StorageUsageLabelKind.bucket,
-                      code: 'image_cache',
+                      kind: StorageUsageLabelKind.imageCategory,
+                      code: 'clearable',
                     ),
-                    bytes: 4096,
+                    bytes: 1024,
                     clearable: true,
-                    categories: <StorageUsageCategory>[
-                      StorageUsageCategory(
-                        id: 'clearable',
-                        labelRef: StorageUsageLabelRef(
-                          kind: StorageUsageLabelKind.imageCategory,
-                          code: 'clearable',
-                        ),
-                        bytes: 1024,
-                        clearable: true,
-                        protected: false,
-                      ),
-                      StorageUsageCategory(
-                        id: 'sticky',
-                        labelRef: StorageUsageLabelRef(
-                          kind: StorageUsageLabelKind.imageCategory,
-                          code: 'sticky',
-                        ),
-                        bytes: 2048,
-                        clearable: false,
-                        protected: false,
-                      ),
-                      StorageUsageCategory(
-                        id: 'protected',
-                        labelRef: StorageUsageLabelRef(
-                          kind: StorageUsageLabelKind.imageCategory,
-                          code: 'protected',
-                        ),
-                        bytes: 1024,
-                        clearable: false,
-                        protected: true,
-                      ),
-                    ],
-                    slices: <StorageUsageSlice>[
-                      StorageUsageSlice(
-                        id: 'image:thread',
-                        labelRef: StorageUsageLabelRef(
-                          kind: StorageUsageLabelKind.imageRole,
-                          code: 'thread_inline',
-                        ),
-                        bytes: 1024,
-                        protected: false,
-                      ),
-                    ],
+                    protected: false,
                   ),
-                  StorageUsageSection(
-                    bucket: StorageBucket.libraryMetadata,
+                  StorageUsageCategory(
+                    id: 'sticky',
                     labelRef: StorageUsageLabelRef(
-                      kind: StorageUsageLabelKind.bucket,
-                      code: 'library_metadata',
+                      kind: StorageUsageLabelKind.imageCategory,
+                      code: 'sticky',
                     ),
                     bytes: 2048,
                     clearable: false,
+                    protected: false,
                   ),
-                  StorageUsageSection(
-                    bucket: StorageBucket.history,
+                  StorageUsageCategory(
+                    id: 'protected',
                     labelRef: StorageUsageLabelRef(
-                      kind: StorageUsageLabelKind.bucket,
-                      code: 'history',
+                      kind: StorageUsageLabelKind.imageCategory,
+                      code: 'protected',
                     ),
                     bytes: 1024,
                     clearable: false,
-                    slices: <StorageUsageSlice>[
-                      StorageUsageSlice(
-                        id: 'history:entries',
-                        labelRef: StorageUsageLabelRef(
-                          kind: StorageUsageLabelKind.historyKind,
-                          code: 'entries',
-                          count: 12,
-                        ),
-                        bytes: 0,
-                        protected: true,
-                      ),
-                    ],
+                    protected: true,
                   ),
-                  StorageUsageSection(
-                    bucket: StorageBucket.download,
+                ],
+                slices: <StorageUsageSlice>[
+                  StorageUsageSlice(
+                    id: 'image:thread',
                     labelRef: StorageUsageLabelRef(
-                      kind: StorageUsageLabelKind.bucket,
-                      code: 'download',
+                      kind: StorageUsageLabelKind.imageRole,
+                      code: 'thread_inline',
                     ),
-                    bytes: 1024 * 1024,
-                    clearable: false,
+                    bytes: 1024,
+                    protected: false,
                   ),
                 ],
               ),
-            ),
+              StorageUsageSection(
+                bucket: StorageBucket.libraryMetadata,
+                labelRef: StorageUsageLabelRef(
+                  kind: StorageUsageLabelKind.bucket,
+                  code: 'library_metadata',
+                ),
+                bytes: 2048,
+                clearable: false,
+              ),
+              StorageUsageSection(
+                bucket: StorageBucket.history,
+                labelRef: StorageUsageLabelRef(
+                  kind: StorageUsageLabelKind.bucket,
+                  code: 'history',
+                ),
+                bytes: 1024,
+                clearable: false,
+                slices: <StorageUsageSlice>[
+                  StorageUsageSlice(
+                    id: 'history:entries',
+                    labelRef: StorageUsageLabelRef(
+                      kind: StorageUsageLabelKind.historyKind,
+                      code: 'entries',
+                      count: 12,
+                    ),
+                    bytes: 0,
+                    protected: true,
+                  ),
+                ],
+              ),
+              StorageUsageSection(
+                bucket: StorageBucket.download,
+                labelRef: StorageUsageLabelRef(
+                  kind: StorageUsageLabelKind.bucket,
+                  code: 'download',
+                ),
+                bytes: 1024 * 1024,
+                clearable: false,
+              ),
+            ],
           ),
-          cacheDiagnosticExportServiceProvider.overrideWithValue(
-            _FakeCacheDiagnosticExportService(),
-          ),
-          downloadStorageServiceProvider.overrideWithValue(
-            _FakeDownloadStorageService(repo: repo),
-          ),
-        ],
-        child: const LocalizedTestApp(home: DataStoragePage()),
+        ),
       ),
     );
-
-    await tester.pumpAndSettle();
 
     expect(
       find.byKey(const Key('data-storage-usage-overview')),
@@ -378,7 +285,7 @@ void main() {
     );
   });
 
-  testWidgets('DataStoragePage does not mount custom path mutation controls', (
+  testWidgets('DataStorageSheet does not mount custom path mutation controls', (
     tester,
   ) async {
     final repo = _FakeDataStorageSettingsRepository(
@@ -386,32 +293,11 @@ void main() {
       customPath: null,
       pickedPath: '/mnt/y300-downloads',
     );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-          storageRootAccessGateProvider.overrideWithValue(
-            const ReadyStorageRootAccessGate(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          cacheMaintenanceServiceProvider.overrideWithValue(
-            _FakeCacheMaintenanceService(),
-          ),
-          storageAccountingServiceProvider.overrideWithValue(
-            _FakeStorageAccountingService(),
-          ),
-          cacheDiagnosticExportServiceProvider.overrideWithValue(
-            _FakeCacheDiagnosticExportService(),
-          ),
-          downloadStorageServiceProvider.overrideWithValue(
-            _FakeDownloadStorageService(repo: repo),
-          ),
-        ],
-        child: const LocalizedTestApp(home: DataStoragePage()),
-      ),
+    await pumpDataStorageSheet(
+      tester,
+      overrides: _overridesWith(repo: repo),
     );
 
-    await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('data-storage-choose-directory-button')),
       findsNothing,
@@ -419,7 +305,7 @@ void main() {
     expect(repo.customPath, isNull);
   });
 
-  testWidgets('DataStoragePage keeps legacy custom path controls hidden', (
+  testWidgets('DataStorageSheet keeps legacy custom path controls hidden', (
     tester,
   ) async {
     final repo = _FakeDataStorageSettingsRepository(
@@ -427,32 +313,11 @@ void main() {
       customPath: '/mnt/y300-downloads',
     );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-          storageRootAccessGateProvider.overrideWithValue(
-            const ReadyStorageRootAccessGate(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          cacheMaintenanceServiceProvider.overrideWithValue(
-            _FakeCacheMaintenanceService(),
-          ),
-          storageAccountingServiceProvider.overrideWithValue(
-            _FakeStorageAccountingService(),
-          ),
-          cacheDiagnosticExportServiceProvider.overrideWithValue(
-            _FakeCacheDiagnosticExportService(),
-          ),
-          downloadStorageServiceProvider.overrideWithValue(
-            _FakeDownloadStorageService(repo: repo),
-          ),
-        ],
-        child: const LocalizedTestApp(home: DataStoragePage()),
-      ),
+    await pumpDataStorageSheet(
+      tester,
+      overrides: _overridesWith(repo: repo),
     );
 
-    await tester.pumpAndSettle();
     expect(repo.customPath, '/mnt/y300-downloads');
     expect(
       find.byKey(const Key('data-storage-custom-directory')),
@@ -476,29 +341,10 @@ void main() {
       retryResult: ReadyStorageRootAccessGate.result,
     );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-          storageRootAccessGateProvider.overrideWithValue(gate),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          cacheMaintenanceServiceProvider.overrideWithValue(
-            _FakeCacheMaintenanceService(),
-          ),
-          storageAccountingServiceProvider.overrideWithValue(
-            _FakeStorageAccountingService(),
-          ),
-          cacheDiagnosticExportServiceProvider.overrideWithValue(
-            _FakeCacheDiagnosticExportService(),
-          ),
-          downloadStorageServiceProvider.overrideWithValue(
-            _FakeDownloadStorageService(repo: repo),
-          ),
-        ],
-        child: const LocalizedTestApp(home: DataStoragePage()),
-      ),
+    await pumpDataStorageSheet(
+      tester,
+      overrides: _overridesWith(repo: repo, gate: gate),
     );
-    await tester.pumpAndSettle();
 
     expect(
       find.byKey(const Key('data-storage-migration-card')),
@@ -526,34 +372,16 @@ void main() {
       customPath: null,
     );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-          storageRootAccessGateProvider.overrideWithValue(
-            _FixedStorageRootAccessGate(
-              initial: _cleanupPendingMigrationResult,
-              retryResult: ReadyStorageRootAccessGate.result,
-            ),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          cacheMaintenanceServiceProvider.overrideWithValue(
-            _FakeCacheMaintenanceService(),
-          ),
-          storageAccountingServiceProvider.overrideWithValue(
-            _FakeStorageAccountingService(),
-          ),
-          cacheDiagnosticExportServiceProvider.overrideWithValue(
-            _FakeCacheDiagnosticExportService(),
-          ),
-          downloadStorageServiceProvider.overrideWithValue(
-            _FakeDownloadStorageService(repo: repo),
-          ),
-        ],
-        child: const LocalizedTestApp(home: DataStoragePage()),
+    await pumpDataStorageSheet(
+      tester,
+      overrides: _overridesWith(
+        repo: repo,
+        gate: _FixedStorageRootAccessGate(
+          initial: _cleanupPendingMigrationResult,
+          retryResult: ReadyStorageRootAccessGate.result,
+        ),
       ),
     );
-    await tester.pumpAndSettle();
 
     expect(
       find.byKey(const Key('data-storage-migration-card')),
@@ -566,7 +394,7 @@ void main() {
     expect(find.text('/tmp/default-downloads'), findsNothing);
   });
 
-  testWidgets('DataStoragePage reloads usage report', (tester) async {
+  testWidgets('DataStorageSheet reloads usage report', (tester) async {
     final repo = _FakeDataStorageSettingsRepository(
       defaultPath: '/tmp/default-downloads',
       customPath: null,
@@ -585,28 +413,15 @@ void main() {
     );
     final maintenance = _FakeCacheMaintenanceService(clearableBytes: 1024);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-          storageRootAccessGateProvider.overrideWithValue(
-            const ReadyStorageRootAccessGate(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          cacheMaintenanceServiceProvider.overrideWithValue(maintenance),
-          storageAccountingServiceProvider.overrideWithValue(accounting),
-          cacheDiagnosticExportServiceProvider.overrideWithValue(
-            _FakeCacheDiagnosticExportService(),
-          ),
-          downloadStorageServiceProvider.overrideWithValue(
-            _FakeDownloadStorageService(repo: repo),
-          ),
-        ],
-        child: const LocalizedTestApp(home: DataStoragePage()),
+    await pumpDataStorageSheet(
+      tester,
+      overrides: _overridesWith(
+        repo: repo,
+        maintenance: maintenance,
+        accounting: accounting,
       ),
     );
 
-    await tester.pumpAndSettle();
     final reloadButton = find.byKey(
       const Key('data-storage-reload-usage-button'),
     );
@@ -626,51 +441,24 @@ void main() {
     await tester.tap(reloadButton);
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('data-storage-hint-text')),
-      120,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('存储统计已刷新'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('data-storage-clearable-cache-size')),
-      -120,
-      scrollable: find.byType(Scrollable).first,
-    );
+    // 操作结果不再以内联文本展示，避免抽屉高度突变。
+    expect(find.byKey(const Key('data-storage-hint-text')), findsNothing);
+    expect(find.text('存储统计已刷新'), findsNothing);
     expect(find.text('2.0 KB'), findsOneWidget);
   });
 
-  testWidgets('DataStoragePage exports cache diagnostics', (tester) async {
+  testWidgets('DataStorageSheet exports cache diagnostics', (tester) async {
     final repo = _FakeDataStorageSettingsRepository(
       defaultPath: '/tmp/default-downloads',
       customPath: null,
     );
     final exporter = _FakeCacheDiagnosticExportService();
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          dataStorageSettingsRepositoryProvider.overrideWithValue(repo),
-          storageRootAccessGateProvider.overrideWithValue(
-            const ReadyStorageRootAccessGate(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-          cacheMaintenanceServiceProvider.overrideWithValue(
-            _FakeCacheMaintenanceService(),
-          ),
-          storageAccountingServiceProvider.overrideWithValue(
-            _FakeStorageAccountingService(),
-          ),
-          cacheDiagnosticExportServiceProvider.overrideWithValue(exporter),
-          downloadStorageServiceProvider.overrideWithValue(
-            _FakeDownloadStorageService(repo: repo),
-          ),
-        ],
-        child: const LocalizedTestApp(home: DataStoragePage()),
-      ),
+    await pumpDataStorageSheet(
+      tester,
+      overrides: _overridesWith(repo: repo, exporter: exporter),
     );
 
-    await tester.pumpAndSettle();
     final exportButton = find.byKey(
       const Key('data-storage-export-diagnostics-button'),
     );
@@ -678,13 +466,10 @@ void main() {
     await tester.tap(exportButton);
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('data-storage-hint-text')),
-      120,
-      scrollable: find.byType(Scrollable).first,
-    );
     expect(exporter.exportCalls, 1);
-    expect(find.textContaining('缓存诊断已导出'), findsOneWidget);
+    // 导出结果同样不内联展示，抽屉高度保持稳定。
+    expect(find.byKey(const Key('data-storage-hint-text')), findsNothing);
+    expect(find.textContaining('缓存诊断已导出'), findsNothing);
   });
 
   test('formatDataStorageBytes uses KB, MB and GB units', () {
@@ -692,6 +477,76 @@ void main() {
     expect(formatDataStorageBytes(4 * 1024 * 1024), '4.0 MB');
     expect(formatDataStorageBytes(3 * 1024 * 1024 * 1024), '3.0 GB');
   });
+}
+
+/// 在宿主页中通过 [showModalBottomSheet] 打开抽屉，模拟真实入口路径。
+Future<void> pumpDataStorageSheet(
+  WidgetTester tester, {
+  required List<riverpod_misc.Override> overrides,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: overrides,
+      child: LocalizedTestApp(home: const _DataStorageSheetHost()),
+    ),
+  );
+  await tester.tap(find.byKey(const Key('data-storage-sheet-opener')));
+  await tester.pumpAndSettle();
+}
+
+class _DataStorageSheetHost extends StatelessWidget {
+  const _DataStorageSheetHost();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: FilledButton(
+          key: const Key('data-storage-sheet-opener'),
+          onPressed: () => showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => const DataStorageSheet(),
+          ),
+          child: const Text('open data storage sheet'),
+        ),
+      ),
+    );
+  }
+}
+
+List<riverpod_misc.Override> _overridesWith({
+  _FakeDataStorageSettingsRepository? repo,
+  StorageRootAccessGate? gate,
+  _FakeCacheMaintenanceService? maintenance,
+  _FakeStorageAccountingService? accounting,
+  _FakeCacheDiagnosticExportService? exporter,
+}) {
+  final effectiveRepo =
+      repo ??
+      _FakeDataStorageSettingsRepository(
+        defaultPath: '/tmp/default-downloads',
+        customPath: null,
+      );
+  return [
+    dataStorageSettingsRepositoryProvider.overrideWithValue(effectiveRepo),
+    storageRootAccessGateProvider.overrideWithValue(
+      gate ?? const ReadyStorageRootAccessGate(),
+    ),
+    imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+    cacheMaintenanceServiceProvider.overrideWithValue(
+      maintenance ?? _FakeCacheMaintenanceService(),
+    ),
+    storageAccountingServiceProvider.overrideWithValue(
+      accounting ?? _FakeStorageAccountingService(),
+    ),
+    cacheDiagnosticExportServiceProvider.overrideWithValue(
+      exporter ?? _FakeCacheDiagnosticExportService(),
+    ),
+    downloadStorageServiceProvider.overrideWithValue(
+      _FakeDownloadStorageService(repo: effectiveRepo),
+    ),
+  ];
 }
 
 StorageUsageReport _usageReport({

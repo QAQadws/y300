@@ -3821,12 +3821,6 @@ abstract class AppLocalizations {
   /// **'验证复杂正文 HTML 的原生渲染'**
   String get moreDebugHtmlRendererSubtitle;
 
-  /// No description provided for @moreStorageTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'数据与存储'**
-  String get moreStorageTitle;
-
   /// 数据与存储页面加载失败提示；error 是安全的外部错误摘要
   ///
   /// In zh, this message translates to:

@@ -993,7 +993,6 @@
   "moreDebugHtmlRenderer": "HTML 正文渲染原型",
   "moreDebugHtmlRendererSubtitle": "验证复杂正文 HTML 的原生渲染",
 
-  "moreStorageTitle": "数据与存储",
   "moreStorageLoadFailed": "加载数据与存储设置失败：{error}",
   "@moreStorageLoadFailed": {
     "description": "数据与存储页面加载失败提示；error 是安全的外部错误摘要",
