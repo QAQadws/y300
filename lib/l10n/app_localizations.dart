@@ -628,7 +628,7 @@ abstract class AppLocalizations {
   /// No description provided for @historyClearAllBody.
   ///
   /// In zh, this message translates to:
-  /// **'浏览记录将被清空，但不会删除收藏、书架作品或下载内容。'**
+  /// **'浏览记录将被清空，但不会删除收藏、书架作品或离线内容。'**
   String get historyClearAllBody;
 
   /// No description provided for @historyNoResults.
@@ -808,7 +808,7 @@ abstract class AppLocalizations {
   /// No description provided for @librarySelectionActionDownload.
   ///
   /// In zh, this message translates to:
-  /// **'下载'**
+  /// **'缓存'**
   String get librarySelectionActionDownload;
 
   /// No description provided for @librarySelectionActionUnfavorite.
@@ -844,7 +844,7 @@ abstract class AppLocalizations {
   /// 取消收藏确认正文；count 是选中项目数量
   ///
   /// In zh, this message translates to:
-  /// **'将取消已选 {count, plural, =0 {0 项} other {{count} 项}}收藏。若作品已无其它活跃收藏来源，相关本地作品、章节、封面缓存和下载也会被清除。是否继续？'**
+  /// **'将取消已选 {count, plural, =0 {0 项} other {{count} 项}}收藏。若作品已无其它活跃收藏来源，相关本地作品、章节、封面缓存和离线缓存也会被清除。是否继续？'**
   String librarySelectionConfirmUnfavoriteBody(int count);
 
   /// 普通多选动作确认正文；action 是由稳定 action id 映射的本地化名称
@@ -914,28 +914,28 @@ abstract class AppLocalizations {
   /// **'未读'**
   String get librarySelectionUnread;
 
-  /// 批量下载入队提示；count 是新加入队列的章节数量
+  /// 批量缓存入队提示；count 是新加入队列的章节数量
   ///
   /// In zh, this message translates to:
-  /// **'已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入下载队列'**
+  /// **'已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入缓存队列'**
   String librarySelectionDownloadQueued(int count);
 
-  /// 批量下载入队部分失败提示
+  /// 批量缓存入队部分失败提示
   ///
   /// In zh, this message translates to:
-  /// **'已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入下载队列；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}'**
+  /// **'已将 {count, plural, =0 {0 个章节} other {{count} 个章节}}加入缓存队列；{failedCount, plural, =0 {没有失败项目} other {失败 {failedCount} 项}}'**
   String librarySelectionDownloadQueuedPartial(int count, int failedCount);
 
   /// No description provided for @librarySelectionDownloadAlreadyQueued.
   ///
   /// In zh, this message translates to:
-  /// **'所选章节已在下载队列中'**
+  /// **'所选章节已在缓存队列中'**
   String get librarySelectionDownloadAlreadyQueued;
 
   /// No description provided for @librarySelectionNothingToDownload.
   ///
   /// In zh, this message translates to:
-  /// **'没有需要下载的章节'**
+  /// **'没有需要缓存的章节'**
   String get librarySelectionNothingToDownload;
 
   /// 批量取消收藏成功提示；count 是成功取消的项目数量
@@ -1127,7 +1127,7 @@ abstract class AppLocalizations {
   /// No description provided for @libraryShelfFilterDownloaded.
   ///
   /// In zh, this message translates to:
-  /// **'已下载'**
+  /// **'已缓存'**
   String get libraryShelfFilterDownloaded;
 
   /// No description provided for @libraryShelfFilterUnread.
@@ -1307,7 +1307,7 @@ abstract class AppLocalizations {
   /// No description provided for @libraryDetailDownload.
   ///
   /// In zh, this message translates to:
-  /// **'下载'**
+  /// **'缓存'**
   String get libraryDetailDownload;
 
   /// No description provided for @libraryDetailFilterAndSort.
@@ -1457,25 +1457,25 @@ abstract class AppLocalizations {
   /// No description provided for @libraryDetailDownloadUnread.
   ///
   /// In zh, this message translates to:
-  /// **'下载未读章节'**
+  /// **'缓存未读章节'**
   String get libraryDetailDownloadUnread;
 
   /// No description provided for @libraryDetailDownloadAll.
   ///
   /// In zh, this message translates to:
-  /// **'下载全部章节'**
+  /// **'缓存全部章节'**
   String get libraryDetailDownloadAll;
 
   /// No description provided for @libraryDetailDeleteDownloadFailed.
   ///
   /// In zh, this message translates to:
-  /// **'删除下载失败：{error}'**
+  /// **'删除缓存失败：{error}'**
   String libraryDetailDeleteDownloadFailed(String error);
 
   /// No description provided for @libraryDetailDownloadFailed.
   ///
   /// In zh, this message translates to:
-  /// **'下载失败：{error}'**
+  /// **'缓存失败：{error}'**
   String libraryDetailDownloadFailed(String error);
 
   /// No description provided for @libraryDetailReadStateUpdateFailed.
@@ -1493,7 +1493,7 @@ abstract class AppLocalizations {
   /// No description provided for @libraryDetailDownloaded.
   ///
   /// In zh, this message translates to:
-  /// **'已下载'**
+  /// **'已缓存'**
   String get libraryDetailDownloaded;
 
   /// No description provided for @libraryDetailUnread.
@@ -1553,7 +1553,7 @@ abstract class AppLocalizations {
   /// No description provided for @libraryDetailDeleteChapterDownload.
   ///
   /// In zh, this message translates to:
-  /// **'删除该章节下载'**
+  /// **'删除该章节缓存'**
   String get libraryDetailDeleteChapterDownload;
 
   /// No description provided for @libraryDetailResetReadingTitle.
@@ -1565,7 +1565,7 @@ abstract class AppLocalizations {
   /// No description provided for @libraryDetailResetReadingBody.
   ///
   /// In zh, this message translates to:
-  /// **'全部章节将变为未读，所有阅读进度和上次阅读位置都会被清除。书签和下载不会受影响。'**
+  /// **'全部章节将变为未读，所有阅读进度和上次阅读位置都会被清除。书签和离线缓存不会受影响。'**
   String get libraryDetailResetReadingBody;
 
   /// No description provided for @libraryDetailResetReadingConfirm.
@@ -1784,19 +1784,19 @@ abstract class AppLocalizations {
   /// No description provided for @libraryChapterDownloading.
   ///
   /// In zh, this message translates to:
-  /// **'正在下载'**
+  /// **'正在缓存'**
   String get libraryChapterDownloading;
 
   /// No description provided for @libraryChapterDownloadedDelete.
   ///
   /// In zh, this message translates to:
-  /// **'已下载，点击删除下载'**
+  /// **'已缓存，点击删除缓存'**
   String get libraryChapterDownloadedDelete;
 
   /// No description provided for @libraryChapterDownload.
   ///
   /// In zh, this message translates to:
-  /// **'下载该章节'**
+  /// **'缓存该章节'**
   String get libraryChapterDownload;
 
   /// No description provided for @libraryChapterClearReadState.
@@ -2035,7 +2035,7 @@ abstract class AppLocalizations {
   /// 移除手动章节确认；title 是原始或用户自定义章节名
   ///
   /// In zh, this message translates to:
-  /// **'将删除手动添加的“{title}”及其阅读记录与下载任务，此操作不可撤销。'**
+  /// **'将删除手动添加的“{title}”及其阅读记录与缓存任务，此操作不可撤销。'**
   String libraryChapterRemoveBody(String title);
 
   /// No description provided for @libraryChapterParsedCannotRemove.
@@ -2059,13 +2059,13 @@ abstract class AppLocalizations {
   /// No description provided for @libraryChapterDownloadTaskCleanupFailed.
   ///
   /// In zh, this message translates to:
-  /// **'下载任务清理失败'**
+  /// **'缓存任务清理失败'**
   String get libraryChapterDownloadTaskCleanupFailed;
 
   /// No description provided for @libraryChapterDownloadFileCleanupFailed.
   ///
   /// In zh, this message translates to:
-  /// **'章节下载文件清理失败'**
+  /// **'章节缓存文件清理失败'**
   String get libraryChapterDownloadFileCleanupFailed;
 
   /// No description provided for @libraryChapterRemoveFailed.
@@ -2725,31 +2725,31 @@ abstract class AppLocalizations {
   /// No description provided for @comicDownloadQueue.
   ///
   /// In zh, this message translates to:
-  /// **'下载队列'**
+  /// **'缓存队列'**
   String get comicDownloadQueue;
 
   /// No description provided for @comicDownloadQueueEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'暂无下载任务'**
+  /// **'暂无缓存任务'**
   String get comicDownloadQueueEmpty;
 
   /// No description provided for @comicDownloadActive.
   ///
   /// In zh, this message translates to:
-  /// **'正在下载'**
+  /// **'正在缓存'**
   String get comicDownloadActive;
 
   /// No description provided for @comicDownloadPending.
   ///
   /// In zh, this message translates to:
-  /// **'等待中'**
+  /// **'等待缓存'**
   String get comicDownloadPending;
 
   /// No description provided for @comicDownloadFailedSection.
   ///
   /// In zh, this message translates to:
-  /// **'下载失败'**
+  /// **'缓存失败'**
   String get comicDownloadFailedSection;
 
   /// No description provided for @comicDownloadCanceling.
@@ -2761,7 +2761,7 @@ abstract class AppLocalizations {
   /// No description provided for @comicDownloadCancel.
   ///
   /// In zh, this message translates to:
-  /// **'取消下载'**
+  /// **'取消缓存'**
   String get comicDownloadCancel;
 
   /// No description provided for @comicDownloadRemove.
@@ -2803,7 +2803,7 @@ abstract class AppLocalizations {
   /// No description provided for @comicDownloadCancelFailed.
   ///
   /// In zh, this message translates to:
-  /// **'取消下载失败：{error}'**
+  /// **'取消缓存失败：{error}'**
   String comicDownloadCancelFailed(String error);
 
   /// No description provided for @comicDownloadRemoveFailed.
@@ -2833,25 +2833,25 @@ abstract class AppLocalizations {
   /// No description provided for @comicDownloadNoImages.
   ///
   /// In zh, this message translates to:
-  /// **'章节没有可下载图片'**
+  /// **'章节没有可缓存图片'**
   String get comicDownloadNoImages;
 
   /// No description provided for @comicDownloadImageFailed.
   ///
   /// In zh, this message translates to:
-  /// **'部分图片下载失败'**
+  /// **'部分图片缓存失败'**
   String get comicDownloadImageFailed;
 
   /// No description provided for @comicDownloadStorageFailed.
   ///
   /// In zh, this message translates to:
-  /// **'下载文件保存失败'**
+  /// **'缓存文件保存失败'**
   String get comicDownloadStorageFailed;
 
   /// No description provided for @comicDownloadUnknownFailure.
   ///
   /// In zh, this message translates to:
-  /// **'下载失败，请重试'**
+  /// **'缓存失败，请重试'**
   String get comicDownloadUnknownFailure;
 
   /// No description provided for @novelUntitledWork.
@@ -3693,13 +3693,13 @@ abstract class AppLocalizations {
   /// No description provided for @moreDataAndStorageSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'管理图片缓存与下载位置'**
+  /// **'管理缓存与离线内容'**
   String get moreDataAndStorageSubtitle;
 
   /// No description provided for @moreDownloadQueue.
   ///
   /// In zh, this message translates to:
-  /// **'下载队列'**
+  /// **'缓存队列'**
   String get moreDownloadQueue;
 
   /// No description provided for @moreDownloadParsingImages.
@@ -3708,10 +3708,10 @@ abstract class AppLocalizations {
   /// **'正在解析图片'**
   String get moreDownloadParsingImages;
 
-  /// 下载队列当前任务摘要；标题和章节名是原始业务内容
+  /// 缓存队列当前任务摘要；标题和章节名是原始业务内容
   ///
   /// In zh, this message translates to:
-  /// **'正在下载《{comicTitle}》 {episodeTitle} · {progress}{waitingCount, plural, =0 {} other { · 等待 {waitingCount}}}'**
+  /// **'正在缓存《{comicTitle}》 {episodeTitle} · {progress}{waitingCount, plural, =0 {} other { · 等待 {waitingCount}}}'**
   String moreDownloadActiveProgress(
     String comicTitle,
     String episodeTitle,
@@ -3722,19 +3722,19 @@ abstract class AppLocalizations {
   /// No description provided for @moreDownloadWaiting.
   ///
   /// In zh, this message translates to:
-  /// **'等待下载 · {count, plural, =0 {0 个任务} other {{count} 个任务}}'**
+  /// **'等待缓存 · {count, plural, =0 {0 个任务} other {{count} 个任务}}'**
   String moreDownloadWaiting(int count);
 
   /// No description provided for @moreDownloadFailed.
   ///
   /// In zh, this message translates to:
-  /// **'{count, plural, =0 {0 个任务下载失败} other {{count} 个任务下载失败}}'**
+  /// **'{count, plural, =0 {0 个任务缓存失败} other {{count} 个任务缓存失败}}'**
   String moreDownloadFailed(int count);
 
   /// No description provided for @moreDownloadEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'暂无下载任务'**
+  /// **'暂无缓存任务'**
   String get moreDownloadEmpty;
 
   /// No description provided for @moreAbout.
@@ -3821,12 +3821,6 @@ abstract class AppLocalizations {
   /// **'验证复杂正文 HTML 的原生渲染'**
   String get moreDebugHtmlRendererSubtitle;
 
-  /// No description provided for @moreStorageTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'数据与存储'**
-  String get moreStorageTitle;
-
   /// 数据与存储页面加载失败提示；error 是安全的外部错误摘要
   ///
   /// In zh, this message translates to:
@@ -3848,7 +3842,7 @@ abstract class AppLocalizations {
   /// No description provided for @moreStorageCacheDescription.
   ///
   /// In zh, this message translates to:
-  /// **'清理 HTML、解析快照与常规图片缓存；长期缓存、封面、下载和用户数据会保留。'**
+  /// **'清理 HTML、解析快照与常规图片缓存；长期缓存、封面、离线内容和用户数据会保留。'**
   String get moreStorageCacheDescription;
 
   /// No description provided for @moreStorageLocation.
@@ -3881,6 +3875,60 @@ abstract class AppLocalizations {
   /// **'恢复默认'**
   String get moreStorageRestoreDefault;
 
+  /// No description provided for @moreStorageMigrationTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'存储位置迁移'**
+  String get moreStorageMigrationTitle;
+
+  /// No description provided for @moreStorageMigrationInProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在将离线内容迁移到默认存储位置'**
+  String get moreStorageMigrationInProgress;
+
+  /// No description provided for @moreStorageMigrationDataSafe.
+  ///
+  /// In zh, this message translates to:
+  /// **'迁移完成前仍会保留并使用原位置的数据，请勿移动相关文件。'**
+  String get moreStorageMigrationDataSafe;
+
+  /// No description provided for @moreStorageMigrationInsufficientSpace.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认存储位置空间不足。原位置的数据仍然可用，请释放空间后重试。'**
+  String get moreStorageMigrationInsufficientSpace;
+
+  /// No description provided for @moreStorageMigrationLocationUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法访问原位置或默认存储位置。原位置的数据仍然保留，请检查存储权限后重试。'**
+  String get moreStorageMigrationLocationUnavailable;
+
+  /// No description provided for @moreStorageMigrationConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认存储位置存在冲突内容或目录结构无法安全迁移。原位置的数据仍然可用，请处理冲突后重试。'**
+  String get moreStorageMigrationConflict;
+
+  /// No description provided for @moreStorageMigrationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'存储位置迁移未完成。原位置的数据仍然可用，请稍后重试。'**
+  String get moreStorageMigrationFailed;
+
+  /// No description provided for @moreStorageMigrationCleanupPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认存储位置已经生效，但原位置的已验证副本尚未清理完成。缓存功能可正常使用。'**
+  String get moreStorageMigrationCleanupPending;
+
+  /// No description provided for @moreStorageMigrationRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试迁移'**
+  String get moreStorageMigrationRetry;
+
   /// No description provided for @moreStorageMaximumCache.
   ///
   /// In zh, this message translates to:
@@ -3896,7 +3944,7 @@ abstract class AppLocalizations {
   /// No description provided for @moreStorageNoticeCacheCleared.
   ///
   /// In zh, this message translates to:
-  /// **'已清理常规缓存，长期缓存、下载与用户数据已保留'**
+  /// **'已清理常规缓存，长期缓存、离线内容与用户数据已保留'**
   String get moreStorageNoticeCacheCleared;
 
   /// No description provided for @moreStorageNoticeCacheLimitUpdated.
@@ -3998,7 +4046,7 @@ abstract class AppLocalizations {
   /// No description provided for @moreStorageBucketDownload.
   ///
   /// In zh, this message translates to:
-  /// **'下载内容'**
+  /// **'离线内容'**
   String get moreStorageBucketDownload;
 
   /// No description provided for @moreStorageBucketAppSettings.
@@ -4022,7 +4070,7 @@ abstract class AppLocalizations {
   /// No description provided for @moreStorageCategoryProtected.
   ///
   /// In zh, this message translates to:
-  /// **'受保护/下载内容'**
+  /// **'受保护/离线内容'**
   String get moreStorageCategoryProtected;
 
   /// No description provided for @moreStorageImageRole.
@@ -4052,7 +4100,7 @@ abstract class AppLocalizations {
   /// No description provided for @moreStorageImageQualifierDownloaded.
   ///
   /// In zh, this message translates to:
-  /// **'（已下载）'**
+  /// **'（已缓存）'**
   String get moreStorageImageQualifierDownloaded;
 
   /// No description provided for @moreStorageImageCover.
@@ -4220,13 +4268,13 @@ abstract class AppLocalizations {
   /// No description provided for @moreStorageDownloadComics.
   ///
   /// In zh, this message translates to:
-  /// **'漫画下载'**
+  /// **'漫画离线缓存'**
   String get moreStorageDownloadComics;
 
   /// No description provided for @moreStorageDownloadNovels.
   ///
   /// In zh, this message translates to:
-  /// **'小说下载'**
+  /// **'小说离线内容'**
   String get moreStorageDownloadNovels;
 
   /// No description provided for @moreStorageDownloadFavorites.

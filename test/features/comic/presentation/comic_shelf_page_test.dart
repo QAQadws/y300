@@ -13,6 +13,7 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 import 'package:y300/features/comic/presentation/comic_shelf_page.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
@@ -65,7 +66,7 @@ void main() {
     expect(find.byKey(const Key('unified-shelf-more-button')), findsNothing);
   });
 
-  testWidgets('ComicShelfPage long press activates 5 selection actions', (
+  testWidgets('ComicShelfPage long press omits bulk cache action', (
     tester,
   ) async {
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
@@ -96,7 +97,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(selectionHost.state?.selectionActions.length, 5);
+    expect(selectionHost.state?.selectionActions.length, 4);
+    expect(
+      selectionHost.state?.selectionActions.map((action) => action.id),
+      isNot(contains(SelectionActionIds.download)),
+    );
   });
 }
 

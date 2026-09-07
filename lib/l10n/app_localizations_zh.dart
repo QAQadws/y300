@@ -295,7 +295,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historyClearAllTitle => '清空全部记录';
 
   @override
-  String get historyClearAllBody => '浏览记录将被清空，但不会删除收藏、书架作品或下载内容。';
+  String get historyClearAllBody => '浏览记录将被清空，但不会删除收藏、书架作品或离线内容。';
 
   @override
   String get historyNoResults => '没有搜索结果';
@@ -403,7 +403,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get librarySelectionActionMarkAllUnread => '全部未读';
 
   @override
-  String get librarySelectionActionDownload => '下载';
+  String get librarySelectionActionDownload => '缓存';
 
   @override
   String get librarySelectionActionUnfavorite => '取消收藏';
@@ -430,7 +430,7 @@ class AppLocalizationsZh extends AppLocalizations {
       other: '$count 项',
       zero: '0 项',
     );
-    return '将取消已选 $_temp0收藏。若作品已无其它活跃收藏来源，相关本地作品、章节、封面缓存和下载也会被清除。是否继续？';
+    return '将取消已选 $_temp0收藏。若作品已无其它活跃收藏来源，相关本地作品、章节、封面缓存和离线缓存也会被清除。是否继续？';
   }
 
   @override
@@ -530,7 +530,7 @@ class AppLocalizationsZh extends AppLocalizations {
       other: '$count 个章节',
       zero: '0 个章节',
     );
-    return '已将 $_temp0加入下载队列';
+    return '已将 $_temp0加入缓存队列';
   }
 
   @override
@@ -547,14 +547,14 @@ class AppLocalizationsZh extends AppLocalizations {
       other: '失败 $failedCount 项',
       zero: '没有失败项目',
     );
-    return '已将 $_temp0加入下载队列；$_temp1';
+    return '已将 $_temp0加入缓存队列；$_temp1';
   }
 
   @override
-  String get librarySelectionDownloadAlreadyQueued => '所选章节已在下载队列中';
+  String get librarySelectionDownloadAlreadyQueued => '所选章节已在缓存队列中';
 
   @override
-  String get librarySelectionNothingToDownload => '没有需要下载的章节';
+  String get librarySelectionNothingToDownload => '没有需要缓存的章节';
 
   @override
   String librarySelectionUnfavorite(int count) {
@@ -697,7 +697,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryShelfColumnsPerRow => '每行个数';
 
   @override
-  String get libraryShelfFilterDownloaded => '已下载';
+  String get libraryShelfFilterDownloaded => '已缓存';
 
   @override
   String get libraryShelfFilterUnread => '未读';
@@ -820,7 +820,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryTaskNotificationTitle => '书架任务';
 
   @override
-  String get libraryDetailDownload => '下载';
+  String get libraryDetailDownload => '缓存';
 
   @override
   String get libraryDetailFilterAndSort => '筛选与排序';
@@ -899,19 +899,19 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get libraryDetailDownloadUnread => '下载未读章节';
+  String get libraryDetailDownloadUnread => '缓存未读章节';
 
   @override
-  String get libraryDetailDownloadAll => '下载全部章节';
+  String get libraryDetailDownloadAll => '缓存全部章节';
 
   @override
   String libraryDetailDeleteDownloadFailed(String error) {
-    return '删除下载失败：$error';
+    return '删除缓存失败：$error';
   }
 
   @override
   String libraryDetailDownloadFailed(String error) {
-    return '下载失败：$error';
+    return '缓存失败：$error';
   }
 
   @override
@@ -921,7 +921,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryDetailAllChapters => '全部章节';
 
   @override
-  String get libraryDetailDownloaded => '已下载';
+  String get libraryDetailDownloaded => '已缓存';
 
   @override
   String get libraryDetailUnread => '未读';
@@ -953,14 +953,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryDetailResetWorkReading => '重置本作品阅读';
 
   @override
-  String get libraryDetailDeleteChapterDownload => '删除该章节下载';
+  String get libraryDetailDeleteChapterDownload => '删除该章节缓存';
 
   @override
   String get libraryDetailResetReadingTitle => '重置本作品阅读？';
 
   @override
   String get libraryDetailResetReadingBody =>
-      '全部章节将变为未读，所有阅读进度和上次阅读位置都会被清除。书签和下载不会受影响。';
+      '全部章节将变为未读，所有阅读进度和上次阅读位置都会被清除。书签和离线缓存不会受影响。';
 
   @override
   String get libraryDetailResetReadingConfirm => '重置';
@@ -1123,13 +1123,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryChapterBookmarkSemantics => '已添加书签';
 
   @override
-  String get libraryChapterDownloading => '正在下载';
+  String get libraryChapterDownloading => '正在缓存';
 
   @override
-  String get libraryChapterDownloadedDelete => '已下载，点击删除下载';
+  String get libraryChapterDownloadedDelete => '已缓存，点击删除缓存';
 
   @override
-  String get libraryChapterDownload => '下载该章节';
+  String get libraryChapterDownload => '缓存该章节';
 
   @override
   String get libraryChapterClearReadState => '清除阅读状态';
@@ -1295,7 +1295,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String libraryChapterRemoveBody(String title) {
-    return '将删除手动添加的“$title”及其阅读记录与下载任务，此操作不可撤销。';
+    return '将删除手动添加的“$title”及其阅读记录与缓存任务，此操作不可撤销。';
   }
 
   @override
@@ -1310,10 +1310,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get libraryChapterDownloadTaskCleanupFailed => '下载任务清理失败';
+  String get libraryChapterDownloadTaskCleanupFailed => '缓存任务清理失败';
 
   @override
-  String get libraryChapterDownloadFileCleanupFailed => '章节下载文件清理失败';
+  String get libraryChapterDownloadFileCleanupFailed => '章节缓存文件清理失败';
 
   @override
   String libraryChapterRemoveFailed(String error) {
@@ -1681,25 +1681,25 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get comicDownloadQueue => '下载队列';
+  String get comicDownloadQueue => '缓存队列';
 
   @override
-  String get comicDownloadQueueEmpty => '暂无下载任务';
+  String get comicDownloadQueueEmpty => '暂无缓存任务';
 
   @override
-  String get comicDownloadActive => '正在下载';
+  String get comicDownloadActive => '正在缓存';
 
   @override
-  String get comicDownloadPending => '等待中';
+  String get comicDownloadPending => '等待缓存';
 
   @override
-  String get comicDownloadFailedSection => '下载失败';
+  String get comicDownloadFailedSection => '缓存失败';
 
   @override
   String get comicDownloadCanceling => '正在取消';
 
   @override
-  String get comicDownloadCancel => '取消下载';
+  String get comicDownloadCancel => '取消缓存';
 
   @override
   String get comicDownloadRemove => '移除任务';
@@ -1727,7 +1727,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String comicDownloadCancelFailed(String error) {
-    return '取消下载失败：$error';
+    return '取消缓存失败：$error';
   }
 
   @override
@@ -1747,16 +1747,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get comicDownloadEpisodeUnavailable => '漫画章节不存在或已被移除';
 
   @override
-  String get comicDownloadNoImages => '章节没有可下载图片';
+  String get comicDownloadNoImages => '章节没有可缓存图片';
 
   @override
-  String get comicDownloadImageFailed => '部分图片下载失败';
+  String get comicDownloadImageFailed => '部分图片缓存失败';
 
   @override
-  String get comicDownloadStorageFailed => '下载文件保存失败';
+  String get comicDownloadStorageFailed => '缓存文件保存失败';
 
   @override
-  String get comicDownloadUnknownFailure => '下载失败，请重试';
+  String get comicDownloadUnknownFailure => '缓存失败，请重试';
 
   @override
   String novelUntitledWork(String novelId) {
@@ -2277,10 +2277,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreDataAndStorage => '数据与存储';
 
   @override
-  String get moreDataAndStorageSubtitle => '管理图片缓存与下载位置';
+  String get moreDataAndStorageSubtitle => '管理缓存与离线内容';
 
   @override
-  String get moreDownloadQueue => '下载队列';
+  String get moreDownloadQueue => '缓存队列';
 
   @override
   String get moreDownloadParsingImages => '正在解析图片';
@@ -2298,7 +2298,7 @@ class AppLocalizationsZh extends AppLocalizations {
       other: ' · 等待 $waitingCount',
       zero: '',
     );
-    return '正在下载《$comicTitle》 $episodeTitle · $progress$_temp0';
+    return '正在缓存《$comicTitle》 $episodeTitle · $progress$_temp0';
   }
 
   @override
@@ -2309,7 +2309,7 @@ class AppLocalizationsZh extends AppLocalizations {
       other: '$count 个任务',
       zero: '0 个任务',
     );
-    return '等待下载 · $_temp0';
+    return '等待缓存 · $_temp0';
   }
 
   @override
@@ -2317,14 +2317,14 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count 个任务下载失败',
-      zero: '0 个任务下载失败',
+      other: '$count 个任务缓存失败',
+      zero: '0 个任务缓存失败',
     );
     return '$_temp0';
   }
 
   @override
-  String get moreDownloadEmpty => '暂无下载任务';
+  String get moreDownloadEmpty => '暂无缓存任务';
 
   @override
   String get moreAbout => '关于';
@@ -2373,9 +2373,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreDebugHtmlRendererSubtitle => '验证复杂正文 HTML 的原生渲染';
 
   @override
-  String get moreStorageTitle => '数据与存储';
-
-  @override
   String moreStorageLoadFailed(String error) {
     return '加载数据与存储设置失败：$error';
   }
@@ -2388,7 +2385,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get moreStorageCacheDescription =>
-      '清理 HTML、解析快照与常规图片缓存；长期缓存、封面、下载和用户数据会保留。';
+      '清理 HTML、解析快照与常规图片缓存；长期缓存、封面、离线内容和用户数据会保留。';
 
   @override
   String get moreStorageLocation => '存储位置';
@@ -2406,6 +2403,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreStorageRestoreDefault => '恢复默认';
 
   @override
+  String get moreStorageMigrationTitle => '存储位置迁移';
+
+  @override
+  String get moreStorageMigrationInProgress => '正在将离线内容迁移到默认存储位置';
+
+  @override
+  String get moreStorageMigrationDataSafe => '迁移完成前仍会保留并使用原位置的数据，请勿移动相关文件。';
+
+  @override
+  String get moreStorageMigrationInsufficientSpace =>
+      '默认存储位置空间不足。原位置的数据仍然可用，请释放空间后重试。';
+
+  @override
+  String get moreStorageMigrationLocationUnavailable =>
+      '无法访问原位置或默认存储位置。原位置的数据仍然保留，请检查存储权限后重试。';
+
+  @override
+  String get moreStorageMigrationConflict =>
+      '默认存储位置存在冲突内容或目录结构无法安全迁移。原位置的数据仍然可用，请处理冲突后重试。';
+
+  @override
+  String get moreStorageMigrationFailed => '存储位置迁移未完成。原位置的数据仍然可用，请稍后重试。';
+
+  @override
+  String get moreStorageMigrationCleanupPending =>
+      '默认存储位置已经生效，但原位置的已验证副本尚未清理完成。缓存功能可正常使用。';
+
+  @override
+  String get moreStorageMigrationRetry => '重试迁移';
+
+  @override
   String moreStorageMaximumCache(String size) {
     return '最大缓存：$size';
   }
@@ -2414,7 +2442,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreStorageNoticeCachePartiallyCleared => '部分缓存清理失败，请稍后重试';
 
   @override
-  String get moreStorageNoticeCacheCleared => '已清理常规缓存，长期缓存、下载与用户数据已保留';
+  String get moreStorageNoticeCacheCleared => '已清理常规缓存，长期缓存、离线内容与用户数据已保留';
 
   @override
   String get moreStorageNoticeCacheLimitUpdated => '最大缓存已更新';
@@ -2469,7 +2497,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreStorageBucketComposerDraft => '草稿';
 
   @override
-  String get moreStorageBucketDownload => '下载内容';
+  String get moreStorageBucketDownload => '离线内容';
 
   @override
   String get moreStorageBucketAppSettings => '应用设置';
@@ -2481,7 +2509,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreStorageCategorySticky => '长期缓存';
 
   @override
-  String get moreStorageCategoryProtected => '受保护/下载内容';
+  String get moreStorageCategoryProtected => '受保护/离线内容';
 
   @override
   String moreStorageImageRole(String role, String qualifier) {
@@ -2498,7 +2526,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreStorageImageQualifierProtected => '（受保护）';
 
   @override
-  String get moreStorageImageQualifierDownloaded => '（已下载）';
+  String get moreStorageImageQualifierDownloaded => '（已缓存）';
 
   @override
   String get moreStorageImageCover => '封面';
@@ -2588,10 +2616,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get moreStorageDownloadComics => '漫画下载';
+  String get moreStorageDownloadComics => '漫画离线缓存';
 
   @override
-  String get moreStorageDownloadNovels => '小说下载';
+  String get moreStorageDownloadNovels => '小说离线内容';
 
   @override
   String get moreStorageDownloadFavorites => '收藏快照';
@@ -4649,7 +4677,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get historyClearAllTitle => '清空全部記錄';
 
   @override
-  String get historyClearAllBody => '瀏覽記錄將被清空，但不會刪除收藏、書架作品或下載內容。';
+  String get historyClearAllBody => '瀏覽記錄將被清空，但不會刪除收藏、書架作品或離線內容。';
 
   @override
   String get historyNoResults => '沒有搜尋結果';
@@ -4757,7 +4785,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get librarySelectionActionMarkAllUnread => '全部未讀';
 
   @override
-  String get librarySelectionActionDownload => '下載';
+  String get librarySelectionActionDownload => '快取';
 
   @override
   String get librarySelectionActionUnfavorite => '取消收藏';
@@ -4784,7 +4812,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       other: '$count 項',
       zero: '0 項',
     );
-    return '將取消已選 $_temp0收藏。若作品已無其他活躍收藏來源，相關本機作品、章節、封面快取和下載也會被清除。是否繼續？';
+    return '將取消已選 $_temp0收藏。若作品已無其他活躍收藏來源，相關本機作品、章節、封面快取和離線快取也會被清除。是否繼續？';
   }
 
   @override
@@ -4884,7 +4912,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       other: '$count 個章節',
       zero: '0 個章節',
     );
-    return '已將 $_temp0加入下載佇列';
+    return '已將 $_temp0加入快取佇列';
   }
 
   @override
@@ -4901,14 +4929,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       other: '失敗 $failedCount 項',
       zero: '沒有失敗項目',
     );
-    return '已將 $_temp0加入下載佇列；$_temp1';
+    return '已將 $_temp0加入快取佇列；$_temp1';
   }
 
   @override
-  String get librarySelectionDownloadAlreadyQueued => '所選章節已在下載佇列中';
+  String get librarySelectionDownloadAlreadyQueued => '所選章節已在快取佇列中';
 
   @override
-  String get librarySelectionNothingToDownload => '沒有需要下載的章節';
+  String get librarySelectionNothingToDownload => '沒有需要快取的章節';
 
   @override
   String librarySelectionUnfavorite(int count) {
@@ -5051,7 +5079,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get libraryShelfColumnsPerRow => '每列數量';
 
   @override
-  String get libraryShelfFilterDownloaded => '已下載';
+  String get libraryShelfFilterDownloaded => '已快取';
 
   @override
   String get libraryShelfFilterUnread => '未讀';
@@ -5174,7 +5202,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get libraryTaskNotificationTitle => '書架工作';
 
   @override
-  String get libraryDetailDownload => '下載';
+  String get libraryDetailDownload => '快取';
 
   @override
   String get libraryDetailFilterAndSort => '篩選與排序';
@@ -5253,19 +5281,19 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get libraryDetailDownloadUnread => '下載未讀章節';
+  String get libraryDetailDownloadUnread => '快取未讀章節';
 
   @override
-  String get libraryDetailDownloadAll => '下載全部章節';
+  String get libraryDetailDownloadAll => '快取全部章節';
 
   @override
   String libraryDetailDeleteDownloadFailed(String error) {
-    return '刪除下載失敗：$error';
+    return '刪除快取失敗：$error';
   }
 
   @override
   String libraryDetailDownloadFailed(String error) {
-    return '下載失敗：$error';
+    return '快取失敗：$error';
   }
 
   @override
@@ -5275,7 +5303,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get libraryDetailAllChapters => '全部章節';
 
   @override
-  String get libraryDetailDownloaded => '已下載';
+  String get libraryDetailDownloaded => '已快取';
 
   @override
   String get libraryDetailUnread => '未讀';
@@ -5307,14 +5335,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get libraryDetailResetWorkReading => '重設本作品閱讀狀態';
 
   @override
-  String get libraryDetailDeleteChapterDownload => '刪除此章節下載';
+  String get libraryDetailDeleteChapterDownload => '刪除此章節快取';
 
   @override
   String get libraryDetailResetReadingTitle => '重設本作品閱讀狀態？';
 
   @override
   String get libraryDetailResetReadingBody =>
-      '全部章節將變為未讀，所有閱讀進度和上次閱讀位置都會被清除。書籤和下載不受影響。';
+      '全部章節將變為未讀，所有閱讀進度和上次閱讀位置都會被清除。書籤和離線快取不受影響。';
 
   @override
   String get libraryDetailResetReadingConfirm => '重設';
@@ -5477,13 +5505,13 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get libraryChapterBookmarkSemantics => '已加入書籤';
 
   @override
-  String get libraryChapterDownloading => '正在下載';
+  String get libraryChapterDownloading => '正在快取';
 
   @override
-  String get libraryChapterDownloadedDelete => '已下載，點擊刪除下載';
+  String get libraryChapterDownloadedDelete => '已快取，點擊刪除快取';
 
   @override
-  String get libraryChapterDownload => '下載此章節';
+  String get libraryChapterDownload => '快取此章節';
 
   @override
   String get libraryChapterClearReadState => '清除閱讀狀態';
@@ -5649,7 +5677,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String libraryChapterRemoveBody(String title) {
-    return '將刪除手動新增的「$title」及其閱讀記錄與下載工作，此操作無法復原。';
+    return '將刪除手動新增的「$title」及其閱讀記錄與快取工作，此操作無法復原。';
   }
 
   @override
@@ -5664,10 +5692,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get libraryChapterDownloadTaskCleanupFailed => '下載工作清理失敗';
+  String get libraryChapterDownloadTaskCleanupFailed => '快取工作清理失敗';
 
   @override
-  String get libraryChapterDownloadFileCleanupFailed => '章節下載檔案清理失敗';
+  String get libraryChapterDownloadFileCleanupFailed => '章節快取檔案清理失敗';
 
   @override
   String libraryChapterRemoveFailed(String error) {
@@ -6035,25 +6063,25 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get comicDownloadQueue => '下載佇列';
+  String get comicDownloadQueue => '快取佇列';
 
   @override
-  String get comicDownloadQueueEmpty => '暫無下載任務';
+  String get comicDownloadQueueEmpty => '暫無快取工作';
 
   @override
-  String get comicDownloadActive => '正在下載';
+  String get comicDownloadActive => '正在快取';
 
   @override
-  String get comicDownloadPending => '等待中';
+  String get comicDownloadPending => '等待快取';
 
   @override
-  String get comicDownloadFailedSection => '下載失敗';
+  String get comicDownloadFailedSection => '快取失敗';
 
   @override
   String get comicDownloadCanceling => '正在取消';
 
   @override
-  String get comicDownloadCancel => '取消下載';
+  String get comicDownloadCancel => '取消快取';
 
   @override
   String get comicDownloadRemove => '移除任務';
@@ -6081,7 +6109,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String comicDownloadCancelFailed(String error) {
-    return '取消下載失敗：$error';
+    return '取消快取失敗：$error';
   }
 
   @override
@@ -6101,16 +6129,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get comicDownloadEpisodeUnavailable => '漫畫章節不存在或已被移除';
 
   @override
-  String get comicDownloadNoImages => '章節沒有可下載圖片';
+  String get comicDownloadNoImages => '章節沒有可快取圖片';
 
   @override
-  String get comicDownloadImageFailed => '部分圖片下載失敗';
+  String get comicDownloadImageFailed => '部分圖片快取失敗';
 
   @override
-  String get comicDownloadStorageFailed => '下載檔案儲存失敗';
+  String get comicDownloadStorageFailed => '快取檔案儲存失敗';
 
   @override
-  String get comicDownloadUnknownFailure => '下載失敗，請重試';
+  String get comicDownloadUnknownFailure => '快取失敗，請重試';
 
   @override
   String novelUntitledWork(String novelId) {
@@ -6631,10 +6659,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get moreDataAndStorage => '資料與儲存空間';
 
   @override
-  String get moreDataAndStorageSubtitle => '管理圖片快取與下載位置';
+  String get moreDataAndStorageSubtitle => '管理快取與離線內容';
 
   @override
-  String get moreDownloadQueue => '下載佇列';
+  String get moreDownloadQueue => '快取佇列';
 
   @override
   String get moreDownloadParsingImages => '正在解析圖片';
@@ -6652,7 +6680,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       other: ' · 等待 $waitingCount',
       zero: '',
     );
-    return '正在下載《$comicTitle》 $episodeTitle · $progress$_temp0';
+    return '正在快取《$comicTitle》 $episodeTitle · $progress$_temp0';
   }
 
   @override
@@ -6663,7 +6691,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       other: '$count 個工作',
       zero: '0 個工作',
     );
-    return '等待下載 · $_temp0';
+    return '等待快取 · $_temp0';
   }
 
   @override
@@ -6671,14 +6699,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count 個工作下載失敗',
-      zero: '0 個工作下載失敗',
+      other: '$count 個工作快取失敗',
+      zero: '0 個工作快取失敗',
     );
     return '$_temp0';
   }
 
   @override
-  String get moreDownloadEmpty => '目前沒有下載工作';
+  String get moreDownloadEmpty => '目前沒有快取工作';
 
   @override
   String get moreAbout => '關於';
@@ -6727,9 +6755,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get moreDebugHtmlRendererSubtitle => '驗證複雜正文 HTML 的原生渲染';
 
   @override
-  String get moreStorageTitle => '資料與儲存空間';
-
-  @override
   String moreStorageLoadFailed(String error) {
     return '載入資料與儲存設定失敗：$error';
   }
@@ -6742,7 +6767,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreStorageCacheDescription =>
-      '清理 HTML、解析快照與一般圖片快取；長期快取、封面、下載和使用者資料會保留。';
+      '清理 HTML、解析快照與一般圖片快取；長期快取、封面、離線內容和使用者資料會保留。';
 
   @override
   String get moreStorageLocation => '儲存位置';
@@ -6760,6 +6785,37 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get moreStorageRestoreDefault => '恢復預設';
 
   @override
+  String get moreStorageMigrationTitle => '儲存位置遷移';
+
+  @override
+  String get moreStorageMigrationInProgress => '正在將離線內容遷移到預設儲存位置';
+
+  @override
+  String get moreStorageMigrationDataSafe => '遷移完成前仍會保留並使用原位置的資料，請勿移動相關檔案。';
+
+  @override
+  String get moreStorageMigrationInsufficientSpace =>
+      '預設儲存位置空間不足。原位置的資料仍然可用，請釋放空間後重試。';
+
+  @override
+  String get moreStorageMigrationLocationUnavailable =>
+      '無法存取原位置或預設儲存位置。原位置的資料仍然保留，請檢查儲存權限後重試。';
+
+  @override
+  String get moreStorageMigrationConflict =>
+      '預設儲存位置存在衝突內容或目錄結構無法安全遷移。原位置的資料仍然可用，請處理衝突後重試。';
+
+  @override
+  String get moreStorageMigrationFailed => '儲存位置遷移尚未完成。原位置的資料仍然可用，請稍後重試。';
+
+  @override
+  String get moreStorageMigrationCleanupPending =>
+      '預設儲存位置已經生效，但原位置的已驗證副本尚未清理完成。快取功能可正常使用。';
+
+  @override
+  String get moreStorageMigrationRetry => '重試遷移';
+
+  @override
   String moreStorageMaximumCache(String size) {
     return '最大快取：$size';
   }
@@ -6768,7 +6824,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get moreStorageNoticeCachePartiallyCleared => '部分快取清理失敗，請稍後重試';
 
   @override
-  String get moreStorageNoticeCacheCleared => '已清理一般快取，長期快取、下載與使用者資料已保留';
+  String get moreStorageNoticeCacheCleared => '已清理一般快取，長期快取、離線內容與使用者資料已保留';
 
   @override
   String get moreStorageNoticeCacheLimitUpdated => '最大快取已更新';
@@ -6823,7 +6879,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get moreStorageBucketComposerDraft => '草稿';
 
   @override
-  String get moreStorageBucketDownload => '下載內容';
+  String get moreStorageBucketDownload => '離線內容';
 
   @override
   String get moreStorageBucketAppSettings => '應用程式設定';
@@ -6835,7 +6891,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get moreStorageCategorySticky => '長期快取';
 
   @override
-  String get moreStorageCategoryProtected => '受保護/下載內容';
+  String get moreStorageCategoryProtected => '受保護/離線內容';
 
   @override
   String moreStorageImageRole(String role, String qualifier) {
@@ -6852,7 +6908,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get moreStorageImageQualifierProtected => '（受保護）';
 
   @override
-  String get moreStorageImageQualifierDownloaded => '（已下載）';
+  String get moreStorageImageQualifierDownloaded => '（已快取）';
 
   @override
   String get moreStorageImageCover => '封面';
@@ -6942,10 +6998,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get moreStorageDownloadComics => '漫畫下載';
+  String get moreStorageDownloadComics => '漫畫離線快取';
 
   @override
-  String get moreStorageDownloadNovels => '小說下載';
+  String get moreStorageDownloadNovels => '小說離線內容';
 
   @override
   String get moreStorageDownloadFavorites => '收藏快照';

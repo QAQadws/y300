@@ -21,6 +21,7 @@ import 'package:y300/features/library_shared/domain/services/library_cover_asset
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
+import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
 
 abstract class ComicDownloadService {
   Future<DownloadedComicEpisode> downloadEpisode({
@@ -850,18 +851,94 @@ class _ComicDownloadedChapterDraft {
   }
 }
 
+final class MigrationGatedComicDownloadService
+    implements ComicDownloadService, ComicDownloadAvailabilityChecker {
+  const MigrationGatedComicDownloadService({
+    required ComicDownloadService delegate,
+    required ComicDownloadAvailabilityChecker availabilityChecker,
+    required StorageRootAccessGate accessGate,
+  }) : _delegate = delegate,
+       _availabilityChecker = availabilityChecker,
+       _accessGate = accessGate;
+
+  final ComicDownloadService _delegate;
+  final ComicDownloadAvailabilityChecker _availabilityChecker;
+  final StorageRootAccessGate _accessGate;
+
+  @override
+  Future<DownloadedComicEpisode> downloadEpisode({
+    required String comicId,
+    required String episodeId,
+    ComicDownloadProgressObserver? observer,
+    ComicDownloadCancellationToken? cancellationToken,
+  }) {
+    return _accessGate.runWithAccess(
+      () => _delegate.downloadEpisode(
+        comicId: comicId,
+        episodeId: episodeId,
+        observer: observer,
+        cancellationToken: cancellationToken,
+      ),
+    );
+  }
+
+  @override
+  Future<void> deleteEpisodeDownload({
+    required String comicId,
+    required String episodeId,
+  }) {
+    return _accessGate.runWithAccess(
+      () => _delegate.deleteEpisodeDownload(
+        comicId: comicId,
+        episodeId: episodeId,
+      ),
+    );
+  }
+
+  @override
+  Future<List<ComicEpisodeImageItem>> getDownloadedEpisodeImages({
+    required String comicId,
+    required String episodeId,
+  }) {
+    return _accessGate.runWithAccess(
+      () => _delegate.getDownloadedEpisodeImages(
+        comicId: comicId,
+        episodeId: episodeId,
+      ),
+    );
+  }
+
+  @override
+  Future<bool> hasValidEpisodeDownload({
+    required String comicId,
+    required String episodeId,
+  }) {
+    return _accessGate.runWithAccess(
+      () => _availabilityChecker.hasValidEpisodeDownload(
+        comicId: comicId,
+        episodeId: episodeId,
+      ),
+    );
+  }
+}
+
 final comicDownloadImageRequestGovernorProvider =
     Provider<ComicDownloadImageRequestGovernor>((ref) {
       return DefaultComicDownloadImageRequestGovernor();
     });
 
 final comicDownloadServiceProvider = Provider<ComicDownloadService>((ref) {
-  return DefaultComicDownloadService(
+  final delegate = DefaultComicDownloadService(
     repository: ref.watch(comicRepositoryProvider),
     readerServiceFuture: ref.watch(comicReaderServiceProvider.future),
     storageService: ref.watch(downloadStorageServiceProvider),
     imageCacheService: ref.watch(imageCacheServiceProvider),
     coverStore: ref.watch(libraryCoverStoreProvider),
     imageRequestGovernor: ref.watch(comicDownloadImageRequestGovernorProvider),
+  );
+  return MigrationGatedComicDownloadService(
+    delegate: delegate,
+    availabilityChecker: delegate,
+    accessGate: ref.watch(storageRootAccessGateProvider),
   );
 });

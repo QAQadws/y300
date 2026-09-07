@@ -18,6 +18,8 @@ import 'package:y300/features/history/data/local/history_local_db.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
+import '../../storage/test_support/ready_storage_root_access_gate.dart';
+
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
@@ -217,6 +219,7 @@ void main() {
             favoritesJsonPath: '${temp.path}/favorites.json',
           ),
         ),
+        storageRootAccessGate: const ReadyStorageRootAccessGate(),
       ).calculateUsage();
 
       expect(section.bucket, StorageBucket.download);

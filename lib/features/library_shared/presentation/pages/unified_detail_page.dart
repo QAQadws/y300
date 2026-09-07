@@ -107,6 +107,11 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   bool get _supportsChapterDownloads => _downloadAdapter != null;
 
+  // The bulk implementation stays available for persisted tasks and a
+  // reversible product-policy change, but the current UI only exposes
+  // chapter-level offline caching.
+  bool get _showsBulkDownloadActions => false;
+
   DetailChapterDownloadActivityAdapter? get _downloadActivityAdapter {
     final adapter = widget.adapter;
     return adapter is DetailChapterDownloadActivityAdapter
@@ -337,7 +342,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                 ),
               ),
               actions: [
-                if (_supportsChapterDownloads)
+                if (_supportsChapterDownloads && _showsBulkDownloadActions)
                   AppPopupMenuButton<String>(
                     key: const Key('unified-detail-appbar-download'),
                     tooltip: l10n.libraryDetailDownload,

@@ -9,6 +9,7 @@ import 'package:y300/features/comic/domain/services/comic_download_queue.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
 
 final class ComicDownloadQueueService implements ComicDownloadQueue {
   ComicDownloadQueueService({
@@ -16,6 +17,7 @@ final class ComicDownloadQueueService implements ComicDownloadQueue {
     required ComicDownloadService downloadService,
     required LibraryStateRepository libraryStateRepository,
     required LibraryShelfRefreshBus shelfRefreshBus,
+    required StorageRootAccessGate storageRootAccessGate,
     ValueNotifier<ComicDownloadQueueSnapshot>? snapshotNotifier,
     DateTime Function()? nowProvider,
   }) : _queueRepository = queueRepository,
@@ -26,6 +28,7 @@ final class ComicDownloadQueueService implements ComicDownloadQueue {
            : null,
        _libraryStateRepository = libraryStateRepository,
        _shelfRefreshBus = shelfRefreshBus,
+       _storageRootAccessGate = storageRootAccessGate,
        _nowProvider = nowProvider ?? DateTime.now,
        _snapshot =
            snapshotNotifier ??
@@ -39,6 +42,7 @@ final class ComicDownloadQueueService implements ComicDownloadQueue {
   final ComicDownloadAvailabilityChecker? _downloadAvailabilityChecker;
   final LibraryStateRepository _libraryStateRepository;
   final LibraryShelfRefreshBus _shelfRefreshBus;
+  final StorageRootAccessGate _storageRootAccessGate;
   final DateTime Function() _nowProvider;
   final ValueNotifier<ComicDownloadQueueSnapshot> _snapshot;
   final bool _ownsSnapshotNotifier;
@@ -59,6 +63,12 @@ final class ComicDownloadQueueService implements ComicDownloadQueue {
 
   @override
   Future<ComicDownloadEnqueueResult> enqueueTargets(
+    Iterable<ComicDownloadTarget> targets,
+  ) {
+    return _storageRootAccessGate.runWithAccess(() => _enqueueTargets(targets));
+  }
+
+  Future<ComicDownloadEnqueueResult> _enqueueTargets(
     Iterable<ComicDownloadTarget> targets,
   ) async {
     final normalized = <ComicDownloadTarget>[];
@@ -129,7 +139,11 @@ final class ComicDownloadQueueService implements ComicDownloadQueue {
   }
 
   @override
-  Future<void> start() async {
+  Future<void> start() {
+    return _storageRootAccessGate.runWithAccess(_start);
+  }
+
+  Future<void> _start() async {
     if (_disposed) {
       return;
     }
@@ -178,13 +192,15 @@ final class ComicDownloadQueueService implements ComicDownloadQueue {
 
   @override
   Future<void> retry(int taskId) async {
-    await _queueRepository.retry(id: taskId, now: _nowProvider());
-    await _refreshSnapshot();
-    if (_started) {
-      _schedulePump();
-    } else {
-      await start();
-    }
+    await _storageRootAccessGate.runWithAccess(() async {
+      await _queueRepository.retry(id: taskId, now: _nowProvider());
+      await _refreshSnapshot();
+      if (_started) {
+        _schedulePump();
+      } else {
+        await _start();
+      }
+    });
   }
 
   @override

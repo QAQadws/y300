@@ -11,6 +11,7 @@ import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/composer_shared/data/local/composer_draft_local_db.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
+import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 
 class LibraryCoverStorageAccountingAdapter implements StorageAccountingAdapter {
@@ -233,15 +234,22 @@ class ComposerDraftStorageAccountingAdapter
 class DownloadStorageAccountingAdapter implements StorageAccountingAdapter {
   const DownloadStorageAccountingAdapter({
     required DownloadStorageService storageService,
-  }) : _storageService = storageService;
+    required StorageRootAccessGate storageRootAccessGate,
+  }) : _storageService = storageService,
+       _storageRootAccessGate = storageRootAccessGate;
 
   final DownloadStorageService _storageService;
+  final StorageRootAccessGate _storageRootAccessGate;
 
   @override
   StorageBucket get bucket => StorageBucket.download;
 
   @override
-  Future<StorageUsageSection> calculateUsage() async {
+  Future<StorageUsageSection> calculateUsage() {
+    return _storageRootAccessGate.runWithAccess(_calculateUsage);
+  }
+
+  Future<StorageUsageSection> _calculateUsage() async {
     final root = await _storageService.prepareRoot();
     final comics = await _directoryBytes(io.Directory(root.comicsPath));
     final novels = await _directoryBytes(io.Directory(root.novelsPath));

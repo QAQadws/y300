@@ -6,6 +6,7 @@ import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/more/domain/models/about_app_info.dart';
 import 'package:y300/features/more/presentation/data_storage_controller.dart';
+import 'package:y300/features/storage/domain/storage_root_migration.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 final class MoreTextResolver {
@@ -144,6 +145,26 @@ final class MoreTextResolver {
         l10n.moreStorageNoticeUsageReloaded,
       DataStorageNoticeCode.diagnosticsExported =>
         l10n.moreStorageNoticeDiagnosticsExported(notice.path ?? ''),
+    };
+  }
+
+  static String storageMigrationFailure(
+    AppLocalizations l10n,
+    StorageRootMigrationFailureCode? code,
+  ) {
+    return switch (code) {
+      StorageRootMigrationFailureCode.insufficientSpace =>
+        l10n.moreStorageMigrationInsufficientSpace,
+      StorageRootMigrationFailureCode.permissionDenied ||
+      StorageRootMigrationFailureCode.sourceUnavailable ||
+      StorageRootMigrationFailureCode.targetUnavailable =>
+        l10n.moreStorageMigrationLocationUnavailable,
+      StorageRootMigrationFailureCode.targetConflict ||
+      StorageRootMigrationFailureCode.unsupportedLayout ||
+      StorageRootMigrationFailureCode.unsafeEntity ||
+      StorageRootMigrationFailureCode.invalidTopology =>
+        l10n.moreStorageMigrationConflict,
+      _ => l10n.moreStorageMigrationFailed,
     };
   }
 

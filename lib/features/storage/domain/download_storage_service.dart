@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:path/path.dart' as p;
 import 'package:y300/features/storage/data/storage_location_repository.dart';
+import 'package:y300/features/storage/domain/download_storage_layout.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 abstract class DownloadStorageService {
@@ -56,27 +57,25 @@ class DefaultDownloadStorageService implements DownloadStorageService {
     final custom = await _locationRepository.getCustomStorageRoot();
     final rootPath =
         custom ?? await _locationRepository.getDefaultStorageRoot();
-    final root = io.Directory(rootPath);
-    final comics = io.Directory(p.join(root.path, 'comics'));
-    final novels = io.Directory(p.join(root.path, 'novels'));
+    final layout = DownloadStorageLayout.resolve(rootPath);
+    final root = io.Directory(layout.path);
+    final comics = io.Directory(layout.comicsPath);
 
     await _prepareDirectory(root);
     await _prepareDirectory(comics);
 
-    final favorites = io.File(p.join(root.path, 'favorites.json'));
+    final favorites = io.File(layout.favoritesJsonPath);
     if (!await favorites.exists()) {
-      await writeJsonAtomically(favorites, <String, Object?>{
-        'schemaVersion': 1,
-        'remoteCount': 0,
-        'syncedAt': null,
-        'threads': <Object?>[],
-      });
+      await writeJsonAtomically(
+        favorites,
+        DownloadStorageLayout.emptyFavoritesSnapshot(),
+      );
     }
 
     return DownloadStorageRoot(
       path: root.path,
       comicsPath: comics.path,
-      novelsPath: novels.path,
+      novelsPath: layout.novelsPath,
       favoritesJsonPath: favorites.path,
     );
   }

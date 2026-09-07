@@ -34,6 +34,7 @@ import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/more/presentation/data_storage_controller.dart';
 import 'package:y300/features/novel/presentation/novel_tab_page.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
+import 'package:y300/features/storage/data/storage_providers.dart';
 
 final mainShellBackgroundTaskStarterProvider =
     Provider<Future<void> Function()>((ref) {
@@ -57,9 +58,10 @@ final mainShellBackgroundTaskStarterProvider =
             _startBackgroundTaskSafely(
               ref.read(comicSearchRefreshQueueServiceProvider).start,
             ),
-            _startBackgroundTaskSafely(
-              ref.read(comicDownloadQueueProvider).start,
-            ),
+            _startBackgroundTaskSafely(() async {
+              await ref.read(storageRootAccessGateProvider).ensureReady();
+              await ref.read(comicDownloadQueueProvider).start();
+            }),
             _startBackgroundTaskSafely(migrator.migrateSourceAssets),
           ]),
         );

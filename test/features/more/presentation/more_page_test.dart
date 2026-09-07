@@ -89,10 +89,11 @@ void main() {
     expect(find.byKey(const Key('more-cache-settings-entry')), findsNothing);
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
-    expect(find.text('管理图片缓存与下载位置'), findsOneWidget);
+    expect(find.text('管理缓存与离线内容'), findsOneWidget);
     expect(find.byKey(const Key('more-download-queue-entry')), findsOneWidget);
-    expect(find.text('下载队列'), findsOneWidget);
-    expect(find.text('暂无下载任务'), findsOneWidget);
+    expect(find.text('缓存队列'), findsOneWidget);
+    expect(find.text('暂无缓存任务'), findsOneWidget);
+    expect(find.byIcon(Icons.offline_pin_outlined), findsOneWidget);
     expect(find.byKey(const Key('about-check-update-entry')), findsNothing);
     expect(
       find.byKey(const Key('more-reader-settings-placeholder')),
@@ -128,6 +129,45 @@ void main() {
     );
     expect(find.byKey(const Key('more-about-entry')), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
+  });
+
+  testWidgets('MorePage cache queue entry supports large Traditional text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+        ],
+        child: const LocalizedTestApp(
+          locale: Locale('zh', 'TW'),
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: Size(360, 800),
+              textScaler: TextScaler.linear(1.6),
+            ),
+            child: MorePage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('快取佇列'), findsOneWidget);
+    expect(find.text('目前沒有快取工作'), findsOneWidget);
+    expect(find.byIcon(Icons.offline_pin_outlined), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('MorePage opens the HTML renderer prototype in debug builds', (

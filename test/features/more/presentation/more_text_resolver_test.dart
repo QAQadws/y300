@@ -67,7 +67,7 @@ void main() {
           qualifier: 'downloaded',
         ),
       ),
-      '帖子图片（已下载）',
+      '帖子图片（已缓存）',
     );
     expect(
       MoreTextResolver.storageLabel(

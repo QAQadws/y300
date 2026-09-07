@@ -6,4 +6,6 @@
 abstract final class TechnicalStorageKeys {
   static const String networkCookiesV1 = 'network.cookies.v1';
   static const String searchLastSearchAtMs = 'search.last_search_at_ms';
+  static const String downloadStorageRootMigrationV1 =
+      'storage.download_root_migration.v1';
 }
