@@ -33,7 +33,10 @@ class CacheRecordForumImageDimensionIndex implements ForumImageDimensionIndex {
     if (cacheKey == null || cacheKey.isEmpty) {
       return null;
     }
-    final result = await _imageCacheService.getCached(cacheKey);
+    final cacheService = _imageCacheService;
+    final result = cacheService is ImageCacheMetadataLookup
+        ? await (cacheService as ImageCacheMetadataLookup).peekCached(cacheKey)
+        : await cacheService.getCached(cacheKey);
     if (result == null || !result.success) {
       return null;
     }

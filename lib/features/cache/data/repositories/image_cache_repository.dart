@@ -41,7 +41,15 @@ abstract class ImageCacheRepository implements ProtectedCoverCacheStore {
   Future<void> deleteByKey(String cacheKey);
 }
 
-class LocalImageCacheRepository implements ImageCacheRepository {
+/// Optional capability for committing cache access timestamps in one
+/// transaction. Repositories that do not implement it remain compatible with
+/// the buffered recorder's per-key fallback.
+abstract interface class ImageCacheBatchAccessRepository {
+  Future<void> touchMany(Map<String, DateTime> accesses);
+}
+
+class LocalImageCacheRepository
+    implements ImageCacheRepository, ImageCacheBatchAccessRepository {
   LocalImageCacheRepository(Future<Database> dbFuture)
     : _dbFutureFactory = (() => dbFuture);
 
@@ -107,6 +115,27 @@ class LocalImageCacheRepository implements ImageCacheRepository {
       where: 'cache_key = ?',
       whereArgs: <Object>[cacheKey],
     );
+  }
+
+  @override
+  Future<void> touchMany(Map<String, DateTime> accesses) async {
+    if (accesses.isEmpty) {
+      return;
+    }
+    final db = await _db;
+    final batch = db.batch();
+    for (final MapEntry(key: cacheKey, value: accessedAt) in accesses.entries) {
+      batch.update(
+        ComicLocalDb.cachedImagesTable,
+        <String, Object?>{
+          'last_accessed_at': accessedAt.millisecondsSinceEpoch,
+          'updated_at': accessedAt.millisecondsSinceEpoch,
+        },
+        where: 'cache_key = ?',
+        whereArgs: <Object>[cacheKey],
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   @override

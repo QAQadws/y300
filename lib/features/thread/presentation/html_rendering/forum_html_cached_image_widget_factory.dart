@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -9,11 +11,13 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_layout_hint_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
 
 const _forumHtmlInlineMediaBorderRadius = BorderRadius.all(Radius.circular(4));
 
@@ -39,6 +43,8 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     this.imageDimensionIndex,
     this.fallbackAspectRatioFor,
     this.onBlockImageResolved,
+    this.imageViewportCoordinator,
+    this.imagePrecacheService,
     ForumImageLayoutHintResolver? layoutHintResolver,
   }) : imageRequestResolver =
            imageRequestResolver ?? const DefaultForumImageRequestResolver(),
@@ -63,6 +69,8 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     Size size,
   )?
   onBlockImageResolved;
+  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumImagePrecacheService? imagePrecacheService;
   final ForumImageLayoutHintResolver layoutHintResolver;
   var _nextImageIndex = 0;
 
@@ -130,6 +138,8 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
         initialHint: _resolveInitialBlockHint(spec, request),
         dimensionIndex: imageDimensionIndex,
         layoutHintResolver: layoutHintResolver,
+        imageViewportCoordinator: imageViewportCoordinator,
+        imagePrecacheService: imagePrecacheService,
       ),
       spec: spec,
       request: request,
@@ -286,6 +296,8 @@ class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
     required this.initialHint,
     required this.dimensionIndex,
     required this.layoutHintResolver,
+    required this.imageViewportCoordinator,
+    required this.imagePrecacheService,
   });
 
   final ForumImageLoadSpec spec;
@@ -302,6 +314,8 @@ class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
   final ForumImageLayoutHint initialHint;
   final ForumImageDimensionIndex? dimensionIndex;
   final ForumImageLayoutHintResolver layoutHintResolver;
+  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumImagePrecacheService? imagePrecacheService;
 
   @override
   ConsumerState<_ForumHtmlCachedBlockImageView> createState() =>
@@ -315,21 +329,41 @@ class _ForumHtmlCachedBlockImageViewState
   ForumImageLayoutHint? _cachedHint;
   String? _loadedCacheKey;
   int _retryToken = 0;
+  ThreadImageViewportHandle? _viewportHandle;
+  ForumImageWorkToken? _prefetchToken;
+  String? _prefetchIdentity;
 
   ForumImageLayoutHint get _hint => _cachedHint ?? widget.initialHint;
 
   @override
   void initState() {
     super.initState();
+    _createViewportHandle();
     _loadCachedDimensions();
   }
 
   @override
   void didUpdateWidget(covariant _ForumHtmlCachedBlockImageView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.request.cacheKey != widget.request.cacheKey ||
+    if (!identical(
+      oldWidget.imageViewportCoordinator,
+      widget.imageViewportCoordinator,
+    )) {
+      _viewportHandle?.dispose();
+      _viewportHandle = null;
+      _cancelPrefetch();
+      _createViewportHandle();
+    }
+    final imageIdentityChanged =
+        oldWidget.request.cacheKey != widget.request.cacheKey ||
+        oldWidget.request.sourceUrl != widget.request.sourceUrl;
+    if (imageIdentityChanged ||
         oldWidget.spec.htmlWidth != widget.spec.htmlWidth ||
         oldWidget.spec.htmlHeight != widget.spec.htmlHeight) {
+      if (imageIdentityChanged) {
+        _viewportHandle?.reportLoadStarted();
+      }
+      _cancelPrefetch();
       _cachedHint = null;
       _loadedCacheKey = null;
       _loadCachedDimensions();
@@ -338,6 +372,36 @@ class _ForumHtmlCachedBlockImageViewState
 
   @override
   Widget build(BuildContext context) {
+    final viewportHandle = _viewportHandle;
+    viewportHandle?.bind(context);
+    if (viewportHandle != null) {
+      return ValueListenableBuilder<ThreadImageViewportMode>(
+        valueListenable: viewportHandle,
+        builder: (context, mode, child) => _buildForMode(mode),
+      );
+    }
+    return _buildImage();
+  }
+
+  Widget _buildForMode(ThreadImageViewportMode mode) {
+    if (mode == ThreadImageViewportMode.prefetch) {
+      _scheduleDiskPrefetch();
+    } else if (mode == ThreadImageViewportMode.dormant) {
+      _cancelPrefetch();
+    }
+    if (mode != ThreadImageViewportMode.display) {
+      final hint = _hint;
+      return _clipForumHtmlInlineMedia(
+        AspectRatio(
+          aspectRatio: hint.aspectRatio ?? 0.7,
+          child: const _ForumHtmlImageSurface(),
+        ),
+      );
+    }
+    return _buildImage();
+  }
+
+  Widget _buildImage() {
     final hint = _hint;
     final image = CachedLibraryImage(
       request: widget.request,
@@ -350,6 +414,9 @@ class _ForumHtmlCachedBlockImageViewState
       showDelayedLoadingIndicator: true,
       referer: widget.imageReferer,
       onImageResolved: _handleImageResolved,
+      onFirstFrameRendered: (_) => _viewportHandle?.reportFirstFrameSettled(),
+      onImageFailed: _viewportHandle?.reportFirstFrameSettled,
+      remoteDisplayPolicy: CachedImageRemoteDisplayPolicy.afterCacheWrite,
       retryToken: _retryToken,
     );
     return _clipForumHtmlInlineMedia(
@@ -357,7 +424,50 @@ class _ForumHtmlCachedBlockImageViewState
     );
   }
 
+  void _createViewportHandle() {
+    _viewportHandle = widget.imageViewportCoordinator?.register();
+  }
+
+  void _scheduleDiskPrefetch() {
+    final service = widget.imagePrecacheService;
+    if (service == null) {
+      return;
+    }
+    final identity = '${widget.request.cacheKey}:${widget.request.sourceUrl}';
+    if (_prefetchIdentity == identity) {
+      return;
+    }
+    _cancelPrefetch();
+    _prefetchIdentity = identity;
+    final token = ForumImageWorkToken();
+    _prefetchToken = token;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !token.isActive || _prefetchIdentity != identity) {
+        return;
+      }
+      if (service case final ScopedForumImagePrecacheService scoped) {
+        unawaited(scoped.ensureDiskCachedScoped(widget.spec, scope: token));
+      } else {
+        unawaited(service.ensureDiskCached(widget.spec));
+      }
+    });
+  }
+
+  void _cancelPrefetch() {
+    _prefetchToken?.cancel();
+    _prefetchToken = null;
+    _prefetchIdentity = null;
+  }
+
+  @override
+  void dispose() {
+    _cancelPrefetch();
+    _viewportHandle?.dispose();
+    super.dispose();
+  }
+
   void _retryImage() {
+    _viewportHandle?.reportLoadStarted();
     setState(() {
       _retryToken += 1;
     });

@@ -389,6 +389,47 @@ void main() {
     );
   });
 
+  testWidgets('uses trusted cached dimensions without probing the file', (
+    tester,
+  ) async {
+    final localFile = _createTempPng(tester);
+    final cacheService = _ControlledImageCacheService();
+    final dimensionProbe = _ControlledDimensionProbe();
+    Size? resolvedSize;
+    cacheService.completeGetCached(
+      'thread-image',
+      CachedImageResult(
+        success: true,
+        cacheKey: 'thread-image',
+        localPath: localFile.path,
+        width: 1200,
+        height: 800,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(cacheService),
+          encodedImageDimensionProbeProvider.overrideWithValue(dimensionProbe),
+        ],
+        child: LocalizedTestApp(
+          home: CachedLibraryImage(
+            request: _request('thread-image'),
+            fit: BoxFit.contain,
+            placeholder: const SizedBox.shrink(),
+            onImageResolved: (size) => resolvedSize = size,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(resolvedSize, const Size(1200, 800));
+    expect(dimensionProbe.calls, 0);
+  });
+
   testWidgets(
     'reports a local cache decode failure without exposing its path',
     (tester) async {

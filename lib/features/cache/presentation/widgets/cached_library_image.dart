@@ -29,6 +29,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     this.referer,
     this.onImageResolved,
     this.onImageFailed,
+    this.onFirstFrameRendered,
     this.onLocalPathResolved,
     this.imageProviderOverride,
     this.remoteImageProviderOverride,
@@ -51,6 +52,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   final String? referer;
   final ValueChanged<Size>? onImageResolved;
   final VoidCallback? onImageFailed;
+  final ValueChanged<LibraryImageFrameSource>? onFirstFrameRendered;
   final ValueChanged<String>? onLocalPathResolved;
   @visibleForTesting
   final ImageProvider? imageProviderOverride;
@@ -80,11 +82,15 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   String? _localPath;
   bool _allowRemoteFallback = false;
   bool _displayedRemoteImage = false;
+  bool _remoteProviderStarted = false;
   bool _cacheWriteFailed = false;
   bool _displaySettled = false;
   bool _firstFrameRendered = false;
   bool _settledRebuildScheduled = false;
   String? _dimensionLocalPath;
+  int? _knownImageWidth;
+  int? _knownImageHeight;
+  String? _cacheReadyLocalPath;
   String? _scheduledDimensionIdentity;
   int _generation = 0;
 
@@ -121,6 +127,9 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   Widget build(BuildContext context) {
     final request = widget.request;
     final generation = _generation;
+    if (_localPath == null && _allowRemoteFallback) {
+      _remoteProviderStarted = true;
+    }
     return DelayedImageLoadingOverlay(
       loadIdentity: generation,
       isLoading: !_displaySettled,
@@ -173,11 +182,24 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       _displayedRemoteImage = true;
     }
     _markDisplaySettled(generation);
+    widget.onFirstFrameRendered?.call(source);
     _scheduleDimensionProbe(request, generation);
   }
 
   void _handleImageFailed(int generation) {
     if (generation != _generation) {
+      return;
+    }
+    final cacheReadyLocalPath = _cacheReadyLocalPath?.trim();
+    if (_localPath == null &&
+        _remoteProviderStarted &&
+        cacheReadyLocalPath != null &&
+        cacheReadyLocalPath.isNotEmpty) {
+      setState(() {
+        _localPath = cacheReadyLocalPath;
+        _allowRemoteFallback = false;
+        _remoteProviderStarted = false;
+      });
       return;
     }
     _markDisplaySettled(generation);
@@ -241,11 +263,15 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     _localPath = null;
     _allowRemoteFallback = false;
     _displayedRemoteImage = false;
+    _remoteProviderStarted = false;
     _cacheWriteFailed = false;
     _displaySettled = !_hasDisplaySource;
     _firstFrameRendered = false;
     _settledRebuildScheduled = false;
     _dimensionLocalPath = null;
+    _knownImageWidth = null;
+    _knownImageHeight = null;
+    _cacheReadyLocalPath = null;
     _scheduledDimensionIdentity = null;
     final preferredLocalPath = widget.preferredLocalPath?.trim();
     if (preferredLocalPath != null && preferredLocalPath.isNotEmpty) {
@@ -290,6 +316,10 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       }
       widget.onLocalPathResolved?.call(cachedLocalPath);
       _dimensionLocalPath = cachedLocalPath;
+      _knownImageWidth = cached?.width;
+      _knownImageHeight = cached?.height;
+      _cacheReadyLocalPath = cachedLocalPath;
+      _scheduleDimensionProbe(request, generation);
       setState(() {
         _localPath = cachedLocalPath;
         _allowRemoteFallback = false;
@@ -319,8 +349,11 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     }
     widget.onLocalPathResolved?.call(result.localPath!.trim());
     _dimensionLocalPath = result.localPath!.trim();
-    if (_displayedRemoteImage) {
-      _scheduleDimensionProbe(request, generation);
+    _knownImageWidth = result.width;
+    _knownImageHeight = result.height;
+    _cacheReadyLocalPath = result.localPath!.trim();
+    _scheduleDimensionProbe(request, generation);
+    if (_displayedRemoteImage || _remoteProviderStarted) {
       return;
     }
     setState(() {
@@ -364,7 +397,6 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     final localPath = _dimensionLocalPath?.trim();
     final cacheKey = request?.cacheKey.trim();
     if (callback == null ||
-        !_firstFrameRendered ||
         localPath == null ||
         localPath.isEmpty ||
         cacheKey == null ||
@@ -373,6 +405,21 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     }
     final identity = '$cacheKey\u0000$localPath';
     if (_scheduledDimensionIdentity == identity) {
+      return;
+    }
+    final knownWidth = _knownImageWidth;
+    final knownHeight = _knownImageHeight;
+    if (knownWidth != null &&
+        knownHeight != null &&
+        knownWidth > 0 &&
+        knownHeight > 0) {
+      _scheduledDimensionIdentity = identity;
+      callback(Size(knownWidth.toDouble(), knownHeight.toDouble()));
+      return;
+    }
+    // Missing metadata still waits for the displayed provider's first frame.
+    // This prevents a hidden or failed image from starting a second file task.
+    if (!_firstFrameRendered) {
       return;
     }
     _scheduledDimensionIdentity = identity;

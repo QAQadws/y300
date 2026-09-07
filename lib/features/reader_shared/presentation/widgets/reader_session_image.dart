@@ -69,6 +69,7 @@ class ReaderSessionImage extends StatelessWidget {
         retryToken: retryToken,
         showDelayedLoadingIndicator: true,
         loadingIndicatorColor: loadingIndicatorColor,
+        remoteDisplayPolicy: CachedImageRemoteDisplayPolicy.afterCacheWrite,
       ),
     );
   }

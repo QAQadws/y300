@@ -8,6 +8,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -16,6 +17,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
+import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatelessWidget {
@@ -35,6 +37,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.imageDimensionIndex,
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
+    this.imageViewportCoordinator,
+    this.imagePrecacheService,
     this.preparedDocument,
     this.contentImageKind = ForumImageKind.threadInline,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
@@ -62,6 +66,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     Size size,
   )?
   onBlockImageResolved;
+  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlPreparedRenderDocument? preparedDocument;
   final ForumImageKind contentImageKind;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
@@ -152,6 +158,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       imageDimensionIndex: imageDimensionIndex,
       fallbackAspectRatioFor: imageFallbackAspectRatioFor,
       onBlockImageResolved: onBlockImageResolved,
+      imageViewportCoordinator: imageViewportCoordinator,
+      imagePrecacheService: imagePrecacheService,
     );
   }
 
@@ -197,6 +205,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           imageDimensionIndex: imageDimensionIndex,
           imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
           onBlockImageResolved: onBlockImageResolved,
+          imageViewportCoordinator: imageViewportCoordinator,
+          imagePrecacheService: imagePrecacheService,
           contentImageKind: contentImageKind,
           blockSpacingMode: blockSpacingMode,
           preparedDocument: document.copyWith(preparedHtml: html),

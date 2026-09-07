@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
@@ -13,6 +14,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
+import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 typedef ThreadPostHtmlFirstImageFallback =
@@ -40,6 +42,8 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.onImageLayoutShift,
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
+    this.imageViewportCoordinator,
+    this.imagePrecacheService,
     this.fallback,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
@@ -65,6 +69,8 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     Size size,
   )?
   onBlockImageResolved;
+  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumImagePrecacheService? imagePrecacheService;
   final Widget? fallback;
   final ForumHtmlRenderPreparer renderPreparer;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
@@ -134,6 +140,8 @@ class _ThreadPostHtmlFirstBodyState
           imageCacheOwnerId: widget.threadId,
           imageFallbackAspectRatioFor: widget.imageFallbackAspectRatioFor,
           onBlockImageResolved: widget.onBlockImageResolved,
+          imageViewportCoordinator: widget.imageViewportCoordinator,
+          imagePrecacheService: widget.imagePrecacheService,
           preferences: preferences,
           callbacks: ForumHtmlRenderCallbacks(
             onTapUrl: (url) {
@@ -290,6 +298,8 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.onImageLayoutShift,
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
+    this.imageViewportCoordinator,
+    this.imagePrecacheService,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
   });
@@ -314,6 +324,8 @@ class ThreadPostHtmlBody extends StatelessWidget {
     Size size,
   )?
   onBlockImageResolved;
+  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlRenderPreparer renderPreparer;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
 
@@ -333,6 +345,8 @@ class ThreadPostHtmlBody extends StatelessWidget {
       onImageLayoutShift: onImageLayoutShift,
       imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
       onBlockImageResolved: onBlockImageResolved,
+      imageViewportCoordinator: imageViewportCoordinator,
+      imagePrecacheService: imagePrecacheService,
       renderPreparer: renderPreparer,
       imageReaderBridge: imageReaderBridge,
     );

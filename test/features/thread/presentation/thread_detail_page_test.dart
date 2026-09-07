@@ -1532,7 +1532,7 @@ void main() {
       expect(find.byType(ThreadImageReaderPage), findsNothing);
     });
 
-    testWidgets('HTML-first mode triggers lightweight image preheat', (
+    testWidgets('visible HTML-first images do not start a second predecode', (
       tester,
     ) async {
       final precacheService = _RecordingForumImagePrecacheService();
@@ -1564,50 +1564,40 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      expect(precacheService.decodedSpecs, isNotEmpty);
-      expect(
-        precacheService.decodedSpecs.map((spec) => spec.kind).toSet(),
-        <ForumImageKind>{ForumImageKind.threadInline},
-      );
-      expect(precacheService.decodedSpecs.first.sourceUrl, contains('page-1'));
+      expect(precacheService.decodedSpecs, isEmpty);
     });
 
-    testWidgets(
-      'production HTML-first renderer triggers lightweight image preheat',
-      (tester) async {
-        final precacheService = _RecordingForumImagePrecacheService();
-        final repository = _FakeThreadRepository((tid, page, query) async {
-          return ApiSuccess(
-            _threadDetailData(
-              tid: tid,
-              posts: [
-                ThreadPost(
-                  pid: 'p1',
-                  author: 'alice',
-                  authorId: '1',
-                  message: '<img src="data/attachment/forum/page-1.jpg">',
-                  number: 1,
-                  isFirst: true,
-                  dateline: 'today',
-                ),
-              ],
-            ),
-          );
-        });
-
-        await tester.pumpWidget(
-          _buildTestApp(repository, forumImagePrecacheService: precacheService),
+    testWidgets('production HTML-first renderer avoids post-build predecode', (
+      tester,
+    ) async {
+      final precacheService = _RecordingForumImagePrecacheService();
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        return ApiSuccess(
+          _threadDetailData(
+            tid: tid,
+            posts: [
+              ThreadPost(
+                pid: 'p1',
+                author: 'alice',
+                authorId: '1',
+                message: '<img src="data/attachment/forum/page-1.jpg">',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
         );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 120));
+      });
 
-        expect(precacheService.decodedSpecs, isNotEmpty);
-        expect(
-          precacheService.decodedSpecs.first.kind,
-          ForumImageKind.threadInline,
-        );
-      },
-    );
+      await tester.pumpWidget(
+        _buildTestApp(repository, forumImagePrecacheService: precacheService),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(precacheService.decodedSpecs, isEmpty);
+    });
 
     testWidgets('long pressing app bar copies thread link', (tester) async {
       final copiedTexts = <String>[];
@@ -1759,7 +1749,7 @@ void main() {
       );
     });
 
-    testWidgets('schedules only lightweight HTML-first post image preloads', (
+    testWidgets('does not predecode images from a distant built post', (
       tester,
     ) async {
       final imagePrecacheService = _RecordingForumImagePrecacheService();
@@ -1809,21 +1799,14 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      for (var attempt = 0; attempt < 10; attempt++) {
-        final scheduled = imagePrecacheService.decodedSpecs.any(
-          (spec) => spec.sourceUrl.contains('page-2.jpg'),
-        );
-        if (scheduled) break;
-        await tester.pump(const Duration(milliseconds: 20));
-      }
-
       expect(
         imagePrecacheService.decodedSpecs.any(
           (spec) => spec.sourceUrl.contains('page-2.jpg'),
         ),
-        isTrue,
+        isFalse,
       );
-      expect(imagePrecacheService.decodedSpecs.length, lessThanOrEqualTo(3));
+      expect(imagePrecacheService.decodedSpecs, isEmpty);
+      expect(imagePrecacheService.diskSpecs.length, lessThanOrEqualTo(1));
     });
 
     testWidgets('stretches whole post card segments to the same width', (
@@ -5127,11 +5110,13 @@ class _RecordingImageCacheService extends _NoopImageCacheService {
 
 class _RecordingForumImagePrecacheService implements ForumImagePrecacheService {
   final decodedSpecs = <ForumImageLoadSpec>[];
+  final diskSpecs = <ForumImageLoadSpec>[];
 
   @override
   Future<ForumImagePrecacheResult> ensureDiskCached(
     ForumImageLoadSpec spec,
   ) async {
+    diskSpecs.add(spec);
     return const ForumImagePrecacheResult(success: true);
   }
 

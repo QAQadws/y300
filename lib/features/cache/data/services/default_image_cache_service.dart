@@ -7,6 +7,7 @@ import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
+import 'package:y300/features/cache/data/services/image_cache_access_recorder.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
@@ -47,6 +48,7 @@ class DefaultImageCacheService
     implements
         ImageCacheService,
         ImageCacheOwnerDimensionLookup,
+        ImageCacheMetadataLookup,
         ImageCacheDimensionRecorder,
         ImageCacheDecodeFailureReporter,
         CacheBudgetParticipant {
@@ -59,13 +61,15 @@ class DefaultImageCacheService
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
     ImageCacheDiagnosticRecorder diagnosticRecorder =
         const NoopImageCacheDiagnosticRecorder(),
+    ImageCacheAccessRecorder? accessRecorder,
   }) : _repository = repository,
        _cacheManagerFuture = cacheManagerFuture,
        _directoryResolver = directoryResolver,
        _urlResolver = urlResolver,
        _downloader = downloader,
        _mutationReporter = mutationReporter,
-       _diagnosticRecorder = diagnosticRecorder;
+       _diagnosticRecorder = diagnosticRecorder,
+       _accessRecorder = accessRecorder;
 
   final ImageCacheRepository _repository;
   final Future<BaseCacheManager> _cacheManagerFuture;
@@ -74,6 +78,7 @@ class DefaultImageCacheService
   final ImageFileDownloader _downloader;
   final CacheMutationReporter _mutationReporter;
   final ImageCacheDiagnosticRecorder _diagnosticRecorder;
+  final ImageCacheAccessRecorder? _accessRecorder;
   final Map<String, Future<CachedImageResult>> _ensureTasks =
       <String, Future<CachedImageResult>>{};
 
@@ -236,6 +241,18 @@ class DefaultImageCacheService
 
   @override
   Future<CachedImageResult?> getCached(String cacheKey) async {
+    return _getCached(cacheKey, recordAccess: true);
+  }
+
+  @override
+  Future<CachedImageResult?> peekCached(String cacheKey) {
+    return _getCached(cacheKey, recordAccess: false);
+  }
+
+  Future<CachedImageResult?> _getCached(
+    String cacheKey, {
+    required bool recordAccess,
+  }) async {
     final normalized = cacheKey.trim();
     if (normalized.isEmpty) {
       return null;
@@ -253,7 +270,17 @@ class DefaultImageCacheService
       return null;
     }
     final bytes = await file.length();
-    await _repository.touch(normalized, DateTime.now());
+    if (recordAccess) {
+      final accessedAt = DateTime.now();
+      final accessRecorder = _accessRecorder;
+      if (accessRecorder == null) {
+        // Preserve LRU semantics for standalone/test construction while the
+        // production provider uses the non-blocking buffered recorder.
+        await _repository.touch(normalized, accessedAt);
+      } else {
+        accessRecorder.record(normalized, accessedAt);
+      }
+    }
     return CachedImageResult(
       success: true,
       cacheKey: normalized,

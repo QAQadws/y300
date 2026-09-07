@@ -121,6 +121,7 @@ class ReaderImageSessionPreloadCoordinator {
     }
     _generation += 1;
     _cancelPendingTasks();
+    _cancelRunningTasks();
     _finishedByIdentity.clear();
     if (readerOwnerId != null) {
       _sessionStore?.startSession(
@@ -138,6 +139,7 @@ class ReaderImageSessionPreloadCoordinator {
     _disposed = true;
     _generation += 1;
     _cancelPendingTasks();
+    _cancelRunningTasks();
     _finishedByIdentity.clear();
   }
 
@@ -477,15 +479,33 @@ class ReaderImageSessionPreloadCoordinator {
     try {
       switch (task.request.kind) {
         case ReaderImageSessionPreloadKind.decoded:
-          result = await task.precacheService.precacheDecoded(
-            context: task.context,
-            spec: task.request.spec,
-            expectedDisplaySize: task.expectedDisplaySize,
-          );
+          if (task.precacheService
+              case final ScopedForumImagePrecacheService scoped) {
+            result = await scoped.precacheDecodedScoped(
+              context: task.context,
+              spec: task.request.spec,
+              expectedDisplaySize: task.expectedDisplaySize,
+              scope: task.workToken,
+            );
+          } else {
+            result = await task.precacheService.precacheDecoded(
+              context: task.context,
+              spec: task.request.spec,
+              expectedDisplaySize: task.expectedDisplaySize,
+            );
+          }
         case ReaderImageSessionPreloadKind.disk:
-          result = await task.precacheService.ensureDiskCached(
-            task.request.spec,
-          );
+          if (task.precacheService
+              case final ScopedForumImagePrecacheService scoped) {
+            result = await scoped.ensureDiskCachedScoped(
+              task.request.spec,
+              scope: task.workToken,
+            );
+          } else {
+            result = await task.precacheService.ensureDiskCached(
+              task.request.spec,
+            );
+          }
       }
     } catch (error) {
       result = ForumImagePrecacheResult.failed(error);
@@ -687,9 +707,16 @@ class ReaderImageSessionPreloadCoordinator {
   }
 
   void _completeCancelled(_ReaderImagePreparationTask task) {
+    task.workToken.cancel();
     final completer = task.completer;
     if (completer != null && !completer.isCompleted) {
       completer.complete();
+    }
+  }
+
+  void _cancelRunningTasks() {
+    for (final task in _running) {
+      task.workToken.cancel();
     }
   }
 }
@@ -722,7 +749,7 @@ enum _ReaderImagePreparationPriority {
 }
 
 class _ReaderImagePreparationTask {
-  const _ReaderImagePreparationTask({
+  _ReaderImagePreparationTask({
     required this.request,
     required this.generation,
     required this.role,
@@ -747,4 +774,5 @@ class _ReaderImagePreparationTask {
   final ReaderImagePreparationSink? preparationSink;
   final bool force;
   final Completer<ReaderImageSessionPreloadResult?>? completer;
+  final ForumImageWorkToken workToken = ForumImageWorkToken();
 }

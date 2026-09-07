@@ -19,7 +19,8 @@ typedef ForumImageProviderBuilder =
 typedef ForumImagePrecacheInvoker =
     Future<void> Function(ImageProvider provider, ImageConfiguration config);
 
-class DefaultForumImagePrecacheService implements ForumImagePrecacheService {
+class DefaultForumImagePrecacheService
+    implements ForumImagePrecacheService, ScopedForumImagePrecacheService {
   DefaultForumImagePrecacheService({
     required ImageCacheService imageCacheService,
     required ForumImageRequestResolver imageRequestResolver,
@@ -44,11 +45,31 @@ class DefaultForumImagePrecacheService implements ForumImagePrecacheService {
   final ForumImagePrecacheInvoker _precacheInvoker;
   final Map<String, Future<ForumImagePrecacheResult>> _diskTasks =
       <String, Future<ForumImagePrecacheResult>>{};
-  final Map<String, Future<ForumImagePrecacheResult>> _decodeTasks =
-      <String, Future<ForumImagePrecacheResult>>{};
+  final Map<String, _SharedForumImageDecodeTask> _decodeTasks =
+      <String, _SharedForumImageDecodeTask>{};
 
   @override
   Future<ForumImagePrecacheResult> ensureDiskCached(ForumImageLoadSpec spec) {
+    return _ensureDiskCachedForScope(spec, scope: null);
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> ensureDiskCachedScoped(
+    ForumImageLoadSpec spec, {
+    required ForumImageWorkScope scope,
+  }) {
+    return _ensureDiskCachedForScope(spec, scope: scope);
+  }
+
+  Future<ForumImagePrecacheResult> _ensureDiskCachedForScope(
+    ForumImageLoadSpec spec, {
+    required ForumImageWorkScope? scope,
+  }) {
+    if (scope != null && !scope.isActive) {
+      return Future<ForumImagePrecacheResult>.value(
+        ForumImagePrecacheResult.cancelled,
+      );
+    }
     final request = _imageRequestResolver.resolveCacheRequest(spec);
     if (request == null) {
       return Future<ForumImagePrecacheResult>.value(
@@ -87,47 +108,113 @@ class DefaultForumImagePrecacheService implements ForumImagePrecacheService {
     required ForumImageLoadSpec spec,
     Size? expectedDisplaySize,
   }) {
+    return _precacheDecodedForScope(
+      context: context,
+      spec: spec,
+      expectedDisplaySize: expectedDisplaySize,
+      scope: null,
+    );
+  }
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecodedScoped({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    required ForumImageWorkScope scope,
+    Size? expectedDisplaySize,
+  }) {
+    return _precacheDecodedForScope(
+      context: context,
+      spec: spec,
+      expectedDisplaySize: expectedDisplaySize,
+      scope: scope,
+    );
+  }
+
+  Future<ForumImagePrecacheResult> _precacheDecodedForScope({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    required Size? expectedDisplaySize,
+    required ForumImageWorkScope? scope,
+  }) async {
+    if (scope != null && !scope.isActive) {
+      return ForumImagePrecacheResult.cancelled;
+    }
     final policy = _imageRequestResolver.resolveRenderPolicy(spec);
     if (policy.precacheMode == ForumImagePrecacheMode.none) {
-      return Future<ForumImagePrecacheResult>.value(
-        const ForumImagePrecacheResult(
-          success: false,
-          failureReason: 'precache_disabled',
-        ),
+      return const ForumImagePrecacheResult(
+        success: false,
+        failureReason: 'precache_disabled',
       );
     }
     final request = _imageRequestResolver.resolveCacheRequest(spec);
     final key = request?.cacheKey.trim();
     if (request == null || key == null || key.isEmpty) {
-      return Future<ForumImagePrecacheResult>.value(
-        const ForumImagePrecacheResult(
-          success: false,
-          failureReason: 'no_cache_request',
-        ),
+      return const ForumImagePrecacheResult(
+        success: false,
+        failureReason: 'no_cache_request',
       );
     }
-    final decodeKey = '$key:${_sizeSignature(expectedDisplaySize)}';
+    final disk = scope == null
+        ? await ensureDiskCached(spec)
+        : await ensureDiskCachedScoped(spec, scope: scope);
+    if (scope != null && !scope.isActive) {
+      return ForumImagePrecacheResult.cancelled;
+    }
+    final localPath = disk.localPath?.trim();
+    if (!disk.success || localPath == null || localPath.isEmpty) {
+      return ForumImagePrecacheResult(
+        success: false,
+        fromDiskCache: disk.fromDiskCache,
+        diskCacheAttempted: disk.diskCacheAttempted,
+        decodePrecacheAttempted: false,
+        cacheKey: request.cacheKey,
+        localPath: localPath,
+        error: disk.error,
+        failureReason: disk.failureReason ?? 'disk_cache_failed',
+      );
+    }
+    if (!context.mounted) {
+      return ForumImagePrecacheResult.cancelled;
+    }
+    bool requesterIsActive() =>
+        context.mounted && (scope == null || scope.isActive);
+    final devicePixelRatio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
+    final config = createLocalImageConfiguration(context);
+    final fit = _fitFor(spec);
+    final decodeKey =
+        '$key:$localPath:${_sizeSignature(expectedDisplaySize)}:'
+        '${devicePixelRatio.toStringAsFixed(2)}:${fit.name}';
     final existing = _decodeTasks[decodeKey];
     if (existing != null) {
-      return existing;
+      existing.addConsumer(requesterIsActive);
+      final result = await existing.future;
+      return requesterIsActive() ? result : ForumImagePrecacheResult.cancelled;
     }
+    final sharedTask = _SharedForumImageDecodeTask(requesterIsActive);
     late final Future<ForumImagePrecacheResult> task;
     task = _decodeGate
         .run(
           () => _precacheDecoded(
-            context: context,
-            spec: spec,
+            config: config,
+            fit: fit,
+            devicePixelRatio: devicePixelRatio,
             expectedDisplaySize: expectedDisplaySize,
             request: request,
+            disk: disk,
+            localPath: localPath,
+            hasActiveConsumer: () => sharedTask.hasActiveConsumer,
           ),
         )
         .whenComplete(() {
-          if (identical(_decodeTasks[decodeKey], task)) {
+          if (identical(_decodeTasks[decodeKey], sharedTask)) {
             _decodeTasks.remove(decodeKey);
           }
         });
-    _decodeTasks[decodeKey] = task;
-    return task;
+    sharedTask.future = task;
+    _decodeTasks[decodeKey] = sharedTask;
+    final result = await task;
+    return requesterIsActive() ? result : ForumImagePrecacheResult.cancelled;
   }
 
   Future<ForumImagePrecacheResult> _ensureDiskCached(
@@ -149,34 +236,28 @@ class DefaultForumImagePrecacheService implements ForumImagePrecacheService {
   }
 
   Future<ForumImagePrecacheResult> _precacheDecoded({
-    required BuildContext context,
-    required ForumImageLoadSpec spec,
+    required ImageConfiguration config,
+    required BoxFit fit,
+    required double devicePixelRatio,
     required Size? expectedDisplaySize,
     required ImageCacheRequest request,
+    required ForumImagePrecacheResult disk,
+    required String localPath,
+    required bool Function() hasActiveConsumer,
   }) async {
     try {
-      final devicePixelRatio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
-      final config = createLocalImageConfiguration(context);
-      final disk = await ensureDiskCached(spec);
-      final localPath = disk.localPath?.trim();
-      if (!disk.success || localPath == null || localPath.isEmpty) {
-        return ForumImagePrecacheResult(
-          success: false,
-          fromDiskCache: disk.fromDiskCache,
-          diskCacheAttempted: disk.diskCacheAttempted,
-          decodePrecacheAttempted: true,
-          cacheKey: request.cacheKey,
-          localPath: localPath,
-          error: disk.error,
-          failureReason: disk.failureReason ?? 'disk_cache_failed',
-        );
+      if (!hasActiveConsumer()) {
+        return ForumImagePrecacheResult.cancelled;
       }
       final provider = _imageProviderBuilder(
         localPath: localPath,
-        fit: _fitFor(spec),
+        fit: fit,
         expectedDisplaySize: expectedDisplaySize,
         devicePixelRatio: devicePixelRatio,
       );
+      if (!hasActiveConsumer()) {
+        return ForumImagePrecacheResult.cancelled;
+      }
       await _precacheInvoker(provider, config);
       return ForumImagePrecacheResult(
         success: true,
@@ -214,6 +295,20 @@ class DefaultForumImagePrecacheService implements ForumImagePrecacheService {
   }
 }
 
+final class _SharedForumImageDecodeTask {
+  _SharedForumImageDecodeTask(bool Function() firstConsumerIsActive)
+    : _consumers = <bool Function()>[firstConsumerIsActive];
+
+  final List<bool Function()> _consumers;
+  late Future<ForumImagePrecacheResult> future;
+
+  bool get hasActiveConsumer => _consumers.any((isActive) => isActive());
+
+  void addConsumer(bool Function() isActive) {
+    _consumers.add(isActive);
+  }
+}
+
 ImageProvider defaultForumPrecacheImageProviderBuilder({
   required String localPath,
   required BoxFit fit,
@@ -241,10 +336,15 @@ Future<void> defaultForumImagePrecacheInvoker(
   late final ImageStreamListener listener;
   listener = ImageStreamListener(
     (ImageInfo image, bool sync) {
-      if (!completer.isCompleted) {
-        completer.complete();
+      if (completer.isCompleted) {
+        image.dispose();
+        return;
       }
-      stream.removeListener(listener);
+      completer.complete();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        image.dispose();
+        stream.removeListener(listener);
+      });
     },
     onError: (Object error, StackTrace? stackTrace) {
       if (!completer.isCompleted) {

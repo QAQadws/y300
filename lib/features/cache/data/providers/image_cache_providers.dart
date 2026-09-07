@@ -15,6 +15,7 @@ import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/services/image_cache_manager_factory.dart';
 import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
+import 'package:y300/features/cache/data/services/image_cache_access_recorder.dart';
 import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
@@ -131,12 +132,20 @@ final protectedCoverCacheMaintenanceProvider =
     });
 
 final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
+  final repository = ref.watch(imageCacheRepositoryProvider);
+  final accessRecorder = BufferedImageCacheAccessRecorder(
+    repository: repository,
+  );
+  ref.onDispose(() {
+    unawaited(accessRecorder.dispose());
+  });
   return DefaultImageCacheService(
-    repository: ref.watch(imageCacheRepositoryProvider),
+    repository: repository,
     cacheManagerFuture: ref.watch(imageCacheManagerProvider.future),
     directoryResolver: ref.watch(imageCacheDirectoryResolverProvider),
     mutationReporter: ref.watch(cacheMutationBusProvider),
     diagnosticRecorder: ref.watch(imageCacheDiagnosticRecorderProvider),
+    accessRecorder: accessRecorder,
   );
 });
 

@@ -18,8 +18,8 @@ import 'package:y300/shared/widgets/forum_default_avatar.dart';
 /// 自己就会去取并缓存。这正是修复“快滑看不到封面、停下才加载”的关键。
 ///
 /// 网络分支用 `CachedNetworkImageProvider` + 共享的 `flutter_cache_manager`
-/// 实例，按规范化 URL 做 key（同一张图同一份缓存），并通过 provider 的
-/// `maxWidth` 在解码阶段降采样。
+/// 实例，按规范化 URL 做 key（同一张图同一份缓存）。缓存层始终保存原文件，
+/// 显示层再通过 [ResizeImage] 降采样，避免缓存库额外解析并重编码原图。
 class AppImage extends ConsumerStatefulWidget {
   const AppImage({
     super.key,
@@ -59,9 +59,6 @@ class AppImage extends ConsumerStatefulWidget {
 }
 
 class _AppImageState extends ConsumerState<AppImage> {
-  /// 本帧解码目标（宽度优先策略结果），用于网络分支的 maxWidth/maxHeight。
-  ImageDecodeTarget _decodeTarget = ImageDecodeTarget.none;
-
   /// 本帧显示框尺寸与 DPR，由 build 时的 LayoutBuilder 写入，供降采样解析复用。
   Size _displaySize = Size.zero;
   double _devicePixelRatio = 1;
@@ -90,10 +87,6 @@ class _AppImageState extends ConsumerState<AppImage> {
           _finiteOr(widget.height, constraints.maxHeight),
         );
         _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
-        _decodeTarget = widget.downscalePolicy.resolve(
-          displaySize: _displaySize,
-          devicePixelRatio: _devicePixelRatio,
-        );
         return _buildContent(context);
       },
     );
@@ -169,15 +162,20 @@ class _AppImageState extends ConsumerState<AppImage> {
       headers: source.referer == null
           ? null
           : <String, String>{'Referer': source.referer!},
-      maxWidth: _decodeTarget.cacheWidth,
-      maxHeight: _decodeTarget.cacheHeight,
+    );
+    final displayProvider = resolveDownscaledImageProvider(
+      base: provider,
+      fit: widget.fit,
+      displaySize: _displaySize,
+      devicePixelRatio: _devicePixelRatio,
+      downscalePolicy: widget.downscalePolicy,
     );
     return Stack(
       fit: StackFit.passthrough,
       children: <Widget>[
         if (!_networkResolved) widget.placeholder,
         Image(
-          image: provider,
+          image: displayProvider,
           fit: widget.fit,
           width: widget.width,
           height: widget.height,

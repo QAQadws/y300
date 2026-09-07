@@ -114,6 +114,8 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.onHtmlFirstImageFallbackAspectRatio,
     required this.onHtmlFirstBlockImageResolved,
     required this.onOpenPostActions,
+    required this.imageViewportCoordinator,
+    required this.imagePrecacheService,
   });
 
   final ThreadPost sourcePost;
@@ -142,6 +144,8 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     Size size,
   )
   onHtmlFirstBlockImageResolved;
+  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumImagePrecacheService? imagePrecacheService;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;
 
@@ -188,6 +192,8 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
                 onHtmlFirstImageFallbackAspectRatio(sourcePost, spec, request),
             onBlockImageResolved: (spec, request, size) =>
                 onHtmlFirstBlockImageResolved(sourcePost, spec, request, size),
+            imageViewportCoordinator: imageViewportCoordinator,
+            imagePrecacheService: imagePrecacheService,
           ),
         ),
       ),
@@ -348,6 +354,8 @@ class _ThreadPostCardEntry extends StatefulWidget {
     required this.onSubmitPollVote,
     required this.onLoadAllRatings,
     required this.onPostBuilt,
+    required this.imageViewportCoordinator,
+    required this.imagePrecacheService,
   });
 
   final ThreadPost sourcePost;
@@ -388,6 +396,8 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ValueChanged<ThreadPoll> onSubmitPollVote;
   final ValueChanged<ThreadPost> onLoadAllRatings;
   final ValueChanged<int>? onPostBuilt;
+  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumImagePrecacheService? imagePrecacheService;
 
   @override
   State<_ThreadPostCardEntry> createState() => _ThreadPostCardEntryState();
@@ -447,6 +457,8 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
               widget.onHtmlFirstImageFallbackAspectRatio,
           onHtmlFirstBlockImageResolved: widget.onHtmlFirstBlockImageResolved,
           onOpenPostActions: widget.onOpenPostActions,
+          imageViewportCoordinator: widget.imageViewportCoordinator,
+          imagePrecacheService: widget.imagePrecacheService,
         ),
         _ThreadPostCardFooterEntry(
           key: Key('thread-post-footer-${widget.sourcePost.pid}'),

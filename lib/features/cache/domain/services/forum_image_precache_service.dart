@@ -11,6 +11,40 @@ abstract interface class ForumImagePrecacheService {
   });
 }
 
+/// Optional lifecycle-aware extension used by page and reader schedulers.
+///
+/// Cancelling a scope prevents queued decode work and stale UI updates. A
+/// download that already reached the transport may still finish and populate
+/// the shared disk cache.
+abstract interface class ScopedForumImagePrecacheService {
+  Future<ForumImagePrecacheResult> ensureDiskCachedScoped(
+    ForumImageLoadSpec spec, {
+    required ForumImageWorkScope scope,
+  });
+
+  Future<ForumImagePrecacheResult> precacheDecodedScoped({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    required ForumImageWorkScope scope,
+    Size? expectedDisplaySize,
+  });
+}
+
+abstract interface class ForumImageWorkScope {
+  bool get isActive;
+}
+
+final class ForumImageWorkToken implements ForumImageWorkScope {
+  bool _cancelled = false;
+
+  @override
+  bool get isActive => !_cancelled;
+
+  void cancel() {
+    _cancelled = true;
+  }
+}
+
 class ForumImagePrecacheResult {
   const ForumImagePrecacheResult({
     required this.success,
@@ -48,4 +82,9 @@ class ForumImagePrecacheResult {
       decodePrecacheAttempted: decodePrecacheAttempted,
     );
   }
+
+  static const ForumImagePrecacheResult cancelled = ForumImagePrecacheResult(
+    success: false,
+    failureReason: 'cancelled_before_decode',
+  );
 }

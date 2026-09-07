@@ -152,6 +152,111 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('cancelled scope skips decode after disk caching finishes', (
+    tester,
+  ) async {
+    final diskCompleter = Completer<CachedImageResult>();
+    var decodeCalls = 0;
+    final service = DefaultForumImagePrecacheService(
+      imageCacheService: _RecordingImageCacheService(
+        ensureCompleter: diskCompleter,
+      ),
+      imageRequestResolver: const DefaultForumImageRequestResolver(),
+      precacheInvoker: (_, _) async => decodeCalls += 1,
+      imageProviderBuilder:
+          ({
+            required localPath,
+            required fit,
+            required expectedDisplaySize,
+            required devicePixelRatio,
+          }) => _FakeImageProvider(localPath),
+    );
+    final token = ForumImageWorkToken();
+    late Future<ForumImagePrecacheResult> future;
+
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: Builder(
+          builder: (context) {
+            future = service.precacheDecodedScoped(
+              context: context,
+              spec: _threadSpec(),
+              scope: token,
+            );
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    token.cancel();
+    diskCompleter.complete(
+      const CachedImageResult(
+        success: true,
+        cacheKey: 'thread-inline-page',
+        localPath: 'C:/cache/page.jpg',
+      ),
+    );
+
+    final result = await future;
+    expect(result.failureReason, 'cancelled_before_decode');
+    expect(decodeCalls, 0);
+  });
+
+  testWidgets(
+    'cancelling one consumer does not cancel a shared decode still in use',
+    (tester) async {
+      final decodeCompleter = Completer<void>();
+      var decodeCalls = 0;
+      final service = DefaultForumImagePrecacheService(
+        imageCacheService: _RecordingImageCacheService(),
+        imageRequestResolver: const DefaultForumImageRequestResolver(),
+        precacheInvoker: (_, _) {
+          decodeCalls += 1;
+          return decodeCompleter.future;
+        },
+        imageProviderBuilder:
+            ({
+              required localPath,
+              required fit,
+              required expectedDisplaySize,
+              required devicePixelRatio,
+            }) => _FakeImageProvider(localPath),
+      );
+      late BuildContext imageContext;
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          home: Builder(
+            builder: (context) {
+              imageContext = context;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+      final firstToken = ForumImageWorkToken();
+      final secondToken = ForumImageWorkToken();
+      final first = service.precacheDecodedScoped(
+        context: imageContext,
+        spec: _threadSpec(),
+        scope: firstToken,
+      );
+      await tester.pump();
+      final second = service.precacheDecodedScoped(
+        context: imageContext,
+        spec: _threadSpec(),
+        scope: secondToken,
+      );
+      firstToken.cancel();
+      decodeCompleter.complete();
+
+      final firstResult = await first;
+      final secondResult = await second;
+      expect(firstResult.failureReason, 'cancelled_before_decode');
+      expect(secondResult.success, isTrue);
+      expect(decodeCalls, 1);
+    },
+  );
+
   testWidgets('remote smiley does not enter decoded preheat', (tester) async {
     final cacheService = _RecordingImageCacheService();
     var decodeCalls = 0;

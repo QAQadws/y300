@@ -31,6 +31,14 @@ abstract class ImageCacheService {
   }
 }
 
+/// Optional read-only lookup used for layout metadata.
+///
+/// Unlike [ImageCacheService.getCached], this does not count as a user-visible
+/// cache access and therefore must not update LRU timestamps.
+abstract interface class ImageCacheMetadataLookup {
+  Future<CachedImageResult?> peekCached(String cacheKey);
+}
+
 /// Optional cache capability for recovering layout hints by business owner.
 /// Keeping it separate avoids expanding every image-cache test double and
 /// consumer that only needs the basic download/cache contract.

@@ -1,5 +1,4 @@
-import 'dart:async';
-
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
@@ -18,7 +17,7 @@ import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
-import 'package:y300/features/thread/presentation/services/thread_html_image_preload_coordinator.dart';
+import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_viewport_anchor_coordinator.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
@@ -111,8 +110,8 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   );
   late ThreadDetailScrollStabilizer _scrollStabilizer;
   late ThreadPostViewportAnchorCoordinator _projectionAnchorCoordinator;
-  ThreadHtmlImagePreloadCoordinator? _htmlImagePreloadCoordinator;
-  String? _htmlImagePreloadSignature;
+  ThreadImageViewportCoordinator? _imageViewportCoordinator;
+  ValueListenable<TickerModeData>? _tickerModeNotifier;
   final _imageAspectRatioTracker = _ThreadDetailImageAspectRatioTracker();
 
   @override
@@ -128,7 +127,20 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       scrollController: widget.scrollController,
       viewportKey: _viewportKey,
     );
+    _syncImageViewportCoordinator();
     widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notifier = TickerMode.getValuesNotifier(context);
+    if (!identical(_tickerModeNotifier, notifier)) {
+      _tickerModeNotifier?.removeListener(_handleTickerModeChanged);
+      _tickerModeNotifier = notifier;
+      notifier.addListener(_handleTickerModeChanged);
+    }
+    _handleTickerModeChanged();
   }
 
   @override
@@ -171,11 +183,13 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       oldWidget.htmlImagePrecacheService,
       widget.htmlImagePrecacheService,
     )) {
-      _resetHtmlImagePreload();
+      _imageViewportCoordinator?.dispose();
+      _imageViewportCoordinator = null;
+      _syncImageViewportCoordinator();
     }
     if (!identical(oldWidget.state.posts, widget.state.posts) ||
         oldWidget.state.currentPage != widget.state.currentPage) {
-      _resetHtmlImagePreload();
+      _imageViewportCoordinator?.reset();
     }
     if (!identical(oldWidget.projection?.posts, widget.projection?.posts) ||
         !identical(oldWidget.state.posts, widget.state.posts)) {
@@ -187,7 +201,8 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   @override
   void dispose() {
     widget.imageDimensionStore?.removeListener(_onImageDimensionsChanged);
-    _htmlImagePreloadCoordinator?.dispose();
+    _tickerModeNotifier?.removeListener(_handleTickerModeChanged);
+    _imageViewportCoordinator?.dispose();
     _scrollStabilizer.dispose();
     _projectionAnchorCoordinator.dispose();
     super.dispose();
@@ -227,7 +242,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       _postProjections.map((post) => post.sourcePost.pid),
     );
     _imageAspectRatioTracker.resetFor(_imageAspectRatioSignature());
-    _scheduleHtmlImageFirstWindowPreload(context);
     final targetPid = widget.targetPid?.trim();
     final targetEntryIndex = targetPid == null || targetPid.isEmpty
         ? -1
@@ -382,67 +396,21 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
 
   void _handlePostBuilt(int index) {
     widget.onPostBuilt?.call(index);
-    final coordinator = _htmlImageCoordinator();
-    if (coordinator == null || widget.state.posts.isEmpty) {
+  }
+
+  void _syncImageViewportCoordinator() {
+    if (widget.htmlImagePrecacheService == null) {
+      _imageViewportCoordinator?.dispose();
+      _imageViewportCoordinator = null;
       return;
     }
-    unawaited(
-      coordinator.preloadNearWindow(
-        context: context,
-        tid: widget.state.tid,
-        posts: widget.state.posts,
-        visiblePostIndex: index,
-        planFor: _entryPlanner.planFor,
-        expectedDisplaySize: _expectedImageDisplaySize(context),
-      ),
+    _imageViewportCoordinator ??= ThreadImageViewportCoordinator();
+  }
+
+  void _handleTickerModeChanged() {
+    _imageViewportCoordinator?.setActive(
+      _tickerModeNotifier?.value.enabled ?? true,
     );
-  }
-
-  void _scheduleHtmlImageFirstWindowPreload(BuildContext context) {
-    if (widget.state.posts.isEmpty) {
-      return;
-    }
-    final coordinator = _htmlImageCoordinator();
-    if (coordinator == null) {
-      return;
-    }
-    final signature =
-        '${widget.state.tid}:${widget.state.currentPage}:${widget.state.posts.length}';
-    if (_htmlImagePreloadSignature == signature) {
-      return;
-    }
-    _htmlImagePreloadSignature = signature;
-    unawaited(
-      coordinator.preloadFirstWindow(
-        context: context,
-        tid: widget.state.tid,
-        posts: widget.state.posts,
-        planFor: _entryPlanner.planFor,
-        expectedDisplaySize: _expectedImageDisplaySize(context),
-      ),
-    );
-  }
-
-  ThreadHtmlImagePreloadCoordinator? _htmlImageCoordinator() {
-    final service = widget.htmlImagePrecacheService;
-    if (service == null) {
-      return null;
-    }
-    return _htmlImagePreloadCoordinator ??= ThreadHtmlImagePreloadCoordinator(
-      precacheService: service,
-    );
-  }
-
-  Size _expectedImageDisplaySize(BuildContext context) {
-    final mediaWidth = MediaQuery.sizeOf(context).width;
-    final estimatedHorizontalPadding = 44.0;
-    final width = mediaWidth - estimatedHorizontalPadding;
-    return Size(width > 0 ? width : mediaWidth, double.nan);
-  }
-
-  void _resetHtmlImagePreload() {
-    _htmlImagePreloadSignature = null;
-    _htmlImagePreloadCoordinator?.reset();
   }
 
   Widget _buildEntry(
@@ -480,6 +448,8 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
             onHtmlFirstImageFallbackAspectRatio:
                 _fallbackAspectRatioForBlockImage,
             onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
+            imageViewportCoordinator: _imageViewportCoordinator,
+            imagePrecacheService: widget.htmlImagePrecacheService,
             onOpenPostActions: widget.onOpenPostActions,
             onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
             onTogglePollOption: widget.onTogglePollOption,
@@ -529,6 +499,8 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onHtmlFirstImageFallbackAspectRatio:
               _fallbackAspectRatioForBlockImage,
           onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
+          imageViewportCoordinator: _imageViewportCoordinator,
+          imagePrecacheService: widget.htmlImagePrecacheService,
           onOpenPostActions: widget.onOpenPostActions,
         );
       case ThreadDetailRenderEntryKind.postFooter:
