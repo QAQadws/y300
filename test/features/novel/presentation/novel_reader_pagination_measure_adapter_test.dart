@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -15,6 +17,100 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 
 void main() {
+  testWidgets('real pagination ends at the collapse before its CSS footer', (
+    tester,
+  ) async {
+    late BuildContext hostContext;
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: Builder(
+          builder: (context) {
+            hostContext = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    final preferences = ForumHtmlReaderPreferences.defaults();
+    const content =
+        '<i class="pstatus">本帖最后由 fixture-user 于 2026-1-1 编辑</i>'
+        '<br><br><p>正文介绍。</p>'
+        '<div class="showcollapse_box">'
+        '<div class="showcollapse_title">合成目录</div>'
+        '<div class="showcollapse_content">'
+        '<div class="showcollapse_box">'
+        '<div class="showcollapse_title">第一组</div>'
+        '<div class="showcollapse_content">第一章</div></div></div></div>';
+    for (final width in <int>[240, 360]) {
+      final plans = <NovelReaderPaginationPlan>[];
+      for (final footer in <String>[
+        '',
+        '<br>\r\n<br>\r\n<br>\r\n'
+            '<style>.showcollapse_content{display:none}</style>'
+            '<br>\r\n<br>\r\n',
+      ]) {
+        final chapter = await _prepare(
+          rawHtml: '$content$footer',
+          preferences: preferences,
+        );
+        final adapter = NovelReaderHtmlPaginationMeasureAdapter(
+          hostContext: hostContext,
+          theme: _theme,
+          preferences: preferences,
+          sourceId: chapter.episodeId,
+          threadId: '100',
+          imageCacheOwnerId: '100',
+        );
+        final future =
+            DefaultNovelReaderHybridPaginationPlanner(
+              measureAdapter: adapter,
+              preferences: preferences,
+              theme: _theme,
+              baseStyle: Theme.of(hostContext).textTheme.bodyMedium!.copyWith(
+                color: _theme.foreground,
+                height: preferences.typography.lineHeightScale,
+              ),
+            ).paginate(
+              chapter,
+              NovelReaderPaginationKey(
+                episodeId: chapter.episodeId,
+                contentHash: chapter.contentHash,
+                viewportWidthPx: width,
+                viewportHeightPx: 400,
+                typographySignature: 'collapse-footer-test',
+                themeSignature: chapter.themeSignature,
+                imageDimensionRevision: chapter.imageDimensionRevision,
+                rendererRevision: 16,
+              ),
+            );
+        var completed = false;
+        unawaited(
+          future.then<void>(
+            (_) => completed = true,
+            onError: (Object error, StackTrace stackTrace) => completed = true,
+          ),
+        );
+        for (var frame = 0; frame < 80 && !completed; frame += 1) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(completed, isTrue);
+        final plan = await future;
+        plans.add(plan);
+        expect(plan.pages, hasLength(2));
+        expect(plan.pages.every((page) => page.usedHeight > 0), isTrue);
+        expect(plan.pages.last.html, contains('第一章'));
+        expect(plan.pages.last.requiresInnerScroll, isTrue);
+        expect(plan.atomicWidgetPageCount, 0);
+        expect(tester.takeException(), isNull);
+      }
+      expect(
+        plans.last.pages.map((page) => page.html),
+        plans.first.pages.map((page) => page.html),
+      );
+      expect(plans.last.measurementCount, plans.first.measurementCount);
+    }
+  });
+
   testWidgets('measures a candidate with the real HTML renderer', (
     tester,
   ) async {

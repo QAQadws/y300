@@ -30,6 +30,10 @@ final class HtmlPackageForumHtmlFragmentCodec
     if (node is html_dom.Text) {
       return const HtmlEscape().convert(node.data);
     }
+    if (node is html_dom.Comment) {
+      // Preserve comment boundaries instead of turning metadata into body text.
+      return '<!--${node.data}-->';
+    }
     return node.text ?? '';
   }
 }

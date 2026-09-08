@@ -101,6 +101,85 @@ void main() {
     expect(units.single.html, isEmpty);
     expect(units.single.imageIndices, isEmpty);
   });
+
+  test('non-rendered markup does not become a flow unit', () {
+    final document = _prepare(
+      '<p>正文</p><style>.showcollapse_content{display:none}</style>'
+      '<script>fixtureCallback();</script><!-- fixture comment -->',
+    );
+    final units = extractor.extract(
+      episodeId: 'episode-metadata',
+      renderDocument: document,
+    );
+
+    expect(units, hasLength(1));
+    expect(units.single.html, '<p>正文</p>');
+    // Filtering belongs to the local layout projection, not stored HTML.
+    expect(document.preparedHtml, contains('<style>'));
+    expect(document.preparedHtml, contains('<script>'));
+  });
+
+  test('nested metadata does not affect visible offsets or identity', () {
+    final withMetadata = _prepare(
+      '<div>前文<style>.fixture{color:red}</style>'
+      '<span><!-- fixture comment -->后文</span>'
+      '<script>fixtureCallback();</script></div>',
+    );
+    final withoutMetadata = _prepare('<div>前文<span>后文</span></div>');
+    final units = extractor.extract(
+      episodeId: 'episode-metadata',
+      renderDocument: withMetadata,
+    );
+    final expected = extractor.extract(
+      episodeId: 'episode-metadata',
+      renderDocument: withoutMetadata,
+    );
+
+    expect(units.single.html, expected.single.html);
+    expect(units.single.unitId, expected.single.unitId);
+    expect(units.single.startAnchor.nodeId, expected.single.startAnchor.nodeId);
+    expect(units.single.startAnchor.textOffset, 0);
+    expect(units.single.endAnchor.textOffset, '前文后文'.runes.length);
+  });
+
+  test('a metadata-only document uses the existing empty input', () {
+    final units = extractor.extract(
+      episodeId: 'episode-empty',
+      renderDocument: _prepare(
+        '<div><style>.fixture{color:red}</style>'
+        '<script>fixtureCallback();</script><!-- fixture --></div>',
+      ),
+    );
+
+    expect(units, hasLength(1));
+    expect(units.single.unitId, 'episode-empty:empty');
+    expect(units.single.html, isEmpty);
+  });
+
+  test('keeps visible escaped markup, spacing and non-text content', () {
+    final units = extractor.extract(
+      episodeId: 'episode-visible',
+      renderDocument: _prepare(
+        '<p>&lt;style&gt;示例&lt;/style&gt;</p><br><br>'
+        '<style>.fixture{color:red}</style>'
+        '<p><font color="#ff0000">后文</font></p><hr>'
+        '<img src="data/attachment/forum/fixture.jpg">'
+        '<div class="showcollapse_box">'
+        '<div class="showcollapse_title">目录</div>'
+        '<div class="showcollapse_content">折叠正文</div></div>',
+      ),
+    );
+
+    expect(units, hasLength(7));
+    expect(units.first.html, '<p>&lt;style&gt;示例&lt;/style&gt;</p>');
+    expect(units[1].html, '<br>');
+    expect(units[2].html, '<br>');
+    expect(units[3].html, contains('color:'));
+    expect(units[3].html, contains('后文'));
+    expect(units[4].html, '<hr>');
+    expect(units[5].imageIndices, <int>[0]);
+    expect(units.last.html, contains('折叠正文'));
+  });
 }
 
 ForumHtmlPreparedRenderDocument _prepare(String html) {

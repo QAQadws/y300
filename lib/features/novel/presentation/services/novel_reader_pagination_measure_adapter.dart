@@ -431,13 +431,18 @@ final class _NovelReaderHtmlPaginationMeasureSession
           child: IgnorePointer(
             child: Opacity(
               opacity: 0,
-              child: _NovelReaderPaginationMeasureHost(
-                key: _hostKey,
-                initialRequest: request,
-                initialToken: token,
-                onMeasured: _completeHeight,
-                onFrameWaited: _recordFrameWait,
-                childBuilder: _buildCandidate,
+              // A root overlay is outside the reader's Scaffold. Interactive
+              // blocks still require a Material ancestor during measurement.
+              child: Material(
+                type: MaterialType.transparency,
+                child: _NovelReaderPaginationMeasureHost(
+                  key: _hostKey,
+                  initialRequest: request,
+                  initialToken: token,
+                  onMeasured: _completeHeight,
+                  onFrameWaited: _recordFrameWait,
+                  childBuilder: _buildCandidate,
+                ),
               ),
             ),
           ),
