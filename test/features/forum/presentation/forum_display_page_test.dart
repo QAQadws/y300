@@ -28,6 +28,9 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
+import 'package:y300/features/tags/data/providers/tag_providers.dart';
+import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
+import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
@@ -38,6 +41,169 @@ import '../../../support/favorite_command_test_support.dart';
 
 void main() {
   group('ForumDisplayPage', () {
+    testWidgets('fast entry shows cards without a spinner or a second fade', (
+      tester,
+    ) async {
+      final response = Completer<ApiResult<ForumDisplayData>>();
+      final repository = _FakeForumDisplayRepository(
+        (_, _, _) => response.future,
+      );
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        const ForumDisplayPage(fid: '2', title: '公告区'),
+                  ),
+                ),
+                child: const Text('Open fixture forum'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open fixture forum'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(repository.cachePolicies, [CacheLoadPolicy.cacheFirst]);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      response.complete(
+        ApiSuccess(
+          _displayData(
+            page: 1,
+            total: 1,
+            threads: _manyThreads(suffix: 'entry', count: 1),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      _expectCardFullyVisible(tester, 'entry-0');
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets('slow initial loading still shows progress after the delay', (
+      tester,
+    ) async {
+      final response = Completer<ApiResult<ForumDisplayData>>();
+      final repository = _FakeForumDisplayRepository(
+        (_, _, _) => response.future,
+      );
+      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pump(const Duration(milliseconds: 149));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      response.complete(
+        ApiSuccess(_displayData(page: 1, total: 0, threads: const [])),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byKey(const Key('forum-display-list')), findsOneWidget);
+    });
+
+    testWidgets('leaving initial loading cancels the pending indicator', (
+      tester,
+    ) async {
+      final response = Completer<ApiResult<ForumDisplayData>>();
+      await tester.pumpWidget(
+        _buildTestApp(
+          _FakeForumDisplayRepository((_, _, _) => response.future),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('server tag names do not wait for the local tag catalog', (
+      tester,
+    ) async {
+      final lookup = Completer<ForumTagLookup>();
+      var lookupReads = 0;
+      final repository = _FakeForumDisplayRepository((_, _, _) async {
+        return ApiSuccess(
+          _displayData(
+            page: 1,
+            total: 1,
+            threads: [
+              _manyThreads(suffix: 'tag', count: 1).single.copyWith(
+                typeid: '69',
+                sourceTagName: 'Fixture server tag',
+              ),
+            ],
+          ),
+        );
+      });
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          extraOverrides: [
+            forumTagLookupProvider.overrideWith((ref) {
+              lookupReads++;
+              return lookup.future;
+            }),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(lookupReads, 0);
+      expect(find.text('Fixture server tag'), findsOneWidget);
+    });
+
+    testWidgets('missing server tag names still use the local catalog', (
+      tester,
+    ) async {
+      final repository = _FakeForumDisplayRepository((_, _, _) async {
+        return ApiSuccess(
+          _displayData(
+            page: 1,
+            total: 1,
+            threads: [
+              _manyThreads(
+                suffix: 'tag',
+                count: 1,
+              ).single.copyWith(typeid: '69', sourceTagName: ' '),
+            ],
+          ),
+        );
+      });
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          extraOverrides: [
+            forumTagLookupProvider.overrideWith(
+              (ref) async => ForumTagLookup([
+                const ForumBoardTagSet(
+                  fid: '2',
+                  name: 'Fixture forum',
+                  tags: [
+                    ForumTagDefinition(
+                      fid: '2',
+                      typeid: '69',
+                      name: 'Fixture local tag',
+                    ),
+                  ],
+                ),
+              ]),
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Fixture local tag'), findsOneWidget);
+    });
+
     testWidgets('moves create-thread entry into the more menu', (tester) async {
       final repository = _FakeForumDisplayRepository((fid, page, query) async {
         return ApiSuccess(
@@ -696,6 +862,11 @@ void main() {
         cache.requests.any((request) => request.ownerId == '30099'),
         isFalse,
       );
+
+      // A recycled row must be readable on its first frame back in view.
+      _scrollPosition(tester).jumpTo(0);
+      await tester.pump();
+      _expectCardFullyVisible(tester, '10000');
     });
 
     testWidgets('loads next page when tapping load more', (tester) async {
@@ -1679,6 +1850,7 @@ void main() {
 
 Widget _buildTestApp(
   ForumDisplayRepository repository, {
+  Widget home = const ForumDisplayPage(fid: '2', title: '公告区'),
   ThreadRepository? threadRepository,
   ImageCacheService? imageCacheService,
   _FakeForumFavoriteRepository? favoriteRepository,
@@ -1702,10 +1874,32 @@ Widget _buildTestApp(
   ];
   return ProviderScope(
     overrides: overrides,
-    child: const LocalizedTestApp(
-      home: ForumDisplayPage(fid: '2', title: '公告区'),
-    ),
+    child: LocalizedTestApp(home: home),
   );
+}
+
+void _expectCardFullyVisible(WidgetTester tester, String tid) {
+  final card = find.byKey(Key('forum-thread-$tid'));
+  expect(card, findsOneWidget);
+  final ancestors = find
+      .ancestor(of: card, matching: find.byType(FadeTransition))
+      .evaluate()
+      .toSet();
+  // The route may still animate; only inspect fades inside the list itself.
+  final listFades = find
+      .descendant(
+        of: find.byKey(const Key('forum-display-list')),
+        matching: find.byType(FadeTransition),
+      )
+      .evaluate()
+      .where(ancestors.contains);
+  for (final element in listFades) {
+    expect(
+      (element.widget as FadeTransition).opacity.value,
+      1,
+      reason: 'Ready card content must not start transparent.',
+    );
+  }
 }
 
 ForumDisplayData _displayData({

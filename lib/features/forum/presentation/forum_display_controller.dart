@@ -237,7 +237,11 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
   Future<List<ForumThreadSummary>> _attachSourceTagNames(
     ForumDisplayData data,
   ) async {
-    if (!data.threads.any((thread) => thread.typeid.trim().isNotEmpty)) {
+    if (!data.threads.any(
+      (thread) =>
+          thread.typeid.trim().isNotEmpty &&
+          (thread.sourceTagName?.trim().isEmpty ?? true),
+    )) {
       return data.threads;
     }
     final lookup = await _readTagLookup();

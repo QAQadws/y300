@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
@@ -479,15 +481,43 @@ class _SoftDivider extends StatelessWidget {
   }
 }
 
-class ForumDisplayInitialLoading extends StatelessWidget {
+class ForumDisplayInitialLoading extends StatefulWidget {
   const ForumDisplayInitialLoading({super.key});
+
+  @override
+  State<ForumDisplayInitialLoading> createState() =>
+      _ForumDisplayInitialLoadingState();
+}
+
+class _ForumDisplayInitialLoadingState
+    extends State<ForumDisplayInitialLoading> {
+  late final Timer _indicatorTimer;
+  bool _showIndicator = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fast cache/network results should not flash a spinner during navigation.
+    // Only delay the indicator: requests and ready content remain immediate.
+    _indicatorTimer = Timer(const Duration(milliseconds: 150), () {
+      setState(() => _showIndicator = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _indicatorTimer.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final palette = ForumDisplayThemePalette.resolve(Theme.of(context));
     return ColoredBox(
       color: palette.background,
-      child: const Center(child: CircularProgressIndicator()),
+      child: Center(
+        child: _showIndicator ? const CircularProgressIndicator() : null,
+      ),
     );
   }
 }
@@ -1370,60 +1400,6 @@ class _TopEntryTile extends StatelessWidget {
   }
 }
 
-class _ThreadAppear extends StatefulWidget {
-  const _ThreadAppear({super.key, required this.index, required this.child});
-
-  final int index;
-  final Widget child;
-
-  @override
-  State<_ThreadAppear> createState() => _ThreadAppearState();
-}
-
-class _ThreadAppearState extends State<_ThreadAppear>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: Duration(milliseconds: 170 + widget.index.clamp(0, 6) * 24),
-  );
-  late final CurvedAnimation _animation = CurvedAnimation(
-    parent: _controller,
-    curve: Curves.easeOutCubic,
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _controller.value = 1;
-    } else if (_controller.isDismissed) {
-      _controller.forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _animation.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _animation,
-      child: AnimatedBuilder(
-        animation: _animation,
-        builder: (context, child) => Transform.translate(
-          offset: Offset(0, (1 - _animation.value) * 10),
-          child: child,
-        ),
-        child: widget.child,
-      ),
-    );
-  }
-}
-
 class _ThreadListSection extends StatelessWidget {
   const _ThreadListSection({
     required this.signature,
@@ -1445,7 +1421,7 @@ class _ThreadListSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final indices = <Key, int>{
       for (var index = 0; index < threads.length; index++)
-        ValueKey('forum-thread-appear-${threads[index].tid}'): index,
+        ValueKey('forum-thread-row-${threads[index].tid}'): index,
     };
     // Keep only the viewport/cache extent alive. Cross-fading whole pages
     // would retain both lists and start offscreen avatar work on page changes.
@@ -1458,18 +1434,17 @@ class _ThreadListSection extends StatelessWidget {
         findChildIndexCallback: (key) => indices[key],
         itemBuilder: (context, index) {
           final thread = threads[index];
-          return _ThreadAppear(
-            key: ValueKey('forum-thread-appear-${thread.tid}'),
-            index: index,
-            child: Padding(
-              padding: EdgeInsets.only(top: index == 0 ? 0 : 8),
-              child: _ThreadCard(
-                thread: thread,
-                onTap: () => onOpenThread(thread),
-                onLongPress: () => onCopyThreadLink(thread),
-                onTapTag: () => onOpenThreadTag(thread),
-                palette: palette,
-              ),
+          // Lazy rows may be recreated when scrolling back. Keep ready cards
+          // visible immediately instead of replaying an entrance fade each time.
+          return Padding(
+            key: ValueKey('forum-thread-row-${thread.tid}'),
+            padding: EdgeInsets.only(top: index == 0 ? 0 : 8),
+            child: _ThreadCard(
+              thread: thread,
+              onTap: () => onOpenThread(thread),
+              onLongPress: () => onCopyThreadLink(thread),
+              onTapTag: () => onOpenThreadTag(thread),
+              palette: palette,
             ),
           );
         },
