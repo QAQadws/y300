@@ -37,7 +37,7 @@ class ComposerAttachBbCodeTokenizer {
         caseSensitive: false,
       ),
       (match) {
-        final token = ComposerAttachBbCodeGrammar().scan(match.group(0)!);
+        final token = const ComposerAttachBbCodeGrammar().scan(match.group(0)!);
         if (token.isEmpty) {
           return match.group(0)!;
         }

@@ -23,7 +23,7 @@ void main() {
   test('maps Y300 draft fields without exposing protocol state', () {
     final result = mapper.map(
       preparation: preparation,
-      input: ThreadCreationDraftInput(
+      input: const ThreadCreationDraftInput(
         subject: '  subject  ',
         message: 'body [attach]100[/attach] [attach]999[/attach]',
         selectedTypeId: '10',
@@ -32,7 +32,7 @@ void main() {
         bbCodeOff: false,
         smileyOff: true,
         parseUrlOff: true,
-        imageAttachments: const <ComposerImageAttachment>[
+        imageAttachments: <ComposerImageAttachment>[
           ComposerImageAttachment(
             localId: 'image-1',
             localPath: 'fixture.jpg',
@@ -43,7 +43,7 @@ void main() {
             aid: '100',
           ),
         ],
-        tags: const <String>['  tag  ', 'tag'],
+        tags: <String>['  tag  ', 'tag'],
       ),
     );
 

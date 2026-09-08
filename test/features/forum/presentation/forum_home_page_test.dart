@@ -886,7 +886,7 @@ void main() {
       'auth and network pending still render cached home immediately',
       (tester) async {
         final authRepository = _PendingAuthRepository(
-          session: SessionInfo(
+          session: const SessionInfo(
             uid: '0',
             username: '',
             formhash: '',
@@ -1290,13 +1290,13 @@ ForumHomePayload _loggedInPayloadWithFavorites() {
     directory: _sampleDirectory(),
     isLoggedIn: true,
     favoriteForums: [
-      ForumHomeFavoriteForum(
+      const ForumHomeFavoriteForum(
         fid: '2',
         title: '百合会综合讨论区',
         description: '常逛版块',
         todayPosts: 1,
       ),
-      ForumHomeFavoriteForum(
+      const ForumHomeFavoriteForum(
         fid: '55',
         title: '漫画交流区',
         description: '',
@@ -1311,7 +1311,7 @@ ForumHomePayload _loggedInPayloadWithEmptyFavoriteDescription() {
     directory: _sampleDirectory(),
     isLoggedIn: true,
     favoriteForums: [
-      ForumHomeFavoriteForum(
+      const ForumHomeFavoriteForum(
         fid: '2',
         title: '公告区',
         description: '',
@@ -1326,19 +1326,19 @@ ForumHomePayload _loggedInPayloadWithChromeFavoriteDescriptions() {
     directory: _sampleDirectory(),
     isLoggedIn: true,
     favoriteForums: [
-      ForumHomeFavoriteForum(
+      const ForumHomeFavoriteForum(
         fid: '33',
         title: '海域區',
         description: '',
         todayPosts: 0,
       ),
-      ForumHomeFavoriteForum(
+      const ForumHomeFavoriteForum(
         fid: '30',
         title: '中文百合漫画区',
         description: '',
         todayPosts: 0,
       ),
-      ForumHomeFavoriteForum(
+      const ForumHomeFavoriteForum(
         fid: '55',
         title: '轻小说/译文区',
         description: '',
@@ -1526,7 +1526,7 @@ class _FakeAuthRepository implements AuthRepository {
     if (session != null) {
       return ApiSuccess(session);
     }
-    return ApiSuccess(
+    return const ApiSuccess(
       SessionInfo(uid: '0', username: '', formhash: '', isLoggedIn: false),
     );
   }

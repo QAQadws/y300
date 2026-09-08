@@ -65,7 +65,7 @@ void main() {
             threadId: _episode.sourceTid,
             imageCacheOwnerId: _episode.sourceTid,
           );
-      final blockSpacingMode = ForumHtmlBlockSpacingMode.discuzLineDivs;
+      const blockSpacingMode = ForumHtmlBlockSpacingMode.discuzLineDivs;
       final baseStyle = ForumHtmlStylePolicy(
         htmlPreferences,
         theme: htmlTheme,

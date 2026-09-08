@@ -79,7 +79,7 @@ final class DefaultStorageRootAccessGate implements StorageRootAccessGate {
     late final Future<StorageRootMigrationResult> migration;
     migration = _inspectAndMigrate(force: force)
         .catchError((Object _) {
-          final result = const StorageRootMigrationResult(
+          const result = StorageRootMigrationResult(
             disposition: StorageRootMigrationDisposition.blocked,
             status: StorageRootMigrationStatus(
               phase: StorageRootMigrationPhase.blocked,

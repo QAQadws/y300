@@ -179,7 +179,7 @@ void main() {
       ),
     );
     final chapter = _chapter('<p>正文</p>');
-    final engine = const NovelReaderComplexBlockPaginationEngine();
+    const engine = NovelReaderComplexBlockPaginationEngine();
 
     for (final classified in <NovelReaderClassifiedPaginationAtom>[
       safe,

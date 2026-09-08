@@ -630,6 +630,74 @@ void main() {
       expect(avatarImage.fadeInDuration, ForumCachedAvatar.fadeInDuration);
     });
 
+    testWidgets('builds cards and starts avatars only near the viewport', (
+      tester,
+    ) async {
+      final cache = _RecordingImageCacheService();
+      final threads = List.generate(
+        100,
+        (index) => ForumThreadSummary(
+          tid: '${10000 + index}',
+          uid: '${30000 + index}',
+          subject: 'Fixture thread $index',
+          author: 'fixture-user',
+          replies: 1,
+          views: 5,
+          dateline: 'fixture-time',
+          avatarUrl: 'https://bbs.yamibo.com/fixture-avatar-$index.jpg',
+        ),
+      );
+      final repository = _FakeForumDisplayRepository((_, page, query) async {
+        return ApiSuccess(
+          _displayData(
+            page: 1,
+            total: threads.length,
+            lastPage: 1,
+            topEntries: const [],
+            threads: threads,
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        _buildTestApp(repository, imageCacheService: cache),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('forum-thread-10000')), findsOneWidget);
+      expect(find.byKey(const Key('forum-thread-10020')), findsNothing);
+      expect(cache.requests, isNotEmpty);
+      expect(cache.requests.length, lessThan(20));
+      expect(
+        cache.requests.any((request) => request.ownerId == '30020'),
+        isFalse,
+      );
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('forum-thread-10020')),
+        450,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('forum-display-list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('forum-thread-10020')), findsOneWidget);
+      expect(
+        cache.requests.any((request) => request.ownerId == '30020'),
+        isTrue,
+      );
+      expect(find.byKey(const Key('forum-thread-10000')), findsNothing);
+      expect(find.byKey(const Key('forum-thread-10099')), findsNothing);
+      expect(
+        cache.requests.any((request) => request.ownerId == '30099'),
+        isFalse,
+      );
+    });
+
     testWidgets('loads next page when tapping load more', (tester) async {
       var callCount = 0;
       final repository = _FakeForumDisplayRepository((_, page, query) async {
@@ -1238,8 +1306,8 @@ void main() {
           repository,
           extraOverrides: [
             forumImageDimensionIndexProvider.overrideWithValue(
-              _FixedForumImageDimensionIndex(
-                const ForumImageDimensions(
+              const _FixedForumImageDimensionIndex(
+                ForumImageDimensions(
                   width: 1200,
                   height: 300,
                   source: ForumImageDimensionSource.cacheMetadata,
@@ -1612,13 +1680,16 @@ void main() {
 Widget _buildTestApp(
   ForumDisplayRepository repository, {
   ThreadRepository? threadRepository,
+  ImageCacheService? imageCacheService,
   _FakeForumFavoriteRepository? favoriteRepository,
   List<riverpod_misc.Override> extraOverrides =
       const <riverpod_misc.Override>[],
 }) {
   final overrides = [
     forumDisplayRepositoryProvider.overrideWithValue(repository),
-    imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+    imageCacheServiceProvider.overrideWithValue(
+      imageCacheService ?? _NoopImageCacheService(),
+    ),
     if (favoriteRepository != null)
       favoriteForumCommandProvider.overrideWithValue(favoriteRepository),
     if (favoriteRepository != null)
@@ -2033,6 +2104,16 @@ class _NoopImageCacheService implements ImageCacheService {
 
   @override
   Future<void> clearUnprotected() async {}
+}
+
+class _RecordingImageCacheService extends _NoopImageCacheService {
+  final requests = <ImageCacheRequest>[];
+
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) {
+    requests.add(request);
+    return super.ensureCached(request);
+  }
 }
 
 class _FakeThreadRepository implements ThreadRepository {

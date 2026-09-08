@@ -40,7 +40,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
       onLongPress: () => onOpenPostActions(sourcePost, plan),
       child: Container(
         key: Key('thread-post-card-${post.pid}'),
-        padding: EdgeInsets.fromLTRB(
+        padding: const EdgeInsets.fromLTRB(
           ForumContentSpacing.postBodyHorizontal,
           ForumContentSpacing.postCardHeaderTop,
           ForumContentSpacing.postBodyHorizontal,
@@ -156,7 +156,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
       behavior: HitTestBehavior.translucent,
       onLongPress: () => onOpenPostActions(sourcePost, plan),
       child: Container(
-        padding: EdgeInsets.fromLTRB(
+        padding: const EdgeInsets.fromLTRB(
           ForumContentSpacing.postBodyHorizontal,
           ForumContentSpacing.postCardBodyTop,
           ForumContentSpacing.postBodyHorizontal,
@@ -638,7 +638,7 @@ class ThreadPostCard extends StatelessWidget {
     final card = Container(
       key: Key('thread-post-card-${post.pid}'),
       margin: const EdgeInsets.only(bottom: ForumContentSpacing.postCardGap),
-      padding: EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         ForumContentSpacing.postBodyHorizontal,
         ForumContentSpacing.postCardHeaderTop,
         ForumContentSpacing.postBodyHorizontal,

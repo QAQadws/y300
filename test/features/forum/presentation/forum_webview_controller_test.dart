@@ -363,7 +363,7 @@ void main() {
     'board name falls back to page title when tag lookup misses fid',
     () async {
       final container = _createContainer(
-        repository: _FakeForumTagRepository(const <ForumBoardTagSet>[]),
+        repository: const _FakeForumTagRepository(<ForumBoardTagSet>[]),
       );
       addTearDown(container.dispose);
 
@@ -495,7 +495,7 @@ ProviderContainer _createContainer({
   final container = ProviderContainer(
     overrides: [
       forumTagRepositoryProvider.overrideWithValue(
-        repository ?? _FakeForumTagRepository(_defaultBoards),
+        repository ?? const _FakeForumTagRepository(_defaultBoards),
       ),
       favoriteForumCommandProvider.overrideWithValue(
         resolvedFavoriteRepository,

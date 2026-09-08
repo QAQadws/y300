@@ -133,7 +133,7 @@ class AdaptiveNovelReaderDocumentBuildService
 }
 
 Map<String, Object?> _buildDocumentDtoMap(Map<String, Object?> requestMap) {
-  final parser = const DiscuzNovelReaderDocumentParser();
+  const parser = DiscuzNovelReaderDocumentParser();
   final request = NovelReaderDocumentBuildRequest.fromMap(requestMap);
   final document = parser.parse(
     episodeId: request.episodeId,

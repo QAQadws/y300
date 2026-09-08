@@ -2465,7 +2465,7 @@ void main() {
                 number: 1,
                 isFirst: true,
                 dateline: 'today',
-                poll: ThreadPoll(
+                poll: const ThreadPoll(
                   isMultipleChoice: true,
                   canVote: false,
                   maxChoices: 3,
@@ -5331,9 +5331,9 @@ class _FakeForumTagDirectoryRepository implements ForumTagDirectoryRepository {
   }) async {
     requestedQueries.add(query);
     return DataReadSuccess(
-      data: ForumTagDirectoryData(
-        tag: const ForumTagIdentity(id: '20674', name: '狱门抚子在此'),
-        topics: const <ForumTagTopicSummary>[
+      data: const ForumTagDirectoryData(
+        tag: ForumTagIdentity(id: '20674', name: '狱门抚子在此'),
+        topics: <ForumTagTopicSummary>[
           ForumTagTopicSummary(
             tid: '549277',
             title: '狱门抚子在此 00',
@@ -5342,7 +5342,7 @@ class _FakeForumTagDirectoryRepository implements ForumTagDirectoryRepository {
             viewCount: 6111,
           ),
         ],
-        pagination: const ForumTagPagination(
+        pagination: ForumTagPagination(
           currentPage: 1,
           totalPages: 1,
           hasPrevious: false,

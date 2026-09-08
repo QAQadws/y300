@@ -1548,7 +1548,7 @@ class _ReaderFakeRepository
     bool descending = true,
   }) async {
     final episodes = <ComicEpisodeItem>[
-      ComicEpisodeItem(
+      const ComicEpisodeItem(
         episodeId: 'yamibo:100:101',
         comicId: 'yamibo:100',
         episodeTitle: '第1话',

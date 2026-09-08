@@ -264,7 +264,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         controller: widget.scrollController,
         // 只有一楼的短帖也要能下拉刷新，见 ForumPullToRefresh.scrollPhysics。
         physics: ForumPullToRefresh.scrollPhysics,
-        padding: EdgeInsets.fromLTRB(
+        padding: const EdgeInsets.fromLTRB(
           ForumContentSpacing.pageHorizontal,
           ForumContentSpacing.listTop,
           ForumContentSpacing.pageHorizontal,
@@ -316,7 +316,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     return SizedBox.expand(
       key: _viewportKey,
       child: Padding(
-        padding: EdgeInsets.symmetric(
+        padding: const EdgeInsets.symmetric(
           horizontal: ForumContentSpacing.pageHorizontal,
         ),
         child: CustomScrollView(

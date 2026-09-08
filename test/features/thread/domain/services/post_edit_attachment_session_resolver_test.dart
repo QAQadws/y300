@@ -12,7 +12,7 @@ void main() {
     isAssociated: true,
     fileName: 'remote.jpg',
   );
-  final local = ComposerImageAttachment(
+  const local = ComposerImageAttachment(
     localId: 'local-1',
     localPath: '/tmp/local.jpg',
     fileName: 'local.jpg',

@@ -212,9 +212,9 @@ void main() {
             'https://bbs.yamibo.com/',
           ),
         ],
-        child: MediaQuery(
-          data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
-          child: const LocalizedTestApp(home: UserProfilePage(uid: '509957')),
+        child: const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          child: LocalizedTestApp(home: UserProfilePage(uid: '509957')),
         ),
       ),
     );
@@ -460,7 +460,7 @@ class _FakeAuthRepository implements AuthRepository {
   const _FakeAuthRepository();
 
   @override
-  Future<ApiResult<SessionInfo>> refreshSession() async => ApiSuccess(
+  Future<ApiResult<SessionInfo>> refreshSession() async => const ApiSuccess(
     SessionInfo(
       uid: '597454',
       username: '2834758851',

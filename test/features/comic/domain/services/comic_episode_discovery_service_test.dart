@@ -698,7 +698,7 @@ class _FakeCatalogDirectoryReader implements ComicCatalogDirectoryReader {
     DataReadResult<ComicCatalogDirectory, ComicCatalogDirectoryCapabilities>
   >
   load(ComicCatalogDirectoryRequest request) async {
-    final references = const ForumReferenceResolver(
+    const references = ForumReferenceResolver(
       siteOrigin: 'https://bbs.yamibo.com',
     );
     final tagId = references.extractTagId(request.catalogUrl);

@@ -196,7 +196,7 @@ class _FakeAuthRepository implements AuthRepository {
               formhash: 'fh',
               isLoggedIn: true,
             )
-          : SessionInfo(
+          : const SessionInfo(
               uid: '0',
               username: '',
               formhash: '',

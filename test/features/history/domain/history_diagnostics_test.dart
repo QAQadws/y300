@@ -29,7 +29,10 @@ void main() {
 
       await record.record(
         HistoryVisitDraft(
-          target: HistoryTargetKey(type: HistoryTargetType.thread, id: '100'),
+          target: const HistoryTargetKey(
+            type: HistoryTargetType.thread,
+            id: '100',
+          ),
           surface: HistoryVisitSurface.threadNative,
           title: 'sensitive title must not enter diagnostics',
           canonicalUri: Uri(

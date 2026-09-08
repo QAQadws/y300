@@ -32,7 +32,7 @@ void main() {
   group('ComposerControllerBase', () {
     test('restores message and useSignature from draft snapshot', () async {
       final draftRepository = _MemoryDraftRepository();
-      final args = _TestArgs(fid: '33', tid: '572063');
+      const args = _TestArgs(fid: '33', tid: '572063');
       await draftRepository.saveDraft(
         ComposerDraftSnapshot(
           identity: args.identity,
@@ -54,7 +54,7 @@ void main() {
 
     test('updateMessage saves draft on flush', () async {
       final draftRepository = _MemoryDraftRepository();
-      final args = _TestArgs(fid: '33', tid: '572063');
+      const args = _TestArgs(fid: '33', tid: '572063');
       final container = _buildContainer(draftRepository: draftRepository);
       addTearDown(container.dispose);
       _keepAlive(container, args);
@@ -76,7 +76,7 @@ void main() {
         final draftRepository = _MemoryDraftRepository();
         final coordinator = _ControllableUploadCoordinator();
         addTearDown(coordinator.close);
-        final args = _TestArgs(fid: '33', tid: '572063');
+        const args = _TestArgs(fid: '33', tid: '572063');
         final container = _buildContainer(
           draftRepository: draftRepository,
           imagePicker: _FakeImagePicker(
@@ -171,7 +171,7 @@ void main() {
           const ComposerImageUploadEvent.completed(total: 1),
         ],
       );
-      final args = _TestArgs(fid: '33', tid: '572063');
+      const args = _TestArgs(fid: '33', tid: '572063');
       final container = _buildContainer(
         draftRepository: draftRepository,
         imagePicker: imagePicker,
@@ -218,7 +218,7 @@ void main() {
       'verification retry preserves attachments uploaded while in flight',
       () async {
         final drafts = _MemoryDraftRepository();
-        final args = _TestArgs(fid: '33', tid: '572063');
+        const args = _TestArgs(fid: '33', tid: '572063');
         final originalAttachment = ComposerImageAttachment(
           localId: 'restored-12',
           localPath: '/gallery/12.jpg',
@@ -299,7 +299,7 @@ void main() {
     test(
       'local attachment delegate applies without mutating root message',
       () async {
-        final args = _TestArgs(fid: '33', tid: '572063');
+        const args = _TestArgs(fid: '33', tid: '572063');
         final container = _buildContainer(
           imagePicker: _FakeImagePicker(
             images: const [
@@ -366,7 +366,7 @@ void main() {
     test(
       'stale local attachment delegate moves uploaded aid to pending',
       () async {
-        final args = _TestArgs(fid: '33', tid: '572063');
+        const args = _TestArgs(fid: '33', tid: '572063');
         final container = _buildContainer(
           imagePicker: _FakeImagePicker(
             images: const [
@@ -426,7 +426,7 @@ void main() {
     test(
       'upload without an anchor stays pending until a new position is chosen',
       () async {
-        final args = _TestArgs(fid: '33', tid: '572063');
+        const args = _TestArgs(fid: '33', tid: '572063');
         final container = _buildContainer(
           imagePicker: _FakeImagePicker(
             images: const [
@@ -484,7 +484,7 @@ void main() {
     );
 
     test('unsafe selection recovery keeps the uploaded aid pending', () async {
-      final args = _TestArgs(fid: '33', tid: '572063');
+      const args = _TestArgs(fid: '33', tid: '572063');
       final coordinator = _ControllableUploadCoordinator();
       addTearDown(coordinator.close);
       final container = _buildContainer(
@@ -529,7 +529,7 @@ void main() {
     test(
       'preflight failure short-circuits submit and does not call performSubmit',
       () async {
-        final args = _TestArgs(fid: '33', tid: '572063');
+        const args = _TestArgs(fid: '33', tid: '572063');
         final container = _buildContainer();
         addTearDown(container.dispose);
         _keepAlive(container, args);
@@ -556,7 +556,7 @@ void main() {
 
     test('successful submit clears state and deletes draft', () async {
       final draftRepository = _MemoryDraftRepository();
-      final args = _TestArgs(fid: '33', tid: '572063');
+      const args = _TestArgs(fid: '33', tid: '572063');
       await draftRepository.saveDraft(
         ComposerDraftSnapshot(
           identity: args.identity,
@@ -611,7 +611,7 @@ void main() {
             const ComposerImageUploadEvent.completed(total: 1),
           ],
         );
-        final args = _TestArgs(fid: '33', tid: '572063');
+        const args = _TestArgs(fid: '33', tid: '572063');
         final container = _buildContainer(
           cacheStorage: cacheStorage,
           imagePicker: _FakeImagePicker(
@@ -656,7 +656,7 @@ void main() {
       'failed submit preserves draft and writes structured failure',
       () async {
         final draftRepository = _MemoryDraftRepository();
-        final args = _TestArgs(fid: '33', tid: '572063');
+        const args = _TestArgs(fid: '33', tid: '572063');
         final container = _buildContainer(draftRepository: draftRepository);
         addTearDown(container.dispose);
         _keepAlive(container, args);
@@ -696,7 +696,7 @@ void main() {
     test(
       'duplicate submit while submitting does not call performSubmit twice',
       () async {
-        final args = _TestArgs(fid: '33', tid: '572063');
+        const args = _TestArgs(fid: '33', tid: '572063');
         final container = _buildContainer();
         addTearDown(container.dispose);
         _keepAlive(container, args);

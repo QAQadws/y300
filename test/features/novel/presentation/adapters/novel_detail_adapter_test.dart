@@ -143,7 +143,7 @@ void main() {
         _FakeNovelRepository(progress: progress),
         stateRepository: _RecordingLibraryStateRepository(
           episodeStates: <String, LibraryEpisodeState>{
-            'novel:1:1': LibraryEpisodeState(
+            'novel:1:1': const LibraryEpisodeState(
               moduleKey: LibraryModuleKey.novel,
               episodeId: 'novel:1:1',
               workId: 'novel:1',

@@ -138,21 +138,19 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
           if (displayThreads.isEmpty)
             SliverToBoxAdapter(child: _EmptyThreadList(palette: palette))
           else
-            SliverToBoxAdapter(
-              child: _ThreadListSection(
-                signature: _threadListSignature(state),
-                threads: displayThreads,
-                onOpenThread: (item) => widget.onOpenThread(
-                  _sourceThread(item, widget.projection.threads),
-                ),
-                onOpenThreadTag: (item) => widget.onOpenThreadTag(
-                  _sourceThread(item, widget.projection.threads),
-                ),
-                onCopyThreadLink: (item) => widget.onCopyThreadLink(
-                  _sourceThread(item, widget.projection.threads),
-                ),
-                palette: palette,
+            _ThreadListSection(
+              signature: _threadListSignature(state),
+              threads: displayThreads,
+              onOpenThread: (item) => widget.onOpenThread(
+                _sourceThread(item, widget.projection.threads),
               ),
+              onOpenThreadTag: (item) => widget.onOpenThreadTag(
+                _sourceThread(item, widget.projection.threads),
+              ),
+              onCopyThreadLink: (item) => widget.onCopyThreadLink(
+                _sourceThread(item, widget.projection.threads),
+              ),
+              palette: palette,
             ),
           SliverToBoxAdapter(
             child: _LoadMoreSection(
@@ -477,37 +475,6 @@ class _SoftDivider extends StatelessWidget {
       indent: 12,
       endIndent: 12,
       color: palette.outlineSoft,
-    );
-  }
-}
-
-class _SeparatedColumn extends StatelessWidget {
-  const _SeparatedColumn({
-    required this.children,
-    required this.palette,
-    this.gap = 0,
-    this.showDividers = true,
-  });
-
-  final List<Widget> children;
-  final ForumDisplayThemePalette palette;
-  final double gap;
-  final bool showDividers;
-
-  @override
-  Widget build(BuildContext context) {
-    if (children.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var index = 0; index < children.length; index++) ...[
-          if (index > 0 && showDividers) _SoftDivider(palette: palette),
-          if (index > 0 && gap > 0) SizedBox(height: gap),
-          children[index],
-        ],
-      ],
     );
   }
 }
@@ -933,7 +900,6 @@ class _TypeFilterMenuOverlay extends StatelessWidget {
                       child: ListView.builder(
                         padding: EdgeInsets.zero,
                         itemExtent: _itemHeight,
-                        shrinkWrap: true,
                         itemCount: items.length,
                         itemBuilder: (context, index) {
                           final item = items[index];
@@ -1404,29 +1370,56 @@ class _TopEntryTile extends StatelessWidget {
   }
 }
 
-class _ThreadAppear extends StatelessWidget {
+class _ThreadAppear extends StatefulWidget {
   const _ThreadAppear({super.key, required this.index, required this.child});
 
   final int index;
   final Widget child;
 
   @override
+  State<_ThreadAppear> createState() => _ThreadAppearState();
+}
+
+class _ThreadAppearState extends State<_ThreadAppear>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: Duration(milliseconds: 170 + widget.index.clamp(0, 6) * 24),
+  );
+  late final CurvedAnimation _animation = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.value = 1;
+    } else if (_controller.isDismissed) {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _animation.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final cappedIndex = index.clamp(0, 6).toInt();
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: 1),
-      duration: Duration(milliseconds: 170 + cappedIndex * 24),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - value) * 10),
-            child: child,
-          ),
-        );
-      },
-      child: child,
+    return FadeTransition(
+      opacity: _animation,
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(0, (1 - _animation.value) * 10),
+          child: child,
+        ),
+        child: widget.child,
+      ),
     );
   }
 }
@@ -1450,45 +1443,36 @@ class _ThreadListSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) {
-        final offsetAnimation = Tween<Offset>(
-          begin: const Offset(0, 0.025),
-          end: Offset.zero,
-        ).animate(animation);
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(position: offsetAnimation, child: child),
-        );
-      },
-      child: Padding(
-        key: ValueKey('forum-thread-list-$signature'),
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-        child: KeyedSubtree(
-          key: const Key('forum-thread-list-group'),
-          child: _SeparatedColumn(
-            palette: palette,
-            gap: 8,
-            showDividers: false,
-            children: [
-              for (var index = 0; index < threads.length; index++)
-                _ThreadAppear(
-                  key: ValueKey('forum-thread-appear-${threads[index].tid}'),
-                  index: index,
-                  child: _ThreadCard(
-                    thread: threads[index],
-                    onTap: () => onOpenThread(threads[index]),
-                    onLongPress: () => onCopyThreadLink(threads[index]),
-                    onTapTag: () => onOpenThreadTag(threads[index]),
-                    palette: palette,
-                  ),
-                ),
-            ],
-          ),
-        ),
+    final indices = <Key, int>{
+      for (var index = 0; index < threads.length; index++)
+        ValueKey('forum-thread-appear-${threads[index].tid}'): index,
+    };
+    // Keep only the viewport/cache extent alive. Cross-fading whole pages
+    // would retain both lists and start offscreen avatar work on page changes.
+    return SliverPadding(
+      key: ValueKey('forum-thread-list-$signature'),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+      sliver: SliverList.builder(
+        key: const Key('forum-thread-list-group'),
+        itemCount: threads.length,
+        findChildIndexCallback: (key) => indices[key],
+        itemBuilder: (context, index) {
+          final thread = threads[index];
+          return _ThreadAppear(
+            key: ValueKey('forum-thread-appear-${thread.tid}'),
+            index: index,
+            child: Padding(
+              padding: EdgeInsets.only(top: index == 0 ? 0 : 8),
+              child: _ThreadCard(
+                thread: thread,
+                onTap: () => onOpenThread(thread),
+                onLongPress: () => onCopyThreadLink(thread),
+                onTapTag: () => onOpenThreadTag(thread),
+                palette: palette,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

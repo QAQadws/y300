@@ -204,48 +204,48 @@ void main() {
     final plan = NovelReaderPaginationPlan(
       key: key,
       episodeId: 'episode-1',
-      pages: [
+      pages: const [
         NovelReaderPageFragment(
           index: 0,
           html: '<p>one</p>',
-          startAnchor: const NovelReaderTextAnchor(
+          startAnchor: NovelReaderTextAnchor(
             episodeId: 'episode-1',
             nodeId: 'paragraph-1',
           ),
-          endAnchor: const NovelReaderTextAnchor(
+          endAnchor: NovelReaderTextAnchor(
             episodeId: 'episode-1',
             nodeId: 'paragraph-1',
             textOffset: 3,
           ),
-          imageIndices: const [],
+          imageIndices: [],
         ),
         NovelReaderPageFragment(
           index: 1,
           html: '<p>two</p>',
-          startAnchor: const NovelReaderTextAnchor(
+          startAnchor: NovelReaderTextAnchor(
             episodeId: 'episode-1',
             nodeId: 'paragraph-2',
           ),
-          endAnchor: const NovelReaderTextAnchor(
+          endAnchor: NovelReaderTextAnchor(
             episodeId: 'episode-1',
             nodeId: 'paragraph-2',
             textOffset: 3,
           ),
-          imageIndices: const [],
+          imageIndices: [],
         ),
         NovelReaderPageFragment(
           index: 2,
           html: '<p>three</p>',
-          startAnchor: const NovelReaderTextAnchor(
+          startAnchor: NovelReaderTextAnchor(
             episodeId: 'episode-1',
             nodeId: 'paragraph-3',
           ),
-          endAnchor: const NovelReaderTextAnchor(
+          endAnchor: NovelReaderTextAnchor(
             episodeId: 'episode-1',
             nodeId: 'paragraph-3',
             textOffset: 5,
           ),
-          imageIndices: const [],
+          imageIndices: [],
         ),
       ],
     );

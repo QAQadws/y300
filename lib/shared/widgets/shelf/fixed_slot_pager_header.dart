@@ -166,16 +166,18 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
                       key: widget.indicatorKey,
                       left: left,
                       bottom: 6,
-                      child: Container(
-                        width: slotWidth * 0.6,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: palette.categorySelectedBackground,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
+                      child: child!,
                     );
                   },
+                  // Only the position changes while either pager scrolls.
+                  child: Container(
+                    width: slotWidth * 0.6,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: palette.categorySelectedBackground,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
                 ),
               ],
             );

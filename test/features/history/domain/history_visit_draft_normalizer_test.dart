@@ -47,7 +47,7 @@ void main() {
   });
 
   test('uses type fallbacks and truncates title by grapheme cluster', () {
-    final family = '👨‍👩‍👧‍👦';
+    const family = '👨‍👩‍👧‍👦';
     final normalized = normalizer.normalize(
       HistoryVisitDraft(
         target: const HistoryTargetKey(

@@ -26,10 +26,7 @@ import '../../storage/test_support/ready_storage_root_access_gate.dart';
 
 void main() {
   testWidgets('DataStorageSheet builds dark theme chrome', (tester) async {
-    await pumpDataStorageSheet(
-      tester,
-      overrides: _overridesWith(),
-    );
+    await pumpDataStorageSheet(tester, overrides: _overridesWith());
 
     expect(find.byKey(const Key('data-storage-sheet')), findsOneWidget);
     expect(
@@ -42,30 +39,28 @@ void main() {
     );
   });
 
-  testWidgets('DataStorageSheet commits cache limit once after slider release', (
-    tester,
-  ) async {
-    final repo = _FakeDataStorageSettingsRepository(
-      defaultPath: '/tmp/default-downloads',
-      customPath: null,
-    );
+  testWidgets(
+    'DataStorageSheet commits cache limit once after slider release',
+    (tester) async {
+      final repo = _FakeDataStorageSettingsRepository(
+        defaultPath: '/tmp/default-downloads',
+        customPath: null,
+      );
 
-    await pumpDataStorageSheet(
-      tester,
-      overrides: _overridesWith(repo: repo),
-    );
+      await pumpDataStorageSheet(tester, overrides: _overridesWith(repo: repo));
 
-    final slider = find.byKey(const Key('data-storage-cache-max-slider'));
-    final gesture = await tester.startGesture(tester.getCenter(slider));
-    await gesture.moveBy(const Offset(80, 0));
-    await tester.pump();
+      final slider = find.byKey(const Key('data-storage-cache-max-slider'));
+      final gesture = await tester.startGesture(tester.getCenter(slider));
+      await gesture.moveBy(const Offset(80, 0));
+      await tester.pump();
 
-    expect(repo.setCacheMaxBytesCalls, 0);
+      expect(repo.setCacheMaxBytesCalls, 0);
 
-    await gesture.up();
-    await tester.pumpAndSettle();
-    expect(repo.setCacheMaxBytesCalls, 1);
-  });
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(repo.setCacheMaxBytesCalls, 1);
+    },
+  );
 
   testWidgets(
     'DataStorageSheet hides path controls after migration is complete',
@@ -75,10 +70,7 @@ void main() {
         customPath: null,
       );
 
-      await pumpDataStorageSheet(
-        tester,
-        overrides: _overridesWith(repo: repo),
-      );
+      await pumpDataStorageSheet(tester, overrides: _overridesWith(repo: repo));
 
       expect(
         find.byKey(const Key('data-storage-effective-directory')),
@@ -293,10 +285,7 @@ void main() {
       customPath: null,
       pickedPath: '/mnt/y300-downloads',
     );
-    await pumpDataStorageSheet(
-      tester,
-      overrides: _overridesWith(repo: repo),
-    );
+    await pumpDataStorageSheet(tester, overrides: _overridesWith(repo: repo));
 
     expect(
       find.byKey(const Key('data-storage-choose-directory-button')),
@@ -313,10 +302,7 @@ void main() {
       customPath: '/mnt/y300-downloads',
     );
 
-    await pumpDataStorageSheet(
-      tester,
-      overrides: _overridesWith(repo: repo),
-    );
+    await pumpDataStorageSheet(tester, overrides: _overridesWith(repo: repo));
 
     expect(repo.customPath, '/mnt/y300-downloads');
     expect(
@@ -487,7 +473,7 @@ Future<void> pumpDataStorageSheet(
   await tester.pumpWidget(
     ProviderScope(
       overrides: overrides,
-      child: LocalizedTestApp(home: const _DataStorageSheetHost()),
+      child: const LocalizedTestApp(home: _DataStorageSheetHost()),
     ),
   );
   await tester.tap(find.byKey(const Key('data-storage-sheet-opener')));

@@ -467,7 +467,7 @@ void main() {
         // 老 reply 草稿（无 kind / subject / extras）和新 newthread 草稿在同一个
         // SharedPreferences 命名空间下应该各自独立——身份 key 不同就不会互相覆盖。
         final draftRepository = _MemoryDraftRepository();
-        final replyArgs = const ComposerDraftIdentity.thread(
+        const replyArgs = ComposerDraftIdentity.thread(
           fid: '33',
           tid: '572063',
         );
@@ -741,7 +741,7 @@ void main() {
       // 模拟"杀进程后重启"：先在仓库里塞一份草稿。
       await draftRepository.saveDraft(
         ComposerDraftSnapshot(
-          identity: ComposerDraftIdentity.newThread(fid: '33'),
+          identity: const ComposerDraftIdentity.newThread(fid: '33'),
           message: '说明',
           subject: '投票',
           useSignature: true,
@@ -795,21 +795,21 @@ void main() {
         postingComposerControllerProvider(args).notifier,
       );
 
-      final mutation = ComposerTextMutation(
+      const mutation = ComposerTextMutation(
         previousSource: '旧',
         nextSource: '新',
-        replacedSelection: const ComposerSelection(start: 0, end: 1),
-        resultSelection: const ComposerSelection(start: 1, end: 1),
+        replacedSelection: ComposerSelection(start: 0, end: 1),
+        resultSelection: ComposerSelection(start: 1, end: 1),
         revision: 9,
       );
       final applied = controller.applyPatch(
         initial,
-        ComposerStatePatch(
+        const ComposerStatePatch(
           message: '新正文',
           useSignature: false,
           isSubmitting: true,
           restoredDraft: true,
-          imageAttachments: const [
+          imageAttachments: [
             ComposerImageAttachment(
               localId: 'local-1',
               localPath: '/tmp/a.png',
@@ -824,7 +824,7 @@ void main() {
           imageUploadTotal: 3,
           messageRevision: 7,
           lastMessageMutation: mutation,
-          pendingAttachmentAids: const ['888'],
+          pendingAttachmentAids: ['888'],
           pendingAttachmentNotice: ComposerPendingAttachmentNotice(
             code: ComposerPendingAttachmentNoticeCode.readyToReinsert,
             count: 1,

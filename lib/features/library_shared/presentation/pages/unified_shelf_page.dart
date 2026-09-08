@@ -1694,13 +1694,13 @@ class _DisplayTab extends StatelessWidget {
             children: [
               ListTile(
                 title: Text(AppLocalizations.of(context).libraryShelfGrid),
-                leading: Radio<LibraryDisplayMode>(
+                leading: const Radio<LibraryDisplayMode>(
                   value: LibraryDisplayMode.grid,
                 ),
               ),
               ListTile(
                 title: Text(AppLocalizations.of(context).libraryShelfList),
-                leading: Radio<LibraryDisplayMode>(
+                leading: const Radio<LibraryDisplayMode>(
                   value: LibraryDisplayMode.list,
                 ),
               ),

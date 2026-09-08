@@ -997,7 +997,7 @@ void main() {
             ],
           ),
           capabilities: _favoriteForumReadCapabilities,
-          metadata: DataReadMetadata.network(),
+          metadata: const DataReadMetadata.network(),
         ),
       ],
     );

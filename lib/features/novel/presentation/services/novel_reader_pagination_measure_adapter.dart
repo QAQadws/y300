@@ -389,7 +389,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
     return completer.future.timeout(
       timeout,
       onTimeout: () {
-        final error = const NovelReaderPaginationException(
+        const error = NovelReaderPaginationException(
           code: 'measurementTimeout',
           message: 'HTML renderer pagination measurement timed out.',
         );

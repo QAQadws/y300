@@ -151,7 +151,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
@@ -196,7 +196,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final args = const ComicReaderArgs(
+    const args = ComicReaderArgs(
       comicId: 'yamibo:100',
       episodeId: 'yamibo:100:101',
     );
@@ -250,7 +250,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
@@ -281,7 +281,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final args = const ComicReaderArgs(
+    const args = ComicReaderArgs(
       comicId: 'yamibo:100',
       episodeId: 'yamibo:100:101',
     );
@@ -365,7 +365,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
@@ -412,7 +412,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
@@ -455,7 +455,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
@@ -497,7 +497,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
@@ -554,7 +554,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
@@ -614,7 +614,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
@@ -660,7 +660,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
@@ -691,7 +691,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final args = const ComicReaderArgs(
+    const args = ComicReaderArgs(
       comicId: 'yamibo:100',
       episodeId: 'yamibo:100:101',
     );
@@ -724,7 +724,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final args = const ComicReaderArgs(
+    const args = ComicReaderArgs(
       comicId: 'yamibo:100',
       episodeId: 'yamibo:100:101',
     );
@@ -762,7 +762,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );
@@ -800,7 +800,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final args = const ComicReaderArgs(
+      const args = ComicReaderArgs(
         comicId: 'yamibo:100',
         episodeId: 'yamibo:100:101',
       );

@@ -169,7 +169,7 @@ void main() {
       );
       await repository.saveDraft(
         ComposerDraftSnapshot(
-          identity: ComposerDraftIdentity.thread(fid: '33', tid: '100'),
+          identity: const ComposerDraftIdentity.thread(fid: '33', tid: '100'),
           message: '百合 draft',
           useSignature: true,
           updatedAt: DateTime.utc(2026, 7, 18),

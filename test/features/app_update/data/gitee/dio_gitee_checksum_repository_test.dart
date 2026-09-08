@@ -80,7 +80,7 @@ void main() {
 }
 
 Future<AppUpdateArtifact> _fixtureArtifact() async {
-  final parsed = GiteeReleaseParser().parse(
+  final parsed = const GiteeReleaseParser().parse(
     await loadGiteeLatestReleaseV001Fixture(),
   );
   return AppUpdateArtifact.fromCandidate(

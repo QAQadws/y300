@@ -683,7 +683,7 @@ class _FakeBulkDownloadUseCase implements BulkDownloadUseCase {
   @override
   Future<BulkDownloadResult> downloadComics(Set<String> comicIds) async {
     lastComicIds = comicIds;
-    return BulkDownloadResult(
+    return const BulkDownloadResult(
       requestedCount: 3,
       enqueuedCount: 3,
       deduplicatedCount: 0,
@@ -700,11 +700,11 @@ class _FakeUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
     required String workId,
     required ThreadContentKind kind,
   }) async {
-    return UnfavoriteResult(
-      requestedTids: const <String>['100'],
-      succeededTids: const <String>['100'],
-      failedTids: const <String>[],
-      purgedWorkIds: const <String>[],
+    return const UnfavoriteResult(
+      requestedTids: <String>['100'],
+      succeededTids: <String>['100'],
+      failedTids: <String>[],
+      purgedWorkIds: <String>[],
     );
   }
 
@@ -713,11 +713,11 @@ class _FakeUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
     required Map<String, ThreadContentKind> workKinds,
   }) async {
     lastWorkKinds = workKinds;
-    return UnfavoriteResult(
-      requestedTids: const <String>['100'],
-      succeededTids: const <String>['100'],
-      failedTids: const <String>[],
-      purgedWorkIds: const <String>[],
+    return const UnfavoriteResult(
+      requestedTids: <String>['100'],
+      succeededTids: <String>['100'],
+      failedTids: <String>[],
+      purgedWorkIds: <String>[],
     );
   }
 }

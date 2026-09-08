@@ -867,7 +867,11 @@ void main() {
         ),
         imageUploadCoordinator: _FakeReplyImageUploadCoordinator(
           events: [
-            ComposerImageUploadEvent.started(localId: '', current: 1, total: 1),
+            const ComposerImageUploadEvent.started(
+              localId: '',
+              current: 1,
+              total: 1,
+            ),
           ],
         ),
       ),
@@ -951,7 +955,7 @@ void main() {
           replyRepository: replyRepository,
           imagePicker: _FakeReplyImagePicker(
             images: [
-              ComposerPickedImage(
+              const ComposerPickedImage(
                 path: path,
                 fileName: 'uploaded.png',
                 mimeType: 'image/png',
@@ -1043,11 +1047,11 @@ void main() {
           ),
           imageUploadCoordinator: _FakeReplyImageUploadCoordinator(
             events: [
-              ComposerImageUploadEvent.failed(
+              const ComposerImageUploadEvent.failed(
                 localId: '',
                 current: 1,
                 total: 1,
-                failure: const ComposerImageUploadFailure(
+                failure: ComposerImageUploadFailure(
                   code: ComposerImageUploadFailureCode.server,
                   detail: '图片上传失败',
                 ),
@@ -1776,7 +1780,7 @@ class _PassThroughDraftVerificationService
   }
 }
 
-final _testRenderer = FlutterBbCodeForumRenderer(
+const _testRenderer = FlutterBbCodeForumRenderer(
   attachImageBuilder: _buildTestAttachPreviewImage,
   attachFileExists: _testAttachFileExists,
   stickerImageBuilder: _buildTestStickerPreviewImage,

@@ -882,9 +882,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       _setDataState(
         applyPatch(
           current,
-          ComposerStatePatch(
+          const ComposerStatePatch(
             clearLastMessageMutation: true,
-            pendingAttachmentAids: const <String>[],
+            pendingAttachmentAids: <String>[],
             clearPendingAttachmentNotice: true,
             clearFailure: true,
           ),

@@ -87,7 +87,10 @@ class DataStorageSheet extends ConsumerWidget {
                   contentPadding: EdgeInsets.zero,
                   title: Text(
                     l10n.moreStorageClearCache,
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   trailing: FilledButton(
                     key: const Key('data-storage-clear-cache-button'),

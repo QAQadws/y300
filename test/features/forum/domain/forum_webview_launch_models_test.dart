@@ -47,7 +47,7 @@ void main() {
       'https://bbs.yamibo.com/forum.php?mod=post&action=edit&fid=5&tid=10&pid=11',
     );
     final navigator = DefaultForumWebViewNavigator();
-    final policy = const DefaultForumWebViewVisualPolicyResolver();
+    const policy = DefaultForumWebViewVisualPolicyResolver();
 
     expect(navigator.classify(uri), ForumWebViewPageKind.other);
     expect(

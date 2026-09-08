@@ -913,7 +913,7 @@ class _IncrementalGateway implements LegacyNovelThreadGateway {
     required int page,
   }) async {
     requestedPages.add(page);
-    final perPage = 2;
+    const perPage = 2;
     if (page == 1) {
       return ThreadDetailData(
         tid: tid,

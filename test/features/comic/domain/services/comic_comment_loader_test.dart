@@ -139,12 +139,12 @@ void main() {
   );
 
   test('returns empty for a thread with only the first floor', () async {
-    final page = ThreadReplyPage(
+    const page = ThreadReplyPage(
       tid: '570140',
       page: 1,
       perPage: 20,
       replyCount: 0,
-      posts: const <ThreadReplyEntry>[
+      posts: <ThreadReplyEntry>[
         ThreadReplyEntry(
           pid: '41519747',
           authorId: '365616',

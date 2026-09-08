@@ -2284,7 +2284,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final currentMode =
         ref.read(readerPreferencesControllerProvider).value?.readerMode ??
         ReaderPreferences.defaults().readerMode;
-    final modes = ReaderModePreference.values;
+    const modes = ReaderModePreference.values;
     final nextMode = modes[(currentMode.index + 1) % modes.length];
     unawaited(_onReaderModeChanged(nextMode));
   }

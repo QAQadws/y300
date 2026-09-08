@@ -802,7 +802,7 @@ class _NovelReaderHtmlPagedSurfaceState
     required BuildContext context,
     required ForumHtmlReaderPreferences htmlPreferences,
   }) {
-    final blockSpacingMode = ForumHtmlBlockSpacingMode.discuzLineDivs;
+    const blockSpacingMode = ForumHtmlBlockSpacingMode.discuzLineDivs;
     final rendererBaseStyle = ForumHtmlStylePolicy(
       htmlPreferences,
       theme: widget.theme,

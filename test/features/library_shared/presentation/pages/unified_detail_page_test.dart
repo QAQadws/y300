@@ -101,25 +101,49 @@ void main() {
       findsOneWidget,
     );
     expect(
-      tester.widget<Opacity>(
-        find.ancestor(
-          of: find.byKey(const Key('unified-detail-collapsed-title')),
-          matching: find.byType(Opacity),
-        ),
-      ),
-      isA<Opacity>().having((w) => w.opacity, 'opacity', 0),
+      tester
+          .widget<Text>(find.byKey(const Key('unified-detail-collapsed-title')))
+          .style
+          ?.color
+          ?.a,
+      0,
+    );
+    expect(
+      tester
+          .widget<ExcludeSemantics>(
+            find
+                .ancestor(
+                  of: find.byKey(const Key('unified-detail-collapsed-title')),
+                  matching: find.byType(ExcludeSemantics),
+                )
+                .first,
+          )
+          .excluding,
+      isTrue,
     );
 
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<Opacity>(
-        find.ancestor(
-          of: find.byKey(const Key('unified-detail-collapsed-title')),
-          matching: find.byType(Opacity),
-        ),
-      ),
-      isA<Opacity>().having((w) => w.opacity, 'opacity', 1),
+      tester
+          .widget<Text>(find.byKey(const Key('unified-detail-collapsed-title')))
+          .style
+          ?.color
+          ?.a,
+      1,
+    );
+    expect(
+      tester
+          .widget<ExcludeSemantics>(
+            find
+                .ancestor(
+                  of: find.byKey(const Key('unified-detail-collapsed-title')),
+                  matching: find.byType(ExcludeSemantics),
+                )
+                .first,
+          )
+          .excluding,
+      isFalse,
     );
 
     // 章节列表位于下方 sliver，测试中需要滚动后再断言。

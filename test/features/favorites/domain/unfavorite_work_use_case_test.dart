@@ -24,10 +24,10 @@ void main() {
       );
       final favoriteLinkService = _FakeFavoriteLinkService(
         linksByWorkId: <String, FavoriteWorkLinks>{
-          'yamibo:1': FavoriteWorkLinks(
+          'yamibo:1': const FavoriteWorkLinks(
             workId: 'yamibo:1',
             kind: ThreadContentKind.comic,
-            threads: const <FavoriteThreadRef>[
+            threads: <FavoriteThreadRef>[
               FavoriteThreadRef(tid: '100'),
               FavoriteThreadRef(tid: '101'),
             ],
@@ -83,10 +83,10 @@ void main() {
         );
         final favoriteLinkService = _FakeFavoriteLinkService(
           linksByWorkId: <String, FavoriteWorkLinks>{
-            'yamibo:2': FavoriteWorkLinks(
+            'yamibo:2': const FavoriteWorkLinks(
               workId: 'yamibo:2',
               kind: ThreadContentKind.comic,
-              threads: const <FavoriteThreadRef>[
+              threads: <FavoriteThreadRef>[
                 FavoriteThreadRef(tid: '100'),
                 FavoriteThreadRef(tid: '101'),
               ],
@@ -134,10 +134,10 @@ void main() {
       );
       final favoriteLinkService = _FakeFavoriteLinkService(
         linksByWorkId: <String, FavoriteWorkLinks>{
-          'yamibo:3': FavoriteWorkLinks(
+          'yamibo:3': const FavoriteWorkLinks(
             workId: 'yamibo:3',
             kind: ThreadContentKind.comic,
-            threads: const <FavoriteThreadRef>[FavoriteThreadRef(tid: '100')],
+            threads: <FavoriteThreadRef>[FavoriteThreadRef(tid: '100')],
           ),
         },
         activeByWorkId: <String, bool>{'yamibo:3': true},
@@ -206,15 +206,15 @@ void main() {
       );
       final favoriteLinkService = _FakeFavoriteLinkService(
         linksByWorkId: <String, FavoriteWorkLinks>{
-          'yamibo:1': FavoriteWorkLinks(
+          'yamibo:1': const FavoriteWorkLinks(
             workId: 'yamibo:1',
             kind: ThreadContentKind.comic,
-            threads: const <FavoriteThreadRef>[FavoriteThreadRef(tid: '100')],
+            threads: <FavoriteThreadRef>[FavoriteThreadRef(tid: '100')],
           ),
-          'novel:1': FavoriteWorkLinks(
+          'novel:1': const FavoriteWorkLinks(
             workId: 'novel:1',
             kind: ThreadContentKind.novel,
-            threads: const <FavoriteThreadRef>[FavoriteThreadRef(tid: '200')],
+            threads: <FavoriteThreadRef>[FavoriteThreadRef(tid: '200')],
           ),
         },
         activeByWorkId: <String, bool>{'yamibo:1': true, 'novel:1': true},

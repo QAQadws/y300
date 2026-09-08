@@ -33,10 +33,10 @@ void main() {
           libraryCoverStoreProvider.overrideWithValue(store),
           libraryCoverDecodeSchedulerProvider.overrideWithValue(scheduler),
         ],
-        child: LocalizedTestApp(
+        child: const LocalizedTestApp(
           home: Scaffold(
             body: UnifiedDetailHeaderSection(
-              header: const LibraryDetailHeader(
+              header: LibraryDetailHeader(
                 workId: 'comic:1',
                 title: '测试作品',
                 coverAsset: asset,

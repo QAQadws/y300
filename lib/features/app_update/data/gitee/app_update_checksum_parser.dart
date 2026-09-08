@@ -63,8 +63,8 @@ final class AppUpdateChecksumParser {
 
     final fileName = match.group(2)!;
     if (fileName != expectedFileName) {
-      return AppUpdateChecksumParseFailure(
-        const AppUpdateFailure(
+      return const AppUpdateChecksumParseFailure(
+        AppUpdateFailure(
           code: AppUpdateFailureCode.checksumFileNameMismatch,
           message: 'The checksum filename does not match the APK filename.',
           field: 'filename',

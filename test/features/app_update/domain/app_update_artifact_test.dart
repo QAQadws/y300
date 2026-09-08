@@ -8,7 +8,7 @@ import '../test_support/gitee_release_phase0_fixture.dart';
 
 void main() {
   test('maps a parsed Gitee candidate to a canonical artifact', () async {
-    final parsed = GiteeReleaseParser().parse(
+    final parsed = const GiteeReleaseParser().parse(
       await loadGiteeLatestReleaseV001Fixture(),
     );
     final candidate = (parsed as GiteeReleaseParseSuccess).candidate;

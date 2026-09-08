@@ -671,7 +671,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   ) {
     final l10n = AppLocalizations.of(context);
     final refreshItem = AppPopupMenuItem<String>(
-      key: Key('forum-webview-refresh-action'),
+      key: const Key('forum-webview-refresh-action'),
       value: _refreshPageAction,
       label: l10n.forumRefreshPage,
     );
@@ -681,7 +681,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         return <PopupMenuEntry<String>>[
           refreshItem,
           AppPopupMenuItem<String>(
-            key: Key('forum-webview-home-unfavorite-action'),
+            key: const Key('forum-webview-home-unfavorite-action'),
             value: _homeUnfavoriteAction,
             label: l10n.forumUnfavoriteForum,
           ),
@@ -700,7 +700,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         return <PopupMenuEntry<String>>[
           refreshItem,
           AppPopupMenuItem<String>(
-            key: Key('forum-webview-search-home-action'),
+            key: const Key('forum-webview-search-home-action'),
             value: _searchGoHomeAction,
             label: l10n.forumWebViewBackHome,
           ),
@@ -760,7 +760,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (!menu.isAuthorOnly && menu.authorOnlyUri != null) {
       items.add(
         AppPopupMenuItem<String>(
-          key: Key('forum-webview-thread-author-action'),
+          key: const Key('forum-webview-thread-author-action'),
           value: _threadAuthorOnlyAction,
           label: l10n.forumWebViewAuthorOnly,
         ),
@@ -768,7 +768,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     } else if (menu.isAuthorOnly && menu.normalThreadUri != null) {
       items.add(
         AppPopupMenuItem<String>(
-          key: Key('forum-webview-thread-author-action'),
+          key: const Key('forum-webview-thread-author-action'),
           value: _threadNormalThreadAction,
           label: l10n.forumWebViewAllPosts,
         ),
@@ -788,7 +788,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     );
     items.add(
       AppPopupMenuItem<String>(
-        key: Key('forum-webview-thread-home-action'),
+        key: const Key('forum-webview-thread-home-action'),
         value: _threadGoHomeAction,
         label: l10n.forumWebViewBackHome,
       ),

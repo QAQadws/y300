@@ -517,7 +517,7 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
     WidgetRef ref,
     ForumHomeCarouselItem item,
   ) async {
-    final parser = const ForumReferenceResolver();
+    const parser = ForumReferenceResolver();
     final normalized = parser.normalizeHref(item.targetUrl);
     final tid = normalized == null ? null : parser.extractTid(normalized);
     if (tid != null && tid.isNotEmpty) {

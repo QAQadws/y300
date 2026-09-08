@@ -147,7 +147,7 @@ final class TransactionalStorageRootMigrationCoordinator
       );
     }
     if (checkpointCorrupt && customRoot == null) {
-      final corruptCleanup = const StorageRootMigrationCheckpoint(
+      const corruptCleanup = StorageRootMigrationCheckpoint(
         phase: StorageRootMigrationPhase.cleanupPending,
         failureCode: StorageRootMigrationFailureCode.stateCorrupt,
       );
@@ -193,7 +193,7 @@ final class TransactionalStorageRootMigrationCoordinator
     if (customRoot == null) {
       if (checkpoint != null &&
           checkpoint.phase != StorageRootMigrationPhase.completed) {
-        final inconsistent = const StorageRootMigrationCheckpoint(
+        const inconsistent = StorageRootMigrationCheckpoint(
           phase: StorageRootMigrationPhase.cleanupPending,
           failureCode: StorageRootMigrationFailureCode.stateCorrupt,
         );

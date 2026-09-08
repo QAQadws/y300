@@ -128,10 +128,10 @@ class _FakeCommentLoader implements ComicCommentLoader {
 }
 
 ComicCommentLoadResult _successResult() {
-  return ComicCommentLoadResult(
+  return const ComicCommentLoadResult(
     sourceTid: '573279',
     status: ComicCommentLoadStatus.success,
-    items: const <ComicCommentItem>[
+    items: <ComicCommentItem>[
       ComicCommentItem(
         pid: 'p2',
         authorId: '8',
@@ -142,7 +142,7 @@ ComicCommentLoadResult _successResult() {
         avatarUrl: null,
       ),
     ],
-    loadedPages: const <int>{1},
+    loadedPages: <int>{1},
     expectedPages: 1,
   );
 }

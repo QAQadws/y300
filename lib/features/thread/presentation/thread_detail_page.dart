@@ -648,7 +648,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     switch (submitResult) {
       case DataCommandApplied<ThreadPostRatingReceipt>():
         _showActionNotice(
-          ThreadActionNotice(
+          const ThreadActionNotice(
             code: ThreadActionNoticeCode.success,
             action: ThreadActionKind.rate,
           ),
@@ -713,7 +713,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     switch (submitResult) {
       case DataCommandApplied<ThreadPostCommentReceipt>():
         _showActionNotice(
-          ThreadActionNotice(
+          const ThreadActionNotice(
             code: ThreadActionNoticeCode.success,
             action: ThreadActionKind.comment,
           ),
@@ -1306,7 +1306,7 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
           ),
         ],
         AppPopupMenuItem<String>(
-          key: Key('thread-detail-display-settings-menu-item'),
+          key: const Key('thread-detail-display-settings-menu-item'),
           value: 'display-settings',
           label: l10n.threadDetailDisplaySettings,
         ),

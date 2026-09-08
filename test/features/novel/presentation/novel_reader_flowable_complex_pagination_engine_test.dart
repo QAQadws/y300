@@ -173,7 +173,7 @@ void main() {
   });
 
   test('accepts the ruby route with the shared DOM-range policy', () async {
-    final engine = const DefaultNovelReaderFlowableComplexPaginationEngine();
+    const engine = DefaultNovelReaderFlowableComplexPaginationEngine();
     final atom = _atom('ruby', route: NovelReaderPaginationRoute.rubyInline);
 
     final result = await engine.paginate(
@@ -230,7 +230,7 @@ void main() {
   });
 
   test('rejects a route without the DOM-range flow policy', () async {
-    final engine = const DefaultNovelReaderFlowableComplexPaginationEngine();
+    const engine = DefaultNovelReaderFlowableComplexPaginationEngine();
     final atom = _atom(
       'widget',
       route: NovelReaderPaginationRoute.atomicWidget,

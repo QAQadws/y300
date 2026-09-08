@@ -188,13 +188,13 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
       return result;
     } on _FavoriteSyncFailure catch (error) {
       _emitProgress(
-        FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
+        const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
       );
       await _localRepository.markSyncFailure(error.message);
       throw StateError(error.message);
     } catch (error) {
       _emitProgress(
-        FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
+        const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
       );
       await _localRepository.markSyncFailure('$error');
       rethrow;

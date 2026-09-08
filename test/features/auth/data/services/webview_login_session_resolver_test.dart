@@ -80,7 +80,7 @@ void main() {
     'returns pending and skips API verification when no auth cookie',
     () async {
       final authRepository = _FakeAuthRepository(
-        ApiSuccess<SessionInfo>(
+        const ApiSuccess<SessionInfo>(
           SessionInfo(uid: '1', username: 'u', formhash: 'h', isLoggedIn: true),
         ),
       );
@@ -102,21 +102,21 @@ void main() {
   test(
     'returns succeeded when auth cookie present and profile verifies',
     () async {
-      final session = SessionInfo(
+      const session = SessionInfo(
         uid: '42',
         username: 'reader',
         formhash: 'abcd',
         isLoggedIn: true,
       );
       final authRepository = _FakeAuthRepository(
-        ApiSuccess<SessionInfo>(session),
+        const ApiSuccess<SessionInfo>(session),
       );
       final resolver = _buildResolver(
         webViewCookies: const <String, String>{
           'acw_sc__v2': 'wafpass',
           'EeqY_2132_auth': 'token',
         },
-        refreshResult: ApiSuccess<SessionInfo>(session),
+        refreshResult: const ApiSuccess<SessionInfo>(session),
         authRepository: authRepository,
       );
 

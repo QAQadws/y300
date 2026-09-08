@@ -172,7 +172,7 @@ void main() {
           url: prepared.sequence.entries.first.url,
         ),
         sequence: prepared.sequence,
-        imageRequest: ForumHtmlImageRequest(
+        imageRequest: const ForumHtmlImageRequest(
           url: 'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
           attachmentId: '99',
         ),
@@ -232,11 +232,11 @@ ForumHtmlPreparedRenderDocument _prepared(String html) {
   );
 }
 
-ThreadPostBodyRenderPlan get _emptyPlan => ThreadPostBodyRenderPlan(
-  document: const RichDocument(blocks: <RichBlock>[]),
-  displayDocument: const RichDocument(blocks: <RichBlock>[]),
-  images: const <RichImageBlock>[],
-  segments: const <ThreadPostBodySegment>[],
+ThreadPostBodyRenderPlan get _emptyPlan => const ThreadPostBodyRenderPlan(
+  document: RichDocument(blocks: <RichBlock>[]),
+  displayDocument: RichDocument(blocks: <RichBlock>[]),
+  images: <RichImageBlock>[],
+  segments: <ThreadPostBodySegment>[],
   usesListSegments: false,
   renderKey: _renderKey,
 );

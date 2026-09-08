@@ -219,8 +219,8 @@ void main() {
     test(
       'ComicDuplicateMergeTask failure is recorded and resolvedWorkId stays null',
       () async {
-        final runner = DefaultLibraryPostIngestTaskRunner(
-          comicDuplicateMergeService: const ComicDuplicateMergeService(
+        const runner = DefaultLibraryPostIngestTaskRunner(
+          comicDuplicateMergeService: ComicDuplicateMergeService(
             repository: _ThrowingDuplicateMergeRepository(),
           ),
         );
@@ -278,8 +278,8 @@ void main() {
     test(
       'ComicDuplicateMergeAllTask failure is recorded but does not throw',
       () async {
-        final runner = DefaultLibraryPostIngestTaskRunner(
-          comicDuplicateMergeService: const ComicDuplicateMergeService(
+        const runner = DefaultLibraryPostIngestTaskRunner(
+          comicDuplicateMergeService: ComicDuplicateMergeService(
             repository: _ThrowingDuplicateMergeRepository(),
           ),
         );

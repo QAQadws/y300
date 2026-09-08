@@ -19,7 +19,7 @@ void main() {
     directory = await Directory.systemTemp.createTemp(
       'y300-app-update-verifier-',
     );
-    final parsed = GiteeReleaseParser().parse(
+    final parsed = const GiteeReleaseParser().parse(
       await loadGiteeLatestReleaseV001Fixture(),
     );
     artifact = AppUpdateArtifact.fromCandidate(

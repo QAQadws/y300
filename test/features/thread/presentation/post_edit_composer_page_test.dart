@@ -482,7 +482,7 @@ class _UnusedPreparationRepository
   @override
   Future<DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>>
   load(ThreadPostEditPreparationRequest request) async {
-    return DataReadFailure(
+    return const DataReadFailure(
       kind: DataReadFailureKind.network,
       diagnosticMessage: 'not_used',
     );

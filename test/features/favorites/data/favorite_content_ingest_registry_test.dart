@@ -5,16 +5,16 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 
 void main() {
   test('returns comic handler for comic kind', () {
-    final comicHandler = _StubFavoriteContentIngestHandler(
+    const comicHandler = _StubFavoriteContentIngestHandler(
       kind: ThreadContentKind.comic,
     );
-    final novelHandler = _StubFavoriteContentIngestHandler(
+    const novelHandler = _StubFavoriteContentIngestHandler(
       kind: ThreadContentKind.novel,
     );
-    final forumHandler = _StubFavoriteContentIngestHandler(
+    const forumHandler = _StubFavoriteContentIngestHandler(
       kind: ThreadContentKind.forum,
     );
-    final registry = DefaultFavoriteContentIngestRegistry(
+    const registry = DefaultFavoriteContentIngestRegistry(
       comicHandler: comicHandler,
       novelHandler: novelHandler,
       forumHandler: forumHandler,
@@ -24,16 +24,16 @@ void main() {
   });
 
   test('returns novel handler for novel kind', () {
-    final comicHandler = _StubFavoriteContentIngestHandler(
+    const comicHandler = _StubFavoriteContentIngestHandler(
       kind: ThreadContentKind.comic,
     );
-    final novelHandler = _StubFavoriteContentIngestHandler(
+    const novelHandler = _StubFavoriteContentIngestHandler(
       kind: ThreadContentKind.novel,
     );
-    final forumHandler = _StubFavoriteContentIngestHandler(
+    const forumHandler = _StubFavoriteContentIngestHandler(
       kind: ThreadContentKind.forum,
     );
-    final registry = DefaultFavoriteContentIngestRegistry(
+    const registry = DefaultFavoriteContentIngestRegistry(
       comicHandler: comicHandler,
       novelHandler: novelHandler,
       forumHandler: forumHandler,
@@ -43,16 +43,16 @@ void main() {
   });
 
   test('returns forum handler for forum and unknown kinds', () {
-    final comicHandler = _StubFavoriteContentIngestHandler(
+    const comicHandler = _StubFavoriteContentIngestHandler(
       kind: ThreadContentKind.comic,
     );
-    final novelHandler = _StubFavoriteContentIngestHandler(
+    const novelHandler = _StubFavoriteContentIngestHandler(
       kind: ThreadContentKind.novel,
     );
-    final forumHandler = _StubFavoriteContentIngestHandler(
+    const forumHandler = _StubFavoriteContentIngestHandler(
       kind: ThreadContentKind.forum,
     );
-    final registry = DefaultFavoriteContentIngestRegistry(
+    const registry = DefaultFavoriteContentIngestRegistry(
       comicHandler: comicHandler,
       novelHandler: novelHandler,
       forumHandler: forumHandler,

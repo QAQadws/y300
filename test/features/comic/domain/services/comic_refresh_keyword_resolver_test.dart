@@ -7,8 +7,8 @@ import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 void main() {
   group('DefaultComicRefreshKeywordResolver phase 1 baseline', () {
     test('uses custom search title before lower priority fields', () {
-      final resolver = DefaultComicRefreshKeywordResolver(
-        subjectParser: const RuleBasedComicSubjectParser(),
+      const resolver = DefaultComicRefreshKeywordResolver(
+        subjectParser: RuleBasedComicSubjectParser(),
       );
 
       final keywords = resolver.resolve(
@@ -31,8 +31,8 @@ void main() {
     });
 
     test('single keyword mode stops after first non-empty choice', () {
-      final resolver = DefaultComicRefreshKeywordResolver(
-        subjectParser: const RuleBasedComicSubjectParser(),
+      const resolver = DefaultComicRefreshKeywordResolver(
+        subjectParser: RuleBasedComicSubjectParser(),
       );
 
       final keywords = resolver.resolve(
@@ -111,8 +111,8 @@ void main() {
     );
 
     test('uses cleaner parser output for display title keywords', () {
-      final resolver = DefaultComicRefreshKeywordResolver(
-        subjectParser: const RuleBasedComicSubjectParser(),
+      const resolver = DefaultComicRefreshKeywordResolver(
+        subjectParser: RuleBasedComicSubjectParser(),
       );
 
       final keywords = resolver.resolve(
@@ -129,8 +129,8 @@ void main() {
     });
 
     test('strips author bracket and chapter tail from raw thread title', () {
-      final resolver = DefaultComicRefreshKeywordResolver(
-        subjectParser: const RuleBasedComicSubjectParser(),
+      const resolver = DefaultComicRefreshKeywordResolver(
+        subjectParser: RuleBasedComicSubjectParser(),
       );
 
       final keywords = resolver.resolve(
@@ -147,8 +147,8 @@ void main() {
     });
 
     test('keeps trimmed custom search title above cleaned thread title', () {
-      final resolver = DefaultComicRefreshKeywordResolver(
-        subjectParser: const RuleBasedComicSubjectParser(),
+      const resolver = DefaultComicRefreshKeywordResolver(
+        subjectParser: RuleBasedComicSubjectParser(),
       );
 
       final keywords = resolver.resolve(

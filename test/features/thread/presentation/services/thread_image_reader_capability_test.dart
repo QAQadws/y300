@@ -22,19 +22,19 @@ void main() {
   ThreadImageReaderCapability buildCapability() {
     final l10n = AppLocalizationsZh();
     return ThreadImageReaderCapability(
-      request: ThreadImageOpenRequest(
+      request: const ThreadImageOpenRequest(
         tid: '573279',
         pid: '8899',
         postNumber: 1,
         referer: 'https://example.com/thread-573279.htm',
-        group: const ThreadPostImageGroup(
+        group: ThreadPostImageGroup(
           tid: '573279',
           pid: '8899',
           postNumber: 1,
           entries: [],
         ),
         initialIndex: 0,
-        continuousImages: const [item],
+        continuousImages: [item],
       ),
       imageReferer: null,
       title: l10n.threadImageReaderTitle,

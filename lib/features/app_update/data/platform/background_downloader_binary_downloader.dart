@@ -533,7 +533,7 @@ final class BackgroundDownloaderBinaryDownloader
     if (record.exception == null) {
       return null;
     }
-    return AppUpdateFailure(
+    return const AppUpdateFailure(
       code: AppUpdateFailureCode.apkDownloadFailed,
       message: 'The background update task failed.',
     );
