@@ -1127,6 +1127,7 @@
   },
 
   "threadDetailTitle": "帖子详情",
+  "threadDetailLoading": "正在读取帖子",
   "threadDetailRefresh": "刷新帖子详情",
   "threadDetailOnlyAuthor": "只看该作者",
   "threadDetailAllPosts": "显示全部楼层",

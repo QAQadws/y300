@@ -2665,6 +2665,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadDetailTitle => '帖子详情';
 
   @override
+  String get threadDetailLoading => '正在读取帖子';
+
+  @override
   String get threadDetailRefresh => '刷新帖子详情';
 
   @override
@@ -7045,6 +7048,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadDetailTitle => '帖子詳情';
+
+  @override
+  String get threadDetailLoading => '正在讀取帖子';
 
   @override
   String get threadDetailRefresh => '重新整理帖子詳情';

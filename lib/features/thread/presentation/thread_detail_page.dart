@@ -272,8 +272,12 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
             children: [
               Expanded(
                 child: (asyncState.isLoading && state.posts.isEmpty)
-                    ? const SizedBox.shrink()
-                    : state.errorMessage != null && state.posts.isEmpty
+                    ? ThreadDetailLoading(
+                        key: ValueKey(args),
+                        subject: projection.displaySubject,
+                      )
+                    : (asyncState.hasError || state.errorMessage != null) &&
+                          state.posts.isEmpty
                     ? _ThreadErrorView(
                         message: state.loadFailure == null
                             ? ThreadTextResolver.loadFailure(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
@@ -40,6 +42,7 @@ part 'thread_detail_sheets.dart';
 part 'thread_detail_footer.dart';
 part 'thread_detail_atoms.dart';
 part 'thread_detail_card.dart';
+part 'thread_detail_loading.dart';
 
 class ThreadDetailContent extends StatefulWidget {
   const ThreadDetailContent({
