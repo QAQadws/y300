@@ -142,7 +142,7 @@ void main() {
             '|scale=${testCase.textScale}',
         themeSignature: chapter.themeSignature,
         imageDimensionRevision: chapter.imageDimensionRevision,
-        rendererRevision: 14,
+        rendererRevision: 15,
       );
       final adapter = NovelReaderHtmlPaginationMeasureAdapter(
         hostContext: hostContext,
@@ -279,6 +279,7 @@ ForumHtmlReaderPreferences _preferences({
 }
 
 const _matrixHtml =
+    '<i class="pstatus">本帖最后由 fixture-user-with-a-long-name 于 2026-1-1 12:34 编辑</i>'
     '<div><font face="Fantasy Novel Font"><strong>复杂样式标题</strong></font>'
     '<br>正文 mixed 123，包含 <ruby>漢<rt>かん</rt><rp>(</rp><rp>)</rp></ruby>'
     ' 与连续换行。<br>第二行正文用于验证实际行盒高度。</div>';

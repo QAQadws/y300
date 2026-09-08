@@ -14,6 +14,7 @@ void main() {
         NovelReaderPaginationRoute.values,
         const <NovelReaderPaginationRoute>[
           NovelReaderPaginationRoute.safeText,
+          NovelReaderPaginationRoute.editStatus,
           NovelReaderPaginationRoute.flowableComplexText,
           NovelReaderPaginationRoute.rubyInline,
           NovelReaderPaginationRoute.isolatedImage,
@@ -35,6 +36,14 @@ void main() {
         split: NovelReaderPaginationSplitPolicy.lineRanges,
         placement: NovelReaderPaginationPlacementPolicy.flow,
         overflow: NovelReaderPaginationOverflowPolicy.minimumTextFragment,
+        keepPageOpen: true,
+      );
+      _expectPolicy(
+        policies[NovelReaderPaginationRoute.editStatus]!,
+        measure: NovelReaderPaginationMeasurePolicy.htmlRendererWholeAtom,
+        split: NovelReaderPaginationSplitPolicy.none,
+        placement: NovelReaderPaginationPlacementPolicy.flow,
+        overflow: NovelReaderPaginationOverflowPolicy.innerScroll,
         keepPageOpen: true,
       );
       for (final route in const <NovelReaderPaginationRoute>[

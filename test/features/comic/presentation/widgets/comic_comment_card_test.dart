@@ -17,6 +17,43 @@ import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 void main() {
+  testWidgets('API comment edit notices use the shared single-line fitting', (
+    tester,
+  ) async {
+    const notice = '本帖最后由 fixture-comment-author 于 2026-1-1 12:34 编辑';
+    await tester.pumpWidget(
+      _host(
+        SizedBox(
+          width: 280,
+          child: ComicCommentCard(
+            projection: ComicCommentItemProjection.raw(
+              _comment(
+                rawMessage: '<i class="pstatus">$notice</i><br><br><p>评论正文</p>',
+              ),
+            ),
+            sourceTid: '10001',
+          ),
+        ),
+        imageCacheService: _NoopImageCacheService(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final status = find.byKey(const Key('forum-html-discuz-edit-status'));
+    expect(tester.widget<Text>(status).data, notice);
+    expect(tester.widget<Text>(status).maxLines, 1);
+    expect(
+      tester
+          .widget<FittedBox>(
+            find.ancestor(of: status, matching: find.byType(FittedBox)),
+          )
+          .fit,
+      BoxFit.scaleDown,
+    );
+    expect(find.textContaining('评论正文', findRichText: true), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('renders comment metadata and shared HTML body', (tester) async {
     await tester.pumpWidget(
       _host(

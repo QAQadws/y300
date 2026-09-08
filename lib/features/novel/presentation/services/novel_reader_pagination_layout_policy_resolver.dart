@@ -25,6 +25,16 @@ final class DefaultNovelReaderPaginationLayoutPolicyResolver
     keepPageOpenAfterAppend: true,
   );
 
+  // The shared renderer fits this notice to one line. It must be measured
+  // intact, but unlike tables and widgets it should share a page with prose.
+  static const editStatus = NovelReaderPaginationLayoutPolicy(
+    measure: NovelReaderPaginationMeasurePolicy.htmlRendererWholeAtom,
+    split: NovelReaderPaginationSplitPolicy.none,
+    placement: NovelReaderPaginationPlacementPolicy.flow,
+    overflow: NovelReaderPaginationOverflowPolicy.innerScroll,
+    keepPageOpenAfterAppend: true,
+  );
+
   static const dedicatedContent = NovelReaderPaginationLayoutPolicy(
     measure: NovelReaderPaginationMeasurePolicy.htmlRendererWholeAtom,
     split: NovelReaderPaginationSplitPolicy.none,
@@ -45,6 +55,7 @@ final class DefaultNovelReaderPaginationLayoutPolicyResolver
   NovelReaderPaginationLayoutPolicy resolve(NovelReaderPaginationRoute route) {
     return switch (route) {
       NovelReaderPaginationRoute.safeText => safeText,
+      NovelReaderPaginationRoute.editStatus => editStatus,
       NovelReaderPaginationRoute.flowableComplexText ||
       NovelReaderPaginationRoute.rubyInline => flowableComplexText,
       NovelReaderPaginationRoute.isolatedImage ||

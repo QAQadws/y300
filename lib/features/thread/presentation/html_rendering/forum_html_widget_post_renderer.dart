@@ -317,6 +317,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
 class _DiscuzEditStatusText extends StatelessWidget {
   const _DiscuzEditStatusText({required this.text, required this.baseStyle});
 
+  static final _whitespace = RegExp(r'[\s\u0085\u00a0\u2028\u2029]+');
+
   final String text;
   final TextStyle Function(BuildContext context) baseStyle;
 
@@ -331,13 +333,23 @@ class _DiscuzEditStatusText extends StatelessWidget {
         Theme.of(context).colorScheme.onSurface;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        key: const Key('forum-html-discuz-edit-status'),
-        style: source.copyWith(
-          fontSize: baseFontSize == null ? null : baseFontSize * 0.88,
-          fontStyle: FontStyle.italic,
-          color: baseColor.withValues(alpha: 0.62),
+      // Lay out the complete line at the reader's chosen size once. Scaling
+      // only when necessary avoids iterative font-size measurement and keeps
+      // both the painted line and its layout height within the available box.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: AlignmentDirectional.centerStart,
+        child: Text(
+          text.replaceAll(_whitespace, ' ').trim(),
+          key: const Key('forum-html-discuz-edit-status'),
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.visible,
+          style: source.copyWith(
+            fontSize: baseFontSize == null ? null : baseFontSize * 0.88,
+            fontStyle: FontStyle.italic,
+            color: baseColor.withValues(alpha: 0.62),
+          ),
         ),
       ),
     );

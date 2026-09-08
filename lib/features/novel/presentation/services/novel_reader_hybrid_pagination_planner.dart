@@ -777,6 +777,21 @@ final class DefaultNovelReaderHybridPaginationPlanner
               domSliceCount += 1;
               await publishFinalPages();
             }
+          case NovelReaderPaginationRoute.editStatus:
+            complexBlockCount += 1;
+            final block = await complexBlockEngine.paginate(
+              atom: classified,
+              chapter: chapter,
+              key: key,
+              measurer: complexMeasurer,
+            );
+            cancellationToken.throwIfCancelled();
+            composer.appendComplexBlock(
+              classified,
+              block,
+              combineWithBufferedContent: composer.canAppendComplexBlock(block),
+              keepPageOpen: true,
+            );
           case NovelReaderPaginationRoute.collapseBlock:
           case NovelReaderPaginationRoute.tableBlock:
           case NovelReaderPaginationRoute.atomicWidget:

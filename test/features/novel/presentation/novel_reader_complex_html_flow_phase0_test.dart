@@ -176,13 +176,15 @@ void main() {
         },
       );
       expect(_routeCounts(existingRoutes), <NovelReaderPaginationRoute, int>{
-        NovelReaderPaginationRoute.safeText: 95,
+        NovelReaderPaginationRoute.editStatus: 1,
+        NovelReaderPaginationRoute.safeText: 94,
         NovelReaderPaginationRoute.rubyInline: 2,
       });
       expect(
         _reasonCounts(existingRoutes),
         <NovelReaderPaginationRouteReason, int>{
-          NovelReaderPaginationRouteReason.safeTextSubset: 95,
+          NovelReaderPaginationRouteReason.containsEditStatus: 1,
+          NovelReaderPaginationRouteReason.safeTextSubset: 94,
           NovelReaderPaginationRouteReason.containsRuby: 2,
         },
       );

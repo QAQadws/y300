@@ -20,6 +20,37 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 
 void main() {
   testWidgets(
+    'v1-style chapter edit notices use the shared single-line fitting',
+    (tester) async {
+      const notice = '本帖最后由 fixture-novel-author 于 2026-1-1 12:34 编辑';
+      await tester.pumpWidget(
+        _host(
+          theme: _lightTheme,
+          preparer: const NovelHtmlChapterRenderPreparer(),
+          rawHtml:
+              '<i class="pstatus"> $notice </i><br />\n<br /><div>小说正文</div>',
+          preferences: NovelReaderPreferences.defaults().copyWith(fontSize: 24),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final status = find.byKey(const Key('forum-html-discuz-edit-status'));
+      expect(tester.widget<Text>(status).data, notice);
+      expect(tester.widget<Text>(status).maxLines, 1);
+      expect(
+        tester
+            .widget<FittedBox>(
+              find.ancestor(of: status, matching: find.byType(FittedBox)),
+            )
+            .fit,
+        BoxFit.scaleDown,
+      );
+      expect(find.textContaining('小说正文', findRichText: true), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'theme changes prepare a new document and ignore the old late future',
     (tester) async {
       final preparer = _DeferredNovelHtmlChapterPreparer();

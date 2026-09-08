@@ -3,6 +3,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 
 enum NovelReaderPaginationRoute {
   safeText,
+  editStatus,
   flowableComplexText,
   rubyInline,
   isolatedImage,
@@ -13,6 +14,7 @@ enum NovelReaderPaginationRoute {
 
 enum NovelReaderPaginationRouteReason {
   safeTextSubset,
+  containsEditStatus,
   containsRuby,
   isolatedReadableImage,
   containsCollapse,

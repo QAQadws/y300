@@ -26,6 +26,52 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_text
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 void main() {
+  test(
+    'keeps a long edit notice intact on the same page as the following prose',
+    () async {
+      final notice =
+          '本帖最后由 ${List.filled(30, 'fixture-user').join()} 于 2026-1-1 12:34 编辑';
+      final chapter = await _prepare(
+        '<i class="pstatus">$notice</i><br><br><p>正文第一段。</p>',
+      );
+      final adapter = _RecordingMeasureAdapter();
+      final plan = await _planner(
+        adapter,
+      ).paginate(chapter, _key(chapter, height: 160));
+
+      expect(plan.pageCount, 1);
+      expect(plan.pages.single.html, contains(notice));
+      expect(plan.pages.single.html, contains('正文第一段。'));
+      expect(plan.pages.single.requiresInnerScroll, isFalse);
+      expect(plan.pages.single.isDedicatedContentPage, isFalse);
+      expect(plan.routeCounts[NovelReaderPaginationRoute.editStatus], 1);
+      expect(plan.routeCounts[NovelReaderPaginationRoute.safeText], 1);
+      expect(plan.textLayoutCount, 1);
+      expect(
+        adapter.requests.where(
+          (r) => r.html.contains(notice) && !r.html.contains('正文第一段。'),
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'an edit notice joins preceding content without forcing a new page',
+    () async {
+      final chapter = await _prepare(
+        '<p>前文</p><i class="pstatus">编辑提示</i><p>后文</p>',
+      );
+      final plan = await _planner(
+        _RecordingMeasureAdapter(),
+      ).paginate(chapter, _key(chapter, height: 160));
+      expect(plan.pageCount, 1);
+      expect(plan.pages.single.html, contains('前文'));
+      expect(plan.pages.single.html, contains('编辑提示'));
+      expect(plan.pages.single.html, contains('后文'));
+    },
+  );
+
   test('pure text uses TextPainter with bounded HTML validation', () async {
     final chapter = await _prepare(
       '<p>${List<String>.filled(60, '混合分页正文 mixed 123。').join()}</p>',
