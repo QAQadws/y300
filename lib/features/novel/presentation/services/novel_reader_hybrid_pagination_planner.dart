@@ -26,6 +26,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_renderer_validator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_text_run_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_text_pagination_engine.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_work_slice.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
@@ -158,7 +159,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
             onProgress: (progress) async {
               if (!controller.isClosed) {
                 controller.add(progress);
-                await Future<void>.delayed(Duration.zero);
+                await cancellationToken.yieldToEventLoop();
               }
             },
           ).then<void>(
@@ -191,19 +192,26 @@ final class DefaultNovelReaderHybridPaginationPlanner
     cancellationToken.throwIfCancelled();
 
     final atomizationStopwatch = Stopwatch()..start();
-    final atoms = atomExtractor.extract(chapter);
+    final atoms = await atomExtractor.extractInBackground(chapter);
+    cancellationToken.throwIfCancelled();
     atomizationStopwatch.stop();
     final classificationStopwatch = Stopwatch()..start();
-    final classifiedAtoms = atoms
-        .map(
-          (atom) => atomClassifier.classify(
-            atom: atom,
-            baseStyle: baseStyle,
-            preferences: preferences,
-            theme: theme,
-          ),
-        )
-        .toList(growable: false);
+    final workSlice = NovelReaderWorkSlice(
+      cancellationToken: cancellationToken,
+    );
+    final classifiedAtoms = <NovelReaderClassifiedPaginationAtom>[];
+    for (final atom in atoms) {
+      await workSlice.yieldIfNeeded();
+      cancellationToken.throwIfCancelled();
+      classifiedAtoms.add(
+        atomClassifier.classify(
+          atom: atom,
+          baseStyle: baseStyle,
+          preferences: preferences,
+          theme: theme,
+        ),
+      );
+    }
     classificationStopwatch.stop();
 
     final atomKinds = <NovelReaderPaginationAtomKind, int>{};
@@ -395,6 +403,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
         classifiedIndex += 1
       ) {
         final classified = classifiedAtoms[classifiedIndex];
+        await workSlice.yieldIfNeeded();
         cancellationToken.throwIfCancelled();
         switch (classified.route) {
           case NovelReaderPaginationRoute.safeText:
@@ -609,6 +618,8 @@ final class DefaultNovelReaderHybridPaginationPlanner
             }
             var remainderFellBack = false;
             for (var index = 0; index < accepted.chunks.length; index += 1) {
+              await workSlice.yieldIfNeeded();
+              cancellationToken.throwIfCancelled();
               final chunk = accepted.chunks[index];
               final pageOrdinal = composer.pages.length;
               final shouldValidate =

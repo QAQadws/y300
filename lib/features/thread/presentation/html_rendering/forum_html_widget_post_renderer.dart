@@ -29,6 +29,9 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.preferences,
     this.buildAsync,
     this.enableCaching,
+    this.renderMode = RenderMode.column,
+    this.onBodyBuilt,
+    this.collapseExpansion,
     this.sourceId,
     this.threadId,
     this.imageReferer,
@@ -52,6 +55,13 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ForumHtmlReaderPreferences? preferences;
   final bool? buildAsync;
   final bool? enableCaching;
+
+  /// Only the outer chapter may be a sliver; nested collapse content stays a box.
+  final RenderMode renderMode;
+  final VoidCallback? onBodyBuilt;
+
+  /// Chapter-owned expansion memory when offscreen sliver children unmount.
+  final Map<String, bool>? collapseExpansion;
   final String? sourceId;
   final String? threadId;
   final String? imageReferer;
@@ -120,7 +130,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       ),
       factoryBuilder: _cachedImageFactoryBuilder(),
       enableCaching: enableCaching,
-      renderMode: RenderMode.column,
+      renderMode: renderMode,
       textStyle: stylePolicy.baseTextStyle(context),
       onTapUrl: callbacks.onTapUrl == null
           ? null
@@ -137,10 +147,13 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   WidgetFactory Function()? _cachedImageFactoryBuilder() {
     final tid = threadId?.trim();
     if (tid == null || tid.isEmpty) {
-      return null;
+      return onBodyBuilt == null
+          ? null
+          : () => _BodyReadyWidgetFactory(onBodyBuilt!);
     }
     return () => ForumHtmlCachedImageWidgetFactory(
       threadId: tid,
+      onBodyBuilt: onBodyBuilt,
       imageReferer: imageReferer,
       imageCacheOwnerId: imageCacheOwnerId,
       onTapImageRequest: callbacks.onTapImage == null
@@ -181,12 +194,19 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     }
 
     final collapseId = _collapseSourceId(element);
-    return ForumCollapseBlock(
-      titleHtml:
-          _firstChildWithClass(element, 'showcollapse_title')?.innerHtml ??
-          AppLocalizations.of(context).threadHtmlCollapseContent,
-      contentHtml: _collapseContentHtml(element),
-      initiallyExpanded: stylePolicy.isForumCollapseInitiallyExpanded(element),
+    final titleHtml =
+        _firstChildWithClass(element, 'showcollapse_title')?.innerHtml ??
+        AppLocalizations.of(context).threadHtmlCollapseContent;
+    final contentHtml = _collapseContentHtml(element);
+    Widget buildCollapse(BuildContext context) => ForumCollapseBlock(
+      titleHtml: titleHtml,
+      contentHtml: contentHtml,
+      initiallyExpanded:
+          collapseExpansion?[collapseId] ??
+          stylePolicy.isForumCollapseInitiallyExpanded(element),
+      onExpandedChanged: collapseExpansion == null
+          ? null
+          : (expanded) => collapseExpansion![collapseId] = expanded,
       sourceId: collapseId,
       onInteraction: callbacks.onInteraction,
       nestedRendererBuilder: (html, {required sourceId}) {
@@ -194,6 +214,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           html: html,
           theme: theme,
           callbacks: callbacks,
+          collapseExpansion: collapseExpansion,
           preferences: resolvedPreferences,
           buildAsync: buildAsync,
           enableCaching: enableCaching,
@@ -213,6 +234,11 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
         );
       },
     );
+    // HtmlWidget caches its widget tree. Re-read chapter-owned state when a
+    // lazy sliver remounts this child instead of freezing the initial value.
+    return collapseExpansion == null
+        ? buildCollapse(context)
+        : Builder(builder: buildCollapse);
   }
 
   String _collapseContentHtml(html_dom.Element element) {
@@ -311,6 +337,18 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     }
     final aidMatch = RegExp(r'(?:aid|attachmentid)=(\d+)').firstMatch(url);
     return aidMatch?.group(1);
+  }
+}
+
+class _BodyReadyWidgetFactory extends WidgetFactory {
+  _BodyReadyWidgetFactory(this.onBodyBuilt);
+  final VoidCallback onBodyBuilt;
+
+  @override
+  Widget buildBodyWidget(BuildContext context, Widget child) {
+    final body = super.buildBodyWidget(context, child);
+    onBodyBuilt();
+    return body;
   }
 }
 

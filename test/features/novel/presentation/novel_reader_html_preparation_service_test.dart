@@ -5,6 +5,8 @@ import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_legacy_markup_normalizer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
@@ -14,6 +16,51 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_read
 void main() {
   const service = DefaultNovelReaderHtmlPreparationService();
   const adapter = NovelHtmlReaderPreferencesAdapter();
+
+  test('large background preparation matches synchronous HTML and anchors', () async {
+    final body = List.generate(
+      220,
+      (index) =>
+          '<p id="fixture-$index">正文 $index <b>粗体</b>'
+          '<font color="#ff0000">颜色</font><a href="https://example.org">链接</a></p>',
+    ).join();
+    final rawHtml =
+        '$body<img width="640" height="480" src="data/attachment/forum/fixture.jpg">'
+        '<div class="showcollapse_box"><div class="showcollapse_title">目录</div>'
+        '<div class="showcollapse_content">折叠正文</div></div>';
+    final preferences = adapter.map(NovelReaderPreferences.defaults());
+    final expected = const DefaultForumHtmlRenderPreparer().prepare(
+      html: rawHtml,
+      preferences: preferences,
+      theme: _theme,
+      sourceId: _episode.episodeId,
+      threadId: _episode.sourceTid,
+      imageCacheOwnerId: _episode.sourceTid,
+    );
+    final units = const DefaultNovelReaderHtmlFlowUnitExtractor().extract(
+      episodeId: _episode.episodeId,
+      renderDocument: expected,
+    );
+    final actual = await service.prepare(
+      rawHtml: rawHtml,
+      episode: _episode,
+      preferences: preferences,
+      theme: _theme,
+      sourceId: _episode.episodeId,
+      threadId: _episode.sourceTid,
+      imageCacheOwnerId: _episode.sourceTid,
+    );
+    expect(actual.renderDocument.preparedHtml, expected.preparedHtml);
+    expect(
+      actual.flowUnits.map((u) => (u.unitId, u.html, u.endAnchor.textOffset)),
+      units.map((u) => (u.unitId, u.html, u.endAnchor.textOffset)),
+    );
+    expect(
+      actual.renderDocument.sequence.entries.single.cacheKey,
+      expected.sequence.entries.single.cacheKey,
+    );
+    expect(actual.html, rawHtml);
+  });
 
   test('prepares one reusable HTML-first visual chapter', () async {
     const rawHtml =

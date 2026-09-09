@@ -776,6 +776,9 @@ class _NovelReaderHtmlPagedSurfaceState
         callback();
       }
     });
+    // A background result/timer can arrive with no frame scheduled. Do not
+    // leave the fallback waiting until the user's next gesture.
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _cancelPerformanceTimers() {

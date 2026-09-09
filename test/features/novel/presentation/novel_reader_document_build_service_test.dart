@@ -5,6 +5,51 @@ import 'package:y300/features/novel/domain/services/novel_reader_document_parser
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 
 void main() {
+  test(
+    'real isolate returns the same document without UI DTO reconstruction',
+    () async {
+      final request = NovelReaderDocumentBuildRequest(
+        episodeId: 'fixture-background',
+        rawHtml: List.filled(
+          180,
+          '<p>正文<b>粗体</b><a href="https://example.org">链接</a></p>',
+        ).join(),
+        fallbackParagraphs: const [],
+      );
+      final background = await const IsolateNovelReaderDocumentBuildExecutor()
+          .buildInBackground(request);
+      final local = const DiscuzNovelReaderDocumentParser().parse(
+        episodeId: request.episodeId,
+        rawHtml: request.rawHtml,
+        fallbackParagraphs: request.fallbackParagraphs,
+      );
+      expect(background.rawHtmlHash, local.rawHtmlHash);
+      expect(background.plainText, local.plainText);
+      expect(
+        background.blocks.map((block) => block.anchorId),
+        local.blocks.map((block) => block.anchorId),
+      );
+      expect(background.wordCount, local.wordCount);
+    },
+  );
+
+  test(
+    'one very long fallback paragraph also uses the background executor',
+    () async {
+      final executor = _RecordingBuildExecutor();
+      await AdaptiveNovelReaderDocumentBuildService(
+        parser: const DiscuzNovelReaderDocumentParser(),
+        executor: executor,
+      ).build(
+        NovelReaderDocumentBuildRequest(
+          episodeId: 'fixture-fallback',
+          rawHtml: '',
+          fallbackParagraphs: [List.filled(13000, '文').join()],
+        ),
+      );
+      expect(executor.callCount, 1);
+    },
+  );
   test('small request builds on current isolate', () async {
     final executor = _RecordingBuildExecutor();
     final service = AdaptiveNovelReaderDocumentBuildService(

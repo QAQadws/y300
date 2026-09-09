@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +22,8 @@ import 'package:y300/features/novel/presentation/models/novel_reader_paged_indic
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_scroll_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
@@ -52,7 +55,7 @@ class NovelReaderPage extends ConsumerStatefulWidget {
 
 class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     with WidgetsBindingObserver {
-  late final ScrollController _scrollController;
+  late final NovelReaderScrollController _scrollController;
   late final ReaderOverlayController _overlayController;
   late final ReaderGestureCoordinator _readerGestureCoordinator;
   late final NovelReaderPagedNavigationController _pagedNavigationController;
@@ -62,6 +65,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       const NovelReaderTypographyResolver();
   final NovelReaderProgressPolicy _progressPolicy =
       const NovelReaderProgressPolicy();
+  final _preparedChapterCache = NovelReaderPreparedChapterCache();
   Timer? _displayPreviewThrottle;
   Timer? _displayPersistDebounce;
   NovelReaderPreferences? _pendingDisplayPreferences;
@@ -74,6 +78,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   String? _verticalRestoreOwner;
   String? _verticalContentReadyOwner;
   String? _verticalRestoreScheduledOwner;
+  String? _verticalRestoreInFlight;
   String? _verticalRenderThemeOwner;
   String? _verticalRenderThemeSignature;
   double? _pendingVerticalThemeRestoreOffset;
@@ -113,7 +118,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       doubleTapTimeout: ReaderPagedTurnMotion.tapConfirmationDelay,
     );
     _pagedNavigationController = NovelReaderPagedNavigationController();
-    _scrollController = ScrollController()..addListener(_onScroll);
+    _scrollController = NovelReaderScrollController()..addListener(_onScroll);
   }
 
   @override
@@ -207,6 +212,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               }
             }
             if (_verticalRestoreOwner != restoreOwner) {
+              _scrollController.cancelRestore();
+              _verticalRestoreInFlight = null;
               _verticalRestoreOwner = restoreOwner;
               _verticalContentReadyOwner = null;
               _verticalRestoreScheduledOwner = null;
@@ -327,35 +334,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     return '$surfaceIdentity|vertical-restore';
   }
 
-  void _markReaderSurfaceReady(String identity, {bool terminal = false}) {
+  void _markReaderSurfaceReady(String identity) {
     if (!_isCurrentReaderSurface(identity) ||
         _readyReaderSurfaceIdentity == identity) {
       return;
     }
     setState(() {
       _readyReaderSurfaceIdentity = identity;
-    });
-    if (terminal) {
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      final latest = ref
-          .read(novelReaderControllerProvider(_args))
-          .asData
-          ?.value;
-      if (latest == null ||
-          latest.transition != null ||
-          _readerSurfaceIdentity(latest) != identity ||
-          latest.preferences.flowMode != NovelReaderFlowMode.vertical) {
-        return;
-      }
-      _restoreVerticalOffsetAfterContentReady(
-        owner: _verticalRestoreOwnerFor(identity),
-        episodeId: latest.currentEpisode.episodeId,
-      );
     });
   }
 
@@ -618,6 +603,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }) {
     if (viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
       return NovelReaderHtmlPagedSurface(
+        preparedChapterCache: _preparedChapterCache,
         rawHtml: viewState.currentContent.rawHtml,
         episode: viewState.currentEpisode,
         preferences: viewState.preferences,
@@ -644,8 +630,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           return _turnToAdjacentChapter(edge, viewState);
         },
         onContentReady: () => _markReaderSurfaceReady(surfaceIdentity),
-        onContentTerminal: () =>
-            _markReaderSurfaceReady(surfaceIdentity, terminal: true),
+        onContentTerminal: () => _markReaderSurfaceReady(surfaceIdentity),
         onLinkTap: (link) {
           if (_isCurrentReaderSurface(surfaceIdentity)) {
             _openReaderLink(link, externalLauncher);
@@ -706,6 +691,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     );
     final children = <Widget>[
       NovelReaderHtmlDocumentView(
+        asSliver: true,
+        preparedChapterCache: _preparedChapterCache,
         rawHtml: viewState.currentContent.rawHtml,
         episode: viewState.currentEpisode,
         preferences: viewState.preferences,
@@ -733,14 +720,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             owner: restoreOwner,
             themeSignature: htmlTheme.signature,
           );
-          _markReaderSurfaceReady(surfaceIdentity);
+          _restoreVerticalOffsetAfterContentReady(
+            owner: restoreOwner,
+            episodeId: viewState.currentEpisode.episodeId,
+          );
         },
         onContentTerminal: () {
           _clearPendingVerticalThemeRestore(
             owner: restoreOwner,
             themeSignature: htmlTheme.signature,
           );
-          _markReaderSurfaceReady(surfaceIdentity, terminal: true);
+          _markReaderSurfaceReady(surfaceIdentity);
         },
         onRetry: () {
           if (_isCurrentReaderSurface(surfaceIdentity)) {
@@ -748,21 +738,26 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           }
         },
       ),
-      if (viewState.nextEpisode != null) ...[
-        SizedBox(height: viewState.preferences.paragraphSpacing * 2),
-        NovelReaderNextChapterTransition(
-          nextEpisode: viewState.nextEpisode!,
-          onPressed: () {
-            if (_isCurrentReaderSurface(surfaceIdentity)) {
-              _openDifferentEpisode(
-                () => ref
-                    .read(novelReaderControllerProvider(_args).notifier)
-                    .goToNextEpisode(),
-              );
-            }
-          },
+      if (viewState.nextEpisode != null)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.only(
+              top: viewState.preferences.paragraphSpacing * 2,
+            ),
+            child: NovelReaderNextChapterTransition(
+              nextEpisode: viewState.nextEpisode!,
+              onPressed: () {
+                if (_isCurrentReaderSurface(surfaceIdentity)) {
+                  _openDifferentEpisode(
+                    () => ref
+                        .read(novelReaderControllerProvider(_args).notifier)
+                        .goToNextEpisode(),
+                  );
+                }
+              },
+            ),
+          ),
         ),
-      ],
     ];
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
@@ -794,30 +789,31 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           }
           return false;
         },
-        child: ListView(
-          key: const Key('novel-reader-paragraph-list'),
-          controller: _scrollController,
-          padding: EdgeInsets.fromLTRB(
-            NovelReaderSpacing.verticalPagePadding,
-            NovelReaderSpacing.verticalPagePadding + chromeInsets.topInset,
-            NovelReaderSpacing.verticalPagePadding,
-            NovelReaderSpacing.verticalPagePadding +
-                chromeInsets.persistentBottomInset,
-          ),
-          children: [
-            Center(
-              child: ConstrainedBox(
-                key: const Key('novel-reader-content-column'),
-                constraints: BoxConstraints(
-                  maxWidth: _safeContentMaxWidth(typography),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final sidePadding = math.max(
+              NovelReaderSpacing.verticalPagePadding,
+              (constraints.maxWidth - _safeContentMaxWidth(typography)) / 2,
+            );
+            return CustomScrollView(
+              key: const Key('novel-reader-paragraph-list'),
+              controller: _scrollController,
+              slivers: [
+                SliverPadding(
+                  key: const Key('novel-reader-content-column'),
+                  padding: EdgeInsets.fromLTRB(
+                    sidePadding,
+                    NovelReaderSpacing.verticalPagePadding +
+                        chromeInsets.topInset,
+                    sidePadding,
+                    NovelReaderSpacing.verticalPagePadding +
+                        chromeInsets.persistentBottomInset,
+                  ),
+                  sliver: SliverMainAxisGroup(slivers: children),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
-                ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1029,14 +1025,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     WidgetsBinding.instance.scheduleFrame();
   }
 
-  void _attemptVerticalRestore({
+  Future<void> _attemptVerticalRestore({
     required String owner,
     required String episodeId,
     required String trigger,
-  }) {
+  }) async {
     if (!mounted ||
         _verticalRestoreOwner != owner ||
         _verticalContentReadyOwner != owner ||
+        _verticalRestoreInFlight == owner ||
         _hasRestoredOffset) {
       return;
     }
@@ -1073,16 +1070,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     final max = _scrollController.position.maxScrollExtent;
-    if (max <= 0) {
-      _logVerticalRestoreWait(
-        episodeId: episodeId,
-        trigger: trigger,
-        snapshot: snapshot,
-        reason: 'empty_scroll_extent',
-        maxScrollExtent: max,
-      );
-      return;
-    }
     final offset = _progressPolicy.restoreScrollOffset(
       snapshot,
       maxScrollExtent: max,
@@ -1104,17 +1091,25 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         'targetOffset': offset.toStringAsFixed(2),
       },
     );
-    _isProgrammaticScrollChange = true;
-    try {
-      _scrollController.jumpTo(offset.clamp(0.0, max).toDouble());
-    } finally {
-      _isProgrammaticScrollChange = false;
-    }
+    _verticalRestoreInFlight = owner;
+    final restored = await _scrollController.restore(
+      (metrics) => _progressPolicy.restoreScrollOffset(
+        snapshot,
+        maxScrollExtent: metrics.maxScrollExtent,
+        viewportDimension: metrics.viewportDimension,
+      ),
+    );
+    if (!mounted || _verticalRestoreOwner != owner) return;
+    _verticalRestoreInFlight = null;
+    if (!restored || !_scrollController.hasClients) return;
     _hasRestoredOffset = true;
     unawaited(
       ref
           .read(novelReaderControllerProvider(_args).notifier)
-          .onScrollOffsetChanged(offset, maxScrollExtent: max),
+          .onScrollOffsetChanged(
+            _scrollController.offset,
+            maxScrollExtent: _scrollController.position.maxScrollExtent,
+          ),
     );
     _notifyVerticalContentReady(episodeId);
   }
@@ -1141,6 +1136,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   void _notifyVerticalContentReady(String episodeId) {
+    final current = ref.read(novelReaderControllerProvider(_args)).value;
+    if (current?.currentEpisode.episodeId != episodeId) return;
+    _markReaderSurfaceReady(_readerSurfaceIdentity(current!));
     unawaited(
       ref
           .read(novelReaderControllerProvider(_args).notifier)

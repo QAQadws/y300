@@ -55,16 +55,17 @@ void main() {
         'test/features/novel/fixtures/pagination/'
         'centered_divider_overflow_v1.html',
       ).readAsStringSync();
-      final chapter = await const DefaultNovelReaderHtmlPreparationService()
-          .prepare(
-            rawHtml: rawHtml,
-            episode: _episode,
-            preferences: htmlPreferences,
-            theme: htmlTheme,
-            sourceId: _episode.episodeId,
-            threadId: _episode.sourceTid,
-            imageCacheOwnerId: _episode.sourceTid,
-          );
+      final chapter = (await tester.runAsync(
+        () => const DefaultNovelReaderHtmlPreparationService().prepare(
+          rawHtml: rawHtml,
+          episode: _episode,
+          preferences: htmlPreferences,
+          theme: htmlTheme,
+          sourceId: _episode.episodeId,
+          threadId: _episode.sourceTid,
+          imageCacheOwnerId: _episode.sourceTid,
+        ),
+      ))!;
       const blockSpacingMode = ForumHtmlBlockSpacingMode.discuzLineDivs;
       final baseStyle = ForumHtmlStylePolicy(
         htmlPreferences,
@@ -83,15 +84,17 @@ void main() {
         imageDimensionRevision: chapter.imageDimensionRevision,
         rendererRevision: 12,
       );
-      final plan = await DefaultNovelReaderHybridPaginationPlanner(
-        measureAdapter: const _CenteredDividerMeasureAdapter(),
-        preferences: htmlPreferences,
-        theme: htmlTheme,
-        baseStyle: baseStyle,
-        validationPolicy: const NovelReaderPaginationValidationPolicy(
-          interval: 10000,
-        ),
-      ).paginate(chapter, key);
+      final plan = (await tester.runAsync(
+        () => DefaultNovelReaderHybridPaginationPlanner(
+          measureAdapter: const _CenteredDividerMeasureAdapter(),
+          preferences: htmlPreferences,
+          theme: htmlTheme,
+          baseStyle: baseStyle,
+          validationPolicy: const NovelReaderPaginationValidationPolicy(
+            interval: 10000,
+          ),
+        ).paginate(chapter, key),
+      ))!;
 
       expect(plan.pages, isNotEmpty);
       expect(plan.pages.every((page) => page.html.trim().isNotEmpty), isTrue);

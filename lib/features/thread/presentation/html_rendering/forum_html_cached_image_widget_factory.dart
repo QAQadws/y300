@@ -37,6 +37,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     this.onImageResolved,
     this.onTapImageRequest,
     this.onImageLayoutShift,
+    this.onBodyBuilt,
     this.readableImageKeyPrefix,
     this.contentImageKind = ForumImageKind.threadInline,
     ForumImageRequestResolver? imageRequestResolver,
@@ -52,6 +53,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
            layoutHintResolver ?? const ForumImageLayoutHintResolver();
 
   final String threadId;
+  final VoidCallback? onBodyBuilt;
   final String? imageReferer;
   final String? imageCacheOwnerId;
   final ValueChanged<Size>? onImageResolved;
@@ -73,6 +75,13 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumImageLayoutHintResolver layoutHintResolver;
   var _nextImageIndex = 0;
+
+  @override
+  Widget buildBodyWidget(BuildContext context, Widget child) {
+    final body = super.buildBodyWidget(context, child);
+    onBodyBuilt?.call();
+    return body;
+  }
 
   @override
   Widget? buildImageWidget(BuildTree tree, ImageSource src) {

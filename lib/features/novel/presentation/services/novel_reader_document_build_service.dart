@@ -2,7 +2,6 @@ import 'dart:isolate';
 
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_document_dto.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
@@ -56,11 +55,9 @@ class IsolateNovelReaderDocumentBuildExecutor
   Future<NovelReaderDocument> buildInBackground(
     NovelReaderDocumentBuildRequest request,
   ) async {
-    final requestMap = request.toMap();
-    final dtoMap = await Isolate.run<Map<String, Object?>>(() {
-      return _buildDocumentDtoMap(requestMap);
-    });
-    return NovelReaderDocumentDto.fromMap(dtoMap).toDocument();
+    // The document contains data only. Isolate.run transfers ownership on exit;
+    // encoding a DTO then decoding its entire block tree on UI undoes that win.
+    return Isolate.run(() => _buildDocument(request));
   }
 }
 
@@ -128,17 +125,20 @@ class AdaptiveNovelReaderDocumentBuildService
 
   bool _shouldBuildInBackground(NovelReaderDocumentBuildRequest request) {
     return request.rawHtml.length >= rawHtmlLengthThreshold ||
-        request.fallbackParagraphs.length >= fallbackParagraphCountThreshold;
+        request.fallbackParagraphs.length >= fallbackParagraphCountThreshold ||
+        request.fallbackParagraphs.fold<int>(
+              0,
+              (sum, text) => sum + text.length,
+            ) >=
+            rawHtmlLengthThreshold;
   }
 }
 
-Map<String, Object?> _buildDocumentDtoMap(Map<String, Object?> requestMap) {
+NovelReaderDocument _buildDocument(NovelReaderDocumentBuildRequest request) {
   const parser = DiscuzNovelReaderDocumentParser();
-  final request = NovelReaderDocumentBuildRequest.fromMap(requestMap);
-  final document = parser.parse(
+  return parser.parse(
     episodeId: request.episodeId,
     rawHtml: request.rawHtml,
     fallbackParagraphs: request.fallbackParagraphs,
   );
-  return NovelReaderDocumentDto.fromDocument(document).toMap();
 }

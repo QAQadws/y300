@@ -39,6 +39,118 @@ import 'package:y300/features/thread/data/providers/thread_repository_providers.
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 void main() {
+  testWidgets('short paged chapter starts preparing during route entrance', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+    );
+    late BuildContext hostContext;
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        home: Builder(
+          builder: (context) {
+            hostContext = context;
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    final route = PageRouteBuilder<void>(
+      transitionDuration: const Duration(seconds: 1),
+      pageBuilder: (_, _, _) => const NovelReaderPage(
+        novelId: 'novel:49:100',
+        initialEpisodeId: 'novel:49:100:5001',
+      ),
+    );
+    unawaited(Navigator.of(hostContext).push(route));
+    for (var frame = 0; frame < 12; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        find.byKey(const Key('novel-reader-delayed-loading-indicator')),
+        findsNothing,
+      );
+    }
+    expect(route.animation!.status, AnimationStatus.forward);
+    expect(
+      find.byKey(const Key('novel-reader-paged-page-view')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('novel-reader-delayed-loading-surface')),
+      findsNothing,
+    );
+    await tester.pumpAndSettle();
+  });
+
+  for (final (fraction, chunked) in [
+    (0.5, false),
+    (1.0, false),
+    (0.5, true),
+    (1.0, true),
+  ]) {
+    testWidgets(
+      'vertical resume $fraction chunks=$chunked reveals only its settled position',
+      (tester) async {
+        final repository = _FakeNovelRepository(
+          firstRawHtml: chunked
+              ? List.generate(
+                  400,
+                  (index) => 'fixture-$index ${'正文保留🙂' * 12}<br><br>',
+                ).join()
+              : null,
+          firstParagraphs: List.generate(
+            80,
+            (index) => 'fixture $index ${'正文' * (index < 10 ? 2 : 20)}',
+          ),
+          readingProgress: NovelReadingProgress(
+            novelId: 'novel:49:100',
+            episodeId: 'novel:49:100:5001',
+            scrollOffset: 10,
+            progressPercent: fraction,
+            updatedAt: DateTime(2026),
+          ),
+        );
+        await tester.pumpWidget(_buildReaderApp(repository: repository));
+        double? firstVisibleOffset;
+        var visibleFrames = 0;
+        for (var frame = 0; frame < 300 && visibleFrames < 20; frame++) {
+          // The semantic document can be built on a real worker isolate.
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 5)),
+          );
+          await tester.pump(const Duration(milliseconds: 16));
+          final finder = find.descendant(
+            of: find.byKey(const Key('novel-reader-paragraph-list')),
+            matching: find.byType(Scrollable),
+          );
+          if (finder.evaluate().isEmpty ||
+              find
+                  .byKey(const Key('novel-reader-delayed-loading-surface'))
+                  .evaluate()
+                  .isNotEmpty) {
+            continue;
+          }
+          final position = tester.state<ScrollableState>(finder).position;
+          expect(
+            position.pixels,
+            closeTo(position.maxScrollExtent * fraction, 1),
+          );
+          expect(position.isScrollingNotifier.value, isFalse);
+          firstVisibleOffset ??= position.pixels;
+          expect(position.pixels, closeTo(firstVisibleOffset, 0.01));
+          visibleFrames++;
+        }
+        expect(firstVisibleOffset, isNotNull);
+        expect(firstVisibleOffset, greaterThan(0));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('NovelReaderPage shows immersive menu from center tap', (
     tester,
   ) async {
@@ -174,6 +286,9 @@ void main() {
       expect(position.maxScrollExtent, greaterThan(320));
       final expectedOffset = position.maxScrollExtent * 0.25;
       expect(position.pixels, closeTo(expectedOffset, 0.01));
+      // The corrected viewport no longer waits for an entrance animation;
+      // persistence retains its independent debounce, not a rendering delay.
+      await tester.pump(const Duration(seconds: 1));
       expect(
         repository.readingProgress?.scrollOffset,
         closeTo(expectedOffset, 0.01),
@@ -1239,9 +1354,17 @@ void main() {
     await tester.pumpWidget(_buildReaderApp(repository: repository));
     await tester.pumpAndSettle();
 
-    final width = tester
-        .getSize(find.byKey(const Key('novel-reader-content-column')))
-        .width;
+    final padding = tester
+        .widget<SliverPadding>(
+          find.byKey(const Key('novel-reader-content-column')),
+        )
+        .padding
+        .resolve(TextDirection.ltr);
+    final width =
+        tester
+            .getSize(find.byKey(const Key('novel-reader-paragraph-list')))
+            .width -
+        padding.horizontal;
 
     expect(width, lessThanOrEqualTo(360));
   });

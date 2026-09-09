@@ -246,6 +246,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Work slices yield to the event queue without scheduling a UI frame.
+    // Advance that queue before asserting the timeout's post-frame callback.
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pumpAndSettle();
     expect(fallbackCount, 1);
   });
 

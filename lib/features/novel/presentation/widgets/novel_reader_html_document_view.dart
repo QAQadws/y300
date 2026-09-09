@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
@@ -37,6 +38,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
     this.preparer = const NovelHtmlChapterRenderPreparer(),
     this.preparationService,
     this.preparedChapterCache,
+    this.asSliver = false,
     this.imageReaderBridge = const NovelHtmlImageReaderBridge(),
   });
 
@@ -57,6 +59,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   final NovelHtmlChapterPreparer preparer;
   final NovelReaderHtmlPreparationService? preparationService;
   final NovelReaderPreparedChapterCache? preparedChapterCache;
+  final bool asSliver;
   final NovelHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -71,6 +74,8 @@ class _NovelReaderHtmlDocumentViewState
   Object? _reportedReadySignature;
   Object? _reportedTerminalSignature;
   NovelReaderPreparedChapterCache? _ownedPreparedCache;
+  final _collapseExpansion = <String, bool>{};
+  (String, String)? _collapseOwner;
 
   @override
   void initState() {
@@ -92,30 +97,58 @@ class _NovelReaderHtmlDocumentViewState
       child: DefaultTextStyle.merge(
         style: widget.typography.body,
         child: FutureBuilder<NovelReaderPreparedChapter>(
+          key: ValueKey(_signature),
           future: _future,
           builder: (context, snapshot) {
             final prepared = snapshot.data;
             if (snapshot.hasError) {
               _scheduleContentTerminal();
-              return _NovelReaderHtmlFailureView(
-                error: snapshot.error!,
-                onRetry: widget.onRetry,
+              return _boxOrSliver(
+                _NovelReaderHtmlFailureView(
+                  error: snapshot.error!,
+                  onRetry: widget.onRetry,
+                ),
               );
             }
             if (prepared == null ||
                 prepared.renderDocument.themeSignature !=
                     widget.theme.signature) {
-              return const SizedBox(
-                key: Key('novel-reader-html-loading'),
-                height: 96,
+              return _boxOrSliver(
+                const SizedBox(
+                  key: Key('novel-reader-html-loading'),
+                  height: 96,
+                ),
               );
             }
-            _scheduleContentReady();
-            return ForumHtmlWidgetPostRenderer(
-              key: const Key('novel-reader-html-renderer'),
+            final signature = _signature;
+            final fragments = widget.asSliver ? prepared.scrollFragments : null;
+            Widget render(String? fragment) => ForumHtmlWidgetPostRenderer(
+              key: fragment == null
+                  ? const Key('novel-reader-html-renderer')
+                  : null,
               html: prepared.html,
               theme: widget.theme,
-              preparedDocument: prepared.renderDocument,
+              preparedDocument: fragment != null
+                  ? prepared.renderDocument.copyWith(preparedHtml: fragment)
+                  : widget.asSliver && prepared.scrollHtml != null
+                  ? prepared.renderDocument.copyWith(
+                      preparedHtml: prepared.scrollHtml,
+                    )
+                  : prepared.renderDocument,
+              renderMode: widget.asSliver && fragment == null
+                  ? RenderMode.sliverList
+                  : RenderMode.column,
+              // These bounded fragments are created only in the sliver's
+              // visible range. No whole-chapter sync HtmlWidget build first.
+              buildAsync: fragment == null ? null : false,
+              enableCaching: true,
+              collapseExpansion: _collapseExpansion,
+              onBodyBuilt: () {
+                // An async HtmlWidget build can outlive its chapter/theme.
+                if (mounted && _signature == signature) {
+                  _scheduleContentReady();
+                }
+              },
               preferences: preferences,
               sourceId: widget.episode.episodeId,
               threadId: widget.episode.sourceTid,
@@ -133,13 +166,26 @@ class _NovelReaderHtmlDocumentViewState
                 ),
               ),
             );
+            if (fragments == null) return render(null);
+            return SliverList.builder(
+              itemCount: fragments.length,
+              itemBuilder: (context, index) => render(fragments[index]),
+            );
           },
         ),
       ),
     );
   }
 
+  Widget _boxOrSliver(Widget child) =>
+      widget.asSliver ? SliverToBoxAdapter(child: child) : child;
+
   void _ensureFuture() {
+    final owner = (widget.episode.episodeId, widget.rawHtml);
+    if (_collapseOwner != owner) {
+      _collapseOwner = owner;
+      _collapseExpansion.clear();
+    }
     final preferences = widget.preferencesAdapter.map(widget.preferences);
     final signature = (
       rawHtml: widget.rawHtml,

@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
@@ -14,6 +16,22 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 void main() {
   const preparer = NovelHtmlChapterRenderPreparer();
   const colorParser = CsslibAuthorColorParser();
+
+  test('large chapter projection finishes on the preparation worker', () async {
+    final parent = Isolate.current.hashCode;
+    final result = await preparer.prepareAndProject(
+      rawHtml: '<p>${'正文' * 7000}</p>',
+      preferences: ForumHtmlReaderPreferences.defaults(),
+      theme: _darkTheme,
+      sourceId: 'fixture-episode',
+      threadId: '100',
+      imageCacheOwnerId: '100',
+      project: (chapter) =>
+          (Isolate.current.hashCode, chapter.document.themeSignature),
+    );
+    expect(result.$1, isNot(parent));
+    expect(result.$2, _darkTheme.signature);
+  });
 
   test(
     'adapts black author text against the resolved dark reader surface',
