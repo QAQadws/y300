@@ -10,6 +10,7 @@ extension MainShellDestinationPresentation on MainShellDestination {
       MainShellDestination.comic => l10n.appNavigationComic,
       MainShellDestination.novel => l10n.appNavigationNovel,
       MainShellDestination.history => l10n.appNavigationHistory,
+      MainShellDestination.blogs => l10n.profileBlogTitle,
       MainShellDestination.more => l10n.appNavigationMore,
     };
   }
@@ -21,6 +22,7 @@ extension MainShellDestinationPresentation on MainShellDestination {
       MainShellDestination.comic => Icons.collections_bookmark_outlined,
       MainShellDestination.novel => Icons.local_library_outlined,
       MainShellDestination.history => Icons.history_outlined,
+      MainShellDestination.blogs => Icons.article_outlined,
       MainShellDestination.more => Icons.more_horiz_outlined,
     };
   }
@@ -32,6 +34,7 @@ extension MainShellDestinationPresentation on MainShellDestination {
       MainShellDestination.comic => Icons.collections_bookmark,
       MainShellDestination.novel => Icons.local_library,
       MainShellDestination.history => Icons.history,
+      MainShellDestination.blogs => Icons.article,
       MainShellDestination.more => Icons.more_horiz,
     };
   }

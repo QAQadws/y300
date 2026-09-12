@@ -10,7 +10,12 @@ import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/navigation/main_navigation_settings_repository.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
+
+import '../../profile/test_support/blog_directory_fixture.dart';
 
 void main() {
   testWidgets(
@@ -62,11 +67,54 @@ void main() {
           expect(find.byType(NavigationManagementPage), findsOneWidget);
         }
       }
-      expect(opened, hasLength(15));
+      expect(opened, hasLength(initialSettings.managedOrder.length * 3));
       expect(repository.savedSettings, isEmpty);
       expect(await repository.load(), initialSettings);
     },
   );
+
+  testWidgets('opens hidden blogs through the shared native destination', (
+    tester,
+  ) async {
+    final repository = _FakeMainNavigationSettingsRepository();
+    final blogs = BlogDirectoryFixture();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mainNavigationSettingsRepositoryProvider.overrideWithValue(
+            repository,
+          ),
+          blogAccountIdProvider.overrideWithValue('101'),
+          userBlogDirectoryRepositoryProvider.overrideWithValue(blogs),
+          forumImageRefererProvider.overrideWithValue('https://example.test/'),
+        ],
+        child: const LocalizedTestApp(home: NavigationManagementPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(blogs.queries, isEmpty);
+    await tester.tap(find.byKey(const Key('navigation-management-open-blogs')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileBlogPage), findsOneWidget);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogPage)),
+    );
+    expect(find.text(l10n.profileBlogFriends), findsOneWidget);
+    expect(blogs.queries, hasLength(1));
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationManagementPage), findsOneWidget);
+    expect(
+      tester
+          .widget<Switch>(
+            find.byKey(const Key('navigation-management-visible-blogs')),
+          )
+          .value,
+      isFalse,
+    );
+    expect(repository.savedSettings, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('switches and drag handles do not open a destination', (
     tester,
@@ -178,7 +226,14 @@ void main() {
     expect(find.text('小说'), findsOneWidget);
     expect(find.text('记录'), findsOneWidget);
     expect(find.text('更多'), findsNothing);
-    expect(find.byType(Switch), findsNWidgets(5));
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(NavigationManagementPage)),
+    );
+    expect(find.text(l10n.profileBlogTitle), findsOneWidget);
+    expect(
+      find.byType(Switch),
+      findsNWidgets(MainShellDestination.defaultManagedOrder.length),
+    );
   });
 
   testWidgets('visibility changes persist immediately', (tester) async {
@@ -238,6 +293,7 @@ void main() {
           MainShellDestination.comic,
           MainShellDestination.novel,
           MainShellDestination.history,
+          MainShellDestination.blogs,
         },
       ),
     );

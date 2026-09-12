@@ -12,6 +12,7 @@ import 'package:y300/features/library_shared/presentation/selection/shelf_select
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/novel/presentation/novel_tab_page.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 
 typedef MainDestinationRouteFactory =
     Route<void> Function(MainShellDestination destination);
@@ -66,6 +67,7 @@ class MainDestinationPage extends ConsumerWidget {
       MainShellDestination.favorites => FavoriteShelfPage(isActive: isActive),
       MainShellDestination.comic => ComicTabPage(isActive: isActive),
       MainShellDestination.novel => NovelTabPage(isActive: isActive),
+      MainShellDestination.blogs => ProfileBlogPage(isActive: isActive),
       MainShellDestination.history => HistoryPage(
         onOpenEntry: ref.read(historyEntryRouterProvider).open,
         imageReferer: ref.watch(forumImageRefererProvider),

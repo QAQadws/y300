@@ -53,6 +53,10 @@ import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
+import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
+
+import '../../profile/test_support/blog_directory_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -180,12 +184,15 @@ void main() {
       ComicSearchRefreshQueueSnapshot.empty,
     );
     final textScale = ValueNotifier<double>(2);
+    final blogs = BlogDirectoryFixture();
     final webViewDriver = _FakeForumWebViewDriver();
     addTearDown(queueSnapshot.dispose);
     addTearDown(textScale.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          blogAccountIdProvider.overrideWithValue('101'),
+          userBlogDirectoryRepositoryProvider.overrideWithValue(blogs),
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
           libraryStateRepositoryProvider.overrideWithValue(
@@ -260,7 +267,11 @@ void main() {
     expect(_navigationIconData(destinations[4].icon), Icons.history_outlined);
     expect(_navigationIconData(destinations[4].selectedIcon!), Icons.history);
     final initialStack = tester.widget<IndexedStack>(find.byType(IndexedStack));
-    expect(initialStack.children, hasLength(6));
+    expect(
+      initialStack.children,
+      hasLength(MainShellDestination.values.length),
+    );
+    expect(blogs.queries, isEmpty);
     final initialTickerModes = _builtTickerModes(initialStack);
     expect(initialTickerModes, hasLength(1));
     expect(initialTickerModes.single.enabled, isTrue);
@@ -306,6 +317,26 @@ void main() {
       fullyBuiltTickerModes.map((tickerMode) => tickerMode.enabled),
       <bool>[false, false, false, false, false, true],
     );
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MainShellPage)),
+    );
+    await container
+        .read(mainNavigationSettingsControllerProvider.notifier)
+        .setVisibility(MainShellDestination.blogs, true);
+    await tester.pumpAndSettle();
+    expect(blogs.queries, isEmpty);
+    await tester.tap(find.text(l10n.profileBlogTitle).last);
+    await _pumpShellTab(tester);
+    final blogElement = tester.element(find.byType(ProfileBlogPage));
+    expect(blogs.queries, hasLength(1));
+    await tester.tap(find.text(l10n.appNavigationMore).last);
+    await _pumpShellTab(tester);
+    await tester.tap(find.text(l10n.profileBlogTitle).last);
+    await _pumpShellTab(tester);
+    expect(tester.element(find.byType(ProfileBlogPage)), same(blogElement));
+    expect(blogs.queries, hasLength(1));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -329,6 +360,7 @@ void main() {
           hiddenDestinations: const <MainShellDestination>{
             MainShellDestination.forum,
             MainShellDestination.history,
+            MainShellDestination.blogs,
           },
         ),
       );

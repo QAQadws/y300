@@ -12,6 +12,35 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MainNavigationSettingsSnapshotCodec', () {
+    test('hides blogs for defaults and legacy snapshots', () {
+      final defaults = MainNavigationSettings.defaults();
+      expect(defaults.isVisible(MainShellDestination.blogs), isFalse);
+      final legacy = MainNavigationSettingsSnapshotCodec.decode('''
+        {"schemaVersion":1,"order":["novel","forum","history","comic","favorites"],
+         "hidden":["comic"]}
+      ''');
+      expect(legacy.managedOrder.first, MainShellDestination.novel);
+      expect(legacy.managedOrder.last, MainShellDestination.blogs);
+      expect(legacy.hiddenDestinations, {
+        MainShellDestination.comic,
+        MainShellDestination.blogs,
+      });
+      for (final visible in [true, false]) {
+        final settings = legacy.copyWith(
+          hiddenDestinations: {
+            MainShellDestination.comic,
+            if (!visible) MainShellDestination.blogs,
+          },
+        );
+        expect(
+          MainNavigationSettingsSnapshotCodec.decode(
+            MainNavigationSettingsSnapshotCodec.encode(settings),
+          ),
+          settings,
+        );
+      }
+    });
+
     test('round-trips a normalized snapshot', () {
       final settings = MainNavigationSettings(
         managedOrder: const <MainShellDestination>[
@@ -50,6 +79,7 @@ void main() {
         MainShellDestination.forum,
         MainShellDestination.favorites,
         MainShellDestination.novel,
+        MainShellDestination.blogs,
       ]);
       expect(decoded.visibleManagedDestinations, const <MainShellDestination>[
         MainShellDestination.history,
@@ -133,6 +163,7 @@ void main() {
           .requireValue
           .settings;
       expect(settings.hiddenDestinations, <MainShellDestination>{
+        MainShellDestination.blogs,
         MainShellDestination.history,
       });
       expect(settings.managedOrder.take(3), const <MainShellDestination>[
@@ -159,6 +190,7 @@ void main() {
             MainShellDestination.comic,
             MainShellDestination.novel,
             MainShellDestination.history,
+            MainShellDestination.blogs,
           },
         ),
       );

@@ -27,9 +27,17 @@ abstract final class MainNavigationSettingsSnapshotCodec {
       if (decoded is! Map || decoded['schemaVersion'] != schemaVersion) {
         return MainNavigationSettings.defaults();
       }
+      final order = _decodeDestinations(decoded['order']).toList();
       return MainNavigationSettings(
-        managedOrder: _decodeDestinations(decoded['order']),
-        hiddenDestinations: _decodeDestinations(decoded['hidden']),
+        managedOrder: order,
+        hiddenDestinations: {
+          ..._decodeDestinations(decoded['hidden']),
+          // A newly introduced optional feature must not appear on upgrade.
+          // Once its ID is saved in the order, retain the user's visibility.
+          ...MainShellDestination.defaultHiddenDestinations.where(
+            (destination) => !order.contains(destination),
+          ),
+        },
       );
     } on Object {
       return MainNavigationSettings.defaults();
