@@ -110,6 +110,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageConversationUnavailable => '这段对话已不可用，请刷新消息列表后重试。';
 
   @override
+  String get appNavigationMessages => '消息';
+
+  @override
+  String get messageMessagesTab => '我的消息';
+
+  @override
+  String get messageNotificationsTab => '我的提醒';
+
+  @override
+  String get messageLoadMore => '加载更多';
+
+  @override
+  String get messageIgnore => '屏蔽此类提醒';
+
+  @override
+  String get messageIgnoreExplanation => '仅影响今后同类提醒，不删除现有提醒，也不屏蔽私信。';
+
+  @override
+  String get messageIgnoreAuthor => '仅这位用户';
+
+  @override
+  String get messageIgnoreEveryone => '所有用户';
+
+  @override
+  String get messageIgnoreApplied => '已屏蔽今后的此类提醒';
+
+  @override
+  String get messageIgnoreUnknown => '暂时无法确认屏蔽设置是否已生效，未自动重试。';
+
+  @override
+  String get messageIgnoreSaving => '正在保存…';
+
+  @override
+  String get messageNoPreview => '打开对话查看消息';
+
+  @override
   String get commonCancel => '取消';
 
   @override
@@ -4577,6 +4613,42 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get messageConversationUnavailable => '這段對話已無法使用，請重新整理訊息列表後再試。';
+
+  @override
+  String get appNavigationMessages => '訊息';
+
+  @override
+  String get messageMessagesTab => '我的訊息';
+
+  @override
+  String get messageNotificationsTab => '我的提醒';
+
+  @override
+  String get messageLoadMore => '載入更多';
+
+  @override
+  String get messageIgnore => '屏蔽此類提醒';
+
+  @override
+  String get messageIgnoreExplanation => '僅影響今後同類提醒，不刪除現有提醒，也不屏蔽私訊。';
+
+  @override
+  String get messageIgnoreAuthor => '僅這位使用者';
+
+  @override
+  String get messageIgnoreEveryone => '所有使用者';
+
+  @override
+  String get messageIgnoreApplied => '已屏蔽今後的此類提醒';
+
+  @override
+  String get messageIgnoreUnknown => '暫時無法確認屏蔽設定是否已生效，未自動重試。';
+
+  @override
+  String get messageIgnoreSaving => '正在儲存…';
+
+  @override
+  String get messageNoPreview => '開啟對話查看訊息';
 
   @override
   String get commonCancel => '取消';

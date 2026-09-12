@@ -7,6 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/navigation/main_navigation_settings_repository.dart';
+import 'package:y300/features/messages/data/message_repository_provider.dart';
+import 'package:y300/features/messages/presentation/message_center_page.dart';
+import 'package:y300/features/messages/presentation/message_feed_providers.dart';
+import '../../messages/support/message_test_repository.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
@@ -260,7 +264,10 @@ void main() {
     expect(_navigationIconData(destinations[4].icon), Icons.history_outlined);
     expect(_navigationIconData(destinations[4].selectedIcon!), Icons.history);
     final initialStack = tester.widget<IndexedStack>(find.byType(IndexedStack));
-    expect(initialStack.children, hasLength(6));
+    expect(
+      initialStack.children,
+      hasLength(MainShellDestination.values.length),
+    );
     final initialTickerModes = _builtTickerModes(initialStack);
     expect(initialTickerModes, hasLength(1));
     expect(initialTickerModes.single.enabled, isTrue);
@@ -329,9 +336,11 @@ void main() {
           hiddenDestinations: const <MainShellDestination>{
             MainShellDestination.forum,
             MainShellDestination.history,
+            MainShellDestination.messages,
           },
         ),
       );
+      final messages = MessageTestRepository();
       addTearDown(queueSnapshot.dispose);
 
       await tester.pumpWidget(
@@ -340,6 +349,8 @@ void main() {
             mainNavigationSettingsRepositoryProvider.overrideWithValue(
               navigationRepository,
             ),
+            messageAccountIdProvider.overrideWithValue('10'),
+            messageRepositoryProvider.overrideWithValue(messages),
             comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
             novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
             libraryStateRepositoryProvider.overrideWithValue(
@@ -427,6 +438,26 @@ void main() {
         tester.element(comicPageFinder),
         isNot(same(originalComicElement)),
       );
+      expect(messages.reads, isEmpty);
+      await controller.setVisibility(MainShellDestination.messages, true);
+      await tester.pump();
+      final label = AppLocalizationsZh().appNavigationMessages;
+      await tester.tap(find.text(label).last);
+      await tester.pump();
+      expect(messages.reads, hasLength(1));
+      expect(messages.notificationReads, isEmpty);
+      messages.reads.single.result.complete(messageTestPage([]));
+      await _pumpShellTab(tester);
+      final messageElement = tester.element(find.byType(MessageCenterPage));
+      await tester.tap(find.text('漫画').last);
+      await _pumpShellTab(tester);
+      await tester.tap(find.text(label).last);
+      await _pumpShellTab(tester);
+      expect(
+        tester.element(find.byType(MessageCenterPage)),
+        same(messageElement),
+      );
+      expect(messages.reads, hasLength(1));
     },
   );
 

@@ -7,7 +7,6 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -305,7 +304,7 @@ class MyProfilePage extends ConsumerWidget {
                 onOpenMessages: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => const MyMessageCenterPage(),
+                      builder: (_) => const MessageCenterDestination(),
                     ),
                   );
                 },

@@ -39,14 +39,15 @@
 - `history`：浏览记录数据库、记录/查询/分组/清理/保留策略、Debug 日志和记录页；记录类型覆盖论坛、帖子、漫画与小说。
 - `image_loading`：通用应用图片 source/provider/cache manager、预取接口和 `AppImage` 展示封装；不要与业务化的 `cache` 所有权/retention 规则混为一层。
 - `library_shared`：漫画、小说、收藏共用的书架/详情/选择模式抽象。包含模块 adapter、统一 controller/page、排序筛选、视图偏好、书架状态、刷新总线、任务进度/通知、批量阅读状态、封面预热和作品清理契约。
+- `messages`：原生消息目录、单人及已有群组对话、用户名发送、提醒列表与按类型/作者屏蔽。读取和命令经 forum client 契约；负责账号隔离、取消、分页合并、延迟失效刷新、输入生命周期和正文展示。跨 feature 链接由 `app/navigation/message_routes.dart` 装配，不自建协议或持久化私信缓存。
 - `more`：更多页、关于页、外观入口、数据与存储页、统一缓存上限设置、清理/统计/手动导出和 Debug 原型工具。
 - `novel`：小说数据、书架、详情和阅读器。作者帖正文经 forum client `threadAuthorPosts` 契约以 `version=1` 读取；负责来源元数据与章节同步/恢复、帖子章节网关、正文解析、HTML-first 纵向渲染、全新混合分页、分页缓存/取消/性能策略、唯一阅读进度、书签/搜索和显示偏好。
 - `posting`：新主题发布流程。发帖准备与提交经 forum client preparation/command 契约；负责版块/类型/标签/特殊主题与投票建模、提交结果映射，并在 `composer_shared` 之上提供发帖 controller/page。
-- `profile`：当前用户与指定用户资料、消息中心、日志列表/详情。当前用户资料、公开资料/日志、提醒/私信读取经 forum client 契约；同时承接需要认证资料的页面入口。资料修改、私信发送等写能力尚未实现，不得凭空补造请求。
+- `profile`：当前用户与指定用户资料、日志列表/详情。当前用户资料、公开资料/日志经 forum client 契约；只提供消息中心与单人对话入口，完整消息工作流归 `messages`。资料修改尚未实现，不得凭空补造请求。
 - `reader_shared`：漫画与帖子图片阅读共用引擎。负责连续/横向分页阅读、owner 会话隔离、真实可见位置、预加载窗口、图片 preparation、长图切片、缩放/手势、阅读偏好、简繁转换、性能诊断和图片导出。
 - `reply`：帖子回复与楼层回复。回复准备与提交经 forum client preparation/command 契约（楼层回复动态字段封装在包内 opaque token）；负责草稿校验，并在 `composer_shared` 之上提供回复 controller/page。
 - `search`：搜索读取经 forum client `forumSearch` 契约（formhash、POST、redirect 校验与结果页解析在包内）；负责搜索调度器、限流、查询 generation 隔离、自动分页搜索页和漫画 fallback 编排。
-- `startup`：六栏懒加载主壳、跨书架选择操作，以及启动后的 best-effort 任务编排，包括缓存预算维护、漫画刷新/下载队列恢复、系统通知初始化、草稿附件维护和 Yamibo 会话预热（经 client 当前用户资料契约）。
+- `startup`：可配置导航的懒加载主壳（消息默认隐藏）、跨书架选择操作，以及启动后的 best-effort 任务编排，包括缓存预算维护、漫画刷新/下载队列恢复、系统通知初始化、草稿附件维护和 Yamibo 会话预热（经 client 当前用户资料契约）。
 - `storage`：下载根目录选择、目录/文件名规范化、原子 JSON 写入、漫画 CBZ 定位和下载存储模型；不负责具体业务下载队列。
 - `tags`：论坛标签索引与查询、标签主题页；标签主题列表读取经 forum client 桌面 HTML 契约。为帖子内容分类和漫画/小说识别提供元数据。
 - `thread`：帖子详情核心。详情、回复分页、只看楼主、评分/点评的准备与提交、投票、收藏动作、楼层定位经 forum client 契约；负责内容分类、HTML-first 正文准备/主题适配/缓存图片、原生帖子页、历史记录和帖子图片阅读器桥接。帖子编辑的表单准备、提交与图片附件删除契约已在包内，本模块负责编辑 composer 工作流、提交回读验证、capability gate、原生编辑页及 WebView fallback。

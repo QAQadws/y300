@@ -9,6 +9,7 @@ import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.d
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/messages/presentation/new_private_message_page.dart';
+import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/private_conversation_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
@@ -19,6 +20,29 @@ import 'package:y300/l10n/app_localizations.dart';
 
 typedef PrivateConversationRouteFactory =
     Route<void> Function(ForumConversationTarget target, {String title});
+
+class MessageCenterDestination extends ConsumerWidget {
+  const MessageCenterDestination({
+    super.key,
+    this.isActive = true,
+    this.initialTab = MessageCenterTab.messages,
+  });
+  final bool isActive;
+  final MessageCenterTab initialTab;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => MessageCenterPage(
+    isActive: isActive,
+    initialTab: initialTab,
+    onOpenLink: ref.watch(messageLinkOpenerProvider),
+    onOpenUser: (context, userId) => Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => UserProfilePage(uid: userId)),
+    ),
+    onOpenConversation: (context, target, title) => Navigator.of(context).push(
+      ref.read(privateConversationRouteFactoryProvider)(target, title: title),
+    ),
+  );
+}
 
 /// Cross-feature destinations stay in app composition; message widgets only
 /// receive a link callback and source-neutral conversation identities.
@@ -93,6 +117,15 @@ final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
         case YamiboForumLinkKind.managedWebView:
           if (uri.path == '/home.php' &&
               query['mod'] == 'space' &&
+              (query['do'] == 'notice' ||
+                  (query['do'] == 'pm' && query['subop'] != 'view'))) {
+            page = MessageCenterDestination(
+              initialTab: query['do'] == 'notice'
+                  ? MessageCenterTab.notifications
+                  : MessageCenterTab.messages,
+            );
+          } else if (uri.path == '/home.php' &&
+              query['mod'] == 'space' &&
               query['do'] == 'pm' &&
               query['subop'] == 'view') {
             final group = query['type'] == '1';
@@ -119,7 +152,7 @@ final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
             final profileId =
                 uri.path == '/home.php' &&
                     query['mod'] == 'space' &&
-                    !query.containsKey('do')
+                    (!query.containsKey('do') || query['do'] == 'profile')
                 ? query['uid']
                 : RegExp(
                     r'^/space-uid-(\d+)\.html$',

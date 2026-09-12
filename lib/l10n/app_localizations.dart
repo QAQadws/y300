@@ -295,6 +295,78 @@ abstract class AppLocalizations {
   /// **'这段对话已不可用，请刷新消息列表后重试。'**
   String get messageConversationUnavailable;
 
+  /// No description provided for @appNavigationMessages.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息'**
+  String get appNavigationMessages;
+
+  /// No description provided for @messageMessagesTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的消息'**
+  String get messageMessagesTab;
+
+  /// No description provided for @messageNotificationsTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的提醒'**
+  String get messageNotificationsTab;
+
+  /// No description provided for @messageLoadMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载更多'**
+  String get messageLoadMore;
+
+  /// No description provided for @messageIgnore.
+  ///
+  /// In zh, this message translates to:
+  /// **'屏蔽此类提醒'**
+  String get messageIgnore;
+
+  /// No description provided for @messageIgnoreExplanation.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅影响今后同类提醒，不删除现有提醒，也不屏蔽私信。'**
+  String get messageIgnoreExplanation;
+
+  /// No description provided for @messageIgnoreAuthor.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅这位用户'**
+  String get messageIgnoreAuthor;
+
+  /// No description provided for @messageIgnoreEveryone.
+  ///
+  /// In zh, this message translates to:
+  /// **'所有用户'**
+  String get messageIgnoreEveryone;
+
+  /// No description provided for @messageIgnoreApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已屏蔽今后的此类提醒'**
+  String get messageIgnoreApplied;
+
+  /// No description provided for @messageIgnoreUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法确认屏蔽设置是否已生效，未自动重试。'**
+  String get messageIgnoreUnknown;
+
+  /// No description provided for @messageIgnoreSaving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存…'**
+  String get messageIgnoreSaving;
+
+  /// No description provided for @messageNoPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开对话查看消息'**
+  String get messageNoPreview;
+
   /// No description provided for @commonCancel.
   ///
   /// In zh, this message translates to:

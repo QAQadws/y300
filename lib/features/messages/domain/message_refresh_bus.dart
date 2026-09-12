@@ -10,10 +10,14 @@ final class MessageRefreshEvent {
     required this.accountId,
     required this.kind,
     this.target,
+    this.directoryOnly = false,
   });
   final String accountId;
   final MessageRefreshKind kind;
   final ForumConversationTarget? target;
+
+  /// Reading a conversation updates unread markers without reloading itself.
+  final bool directoryOnly;
 }
 
 /// Local writes and future push adapters share the same account-scoped signal.

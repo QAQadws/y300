@@ -30,6 +30,8 @@ final privateMessageFeedProvider = Provider.autoDispose
       final account = ref.watch(messageAccountIdProvider);
       final repository = ref.watch(messageRepositoryProvider);
       final conversation = target != null;
+      var visited = false;
+      final bus = ref.watch(messageRefreshBusProvider);
       late final MessageFeedController<ForumPrivateMessagePage> controller;
       controller = MessageFeedController<ForumPrivateMessagePage>(
         initialPage: conversation ? 0 : 1,
@@ -56,6 +58,19 @@ final privateMessageFeedProvider = Provider.autoDispose
               diagnosticMessage: 'message_account_changed',
             );
           }
+          if (conversation &&
+              !visited &&
+              !cancellation.isCancelled &&
+              result.dataOrNull != null) {
+            visited = true;
+            bus.publish(
+              MessageRefreshEvent(
+                accountId: account,
+                kind: MessageRefreshKind.messages,
+                directoryOnly: true,
+              ),
+            );
+          }
           return result;
         },
         nextPage: (data) => conversation
@@ -70,6 +85,7 @@ final privateMessageFeedProvider = Provider.autoDispose
       ) {
         if (event.accountId == account &&
             event.kind == MessageRefreshKind.messages &&
+            (!event.directoryOnly || target == null) &&
             (target == null ||
                 event.target == null ||
                 event.target == target)) {

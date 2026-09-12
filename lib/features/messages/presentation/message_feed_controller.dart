@@ -11,10 +11,12 @@ final class MessageFeedState<P> {
     this.data,
     this.failure,
     this.operation = MessageFeedOperation.idle,
+    this.failedOperation,
   });
   final P? data;
   final DataReadFailure<P, Object?>? failure;
   final MessageFeedOperation operation;
+  final MessageFeedOperation? failedOperation;
   bool get isBusy => operation != MessageFeedOperation.idle;
   bool get isInitialLoading =>
       data == null && operation == MessageFeedOperation.refresh;
@@ -63,7 +65,9 @@ final class MessageFeedController<P>
       _activeOwners.remove(identity);
     }
     if (wasActive == _active) return;
-    if (active && (value.data == null || _dirty) && !value.isBusy) {
+    if (active &&
+        (_dirty || (value.data == null && value.failure == null)) &&
+        !value.isBusy) {
       unawaited(refresh());
     }
   }
@@ -137,12 +141,14 @@ final class MessageFeedController<P>
                 ? null
                 : value.data,
             failure: result,
+            failedOperation: operation,
           );
       }
     } on Object {
       if (_disposed || generation != _generation) return;
       value = MessageFeedState(
         data: value.data,
+        failedOperation: operation,
         failure: DataReadFailure<P, Object?>(
           kind: DataReadFailureKind.unknown,
           code: 'message_read_failed',

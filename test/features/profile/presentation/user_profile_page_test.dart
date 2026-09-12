@@ -11,14 +11,15 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
-import 'package:y300/features/profile/data/models/my_message_models.dart';
+import 'package:y300/features/messages/data/message_repository_provider.dart';
+import 'package:y300/features/messages/domain/message_repository.dart';
+import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
-import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 
 import '../../../support/forum_auth_test_support.dart';
 import '../../../test_support/localized_test_app.dart';
+import '../../messages/support/message_test_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -203,8 +204,8 @@ void main() {
           forumUserProfileRepositoryProvider.overrideWithValue(
             _FakeProfileRepository(data: _myProfile),
           ),
-          myMessageRepositoryProvider.overrideWithValue(
-            const _EmptyMyMessageRepository(),
+          messageRepositoryProvider.overrideWithValue(
+            _EmptyMessageRepository(),
           ),
           forumImageRefererProvider.overrideWithValue(
             'https://bbs.yamibo.com/',
@@ -219,7 +220,7 @@ void main() {
     await tester.tap(find.text('消息提醒'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(MyMessageCenterPage), findsOneWidget);
+    expect(find.byType(MessageCenterPage), findsOneWidget);
   });
 
   testWidgets('profile layout remains usable at 300dp with large text', (
@@ -253,42 +254,11 @@ void main() {
   });
 }
 
-class _EmptyMyMessageRepository implements MyMessageRepository {
-  const _EmptyMyMessageRepository();
-
+class _EmptyMessageRepository extends MessageTestRepository {
   @override
-  Future<ApiResult<MyMessageCenterData>> getMessageCenter() async {
-    return ApiSuccess<MyMessageCenterData>(
-      MyMessageCenterData(
-        notifications: (await getNotifications()).dataOrNull!,
-        privateMessages: (await getPrivateMessages()).dataOrNull!,
-      ),
-    );
-  }
-
-  @override
-  Future<ApiResult<MyNotificationPage>> getNotifications() async {
-    return const ApiSuccess<MyNotificationPage>(
-      MyNotificationPage(
-        count: 0,
-        page: 1,
-        perPage: 30,
-        items: <MyNotificationItem>[],
-      ),
-    );
-  }
-
-  @override
-  Future<ApiResult<MyPrivateMessagePage>> getPrivateMessages() async {
-    return const ApiSuccess<MyPrivateMessagePage>(
-      MyPrivateMessagePage(
-        count: 0,
-        page: 1,
-        perPage: 30,
-        items: <MyPrivateMessageItem>[],
-      ),
-    );
-  }
+  Future<PrivateMessageRead> loadMessages(
+    ForumPrivateMessageQuery query,
+  ) async => messageTestPage([], owner: '597454');
 }
 
 Future<void> _pumpPublicProfile(

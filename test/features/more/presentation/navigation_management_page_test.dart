@@ -9,6 +9,8 @@ import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/navigation/main_navigation_settings_repository.dart';
+import 'package:y300/features/messages/presentation/message_center_page.dart';
+import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -62,11 +64,47 @@ void main() {
           expect(find.byType(NavigationManagementPage), findsOneWidget);
         }
       }
-      expect(opened, hasLength(15));
+      expect(opened, hasLength(initialSettings.managedOrder.length * 3));
       expect(repository.savedSettings, isEmpty);
       expect(await repository.load(), initialSettings);
     },
   );
+
+  testWidgets('opens the hidden message center through the shared route', (
+    tester,
+  ) async {
+    final repository = _FakeMainNavigationSettingsRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mainNavigationSettingsRepositoryProvider.overrideWithValue(
+            repository,
+          ),
+          messageAccountIdProvider.overrideWithValue(null),
+        ],
+        child: const LocalizedTestApp(home: NavigationManagementPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('navigation-management-open-messages')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(MessageCenterPage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationManagementPage), findsOneWidget);
+    expect(
+      tester
+          .widget<Switch>(
+            find.byKey(const Key('navigation-management-visible-messages')),
+          )
+          .value,
+      isFalse,
+    );
+    expect(repository.savedSettings, isEmpty);
+  });
 
   testWidgets('switches and drag handles do not open a destination', (
     tester,
@@ -178,7 +216,21 @@ void main() {
     expect(find.text('小说'), findsOneWidget);
     expect(find.text('记录'), findsOneWidget);
     expect(find.text('更多'), findsNothing);
-    expect(find.byType(Switch), findsNWidgets(5));
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(NavigationManagementPage)),
+    );
+    expect(find.text(l10n.appNavigationMessages), findsOneWidget);
+    expect(find.byType(Switch), findsNWidgets(6));
+    final messageToggle = find.byKey(
+      const ValueKey<String>('navigation-management-visible-messages'),
+    );
+    expect(tester.widget<Switch>(messageToggle).value, isFalse);
+    await tester.tap(messageToggle);
+    await tester.pumpAndSettle();
+    expect(
+      repository.savedSettings.single.isVisible(MainShellDestination.messages),
+      isTrue,
+    );
   });
 
   testWidgets('visibility changes persist immediately', (tester) async {
@@ -238,6 +290,7 @@ void main() {
           MainShellDestination.comic,
           MainShellDestination.novel,
           MainShellDestination.history,
+          MainShellDestination.messages,
         },
       ),
     );

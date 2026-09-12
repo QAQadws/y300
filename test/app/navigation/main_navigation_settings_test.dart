@@ -35,6 +35,24 @@ void main() {
       expect(decoded.visibleDestinations.last, MainShellDestination.more);
     });
 
+    test('messages are opt-in for defaults and existing saved navigation', () {
+      expect(
+        MainNavigationSettings.defaults().isVisible(
+          MainShellDestination.messages,
+        ),
+        isFalse,
+      );
+      final old = MainNavigationSettingsSnapshotCodec.decode(
+        '{"schemaVersion":1,"order":["forum","favorites","comic","novel","history"],"hidden":[]}',
+      );
+      expect(old.isVisible(MainShellDestination.messages), isFalse);
+      final enabled = old.copyWith(hiddenDestinations: {});
+      final restored = MainNavigationSettingsSnapshotCodec.decode(
+        MainNavigationSettingsSnapshotCodec.encode(enabled),
+      );
+      expect(restored.isVisible(MainShellDestination.messages), isTrue);
+    });
+
     test('repairs unknown, duplicate, missing, and all-hidden values', () {
       final decoded = MainNavigationSettingsSnapshotCodec.decode('''
         {
@@ -50,6 +68,7 @@ void main() {
         MainShellDestination.forum,
         MainShellDestination.favorites,
         MainShellDestination.novel,
+        MainShellDestination.messages,
       ]);
       expect(decoded.visibleManagedDestinations, const <MainShellDestination>[
         MainShellDestination.history,
@@ -134,6 +153,7 @@ void main() {
           .settings;
       expect(settings.hiddenDestinations, <MainShellDestination>{
         MainShellDestination.history,
+        MainShellDestination.messages,
       });
       expect(settings.managedOrder.take(3), const <MainShellDestination>[
         MainShellDestination.favorites,
@@ -159,6 +179,7 @@ void main() {
             MainShellDestination.comic,
             MainShellDestination.novel,
             MainShellDestination.history,
+            MainShellDestination.messages,
           },
         ),
       );

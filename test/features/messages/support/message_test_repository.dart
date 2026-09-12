@@ -6,6 +6,8 @@ import 'package:y300/features/messages/domain/message_repository.dart';
 class MessageTestRepository implements MessageRepository {
   final reads = <MessageTestRead>[];
   final sends = <MessageTestSend>[];
+  final notificationReads = <MessageTestNotificationRead>[];
+  final ignores = <MessageTestIgnore>[];
 
   @override
   Future<PrivateMessageRead> loadMessages(ForumPrivateMessageQuery query) {
@@ -24,14 +26,80 @@ class MessageTestRepository implements MessageRepository {
   }
 
   @override
-  Future<NotificationRead> loadNotifications(ForumNotificationQuery query) =>
-      throw StateError('Unexpected notification read');
+  Future<NotificationRead> loadNotifications(ForumNotificationQuery query) {
+    final read = MessageTestNotificationRead(query);
+    notificationReads.add(read);
+    return read.result.future;
+  }
 
   @override
   Future<DataCommandResult<ForumNotificationIgnoreReceipt>> ignore(
     ForumNotificationIgnoreSubmission submission,
-  ) => throw StateError('Unexpected notification command');
+  ) {
+    final command = MessageTestIgnore(submission);
+    ignores.add(command);
+    return command.result.future;
+  }
 }
+
+class MessageTestNotificationRead {
+  MessageTestNotificationRead(this.query);
+  final ForumNotificationQuery query;
+  final result = Completer<NotificationRead>();
+}
+
+class MessageTestIgnore {
+  MessageTestIgnore(this.submission);
+  final ForumNotificationIgnoreSubmission submission;
+  final result = Completer<DataCommandResult<ForumNotificationIgnoreReceipt>>();
+
+  void succeed() => result.complete(
+    DataCommandApplied(
+      ForumNotificationIgnoreReceipt(
+        notificationId: submission.notificationId,
+        type: submission.type,
+        authorId: submission.scope == ForumNotificationIgnoreScope.allAuthors
+            ? '0'
+            : submission.authorId,
+      ),
+    ),
+  );
+}
+
+NotificationRead notificationTestPage(
+  List<ForumNotificationItem> items, {
+  int page = 1,
+  int? count,
+  int perPage = 20,
+}) => DataReadSuccess(
+  data: ForumNotificationPage(
+    items: items,
+    count: count ?? items.length,
+    page: page,
+    perPage: perPage,
+  ),
+  capabilities: ForumNotificationReadCapabilities(
+    values: DataCapabilitySet.supported(ForumNotificationCapability.values),
+  ),
+  metadata: const DataReadMetadata.network(),
+);
+
+ForumNotificationItem notificationTestItem(
+  String id, {
+  String authorId = '20',
+  String? markup,
+}) => ForumNotificationItem(
+  id: id,
+  type: 'post',
+  isNew: true,
+  authorId: authorId,
+  authorName: authorId == '0' ? '' : 'Alice',
+  noteMarkup:
+      markup ??
+      '<p><a href="forum.php?mod=viewthread&amp;tid=42">Reply $id</a></p>',
+  occurredAt: null,
+  rawDateline: '2026-09-12',
+);
 
 class MessageTestRead {
   MessageTestRead(this.query);
@@ -80,6 +148,7 @@ ForumPrivateMessageItem messageTestItem(
   String id, {
   String? html,
   String sender = '20',
+  String recipient = '20',
 }) => ForumPrivateMessageItem(
   messageId: id,
   conversationId: '91',
@@ -87,7 +156,7 @@ ForumPrivateMessageItem messageTestItem(
   subject: '',
   fromUserId: sender,
   fromUserName: sender == '10' ? 'Me' : 'Alice',
-  toUserId: sender == '10' ? '20' : '10',
+  toUserId: sender == '10' ? recipient : '10',
   toUserName: sender == '10' ? 'Alice' : 'Me',
   message: html ?? '<p>Message $id</p>',
   sentAt: DateTime(2026, 9, 12, 10, 30),
