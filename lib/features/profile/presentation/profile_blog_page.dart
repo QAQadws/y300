@@ -16,6 +16,7 @@ import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart
 import 'package:y300/features/profile/presentation/blog/blog_read_view.dart';
 
 import 'package:y300/features/profile/presentation/profile_text_resolver.dart';
+import 'package:y300/features/profile/presentation/profile_user_link.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
@@ -668,6 +669,7 @@ class _ProfileBlogListCard extends StatelessWidget {
                     _ProfileBlogAvatar(
                       imageUrl: item.avatarUrl,
                       ownerId: item.ownerUserId,
+                      userId: item.ownerUserId,
                       radius: 17,
                       imageReferer: imageReferer,
                     ),
@@ -685,15 +687,19 @@ class _ProfileBlogListCard extends StatelessWidget {
                                 ) ==
                                 true &&
                             item.authorName != null)
-                          Text(
-                            item.authorName!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(
-                                  color: palette.title,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                          ProfileUserLink(
+                            key: Key('blog-list-author-${item.blogId}'),
+                            userId: item.ownerUserId,
+                            child: Text(
+                              item.authorName!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    color: palette.title,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
                           ),
                         if (capabilities?.supports(
                                   UserBlogDirectoryCapability.publishedAtText,
@@ -974,19 +980,24 @@ class _BlogDetailCard extends StatelessWidget {
                 _ProfileBlogAvatar(
                   imageUrl: data.avatarUrl,
                   ownerId: data.ownerUserId,
+                  userId: data.ownerUserId,
                   radius: 17,
                   imageReferer: imageReferer,
                 ),
                 const SizedBox(width: 10),
               ],
               Expanded(
-                child: Text(
-                  _detailMeta(context, data),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelMedium?.copyWith(color: palette.muted),
+                child: ProfileUserLink(
+                  key: const Key('blog-detail-author'),
+                  userId: data.ownerUserId,
+                  child: Text(
+                    _detailMeta(context, data),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelMedium?.copyWith(color: palette.muted),
+                  ),
                 ),
               ),
             ],
@@ -1069,27 +1080,32 @@ class _CommentCard extends StatelessWidget {
                 _ProfileBlogAvatar(
                   imageUrl: comment.avatarUrl,
                   ownerId: comment.authorUserId ?? comment.authorName,
+                  userId: comment.authorUserId,
                   radius: 15,
                   imageReferer: imageReferer,
                 ),
                 const SizedBox(width: 9),
               ],
               Expanded(
-                child: Text(
-                  <String>[
-                    comment.authorName,
-                    if (capabilities?.supports(
-                              UserBlogDetailCapability.commentPublishedAtText,
-                            ) ==
-                            true &&
-                        comment.publishedAtText != null)
-                      comment.publishedAtText!,
-                  ].join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: palette.muted,
-                    fontWeight: FontWeight.w600,
+                child: ProfileUserLink(
+                  key: Key('blog-comment-author-${comment.commentId}'),
+                  userId: comment.authorUserId,
+                  child: Text(
+                    <String>[
+                      comment.authorName,
+                      if (capabilities?.supports(
+                                UserBlogDetailCapability.commentPublishedAtText,
+                              ) ==
+                              true &&
+                          comment.publishedAtText != null)
+                        comment.publishedAtText!,
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: palette.muted,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -1145,12 +1161,14 @@ class _ProfileBlogAvatar extends StatelessWidget {
   const _ProfileBlogAvatar({
     required this.imageUrl,
     required this.ownerId,
+    required this.userId,
     required this.radius,
     required this.imageReferer,
   });
 
   final String? imageUrl;
   final String ownerId;
+  final String? userId;
   final double radius;
   final String imageReferer;
 
@@ -1158,12 +1176,16 @@ class _ProfileBlogAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final size = radius * 2;
     final url = imageUrl?.trim();
-    return ForumCachedAvatar(
-      imageUrl: url,
-      ownerId: ownerId.trim().isEmpty ? (url ?? 'unknown') : ownerId,
-      ownerType: ImageCacheOwnerType.profile,
-      size: size,
-      imageReferer: imageReferer,
+    return ProfileUserLink(
+      userId: userId,
+      alignment: Alignment.center,
+      child: ForumCachedAvatar(
+        imageUrl: url,
+        ownerId: ownerId.trim().isEmpty ? (url ?? 'unknown') : ownerId,
+        ownerType: ImageCacheOwnerType.profile,
+        size: size,
+        imageReferer: imageReferer,
+      ),
     );
   }
 }

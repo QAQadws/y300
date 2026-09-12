@@ -224,6 +224,20 @@ class UserProfilePage extends ConsumerWidget {
       appBar: AppBar(
         title: Text(_profilePageTitle(l10n, profile)),
         actions: [
+          if (RegExp(r'^[1-9]\d*$').hasMatch(uid))
+            IconButton(
+              key: const Key('user-profile-blogs'),
+              tooltip: l10n.profileBlogTitle,
+              icon: const Icon(Icons.article_outlined),
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute(
+                  builder: (_) => ProfileBlogPage(
+                    ownerUserId: uid,
+                    initialScope: UserBlogFeedScope.self,
+                  ),
+                ),
+              ),
+            ),
           IconButton(
             tooltip: AppLocalizations.of(context).profileHome,
             onPressed: () =>

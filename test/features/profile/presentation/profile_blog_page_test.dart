@@ -10,13 +10,82 @@ import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_page.dart';
+import 'package:y300/features/profile/presentation/profile_user_link.dart';
+import 'package:y300/features/profile/presentation/user_profile_page.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../test_support/blog_comment_fixture.dart';
 import '../test_support/blog_operation_fixture.dart';
+import '../test_support/profile_repository_fixture.dart';
 
 void main() {
+  for (final source in ['list', 'detail', 'comment']) {
+    for (final avatar in [false, true]) {
+      testWidgets(
+        '$source ${avatar ? 'avatar' : 'name'} opens the source author and preserves the article on return',
+        (tester) async {
+          final profiles = ProfileRepositoryFixture();
+          final directory = _FakeBlogDirectoryRepository();
+          final details = _FakeBlogDetailRepository(commentAuthorId: '909');
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                blogAccountIdProvider.overrideWithValue('101'),
+                forumUserProfileRepositoryProvider.overrideWithValue(profiles),
+                userBlogDirectoryRepositoryProvider.overrideWithValue(
+                  directory,
+                ),
+                userBlogDetailRepositoryProvider.overrideWithValue(details),
+                forumImageRefererProvider.overrideWithValue(
+                  'https://example.test/',
+                ),
+              ],
+              child: const LocalizedTestApp(home: ProfileBlogPage()),
+            ),
+          );
+          await tester.pumpAndSettle();
+          if (source != 'list') {
+            await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
+            await tester.pumpAndSettle();
+          }
+          final author = source == 'comment' ? '909' : '257582';
+          final target = avatar
+              ? find
+                    .descendant(
+                      of: find.byWidgetPredicate(
+                        (widget) =>
+                            widget is ProfileUserLink &&
+                            widget.userId == author,
+                      ),
+                      matching: find.byType(ForumCachedAvatar),
+                    )
+                    .first
+              : find.byKey(
+                  Key(switch (source) {
+                    'list' => 'blog-list-author-117558',
+                    'detail' => 'blog-detail-author',
+                    _ => 'blog-comment-author-646846',
+                  }),
+                );
+          await tester.ensureVisible(target);
+          await tester.pumpAndSettle();
+          expect(profiles.queries, isEmpty);
+          await tester.tap(target);
+          await tester.pumpAndSettle();
+          expect(find.byType(UserProfilePage), findsOneWidget);
+          expect(profiles.queries.single.userId, author);
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+          expect(directory.queries, hasLength(1));
+          expect(details.queries, hasLength(source == 'list' ? 0 : 1));
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   testWidgets(
     'publishing opens the verified article and defers the feed refresh',
     (tester) async {
@@ -863,12 +932,14 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
     this.commentActions = const {},
     this.blogActions = const {},
     this.title = '我们小区的公共交通极其不便利',
+    this.commentAuthorId,
   }) : readCapabilities = capabilities ?? _detailCapabilities();
 
   final UserBlogDetailReadCapabilities readCapabilities;
   final Set<UserBlogCommentAction> commentActions;
   final Set<UserBlogAction> blogActions;
   String title;
+  final String? commentAuthorId;
   final policies = <CacheLoadPolicy>[];
   final Completer<void>? gate;
   final cancellations = <ForumRequestCancellation?>[];
@@ -905,6 +976,7 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
           UserBlogComment(
             commentId: '646846',
             authorName: 'thessky',
+            authorUserId: commentAuthorId,
             bodyHtml: '<p>探险的感觉</p>',
             publishedAtText: '2026-6-18 01:00',
             actions: commentActions,
