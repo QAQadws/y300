@@ -10,9 +10,11 @@ import 'package:y300/features/library_shared/data/services/library_cover_store.d
 import 'package:y300/features/library_shared/data/services/library_cover_decode_scheduler.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_decode_policy.dart';
-import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_cache.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 import 'package:y300/features/library_shared/presentation/images/library_cover_thumbnail_writer.dart';
 import 'package:y300/features/library_shared/presentation/images/library_cover_load_trace.dart';
+
+enum LibraryCoverUsage { shelf, detail, original }
 
 @immutable
 class LibraryCoverImageKey {
@@ -20,11 +22,13 @@ class LibraryCoverImageKey {
     required this.assetId,
     required this.revision,
     required this.decodeTarget,
+    this.usage = LibraryCoverUsage.shelf,
   });
 
   final String assetId;
   final int revision;
   final LibraryCoverDecodeTarget decodeTarget;
+  final LibraryCoverUsage usage;
 
   int? get targetWidthPx => decodeTarget.targetWidthPx;
 
@@ -37,17 +41,19 @@ class LibraryCoverImageKey {
     return other is LibraryCoverImageKey &&
         other.assetId == assetId &&
         other.revision == revision &&
-        other.decodeTarget == decodeTarget;
+        other.decodeTarget == decodeTarget &&
+        other.usage == usage;
   }
 
   @override
-  int get hashCode => Object.hash(assetId, revision, decodeTarget);
+  int get hashCode => Object.hash(assetId, revision, decodeTarget, usage);
 }
 
 class LibraryCoverImageProvider extends ImageProvider<LibraryCoverImageKey> {
   const LibraryCoverImageProvider({
     required this.asset,
     required this.decodeTarget,
+    this.usage = LibraryCoverUsage.shelf,
     required this.store,
     required this.scheduler,
     this.thumbnails,
@@ -56,15 +62,17 @@ class LibraryCoverImageProvider extends ImageProvider<LibraryCoverImageKey> {
 
   final LibraryCoverAssetRef asset;
   final LibraryCoverDecodeTarget decodeTarget;
+  final LibraryCoverUsage usage;
   final LibraryCoverStore store;
   final LibraryCoverDecodeScheduler scheduler;
-  final LibraryCoverThumbnailCache? thumbnails;
+  final LibraryCoverThumbnailStore? thumbnails;
   final LibraryCoverThumbnailWriter? thumbnailWriter;
 
   LibraryCoverImageKey get cacheKey => LibraryCoverImageKey(
     assetId: asset.assetId,
     revision: asset.revision,
     decodeTarget: decodeTarget,
+    usage: decodeTarget.isOriginal ? LibraryCoverUsage.original : usage,
   );
 
   @override
@@ -79,6 +87,8 @@ class LibraryCoverImageProvider extends ImageProvider<LibraryCoverImageKey> {
     LibraryCoverImageKey key,
     ImageErrorListener handleError,
   ) {
+    final thumbnailKey = _thumbnailKey(key);
+    if (thumbnailKey != null) thumbnails?.registerTarget(thumbnailKey);
     if (LibraryCoverLoadTrace.enabled) {
       final status = PaintingBinding.instance.imageCache.statusForKey(key);
       if (status.keepAlive || status.live) {
@@ -101,13 +111,8 @@ class LibraryCoverImageProvider extends ImageProvider<LibraryCoverImageKey> {
     ImageDecoderCallback decode,
   ) {
     final state = _CoverLoadState();
-    final thumbnailKey = key.isOriginal
-        ? null
-        : LibraryCoverThumbnailKey(
-            asset: asset,
-            width: key.targetWidthPx!,
-            height: key.targetHeightPx!,
-          );
+    final thumbnailKey = _thumbnailKey(key);
+    if (thumbnailKey != null) thumbnails?.registerTarget(thumbnailKey);
     final trace = LibraryCoverLoadTrace(
       LibraryCoverLoadTrace.enabled
           ? sha256
@@ -124,6 +129,9 @@ class LibraryCoverImageProvider extends ImageProvider<LibraryCoverImageKey> {
       onRelease: () => state.disposed = true,
       onFirstImage: (image) {
         trace.mark('firstFrame');
+        if (state.derivative && thumbnailKey != null) {
+          thumbnails?.scheduleMaintenance(thumbnailKey);
+        }
         final ticket = state.ticket;
         if (thumbnailKey != null &&
             ticket != null &&
@@ -152,6 +160,15 @@ class LibraryCoverImageProvider extends ImageProvider<LibraryCoverImageKey> {
     });
     return completer;
   }
+
+  LibraryCoverThumbnailKey? _thumbnailKey(LibraryCoverImageKey key) =>
+      key.usage != LibraryCoverUsage.shelf || key.isOriginal
+      ? null
+      : LibraryCoverThumbnailKey(
+          asset: asset,
+          width: key.targetWidthPx!,
+          height: key.targetHeightPx!,
+        );
 
   Future<ui.Codec> _loadCodec(
     LibraryCoverImageKey key,
@@ -270,8 +287,10 @@ class LibraryCoverImageProvider extends ImageProvider<LibraryCoverImageKey> {
             frame.image.dispose();
             throw StateError('Cover request disposed');
           }
+          state.derivative = derivative;
           state.generateThumbnail =
               !derivative &&
+              key.usage == LibraryCoverUsage.shelf &&
               !key.isOriginal &&
               sampled &&
               codec.frameCount == 1;
@@ -312,6 +331,7 @@ class LibraryCoverImageProvider extends ImageProvider<LibraryCoverImageKey> {
 class _CoverLoadState {
   bool disposed = false;
   bool generateThumbnail = false;
+  bool derivative = false;
   LibraryCoverThumbnailTicket? ticket;
 }
 

@@ -4,13 +4,13 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
-import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_cache.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 
 void main() {
   late io.Directory root;
-  late LibraryCoverThumbnailCache cache;
+  late LibraryCoverThumbnailStore cache;
   const asset = LibraryCoverAssetRef(
     assetId: 'comic/test/source',
     revision: 1,
@@ -26,17 +26,19 @@ void main() {
 
   setUp(() async {
     root = await io.Directory.systemTemp.createTemp('cover-thumbnails-test-');
-    cache = LibraryCoverThumbnailCache(rootPath: () async => root.path);
+    cache = LibraryCoverThumbnailStore(rootPath: () async => root.path);
   });
   tearDown(() async {
     await cache.dispose();
     await root.delete(recursive: true);
   });
-  Future<void> write(LibraryCoverThumbnailKey target) =>
-      cache.write(key: target, ticket: cache.ticket(target), bytes: bytes);
+  Future<bool> write(LibraryCoverThumbnailKey target) {
+    cache.registerTarget(target);
+    return cache.write(key: target, ticket: cache.ticket(target), bytes: bytes);
+  }
 
   test(
-    'deterministic exact keys survive restart; access writes are deferred',
+    'deterministic exact keys survive restart; no index is needed',
     () async {
       await write(key());
       final first = await cache.lookup(key());
@@ -44,18 +46,17 @@ void main() {
       expect(await cache.lookup(key(revision: 2)), isNull);
       expect(await cache.lookup(key(width: 33)), isNull);
       await cache.dispose();
-      cache = LibraryCoverThumbnailCache(rootPath: () async => root.path);
+      cache = LibraryCoverThumbnailStore(rootPath: () async => root.path);
       expect((await cache.lookup(key()))?.path, first!.path);
       expect(await first.readAsBytes(), bytes);
-      expect((await cache.loadUsage()).budgetedBytes, bytes.length);
+      expect(await cache.calculateUsageBytes(), bytes.length);
     },
   );
 
-  test('clear invalidates tickets captured before encoding', () async {
+  test('asset deletion invalidates tickets captured before encoding', () async {
     final ticket = cache.ticket(key());
     await write(key());
-    final cleared = await cache.clearRegular();
-    expect(cleared.deletedBytes, bytes.length);
+    await cache.invalidateAsset(asset.assetId);
     await cache.write(key: key(), ticket: ticket, bytes: bytes);
     expect(await cache.lookup(key()), isNull);
     await write(key());
@@ -66,8 +67,9 @@ void main() {
     'new revision rejects old late writers and keeps the current one',
     () async {
       final old = cache.ticket(key());
-      final current = cache.ticket(key(revision: 2));
       await write(key());
+      cache.registerTarget(key(revision: 2));
+      final current = cache.ticket(key(revision: 2));
       await write(key(revision: 2));
       await cache.invalidateAsset(asset.assetId, retainRevision: 2);
       expect(old.isValid, isFalse);
@@ -79,31 +81,47 @@ void main() {
   );
 
   test(
-    'budget participant evicts only derived files and rejects foreign keys',
+    'target changes replace only after successful publication and cancel old tickets',
     () async {
-      await write(key());
-      await io.File(
-        '${root.path}/unrelated',
-      ).writeAsString('protected fixture');
-      final coordinator = CacheBudgetCoordinator(
-        participants: <CacheBudgetParticipant>[cache],
-      );
-      expect((await coordinator.loadReport()).clearableBytes, bytes.length);
-      await coordinator.pruneToLimit(maxBytes: 0);
-      expect(await cache.lookup(key()), isNull);
-      expect(await io.File('${root.path}/unrelated').exists(), isTrue);
+      final a = key();
+      final b = key(width: 40);
+      await write(a);
+      final oldFile = (await cache.lookup(a))!;
+      cache.registerTarget(b);
+      final stale = cache.ticket(b);
+      cache.registerTarget(a);
+      expect(stale.isValid, isFalse);
+      expect(await cache.write(key: b, ticket: stale, bytes: bytes), isFalse);
+      expect(await oldFile.exists(), isTrue);
+      cache.registerTarget(b);
       expect(
-        await cache.deleteCandidate(
-          CacheEvictionCandidate(
-            participantId: cache.participantId,
-            cacheKey: '../unrelated',
-            bytes: 1,
-            lastAccessedAt: DateTime(2026),
-            priority: CacheEvictionPriority.regularImage,
-          ),
-        ),
+        await cache.write(key: b, ticket: cache.ticket(b), bytes: Uint8List(0)),
         isFalse,
       );
+      expect(await oldFile.exists(), isTrue);
+      expect(await write(b), isTrue);
+      expect(await oldFile.exists(), isFalse);
+      expect(await cache.calculateUsageBytes(), bytes.length);
+      expect(await write(b), isFalse);
+    },
+  );
+
+  test(
+    'successful maintenance removes crash leftovers but preserves unknown files',
+    () async {
+      await write(key());
+      final file = (await cache.lookup(key()))!;
+      final stale = io.File('${file.parent.path}/r1-12x18.png');
+      final part = io.File('${file.parent.path}/r1-12x18.png.123-1.part');
+      final unknown = io.File('${file.parent.path}/user.png');
+      await stale.writeAsBytes(bytes);
+      await part.writeAsBytes(bytes);
+      await unknown.writeAsBytes(bytes);
+      await write(key());
+      expect(await stale.exists(), isFalse);
+      expect(await part.exists(), isFalse);
+      expect(await unknown.exists(), isTrue);
+      expect(await file.exists(), isTrue);
     },
   );
 
@@ -111,7 +129,7 @@ void main() {
     'unavailable derivative directory is a miss and write is best effort',
     () async {
       await cache.dispose();
-      cache = LibraryCoverThumbnailCache(
+      cache = LibraryCoverThumbnailStore(
         rootPath: () async => throw const io.FileSystemException('fixture'),
       );
       expect(await cache.lookup(key()), isNull);
@@ -135,7 +153,9 @@ void main() {
       await original.parent.create(recursive: true);
       await original.writeAsBytes(bytes);
       await write(key());
-      await cache.clearRegular();
+      await CacheBudgetCoordinator(
+        participants: <CacheBudgetParticipant>[],
+      ).clearRegular();
       expect(await original.exists(), isTrue);
       await write(key());
       final ticket = cache.ticket(key());

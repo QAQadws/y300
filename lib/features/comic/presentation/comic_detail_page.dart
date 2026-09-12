@@ -1,3 +1,4 @@
+import 'package:y300/features/comic/data/providers/comic_download_cover_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
@@ -66,6 +67,7 @@ class ComicDetailPage extends ConsumerWidget {
         return path.isEmpty ? null : path;
       },
       onFirstContentPresented: (header, chapters) async {
+        ref.read(comicDownloadCoverMaintenanceProvider).schedule(comicId);
         final draft = const LibraryDetailHistoryVisitMapper().map(
           module: LibraryModuleKey.comic,
           header: header,

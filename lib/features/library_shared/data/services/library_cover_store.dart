@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
-import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_cache.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 
 abstract interface class LibraryCoverStore {
   Future<io.File> ensureAvailable(LibraryCoverAssetRef asset);
@@ -95,14 +95,14 @@ class LocalLibraryCoverStore implements LibraryCoverStore {
   LocalLibraryCoverStore({
     required Future<String> rootPath,
     required LibraryCoverDownloader downloader,
-    LibraryCoverThumbnailCache? thumbnails,
+    LibraryCoverThumbnailStore? thumbnails,
   }) : _rootPath = rootPath,
        _downloader = downloader,
        _thumbnails = thumbnails;
 
   final Future<String> _rootPath;
   final LibraryCoverDownloader _downloader;
-  final LibraryCoverThumbnailCache? _thumbnails;
+  final LibraryCoverThumbnailStore? _thumbnails;
   final Map<String, Future<io.File>> _ensureTasks = <String, Future<io.File>>{};
 
   @override

@@ -1,3 +1,4 @@
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -23,6 +24,7 @@ void main() {
         'library_cover_providers.dart',
         'core/network/',
         'sqflite',
+        'cache_mutation_provider.dart',
       ]) {
         expect(file, isNot(contains(forbidden)));
         expect(bus, isNot(contains(forbidden)));
@@ -31,8 +33,8 @@ void main() {
       addTearDown(container.dispose);
       // Construction alone must not invoke a platform directory, network or DB.
       expect(
-        container.read(libraryCoverThumbnailCacheProvider).participantId,
-        'library_cover_thumbnails',
+        container.read(libraryCoverThumbnailStoreProvider),
+        isA<LibraryCoverThumbnailStore>(),
       );
     },
   );

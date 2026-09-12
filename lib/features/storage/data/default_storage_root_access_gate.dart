@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
 import 'package:y300/features/storage/domain/storage_root_migration.dart';
 
-final class DefaultStorageRootAccessGate implements StorageRootAccessGate {
+final class DefaultStorageRootAccessGate
+    implements StorageRootAccessGate, IndependentStorageRootAccessGate {
   DefaultStorageRootAccessGate({
     required StorageRootMigrationCoordinator migrationCoordinator,
   }) : _migrationCoordinator = migrationCoordinator;
@@ -31,6 +32,15 @@ final class DefaultStorageRootAccessGate implements StorageRootAccessGate {
   Future<StorageRootMigrationResult> retry() {
     _settledResult = null;
     return _startMigration(force: true);
+  }
+
+  @override
+  Future<T> runWithIndependentAccess<T>(Future<T> Function() operation) {
+    // Clear only the reentrancy marker; retain the app's async error boundary.
+    return runZoned(
+      () => runWithAccess(operation),
+      zoneValues: <Object, Object?>{_zoneKey: null},
+    );
   }
 
   @override

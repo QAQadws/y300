@@ -5,7 +5,7 @@ import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
 
 final class MigrationGatedDownloadStorageService
-    implements DownloadStorageService {
+    implements DownloadStorageService, ComicDownloadDirectoryLocator {
   const MigrationGatedDownloadStorageService({
     required DownloadStorageService delegate,
     required StorageRootAccessGate accessGate,
@@ -14,6 +14,20 @@ final class MigrationGatedDownloadStorageService
 
   final DownloadStorageService _delegate;
   final StorageRootAccessGate _accessGate;
+
+  @override
+  Future<io.Directory?> findExistingComicDirectory({
+    required String workId,
+    required String title,
+  }) => _accessGate.runWithAccess(() async {
+    final locator = _delegate;
+    return locator is ComicDownloadDirectoryLocator
+        ? (locator as ComicDownloadDirectoryLocator).findExistingComicDirectory(
+            workId: workId,
+            title: title,
+          )
+        : null;
+  });
 
   @override
   Future<DownloadStorageRoot> prepareRoot() {

@@ -1,3 +1,5 @@
+import 'package:y300/features/comic/data/providers/comic_download_cover_providers.dart';
+import 'package:y300/features/comic/data/services/comic_download_cover_maintenance.dart';
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,6 +43,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            comicDownloadCoverMaintenanceProvider.overrideWithValue(
+              _NoopCoverMaintenance(),
+            ),
             historyVisitRecorderProvider.overrideWithValue(historyRecorder),
             comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
             comicEpisodeRefreshServiceProvider.overrideWithValue(
@@ -115,6 +120,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          comicDownloadCoverMaintenanceProvider.overrideWithValue(
+            _NoopCoverMaintenance(),
+          ),
           historyVisitRecorderProvider.overrideWithValue(
             const _NoopHistoryVisitRecorder(),
           ),
@@ -165,6 +173,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          comicDownloadCoverMaintenanceProvider.overrideWithValue(
+            _NoopCoverMaintenance(),
+          ),
           historyVisitRecorderProvider.overrideWithValue(historyRecorder),
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           comicEpisodeRefreshServiceProvider.overrideWithValue(
@@ -225,6 +236,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            comicDownloadCoverMaintenanceProvider.overrideWithValue(
+              _NoopCoverMaintenance(),
+            ),
             historyVisitRecorderProvider.overrideWithValue(
               const _NoopHistoryVisitRecorder(),
             ),
@@ -1074,4 +1088,11 @@ class _RecordingReadingStateWriter implements ComicReadingStateWriter {
       readAt: isRead ? readAt ?? DateTime(2026, 1, 1) : null,
     );
   }
+}
+
+class _NoopCoverMaintenance implements ComicDownloadCoverMaintenance {
+  @override
+  void schedule(String comicId) {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

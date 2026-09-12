@@ -7,7 +7,7 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_decode_scheduler.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
-import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_cache.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_decode_policy.dart';
 import 'package:y300/features/library_shared/presentation/images/library_cover_image_provider.dart';
@@ -61,9 +61,11 @@ void main() {
 
   LibraryCoverImageProvider provider({
     LibraryCoverDecodeTarget size = target,
+    LibraryCoverUsage usage = LibraryCoverUsage.shelf,
   }) => LibraryCoverImageProvider(
     asset: asset,
     decodeTarget: size,
+    usage: usage,
     store: store,
     scheduler: scheduler,
     thumbnails: cache,
@@ -109,7 +111,7 @@ void main() {
       final pixels = await thumbnail.image.toByteData();
       expect(pixels!.getUint8(3), 0);
 
-      await cache.clearRegular();
+      await cache.invalidateAsset(asset.assetId);
       final lookupsBeforeMemoryHit = cache.lookups;
       final memoryHit = _ImageConsumer(provider());
       addTearDown(memoryHit.dispose);
@@ -174,7 +176,7 @@ void main() {
       final consumer = _ImageConsumer(provider());
       addTearDown(consumer.dispose);
       await _until(() => cache.removalStarted);
-      await cache.clearRegular();
+      await cache.invalidateAsset(asset.assetId);
       release.complete();
 
       expect((await consumer.frame).image.width, 32);
@@ -220,7 +222,7 @@ void main() {
         addTearDown(consumer.dispose);
         await _until(() => failedCodec?.requested == true);
         if (invalidate == 'clear') {
-          await cache.clearRegular();
+          await cache.invalidateAsset(asset.assetId);
         } else if (invalidate == 'purge') {
           await cache.invalidateAsset(asset.assetId);
         }
@@ -268,7 +270,40 @@ void main() {
     },
   );
 
-  test('cache clear during encoding cannot commit a late thumbnail', () async {
+  test(
+    'asset deletion during encoding cannot commit a late thumbnail',
+    () async {
+      final encoding = Completer<Uint8List?>();
+      var started = false;
+      writer.dispose();
+      writer = LibraryCoverThumbnailWriter(
+        cache: cache,
+        scheduler: scheduler,
+        afterFrame: frames.add,
+        encoder: (_) {
+          started = true;
+          return encoding.future;
+        },
+      );
+      final consumer = _ImageConsumer(provider());
+      addTearDown(consumer.dispose);
+      expect((await consumer.frame).image.width, 32);
+      frames.removeAt(0)();
+      await _until(() => started);
+      await cache.invalidateAsset(asset.assetId);
+      encoding.complete(Uint8List.fromList(<int>[1, 2, 3]));
+      await _until(() => writer.retainedBytes == 0);
+      expect(await cache.lookup(key), isNull);
+    },
+  );
+
+  test('A B A memory resolution cancels late B without file access', () async {
+    final a = _ImageConsumer(provider());
+    addTearDown(a.dispose);
+    await a.frame;
+    frames.removeAt(0)();
+    await _until(() => writer.retainedBytes == 0);
+    final diskA = (await cache.lookup(key))!;
     final encoding = Completer<Uint8List?>();
     var started = false;
     writer.dispose();
@@ -281,16 +316,135 @@ void main() {
         return encoding.future;
       },
     );
-    final consumer = _ImageConsumer(provider());
-    addTearDown(consumer.dispose);
-    expect((await consumer.frame).image.width, 32);
+    final b = _ImageConsumer(
+      provider(
+        size: const LibraryCoverDecodeTarget.thumbnail(
+          widthPx: 24,
+          heightPx: 36,
+        ),
+      ),
+    );
+    addTearDown(b.dispose);
+    await b.frame;
     frames.removeAt(0)();
     await _until(() => started);
-    await cache.clearRegular();
-    encoding.complete(Uint8List.fromList(<int>[1, 2, 3]));
+    final before = cache.lookups;
+    final returned = _ImageConsumer(provider());
+    addTearDown(returned.dispose);
+    await returned.frame;
+    expect(cache.lookups, before);
+    expect(store.reads, 2);
+    encoding.complete(await _png());
     await _until(() => writer.retainedBytes == 0);
+    expect(await diskA.exists(), isTrue);
+    expect(await cache.calculateUsageBytes(), await diskA.length());
+  });
+
+  test('new target queues while an obsolete generation is encoding', () async {
+    final blocked = Completer<Uint8List?>();
+    var encodes = 0;
+    writer.dispose();
+    writer = LibraryCoverThumbnailWriter(
+      cache: cache,
+      scheduler: scheduler,
+      afterFrame: frames.add,
+      encoder: (image) async {
+        if (++encodes == 1) return blocked.future;
+        final data = (await image.toByteData(format: ui.ImageByteFormat.png))!;
+        return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      },
+    );
+    final a = _ImageConsumer(provider());
+    addTearDown(a.dispose);
+    await a.frame;
+    frames.removeAt(0)();
+    await _until(() => encodes == 1);
+    final b = _ImageConsumer(
+      provider(
+        size: const LibraryCoverDecodeTarget.thumbnail(
+          widthPx: 24,
+          heightPx: 36,
+        ),
+      ),
+    );
+    addTearDown(b.dispose);
+    await b.frame;
+    expect(writer.pendingCount, 1);
+    blocked.complete(null);
+    await _until(() => frames.isNotEmpty);
+    frames.removeAt(0)();
+    await _until(() => writer.retainedBytes == 0);
+    expect(encodes, 2);
+    expect(
+      await cache.lookup(
+        LibraryCoverThumbnailKey(asset: asset, width: 24, height: 36),
+      ),
+      isNotNull,
+    );
     expect(await cache.lookup(key), isNull);
   });
+
+  test(
+    'detail foreground/background share original pending load and preserve shelf target',
+    () async {
+      final shelf = _ImageConsumer(provider());
+      addTearDown(shelf.dispose);
+      await shelf.frame;
+      frames.removeAt(0)();
+      await _until(() => writer.retainedBytes == 0);
+      final ticket = cache.ticket(key);
+      final disk = (await cache.lookup(key))!;
+      final lookups = cache.lookups;
+      final detail = provider(usage: LibraryCoverUsage.detail);
+      expect(detail.cacheKey, isNot(provider().cacheKey));
+      final foreground = _ImageConsumer(detail);
+      final background = _ImageConsumer(
+        provider(usage: LibraryCoverUsage.detail),
+      );
+      addTearDown(foreground.dispose);
+      addTearDown(background.dispose);
+      await Future.wait([foreground.frame, background.frame]);
+      expect(store.reads, 2);
+      expect(cache.lookups, lookups);
+      expect(ticket.isValid, isTrue);
+      expect(writer.pendingCount, 0);
+      expect(await disk.exists(), isTrue);
+    },
+  );
+
+  test(
+    'writer accepts at most eight assets and releases every queued handle',
+    () async {
+      final codec = await ui.instantiateImageCodec(await _png());
+      final frame = await codec.getNextFrame();
+      for (var i = 0; i < 9; i++) {
+        final key = LibraryCoverThumbnailKey(
+          asset: LibraryCoverAssetRef(
+            assetId: 'fixture/$i/source',
+            revision: 1,
+            kind: LibraryCoverAssetKind.source,
+          ),
+          width: 32,
+          height: 48,
+        );
+        writer.enqueue(
+          key: key,
+          ticket: cache.ticket(key),
+          image: frame.image,
+          isActive: () => true,
+        );
+      }
+      expect(writer.pendingCount, 8);
+      expect(
+        writer.retainedBytes,
+        8 * frame.image.width * frame.image.height * 4,
+      );
+      writer.dispose();
+      expect(writer.retainedBytes, 0);
+      frame.image.dispose();
+      codec.dispose();
+    },
+  );
 
   test(
     'same provider key shares a pending load, not separate codecs',
@@ -469,7 +623,7 @@ void main() {
   );
 
   test(
-    'clear and revision change release queued handles before a frame runs',
+    'asset deletion and revision change release queued handles before a frame runs',
     () async {
       final consumer = _ImageConsumer(provider());
       addTearDown(consumer.dispose);
@@ -478,7 +632,7 @@ void main() {
       await cache.invalidateAsset(asset.assetId, retainRevision: 2);
       expect(writer.pendingCount, 0);
       expect(writer.retainedBytes, 0);
-      await cache.clearRegular();
+      await cache.invalidateAsset(asset.assetId);
       frames.removeAt(0)();
       expect(await cache.lookup(key), isNull);
     },
@@ -589,7 +743,7 @@ class _ImageConsumer {
   }
 }
 
-class _ObservedThumbnailCache extends LibraryCoverThumbnailCache {
+class _ObservedThumbnailCache extends LibraryCoverThumbnailStore {
   _ObservedThumbnailCache({required super.rootPath});
 
   int lookups = 0;

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:y300/features/library_shared/data/providers/library_cover_thumbnail_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/history_entry_router.dart';
@@ -63,6 +64,9 @@ final mainShellBackgroundTaskStarterProvider =
               await ref.read(comicDownloadQueueProvider).start();
             }),
             _startBackgroundTaskSafely(migrator.migrateSourceAssets),
+            _startBackgroundTaskSafely(
+              ref.read(libraryCoverLegacyThumbnailCleanupProvider).run,
+            ),
           ]),
         );
       };

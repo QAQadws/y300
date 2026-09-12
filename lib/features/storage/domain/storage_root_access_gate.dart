@@ -12,3 +12,9 @@ abstract interface class StorageRootAccessGate {
 
   Future<T> runWithAccess<T>(Future<T> Function() operation);
 }
+
+/// Background work must acquire its own lease even when scheduled by an active
+/// storage operation. This capability preserves the caller's error zone.
+abstract interface class IndependentStorageRootAccessGate {
+  Future<T> runWithIndependentAccess<T>(Future<T> Function() operation);
+}

@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io' as io;
 
+import 'package:y300/features/comic/data/providers/comic_download_cover_providers.dart';
+import 'package:y300/features/comic/data/services/comic_download_cover_maintenance.dart';
+import 'package:y300/features/comic/data/services/comic_download_metadata_store.dart';
 import 'package:archive/archive_io.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -50,6 +53,8 @@ class DefaultComicDownloadService
     required DownloadStorageService storageService,
     ImageCacheService? imageCacheService,
     LibraryCoverStore? coverStore,
+    ComicDownloadMetadataStore? metadataStore,
+    ComicDownloadCoverMaintenance? coverMaintenance,
     ComicDownloadImageRequestGovernor? imageRequestGovernor,
     io.Directory? readerExtractionRoot,
   }) : _repository = repository,
@@ -57,6 +62,8 @@ class DefaultComicDownloadService
        _storageService = storageService,
        _imageCacheService = imageCacheService,
        _coverStore = coverStore,
+       _metadataStore = metadataStore ?? ComicDownloadMetadataStore(),
+       _coverMaintenance = coverMaintenance,
        _imageRequestGovernor =
            imageRequestGovernor ?? DefaultComicDownloadImageRequestGovernor(),
        _readerExtractionRoot =
@@ -70,6 +77,8 @@ class DefaultComicDownloadService
   final DownloadStorageService _storageService;
   final ImageCacheService? _imageCacheService;
   final LibraryCoverStore? _coverStore;
+  final ComicDownloadMetadataStore _metadataStore;
+  final ComicDownloadCoverMaintenance? _coverMaintenance;
   final ComicDownloadImageRequestGovernor _imageRequestGovernor;
   final io.Directory _readerExtractionRoot;
   final Map<String, Future<List<io.File>>> _readerExtractionTasks =
@@ -110,6 +119,11 @@ class DefaultComicDownloadService
         totalImages: existing.imageFiles.length,
       );
       cancellationToken?.throwIfCancellationRequested();
+      await _ensureCoverIfPossible(
+        detail: detail,
+        cancellationToken: cancellationToken,
+      );
+      _coverMaintenance?.schedule(comicId);
       return existing;
     }
     if (existing != null) {
@@ -146,9 +160,8 @@ class DefaultComicDownloadService
     await observer?.onImagesResolved(images.length);
     cancellationToken?.throwIfCancellationRequested();
 
-    await _copyCoverIfPossible(
+    await _ensureCoverIfPossible(
       detail: detail,
-      comicDir: comicDir,
       cancellationToken: cancellationToken,
     );
 
@@ -209,6 +222,7 @@ class DefaultComicDownloadService
         comicDir: comicDir,
       );
       committed = true;
+      _coverMaintenance?.schedule(comicId);
 
       return DownloadedComicEpisode(
         workId: comicId,
@@ -293,6 +307,7 @@ class DefaultComicDownloadService
     }
 
     final dbImages = await _repository.getEpisodeImages(episodeId: episodeId);
+    _coverMaintenance?.schedule(comicId);
     return extracted
         .asMap()
         .entries
@@ -429,15 +444,10 @@ class DefaultComicDownloadService
     return io.File(path);
   }
 
-  Future<void> _copyCoverIfPossible({
+  Future<void> _ensureCoverIfPossible({
     required ComicDetail detail,
-    required io.Directory comicDir,
     ComicDownloadCancellationToken? cancellationToken,
   }) async {
-    final target = io.File(p.join(comicDir.path, 'cover.jpg'));
-    if (await target.exists()) {
-      return;
-    }
     final coverStore = _coverStore;
     final asset = LibraryCoverAssetFactory.preferred(
       ownerType: 'comic',
@@ -452,25 +462,12 @@ class DefaultComicDownloadService
     if (coverStore != null && asset != null) {
       cancellationToken?.throwIfCancellationRequested();
       try {
-        final source = await coverStore.ensureAvailable(asset);
-        cancellationToken?.throwIfCancellationRequested();
-        if (await source.exists()) {
-          await source.copy(target.path);
-          return;
-        }
+        await coverStore.ensureAvailable(asset);
       } catch (_) {
         // A missing cover must not fail an otherwise valid offline chapter.
       }
     }
-    // Keep a narrow compatibility fallback for injected legacy services used
-    // by older callers/tests. Production always supplies the dedicated Store.
-    final localCover = _firstExistingPath(<String?>[
-      detail.customCoverLocalPath,
-      detail.coverLocalPath,
-    ]);
-    if (localCover != null) {
-      await io.File(localCover).copy(target.path);
-    }
+    cancellationToken?.throwIfCancellationRequested();
   }
 
   Future<bool> _isValidDownloadedEpisode(
@@ -528,35 +525,34 @@ class DefaultComicDownloadService
     required _ComicDownloadedChapterDraft downloaded,
     required io.Directory comicDir,
   }) async {
-    final existing = await _readMeta(comicDir);
-    final oldChapters =
-        (existing?['chapters'] as List?)
-            ?.whereType<Map>()
-            .map(
-              (item) =>
-                  item.map((key, value) => MapEntry(key.toString(), value)),
-            )
-            .toList(growable: false) ??
-        const <Map<String, Object?>>[];
-    final oldByEpisodeId = <String, Map<String, Object?>>{
-      for (final chapter in oldChapters)
-        if (chapter['episodeId'] is String)
-          chapter['episodeId'] as String: chapter,
-    };
-    oldByEpisodeId[downloaded.episode.episodeId] = downloaded.toJson();
+    await _metadataStore.run(comicDir, () async {
+      final existing = await _metadataStore.read(comicDir);
+      final oldChapters =
+          (existing?['chapters'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (item) =>
+                    item.map((key, value) => MapEntry(key.toString(), value)),
+              )
+              .toList(growable: false) ??
+          const <Map<String, Object?>>[];
+      final oldByEpisodeId = <String, Map<String, Object?>>{
+        for (final chapter in oldChapters)
+          if (chapter['episodeId'] is String)
+            chapter['episodeId'] as String: chapter,
+      };
+      oldByEpisodeId[downloaded.episode.episodeId] = downloaded.toJson();
 
-    final chapters = <Map<String, Object?>>[
-      for (var i = 0; i < episodes.length; i++)
-        if (oldByEpisodeId.containsKey(episodes[i].episodeId))
-          <String, Object?>{
-            ...oldByEpisodeId[episodes[i].episodeId]!,
-            'orderIndex': i,
-          },
-    ];
+      final chapters = <Map<String, Object?>>[
+        for (var i = 0; i < episodes.length; i++)
+          if (oldByEpisodeId.containsKey(episodes[i].episodeId))
+            <String, Object?>{
+              ...oldByEpisodeId[episodes[i].episodeId]!,
+              'orderIndex': i,
+            },
+      ];
 
-    await _storageService.writeJsonAtomically(
-      io.File(p.join(comicDir.path, 'meta.json')),
-      <String, Object?>{
+      await _metadataStore.write(comicDir, <String, Object?>{
         'schemaVersion': 1,
         'contentType': 'comic',
         'workId': detail.comicId,
@@ -568,9 +564,7 @@ class DefaultComicDownloadService
         'author': detail.author,
         'translationGroup': detail.translationGroup,
         'intro': existing?['intro'],
-        'coverFile': await io.File(p.join(comicDir.path, 'cover.jpg')).exists()
-            ? 'cover.jpg'
-            : null,
+        'coverFile': null,
         'customCoverFile': null,
         'favorite': existing?['favorite'],
         'tags': <String, Object?>{
@@ -584,8 +578,8 @@ class DefaultComicDownloadService
         },
         'chapters': chapters,
         'updatedAt': DateTime.now().toUtc().toIso8601String(),
-      },
-    );
+      });
+    });
   }
 
   Future<void> _removeChapterFromMeta({
@@ -596,28 +590,27 @@ class DefaultComicDownloadService
       workId: detail.comicId,
       title: detail.title,
     );
-    final existing = await _readMeta(comicDir);
-    if (existing == null) {
-      return;
-    }
-    final chapters =
-        (existing['chapters'] as List?)
-            ?.whereType<Map>()
-            .where((item) => item['episodeId'] != episodeId)
-            .map(
-              (item) =>
-                  item.map((key, value) => MapEntry(key.toString(), value)),
-            )
-            .toList(growable: false) ??
-        const <Map<String, Object?>>[];
-    await _storageService.writeJsonAtomically(
-      io.File(p.join(comicDir.path, 'meta.json')),
-      <String, Object?>{
+    await _metadataStore.run(comicDir, () async {
+      final existing = await _metadataStore.read(comicDir);
+      if (existing == null) {
+        return;
+      }
+      final chapters =
+          (existing['chapters'] as List?)
+              ?.whereType<Map>()
+              .where((item) => item['episodeId'] != episodeId)
+              .map(
+                (item) =>
+                    item.map((key, value) => MapEntry(key.toString(), value)),
+              )
+              .toList(growable: false) ??
+          const <Map<String, Object?>>[];
+      await _metadataStore.write(comicDir, <String, Object?>{
         ...existing,
         'chapters': chapters,
         'updatedAt': DateTime.now().toUtc().toIso8601String(),
-      },
-    );
+      });
+    });
   }
 
   Future<List<io.File>> _extractCbzForReading(
@@ -745,22 +738,6 @@ class DefaultComicDownloadService
     }
   }
 
-  Future<Map<String, Object?>?> _readMeta(io.Directory directory) async {
-    final file = io.File(p.join(directory.path, 'meta.json'));
-    if (!await file.exists()) {
-      return null;
-    }
-    try {
-      final decoded = jsonDecode(await file.readAsString(encoding: utf8));
-      if (decoded is Map) {
-        return decoded.map((key, value) => MapEntry(key.toString(), value));
-      }
-    } catch (_) {
-      return null;
-    }
-    return null;
-  }
-
   Future<void> _updateImageCacheMetadata({
     required ComicEpisodeImageItem image,
     required String stableCacheKey,
@@ -783,18 +760,6 @@ class DefaultComicDownloadService
           lastAccessedAt: DateTime.now(),
           protected: false,
         );
-  }
-
-  String? _firstExistingPath(List<String?> paths) {
-    for (final path in paths) {
-      final trimmed = path?.trim();
-      if (trimmed != null &&
-          trimmed.isNotEmpty &&
-          io.File(trimmed).existsSync()) {
-        return trimmed;
-      }
-    }
-    return null;
   }
 
   String _imageExtension({
@@ -934,6 +899,8 @@ final comicDownloadServiceProvider = Provider<ComicDownloadService>((ref) {
     storageService: ref.watch(downloadStorageServiceProvider),
     imageCacheService: ref.watch(imageCacheServiceProvider),
     coverStore: ref.watch(libraryCoverStoreProvider),
+    metadataStore: ref.watch(comicDownloadMetadataStoreProvider),
+    coverMaintenance: ref.watch(comicDownloadCoverMaintenanceProvider),
     imageRequestGovernor: ref.watch(comicDownloadImageRequestGovernorProvider),
   );
   return MigrationGatedComicDownloadService(

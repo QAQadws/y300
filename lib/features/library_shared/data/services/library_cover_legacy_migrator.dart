@@ -1,5 +1,7 @@
 import 'dart:io' as io;
 
+import 'package:crypto/crypto.dart';
+
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
@@ -19,6 +21,105 @@ class LibraryCoverLegacyMigrator {
   final Future<Database> _database;
   final LibraryCoverStore _store;
   final ImageCacheRepository _legacyCacheRepository;
+
+  /// Access-time adoption is scoped to one work and never requests the network.
+  Future<void> migrateComicAssets(String comicId) async {
+    final db = await _database;
+    final rows = await db.query(
+      ComicLocalDb.comicsTable,
+      where: 'comic_id = ?',
+      whereArgs: [comicId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    for (final custom in [true, false]) {
+      final candidate = _candidate(
+        ownerType: 'comic',
+        ownerId: comicId,
+        row: rows.single,
+        custom: custom,
+      );
+      if (candidate.shouldMigrate) await _migrate(candidate, localOnly: true);
+    }
+  }
+
+  Future<List<LibraryCoverAssetRef>> comicAssets(String comicId) async {
+    final db = await _database;
+    final rows = await db.query(
+      ComicLocalDb.comicsTable,
+      where: 'comic_id = ?',
+      whereArgs: [comicId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return [];
+    return [
+      for (final custom in [false, true])
+        _candidate(
+          ownerType: 'comic',
+          ownerId: comicId,
+          row: rows.single,
+          custom: custom,
+        ).asset,
+    ];
+  }
+
+  /// Hold the final reference check through removal so a concurrent cover edit
+  /// cannot install a path reference between the check and filesystem deletion.
+  Future<void> withUnreferencedComicAsset({
+    required String comicId,
+    required LibraryCoverAssetRef asset,
+    required String path,
+    required Future<void> Function() action,
+  }) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        ComicLocalDb.comicsTable,
+        where: 'comic_id = ?',
+        whereArgs: [comicId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final current = _candidate(
+        ownerType: 'comic',
+        ownerId: comicId,
+        row: rows.single,
+        custom: asset.kind == LibraryCoverAssetKind.custom,
+      ).asset;
+      if (current.revision != asset.revision ||
+          current.sourceUrl != asset.sourceUrl ||
+          current.legacyLocalPath != asset.legacyLocalPath) {
+        return;
+      }
+      for (final table in [ComicLocalDb.comicsTable, ComicLocalDb.worksTable]) {
+        final references = await txn.query(
+          table,
+          columns: ['cover_local_path'],
+          where: 'cover_local_path = ? OR custom_cover_local_path = ?',
+          whereArgs: [path, path],
+          limit: 1,
+        );
+        if (references.isNotEmpty) return;
+      }
+      final references = await txn.query(
+        ComicLocalDb.cachedImagesTable,
+        columns: ['local_path'],
+        where: 'local_path = ?',
+        whereArgs: [path],
+        limit: 1,
+      );
+      if (references.isNotEmpty) return;
+      final pageReferences = await txn.query(
+        ComicLocalDb.episodeImagesTable,
+        columns: ['local_path'],
+        where: 'local_path = ? OR cache_local_path = ?',
+        whereArgs: [path, path],
+        limit: 1,
+      );
+      if (pageReferences.isNotEmpty) return;
+      await action();
+    });
+  }
 
   /// Custom covers are user assets and are always migrated before source
   /// covers. A failed item remains untouched and is retried on next startup.
@@ -123,6 +224,9 @@ class LibraryCoverLegacyMigrator {
             ? row['custom_cover_local_path'] as String?
             : row['cover_local_path'] as String?,
       ),
+      storedRevision: custom
+          ? row['custom_cover_revision'] as int?
+          : row['cover_revision'] as int?,
       legacyCacheKey: custom
           ? ImageCacheKeys.customCover(ownerType: ownerType, ownerId: ownerId)
           : ownerType == 'comic'
@@ -131,20 +235,25 @@ class LibraryCoverLegacyMigrator {
     );
   }
 
-  Future<void> _migrate(_LegacyCoverCandidate candidate) async {
-    if (await _isCompleted(candidate)) {
+  Future<void> _migrate(
+    _LegacyCoverCandidate candidate, {
+    bool localOnly = false,
+  }) async {
+    if (!localOnly && await _isCompleted(candidate)) {
       return;
     }
     final target = await _store.fileFor(candidate.asset);
     if (!await _isValidImageFile(target)) {
+      if (localOnly && await target.exists()) return;
       final source = await _resolveLegacyFile(candidate);
       if (source != null) {
         await _store.installLocalFile(
           asset: candidate.asset,
           sourcePath: source.path,
         );
-        await _store.deleteOlderRevisions(candidate.asset);
-      } else if (candidate.asset.kind == LibraryCoverAssetKind.custom &&
+        if (!localOnly) await _store.deleteOlderRevisions(candidate.asset);
+      } else if (!localOnly &&
+          candidate.asset.kind == LibraryCoverAssetKind.custom &&
           candidate.asset.sourceUrl?.trim().isNotEmpty == true) {
         try {
           await _store.ensureAvailable(
@@ -153,7 +262,8 @@ class LibraryCoverLegacyMigrator {
         } catch (_) {
           return;
         }
-      } else if (candidate.asset.kind == LibraryCoverAssetKind.source &&
+      } else if (!localOnly &&
+          candidate.asset.kind == LibraryCoverAssetKind.source &&
           candidate.asset.sourceUrl?.trim().isNotEmpty == true) {
         await _complete(candidate, installed: false);
         return;
@@ -162,8 +272,17 @@ class LibraryCoverLegacyMigrator {
       }
     }
     if (!await _isValidImageFile(target)) {
-      await _store.invalidate(candidate.asset);
+      if (!localOnly) await _store.invalidate(candidate.asset);
       return;
+    }
+    if (localOnly) {
+      final source = await _resolveLegacyFile(candidate);
+      if (source != null &&
+          (await source.length() != await target.length() ||
+              await sha256.bind(source.openRead()).first !=
+                  await sha256.bind(target.openRead()).first)) {
+        return;
+      }
     }
     await _complete(candidate, installed: true);
   }
@@ -222,8 +341,33 @@ class LibraryCoverLegacyMigrator {
         ? ComicLocalDb.comicsTable
         : ComicLocalDb.worksTable;
     final idColumn = candidate.ownerType == 'comic' ? 'comic_id' : 'work_id';
-    await db.transaction((txn) async {
-      await txn.update(
+    final completed = await db.transaction((txn) async {
+      final revisionColumn = isCustom
+          ? 'custom_cover_revision'
+          : 'cover_revision';
+      final pathColumn = isCustom
+          ? 'custom_cover_local_path'
+          : 'cover_local_path';
+      final urlColumn = isCustom && candidate.ownerType == 'comic'
+          ? 'custom_cover_image_url'
+          : 'cover_image_url';
+      final conditions = <String>['$idColumn = ?'];
+      final arguments = <Object>[candidate.ownerId];
+      final expected = <String, Object?>{
+        revisionColumn: candidate.storedRevision,
+        pathColumn: candidate.asset.legacyLocalPath,
+        if (!isCustom || candidate.ownerType == 'comic')
+          urlColumn: candidate.asset.sourceUrl,
+      };
+      for (final entry in expected.entries) {
+        if (entry.value == null) {
+          conditions.add('${entry.key} IS NULL');
+        } else {
+          conditions.add('${entry.key} = ?');
+          arguments.add(entry.value!);
+        }
+      }
+      final updated = await txn.update(
         table,
         <String, Object?>{
           if (isCustom)
@@ -235,9 +379,10 @@ class LibraryCoverLegacyMigrator {
           else
             'cover_local_path': null,
         },
-        where: '$idColumn = ?',
-        whereArgs: <Object>[candidate.ownerId],
+        where: conditions.join(' AND '),
+        whereArgs: arguments,
       );
+      if (updated == 0) return false;
       await txn.insert(
         ComicLocalDb.libraryCoverMigrationsTable,
         <String, Object?>{
@@ -248,8 +393,11 @@ class LibraryCoverLegacyMigrator {
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
+      return true;
     });
-    await _legacyCacheRepository.deleteByKey(candidate.legacyCacheKey);
+    if (completed) {
+      await _legacyCacheRepository.deleteByKey(candidate.legacyCacheKey);
+    }
   }
 
   Future<bool> _isValidImageFile(io.File file) async {
@@ -297,12 +445,14 @@ class _LegacyCoverCandidate {
     required this.ownerId,
     required this.asset,
     required this.legacyCacheKey,
+    required this.storedRevision,
   });
 
   final String ownerType;
   final String ownerId;
   final LibraryCoverAssetRef asset;
   final String legacyCacheKey;
+  final int? storedRevision;
 
   bool get shouldMigrate {
     return asset.revision > 0 &&

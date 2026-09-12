@@ -27,6 +27,7 @@ class _LibraryCoverOriginalPageState
     super.initState();
     _provider = LibraryCoverImageProvider(
       asset: widget.asset,
+      usage: LibraryCoverUsage.original,
       decodeTarget: const LibraryCoverDecodeTarget.original(),
       store: ref.read(libraryCoverStoreProvider),
       scheduler: ref.read(libraryCoverDecodeSchedulerProvider),

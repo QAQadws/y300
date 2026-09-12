@@ -42,7 +42,15 @@ abstract class DownloadStorageService {
   });
 }
 
-class DefaultDownloadStorageService implements DownloadStorageService {
+abstract interface class ComicDownloadDirectoryLocator {
+  Future<io.Directory?> findExistingComicDirectory({
+    required String workId,
+    required String title,
+  });
+}
+
+class DefaultDownloadStorageService
+    implements DownloadStorageService, ComicDownloadDirectoryLocator {
   DefaultDownloadStorageService({
     required StorageLocationRepository locationRepository,
     Random? random,
@@ -51,6 +59,29 @@ class DefaultDownloadStorageService implements DownloadStorageService {
 
   final StorageLocationRepository _locationRepository;
   final Random _random;
+
+  @override
+  Future<io.Directory?> findExistingComicDirectory({
+    required String workId,
+    required String title,
+  }) async {
+    final locator = _locationRepository;
+    if (locator is! ExistingStorageRootLocator) return null;
+    final root = await (locator as ExistingStorageRootLocator)
+        .getExistingStorageRoot();
+    if (root == null) return null;
+    final directory = io.Directory(
+      p.join(
+        DownloadStorageLayout.resolve(root).comicsPath,
+        _workDirectoryName(title: title, id: workId),
+      ),
+    );
+    if (await io.FileSystemEntity.type(directory.path, followLinks: false) !=
+        io.FileSystemEntityType.directory) {
+      return null;
+    }
+    return directory;
+  }
 
   @override
   Future<DownloadStorageRoot> prepareRoot() async {

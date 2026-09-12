@@ -5,7 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/scheduler.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_decode_scheduler.dart';
-import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_cache.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 import 'package:y300/features/library_shared/presentation/images/library_cover_load_trace.dart';
 
 typedef CoverThumbnailEncoder = Future<Uint8List?> Function(ui.Image image);
@@ -24,14 +24,14 @@ class LibraryCoverThumbnailWriter {
     cache.addInvalidationListener(discardInactive);
   }
 
-  final LibraryCoverThumbnailCache cache;
+  final LibraryCoverThumbnailStore cache;
   final LibraryCoverDecodeScheduler scheduler;
   final int maxPending;
   final int maxRetainedBytes;
   final CoverThumbnailEncoder _encoder;
   final void Function(void Function()) _afterFrame;
   final Queue<_WriteTask> _pending = Queue<_WriteTask>();
-  final Set<String> _keys = <String>{};
+  final Map<String, _WriteTask> _tasks = {};
   int _retainedBytes = 0;
   bool _running = false;
   bool _scheduled = false;
@@ -53,14 +53,15 @@ class LibraryCoverThumbnailWriter {
         image.colorSpace != ui.ColorSpace.sRGB ||
         !ticket.isValid ||
         !isActive() ||
-        _keys.contains(key.value) ||
+        (_tasks[key.assetDigest]?.ticket.isValid == true) ||
         _pending.length >= maxPending ||
         bytes + _retainedBytes > maxRetainedBytes) {
       return;
     }
-    _keys.add(key.value);
+    final task = _WriteTask(key, ticket, image.clone(), bytes, isActive);
+    _tasks[key.assetDigest] = task;
     _retainedBytes += bytes;
-    _pending.add(_WriteTask(key, ticket, image.clone(), bytes, isActive));
+    _pending.add(task);
     _schedule();
   }
 
@@ -112,8 +113,15 @@ class LibraryCoverThumbnailWriter {
           task.ticket.isValid &&
           task.isActive() &&
           bytes != null) {
-        await cache.write(key: task.key, ticket: task.ticket, bytes: bytes);
-        trace.mark('thumbnailWritten', bytes: bytes.length);
+        final committed = await cache.write(
+          key: task.key,
+          ticket: task.ticket,
+          bytes: bytes,
+        );
+        trace.mark(
+          committed ? 'thumbnailWritten' : 'thumbnailSkipped',
+          bytes: bytes.length,
+        );
       }
     } catch (_) {
       // Encoding/storage is best effort, independent of the displayed frame.
@@ -127,7 +135,9 @@ class LibraryCoverThumbnailWriter {
   void _release(_WriteTask task) {
     task.image.dispose();
     _retainedBytes -= task.bytes;
-    _keys.remove(task.key.value);
+    if (identical(_tasks[task.key.assetDigest], task)) {
+      _tasks.remove(task.key.assetDigest);
+    }
   }
 
   void dispose() {

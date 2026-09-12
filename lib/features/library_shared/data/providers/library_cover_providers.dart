@@ -27,7 +27,7 @@ final libraryCoverStoreProvider = Provider<LibraryCoverStore>((ref) {
   return LocalLibraryCoverStore(
     rootPath: resolver.resolveRoot(),
     downloader: ref.watch(libraryCoverDownloaderProvider),
-    thumbnails: ref.watch(libraryCoverThumbnailCacheProvider),
+    thumbnails: ref.watch(libraryCoverThumbnailStoreProvider),
   );
 });
 
@@ -43,7 +43,7 @@ final libraryCoverDecodeSchedulerProvider =
 final libraryCoverThumbnailWriterProvider =
     Provider<LibraryCoverThumbnailWriter>((ref) {
       final writer = LibraryCoverThumbnailWriter(
-        cache: ref.watch(libraryCoverThumbnailCacheProvider),
+        cache: ref.watch(libraryCoverThumbnailStoreProvider),
         scheduler: ref.watch(libraryCoverDecodeSchedulerProvider),
         maxRetainedBytes:
             DeviceMemoryProfileStore.current?.isLowRamDevice == true

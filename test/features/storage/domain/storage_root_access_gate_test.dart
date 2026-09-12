@@ -109,6 +109,43 @@ void main() {
     expect(coordinator.migrateCalls, 0);
   });
 
+  test(
+    'detached background lease survives its scheduling operation and retains error zone',
+    () async {
+      final coordinator = _ControllableMigrationCoordinator(
+        inspectStatus: _completedStatus,
+      );
+      final gate = DefaultStorageRootAccessGate(
+        migrationCoordinator: coordinator,
+      );
+      final release = Completer<void>();
+      final entered = Completer<void>();
+      late Future<void> background;
+      final zone = Zone.current;
+      await gate.runWithAccess(() async {
+        background = gate.runWithIndependentAccess(() async {
+          expect(Zone.current.inSameErrorZone(zone), isTrue);
+          entered.complete();
+          await release.future;
+        });
+        await entered.future;
+      });
+      coordinator.resetMigration(inspectStatus: _copyingStatus);
+      final migration = gate.retry();
+      await Future<void>.delayed(Duration.zero);
+      expect(coordinator.migrateCalls, 0);
+      release.complete();
+      await background;
+      await coordinator.migrationStarted.future;
+      coordinator.completeMigration(_migratedResult);
+      await migration;
+      await expectLater(
+        gate.runWithIndependentAccess(() async => throw StateError('fixture')),
+        throwsStateError,
+      );
+    },
+  );
+
   test('cleanup pending allows default-root access immediately', () async {
     final coordinator = _ControllableMigrationCoordinator(
       inspectStatus: _cleanupPendingStatus,

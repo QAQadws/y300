@@ -186,7 +186,6 @@ final cacheMaintenanceServiceProvider = Provider<CacheMaintenanceService>((
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
     storageAccountingService: ref.watch(storageAccountingServiceProvider),
     cacheBudgetCoordinator: ref.watch(cacheBudgetCoordinatorProvider),
-    coverThumbnails: ref.watch(libraryCoverThumbnailCacheProvider),
     protectedCoverMaintenance: ref.watch(
       protectedCoverCacheMaintenanceProvider,
     ),
@@ -199,7 +198,6 @@ final cacheBudgetCoordinatorProvider = Provider<CacheBudgetCoordinator>((ref) {
     ref.watch(imageCacheServiceProvider),
     ref.watch(documentCacheServiceProvider),
     ref.watch(parsedSnapshotCacheServiceProvider),
-    ref.watch(libraryCoverThumbnailCacheProvider),
   ];
   return CacheBudgetCoordinator(
     participants: services.whereType<CacheBudgetParticipant>().toList(
@@ -214,11 +212,9 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
   final imageCacheRepository = ref.watch(imageCacheRepositoryProvider);
   return DefaultStorageAccountingService(
     adapters: <StorageAccountingAdapter>[
-      ImageCacheStorageAccountingAdapter(
-        repository: imageCacheRepository,
-        thumbnails: ref.watch(libraryCoverThumbnailCacheProvider),
-      ),
+      ImageCacheStorageAccountingAdapter(repository: imageCacheRepository),
       LibraryCoverStorageAccountingAdapter(
+        thumbnails: ref.watch(libraryCoverThumbnailStoreProvider),
         store: ref.watch(libraryCoverStoreProvider),
       ),
       PageCacheStorageAccountingAdapter(

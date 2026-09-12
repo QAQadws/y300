@@ -6,7 +6,7 @@ import 'package:y300/features/library_shared/data/services/library_cover_store.d
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_decode_policy.dart';
 import 'package:y300/features/library_shared/presentation/images/library_cover_image_provider.dart';
-import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_cache.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 import 'package:y300/features/library_shared/presentation/images/library_cover_thumbnail_writer.dart';
 
 abstract final class LibraryCoverProviderResolver {
@@ -16,11 +16,13 @@ abstract final class LibraryCoverProviderResolver {
     required double devicePixelRatio,
     required LibraryCoverStore store,
     required LibraryCoverDecodeScheduler scheduler,
-    LibraryCoverThumbnailCache? thumbnails,
+    LibraryCoverUsage usage = LibraryCoverUsage.shelf,
+    LibraryCoverThumbnailStore? thumbnails,
     LibraryCoverThumbnailWriter? thumbnailWriter,
   }) {
     return LibraryCoverImageProvider(
       asset: asset,
+      usage: usage,
       decodeTarget: LibraryCoverDecodeTarget.fromDisplaySize(
         displaySize: displaySize,
         devicePixelRatio: devicePixelRatio,
@@ -67,7 +69,7 @@ class LibraryCoverImage extends ConsumerWidget {
           devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
           store: ref.watch(libraryCoverStoreProvider),
           scheduler: ref.watch(libraryCoverDecodeSchedulerProvider),
-          thumbnails: ref.watch(libraryCoverThumbnailCacheProvider),
+          thumbnails: ref.watch(libraryCoverThumbnailStoreProvider),
           thumbnailWriter: ref.watch(libraryCoverThumbnailWriterProvider),
         );
         final image = LibraryCoverProviderImage(
