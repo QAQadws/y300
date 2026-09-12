@@ -1,6 +1,11 @@
 import 'tall_image/tall_image_policy.dart';
 
-enum ContinuousImageSourceKind { comicPage, threadPostImage, threadImageReader }
+enum ContinuousImageSourceKind {
+  comicPage,
+  threadPostImage,
+  threadImageReader,
+  genericImageReader,
+}
 
 enum ContinuousImageDimensionSource {
   html,

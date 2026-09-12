@@ -7,6 +7,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
+import 'package:y300/features/profile/presentation/blog/blog_image_reader_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_routes.dart';
 import 'package:y300/features/profile/presentation/blog/blog_web_navigation.dart';
@@ -1068,6 +1069,7 @@ class _BlogDetailCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final display = watchBlogDisplayText(ref, BlogContentSource.article(data));
+    final accountOwner = ref.watch(blogMutationBusProvider);
     return BlogSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1149,6 +1151,15 @@ class _BlogDetailCard extends ConsumerWidget {
             child: ForumHtmlContentView(
               html: display.html(data.bodyHtml),
               sourceId: 'profile-blog-${data.blogId}',
+              onOpenImage: (sequence, image) => openBlogImageReader(
+                context,
+                ref,
+                accountOwner: accountOwner,
+                sequence: sequence,
+                image: image,
+                cacheOwnerId: data.blogId,
+                referer: imageReferer,
+              ),
               imageReferer: imageReferer,
               imageCacheOwnerId: data.blogId,
               contentImageKind: ForumImageKind.blogInline,
@@ -1212,6 +1223,7 @@ class _CommentCard extends ConsumerWidget {
       ref,
       BlogContentSource.comment(comment),
     );
+    final accountOwner = ref.watch(blogMutationBusProvider);
     return BlogSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1278,6 +1290,15 @@ class _CommentCard extends ConsumerWidget {
             child: ForumHtmlContentView(
               html: display.html(comment.bodyHtml),
               sourceId: 'profile-blog-comment-${comment.commentId}',
+              onOpenImage: (sequence, image) => openBlogImageReader(
+                context,
+                ref,
+                accountOwner: accountOwner,
+                sequence: sequence,
+                image: image,
+                cacheOwnerId: comment.commentId,
+                referer: imageReferer,
+              ),
               imageReferer: imageReferer,
               imageCacheOwnerId: comment.commentId,
               contentImageKind: ForumImageKind.blogInline,
