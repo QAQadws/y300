@@ -10,6 +10,60 @@ import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.d
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 
 void main() {
+  for (final scope in CacheClearScope.values) {
+    test(
+      'cover derivatives follow $scope without changing originals',
+      () async {
+        final images = _FakeImageCacheService();
+        final thumbnails = _FakeBudgetParticipant(bytes: 256, entryCount: 1);
+        final service = DefaultCacheMaintenanceService(
+          imageCacheService: images,
+          documentCacheService: _FakeDocumentCacheService(
+            deleteOlderThanResult: 0,
+          ),
+          snapshotCacheService: _FakeSnapshotCacheService(
+            deleteExpiredResult: 0,
+          ),
+          storageAccountingService: const _FakeStorageAccountingService(),
+          cacheBudgetCoordinator: CacheBudgetCoordinator(
+            participants: [thumbnails],
+          ),
+          coverThumbnails: thumbnails,
+        );
+        final result = await service.clear(CacheClearRequest(scope: scope));
+        expect(thumbnails.bytes, scope == CacheClearScope.pageCache ? 256 : 0);
+        expect(result.deletedProtectedCoverRecords, 0);
+        expect(result.failedParticipantIds, isEmpty);
+      },
+    );
+  }
+
+  test(
+    'derivative clear failure reports partial result after ordinary images clear',
+    () async {
+      final images = _FakeImageCacheService();
+      final thumbnails = _FakeBudgetParticipant(bytes: 128, entryCount: 1)
+        ..failClear = true;
+      final service = DefaultCacheMaintenanceService(
+        imageCacheService: images,
+        documentCacheService: _FakeDocumentCacheService(
+          deleteOlderThanResult: 0,
+        ),
+        snapshotCacheService: _FakeSnapshotCacheService(deleteExpiredResult: 0),
+        storageAccountingService: const _FakeStorageAccountingService(),
+        cacheBudgetCoordinator: CacheBudgetCoordinator(
+          participants: [thumbnails],
+        ),
+        coverThumbnails: thumbnails,
+      );
+      final result = await service.clear(
+        const CacheClearRequest(scope: CacheClearScope.imageCache),
+      );
+      expect(images.clearUnprotectedCalls, 1);
+      expect(result.failedParticipantIds, [thumbnails.participantId]);
+    },
+  );
+
   test('clear default cache clears only ordinary cache domains', () async {
     final imageCache = _FakeImageCacheService();
     final documentCache = _FakeDocumentCacheService(deleteOlderThanResult: 2);
@@ -115,6 +169,7 @@ class _FakeBudgetParticipant implements CacheBudgetParticipant {
   _FakeBudgetParticipant({required this.bytes, required this.entryCount});
 
   int bytes;
+  bool failClear = false;
   final int entryCount;
 
   @override
@@ -153,6 +208,7 @@ class _FakeBudgetParticipant implements CacheBudgetParticipant {
 
   @override
   Future<CacheParticipantClearResult> clearRegular() async {
+    if (failClear) throw StateError('fixture failure');
     final deletedBytes = bytes;
     bytes = 0;
     return CacheParticipantClearResult(

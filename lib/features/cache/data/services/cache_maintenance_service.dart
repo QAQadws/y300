@@ -15,6 +15,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
     required ParsedSnapshotCacheService snapshotCacheService,
     required StorageAccountingService storageAccountingService,
     required CacheBudgetCoordinator cacheBudgetCoordinator,
+    CacheBudgetParticipant? coverThumbnails,
     ProtectedCoverCacheMaintenance? protectedCoverMaintenance,
     bool Function(CachedImageRecord record)? protectedCoverOwnerExists,
     DateTime Function()? now,
@@ -23,6 +24,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
        _snapshotCacheService = snapshotCacheService,
        _storageAccountingService = storageAccountingService,
        _cacheBudgetCoordinator = cacheBudgetCoordinator,
+       _coverThumbnails = coverThumbnails,
        _protectedCoverMaintenance = protectedCoverMaintenance,
        _protectedCoverOwnerExists = protectedCoverOwnerExists,
        _now = now ?? DateTime.now;
@@ -32,6 +34,7 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
   final ParsedSnapshotCacheService _snapshotCacheService;
   final StorageAccountingService _storageAccountingService;
   final CacheBudgetCoordinator _cacheBudgetCoordinator;
+  final CacheBudgetParticipant? _coverThumbnails;
   final ProtectedCoverCacheMaintenance? _protectedCoverMaintenance;
   final bool Function(CachedImageRecord record)? _protectedCoverOwnerExists;
   final DateTime Function() _now;
@@ -59,6 +62,16 @@ class DefaultCacheMaintenanceService implements CacheMaintenanceService {
         break;
       case CacheClearScope.imageCache:
         await _imageCacheService.clearUnprotected();
+        final thumbnails = _coverThumbnails;
+        if (thumbnails != null) {
+          try {
+            final cleared = await thumbnails.clearRegular();
+            deletedRegularEntries = cleared.deletedEntries;
+            deletedBytes = cleared.deletedBytes;
+          } catch (_) {
+            failedParticipantIds = <String>[thumbnails.participantId];
+          }
+        }
         imageCacheCleared = true;
         break;
       case CacheClearScope.pageCache:

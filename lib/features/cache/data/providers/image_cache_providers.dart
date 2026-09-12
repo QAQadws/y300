@@ -8,7 +8,7 @@ import 'package:y300/core/media/encoded_image_dimension_probe.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
-import 'package:y300/features/cache/data/services/cache_mutation_bus.dart';
+import 'package:y300/features/cache/data/providers/cache_mutation_provider.dart';
 import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
 import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
@@ -40,6 +40,8 @@ import 'package:y300/features/cache/presentation/services/default_forum_image_pr
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+
+export 'cache_mutation_provider.dart';
 
 final imageCacheDirectoryResolverProvider =
     Provider<ImageCacheDirectoryResolver>((ref) {
@@ -82,12 +84,6 @@ final encodedImageDimensionProbeProvider = Provider<EncodedImageDimensionProbe>(
     return SerialEncodedImageDimensionProbe();
   },
 );
-
-final cacheMutationBusProvider = Provider<CacheMutationBus>((ref) {
-  final bus = CacheMutationBus();
-  ref.onDispose(() => unawaited(bus.dispose()));
-  return bus;
-});
 
 final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
   return LocalDocumentCacheService.lazy(
@@ -190,6 +186,7 @@ final cacheMaintenanceServiceProvider = Provider<CacheMaintenanceService>((
     snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
     storageAccountingService: ref.watch(storageAccountingServiceProvider),
     cacheBudgetCoordinator: ref.watch(cacheBudgetCoordinatorProvider),
+    coverThumbnails: ref.watch(libraryCoverThumbnailCacheProvider),
     protectedCoverMaintenance: ref.watch(
       protectedCoverCacheMaintenanceProvider,
     ),
@@ -202,6 +199,7 @@ final cacheBudgetCoordinatorProvider = Provider<CacheBudgetCoordinator>((ref) {
     ref.watch(imageCacheServiceProvider),
     ref.watch(documentCacheServiceProvider),
     ref.watch(parsedSnapshotCacheServiceProvider),
+    ref.watch(libraryCoverThumbnailCacheProvider),
   ];
   return CacheBudgetCoordinator(
     participants: services.whereType<CacheBudgetParticipant>().toList(
@@ -216,7 +214,10 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
   final imageCacheRepository = ref.watch(imageCacheRepositoryProvider);
   return DefaultStorageAccountingService(
     adapters: <StorageAccountingAdapter>[
-      ImageCacheStorageAccountingAdapter(repository: imageCacheRepository),
+      ImageCacheStorageAccountingAdapter(
+        repository: imageCacheRepository,
+        thumbnails: ref.watch(libraryCoverThumbnailCacheProvider),
+      ),
       LibraryCoverStorageAccountingAdapter(
         store: ref.watch(libraryCoverStoreProvider),
       ),

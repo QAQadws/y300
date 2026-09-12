@@ -57,22 +57,20 @@ void main() {
     await third;
   });
 
-  test('same key shares one queued decode', () async {
+  test('same key does not share independently owned stateful codecs', () async {
     final scheduler = LibraryCoverDecodeScheduler(maxConcurrent: 1);
     final blocker = _DecodeGate();
     final shared = _DecodeGate();
+    final independent = _DecodeGate();
 
     final blockerFuture = scheduler.schedule(
       key: 'blocker',
       action: blocker.run,
     );
     final first = scheduler.schedule(key: 'shared', action: shared.run);
-    final second = scheduler.schedule(
-      key: 'shared',
-      action: () => throw StateError('single-flight action must be reused'),
-    );
+    final second = scheduler.schedule(key: 'shared', action: independent.run);
 
-    expect(identical(first, second), isTrue);
+    expect(identical(first, second), isFalse);
     expect(shared.started, isFalse);
 
     blocker.release();
@@ -81,7 +79,14 @@ void main() {
     expect(shared.started, isTrue);
 
     shared.release();
-    await Future.wait(<Future<ui.Codec>>[first, second]);
+    final firstCodec = await first;
+    await Future<void>.delayed(Duration.zero);
+    expect(independent.started, isTrue);
+    independent.release();
+    final secondCodec = await second;
+    expect(identical(firstCodec, secondCodec), isFalse);
+    firstCodec.dispose();
+    secondCodec.dispose();
   });
 
   test('failed decode releases its slot for the next request', () async {

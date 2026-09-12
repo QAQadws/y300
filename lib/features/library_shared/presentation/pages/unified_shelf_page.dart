@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -70,21 +72,15 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
       adapter: widget.adapter,
       viewPreferencesRepository: widget.viewPreferencesRepository,
       featureFlags: widget.featureFlags,
-      onStateChanged: _handleControllerStateChanged,
       backgroundReloadEnabled: widget.isActive,
     );
     _pageController = PageController();
     _selectionController = ShelfSelectionController()
       ..addListener(_handleSelectionStateChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _controller.initialize();
-      if (!mounted) {
-        return;
-      }
-      _pruneSelectionForCurrentCategory();
-      _syncSelectionHost();
-      setState(() {});
-    });
+    _controller.stateListenable.addListener(_handleControllerStateChanged);
+    // Local reads need no layout. Render the snapshot notification immediately,
+    // even when initialize() is still persisting the resolved category.
+    unawaited(_controller.initialize());
   }
 
   void _handleControllerStateChanged() {
@@ -132,6 +128,7 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     _selectionController
       ..removeListener(_handleSelectionStateChanged)
       ..dispose();
+    _controller.stateListenable.removeListener(_handleControllerStateChanged);
     _controller.dispose();
     _pageController.dispose();
     _searchController.dispose();

@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -15,6 +16,8 @@ import 'package:y300/features/composer_shared/data/local/composer_draft_local_db
 import 'package:y300/features/composer_shared/data/repositories/sqflite_composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_cache.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
@@ -93,6 +96,43 @@ void main() {
         20,
         100,
       ]);
+
+      final directory = await io.Directory.systemTemp.createTemp(
+        'cover-usage-test-',
+      );
+      final thumbnails = LibraryCoverThumbnailCache(
+        rootPath: () async => directory.path,
+      );
+      addTearDown(() async {
+        await thumbnails.dispose();
+        await directory.delete(recursive: true);
+      });
+      final key = LibraryCoverThumbnailKey(
+        asset: const LibraryCoverAssetRef(
+          assetId: 'fixture/source',
+          revision: 1,
+          kind: LibraryCoverAssetKind.source,
+        ),
+        width: 32,
+        height: 48,
+      );
+      await thumbnails.write(
+        key: key,
+        ticket: thumbnails.ticket(key),
+        bytes: Uint8List(16),
+      );
+      final withThumbnails = await ImageCacheStorageAccountingAdapter(
+        repository: repository,
+        thumbnails: thumbnails,
+      ).calculateUsage();
+      expect(withThumbnails.bytes, 176);
+      expect(withThumbnails.categories.first.bytes, 56);
+      expect(
+        withThumbnails.slices
+            .singleWhere((slice) => slice.id == 'cover_thumbnails')
+            .protected,
+        isFalse,
+      );
 
       await deleteDatabase(dbName);
     },

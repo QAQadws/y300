@@ -4,6 +4,10 @@ import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/media/device_memory_profile.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_decode_scheduler.dart';
+import 'package:y300/features/library_shared/data/providers/library_cover_thumbnail_providers.dart';
+import 'package:y300/features/library_shared/presentation/images/library_cover_thumbnail_writer.dart';
+
+export 'library_cover_thumbnail_providers.dart';
 
 final libraryCoverDirectoryResolverProvider =
     Provider<LibraryCoverDirectoryResolver>((ref) {
@@ -23,6 +27,7 @@ final libraryCoverStoreProvider = Provider<LibraryCoverStore>((ref) {
   return LocalLibraryCoverStore(
     rootPath: resolver.resolveRoot(),
     downloader: ref.watch(libraryCoverDownloaderProvider),
+    thumbnails: ref.watch(libraryCoverThumbnailCacheProvider),
   );
 });
 
@@ -33,4 +38,18 @@ final libraryCoverDecodeSchedulerProvider =
             ? 2
             : 3,
       );
+    });
+
+final libraryCoverThumbnailWriterProvider =
+    Provider<LibraryCoverThumbnailWriter>((ref) {
+      final writer = LibraryCoverThumbnailWriter(
+        cache: ref.watch(libraryCoverThumbnailCacheProvider),
+        scheduler: ref.watch(libraryCoverDecodeSchedulerProvider),
+        maxRetainedBytes:
+            DeviceMemoryProfileStore.current?.isLowRamDevice == true
+            ? 4 * 1024 * 1024
+            : 8 * 1024 * 1024,
+      );
+      ref.onDispose(writer.dispose);
+      return writer;
     });

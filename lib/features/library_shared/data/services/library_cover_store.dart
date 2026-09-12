@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_cache.dart';
 
 abstract interface class LibraryCoverStore {
   Future<io.File> ensureAvailable(LibraryCoverAssetRef asset);
@@ -94,11 +95,14 @@ class LocalLibraryCoverStore implements LibraryCoverStore {
   LocalLibraryCoverStore({
     required Future<String> rootPath,
     required LibraryCoverDownloader downloader,
+    LibraryCoverThumbnailCache? thumbnails,
   }) : _rootPath = rootPath,
-       _downloader = downloader;
+       _downloader = downloader,
+       _thumbnails = thumbnails;
 
   final Future<String> _rootPath;
   final LibraryCoverDownloader _downloader;
+  final LibraryCoverThumbnailCache? _thumbnails;
   final Map<String, Future<io.File>> _ensureTasks = <String, Future<io.File>>{};
 
   @override
@@ -181,10 +185,12 @@ class LocalLibraryCoverStore implements LibraryCoverStore {
       throw StateError('Cover source file does not exist: $sourcePath');
     }
     await _atomicCopy(source, await fileFor(asset));
+    await _invalidateThumbnails(asset.assetId);
   }
 
   @override
   Future<void> invalidate(LibraryCoverAssetRef asset) async {
+    await _invalidateThumbnails(asset.assetId);
     final file = await fileFor(asset);
     if (await file.exists()) {
       await file.delete();
@@ -197,6 +203,7 @@ class LocalLibraryCoverStore implements LibraryCoverStore {
 
   @override
   Future<void> deleteAsset(String assetId) async {
+    await _invalidateThumbnails(assetId);
     final root = await _rootPath;
     final digest = _digest(assetId);
     for (final kind in const <String>['source', 'custom']) {
@@ -216,6 +223,7 @@ class LocalLibraryCoverStore implements LibraryCoverStore {
 
   @override
   Future<void> deleteOlderRevisions(LibraryCoverAssetRef asset) async {
+    await _invalidateThumbnails(asset.assetId, retainRevision: asset.revision);
     final current = await fileFor(asset);
     final directory = current.parent;
     if (!await directory.exists()) {
@@ -283,6 +291,21 @@ class LocalLibraryCoverStore implements LibraryCoverStore {
 
   String _digest(String assetId) {
     return sha256.convert(utf8.encode(assetId)).toString();
+  }
+
+  Future<void> _invalidateThumbnails(
+    String assetId, {
+    int? retainRevision,
+  }) async {
+    try {
+      await _thumbnails?.invalidateAsset(
+        assetId,
+        retainRevision: retainRevision,
+      );
+    } catch (_) {
+      // Tickets are invalidated synchronously; failed derivative cleanup must
+      // not roll back an original-asset or database ownership transition.
+    }
   }
 }
 

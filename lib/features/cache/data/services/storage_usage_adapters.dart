@@ -13,6 +13,7 @@ import 'package:y300/features/history/data/local/history_local_db.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
+import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 
 class LibraryCoverStorageAccountingAdapter implements StorageAccountingAdapter {
   const LibraryCoverStorageAccountingAdapter({required LibraryCoverStore store})
@@ -53,9 +54,12 @@ class LibraryCoverStorageAccountingAdapter implements StorageAccountingAdapter {
 class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
   const ImageCacheStorageAccountingAdapter({
     required ImageCacheRepository repository,
-  }) : _repository = repository;
+    CacheBudgetParticipant? thumbnails,
+  }) : _repository = repository,
+       _thumbnails = thumbnails;
 
   final ImageCacheRepository _repository;
+  final CacheBudgetParticipant? _thumbnails;
 
   @override
   StorageBucket get bucket => StorageBucket.imageCache;
@@ -77,9 +81,29 @@ class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
           );
         })
         .where((slice) => slice.bytes > 0)
-        .toList(growable: false);
+        .toList();
+    var thumbnailBytes = 0;
+    try {
+      thumbnailBytes = (await _thumbnails?.loadUsage())?.clearableBytes ?? 0;
+    } catch (_) {
+      // An unavailable temporary directory must not hide other storage usage.
+      // Budget/clear reports retain their own failed-participant diagnostics.
+    }
+    if (thumbnailBytes > 0) {
+      slices.add(
+        StorageUsageSlice(
+          id: 'cover_thumbnails',
+          labelRef: const StorageUsageLabelRef(
+            kind: StorageUsageLabelKind.bucket,
+            code: 'image_cache',
+          ),
+          bytes: thumbnailBytes,
+          protected: false,
+        ),
+      );
+    }
     final total = slices.fold<int>(0, (sum, slice) => sum + slice.bytes);
-    final categories = _imageCategories(groups);
+    final categories = _imageCategories(groups, thumbnailBytes: thumbnailBytes);
     return StorageUsageSection(
       bucket: bucket,
       labelRef: StorageUsageLabelRef(
@@ -94,9 +118,10 @@ class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
   }
 
   List<StorageUsageCategory> _imageCategories(
-    List<ImageCacheUsageGroup> groups,
-  ) {
-    var clearable = 0;
+    List<ImageCacheUsageGroup> groups, {
+    int thumbnailBytes = 0,
+  }) {
+    var clearable = thumbnailBytes;
     var sticky = 0;
     var protectedAssets = 0;
     for (final group in groups) {
