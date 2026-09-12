@@ -7,6 +7,12 @@ typedef BlogActionRead =
       DataCapabilitySet<UserBlogAction>
     >;
 
+typedef BlogEditorRead =
+    DataReadResult<
+      UserBlogEditorPreparation,
+      DataCapabilitySet<UserBlogAction>
+    >;
+
 UserBlogTarget blogActionTarget(UserBlogAction action) => UserBlogTarget(
   actorUserId: '101',
   ownerUserId: '101',
@@ -17,6 +23,23 @@ UserBlogTarget blogActionTarget(UserBlogAction action) => UserBlogTarget(
 final class BlogOperationFixture implements UserBlogOperations {
   BlogOperationFixture({this.autoPrepare = false});
   final bool autoPrepare;
+  UserBlogEditorPreparation Function(UserBlogTarget) editorForm =
+      blogEditorPreparation;
+  final editorPreparations =
+      <
+        ({
+          UserBlogTarget target,
+          ForumRequestCancellation? cancellation,
+          Completer<BlogEditorRead> result,
+        })
+      >[];
+  final editorSubmissions =
+      <
+        ({
+          UserBlogEditorSubmission input,
+          Completer<DataCommandResult<UserBlogReceipt>> result,
+        })
+      >[];
   final preparations =
       <
         ({
@@ -101,13 +124,96 @@ final class BlogOperationFixture implements UserBlogOperations {
   prepareEditor(
     UserBlogTarget target, {
     ForumRequestCancellation? cancellation,
-  }) => throw StateError('Unexpected editor request');
+  }) {
+    final result = Completer<BlogEditorRead>();
+    editorPreparations.add((
+      target: target,
+      cancellation: cancellation,
+      result: result,
+    ));
+    if (autoPrepare) preparedEditor();
+    return result.future;
+  }
+
+  void preparedEditor({
+    UserBlogEditorPreparation? form,
+    bool supported = true,
+  }) {
+    final request = editorPreparations.last;
+    request.result.complete(
+      DataReadSuccess(
+        data: form ?? editorForm(request.target),
+        capabilities: DataCapabilitySet.supported(
+          supported ? [request.target.action] : [],
+        ),
+        metadata: const DataReadMetadata.network(),
+      ),
+    );
+  }
 
   @override
   Future<DataCommandResult<UserBlogReceipt>> save(
     UserBlogEditorSubmission submission,
-  ) => throw StateError('Unexpected editor submission');
+  ) {
+    final result = Completer<DataCommandResult<UserBlogReceipt>>();
+    editorSubmissions.add((input: submission, result: result));
+    return result.future;
+  }
+
+  void saved({UserBlogTarget? target, String? blogId}) {
+    final request = editorSubmissions.last;
+    request.result.complete(
+      DataCommandApplied(
+        UserBlogReceipt(
+          target: target ?? request.input.preparation.target,
+          blogId: blogId ?? request.input.preparation.target.blogId ?? '12',
+        ),
+      ),
+    );
+  }
 }
+
+UserBlogEditorPreparation blogEditorPreparation(
+  UserBlogTarget target, {
+  String? subject,
+  String? bodyHtml,
+  String tags = 'original tag',
+  List<UserBlogCategory> siteCategories = const [
+    UserBlogCategory(id: '0', name: 'None'),
+    UserBlogCategory(id: '8', name: 'Stories'),
+  ],
+  List<UserBlogCategory> personalCategories = const [
+    UserBlogCategory(id: '0', name: 'None'),
+    UserBlogCategory(id: '9', name: 'Travel'),
+  ],
+  bool siteCategoryRequired = false,
+  bool canCreateCategory = true,
+  bool canPublishFeed = true,
+  UserBlogVisibility visibility = UserBlogVisibility.public,
+  bool commentsEnabled = true,
+}) => UserBlogEditorPreparation(
+  target: target,
+  token: _Token(),
+  subject:
+      subject ??
+      (target.action == UserBlogAction.create ? '' : 'Original title'),
+  bodyHtml:
+      bodyHtml ??
+      (target.action == UserBlogAction.create
+          ? ''
+          : '<p class="original">原文 &amp; text</p>'),
+  tags: tags,
+  siteCategories: siteCategories,
+  personalCategories: personalCategories,
+  siteCategoryId: '0',
+  personalCategoryId: '0',
+  siteCategoryRequired: siteCategoryRequired,
+  canCreateCategory: canCreateCategory,
+  canPublishFeed: canPublishFeed,
+  publishFeed: false,
+  visibility: visibility,
+  commentsEnabled: commentsEnabled,
+);
 
 final class _Token implements UserBlogOperationToken {}
 
