@@ -7,6 +7,8 @@ final class DiscuzBlogCommandResponse {
     required this.applied,
     this.redirect,
     this.commentId,
+    this.favoriteId,
+    this.itemId,
   });
 
   /// Whether the server called the success handler.
@@ -17,6 +19,12 @@ final class DiscuzBlogCommandResponse {
 
   /// Comment identity supplied in the callback values.
   final String? commentId;
+
+  /// Bookmark identity, independently validated by the favorite adapter.
+  final String? favoriteId;
+
+  /// Target item identity supplied by the bookmark callback.
+  final String? itemId;
 
   /// Accepts one actual callback invocation with literal arguments.
   /// Strings, handler declarations, unrelated scripts, and mixed results are
@@ -61,6 +69,8 @@ final class DiscuzBlogCommandResponse {
             applied: success,
             redirect: success ? first : null,
             commentId: values['cid'],
+            favoriteId: values['favid'],
+            itemId: values['id'],
           ),
         );
       } on FormatException {

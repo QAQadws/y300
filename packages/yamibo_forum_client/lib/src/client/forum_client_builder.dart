@@ -171,6 +171,7 @@ final class YamiboForumClientBuilder {
       userBlogDetail: factory.createUserBlogDetail(),
       blogComments: factory.createUserBlogComments(),
       blogOperations: factory.createUserBlogOperations(),
+      blogFavorites: factory.createUserBlogFavorites(),
       blogNavigation: factory.createUserBlogNavigation(),
       forumSearch: factory.createForumSearch(formhash),
       comicEpisodeCatalog: factory.createApiComicEpisodeCatalog(),

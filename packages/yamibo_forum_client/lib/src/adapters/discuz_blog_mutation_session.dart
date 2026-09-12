@@ -49,6 +49,8 @@ final class DiscuzBlogMutationSession {
       uri.userInfo.isEmpty;
 
   /// Reads a form and verifies both local and server-reported actor identity.
+  /// A caller handling business notices must verify its own result; login and
+  /// privacy gates still fail closed. Identity lookups can reject redirects.
   Future<DataReadResult<String, Object?>> read(
     Uri uri, {
     required String actor,
@@ -56,6 +58,8 @@ final class DiscuzBlogMutationSession {
     required String operation,
     ForumRequestProfileKind profile = ForumRequestProfileKind.mobileHtml,
     ForumRequestCancellation? cancellation,
+    bool allowBusinessNotice = false,
+    bool requireExactUri = false,
   }) async {
     if ((cancellation?.isCancelled ?? false) || !currentActor(actor)) {
       return _readFailure(
@@ -99,13 +103,17 @@ final class DiscuzBlogMutationSession {
     final response =
         (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
     if (response.statusCode != 200 ||
+        (requireExactUri && response.uri != uri) ||
         !sameSite(response.uri) ||
         response.body is! String) {
       return _readFailure('blog_response_invalid');
     }
     final source = response.body as String;
     final access = DiscuzBlogAccess.failure<String, Object?>(source);
-    if (access != null) return access;
+    if (access != null &&
+        !(allowBusinessNotice && access.code == 'user_blog_unavailable')) {
+      return access;
+    }
     // Normal mobile and desktop GETs expose this identity in header.htm.
     final actors = html
         .parse(source)

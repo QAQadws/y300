@@ -30,6 +30,7 @@ export 'src/contracts/forum_tag_directory.dart';
 export 'src/contracts/profile_and_blog.dart';
 export 'src/contracts/user_blog_comments.dart';
 export 'src/contracts/user_blog_operations.dart';
+export 'src/contracts/user_blog_favorites.dart';
 export 'src/contracts/user_blog_navigation.dart';
 export 'src/contracts/message_directories.dart';
 export 'src/contracts/sticker_catalog.dart';

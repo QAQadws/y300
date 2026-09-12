@@ -71,6 +71,7 @@ void main() {
         sources.userBlogDetail,
         sources.blogComments,
         sources.blogOperations,
+        sources.blogFavorites,
         sources.blogNavigation,
         sources.forumSearch,
         sources.comicEpisodeCatalog,

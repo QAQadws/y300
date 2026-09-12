@@ -16,6 +16,7 @@ import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_operations.dart';
+import '../contracts/user_blog_favorites.dart';
 import '../contracts/user_blog_navigation.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/sticker_catalog.dart';
@@ -178,6 +179,9 @@ final class YamiboForumClient {
 
   /// Account-bound journal publishing, editing, and management.
   UserBlogOperations? get blogOperations => sourcePlan.blogOperations;
+
+  /// Prepared personal blog bookmarks, without shelf ingestion or content writes.
+  UserBlogFavoriteService? get blogFavorites => sourcePlan.blogFavorites;
 
   /// Source-owned browser destinations for complete forms and access gates.
   UserBlogNavigation? get blogNavigation => sourcePlan.blogNavigation;

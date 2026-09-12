@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html;
 
@@ -8,6 +6,7 @@ import '../contracts/user_blog_operations.dart';
 
 /// Parses the complete editor, because the touch editor omits access fields.
 final class DiscuzBlogEditorForm {
+  /// Keeps complete source fields inside the adapter's transient form ticket.
   DiscuzBlogEditorForm({
     required this.actionUri,
     required this.fields,
@@ -17,14 +16,29 @@ final class DiscuzBlogEditorForm {
     required this.canCreateCategory,
     required this.canPublishFeed,
   });
+
+  /// Verified endpoint matching the requested edit or publishing operation.
   final Uri actionUri;
+
+  /// Complete source values, including access fields; never expose or persist.
   final Map<String, String> fields;
+
+  /// Advertised site categories with normalized source identifiers.
   final List<UserBlogCategory> siteCategories;
+
+  /// Author-owned category choices, separate from the create-category option.
   final List<UserBlogCategory> personalCategories;
+
+  /// Whether the source omits the optional site-category choice.
   final bool siteCategoryRequired;
+
+  /// Whether the form explicitly permits a new personal category.
   final bool canCreateCategory;
+
+  /// Whether the form exposes a feed-publication control.
   final bool canPublishFeed;
 
+  /// Exposes editable content and a privacy summary while retaining access fields.
   UserBlogEditorPreparation preparation(
     UserBlogTarget target,
     UserBlogOperationToken token,
@@ -46,6 +60,7 @@ final class DiscuzBlogEditorForm {
     commentsEnabled: fields['noreply'] != '1',
   );
 
+  /// Validates the complete editor instead of defaulting missing privacy inputs.
   static DiscuzBlogEditorForm parse(
     String source, {
     required Uri siteOrigin,
@@ -190,6 +205,7 @@ final class DiscuzBlogEditorForm {
   }
 }
 
+/// Resolves the form endpoint and verifies its operation and article identity.
 Uri blogFormAction(
   Element form, {
   required Uri siteOrigin,
@@ -224,11 +240,14 @@ Uri blogFormAction(
   return uri;
 }
 
+/// Compares the exact source authority without accepting credentialed URLs.
 bool sameBlogSite(Uri uri, Uri origin) =>
     uri.scheme == origin.scheme &&
     uri.host == origin.host &&
     uri.port == origin.port &&
     uri.userInfo.isEmpty;
+
+/// Reads an unambiguous source selection, including the first-option default.
 String selectedBlogOption(Element select) {
   if (select.attributes.containsKey('multiple')) {
     throw const FormatException('blog_form_multiselect_unsupported');
@@ -245,6 +264,7 @@ String selectedBlogOption(Element select) {
       '';
 }
 
+/// Extracts category choices while rejecting conflicting duplicate identities.
 List<UserBlogCategory> blogCategoryOptions(Element? select) {
   if (select == null) return const [];
   final values = <String, UserBlogCategory>{};
