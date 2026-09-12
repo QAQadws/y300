@@ -16,12 +16,21 @@ final class BlogContentSource {
        html = List.unmodifiable(html);
 
   factory BlogContentSource.summary(UserBlogSummary item) => BlogContentSource(
-    text: [item.title, ?item.excerpt, ?item.publishedAtText],
+    text: [
+      item.title,
+      ?item.excerpt,
+      ?item.publishedAtText,
+      ...item.categoryNames,
+    ],
   );
 
   factory BlogContentSource.article(UserBlogDetailData article) =>
       BlogContentSource(
-        text: [article.title, ?article.publishedAtText],
+        text: [
+          article.title,
+          ?article.publishedAtText,
+          for (final link in article.categoryLinks) link.name,
+        ],
         html: [article.bodyHtml],
       );
 

@@ -777,6 +777,15 @@ class _ProfileBlogListCard extends ConsumerWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
+              if (item.categoryNames.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  item.categoryNames.map(display.text).join(' · '),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: palette.muted),
+                ),
+              ],
               if (capabilities?.supports(UserBlogDirectoryCapability.excerpt) ==
                       true &&
                   item.excerpt != null) ...[
@@ -1077,6 +1086,38 @@ class _BlogDetailCard extends ConsumerWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
+          if (data.categoryLinks.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              key: const Key('blog-detail-categories'),
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final category in data.categoryLinks)
+                  TextButton.icon(
+                    key: ValueKey(category.query),
+                    style: TextButton.styleFrom(
+                      foregroundColor: palette.accent,
+                      minimumSize: const Size(48, 48),
+                    ),
+                    icon: const Icon(Icons.folder_outlined, size: 18),
+                    label: Text(display.text(category.name)),
+                    onPressed: () {
+                      if (!context.mounted ||
+                          ModalRoute.of(context)?.isCurrent == false) {
+                        return;
+                      }
+                      Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ProfileBlogPage.fromQuery(category.query),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [

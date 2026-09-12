@@ -8,6 +8,7 @@ final class BlogDetailFixture implements UserBlogDetailRepository {
   String? title;
   String authorName = 'fixture author';
   String? publishedAtText;
+  List<UserBlogCategoryLink> categoryLinks = const [];
   bool emptyComments = false;
   @override
   final capabilities = UserBlogDetailSourceCapabilities(
@@ -31,6 +32,7 @@ final class BlogDetailFixture implements UserBlogDetailRepository {
         bodyHtml: bodyHtml,
         authorName: authorName,
         publishedAtText: publishedAtText,
+        categoryLinks: categoryLinks,
         commentsOpen: true,
         commentPagination: UserBlogPagination(
           currentPage: page,

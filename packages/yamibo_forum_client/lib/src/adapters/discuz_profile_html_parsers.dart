@@ -7,6 +7,7 @@ import '../contracts/data_read_contract.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_comments.dart';
 import '../url/forum_uri_resolver.dart';
+import 'discuz_blog_heading_parser.dart';
 import 'discuz_blog_pagination.dart';
 
 abstract final class DiscuzProfileAuthPageDetector {
@@ -258,7 +259,9 @@ final class UserBlogDirectoryHtmlParser {
     );
     final blogId = uri?.queryParameters['id']?.trim() ?? '';
     final ownerId = uri?.queryParameters['uid']?.trim() ?? '';
-    final title = _clean(row.querySelector('.threadlist_tit')?.text ?? '');
+    final (title, categoryNames) = DiscuzBlogHeadingParser(
+      siteOrigin,
+    ).summary(row.querySelector('.threadlist_tit'));
     if (!RegExp(r'^[1-9]\d*$').hasMatch(blogId) ||
         !RegExp(r'^[1-9]\d*$').hasMatch(ownerId) ||
         title.isEmpty) {
@@ -273,6 +276,7 @@ final class UserBlogDirectoryHtmlParser {
       blogId: blogId,
       ownerUserId: ownerId,
       title: title,
+      categoryNames: categoryNames,
       authorName: _optionalText(author?.text),
       excerpt: _optionalText(row.querySelector('.threadlist_mes')?.text),
       avatarUrl: _optionalUri(
@@ -390,7 +394,10 @@ final class UserBlogDetailHtmlParser {
     if (root == null || post == null || message == null) {
       throw const FormatException('blog_detail_root_missing');
     }
-    final title = _clean(root.querySelector('.view_tit')?.text ?? '');
+    final (title, categoryLinks) = DiscuzBlogHeadingParser(siteOrigin).article(
+      root.querySelector('.view_tit'),
+      ownerUserId: query.ownerUserId.trim(),
+    );
     final body = message.innerHtml.trim();
     if (title.isEmpty || body.isEmpty) {
       throw const FormatException('blog_detail_content_missing');
@@ -451,6 +458,7 @@ final class UserBlogDetailHtmlParser {
       ownerUserId: ownerId,
       title: title,
       bodyHtml: body,
+      categoryLinks: categoryLinks,
       authorName: _optionalText(author?.text),
       avatarUrl: _optionalUri(
         resolver,

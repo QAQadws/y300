@@ -32,6 +32,75 @@ import '../test_support/profile_repository_fixture.dart';
 void main() {
   for (final query in [
     const UserBlogDirectoryQuery.public(
+      categoryId: '7',
+      order: UserBlogOrder.recommended,
+      page: 3,
+    ),
+    const UserBlogDirectoryQuery.self(
+      ownerUserId: '202',
+      personalCategoryId: '8',
+    ),
+  ]) {
+    testWidgets(
+      'article category opens the exact ${query.scope} feed on demand',
+      (tester) async {
+        final host = _Host();
+        host.details.categoryLinks = [
+          UserBlogCategoryLink(name: 'Category fixture', query: query),
+        ];
+        await host.pump(
+          tester,
+          const ProfileBlogDetailPage(ownerUserId: '202', blogId: '12'),
+        );
+        expect(host.directory.queries, isEmpty);
+        final category = find.byKey(ValueKey(query));
+        expect(tester.getSize(category).height, greaterThanOrEqualTo(48));
+        expect(tester.getSize(category).width, greaterThanOrEqualTo(48));
+        final button = tester.widget<TextButton>(category);
+        button.onPressed!();
+        button.onPressed!();
+        await tester.pumpAndSettle();
+        expect(host.directory.queries.single, query);
+        expect(host.webLaunches, isEmpty);
+        expect(host.external.uris, isEmpty);
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+        expect(category, findsOneWidget);
+        expect(host.details.queries, hasLength(1));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('long category names wrap on narrow screens with large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final host = _Host();
+    const query = UserBlogDirectoryQuery.public(categoryId: '7');
+    host.details.categoryLinks = [
+      UserBlogCategoryLink(name: 'Long category name ' * 6, query: query),
+    ];
+    await host.pump(
+      tester,
+      const MediaQuery(
+        data: MediaQueryData(textScaler: TextScaler.linear(2)),
+        child: ProfileBlogDetailPage(ownerUserId: '202', blogId: '12'),
+      ),
+    );
+    final button = find.byKey(const ValueKey(query));
+    expect(tester.getSize(button).width, lessThanOrEqualTo(260));
+    expect(tester.getSize(button).height, greaterThan(48));
+    expect(tester.takeException(), isNull);
+    expect(host.directory.queries, isEmpty);
+  });
+
+  for (final query in [
+    const UserBlogDirectoryQuery.public(
       page: 3,
       categoryId: '7',
       order: UserBlogOrder.recommended,

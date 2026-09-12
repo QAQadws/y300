@@ -438,6 +438,18 @@ final class UserBlogCategory {
   final String name;
 }
 
+/// A category advertised by an article, with its exact reading destination.
+final class UserBlogCategoryLink {
+  /// Creates a link without deriving category identity from its display name.
+  const UserBlogCategoryLink({required this.name, required this.query});
+
+  /// Server-authored display name.
+  final String name;
+
+  /// Complete site or author category query resolved by the source.
+  final UserBlogDirectoryQuery query;
+}
+
 /// Source-neutral user blog summary.
 final class UserBlogSummary {
   /// Creates a [UserBlogSummary].
@@ -450,6 +462,7 @@ final class UserBlogSummary {
     this.avatarUrl,
     this.publishedAtText,
     this.actions = const {},
+    this.categoryNames = const [],
   });
 
   /// Blog id.
@@ -475,6 +488,9 @@ final class UserBlogSummary {
 
   /// Operations explicitly advertised in the current feed response.
   final Set<UserBlogAction> actions;
+
+  /// Display-only labels from the list; they do not prove category identities.
+  final List<String> categoryNames;
 }
 
 /// Source-neutral user blog pagination.
@@ -660,6 +676,7 @@ final class UserBlogDetailData {
     this.commentsOpen,
     this.commentPagination = const UserBlogPagination(currentPage: 1),
     this.actions = const {},
+    this.categoryLinks = const [],
   });
 
   /// Blog id.
@@ -700,6 +717,9 @@ final class UserBlogDetailData {
 
   /// Operations explicitly advertised on this article.
   final Set<UserBlogAction> actions;
+
+  /// Validated category links, separate from the article title.
+  final List<UserBlogCategoryLink> categoryLinks;
 }
 
 /// Source-neutral user blog comment.

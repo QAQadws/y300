@@ -63,6 +63,7 @@ void main() {
         title: '标题',
         excerpt: '摘要',
         authorName: '作者',
+        categoryNames: ['文章分类'],
       );
       final converter = BlogTextConverterFixture();
       final display = await projector().project(
@@ -72,6 +73,7 @@ void main() {
       expect(display.text(summary.title), '標題');
       expect(display.text(summary.excerpt!), '摘錄');
       expect(display.text(summary.authorName!), '作者');
+      expect(display.text(summary.categoryNames.single), '文章分類');
       const comment = UserBlogComment(
         commentId: '5',
         authorName: '作者',

@@ -57,6 +57,7 @@ String blogPager({required String context, int page = 1, int pages = 1}) =>
 ''';
 
 String blogArticle({
+  String heading = 'Article title',
   int page = 1,
   int pages = 1,
   bool commentsOpen = true,
@@ -66,7 +67,7 @@ String blogArticle({
 }) =>
     '''
 <div class="viewthread">
-  <div class="view_tit">Article title</div>
+  <div class="view_tit">$heading</div>
   <div class="plc">
     <div class="avatar"><img src="/owner.png"></div>
     <ul class="authi"><li class="mtit"><a href="home.php?mod=space&uid=101">Author</a></li>

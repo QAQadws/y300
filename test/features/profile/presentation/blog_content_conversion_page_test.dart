@@ -99,11 +99,17 @@ void main() {
     (tester) async {
       final gate = Completer<void>();
       final host = _Host(BlogTextConverterFixture(gate: gate));
+      const category = UserBlogCategoryLink(
+        name: '文章分类',
+        query: UserBlogDirectoryQuery.public(categoryId: '8'),
+      );
+      host.details.categoryLinks = const [category];
       await host.pump(
         tester,
         const ProfileBlogDetailPage(ownerUserId: '101', blogId: '11'),
       );
       expect(find.text('标题'), findsNWidgets(2));
+      expect(find.text('文章分类'), findsOneWidget);
       expect(_html(tester), contains('<p>正文</p>'));
       expect(
         find.descendant(
@@ -116,6 +122,8 @@ void main() {
       gate.complete();
       await tester.pumpAndSettle();
       expect(find.text('標題'), findsNWidgets(2));
+      expect(find.text('文章分類'), findsOneWidget);
+      expect(find.byKey(ValueKey(category.query)), findsOneWidget);
       expect(_html(tester), contains('<p>內文</p>'));
       expect(_html(tester), contains('<p>評論</p>'));
       expect(find.textContaining('作者 · 1 分鐘前'), findsOneWidget);
@@ -132,6 +140,7 @@ void main() {
       await tester.tap(find.text(l10n.profileBlogMoreComments));
       await tester.pumpAndSettle();
       expect(host.details.queries, hasLength(2));
+      expect(find.byKey(ValueKey(category.query)), findsOneWidget);
       expect(_html(tester), contains('<p>內文</p>'));
       expect(host.converter.inputs, hasLength(calls));
       await host.container

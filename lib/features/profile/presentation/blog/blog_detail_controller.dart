@@ -242,6 +242,7 @@ UserBlogDetailData _append(
   blogId: previous.blogId,
   ownerUserId: previous.ownerUserId,
   title: previous.title,
+  categoryLinks: previous.categoryLinks,
   bodyHtml: previous.bodyHtml,
   authorName: previous.authorName,
   avatarUrl: previous.avatarUrl,
