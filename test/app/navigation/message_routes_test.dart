@@ -174,6 +174,16 @@ void main() {
       takeDestination();
       expect(web.single.initialUri.queryParameters['do'], 'blog');
       expect(web.single.popOnRootBack, isTrue);
+      for (final link in [
+        'home.php?mod=space&do=pm&subop=setting',
+        'home.php?mod=space&do=pm&filter=announcepm',
+        'home.php?mod=space&do=notice&ignore=all',
+        'home.php?mod=spacecp&ac=pm&op=delete',
+      ]) {
+        await open(tester, link);
+        takeDestination();
+        expect(web.last.initialUri.query, Uri.parse(link).query);
+      }
       await open(tester, 'https://example.org/read');
       expect(launcher.opened, [Uri.parse('https://example.org/read')]);
       await open(tester, 'javascript:alert(1)');

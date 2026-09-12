@@ -69,10 +69,14 @@ void main() {
       expect(repository.notificationReads, isEmpty);
       await selectTab(tester, MessageCenterTab.notifications);
       repository.notificationReads.single.result.complete(
-        notificationTestPage([notificationTestItem('1')]),
+        notificationTestPage([notificationTestItem('1', duplicateCount: 3)]),
       );
       await tester.pumpAndSettle();
       expect(find.byType(ForumHtmlContentView), findsOneWidget);
+      expect(
+        find.text(l10n(tester).messageRepeatedNotifications(3)),
+        findsOneWidget,
+      );
       repository.reads.single.result.complete(
         const DataReadFailure(
           kind: DataReadFailureKind.timeout,
@@ -131,7 +135,8 @@ void main() {
       expect(find.byType(PrivateConversationPage), findsOneWidget);
       expect(repository.reads, hasLength(2));
       await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(repository.reads, hasLength(3));
       expect(repository.reads.last.query.target, isNull);
       repository.reads.last.result.complete(
@@ -194,13 +199,56 @@ void main() {
       await tester.tap(find.byKey(const Key('message-send')));
       await tester.pump();
       repository.sends.single.succeed();
-      await tester.pumpAndSettle();
-      expect(find.byType(NewPrivateMessagePage), findsNothing);
+      await tester.pump();
+      // Sending schedules the pop after the editor rebuilds its PopScope.
+      // Start that reverse route animation before advancing its duration.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(repository.reads, hasLength(2));
       repository.reads.last.result.complete(
         messageTestPage([messageTestItem('100', sender: '10')]),
       );
       await tester.pumpAndSettle();
+      expect(find.byType(NewPrivateMessagePage), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'group directory item opens its conversation ID rather than its author',
+    (tester) async {
+      await pumpCenter(tester);
+      repository.reads.single.result.complete(
+        messageTestPage([
+          const ForumPrivateMessageItem(
+            messageId: '80',
+            conversationId: '91',
+            isNew: true,
+            subject: 'Reading group',
+            fromUserId: '20',
+            fromUserName: 'Alice',
+            toUserId: '0',
+            toUserName: '',
+            message: 'Latest discussion',
+            sentAt: null,
+            rawDateline: '',
+            isGroupConversation: true,
+            participantCount: 3,
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reading group'));
+      await tester.pump();
+      expect(
+        repository.reads.last.query.target,
+        const ForumConversationTarget.group('91'),
+      );
+      repository.reads.last.result.complete(
+        messageTestPage([messageTestItem('80')], anchor: '80'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(PrivateConversationPage), findsOneWidget);
+      expect(find.text('Reading group'), findsOneWidget);
     },
   );
 

@@ -49,6 +49,12 @@ class MessageFeedList<P> extends StatelessWidget {
             key: listKey,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              if (state.operation == MessageFeedOperation.refresh)
+                SliverToBoxAdapter(
+                  child: LinearProgressIndicator(
+                    value: MediaQuery.disableAnimationsOf(context) ? 0.5 : null,
+                  ),
+                ),
               if (count == 0)
                 SliverFillRemaining(
                   hasScrollBody: false,

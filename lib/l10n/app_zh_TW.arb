@@ -46,6 +46,12 @@
   "messageIgnoreUnknown": "暫時無法確認屏蔽設定是否已生效，未自動重試。",
   "messageIgnoreSaving": "正在儲存…",
   "messageNoPreview": "開啟對話查看訊息",
+  "messageRepeatedNotifications": "另有 {count} 則相同提醒未重複顯示",
+  "@messageRepeatedNotifications": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
   "commonCancel": "取消",
   "commonConfirm": "確定",
   "commonClose": "關閉",

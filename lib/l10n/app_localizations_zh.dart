@@ -146,6 +146,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageNoPreview => '打开对话查看消息';
 
   @override
+  String messageRepeatedNotifications(int count) {
+    return '另有 $count 条相同提醒未重复展示';
+  }
+
+  @override
   String get commonCancel => '取消';
 
   @override
@@ -4649,6 +4654,11 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get messageNoPreview => '開啟對話查看訊息';
+
+  @override
+  String messageRepeatedNotifications(int count) {
+    return '另有 $count 則相同提醒未重複顯示';
+  }
 
   @override
   String get commonCancel => '取消';

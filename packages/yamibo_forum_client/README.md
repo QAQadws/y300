@@ -289,7 +289,8 @@ session/logout handling, forum/thread favorite target-state commands,
 post-rating/comment, thread-creation/reply, thread poll voting, thread editing, and
 image-attachment preparation and commands, the forum home document, forum/thread directories
 and details, Tag, search, remote favorite directories, profiles/blogs,
-notifications, private messages, stickers, full rating details, post location,
+notifications, private-message directories and conversations, private-message
+sending, notification author/type filters, stickers, full rating details, post location,
 author-filtered post pages, comic episode discovery, reply-page reads, and
 protected image transport. Login UI and remaining write operations—including
 complex post-edit WebView fallback—remain application-owned.
@@ -303,7 +304,18 @@ forum protocol operations still live in Y300 and are not part of the package:
   post-edit forms that require WebView fallback;
 - non-image file attachments, attachment descriptions/read permissions/prices,
   attachment replacement, and batch deletion;
-- notification state mutations and private-message sending.
+- private-message deletion, group creation/member management, and notification
+  deletion or a separate mark-read command. Reading messages or notifications
+  can itself update read state on the source.
+
+`privateMessages` accepts directory pages or a direct/group conversation target.
+A conversation page of zero opens the latest page; older history counts down.
+`sendPrivateMessage` accepts a single user ID, a username, or an existing group
+with its reply anchor. `ignoreNotifications` filters future notifications by
+type and author (or all authors), without deleting existing rows. These commands
+use the shared formhash/transport boundary and return structured outcomes; an
+unknown result must never be automatically resubmitted. Reads are not stored in
+the document/snapshot cache. See the message contract Dartdoc for all fields.
 
 The following responsibilities are intentionally application-owned even when
 their network references are produced by the package:

@@ -88,12 +88,14 @@ ForumNotificationItem notificationTestItem(
   String id, {
   String authorId = '20',
   String? markup,
+  int duplicateCount = 0,
 }) => ForumNotificationItem(
   id: id,
   type: 'post',
   isNew: true,
   authorId: authorId,
   authorName: authorId == '0' ? '' : 'Alice',
+  duplicateCount: duplicateCount,
   noteMarkup:
       markup ??
       '<p><a href="forum.php?mod=viewthread&amp;tid=42">Reply $id</a></p>',

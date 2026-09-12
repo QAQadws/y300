@@ -356,6 +356,14 @@ class _NotificationRow extends ConsumerWidget {
               foregroundColor: palette.body,
               onOpenLink: (url) => onOpenLink(context, url),
             ),
+            if (item.duplicateCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  l10n.messageRepeatedNotifications(item.duplicateCount),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
             if (item.occurredAt != null || item.rawDateline.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),

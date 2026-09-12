@@ -94,6 +94,9 @@ final class DiscuzForumNotificationRepository
       authorId: LooseJson.string(item['authorid']).trim(),
       authorName: LooseJson.string(item['author']).trim(),
       noteMarkup: LooseJson.string(item['note']),
+      // space_notice has already subtracted the visible notification from
+      // from_num. Preserve that additional count without subtracting again.
+      duplicateCount: LooseJson.integer(item['from_num']).clamp(0, 0x7fffffff),
       occurredAt: seconds != null && seconds > 0
           ? DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true)
           : null,

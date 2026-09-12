@@ -117,8 +117,13 @@ final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
         case YamiboForumLinkKind.managedWebView:
           if (uri.path == '/home.php' &&
               query['mod'] == 'space' &&
-              (query['do'] == 'notice' ||
-                  (query['do'] == 'pm' && query['subop'] != 'view'))) {
+              ((query['do'] == 'notice' &&
+                      !query.containsKey('ignore') &&
+                      (query['view'] == null || query['view'] == 'all')) ||
+                  (query['do'] == 'pm' &&
+                      (query['subop'] == null || query['subop'] == '') &&
+                      (query['filter'] == null ||
+                          query['filter'] == 'privatepm')))) {
             page = MessageCenterDestination(
               initialTab: query['do'] == 'notice'
                   ? MessageCenterTab.notifications
@@ -140,7 +145,8 @@ final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
             }
           } else if (uri.path == '/home.php' &&
               query['mod'] == 'spacecp' &&
-              query['ac'] == 'pm') {
+              query['ac'] == 'pm' &&
+              (query['op'] == null || query['op'] == '')) {
             final id = query['touid'];
             page = _positiveId(id)
                 ? PrivateConversationPage(

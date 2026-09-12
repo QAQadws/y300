@@ -284,6 +284,46 @@ void main() {
     expect(controller.value.failure?.kind, DataReadFailureKind.unauthorized);
   });
 
+  test(
+    'refresh across an unseen page resets the window before traversing history',
+    () async {
+      final controller = container
+          .listen(
+            privateMessageFeedProvider(
+              const ForumConversationTarget.direct('20'),
+            ),
+            (_, _) {},
+          )
+          .read();
+      final first = controller.refresh();
+      repository.messageReads.last.result.complete(
+        _messages(['5', '6'], page: 3, count: 6),
+      );
+      await first;
+      final refresh = controller.refresh();
+      repository.messageReads.last.result.complete(
+        _messages(['9', '10'], page: 5, count: 10),
+      );
+      await refresh;
+      expect(controller.value.data!.items.map((item) => item.messageId), [
+        '9',
+        '10',
+      ]);
+      final older = controller.loadMore();
+      expect(repository.messageReads.last.query.page, 4);
+      repository.messageReads.last.result.complete(
+        _messages(['7', '8'], page: 4, count: 10),
+      );
+      await older;
+      expect(controller.value.data!.items.map((item) => item.messageId), [
+        '7',
+        '8',
+        '9',
+        '10',
+      ]);
+    },
+  );
+
   test('signed-out feeds do not access private endpoints', () async {
     container.updateOverrides([
       messageRepositoryProvider.overrideWithValue(repository),

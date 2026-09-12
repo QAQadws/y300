@@ -176,7 +176,11 @@ ForumPrivateMessagePage _refreshConversation(
 ) {
   if (next.count < current.count ||
       next.perPage != current.perPage ||
-      next.perPage < 1) {
+      next.perPage < 1 ||
+      next.count - current.count > next.items.length) {
+    // A whole unseen page between retained history and the newest window
+    // cannot be represented as contiguous history. Restart at the latest page
+    // so subsequent older reads traverse the gap in source order.
     return next;
   }
   final pageDelta =

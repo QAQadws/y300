@@ -8,7 +8,12 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
-- Reserved for changes made after `0.10.0`.
+- Paginated private-message directories and direct/group conversations with
+  cancellation, precise timestamps, reply anchors and stable target identity.
+- Verified private-message sending by user ID, username, or an existing group,
+  plus notification filtering by author/type with structured command outcomes.
+- Paginated notification reads with actionable markup and the source's count
+  of additional matching notifications suppressed from display.
 
 ## 0.10.0 - 2026-08-31
 

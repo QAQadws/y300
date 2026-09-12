@@ -139,6 +139,7 @@ void main() {
       expect(item.isNew, isTrue);
       expect(item.type, 'post');
       expect(item.authorId, '20');
+      expect(item.duplicateCount, 3);
       expect(item.noteMarkup, contains('pid=600'));
       expect(result.dataOrNull!.count, 70);
     },
@@ -157,6 +158,21 @@ void main() {
     );
     expect(result.dataOrNull!.items.map((item) => item.id), ['41', '42']);
   });
+
+  for (final count in [null, -1, 'invalid', '0']) {
+    test(
+      'missing or invalid duplicate count does not break the notice: $count',
+      () async {
+        network.variables = _page([
+          {..._notice, 'from_num': count},
+        ]);
+        final result = await factory.createNotifications().load(
+          const ForumNotificationQuery(),
+        );
+        expect(result.dataOrNull!.items.single.duplicateCount, 0);
+      },
+    );
+  }
 
   for (final query in [
     const ForumPrivateMessageQuery(page: 0),
@@ -337,6 +353,7 @@ const _notice = <String, Object?>{
   'new': '1',
   'authorid': '20',
   'author': '朋友',
+  'from_num': '3',
   'note':
       '<a href="forum.php?mod=redirect&goto=findpost&ptid=500&pid=600">回复</a>',
   'dateline': '1767225600',

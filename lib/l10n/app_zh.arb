@@ -66,6 +66,12 @@
   "messageIgnoreUnknown": "暂时无法确认屏蔽设置是否已生效，未自动重试。",
   "messageIgnoreSaving": "正在保存…",
   "messageNoPreview": "打开对话查看消息",
+  "messageRepeatedNotifications": "另有 {count} 条相同提醒未重复展示",
+  "@messageRepeatedNotifications": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
   "commonCancel": "取消",
   "commonConfirm": "确定",
   "commonClose": "关闭",

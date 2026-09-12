@@ -216,6 +216,8 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
     super.didUpdateWidget(oldWidget);
     if (!widget.page.items.any((item) => item.messageId == _anchor)) {
       _anchor = widget.page.items.lastOrNull?.messageId;
+      _awayFromLatest = false;
+      showLatest();
     }
     if (!_awayFromLatest &&
         oldWidget.page.items.lastOrNull?.messageId !=

@@ -29,6 +29,7 @@ final class ForumNotificationItem {
     required this.noteMarkup,
     required this.occurredAt,
     required this.rawDateline,
+    this.duplicateCount = 0,
   });
 
   /// Stable notification identifier.
@@ -48,6 +49,9 @@ final class ForumNotificationItem {
 
   /// Note markup.
   final String noteMarkup;
+
+  /// Additional matching notifications suppressed by the source for this row.
+  final int duplicateCount;
 
   /// Occurred at.
   final DateTime? occurredAt;

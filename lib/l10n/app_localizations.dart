@@ -367,6 +367,12 @@ abstract class AppLocalizations {
   /// **'打开对话查看消息'**
   String get messageNoPreview;
 
+  /// No description provided for @messageRepeatedNotifications.
+  ///
+  /// In zh, this message translates to:
+  /// **'另有 {count} 条相同提醒未重复展示'**
+  String messageRepeatedNotifications(int count);
+
   /// No description provided for @commonCancel.
   ///
   /// In zh, this message translates to:
