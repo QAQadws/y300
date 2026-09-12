@@ -6621,12 +6621,6 @@ abstract class AppLocalizations {
   /// **'写日志'**
   String get profileBlogWrite;
 
-  /// No description provided for @profileBlogWriteUnavailable.
-  ///
-  /// In zh, this message translates to:
-  /// **'发表新日志暂未接入'**
-  String get profileBlogWriteUnavailable;
-
   /// No description provided for @profileBlogEmpty.
   ///
   /// In zh, this message translates to:
@@ -7337,6 +7331,264 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交。'**
   String get profileBlogActionOutcomeUnknown;
+
+  /// No description provided for @profileBlogPlainText.
+  ///
+  /// In zh, this message translates to:
+  /// **'普通文字'**
+  String get profileBlogPlainText;
+
+  /// No description provided for @profileBlogHtmlSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'HTML 源码'**
+  String get profileBlogHtmlSource;
+
+  /// No description provided for @profileBlogHtmlHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'已有富文本以 HTML 保留。可预览效果，或在网页中使用完整编辑器。'**
+  String get profileBlogHtmlHint;
+
+  /// No description provided for @profileBlogBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文'**
+  String get profileBlogBody;
+
+  /// No description provided for @profileBlogSubject.
+  ///
+  /// In zh, this message translates to:
+  /// **'标题'**
+  String get profileBlogSubject;
+
+  /// No description provided for @profileBlogSiteCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'站点分类'**
+  String get profileBlogSiteCategory;
+
+  /// No description provided for @profileBlogPersonalCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人分类'**
+  String get profileBlogPersonalCategory;
+
+  /// No description provided for @profileBlogNewCategoryName.
+  ///
+  /// In zh, this message translates to:
+  /// **'新分类名称'**
+  String get profileBlogNewCategoryName;
+
+  /// No description provided for @profileBlogNewCategoryNameRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写新分类名称。'**
+  String get profileBlogNewCategoryNameRequired;
+
+  /// No description provided for @profileBlogTags.
+  ///
+  /// In zh, this message translates to:
+  /// **'标签'**
+  String get profileBlogTags;
+
+  /// No description provided for @profileBlogPublishFeed.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布到动态'**
+  String get profileBlogPublishFeed;
+
+  /// No description provided for @profileBlogAccessPolicy.
+  ///
+  /// In zh, this message translates to:
+  /// **'访问范围：{value}'**
+  String profileBlogAccessPolicy(String value);
+
+  /// No description provided for @profileBlogCommentsAllowed.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许评论'**
+  String get profileBlogCommentsAllowed;
+
+  /// No description provided for @profileBlogCommentsClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'不允许评论'**
+  String get profileBlogCommentsClosed;
+
+  /// No description provided for @profileBlogPolicyNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存时保留这些访问设置。需要调整时，可在网页中编辑。'**
+  String get profileBlogPolicyNotice;
+
+  /// No description provided for @profileBlogNoCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'未分类'**
+  String get profileBlogNoCategory;
+
+  /// No description provided for @profileBlogNewCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建个人分类'**
+  String get profileBlogNewCategory;
+
+  /// No description provided for @profileBlogChooseCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择分类'**
+  String get profileBlogChooseCategory;
+
+  /// No description provided for @profileBlogServerCategories.
+  ///
+  /// In zh, this message translates to:
+  /// **'站点分类：{site}\n个人分类：{personal}'**
+  String profileBlogServerCategories(String site, String personal);
+
+  /// No description provided for @profileBlogServerTags.
+  ///
+  /// In zh, this message translates to:
+  /// **'标签：{tags}'**
+  String profileBlogServerTags(String tags);
+
+  /// No description provided for @profileBlogVisibilityPublic.
+  ///
+  /// In zh, this message translates to:
+  /// **'公开'**
+  String get profileBlogVisibilityPublic;
+
+  /// No description provided for @profileBlogVisibilityFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'好友可见'**
+  String get profileBlogVisibilityFriends;
+
+  /// No description provided for @profileBlogVisibilitySelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'指定好友可见'**
+  String get profileBlogVisibilitySelected;
+
+  /// No description provided for @profileBlogVisibilityPrivate.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅自己可见'**
+  String get profileBlogVisibilityPrivate;
+
+  /// No description provided for @profileBlogVisibilityPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码保护'**
+  String get profileBlogVisibilityPassword;
+
+  /// No description provided for @profileBlogBackToEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回编辑'**
+  String get profileBlogBackToEditor;
+
+  /// No description provided for @profileBlogPublish.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布日志'**
+  String get profileBlogPublish;
+
+  /// No description provided for @profileBlogPreparingEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取编辑表单…'**
+  String get profileBlogPreparingEditor;
+
+  /// No description provided for @profileBlogSubmittingEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存日志…'**
+  String get profileBlogSubmittingEditor;
+
+  /// No description provided for @profileBlogEditorOutcomeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法确认是否保存成功。请返回核对，避免重复提交。当前输入可以复制。'**
+  String get profileBlogEditorOutcomeUnknown;
+
+  /// No description provided for @profileBlogLeaveEditorTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开编辑？'**
+  String get profileBlogLeaveEditorTitle;
+
+  /// No description provided for @profileBlogLeaveEditorBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前修改不会保留，确定离开吗？'**
+  String get profileBlogLeaveEditorBody;
+
+  /// No description provided for @profileBlogLeavePendingEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求可能已经送达，离开不会撤回。当前输入不会保留，返回后请先检查日志。'**
+  String get profileBlogLeavePendingEditor;
+
+  /// No description provided for @profileBlogServerChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器上的日志内容或设置已变化。请查看服务器版本，再选择保留修改或采用新版本。'**
+  String get profileBlogServerChanged;
+
+  /// No description provided for @profileBlogUseServer.
+  ///
+  /// In zh, this message translates to:
+  /// **'采用服务器版本'**
+  String get profileBlogUseServer;
+
+  /// No description provided for @profileBlogKeepLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留我的修改'**
+  String get profileBlogKeepLocal;
+
+  /// No description provided for @profileBlogSubjectRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写标题。'**
+  String get profileBlogSubjectRequired;
+
+  /// No description provided for @profileBlogBodyRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写正文。'**
+  String get profileBlogBodyRequired;
+
+  /// No description provided for @profileBlogSiteCategoryRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择站点分类。'**
+  String get profileBlogSiteCategoryRequired;
+
+  /// No description provided for @profileBlogCategoryUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'所选分类已不可用，请重新选择。'**
+  String get profileBlogCategoryUnavailable;
+
+  /// No description provided for @profileBlogNewCategoryUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前无法创建个人分类，请选择已有分类。'**
+  String get profileBlogNewCategoryUnavailable;
+
+  /// No description provided for @profileBlogCategoryConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择已有分类或新建分类，不能同时使用。'**
+  String get profileBlogCategoryConflict;
+
+  /// No description provided for @profileBlogFeedUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前无法发布动态，请关闭此选项后重试。'**
+  String get profileBlogFeedUnavailable;
 }
 
 class _AppLocalizationsDelegate

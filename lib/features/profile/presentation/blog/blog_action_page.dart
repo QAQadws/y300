@@ -66,20 +66,21 @@ class BlogActionMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!actions.any(blogManagementActions.contains)) {
+    final available = [
+      UserBlogAction.edit,
+      ...blogManagementActions,
+    ].where(actions.contains);
+    if (available.isEmpty) {
       return const SizedBox.shrink();
     }
     return PopupMenuButton<UserBlogAction>(
       onSelected: onSelected,
       itemBuilder: (context) => [
-        for (final action in blogManagementActions)
-          if (actions.contains(action))
-            PopupMenuItem(
-              value: action,
-              child: Text(
-                blogActionLabel(AppLocalizations.of(context), action),
-              ),
-            ),
+        for (final action in available)
+          PopupMenuItem(
+            value: action,
+            child: Text(blogActionLabel(AppLocalizations.of(context), action)),
+          ),
       ],
     );
   }

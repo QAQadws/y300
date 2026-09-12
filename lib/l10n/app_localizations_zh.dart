@@ -4034,9 +4034,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogWrite => '写日志';
 
   @override
-  String get profileBlogWriteUnavailable => '发表新日志暂未接入';
-
-  @override
   String get profileBlogEmpty => '还没有相关的日志';
 
   @override
@@ -4497,6 +4494,144 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileBlogActionOutcomeUnknown => '暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交。';
+
+  @override
+  String get profileBlogPlainText => '普通文字';
+
+  @override
+  String get profileBlogHtmlSource => 'HTML 源码';
+
+  @override
+  String get profileBlogHtmlHint => '已有富文本以 HTML 保留。可预览效果，或在网页中使用完整编辑器。';
+
+  @override
+  String get profileBlogBody => '正文';
+
+  @override
+  String get profileBlogSubject => '标题';
+
+  @override
+  String get profileBlogSiteCategory => '站点分类';
+
+  @override
+  String get profileBlogPersonalCategory => '个人分类';
+
+  @override
+  String get profileBlogNewCategoryName => '新分类名称';
+
+  @override
+  String get profileBlogNewCategoryNameRequired => '请填写新分类名称。';
+
+  @override
+  String get profileBlogTags => '标签';
+
+  @override
+  String get profileBlogPublishFeed => '发布到动态';
+
+  @override
+  String profileBlogAccessPolicy(String value) {
+    return '访问范围：$value';
+  }
+
+  @override
+  String get profileBlogCommentsAllowed => '允许评论';
+
+  @override
+  String get profileBlogCommentsClosed => '不允许评论';
+
+  @override
+  String get profileBlogPolicyNotice => '保存时保留这些访问设置。需要调整时，可在网页中编辑。';
+
+  @override
+  String get profileBlogNoCategory => '未分类';
+
+  @override
+  String get profileBlogNewCategory => '新建个人分类';
+
+  @override
+  String get profileBlogChooseCategory => '请选择分类';
+
+  @override
+  String profileBlogServerCategories(String site, String personal) {
+    return '站点分类：$site\n个人分类：$personal';
+  }
+
+  @override
+  String profileBlogServerTags(String tags) {
+    return '标签：$tags';
+  }
+
+  @override
+  String get profileBlogVisibilityPublic => '公开';
+
+  @override
+  String get profileBlogVisibilityFriends => '好友可见';
+
+  @override
+  String get profileBlogVisibilitySelected => '指定好友可见';
+
+  @override
+  String get profileBlogVisibilityPrivate => '仅自己可见';
+
+  @override
+  String get profileBlogVisibilityPassword => '密码保护';
+
+  @override
+  String get profileBlogBackToEditor => '返回编辑';
+
+  @override
+  String get profileBlogPublish => '发布日志';
+
+  @override
+  String get profileBlogPreparingEditor => '正在读取编辑表单…';
+
+  @override
+  String get profileBlogSubmittingEditor => '正在保存日志…';
+
+  @override
+  String get profileBlogEditorOutcomeUnknown =>
+      '暂时无法确认是否保存成功。请返回核对，避免重复提交。当前输入可以复制。';
+
+  @override
+  String get profileBlogLeaveEditorTitle => '离开编辑？';
+
+  @override
+  String get profileBlogLeaveEditorBody => '当前修改不会保留，确定离开吗？';
+
+  @override
+  String get profileBlogLeavePendingEditor =>
+      '请求可能已经送达，离开不会撤回。当前输入不会保留，返回后请先检查日志。';
+
+  @override
+  String get profileBlogServerChanged =>
+      '服务器上的日志内容或设置已变化。请查看服务器版本，再选择保留修改或采用新版本。';
+
+  @override
+  String get profileBlogUseServer => '采用服务器版本';
+
+  @override
+  String get profileBlogKeepLocal => '保留我的修改';
+
+  @override
+  String get profileBlogSubjectRequired => '请填写标题。';
+
+  @override
+  String get profileBlogBodyRequired => '请填写正文。';
+
+  @override
+  String get profileBlogSiteCategoryRequired => '请选择站点分类。';
+
+  @override
+  String get profileBlogCategoryUnavailable => '所选分类已不可用，请重新选择。';
+
+  @override
+  String get profileBlogNewCategoryUnavailable => '当前无法创建个人分类，请选择已有分类。';
+
+  @override
+  String get profileBlogCategoryConflict => '请选择已有分类或新建分类，不能同时使用。';
+
+  @override
+  String get profileBlogFeedUnavailable => '当前无法发布动态，请关闭此选项后重试。';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -8530,9 +8665,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogWrite => '寫日誌';
 
   @override
-  String get profileBlogWriteUnavailable => '目前尚未支援發表新日誌';
-
-  @override
   String get profileBlogEmpty => '還沒有相關日誌';
 
   @override
@@ -8994,4 +9126,142 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String get profileBlogActionOutcomeUnknown =>
       '暫時無法確認操作結果。請返回並重新整理日誌核對，避免重複提交。';
+
+  @override
+  String get profileBlogPlainText => '普通文字';
+
+  @override
+  String get profileBlogHtmlSource => 'HTML 原始碼';
+
+  @override
+  String get profileBlogHtmlHint => '既有豐富文字以 HTML 保留。可預覽效果，或在網頁中使用完整編輯器。';
+
+  @override
+  String get profileBlogBody => '內文';
+
+  @override
+  String get profileBlogSubject => '標題';
+
+  @override
+  String get profileBlogSiteCategory => '網站分類';
+
+  @override
+  String get profileBlogPersonalCategory => '個人分類';
+
+  @override
+  String get profileBlogNewCategoryName => '新分類名稱';
+
+  @override
+  String get profileBlogNewCategoryNameRequired => '請填寫新分類名稱。';
+
+  @override
+  String get profileBlogTags => '標籤';
+
+  @override
+  String get profileBlogPublishFeed => '發佈到動態';
+
+  @override
+  String profileBlogAccessPolicy(String value) {
+    return '存取範圍：$value';
+  }
+
+  @override
+  String get profileBlogCommentsAllowed => '允許評論';
+
+  @override
+  String get profileBlogCommentsClosed => '不允許評論';
+
+  @override
+  String get profileBlogPolicyNotice => '儲存時保留這些存取設定。需要調整時，可在網頁中編輯。';
+
+  @override
+  String get profileBlogNoCategory => '未分類';
+
+  @override
+  String get profileBlogNewCategory => '新增個人分類';
+
+  @override
+  String get profileBlogChooseCategory => '請選擇分類';
+
+  @override
+  String profileBlogServerCategories(String site, String personal) {
+    return '網站分類：$site\n個人分類：$personal';
+  }
+
+  @override
+  String profileBlogServerTags(String tags) {
+    return '標籤：$tags';
+  }
+
+  @override
+  String get profileBlogVisibilityPublic => '公開';
+
+  @override
+  String get profileBlogVisibilityFriends => '好友可見';
+
+  @override
+  String get profileBlogVisibilitySelected => '指定好友可見';
+
+  @override
+  String get profileBlogVisibilityPrivate => '僅自己可見';
+
+  @override
+  String get profileBlogVisibilityPassword => '密碼保護';
+
+  @override
+  String get profileBlogBackToEditor => '返回編輯';
+
+  @override
+  String get profileBlogPublish => '發佈日誌';
+
+  @override
+  String get profileBlogPreparingEditor => '正在讀取編輯表單…';
+
+  @override
+  String get profileBlogSubmittingEditor => '正在儲存日誌…';
+
+  @override
+  String get profileBlogEditorOutcomeUnknown =>
+      '暫時無法確認是否儲存成功。請返回核對，避免重複提交。目前輸入可以複製。';
+
+  @override
+  String get profileBlogLeaveEditorTitle => '離開編輯？';
+
+  @override
+  String get profileBlogLeaveEditorBody => '目前修改不會保留，確定離開嗎？';
+
+  @override
+  String get profileBlogLeavePendingEditor =>
+      '請求可能已經送達，離開不會撤回。目前輸入不會保留，返回後請先檢查日誌。';
+
+  @override
+  String get profileBlogServerChanged =>
+      '伺服器上的日誌內容或設定已變化。請查看伺服器版本，再選擇保留修改或採用新版本。';
+
+  @override
+  String get profileBlogUseServer => '採用伺服器版本';
+
+  @override
+  String get profileBlogKeepLocal => '保留我的修改';
+
+  @override
+  String get profileBlogSubjectRequired => '請填寫標題。';
+
+  @override
+  String get profileBlogBodyRequired => '請填寫內文。';
+
+  @override
+  String get profileBlogSiteCategoryRequired => '請選擇網站分類。';
+
+  @override
+  String get profileBlogCategoryUnavailable => '所選分類已無法使用，請重新選擇。';
+
+  @override
+  String get profileBlogNewCategoryUnavailable => '目前無法新增個人分類，請選擇既有分類。';
+
+  @override
+  String get profileBlogCategoryConflict => '請選擇既有分類或新增分類，不能同時使用。';
+
+  @override
+  String get profileBlogFeedUnavailable => '目前無法發佈動態，請關閉此選項後重試。';
 }

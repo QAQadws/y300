@@ -9,6 +9,7 @@ import 'package:y300/features/profile/data/providers/profile_read_providers.dart
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_editor_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
@@ -16,6 +17,135 @@ import '../test_support/blog_comment_fixture.dart';
 import '../test_support/blog_operation_fixture.dart';
 
 void main() {
+  testWidgets(
+    'publishing opens the verified article and defers the feed refresh',
+    (tester) async {
+      final directory = _FakeBlogDirectoryRepository();
+      final details = _FakeBlogDetailRepository(title: 'Newly published');
+      final operations = BlogOperationFixture(autoPrepare: true);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            blogAccountIdProvider.overrideWithValue('101'),
+            userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
+            userBlogDetailRepositoryProvider.overrideWithValue(details),
+            userBlogOperationsProvider.overrideWithValue(operations),
+            forumImageRefererProvider.overrideWithValue(
+              'https://example.test/',
+            ),
+          ],
+          child: const LocalizedTestApp(home: ProfileBlogPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('blog-write')));
+      await tester.pumpAndSettle();
+      expect(find.byType(BlogEditorPage), findsOneWidget);
+      expect(
+        operations.editorPreparations.single.target.action,
+        UserBlogAction.create,
+      );
+      await tester.enterText(
+        find.byKey(const Key('blog-editor-subject')),
+        'Newly published',
+      );
+      await tester.enterText(
+        find.byKey(const Key('blog-editor-body')),
+        'New body',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('blog-editor-submit')));
+      await tester.pump();
+      operations.saved();
+      await tester.pumpAndSettle();
+      final page = tester.widget<ProfileBlogDetailPage>(
+        find.byType(ProfileBlogDetailPage),
+      );
+      expect(page.blogId, '12');
+      expect(page.ownerUserId, '101');
+      expect(page.initialTitle, 'Newly published');
+      expect(details.queries.single.blogId, '12');
+      expect(directory.queries, hasLength(1));
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(directory.queries, hasLength(2));
+      expect(directory.policies.last, CacheLoadPolicy.networkFirst);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final fromDetail in [false, true]) {
+    testWidgets(
+      'editing from ${fromDetail ? 'detail' : 'list'} refreshes existing views after saving',
+      (tester) async {
+        final directory = _FakeBlogDirectoryRepository(
+          blogActions: {UserBlogAction.edit},
+        );
+        final details = _FakeBlogDetailRepository(
+          blogActions: {UserBlogAction.edit},
+        );
+        final operations = BlogOperationFixture(autoPrepare: true);
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              blogAccountIdProvider.overrideWithValue('257582'),
+              userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
+              userBlogDetailRepositoryProvider.overrideWithValue(details),
+              userBlogOperationsProvider.overrideWithValue(operations),
+              forumImageRefererProvider.overrideWithValue(
+                'https://example.test/',
+              ),
+            ],
+            child: const LocalizedTestApp(home: ProfileBlogPage()),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ProfileBlogPage)),
+        );
+        if (fromDetail) {
+          await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(
+          find.byKey(
+            Key(
+              fromDetail ? 'blog-detail-actions' : 'blog-list-actions-117558',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(l10n.profileBlogEdit));
+        await tester.pumpAndSettle();
+        expect(find.byType(BlogEditorPage), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const Key('blog-editor-subject')),
+          'Changed title',
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('blog-editor-submit')));
+        await tester.pump();
+        details.title = 'Changed title';
+        operations.saved();
+        await tester.pumpAndSettle();
+        if (fromDetail) {
+          expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+          expect(details.queries, hasLength(2));
+          expect(find.text('Changed title'), findsWidgets);
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+        }
+        expect(find.byType(ProfileBlogPage), findsOneWidget);
+        expect(directory.queries, hasLength(2));
+        expect(
+          operations.editorSubmissions.single.input.subject,
+          'Changed title',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final fromDetail in [false, true]) {
     for (final action in blogManagementActions) {
       for (final applied in [false, true]) {
@@ -732,11 +862,13 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
     this.gate,
     this.commentActions = const {},
     this.blogActions = const {},
+    this.title = '我们小区的公共交通极其不便利',
   }) : readCapabilities = capabilities ?? _detailCapabilities();
 
   final UserBlogDetailReadCapabilities readCapabilities;
   final Set<UserBlogCommentAction> commentActions;
   final Set<UserBlogAction> blogActions;
+  String title;
   final policies = <CacheLoadPolicy>[];
   final Completer<void>? gate;
   final cancellations = <ForumRequestCancellation?>[];
@@ -761,7 +893,7 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
       data: UserBlogDetailData(
         blogId: query.blogId,
         ownerUserId: query.ownerUserId,
-        title: '我们小区的公共交通极其不便利',
+        title: title,
         bodyHtml: '<p>一直对着电脑屏幕</p>',
         authorName: 'hsyhlj',
         publishedAtText: '2026-6-18 00:25',

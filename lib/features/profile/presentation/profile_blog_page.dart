@@ -7,6 +7,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_editor_routes.dart';
 import 'package:y300/features/profile/presentation/blog/blog_web_navigation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/presentation/blog/blog_feed_controller.dart';
@@ -66,10 +67,27 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
           title: Text(l10n.profileBlogTitle),
           actions: [
             IconButton(
+              key: const Key('blog-write'),
               tooltip: l10n.profileBlogWrite,
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(l10n.profileBlogWriteUnavailable)),
-              ),
+              onPressed: () async {
+                final result = await openBlogEditorPage(context, ref);
+                if (!mounted ||
+                    result == null ||
+                    !context.mounted ||
+                    ref.read(blogAccountIdProvider) !=
+                        result.receipt.target.actorUserId) {
+                  return;
+                }
+                await Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => ProfileBlogDetailPage(
+                      ownerUserId: result.receipt.target.ownerUserId,
+                      blogId: result.receipt.blogId,
+                      initialTitle: result.subject,
+                    ),
+                  ),
+                );
+              },
               icon: const Icon(Icons.edit_note),
             ),
           ],
@@ -115,13 +133,21 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
                         onLoadNextPage: state.canLoadNext
                             ? controller.loadNextPage
                             : null,
-                        onAction: (item, action) => openBlogActionPage(
-                          context,
-                          ref,
-                          ownerUserId: item.ownerUserId,
-                          blogId: item.blogId,
-                          action: action,
-                        ),
+                        onAction: (item, action) =>
+                            action == UserBlogAction.edit
+                            ? openBlogEditorPage(
+                                context,
+                                ref,
+                                ownerUserId: item.ownerUserId,
+                                blogId: item.blogId,
+                              )
+                            : openBlogActionPage(
+                                context,
+                                ref,
+                                ownerUserId: item.ownerUserId,
+                                blogId: item.blogId,
+                                action: action,
+                              ),
                       ),
                     )
                   : !widget.isActive
@@ -215,6 +241,15 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                 key: const Key('blog-detail-actions'),
                 actions: state.data!.actions,
                 onSelected: (action) async {
+                  if (action == UserBlogAction.edit) {
+                    await openBlogEditorPage(
+                      context,
+                      ref,
+                      ownerUserId: widget.ownerUserId,
+                      blogId: widget.blogId,
+                    );
+                    return;
+                  }
                   final receipt = await openBlogActionPage(
                     context,
                     ref,
