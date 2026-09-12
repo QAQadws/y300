@@ -280,6 +280,11 @@ final class UserBlogDirectoryHtmlParser {
         row.querySelector('.avatar img')?.attributes['src'],
       ),
       publishedAtText: _optionalText(row.querySelector('.mtime span')?.text),
+      actions: _blogActions(
+        row.querySelectorAll('.doing_listgl a[href]'),
+        blogId,
+        siteOrigin,
+      ),
     );
   }
 
@@ -455,6 +460,11 @@ final class UserBlogDetailHtmlParser {
       viewCount: viewCount,
       commentCount: commentCount,
       comments: List.unmodifiable(comments),
+      actions: _blogActions(
+        post.querySelectorAll('.threadlist_foot a[href]'),
+        query.blogId,
+        siteOrigin,
+      ),
       commentsOpen:
           form != null &&
           form.querySelector('textarea[name="message"]') != null,
@@ -549,7 +559,13 @@ final class UserBlogDetailHtmlParser {
 
   String? _blogId(String? raw) {
     final uri = _sameSite(raw, siteOrigin);
-    if (uri == null) return null;
+    if (uri == null ||
+        uri.scheme != siteOrigin.scheme ||
+        uri.port != siteOrigin.port ||
+        uri.userInfo.isNotEmpty ||
+        uri.queryParametersAll.values.any((values) => values.length != 1)) {
+      return null;
+    }
     final isSpaceAction =
         uri.path.endsWith('home.php') &&
         uri.queryParameters['mod'] == 'spacecp' &&
@@ -613,3 +629,48 @@ String? _optionalMarkup(String? value) {
 }
 
 String _clean(String value) => value.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+Set<UserBlogAction> _blogActions(
+  Iterable<html_dom.Element> anchors,
+  String blogId,
+  Uri origin,
+) {
+  final actions = <UserBlogAction>{};
+  for (final anchor in anchors) {
+    final uri = _sameSite(anchor.attributes['href'], origin);
+    if (uri == null ||
+        uri.path != '/home.php' ||
+        uri.scheme != origin.scheme ||
+        uri.port != origin.port ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasFragment ||
+        uri.queryParameters['mod'] != 'spacecp' ||
+        uri.queryParameters['ac'] != 'blog' ||
+        uri.queryParameters['blogid'] != blogId ||
+        uri.queryParametersAll.values.any((values) => values.length != 1) ||
+        uri.queryParameters.keys.any(
+          (key) => !{
+            'mod',
+            'ac',
+            'op',
+            'blogid',
+            'stickflag',
+            'mobile',
+          }.contains(key),
+        )) {
+      continue;
+    }
+    final action = switch (uri.queryParameters['op']) {
+      'edit' => UserBlogAction.edit,
+      'delete' => UserBlogAction.delete,
+      'stick' => switch (uri.queryParameters['stickflag']) {
+        '1' => UserBlogAction.pin,
+        '0' => UserBlogAction.unpin,
+        _ => null,
+      },
+      _ => null,
+    };
+    if (action != null) actions.add(action);
+  }
+  return Set.unmodifiable(actions);
+}

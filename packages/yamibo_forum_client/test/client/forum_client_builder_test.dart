@@ -70,6 +70,7 @@ void main() {
         sources.userBlogDirectory,
         sources.userBlogDetail,
         sources.blogComments,
+        sources.blogOperations,
         sources.forumSearch,
         sources.comicEpisodeCatalog,
         sources.comicThreadDiscovery,

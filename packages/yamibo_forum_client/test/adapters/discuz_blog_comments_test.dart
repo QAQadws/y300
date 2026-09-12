@@ -271,7 +271,7 @@ void main() {
         (await commands.prepare(
           _target(UserBlogCommentAction.add),
         )).failureOrNull!.code,
-        'blog_comment_account_unverified',
+        'blog_account_unverified',
       );
     },
   );

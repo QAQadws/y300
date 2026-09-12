@@ -11,6 +11,7 @@ import '../contracts/forum_tag_directory.dart';
 import '../contracts/forum_search.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_comments.dart';
+import '../contracts/user_blog_operations.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_repository.dart';
@@ -42,6 +43,7 @@ import 'discuz_forum_search_repository.dart';
 import 'discuz_forum_display_repositories.dart';
 import 'discuz_profile_html_adapters.dart';
 import 'discuz_blog_comment_service.dart';
+import 'discuz_blog_operations.dart';
 import 'discuz_thread_repositories.dart';
 import 'discuz_thread_interaction_commands.dart';
 import 'discuz_thread_poll_vote_command.dart';
@@ -329,6 +331,14 @@ final class ForumClientAdapterFactory {
         network: network,
         requestProfiles: requestProfiles,
       );
+
+  /// Creates journal publishing and management operations.
+  UserBlogOperations createUserBlogOperations() => DiscuzBlogOperations(
+    config: config,
+    network: network,
+    profiles: requestProfiles,
+    sessions: sessionStore,
+  );
 
   /// Creates account-bound journal comment operations.
   UserBlogCommentService createUserBlogComments() => DiscuzBlogCommentService(

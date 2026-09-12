@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:html/parser.dart' as html;
-
 import '../client/forum_client_config.dart';
 import '../contracts/data_command_contract.dart';
 import '../contracts/data_read_contract.dart';
@@ -10,11 +8,9 @@ import '../contracts/user_blog_comments.dart';
 import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
-import '../network/forum_response.dart';
-import '../network/forum_transport.dart';
 import '../session/forum_session_store.dart';
-import 'discuz_blog_access.dart';
 import 'discuz_blog_command_response.dart';
+import 'discuz_blog_mutation_session.dart';
 import 'discuz_blog_comment_form.dart';
 import 'discuz_profile_html_parsers.dart';
 
@@ -174,84 +170,27 @@ final class DiscuzBlogCommentService implements UserBlogCommentService {
     // uncertain result cannot reuse this form to create a second comment.
     token.used = true;
     final referer = _articleUri(target);
-    const handleKey = 'y300_blog_comment';
-    ForumTransportResult<ForumResponse<Object?>> result;
-    try {
-      result = await network.send(
-        ForumRequest(
-          method: ForumRequestMethod.post,
-          uri: token.form.actionUri.replace(
-            queryParameters: {
-              ...token.form.actionUri.queryParameters,
-              'mobile': '2',
-              'inajax': '1',
-              'handlekey': handleKey,
-            },
-          ),
-          context: const ForumRequestContext(
-            operation: 'blog.comment.submit',
-            module: 'blog',
-            pageKind: 'blog.comment',
-            silent: true,
-          ),
-          headers: requestProfiles
-              .resolve(ForumRequestProfileKind.mobileHtml, referer: referer)
-              .headers,
-          body: <String, String>{
-            ...token.form.fields,
-            'referer': referer.toString(),
-            'handlekey': handleKey,
-            if (target.action != UserBlogCommentAction.delete)
-              'message': message,
-          },
-          cancellation: submission.cancellation,
-          followRedirects: false,
-        ),
-      );
-    } catch (_) {
-      return _unknown(
-        'blog_comment_transport_failed',
-        DataCommandFailureKind.network,
-      );
-    }
-    if ((submission.cancellation?.isCancelled ?? false) ||
-        !_currentActor(target.actorUserId)) {
-      return _unknown(
-        'blog_comment_interrupted',
-        DataCommandFailureKind.cancelled,
-      );
-    }
-    if (result case ForumTransportError<ForumResponse<Object?>>(
-      :final failure,
-    )) {
-      return _unknown(
-        'blog_comment_transport_failed',
-        failure.kind == ForumTransportFailureKind.timeout
-            ? DataCommandFailureKind.timeout
-            : DataCommandFailureKind.network,
-      );
-    }
-    final response =
-        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
-    if (response.statusCode != 200 ||
-        !_sameSite(response.uri) ||
-        response.body is! String) {
-      return _unknown('blog_comment_response_invalid');
-    }
-    final outcome = DiscuzBlogCommandResponse.parse(
-      response.body as String,
-      handleKey,
+    final result = await _boundary.submit(
+      token.form.actionUri.replace(
+        queryParameters: {
+          ...token.form.actionUri.queryParameters,
+          'mobile': '2',
+        },
+      ),
+      actor: target.actorUserId,
+      referer: referer,
+      operation: 'blog.comment.submit',
+      handleKey: 'y300_blog_comment',
+      fields: {
+        ...token.form.fields,
+        if (target.action != UserBlogCommentAction.delete) 'message': message,
+      },
+      cancellation: submission.cancellation,
     );
-    if (outcome == null) return _unknown('blog_comment_response_unproved');
-    if (!outcome.applied) {
-      return DataCommandRejected(
-        _failure(
-          'blog_comment_rejected',
-          DataCommandFailureKind.validation,
-          DataCommandRetryPolicy.afterInputChange,
-        ),
-      );
+    if (result is! DataCommandApplied<DiscuzBlogCommandResponse>) {
+      return retypeBlogCommandFailure(result);
     }
+    final outcome = result.receipt;
     final cid = _confirmedCommentId(outcome, target);
     if (cid == null) return _unknown('blog_comment_receipt_identity_mismatch');
     return DataCommandApplied(
@@ -263,90 +202,20 @@ final class DiscuzBlogCommentService implements UserBlogCommentService {
     Uri uri,
     UserBlogCommentTarget target,
     ForumRequestCancellation? cancellation,
-  ) async {
-    if ((cancellation?.isCancelled ?? false) ||
-        !_currentActor(target.actorUserId)) {
-      return _readFailure(
-        'blog_comment_interrupted',
-        DataReadFailureKind.cancelled,
-      );
-    }
-    ForumTransportResult<ForumResponse<Object?>> result;
-    try {
-      result = await network.send(
-        ForumRequest(
-          method: ForumRequestMethod.get,
-          uri: uri,
-          context: const ForumRequestContext(
-            operation: 'blog.comment.prepare',
-            module: 'blog',
-            pageKind: 'blog.comment',
-            silent: true,
-          ),
-          headers: requestProfiles
-              .resolve(
-                ForumRequestProfileKind.mobileHtml,
-                referer: _articleUri(target),
-              )
-              .headers,
-          cancellation: cancellation,
-        ),
-      );
-    } catch (_) {
-      return _readFailure(
-        'blog_comment_transport_failed',
-        DataReadFailureKind.network,
-      );
-    }
-    if ((cancellation?.isCancelled ?? false) ||
-        !_currentActor(target.actorUserId)) {
-      return _readFailure(
-        'blog_comment_interrupted',
-        DataReadFailureKind.cancelled,
-      );
-    }
-    if (result case ForumTransportError<ForumResponse<Object?>>(
-      :final failure,
-    )) {
-      return _readFailure(
-        'blog_comment_transport_failed',
-        toReadFailureKind(failure.kind),
-      );
-    }
-    final response =
-        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
-    if (response.statusCode != 200 ||
-        !_sameSite(response.uri) ||
-        response.body is! String) {
-      return _readFailure('blog_comment_response_invalid');
-    }
-    final source = response.body as String;
-    final access = DiscuzBlogAccess.failure<String, Object?>(source);
-    if (access != null) return access;
-    // Normal mobile GETs include the current UID in header.htm. Checking it
-    // avoids preparing a form for stale cookies without a separate profile GET.
-    final actors = html
-        .parse(source)
-        .querySelectorAll('script')
-        .expand(
-          (script) => RegExp(
-            r'''(?:^|[,;])\s*discuz_uid\s*=\s*['"](\d+)['"]''',
-          ).allMatches(script.text),
-        )
-        .map((match) => match.group(1))
-        .toSet();
-    if (actors.length != 1 || actors.single != target.actorUserId) {
-      return _readFailure(
-        'blog_comment_account_unverified',
-        DataReadFailureKind.unauthorized,
-      );
-    }
-    return DataReadSuccess(
-      data: source,
-      capabilities: null,
-      metadata: const DataReadMetadata.network(),
-    );
-  }
+  ) => _boundary.read(
+    uri,
+    actor: target.actorUserId,
+    referer: _articleUri(target),
+    operation: 'blog.comment.prepare',
+    cancellation: cancellation,
+  );
+
+  DiscuzBlogMutationSession get _boundary => DiscuzBlogMutationSession(
+    config: config,
+    network: network,
+    profiles: requestProfiles,
+    sessions: sessions,
+  );
 
   String? _confirmedCommentId(
     DiscuzBlogCommandResponse outcome,
@@ -378,16 +247,8 @@ final class DiscuzBlogCommentService implements UserBlogCommentService {
     }
   }
 
-  bool _currentActor(String id) {
-    final session = sessions?.readCurrent();
-    return session != null && session.isLoggedIn && session.userId == id;
-  }
-
-  bool _sameSite(Uri uri) =>
-      uri.scheme == config.siteOrigin.scheme &&
-      uri.host == config.siteOrigin.host &&
-      uri.port == config.siteOrigin.port &&
-      uri.userInfo.isEmpty;
+  bool _currentActor(String id) => _boundary.currentActor(id);
+  bool _sameSite(Uri uri) => _boundary.sameSite(uri);
 
   Uri _articleUri(UserBlogCommentTarget target, {bool singleComment = false}) =>
       config.siteOrigin.replace(

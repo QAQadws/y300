@@ -15,6 +15,7 @@ import '../contracts/forum_resource.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_comments.dart';
+import '../contracts/user_blog_operations.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
@@ -173,6 +174,9 @@ final class YamiboForumClient {
 
   /// Account-bound journal comment preparation and commands.
   UserBlogCommentService? get blogComments => sourcePlan.blogComments;
+
+  /// Account-bound journal publishing, editing, and management.
+  UserBlogOperations? get blogOperations => sourcePlan.blogOperations;
 
   /// Configured user-blog detail source, if installed.
   UserBlogDetailRepository? get userBlogDetail => sourcePlan.userBlogDetail;

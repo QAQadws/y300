@@ -9,6 +9,69 @@ void main() {
       ForumClientAdapterFactory(config: blogConfig, network: network);
   const article = UserBlogDetailQuery(ownerUserId: '101', blogId: '11');
 
+  test(
+    'directory actions come from the management row, not article text',
+    () async {
+      final source = blogFeed(view: 'me', owner: '101')
+          .replaceFirst('<div class="mtime">', '''<div class="doing_listgl">
+          <a href="home.php?mod=spacecp&ac=blog&op=edit&blogid=11">Edit</a>
+          <a href="home.php?mod=spacecp&ac=blog&op=delete&blogid=11">Delete</a>
+          <a href="home.php?mod=spacecp&ac=blog&op=stick&blogid=11&stickflag=1">Pin</a>
+        </div><div class="mtime">''')
+          .replaceFirst(
+            'An excerpt',
+            '<a href="home.php?mod=spacecp&ac=blog&op=stick&blogid=11&stickflag=0">Unrelated content</a>',
+          );
+      final result = await factory(BlogFixtureNetwork(source))
+          .createUserBlogDirectory()
+          .load(const UserBlogDirectoryQuery.self(ownerUserId: '101'));
+      expect(result.failureOrNull, isNull);
+      expect(result.dataOrNull!.items.single.actions, {
+        UserBlogAction.edit,
+        UserBlogAction.delete,
+        UserBlogAction.pin,
+      });
+    },
+  );
+
+  test('detail exposes only validated management links', () async {
+    final source = blogArticle(editOnly: true).replaceFirst(
+      '>Action</a>',
+      '''>Action</a>
+      <a href="home.php?mod=spacecp&ac=blog&op=delete&blogid=11">Delete</a>
+      <a href="home.php?mod=spacecp&ac=blog&op=stick&blogid=11&stickflag=0">Unpin</a>''',
+    );
+    final result = await factory(
+      BlogFixtureNetwork(source),
+    ).createUserBlogDetail().load(article);
+    expect(result.failureOrNull, isNull);
+    expect(result.dataOrNull!.actions, {
+      UserBlogAction.edit,
+      UserBlogAction.delete,
+      UserBlogAction.unpin,
+    });
+  });
+
+  for (final uri in [
+    'https://external.test/home.php?mod=spacecp&ac=blog&op=delete&blogid=11',
+    'http://example.test/home.php?mod=spacecp&ac=blog&op=delete&blogid=11',
+    'https://example.test:444/home.php?mod=spacecp&ac=blog&op=delete&blogid=11',
+    'home.php?mod=spacecp&ac=blog&op=delete&blogid=11&blogid=99',
+    'home.php?mod=spacecp&ac=blog&op=delete&blogid=11&modblogkey=unverified',
+  ]) {
+    test('unverified endpoint is not an advertised action: $uri', () async {
+      final source = blogArticle().replaceFirst(
+        '>Action</a>',
+        '>Action</a><a href="$uri">Delete</a>',
+      );
+      final result = await factory(
+        BlogFixtureNetwork(source),
+      ).createUserBlogDetail().load(article);
+      expect(result.failureOrNull, isNull);
+      expect(result.dataOrNull!.actions, isEmpty);
+    });
+  }
+
   for (final (query, view) in [
     (const UserBlogDirectoryQuery.public(), 'all'),
     (const UserBlogDirectoryQuery.friends(), 'we'),

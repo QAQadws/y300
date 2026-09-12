@@ -304,6 +304,24 @@ enum UserBlogOrder {
   recommended,
 }
 
+/// Journal operations supported by the mobile workflow.
+enum UserBlogAction {
+  /// Publish a journal entry.
+  create,
+
+  /// Edit an existing entry.
+  edit,
+
+  /// Delete an existing entry.
+  delete,
+
+  /// Pin an entry in the author's journal.
+  pin,
+
+  /// Remove an entry's pin.
+  unpin,
+}
+
 /// Query parameters for user blog directory.
 final class UserBlogDirectoryQuery {
   /// Creates a [UserBlogDirectoryQuery].
@@ -431,6 +449,7 @@ final class UserBlogSummary {
     this.excerpt,
     this.avatarUrl,
     this.publishedAtText,
+    this.actions = const {},
   });
 
   /// Blog id.
@@ -453,6 +472,9 @@ final class UserBlogSummary {
 
   /// Published at text.
   final String? publishedAtText;
+
+  /// Operations explicitly advertised in the current feed response.
+  final Set<UserBlogAction> actions;
 }
 
 /// Source-neutral user blog pagination.
@@ -637,6 +659,7 @@ final class UserBlogDetailData {
     this.commentCount,
     this.commentsOpen,
     this.commentPagination = const UserBlogPagination(currentPage: 1),
+    this.actions = const {},
   });
 
   /// Blog id.
@@ -674,6 +697,9 @@ final class UserBlogDetailData {
 
   /// Paging evidence for comments, independent of the article body.
   final UserBlogPagination commentPagination;
+
+  /// Operations explicitly advertised on this article.
+  final Set<UserBlogAction> actions;
 }
 
 /// Source-neutral user blog comment.
