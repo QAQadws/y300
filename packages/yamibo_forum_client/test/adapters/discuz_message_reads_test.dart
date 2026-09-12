@@ -302,6 +302,71 @@ void main() {
   });
 
   test(
+    'message sender and peer avatars use one response without profile reads',
+    () async {
+      network.variables = {
+        ..._page([
+          {..._direct, 'msgfromid': '10'},
+          _group,
+        ]),
+        'member_avatar': '/uc/data/avatar/000/00/00/10_avatar_small.jpg?ts=88',
+      };
+      final result = await factory.createPrivateMessages().load(
+        const ForumPrivateMessageQuery(),
+      );
+      final items = result.dataOrNull!.items;
+      expect(
+        items.first.fromUserAvatarUrl,
+        'https://forum.example.test/uc/data/avatar/000/00/00/10_avatar_middle.jpg?ts=88',
+      );
+      expect(
+        items.first.toUserAvatarUrl,
+        'https://forum.example.test/uc/data/avatar/000/00/00/20_avatar_middle.jpg',
+      );
+      expect(items.last.fromUserAvatarUrl, endsWith('/30_avatar_middle.jpg'));
+      expect(items.last.toUserAvatarUrl, isNull);
+      expect(network.requests, hasLength(1));
+    },
+  );
+
+  test(
+    'default current avatar still resolves notification authors; system has none',
+    () async {
+      network.variables = {
+        ..._page([
+          _notice,
+          {..._notice, 'id': '42', 'authorid': '0'},
+        ]),
+        'member_avatar': '/uc/data/avatar/noavatar.svg',
+      };
+      final result = await factory.createNotifications().load(
+        const ForumNotificationQuery(),
+      );
+      expect(
+        result.dataOrNull!.items.first.authorAvatarUrl,
+        'https://forum.example.test/uc/data/avatar/000/00/00/20_avatar_middle.jpg',
+      );
+      expect(result.dataOrNull!.items.last.authorAvatarUrl, isNull);
+      expect(network.requests, hasLength(1));
+    },
+  );
+
+  test(
+    'malformed optional avatar metadata does not fail message reads',
+    () async {
+      network.variables = {
+        ..._page([_direct]),
+        'member_avatar': '/uc/avatar.php?uid=10&size=%FF',
+      };
+      final result = await factory.createPrivateMessages().load(
+        const ForumPrivateMessageQuery(),
+      );
+      expect(result.dataOrNull!.items.single.toUserAvatarUrl, isNull);
+      expect(network.requests, hasLength(1));
+    },
+  );
+
+  test(
     'expired sessions are classified without exposing server text',
     () async {
       network.errorCode = 'login_before_enter_home//1';

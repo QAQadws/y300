@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html;
+import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -63,6 +64,8 @@ class _MessagePreviewTextState extends ConsumerState<MessagePreviewText> {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: style?.copyWith(
+          color: Theme.of(context).y300NativeContent.supportingText,
+          height: 1.35,
           fontSize: (style.fontSize ?? 14) * preferences.typography.fontScale,
         ),
       ),

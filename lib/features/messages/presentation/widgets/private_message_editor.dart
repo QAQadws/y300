@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/domain/message_refresh_bus.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
@@ -182,13 +183,15 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final error = privateMessageCommandText(l10n, _result);
+    final theme = Theme.of(context);
+    final palette = theme.y300NativeContent;
     return PopScope(
       canPop: _allowPop || !_dirty,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _leave();
       },
       child: Material(
-        color: Theme.of(context).colorScheme.surface,
+        color: palette.background,
         child: SafeArea(
           top: false,
           child: SingleChildScrollView(
@@ -201,6 +204,9 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
                   TextField(
                     key: const Key('message-recipient'),
                     controller: _username,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: palette.body,
+                    ),
                     readOnly: _busy,
                     autocorrect: false,
                     textInputAction: TextInputAction.next,
@@ -211,7 +217,6 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
                           ? l10n.messageRecipientInvalid
                           : null,
                       errorMaxLines: 3,
-                      border: const OutlineInputBorder(),
                     ),
                     onChanged: (_) => setState(() => _invalidRecipient = false),
                   ),
@@ -233,15 +238,15 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
                 TextField(
                   key: const Key('message-input'),
                   controller: _text,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: palette.body,
+                  ),
                   readOnly: _busy,
                   minLines: widget.recipient == null ? 4 : 1,
                   maxLines: 5,
                   keyboardType: TextInputType.multiline,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    labelText: l10n.messageInput,
-                    border: const OutlineInputBorder(),
-                  ),
+                  decoration: InputDecoration(labelText: l10n.messageInput),
                   onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 8),

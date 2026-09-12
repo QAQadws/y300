@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/messages/presentation/message_feed_controller.dart';
 import 'package:y300/features/messages/presentation/widgets/message_feed_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
@@ -52,6 +53,7 @@ class MessageFeedList<P> extends StatelessWidget {
               if (state.operation == MessageFeedOperation.refresh)
                 SliverToBoxAdapter(
                   child: LinearProgressIndicator(
+                    color: Theme.of(context).y300NativeContent.accent,
                     value: MediaQuery.disableAnimationsOf(context) ? 0.5 : null,
                   ),
                 ),
@@ -67,12 +69,19 @@ class MessageFeedList<P> extends StatelessWidget {
                           Icon(
                             emptyIcon,
                             size: 40,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                            color: Theme.of(context).y300NativeContent.muted,
                           ),
                           const SizedBox(height: 12),
-                          Text(emptyText, textAlign: TextAlign.center),
+                          Text(
+                            emptyText,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).y300NativeContent.supportingText,
+                                ),
+                          ),
                         ],
                       ),
                     ),
@@ -80,7 +89,7 @@ class MessageFeedList<P> extends StatelessWidget {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
                   sliver: SliverList.separated(
                     itemCount: count,
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
@@ -100,7 +109,11 @@ class MessageFeedList<P> extends StatelessWidget {
                               : controller.refresh,
                         )
                       : state.operation == MessageFeedOperation.more
-                      ? const Center(child: CircularProgressIndicator())
+                      ? Center(
+                          child: CircularProgressIndicator(
+                            color: Theme.of(context).y300NativeContent.accent,
+                          ),
+                        )
                       : controller.hasMore
                       ? Center(
                           child: TextButton(

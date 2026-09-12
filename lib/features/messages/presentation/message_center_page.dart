@@ -7,9 +7,11 @@ import 'package:y300/features/messages/presentation/message_feed_providers.dart'
 import 'package:y300/features/messages/presentation/new_private_message_page.dart';
 import 'package:y300/features/messages/presentation/notification_ignore_dialog.dart';
 import 'package:y300/features/messages/presentation/private_conversation_page.dart';
+import 'package:y300/features/messages/presentation/widgets/message_avatar.dart';
 import 'package:y300/features/messages/presentation/widgets/message_feed_list.dart';
 import 'package:y300/features/messages/presentation/widgets/message_preview_text.dart';
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
+import 'package:y300/features/messages/presentation/widgets/message_surface.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -45,6 +47,7 @@ class MessageCenterPage extends ConsumerWidget {
     final account = ref.watch(messageAccountIdProvider);
     if (account == null) {
       return Scaffold(
+        backgroundColor: Theme.of(context).y300NativeContent.background,
         appBar: AppBar(
           title: Text(AppLocalizations.of(context).profileMessageCenterTitle),
         ),
@@ -102,6 +105,9 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
     final l10n = AppLocalizations.of(context);
     final messages = ref.watch(privateMessageFeedProvider(null));
     final notifications = ref.watch(notificationFeedProvider);
+    final theme = Theme.of(context);
+    final appBarForeground =
+        theme.appBarTheme.foregroundColor ?? theme.colorScheme.onSurface;
     return Scaffold(
       backgroundColor: Theme.of(context).y300NativeContent.background,
       appBar: AppBar(
@@ -136,6 +142,11 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
         ],
         bottom: TabBar(
           controller: _tabs,
+          labelColor: appBarForeground,
+          unselectedLabelColor: appBarForeground.withValues(alpha: 0.72),
+          indicatorColor: appBarForeground,
+          automaticIndicatorColorAdjustment: false,
+          dividerColor: Colors.transparent,
           tabs: [
             Tab(text: l10n.messageMessagesTab),
             Tab(text: l10n.messageNotificationsTab),
@@ -205,6 +216,8 @@ class _ConversationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final target = item.target;
+    final theme = Theme.of(context);
+    final palette = theme.y300NativeContent;
     final group = target?.kind == ForumConversationKind.group;
     final rawTitle = group
         ? item.subject
@@ -218,60 +231,60 @@ class _ConversationRow extends StatelessWidget {
         : group
         ? l10n.messageGroup
         : l10n.profilePrivateMessage;
-    return Card(
-      margin: EdgeInsets.zero,
-      color: Theme.of(context).y300NativeContent.card,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: target == null ? null : () => onOpen(context, target, title),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                child: Icon(
-                  group ? Icons.group_outlined : Icons.chat_bubble_outline,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        if (item.isNew) const _UnreadBadge(),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    MessagePreviewText(markup: item.message),
-                    if (item.sentAt != null || item.rawDateline.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
+    return MessageSurface(
+      onTap: target == null ? null : () => onOpen(context, target, title),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            MessageAvatar(
+              kind: group ? MessageAvatarKind.group : MessageAvatarKind.user,
+              userId: item.toUserId,
+              imageUrl: item.toUserAvatarUrl,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
                         child: Text(
-                          messageTimeLabel(
-                            context,
-                            item.sentAt,
-                            item.rawDateline,
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: palette.itemTitle,
+                            fontWeight: FontWeight.w700,
+                            height: 1.28,
                           ),
-                          style: Theme.of(context).textTheme.labelSmall,
                         ),
                       ),
-                  ],
-                ),
+                      if (item.isNew) const _UnreadBadge(),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  MessagePreviewText(markup: item.message),
+                  if (item.sentAt != null || item.rawDateline.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        messageTimeLabel(
+                          context,
+                          item.sentAt,
+                          item.rawDateline,
+                        ),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: palette.soft,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -298,34 +311,66 @@ class _NotificationRow extends ConsumerWidget {
     final authorLabel = item.authorName.isEmpty
         ? l10n.profileSystemNotification
         : item.authorName;
-    return Card(
-      margin: EdgeInsets.zero,
-      color: palette.card,
+    final hasAuthor = RegExp(r'^[1-9]\d*$').hasMatch(item.authorId);
+    final avatar = MessageAvatar(
+      kind: hasAuthor ? MessageAvatarKind.user : MessageAvatarKind.system,
+      userId: item.authorId,
+      imageUrl: item.authorAvatarUrl,
+    );
+    return MessageSurface(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 4, 10, 14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
+                if (hasAuthor)
+                  InkWell(
+                    key: ValueKey('notification-avatar:${item.id}'),
+                    customBorder: const CircleBorder(),
+                    onTap: () => onOpenUser(context, item.authorId),
+                    child: Semantics(
+                      label: authorLabel,
+                      child: SizedBox.square(
+                        dimension: 48,
+                        child: Center(child: avatar),
+                      ),
+                    ),
+                  )
+                else
+                  SizedBox.square(dimension: 48, child: Center(child: avatar)),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: RegExp(r'^[1-9]\d*$').hasMatch(item.authorId)
+                  child: hasAuthor
                       ? TextButton(
                           style: TextButton.styleFrom(
                             alignment: AlignmentDirectional.centerStart,
                             padding: EdgeInsets.zero,
+                            foregroundColor: palette.author,
+                            textStyle: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                           onPressed: () => onOpenUser(context, item.authorId),
-                          child: Text(authorLabel),
+                          child: Text(
+                            authorLabel,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         )
                       : Text(
                           authorLabel,
-                          style: Theme.of(context).textTheme.titleSmall,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: palette.itemTitle,
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
                 ),
                 if (item.isNew) const _UnreadBadge(),
                 IconButton(
                   tooltip: l10n.messageIgnore,
+                  color: palette.muted,
                   icon: const Icon(Icons.notifications_off_outlined, size: 20),
                   onPressed: () async {
                     final receipt =
@@ -361,7 +406,9 @@ class _NotificationRow extends ConsumerWidget {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   l10n.messageRepeatedNotifications(item.duplicateCount),
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: palette.supportingText,
+                  ),
                 ),
               ),
             if (item.occurredAt != null || item.rawDateline.isNotEmpty)
@@ -369,7 +416,9 @@ class _NotificationRow extends ConsumerWidget {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   messageTimeLabel(context, item.occurredAt, item.rawDateline),
-                  style: Theme.of(context).textTheme.labelSmall,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(color: palette.soft),
                 ),
               ),
           ],
@@ -384,6 +433,12 @@ class _UnreadBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsetsDirectional.only(start: 8),
-    child: Badge(label: Text(AppLocalizations.of(context).profileNewBadge)),
+    child: Badge(
+      backgroundColor: Theme.of(
+        context,
+      ).y300NativeContent.notificationBadgeBackground,
+      textColor: Theme.of(context).y300NativeContent.selectionForeground,
+      label: Text(AppLocalizations.of(context).profileNewBadge),
+    ),
   );
 }

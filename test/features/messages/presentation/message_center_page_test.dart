@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/message_routes.dart';
+import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
@@ -40,7 +42,10 @@ void main() {
         container: container,
         child: LocalizedTestApp(
           locale: locale,
-          theme: ThemeData(brightness: brightness),
+          theme: AppTheme.build(
+            family: AppThemeFamily.warmPaper,
+            brightness: brightness,
+          ),
           home: MessageCenterDestination(initialTab: tab, isActive: active),
         ),
       ),

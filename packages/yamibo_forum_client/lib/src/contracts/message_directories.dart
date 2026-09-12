@@ -30,6 +30,7 @@ final class ForumNotificationItem {
     required this.occurredAt,
     required this.rawDateline,
     this.duplicateCount = 0,
+    this.authorAvatarUrl,
   });
 
   /// Stable notification identifier.
@@ -46,6 +47,9 @@ final class ForumNotificationItem {
 
   /// Author name.
   final String authorName;
+
+  /// Validated author avatar reference, when the source can resolve it.
+  final String? authorAvatarUrl;
 
   /// Note markup.
   final String noteMarkup;
@@ -219,6 +223,8 @@ final class ForumPrivateMessageItem {
     required this.rawDateline,
     this.isGroupConversation = false,
     this.participantCount = 0,
+    this.fromUserAvatarUrl,
+    this.toUserAvatarUrl,
   });
 
   /// Message id.
@@ -239,11 +245,17 @@ final class ForumPrivateMessageItem {
   /// From user name.
   final String fromUserName;
 
+  /// Validated sender avatar reference, independent of the conversation peer.
+  final String? fromUserAvatarUrl;
+
   /// To user id.
   final String toUserId;
 
   /// To user name.
   final String toUserName;
+
+  /// Validated avatar for [toUserId], when supplied by the source.
+  final String? toUserAvatarUrl;
 
   /// Message.
   final String message;

@@ -5,9 +5,11 @@ import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/messages/presentation/message_feed_controller.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
+import 'package:y300/features/messages/presentation/widgets/message_avatar.dart';
 import 'package:y300/features/messages/presentation/widgets/message_feed_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
 import 'package:y300/features/messages/presentation/widgets/private_message_editor.dart';
+import 'package:y300/features/messages/presentation/widgets/message_surface.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -36,6 +38,7 @@ class PrivateConversationPage extends ConsumerWidget {
         : l10n.profilePrivateMessage;
     if (account == null) {
       return Scaffold(
+        backgroundColor: Theme.of(context).y300NativeContent.background,
         appBar: AppBar(title: Text(label)),
         body: const MessageLoginPrompt(),
       );
@@ -105,6 +108,7 @@ class _ConversationBodyState extends ConsumerState<_ConversationBody> {
             children: [
               if (state.isBusy && state.data != null)
                 LinearProgressIndicator(
+                  color: Theme.of(context).y300NativeContent.accent,
                   value: MediaQuery.disableAnimationsOf(context) ? 0.5 : null,
                 ),
               if (state.failure != null && state.data != null)
@@ -245,7 +249,16 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
     final items = widget.page.items;
     if (items.isEmpty) {
       return Center(
-        child: Text(AppLocalizations.of(context).profileNoMessages),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            AppLocalizations.of(context).profileNoMessages,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).y300NativeContent.supportingText,
+            ),
+          ),
+        ),
       );
     }
     final split = items.indexWhere((item) => item.messageId == _anchor) + 1;
@@ -330,13 +343,12 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette = theme.y300NativeContent;
     final outgoing = item.fromUserId == accountId;
     final surface = outgoing
-        ? theme.colorScheme.secondaryContainer
-        : theme.y300NativeContent.card;
-    final foreground = outgoing
-        ? theme.colorScheme.onSecondaryContainer
-        : theme.y300NativeContent.body;
+        ? Color.alphaBlend(palette.accent.withValues(alpha: 0.10), palette.card)
+        : palette.card;
+    final foreground = palette.body;
     final identity =
         'private:$accountId:${target.kind.name}:${target.id}:${item.messageId}';
     return Padding(
@@ -346,54 +358,73 @@ class _MessageBubble extends StatelessWidget {
         outgoing ? 12 : 32,
         6,
       ),
-      child: Align(
-        alignment: outgoing
-            ? AlignmentDirectional.centerEnd
-            : AlignmentDirectional.centerStart,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: surface,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (item.fromUserName.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      item.fromUserName,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: foreground,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!outgoing) ...[
+            MessageAvatar(
+              userId: item.fromUserId,
+              imageUrl: item.fromUserAvatarUrl,
+              size: 36,
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: MessageSurface(
+              color: surface,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (item.fromUserName.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          item.fromUserName,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: palette.author,
+                          ),
+                        ),
                       ),
+                    ForumHtmlContentView(
+                      html: item.message,
+                      sourceId: identity,
+                      imageCacheOwnerId: identity,
+                      imageReferer: imageReferer,
+                      surfaceColor: surface,
+                      foregroundColor: foreground,
+                      onOpenLink: (url) => onOpenLink(context, url),
                     ),
-                  ),
-                ForumHtmlContentView(
-                  html: item.message,
-                  sourceId: identity,
-                  imageCacheOwnerId: identity,
-                  imageReferer: imageReferer,
-                  surfaceColor: surface,
-                  foregroundColor: foreground,
-                  onOpenLink: (url) => onOpenLink(context, url),
+                    if (item.sentAt != null || item.rawDateline.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          messageTimeLabel(
+                            context,
+                            item.sentAt,
+                            item.rawDateline,
+                          ),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: palette.soft,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-                if (item.sentAt != null || item.rawDateline.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      messageTimeLabel(context, item.sentAt, item.rawDateline),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: foreground.withValues(alpha: 0.75),
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
-        ),
+          if (outgoing) ...[
+            const SizedBox(width: 8),
+            MessageAvatar(
+              userId: item.fromUserId,
+              imageUrl: item.fromUserAvatarUrl,
+              size: 36,
+            ),
+          ],
+        ],
       ),
     );
   }

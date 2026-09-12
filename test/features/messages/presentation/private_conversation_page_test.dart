@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
@@ -43,7 +45,10 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: LocalizedTestApp(
-          theme: ThemeData(brightness: brightness),
+          theme: AppTheme.build(
+            family: AppThemeFamily.warmPaper,
+            brightness: brightness,
+          ),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,

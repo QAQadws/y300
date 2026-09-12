@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
@@ -17,7 +18,10 @@ class MessageReadStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final error = failure;
-    if (error == null) return const Center(child: CircularProgressIndicator());
+    final palette = Theme.of(context).y300NativeContent;
+    if (error == null) {
+      return Center(child: CircularProgressIndicator(color: palette.accent));
+    }
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -28,6 +32,9 @@ class MessageReadStatus extends StatelessWidget {
                 ? l10n.messageHistoryChanged
                 : LocalizedErrorSummary.resolve(l10n, error),
             textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: palette.supportingText),
           ),
           const SizedBox(height: 12),
           TextButton(onPressed: onRetry, child: Text(l10n.commonRetry)),
@@ -43,23 +50,36 @@ class MessageLoginPrompt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final palette = Theme.of(context).y300NativeContent;
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.mark_email_unread_outlined, size: 40),
-            const SizedBox(height: 16),
-            Text(l10n.messageLoginRequired, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<bool>(builder: (_) => const LoginPage()),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.mark_email_unread_outlined,
+                size: 40,
+                color: palette.muted,
               ),
-              child: Text(l10n.authLoginTitle),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                l10n.messageLoginRequired,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: palette.supportingText),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<bool>(builder: (_) => const LoginPage()),
+                ),
+                child: Text(l10n.authLoginTitle),
+              ),
+            ],
+          ),
         ),
       ),
     );

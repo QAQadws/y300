@@ -19,6 +19,7 @@ import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
 import '../parsing/loose_json.dart';
 import 'discuz_api_client.dart';
+import 'discuz_ucenter_avatar_resolver.dart';
 import 'thread_detail_api_mapper.dart';
 import 'thread_detail_html_parser.dart';
 
@@ -62,9 +63,10 @@ final class DiscuzForumNotificationRepository
               .response
               .body
               .variables;
+      final avatars = _messageAvatars(_api.config, variables);
       final items = _messageRows(
         variables['list'],
-      ).map(_notification).toList(growable: false);
+      ).map((item) => _notification(item, avatars)).toList(growable: false);
       _unique(items.map((item) => item.id), 'notification_identity_invalid');
       final page = _messagePage(variables, items.length, query.page);
       return DataReadSuccess(
@@ -82,7 +84,10 @@ final class DiscuzForumNotificationRepository
     }
   }
 
-  ForumNotificationItem _notification(Map<String, Object?> item) {
+  ForumNotificationItem _notification(
+    Map<String, Object?> item,
+    DiscuzUCenterAvatarResolver avatars,
+  ) {
     final id = LooseJson.string(item['id']).trim();
     if (id.isEmpty) throw const FormatException('notification_id_missing');
     final rawDateline = LooseJson.string(item['dateline']).trim();
@@ -93,6 +98,7 @@ final class DiscuzForumNotificationRepository
       isNew: LooseJson.boolean(item['new']),
       authorId: LooseJson.string(item['authorid']).trim(),
       authorName: LooseJson.string(item['author']).trim(),
+      authorAvatarUrl: avatars.resolve(LooseJson.string(item['authorid'])),
       noteMarkup: LooseJson.string(item['note']),
       // space_notice has already subtracted the visible notification from
       // from_num. Preserve that additional count without subtracting again.
@@ -164,9 +170,10 @@ final class DiscuzForumPrivateMessageRepository
               .response
               .body
               .variables;
+      final avatars = _messageAvatars(_api.config, variables);
       final items = _messageRows(
         variables['list'],
-      ).map(_message).toList(growable: false);
+      ).map((item) => _message(item, avatars)).toList(growable: false);
       _unique(
         items.map((item) => item.messageId),
         'private_message_identity_invalid',
@@ -189,10 +196,19 @@ final class DiscuzForumPrivateMessageRepository
     }
   }
 
-  ForumPrivateMessageItem _message(Map<String, Object?> item) {
+  ForumPrivateMessageItem _message(
+    Map<String, Object?> item,
+    DiscuzUCenterAvatarResolver avatars,
+  ) {
     final id = LooseJson.string(item['pmid']).trim();
     if (id.isEmpty) throw const FormatException('private_message_id_missing');
     final conversation = LooseJson.string(item['plid']).trim();
+    final fromUserId = _firstMessageValue(item, [
+      'msgfromid',
+      'lastauthorid',
+      'authorid',
+    ]);
+    final toUserId = LooseJson.string(item['touid']).trim();
     final rawDateline = _firstMessageValue(item, [
       'dateline',
       'lastdateline',
@@ -203,17 +219,15 @@ final class DiscuzForumPrivateMessageRepository
       conversationId: conversation.isEmpty ? null : conversation,
       isNew: LooseJson.boolean(item['isnew']),
       subject: LooseJson.string(item['subject']),
-      fromUserId: _firstMessageValue(item, [
-        'msgfromid',
-        'lastauthorid',
-        'authorid',
-      ]),
+      fromUserId: fromUserId,
+      fromUserAvatarUrl: avatars.resolve(fromUserId),
       fromUserName: _firstMessageValue(item, [
         'msgfrom',
         'lastauthor',
         'author',
       ]),
-      toUserId: LooseJson.string(item['touid']).trim(),
+      toUserId: toUserId,
+      toUserAvatarUrl: avatars.resolve(toUserId),
       toUserName: LooseJson.string(item['tousername']).trim(),
       message: LooseJson.string(item['message']),
       sentAt: _parseDiscuzDateTime(rawDateline),
@@ -223,6 +237,15 @@ final class DiscuzForumPrivateMessageRepository
     );
   }
 }
+
+DiscuzUCenterAvatarResolver _messageAvatars(
+  ForumClientConfig config,
+  Map<String, Object?> variables,
+) => DiscuzUCenterAvatarResolver(
+  siteOrigin: config.siteOrigin,
+  currentUserId: LooseJson.string(variables['member_uid']),
+  currentUserAvatar: LooseJson.string(variables['member_avatar']),
+);
 
 // Message reads are intentionally uncached: the source marks rows as read and
 // their contents must never survive an account change in a shared disk cache.

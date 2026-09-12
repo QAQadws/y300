@@ -89,12 +89,14 @@ ForumNotificationItem notificationTestItem(
   String authorId = '20',
   String? markup,
   int duplicateCount = 0,
+  String? avatarUrl,
 }) => ForumNotificationItem(
   id: id,
   type: 'post',
   isNew: true,
   authorId: authorId,
   authorName: authorId == '0' ? '' : 'Alice',
+  authorAvatarUrl: avatarUrl,
   duplicateCount: duplicateCount,
   noteMarkup:
       markup ??
@@ -151,6 +153,8 @@ ForumPrivateMessageItem messageTestItem(
   String? html,
   String sender = '20',
   String recipient = '20',
+  String? senderAvatarUrl,
+  String? recipientAvatarUrl,
 }) => ForumPrivateMessageItem(
   messageId: id,
   conversationId: '91',
@@ -158,8 +162,10 @@ ForumPrivateMessageItem messageTestItem(
   subject: '',
   fromUserId: sender,
   fromUserName: sender == '10' ? 'Me' : 'Alice',
+  fromUserAvatarUrl: senderAvatarUrl,
   toUserId: sender == '10' ? recipient : '10',
   toUserName: sender == '10' ? 'Alice' : 'Me',
+  toUserAvatarUrl: recipientAvatarUrl,
   message: html ?? '<p>Message $id</p>',
   sentAt: DateTime(2026, 9, 12, 10, 30),
   rawDateline: '',
