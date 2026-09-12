@@ -4055,6 +4055,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogComments => '日志评论';
 
   @override
+  String get profileBlogCommentsEmpty => '暂无评论';
+
+  @override
   String get profileBlogAllCategories => '全部分类';
 
   @override
@@ -8684,6 +8687,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogComments => '日誌留言';
+
+  @override
+  String get profileBlogCommentsEmpty => '暫無留言';
 
   @override
   String get profileBlogAllCategories => '全部分類';

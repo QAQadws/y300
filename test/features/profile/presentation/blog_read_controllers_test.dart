@@ -131,6 +131,91 @@ void main() {
   );
 
   test(
+    'inbound feed query survives scope changes and refresh keeps filters',
+    () async {
+      final repository = _Directory();
+      final controller = feed(
+        repository,
+        args: const ProfileBlogPageArgs(
+          initialOrder: UserBlogOrder.recommended,
+          initialPage: 3,
+          initialCategoryId: '8',
+        ),
+      );
+      var pending = controller.setActive(true);
+      expect(
+        repository.requests.single.query,
+        const UserBlogDirectoryQuery.public(
+          order: UserBlogOrder.recommended,
+          categoryId: '8',
+          page: 3,
+        ),
+      );
+      repository.succeed(0);
+      await pending;
+      pending = controller.selectScope(UserBlogFeedScope.friends);
+      expect(
+        repository.requests.last.query,
+        const UserBlogDirectoryQuery.friends(),
+      );
+      repository.succeed(1);
+      await pending;
+      await controller.selectScope(UserBlogFeedScope.public);
+      expect(repository.requests, hasLength(2));
+      expect(controller.value.query.page, 3);
+      pending = controller.refresh();
+      expect(
+        repository.requests.last.query,
+        const UserBlogDirectoryQuery.public(
+          order: UserBlogOrder.recommended,
+          categoryId: '8',
+        ),
+      );
+      repository.succeed(2);
+      await pending;
+    },
+  );
+
+  test(
+    'an author category entry cannot become the current account journal',
+    () async {
+      final repository = _Directory();
+      final controller = feed(
+        repository,
+        args: const ProfileBlogPageArgs(
+          initialScope: UserBlogFeedScope.self,
+          ownerUserId: '202',
+          initialPage: 4,
+          initialPersonalCategoryId: '9',
+        ),
+      );
+      var pending = controller.setActive(true);
+      expect(
+        repository.requests.single.query,
+        const UserBlogDirectoryQuery.self(
+          ownerUserId: '202',
+          personalCategoryId: '9',
+          page: 4,
+        ),
+      );
+      repository.succeed(0);
+      await pending;
+      await controller.selectScope(UserBlogFeedScope.friends);
+      expect(repository.requests, hasLength(1));
+      pending = controller.refresh();
+      expect(
+        repository.requests.last.query,
+        const UserBlogDirectoryQuery.self(
+          ownerUserId: '202',
+          personalCategoryId: '9',
+        ),
+      );
+      repository.succeed(1);
+      await pending;
+    },
+  );
+
+  test(
     'invalidated retained scopes keep filters and refresh only when selected',
     () async {
       final repository = _Directory();

@@ -13,6 +13,56 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 
 void main() {
   testWidgets(
+    'relative links follow the current document when its query changes',
+    (tester) async {
+      final links = <String>[];
+      final preparer = _CountingRenderPreparer();
+      final repository = _FixedPreferencesRepository(
+        ForumHtmlReaderPreferences.defaults(),
+      );
+      Future<void> show(Uri base) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+                repository,
+              ),
+            ],
+            child: LocalizedTestApp(
+              home: Scaffold(
+                body: ForumHtmlContentView(
+                  html: '<a href="#comment_5">link</a>',
+                  sourceId: 'current-document',
+                  linkBaseUri: base,
+                  renderPreparer: preparer,
+                  onOpenLink: links.add,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('link', findRichText: true));
+        await tester.pumpAndSettle();
+      }
+
+      final first = Uri.parse(
+        'https://bbs.yamibo.com/home.php?mod=space&uid=101&do=blog&id=11',
+      );
+      final second = first.replace(
+        queryParameters: {...first.queryParameters, 'page': '3'},
+      );
+      await show(first);
+      await show(second);
+      expect(links, [
+        first.replace(fragment: 'comment_5').toString(),
+        second.replace(fragment: 'comment_5').toString(),
+      ]);
+      expect(preparer.callCount, 1);
+    },
+  );
+
+  testWidgets(
     'prepares shared HTML once per content theme and preference identity',
     (tester) async {
       final preparer = _CountingRenderPreparer();

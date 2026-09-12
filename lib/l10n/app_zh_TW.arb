@@ -1259,6 +1259,7 @@
   "profileBlogLatest": "最新發表的日誌",
   "profileBlogRecommended": "推薦閱讀的日誌",
   "profileBlogComments": "日誌留言",
+  "profileBlogCommentsEmpty": "暫無留言",
   "profileBlogAllCategories": "全部分類",
   "profileBlogAllComments": "全部留言",
   "profileBlogMoreComments": "更多留言",

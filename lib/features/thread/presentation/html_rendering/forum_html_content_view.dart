@@ -22,6 +22,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
     this.surfaceColor,
     this.foregroundColor,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
+    this.linkBaseUri,
   });
 
   final String html;
@@ -34,6 +35,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
   final Color? surfaceColor;
   final Color? foregroundColor;
   final ForumHtmlRenderPreparer renderPreparer;
+  final Uri? linkBaseUri;
 
   @override
   ConsumerState<ForumHtmlContentView> createState() =>
@@ -97,6 +99,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       preferences: preferences,
       preparedDocument: _preparedDocument,
       contentImageKind: widget.contentImageKind,
+      linkBaseUri: widget.linkBaseUri,
       callbacks: ForumHtmlRenderCallbacks(
         onTapUrl: (url) {
           widget.onOpenLink?.call(url);

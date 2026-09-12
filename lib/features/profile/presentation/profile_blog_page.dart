@@ -14,6 +14,8 @@ import 'package:y300/features/profile/presentation/blog/blog_feed_controller.dar
 import 'package:y300/features/profile/presentation/blog/blog_detail_controller.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_view.dart';
+import 'package:y300/features/profile/presentation/blog/blog_content_link_navigation.dart';
+import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 
 import 'package:y300/features/profile/presentation/profile_text_resolver.dart';
 import 'package:y300/features/profile/presentation/profile_user_link.dart';
@@ -33,12 +35,28 @@ class ProfileBlogPage extends ConsumerStatefulWidget {
     this.initialOrder = UserBlogOrder.latest,
     this.ownerUserId,
     this.isActive = true,
+    this.initialPage = 1,
+    this.initialCategoryId,
+    this.initialPersonalCategoryId,
   });
 
   final UserBlogFeedScope initialScope;
   final UserBlogOrder initialOrder;
   final String? ownerUserId;
   final bool isActive;
+  final int initialPage;
+  final String? initialCategoryId;
+  final String? initialPersonalCategoryId;
+
+  factory ProfileBlogPage.fromQuery(UserBlogDirectoryQuery query) =>
+      ProfileBlogPage(
+        initialScope: query.scope,
+        initialOrder: query.order ?? UserBlogOrder.latest,
+        ownerUserId: query.ownerUserId,
+        initialPage: query.page,
+        initialCategoryId: query.categoryId,
+        initialPersonalCategoryId: query.personalCategoryId,
+      );
 
   @override
   ConsumerState<ProfileBlogPage> createState() => _ProfileBlogPageState();
@@ -52,6 +70,9 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
       initialOrder: widget.initialOrder,
       ownerUserId: widget.ownerUserId,
       routeOwner: this,
+      initialPage: widget.initialPage,
+      initialCategoryId: widget.initialCategoryId,
+      initialPersonalCategoryId: widget.initialPersonalCategoryId,
     );
     final controller = ref.watch(profileBlogListProvider(args));
     final palette = _ProfileBlogPalette.resolve(Theme.of(context));
@@ -186,12 +207,16 @@ class ProfileBlogDetailPage extends ConsumerStatefulWidget {
     this.initialTitle,
     this.initialPage = 1,
     this.commentId,
+    this.lastCommentPage = false,
+    this.focusComments = false,
   });
   final String ownerUserId;
   final String blogId;
   final String? initialTitle;
   final int initialPage;
   final String? commentId;
+  final bool lastCommentPage;
+  final bool focusComments;
 
   @override
   ConsumerState<ProfileBlogDetailPage> createState() =>
@@ -219,6 +244,7 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
       blogId: widget.blogId,
       page: widget.initialPage,
       commentId: widget.commentId,
+      lastCommentPage: widget.lastCommentPage,
     );
     final controller = ref.watch(profileBlogDetailProvider((query, this)));
     final palette = _ProfileBlogPalette.resolve(Theme.of(context));
@@ -304,6 +330,18 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                       ? () => controller.selectCommentPage(1)
                       : null,
                   isLoading: state.isLoading,
+                  focusComments: widget.focusComments,
+                  linkBaseUri: ref
+                      .read(userBlogNavigationProvider)
+                      ?.detail(state.query),
+                  onOpenLink: (url) => openBlogContentLink(
+                    context,
+                    ref,
+                    url,
+                    baseUri: ref
+                        .read(userBlogNavigationProvider)
+                        ?.detail(state.query),
+                  ),
                 ),
               )
             : state.isLoading
@@ -832,6 +870,9 @@ class _ProfileBlogDetailContent extends StatelessWidget {
     required this.onPreviousComments,
     required this.onShowAllComments,
     required this.isLoading,
+    required this.focusComments,
+    required this.linkBaseUri,
+    required this.onOpenLink,
   });
 
   final UserBlogDetailData data;
@@ -844,99 +885,132 @@ class _ProfileBlogDetailContent extends StatelessWidget {
   final VoidCallback? onPreviousComments;
   final VoidCallback? onShowAllComments;
   final bool isLoading;
+  final bool focusComments;
+  final Uri? linkBaseUri;
+  final ValueChanged<String> onOpenLink;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
+    const commentsStart = ValueKey('profile-blog-comments-start');
+    return CustomScrollView(
       key: const Key('profile-blog-detail'),
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-      children: [
-        if (failure != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              AppLocalizations.of(context).profileBlogLoadFailed(
-                LocalizedErrorSummary.resolve(
-                  AppLocalizations.of(context),
-                  failure,
-                ),
-              ),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: palette.muted),
-            ),
-          ),
-        _BlogDetailCard(
-          data: data,
-          capabilities: capabilities,
-          palette: palette,
-          imageReferer: imageReferer,
-        ),
-        if (capabilities?.supports(UserBlogDetailCapability.orderedComments) ==
-                true &&
-            data.comments.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          Text(
-            AppLocalizations.of(context).profileBlogComments,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: palette.title,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 10),
-          for (final comment in data.comments) ...[
-            _CommentCard(
-              key: Key('profile-blog-comment-${comment.commentId}'),
-              comment: comment,
-              capabilities: capabilities,
-              palette: palette,
-              imageReferer: imageReferer,
-              onAction: (action) => onComment(action, comment),
-            ),
-            const SizedBox(height: 10),
-          ],
-        ],
-        if (isLoading) const LinearProgressIndicator(),
-        if (onShowAllComments != null ||
-            onLoadNextComments != null ||
-            onPreviousComments != null)
-          Wrap(
-            spacing: 8,
+      // Content above this origin grows upward. Late article image sizes do
+      // not move an initial comment target or require a delayed scroll jump.
+      center: focusComments ? commentsStart : null,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+          sliver: SliverList.list(
             children: [
-              if (onShowAllComments != null)
-                TextButton(
-                  onPressed: onShowAllComments,
+              if (failure != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
-                    AppLocalizations.of(context).profileBlogAllComments,
+                    AppLocalizations.of(context).profileBlogLoadFailed(
+                      LocalizedErrorSummary.resolve(
+                        AppLocalizations.of(context),
+                        failure,
+                      ),
+                    ),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: palette.muted),
                   ),
                 ),
-              if (onPreviousComments != null)
-                TextButton(
-                  onPressed: isLoading ? null : onPreviousComments,
-                  child: Text(AppLocalizations.of(context).commonPreviousPage),
-                ),
-              if (onLoadNextComments != null)
-                TextButton(
-                  onPressed: onLoadNextComments,
-                  child: Text(
-                    AppLocalizations.of(context).profileBlogMoreComments,
-                  ),
-                ),
+              _BlogDetailCard(
+                data: data,
+                capabilities: capabilities,
+                palette: palette,
+                imageReferer: imageReferer,
+                linkBaseUri: linkBaseUri,
+                onOpenLink: onOpenLink,
+              ),
             ],
           ),
-        if (capabilities?.supports(
-                  UserBlogDetailCapability.commentingAvailability,
-                ) ==
-                true &&
-            data.commentsOpen == true) ...[
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            key: const Key('profile-blog-comment-button'),
-            onPressed: () => onComment(UserBlogCommentAction.add, null),
-            icon: const Icon(Icons.comment_outlined),
-            label: Text(AppLocalizations.of(context).profileBlogComment),
+        ),
+        SliverPadding(
+          key: commentsStart,
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+          sliver: SliverList.list(
+            children: [
+              if (capabilities?.supports(
+                    UserBlogDetailCapability.orderedComments,
+                  ) ==
+                  true) ...[
+                Text(
+                  key: const Key('profile-blog-comments-heading'),
+                  AppLocalizations.of(context).profileBlogComments,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: palette.title,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                if (data.comments.isEmpty)
+                  Text(
+                    AppLocalizations.of(context).profileBlogCommentsEmpty,
+                    style: TextStyle(color: palette.muted),
+                  ),
+                for (final comment in data.comments) ...[
+                  _CommentCard(
+                    key: Key('profile-blog-comment-${comment.commentId}'),
+                    comment: comment,
+                    capabilities: capabilities,
+                    palette: palette,
+                    imageReferer: imageReferer,
+                    onAction: (action) => onComment(action, comment),
+                    linkBaseUri: linkBaseUri,
+                    onOpenLink: onOpenLink,
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ],
+              if (isLoading) const LinearProgressIndicator(),
+              if (onShowAllComments != null ||
+                  onLoadNextComments != null ||
+                  onPreviousComments != null)
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    if (onShowAllComments != null)
+                      TextButton(
+                        onPressed: onShowAllComments,
+                        child: Text(
+                          AppLocalizations.of(context).profileBlogAllComments,
+                        ),
+                      ),
+                    if (onPreviousComments != null)
+                      TextButton(
+                        onPressed: isLoading ? null : onPreviousComments,
+                        child: Text(
+                          AppLocalizations.of(context).commonPreviousPage,
+                        ),
+                      ),
+                    if (onLoadNextComments != null)
+                      TextButton(
+                        onPressed: onLoadNextComments,
+                        child: Text(
+                          AppLocalizations.of(context).profileBlogMoreComments,
+                        ),
+                      ),
+                  ],
+                ),
+              if (capabilities?.supports(
+                        UserBlogDetailCapability.commentingAvailability,
+                      ) ==
+                      true &&
+                  data.commentsOpen == true) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  key: const Key('profile-blog-comment-button'),
+                  onPressed: () => onComment(UserBlogCommentAction.add, null),
+                  icon: const Icon(Icons.comment_outlined),
+                  label: Text(AppLocalizations.of(context).profileBlogComment),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
       ],
     );
   }
@@ -948,12 +1022,16 @@ class _BlogDetailCard extends StatelessWidget {
     required this.capabilities,
     required this.palette,
     required this.imageReferer,
+    required this.linkBaseUri,
+    required this.onOpenLink,
   });
 
   final UserBlogDetailData data;
   final UserBlogDetailReadCapabilities? capabilities;
   final _ProfileBlogPalette palette;
   final String imageReferer;
+  final Uri? linkBaseUri;
+  final ValueChanged<String> onOpenLink;
 
   @override
   Widget build(BuildContext context) {
@@ -1015,9 +1093,8 @@ class _BlogDetailCard extends StatelessWidget {
               contentImageKind: ForumImageKind.blogInline,
               surfaceColor: palette.card,
               foregroundColor: palette.body,
-              onOpenLink: (url) => ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(url))),
+              onOpenLink: onOpenLink,
+              linkBaseUri: linkBaseUri,
             ),
           ),
         ],
@@ -1055,6 +1132,8 @@ class _CommentCard extends StatelessWidget {
     required this.palette,
     required this.imageReferer,
     required this.onAction,
+    required this.linkBaseUri,
+    required this.onOpenLink,
   });
 
   final UserBlogComment comment;
@@ -1062,6 +1141,8 @@ class _CommentCard extends StatelessWidget {
   final _ProfileBlogPalette palette;
   final String imageReferer;
   final ValueChanged<UserBlogCommentAction> onAction;
+  final Uri? linkBaseUri;
+  final ValueChanged<String> onOpenLink;
 
   @override
   Widget build(BuildContext context) {
@@ -1146,9 +1227,8 @@ class _CommentCard extends StatelessWidget {
               contentImageKind: ForumImageKind.blogInline,
               surfaceColor: palette.card,
               foregroundColor: palette.body,
-              onOpenLink: (url) => ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(url))),
+              onOpenLink: onOpenLink,
+              linkBaseUri: linkBaseUri,
             ),
           ),
         ],

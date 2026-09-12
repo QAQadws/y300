@@ -11,12 +11,18 @@ final class ProfileBlogPageArgs {
     this.initialOrder = UserBlogOrder.latest,
     this.ownerUserId,
     this.routeOwner,
+    this.initialPage = 1,
+    this.initialCategoryId,
+    this.initialPersonalCategoryId,
   });
 
   final UserBlogFeedScope initialScope;
   final UserBlogOrder initialOrder;
   final String? ownerUserId;
   final Object? routeOwner;
+  final int initialPage;
+  final String? initialCategoryId;
+  final String? initialPersonalCategoryId;
 
   @override
   bool operator ==(Object other) =>
@@ -24,10 +30,20 @@ final class ProfileBlogPageArgs {
       initialScope == other.initialScope &&
       initialOrder == other.initialOrder &&
       ownerUserId == other.ownerUserId &&
+      initialPage == other.initialPage &&
+      initialCategoryId == other.initialCategoryId &&
+      initialPersonalCategoryId == other.initialPersonalCategoryId &&
       routeOwner == other.routeOwner;
   @override
-  int get hashCode =>
-      Object.hash(initialScope, initialOrder, ownerUserId, routeOwner);
+  int get hashCode => Object.hash(
+    initialScope,
+    initialOrder,
+    ownerUserId,
+    routeOwner,
+    initialPage,
+    initialCategoryId,
+    initialPersonalCategoryId,
+  );
 }
 
 @immutable
@@ -306,10 +322,18 @@ UserBlogDirectoryQuery _initialQuery(
   ProfileBlogPageArgs args,
   String? account,
 ) => args.ownerUserId != null || args.initialScope == UserBlogFeedScope.self
-    ? UserBlogDirectoryQuery.self(ownerUserId: args.ownerUserId ?? account)
+    ? UserBlogDirectoryQuery.self(
+        ownerUserId: args.ownerUserId ?? account,
+        page: args.initialPage,
+        personalCategoryId: args.initialPersonalCategoryId,
+      )
     : args.initialScope == UserBlogFeedScope.friends
-    ? const UserBlogDirectoryQuery.friends()
-    : UserBlogDirectoryQuery.public(order: args.initialOrder);
+    ? UserBlogDirectoryQuery.friends(page: args.initialPage)
+    : UserBlogDirectoryQuery.public(
+        order: args.initialOrder,
+        page: args.initialPage,
+        categoryId: args.initialCategoryId,
+      );
 
 UserBlogDirectoryQuery _page(UserBlogDirectoryQuery query, int page) =>
     UserBlogDirectoryQuery(

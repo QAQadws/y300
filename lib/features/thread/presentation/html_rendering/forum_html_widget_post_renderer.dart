@@ -45,6 +45,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.preparedDocument,
     this.contentImageKind = ForumImageKind.threadInline,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
+    this.linkBaseUri,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -82,6 +83,9 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ForumImageKind contentImageKind;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
 
+  /// The current source document, so fragment links retain article identity.
+  final Uri? linkBaseUri;
+
   @override
   Widget build(BuildContext context) {
     final resolvedPreferences =
@@ -118,7 +122,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     return HtmlWidget(
       preparedHtml,
       key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
-      baseUrl: forumBaseUri,
+      baseUrl: linkBaseUri ?? forumBaseUri,
       buildAsync: buildAsync,
       customStylesBuilder: stylePolicy.customStylesFor,
       customWidgetBuilder: (element) => _buildCustomWidget(
