@@ -11,6 +11,7 @@ import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/private_message_command.dart';
+import '../contracts/notification_ignore_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_repository.dart';
@@ -40,6 +41,7 @@ final class ForumClientSourcePlan {
     this.notifications,
     this.privateMessages,
     this.privateMessageCommand,
+    this.notificationIgnoreCommand,
     this.stickerCatalog,
     this.forumUserProfile,
     this.userBlogDirectory,
@@ -98,6 +100,8 @@ final class ForumClientSourcePlan {
     privateMessages: overrides.privateMessages ?? privateMessages,
     privateMessageCommand:
         overrides.privateMessageCommand ?? privateMessageCommand,
+    notificationIgnoreCommand:
+        overrides.notificationIgnoreCommand ?? notificationIgnoreCommand,
     stickerCatalog: overrides.stickerCatalog ?? stickerCatalog,
     forumUserProfile: overrides.forumUserProfile ?? forumUserProfile,
     userBlogDirectory: overrides.userBlogDirectory ?? userBlogDirectory,
@@ -183,6 +187,9 @@ final class ForumClientSourcePlan {
 
   /// Command for sending a private message to one explicit destination.
   final ForumPrivateMessageCommand? privateMessageCommand;
+
+  /// Command for muting future notifications of a type for selected authors.
+  final ForumNotificationIgnoreCommand? notificationIgnoreCommand;
 
   /// Source for the forum sticker catalog.
   final ForumStickerCatalogRepository? stickerCatalog;

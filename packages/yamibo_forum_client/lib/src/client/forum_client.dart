@@ -16,6 +16,7 @@ import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/private_message_command.dart';
+import '../contracts/notification_ignore_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_detail_models.dart';
@@ -442,6 +443,15 @@ final class YamiboForumClient {
   ) =>
       sourcePlan.privateMessageCommand?.execute(submission) ??
       Future.value(const DataCommandUnsupported<ForumPrivateMessageReceipt>());
+
+  /// Mutes future notifications of one type for the selected author scope.
+  Future<DataCommandResult<ForumNotificationIgnoreReceipt>> ignoreNotifications(
+    ForumNotificationIgnoreSubmission submission,
+  ) =>
+      sourcePlan.notificationIgnoreCommand?.execute(submission) ??
+      Future.value(
+        const DataCommandUnsupported<ForumNotificationIgnoreReceipt>(),
+      );
 
   /// Loads sticker catalog and returns a structured result.
   Future<

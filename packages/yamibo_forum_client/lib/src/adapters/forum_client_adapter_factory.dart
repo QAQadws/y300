@@ -13,6 +13,8 @@ import '../contracts/profile_and_blog.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/private_message_command.dart';
 import 'discuz_private_message_command.dart';
+import '../contracts/notification_ignore_command.dart';
+import 'discuz_notification_ignore_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_reply_page.dart';
@@ -140,6 +142,16 @@ final class ForumClientAdapterFactory {
   ) => DiscuzPrivateMessageCommand(
     api: _api,
     config: config,
+    formhash: formhash,
+  );
+
+  /// Creates the notification-type/author filtering command.
+  ForumNotificationIgnoreCommand createNotificationIgnoreCommand(
+    ForumFormhashProvider formhash,
+  ) => DiscuzNotificationIgnoreCommand(
+    config: config,
+    network: network,
+    profiles: requestProfiles,
     formhash: formhash,
   );
 
