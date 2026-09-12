@@ -4049,7 +4049,60 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogMoreComments => '更多评论';
 
   @override
-  String get profileBlogCommentUnavailable => '日志评论提交暂未接入';
+  String get profileBlogReplyComment => '回复评论';
+
+  @override
+  String get profileBlogEditComment => '编辑评论';
+
+  @override
+  String get profileBlogDeleteComment => '删除评论';
+
+  @override
+  String get profileBlogDeleteCommentBody => '确定删除这条评论吗？删除后无法恢复。';
+
+  @override
+  String get profileBlogCommentInputRequired => '请填写评论内容。';
+
+  @override
+  String get profileBlogCommentTooShort => '评论内容太短，请补充后再提交。';
+
+  @override
+  String get profileBlogCommentSubmitted => '评论已提交；如需审核，显示可能延迟。';
+
+  @override
+  String get profileBlogCommentSaved => '评论已保存';
+
+  @override
+  String get profileBlogCommentDeleted => '评论已删除';
+
+  @override
+  String get profileBlogCommentContent => '评论内容';
+
+  @override
+  String get profileBlogSubmitComment => '发布';
+
+  @override
+  String get profileBlogPreparingComment => '正在准备评论…';
+
+  @override
+  String get profileBlogSubmittingComment => '正在提交…';
+
+  @override
+  String get profileBlogCommentSessionChanged => '账号已变更，请返回日志后重新操作。';
+
+  @override
+  String get profileBlogCommentOutcomeUnknown =>
+      '无法确认这次操作是否成功，请先返回日志核对。为避免重复提交，本页不会再次发送；输入内容可以复制。';
+
+  @override
+  String get profileBlogLeaveCommentTitle => '离开评论页面？';
+
+  @override
+  String get profileBlogLeaveCommentBody => '尚未提交的修改会丢失，不会保存为草稿。';
+
+  @override
+  String get profileBlogLeavePendingCommentBody =>
+      '操作可能已送达服务器，离开不会撤回。请返回日志核对后再操作，避免重复提交。';
 
   @override
   String get profileBlogComment => '评论';
@@ -8444,7 +8497,60 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogMoreComments => '更多留言';
 
   @override
-  String get profileBlogCommentUnavailable => '目前尚未支援提交日誌留言';
+  String get profileBlogReplyComment => '回覆留言';
+
+  @override
+  String get profileBlogEditComment => '編輯留言';
+
+  @override
+  String get profileBlogDeleteComment => '刪除留言';
+
+  @override
+  String get profileBlogDeleteCommentBody => '確定刪除這則留言嗎？刪除後無法復原。';
+
+  @override
+  String get profileBlogCommentInputRequired => '請填寫留言內容。';
+
+  @override
+  String get profileBlogCommentTooShort => '留言內容太短，請補充後再提交。';
+
+  @override
+  String get profileBlogCommentSubmitted => '留言已提交；如需審核，顯示可能延遲。';
+
+  @override
+  String get profileBlogCommentSaved => '留言已儲存';
+
+  @override
+  String get profileBlogCommentDeleted => '留言已刪除';
+
+  @override
+  String get profileBlogCommentContent => '留言內容';
+
+  @override
+  String get profileBlogSubmitComment => '發佈';
+
+  @override
+  String get profileBlogPreparingComment => '正在準備留言…';
+
+  @override
+  String get profileBlogSubmittingComment => '正在提交…';
+
+  @override
+  String get profileBlogCommentSessionChanged => '帳號已變更，請返回日誌後重新操作。';
+
+  @override
+  String get profileBlogCommentOutcomeUnknown =>
+      '無法確認這次操作是否成功，請先返回日誌核對。為避免重複提交，本頁不會再次傳送；輸入內容可以複製。';
+
+  @override
+  String get profileBlogLeaveCommentTitle => '離開留言頁面？';
+
+  @override
+  String get profileBlogLeaveCommentBody => '尚未提交的修改會遺失，不會儲存為草稿。';
+
+  @override
+  String get profileBlogLeavePendingCommentBody =>
+      '操作可能已送達伺服器，離開不會撤回。請返回日誌核對後再操作，避免重複提交。';
 
   @override
   String get profileBlogComment => '留言';

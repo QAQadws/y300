@@ -7,10 +7,122 @@ import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../test_support/blog_comment_fixture.dart';
 
 void main() {
+  for (final action in UserBlogCommentAction.values) {
+    for (final applied in [true, false]) {
+      testWidgets('$action refreshes comment data only when applied=$applied', (
+        tester,
+      ) async {
+        final details = _FakeBlogDetailRepository(commentActions: {action});
+        final comments = BlogCommentFixture(autoPrepare: true);
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              blogAccountIdProvider.overrideWithValue('101'),
+              userBlogDetailRepositoryProvider.overrideWithValue(details),
+              userBlogCommentServiceProvider.overrideWithValue(comments),
+              forumImageRefererProvider.overrideWithValue(
+                'https://bbs.yamibo.com/',
+              ),
+            ],
+            child: const LocalizedTestApp(
+              home: ProfileBlogDetailPage(ownerUserId: '202', blogId: '11'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ProfileBlogDetailPage)),
+        );
+        if (action == UserBlogCommentAction.add) {
+          final add = find.byKey(const Key('profile-blog-comment-button'));
+          await tester.scrollUntilVisible(
+            add,
+            150,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.tap(add);
+        } else {
+          final menu = find.byKey(const Key('blog-comment-actions-646846'));
+          await tester.scrollUntilVisible(
+            menu,
+            150,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.tap(menu);
+          await tester.pumpAndSettle();
+          for (final other in UserBlogCommentAction.values) {
+            if (other != action && other != UserBlogCommentAction.add) {
+              expect(
+                find.text(blogCommentActionLabel(l10n, other)),
+                findsNothing,
+              );
+            }
+          }
+          await tester.tap(find.text(blogCommentActionLabel(l10n, action)));
+        }
+        await tester.pumpAndSettle();
+        expect(find.byType(BlogCommentPage), findsOneWidget);
+        expect(
+          comments.preparations.single.target,
+          UserBlogCommentTarget(
+            actorUserId: '101',
+            ownerUserId: '202',
+            blogId: '11',
+            action: action,
+            commentId: action == UserBlogCommentAction.add ? null : '646846',
+          ),
+        );
+        if (action != UserBlogCommentAction.delete) {
+          await tester.enterText(find.byType(TextField), '实际输入内容');
+        }
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('blog-comment-submit')));
+        await tester.pump();
+        expect(details.queries, hasLength(1));
+        if (applied) {
+          comments.applied();
+          await tester.pumpAndSettle();
+          expect(details.queries, hasLength(2));
+          expect(details.policies.last, CacheLoadPolicy.networkFirst);
+          expect(
+            details.queries.last.lastCommentPage,
+            action == UserBlogCommentAction.add ||
+                action == UserBlogCommentAction.reply,
+          );
+        } else {
+          comments.submissions.single.result.complete(
+            const DataCommandOutcomeUnknown(blogCommentWriteFailure),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('blog-comment-leave')));
+          await tester.pumpAndSettle();
+          expect(details.queries, hasLength(1));
+          // An inconclusive write leaves the article untouched, but the
+          // user must still be able to check it by pulling a short page.
+          await tester.drag(
+            find.byKey(const Key('profile-blog-detail')),
+            const Offset(0, 400),
+          );
+          await tester.pumpAndSettle();
+          expect(details.queries, hasLength(2));
+          expect(details.policies.last, CacheLoadPolicy.networkFirst);
+        }
+        expect(find.byType(BlogCommentPage), findsNothing);
+        expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('tabs remain usable while the first request is pending', (
     tester,
   ) async {
@@ -232,10 +344,7 @@ void main() {
 
     expect(find.textContaining('浏览 39'), findsNothing);
     expect(find.text('日志评论'), findsNothing);
-    expect(
-      find.byKey(const Key('profile-blog-comment-placeholder')),
-      findsNothing,
-    );
+    expect(find.byKey(const Key('profile-blog-comment-button')), findsNothing);
   });
 
   testWidgets('refresh failure retains existing directory content', (
@@ -513,9 +622,12 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
   _FakeBlogDetailRepository({
     UserBlogDetailReadCapabilities? capabilities,
     this.gate,
+    this.commentActions = const {},
   }) : readCapabilities = capabilities ?? _detailCapabilities();
 
   final UserBlogDetailReadCapabilities readCapabilities;
+  final Set<UserBlogCommentAction> commentActions;
+  final policies = <CacheLoadPolicy>[];
   final Completer<void>? gate;
   final cancellations = <ForumRequestCancellation?>[];
   final List<UserBlogDetailQuery> queries = <UserBlogDetailQuery>[];
@@ -532,6 +644,7 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
     ForumRequestCancellation? cancellation,
   }) async {
     queries.add(query);
+    policies.add(cachePolicy);
     cancellations.add(cancellation);
     await gate?.future;
     return DataReadSuccess(
@@ -545,12 +658,13 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
         viewCount: 39,
         commentCount: 1,
         commentsOpen: true,
-        comments: const <UserBlogComment>[
+        comments: <UserBlogComment>[
           UserBlogComment(
             commentId: '646846',
             authorName: 'thessky',
             bodyHtml: '<p>探险的感觉</p>',
             publishedAtText: '2026-6-18 01:00',
+            actions: commentActions,
           ),
         ],
       ),

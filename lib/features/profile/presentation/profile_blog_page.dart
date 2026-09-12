@@ -4,6 +4,8 @@ import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/auth/presentation/login_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/presentation/blog/blog_feed_controller.dart';
 import 'package:y300/features/profile/presentation/blog/blog_detail_controller.dart';
@@ -183,6 +185,8 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                   failure: state.failure,
                   palette: palette,
                   imageReferer: referer,
+                  onComment: (action, comment) =>
+                      _openComment(controller, action, comment),
                   onLoadNextComments: state.canLoadNext
                       ? controller.loadNextComments
                       : null,
@@ -206,6 +210,60 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
               ),
       ),
     );
+  }
+
+  Future<void> _openComment(
+    ProfileBlogDetailController controller,
+    UserBlogCommentAction action,
+    UserBlogComment? comment,
+  ) async {
+    final actor = ref.read(blogAccountIdProvider);
+    if (actor == null) {
+      await Navigator.of(
+        context,
+      ).push<void>(MaterialPageRoute(builder: (_) => const LoginPage()));
+      return;
+    }
+    final receipt = await Navigator.of(context).push<UserBlogCommentReceipt>(
+      MaterialPageRoute(
+        builder: (_) => BlogCommentPage(
+          target: UserBlogCommentTarget(
+            actorUserId: actor,
+            ownerUserId: widget.ownerUserId,
+            blogId: widget.blogId,
+            action: action,
+            commentId: comment?.commentId,
+          ),
+        ),
+      ),
+    );
+    if (!mounted ||
+        receipt == null ||
+        ref.read(blogAccountIdProvider) != actor) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (action) {
+          UserBlogCommentAction.add ||
+          UserBlogCommentAction.reply => l10n.profileBlogCommentSubmitted,
+          UserBlogCommentAction.edit => l10n.profileBlogCommentSaved,
+          UserBlogCommentAction.delete => l10n.profileBlogCommentDeleted,
+        }),
+      ),
+    );
+    // Only a confirmed write refreshes the article. Editing/deleting keeps the
+    // current comment range; additions ask the server for its actual last page.
+    if (action == UserBlogCommentAction.add ||
+        action == UserBlogCommentAction.reply) {
+      await controller.loadLastComments();
+    } else {
+      await controller.selectCommentPage(
+        controller.value.firstCommentPage,
+        refresh: true,
+      );
+    }
   }
 }
 
@@ -648,6 +706,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
     required this.failure,
     required this.palette,
     required this.imageReferer,
+    required this.onComment,
     required this.onLoadNextComments,
     required this.onPreviousComments,
     required this.onShowAllComments,
@@ -659,6 +718,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
   final Object? failure;
   final _ProfileBlogPalette palette;
   final String imageReferer;
+  final void Function(UserBlogCommentAction, UserBlogComment?) onComment;
   final VoidCallback? onLoadNextComments;
   final VoidCallback? onPreviousComments;
   final VoidCallback? onShowAllComments;
@@ -668,6 +728,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       key: const Key('profile-blog-detail'),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
       children: [
         if (failure != null)
@@ -709,6 +770,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
               capabilities: capabilities,
               palette: palette,
               imageReferer: imageReferer,
+              onAction: (action) => onComment(action, comment),
             ),
             const SizedBox(height: 10),
           ],
@@ -748,14 +810,8 @@ class _ProfileBlogDetailContent extends StatelessWidget {
             data.commentsOpen == true) ...[
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            key: const Key('profile-blog-comment-placeholder'),
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  AppLocalizations.of(context).profileBlogCommentUnavailable,
-                ),
-              ),
-            ),
+            key: const Key('profile-blog-comment-button'),
+            onPressed: () => onComment(UserBlogCommentAction.add, null),
             icon: const Icon(Icons.comment_outlined),
             label: Text(AppLocalizations.of(context).profileBlogComment),
           ),
@@ -872,12 +928,14 @@ class _CommentCard extends StatelessWidget {
     required this.capabilities,
     required this.palette,
     required this.imageReferer,
+    required this.onAction,
   });
 
   final UserBlogComment comment;
   final UserBlogDetailReadCapabilities? capabilities;
   final _ProfileBlogPalette palette;
   final String imageReferer;
+  final ValueChanged<UserBlogCommentAction> onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -920,6 +978,28 @@ class _CommentCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (comment.actions.any(
+                (action) => action != UserBlogCommentAction.add,
+              ))
+                PopupMenuButton<UserBlogCommentAction>(
+                  key: Key('blog-comment-actions-${comment.commentId}'),
+                  tooltip: AppLocalizations.of(context).threadDetailMore,
+                  onSelected: onAction,
+                  itemBuilder: (context) => [
+                    for (final action in UserBlogCommentAction.values)
+                      if (action != UserBlogCommentAction.add &&
+                          comment.actions.contains(action))
+                        PopupMenuItem(
+                          value: action,
+                          child: Text(
+                            blogCommentActionLabel(
+                              AppLocalizations.of(context),
+                              action,
+                            ),
+                          ),
+                        ),
+                  ],
+                ),
             ],
           ),
           const SizedBox(height: 10),

@@ -6651,11 +6651,113 @@ abstract class AppLocalizations {
   /// **'更多评论'**
   String get profileBlogMoreComments;
 
-  /// No description provided for @profileBlogCommentUnavailable.
+  /// No description provided for @profileBlogReplyComment.
   ///
   /// In zh, this message translates to:
-  /// **'日志评论提交暂未接入'**
-  String get profileBlogCommentUnavailable;
+  /// **'回复评论'**
+  String get profileBlogReplyComment;
+
+  /// No description provided for @profileBlogEditComment.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑评论'**
+  String get profileBlogEditComment;
+
+  /// No description provided for @profileBlogDeleteComment.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除评论'**
+  String get profileBlogDeleteComment;
+
+  /// No description provided for @profileBlogDeleteCommentBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定删除这条评论吗？删除后无法恢复。'**
+  String get profileBlogDeleteCommentBody;
+
+  /// No description provided for @profileBlogCommentInputRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写评论内容。'**
+  String get profileBlogCommentInputRequired;
+
+  /// No description provided for @profileBlogCommentTooShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论内容太短，请补充后再提交。'**
+  String get profileBlogCommentTooShort;
+
+  /// No description provided for @profileBlogCommentSubmitted.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论已提交；如需审核，显示可能延迟。'**
+  String get profileBlogCommentSubmitted;
+
+  /// No description provided for @profileBlogCommentSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论已保存'**
+  String get profileBlogCommentSaved;
+
+  /// No description provided for @profileBlogCommentDeleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论已删除'**
+  String get profileBlogCommentDeleted;
+
+  /// No description provided for @profileBlogCommentContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论内容'**
+  String get profileBlogCommentContent;
+
+  /// No description provided for @profileBlogSubmitComment.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布'**
+  String get profileBlogSubmitComment;
+
+  /// No description provided for @profileBlogPreparingComment.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备评论…'**
+  String get profileBlogPreparingComment;
+
+  /// No description provided for @profileBlogSubmittingComment.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在提交…'**
+  String get profileBlogSubmittingComment;
+
+  /// No description provided for @profileBlogCommentSessionChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'账号已变更，请返回日志后重新操作。'**
+  String get profileBlogCommentSessionChanged;
+
+  /// No description provided for @profileBlogCommentOutcomeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法确认这次操作是否成功，请先返回日志核对。为避免重复提交，本页不会再次发送；输入内容可以复制。'**
+  String get profileBlogCommentOutcomeUnknown;
+
+  /// No description provided for @profileBlogLeaveCommentTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开评论页面？'**
+  String get profileBlogLeaveCommentTitle;
+
+  /// No description provided for @profileBlogLeaveCommentBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未提交的修改会丢失，不会保存为草稿。'**
+  String get profileBlogLeaveCommentBody;
+
+  /// No description provided for @profileBlogLeavePendingCommentBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作可能已送达服务器，离开不会撤回。请返回日志核对后再操作，避免重复提交。'**
+  String get profileBlogLeavePendingCommentBody;
 
   /// No description provided for @profileBlogComment.
   ///

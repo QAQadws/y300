@@ -86,10 +86,10 @@ final class ProfileBlogDetailController
           append: true,
         );
 
-  Future<void> selectCommentPage(int page) {
+  Future<void> selectCommentPage(int page, {bool refresh = false}) {
     if (!_active || _disposed || page < 1) return Future.value();
     _cancel();
-    return _load(_query(page: page));
+    return _load(_query(page: page), refresh: refresh);
   }
 
   Future<void> loadLastComments() {

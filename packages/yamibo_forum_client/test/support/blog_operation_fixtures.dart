@@ -59,7 +59,7 @@ ${deleting ? '' : '<input type="hidden" name="stickflag" value="${action == User
 }
 
 String blogManagedArticle({bool deletionAllowed = true}) =>
-    '$blogOperationHeader${blogArticle().replaceFirst('</div>\n  </div>\n  <div class="doing_list_box">', '''${deletionAllowed ? '<a href="home.php?mod=spacecp&ac=blog&op=delete&blogid=11">Delete</a>' : ''}</div>
+    '$blogOperationHeader${blogArticle().replaceFirst('</div>\n  </div>\n  <div class="doing_list_box">', '''${deletionAllowed ? '<a href="home.php?mod=spacecp&ac=blog&op=delete&blogid=11&handlekey=delbloghk_11">Delete</a>' : ''}</div>
   </div>
   <div class="doing_list_box">''')}';
 

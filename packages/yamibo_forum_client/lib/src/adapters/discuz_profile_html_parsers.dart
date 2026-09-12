@@ -656,6 +656,7 @@ Set<UserBlogAction> _blogActions(
             'blogid',
             'stickflag',
             'mobile',
+            'handlekey',
           }.contains(key),
         )) {
       continue;
