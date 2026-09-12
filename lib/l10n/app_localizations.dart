@@ -6633,6 +6633,24 @@ abstract class AppLocalizations {
   /// **'日志评论'**
   String get profileBlogComments;
 
+  /// No description provided for @profileBlogAllCategories.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部分类'**
+  String get profileBlogAllCategories;
+
+  /// No description provided for @profileBlogAllComments.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部评论'**
+  String get profileBlogAllComments;
+
+  /// No description provided for @profileBlogMoreComments.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多评论'**
+  String get profileBlogMoreComments;
+
   /// No description provided for @profileBlogCommentUnavailable.
   ///
   /// In zh, this message translates to:

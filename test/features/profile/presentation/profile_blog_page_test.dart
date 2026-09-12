@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +11,121 @@ import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import '../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets('tabs remain usable while the first request is pending', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repository = _FakeBlogDirectoryRepository(gate: gate);
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: repository,
+      detailRepository: _FakeBlogDetailRepository(),
+      settle: false,
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('profile-blog-view-tabs')), findsOneWidget);
+    await tester.tap(find.text('我的日志'));
+    await tester.pump();
+    expect(repository.queries.map((q) => q.scope), [
+      UserBlogFeedScope.public,
+      UserBlogFeedScope.self,
+    ]);
+    expect(repository.cancellations.first!.isCancelled, isTrue);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('一种体验'), findsNothing);
+    expect(find.text('还没有相关的日志'), findsOneWidget);
+  });
+
+  testWidgets('returning from a pending article cancels its read', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final details = _FakeBlogDetailRepository(gate: gate);
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: _FakeBlogDirectoryRepository(),
+      detailRepository: details,
+    );
+    await tester.tap(find.text('一种体验'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ProfileBlogDetailPage),
+        matching: find.text('一种体验'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(details.cancellations.single!.isCancelled, isTrue);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileBlogDetailPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the last scroll offset is restored independently for each tab', (
+    tester,
+  ) async {
+    final repository = _FakeBlogDirectoryRepository(longList: true);
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: repository,
+      detailRepository: _FakeBlogDetailRepository(),
+    );
+    final list = find.byKey(const Key('profile-blog-list'));
+    await tester.drag(list, const Offset(0, -650));
+    await tester.pumpAndSettle();
+    double offset() => tester
+        .state<ScrollableState>(
+          find.descendant(of: list, matching: find.byType(Scrollable)),
+        )
+        .position
+        .pixels;
+    final before = offset();
+    expect(before, greaterThan(400));
+    await tester.tap(find.text('我的日志'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('随便看看'));
+    await tester.pumpAndSettle();
+    expect(offset(), closeTo(before, 1));
+    expect(repository.queries, hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'two routes with the same feed use separate controller instances',
+    (tester) async {
+      final repository = _FakeBlogDirectoryRepository();
+      await _pumpBlogPage(
+        tester,
+        directoryRepository: repository,
+        detailRepository: _FakeBlogDetailRepository(),
+      );
+      final context = tester.element(find.text('随便看看'));
+      unawaited(
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const ProfileBlogPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.queries, hasLength(2));
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester
+          .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+          .onRefresh();
+      await tester.pumpAndSettle();
+      expect(repository.queries, hasLength(3));
+      expect(find.text('一种体验'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('ProfileBlogPage switches structured queries and opens detail', (
     tester,
   ) async {
@@ -130,13 +247,9 @@ void main() {
       directoryRepository: repository,
       detailRepository: _FakeBlogDetailRepository(),
     );
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(ProfileBlogPage)),
-    );
-
-    await container
-        .read(profileBlogListProvider(const ProfileBlogPageArgs()).notifier)
-        .refresh();
+    await tester
+        .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+        .onRefresh();
     await tester.pumpAndSettle();
 
     expect(find.text('一种体验'), findsOneWidget);
@@ -194,6 +307,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          blogAccountIdProvider.overrideWithValue('101'),
           userBlogDirectoryRepositoryProvider.overrideWithValue(
             _FakeBlogDirectoryRepository(),
           ),
@@ -227,6 +341,7 @@ Future<void> _pumpBlogPage(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        blogAccountIdProvider.overrideWithValue('101'),
         userBlogDirectoryRepositoryProvider.overrideWithValue(
           directoryRepository,
         ),
@@ -278,11 +393,16 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
     UserBlogDirectoryReadCapabilities? capabilities,
     this.failAfterSuccess = false,
     this.failFirst = false,
+    this.gate,
+    this.longList = false,
   }) : readCapabilities = capabilities ?? _directoryCapabilities();
 
   final UserBlogDirectoryReadCapabilities readCapabilities;
   final bool failAfterSuccess;
   final bool failFirst;
+  final Completer<void>? gate;
+  final bool longList;
+  final cancellations = <ForumRequestCancellation?>[];
   final List<UserBlogDirectoryQuery> queries = <UserBlogDirectoryQuery>[];
   final List<CacheLoadPolicy> policies = <CacheLoadPolicy>[];
 
@@ -304,6 +424,8 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
   }) async {
     queries.add(query);
     policies.add(cachePolicy);
+    cancellations.add(cancellation);
+    await gate?.future;
     if ((failFirst && queries.length == 1) ||
         (failAfterSuccess && queries.length > 1)) {
       return const DataReadFailure(
@@ -325,6 +447,23 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
         order: null,
         items: const <UserBlogSummary>[],
         pagination: UserBlogPagination(currentPage: query.page),
+      );
+    }
+    if (longList) {
+      return UserBlogDirectoryData(
+        scope: query.scope,
+        order: query.order,
+        items: [
+          for (var i = 0; i < 30; i++)
+            UserBlogSummary(
+              blogId: '${i + 1}',
+              ownerUserId: '101',
+              title: 'Entry $i',
+              excerpt:
+                  'A longer journal excerpt for checking retained scroll position.',
+            ),
+        ],
+        pagination: const UserBlogPagination(currentPage: 1, hasNext: false),
       );
     }
     if (query.page == 2) {
@@ -371,10 +510,14 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
 }
 
 class _FakeBlogDetailRepository implements UserBlogDetailRepository {
-  _FakeBlogDetailRepository({UserBlogDetailReadCapabilities? capabilities})
-    : readCapabilities = capabilities ?? _detailCapabilities();
+  _FakeBlogDetailRepository({
+    UserBlogDetailReadCapabilities? capabilities,
+    this.gate,
+  }) : readCapabilities = capabilities ?? _detailCapabilities();
 
   final UserBlogDetailReadCapabilities readCapabilities;
+  final Completer<void>? gate;
+  final cancellations = <ForumRequestCancellation?>[];
   final List<UserBlogDetailQuery> queries = <UserBlogDetailQuery>[];
 
   @override
@@ -389,6 +532,8 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
     ForumRequestCancellation? cancellation,
   }) async {
     queries.add(query);
+    cancellations.add(cancellation);
+    await gate?.future;
     return DataReadSuccess(
       data: UserBlogDetailData(
         blogId: query.blogId,

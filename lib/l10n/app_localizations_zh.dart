@@ -4040,6 +4040,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogComments => '日志评论';
 
   @override
+  String get profileBlogAllCategories => '全部分类';
+
+  @override
+  String get profileBlogAllComments => '全部评论';
+
+  @override
+  String get profileBlogMoreComments => '更多评论';
+
+  @override
   String get profileBlogCommentUnavailable => '日志评论提交暂未接入';
 
   @override
@@ -8424,6 +8433,15 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogComments => '日誌留言';
+
+  @override
+  String get profileBlogAllCategories => '全部分類';
+
+  @override
+  String get profileBlogAllComments => '全部留言';
+
+  @override
+  String get profileBlogMoreComments => '更多留言';
 
   @override
   String get profileBlogCommentUnavailable => '目前尚未支援提交日誌留言';
