@@ -165,6 +165,7 @@ final class YamiboForumClientBuilder {
       currentUserProfile: factory.createCurrentUserProfile(),
       notifications: factory.createNotifications(),
       privateMessages: factory.createPrivateMessages(),
+      privateMessageCommand: factory.createPrivateMessageCommand(formhash),
       stickerCatalog: factory.createStickerCatalog(store: stickerCatalogStore),
       forumUserProfile: factory.createForumUserProfile(),
       userBlogDirectory: factory.createUserBlogDirectory(),

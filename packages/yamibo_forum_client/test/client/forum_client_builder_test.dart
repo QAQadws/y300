@@ -65,6 +65,7 @@ void main() {
         sources.currentUserProfile,
         sources.notifications,
         sources.privateMessages,
+        sources.privateMessageCommand,
         sources.stickerCatalog,
         sources.forumUserProfile,
         sources.userBlogDirectory,

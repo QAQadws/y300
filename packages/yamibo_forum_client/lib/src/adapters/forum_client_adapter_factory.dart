@@ -11,6 +11,8 @@ import '../contracts/forum_tag_directory.dart';
 import '../contracts/forum_search.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/message_directories.dart';
+import '../contracts/private_message_command.dart';
+import 'discuz_private_message_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_repository.dart';
 import '../contracts/thread_reply_page.dart';
@@ -131,6 +133,15 @@ final class ForumClientAdapterFactory {
   /// Creates the Discuz private-message directory source.
   ForumPrivateMessageRepository createPrivateMessages() =>
       DiscuzForumPrivateMessageRepository(_api);
+
+  /// Creates the private-message command on the shared formhash boundary.
+  ForumPrivateMessageCommand createPrivateMessageCommand(
+    ForumFormhashProvider formhash,
+  ) => DiscuzPrivateMessageCommand(
+    api: _api,
+    config: config,
+    formhash: formhash,
+  );
 
   /// Creates the sticker source, optionally backed by [store].
   ForumStickerCatalogRepository createStickerCatalog({

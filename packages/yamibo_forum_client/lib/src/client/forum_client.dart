@@ -15,6 +15,7 @@ import '../contracts/forum_resource.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/message_directories.dart';
+import '../contracts/private_message_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_detail_models.dart';
@@ -434,6 +435,13 @@ final class YamiboForumClient {
         ForumPrivateMessagePage,
         ForumPrivateMessageReadCapabilities
       >();
+
+  /// Sends one explicit private message; uncertain outcomes are never retried.
+  Future<DataCommandResult<ForumPrivateMessageReceipt>> sendPrivateMessage(
+    ForumPrivateMessageSubmission submission,
+  ) =>
+      sourcePlan.privateMessageCommand?.execute(submission) ??
+      Future.value(const DataCommandUnsupported<ForumPrivateMessageReceipt>());
 
   /// Loads sticker catalog and returns a structured result.
   Future<

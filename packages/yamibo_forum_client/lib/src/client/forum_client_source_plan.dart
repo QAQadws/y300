@@ -10,6 +10,7 @@ import '../contracts/forum_search.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/message_directories.dart';
+import '../contracts/private_message_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_repository.dart';
@@ -38,6 +39,7 @@ final class ForumClientSourcePlan {
     this.currentUserProfile,
     this.notifications,
     this.privateMessages,
+    this.privateMessageCommand,
     this.stickerCatalog,
     this.forumUserProfile,
     this.userBlogDirectory,
@@ -94,6 +96,8 @@ final class ForumClientSourcePlan {
     currentUserProfile: overrides.currentUserProfile ?? currentUserProfile,
     notifications: overrides.notifications ?? notifications,
     privateMessages: overrides.privateMessages ?? privateMessages,
+    privateMessageCommand:
+        overrides.privateMessageCommand ?? privateMessageCommand,
     stickerCatalog: overrides.stickerCatalog ?? stickerCatalog,
     forumUserProfile: overrides.forumUserProfile ?? forumUserProfile,
     userBlogDirectory: overrides.userBlogDirectory ?? userBlogDirectory,
@@ -176,6 +180,9 @@ final class ForumClientSourcePlan {
 
   /// Source for private-message pages.
   final ForumPrivateMessageRepository? privateMessages;
+
+  /// Command for sending a private message to one explicit destination.
+  final ForumPrivateMessageCommand? privateMessageCommand;
 
   /// Source for the forum sticker catalog.
   final ForumStickerCatalogRepository? stickerCatalog;
