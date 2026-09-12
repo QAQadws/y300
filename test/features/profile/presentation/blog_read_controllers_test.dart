@@ -624,6 +624,31 @@ void main() {
   );
 
   test(
+    'comment paging updates advertised reader actions without replacing the article',
+    () async {
+      final repository = _Details();
+      final controller = detail(repository);
+      var pending = controller.setActive(true);
+      repository.succeed(0, socialActions: {UserBlogSocialAction.favorite});
+      await pending;
+      expect(controller.value.data!.socialActions, {
+        UserBlogSocialAction.favorite,
+      });
+      pending = controller.loadNextComments();
+      repository.succeed(
+        1,
+        body: '<p>New remote body</p>',
+        socialActions: {UserBlogSocialAction.invite},
+      );
+      await pending;
+      expect(controller.value.data!.bodyHtml, '<p>Article</p>');
+      expect(controller.value.data!.socialActions, {
+        UserBlogSocialAction.invite,
+      });
+    },
+  );
+
+  test(
     'comment pagination appends without replacing the displayed article',
     () async {
       final repository = _Details();
@@ -806,6 +831,7 @@ class _Details implements UserBlogDetailRepository {
     int index, {
     List<String> ids = const ['5'],
     String body = '<p>Article</p>',
+    Set<UserBlogSocialAction> socialActions = const {},
     bool next = true,
     int? page,
   }) {
@@ -817,6 +843,7 @@ class _Details implements UserBlogDetailRepository {
           blogId: request.query.blogId,
           title: 'Title',
           bodyHtml: body,
+          socialActions: socialActions,
           comments: [
             for (final id in ids)
               UserBlogComment(

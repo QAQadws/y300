@@ -322,6 +322,18 @@ enum UserBlogAction {
   unpin,
 }
 
+/// Reader actions advertised by the article's mobile toolbar.
+enum UserBlogSocialAction {
+  /// Save a personal bookmark with an optional description.
+  favorite,
+
+  /// Publish a share to the reader's activity feed.
+  share,
+
+  /// Invite selected friends to read the article.
+  invite,
+}
+
 /// Query parameters for user blog directory.
 final class UserBlogDirectoryQuery {
   /// Creates a [UserBlogDirectoryQuery].
@@ -677,6 +689,7 @@ final class UserBlogDetailData {
     this.commentPagination = const UserBlogPagination(currentPage: 1),
     this.actions = const {},
     this.categoryLinks = const [],
+    this.socialActions = const {},
   });
 
   /// Blog id.
@@ -720,6 +733,9 @@ final class UserBlogDetailData {
 
   /// Validated category links, separate from the article title.
   final List<UserBlogCategoryLink> categoryLinks;
+
+  /// Source-advertised reader actions, separate from author management.
+  final Set<UserBlogSocialAction> socialActions;
 }
 
 /// Source-neutral user blog comment.

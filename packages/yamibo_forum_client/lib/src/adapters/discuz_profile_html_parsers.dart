@@ -8,6 +8,7 @@ import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_comments.dart';
 import '../url/forum_uri_resolver.dart';
 import 'discuz_blog_heading_parser.dart';
+import 'discuz_blog_social_links.dart';
 import 'discuz_blog_pagination.dart';
 
 abstract final class DiscuzProfileAuthPageDetector {
@@ -459,6 +460,11 @@ final class UserBlogDetailHtmlParser {
       title: title,
       bodyHtml: body,
       categoryLinks: categoryLinks,
+      socialActions: DiscuzBlogSocialLinks(siteOrigin).parse(
+        post.querySelectorAll('.threadlist_foot a[href]'),
+        blogId: query.blogId,
+        ownerUserId: ownerId,
+      ),
       authorName: _optionalText(author?.text),
       avatarUrl: _optionalUri(
         resolver,

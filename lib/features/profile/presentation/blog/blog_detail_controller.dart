@@ -251,6 +251,7 @@ UserBlogDetailData _append(
   commentCount: next.commentCount,
   commentsOpen: next.commentsOpen,
   actions: next.actions,
+  socialActions: next.socialActions,
   commentPagination: next.commentPagination,
   comments: List.unmodifiable(
     {
