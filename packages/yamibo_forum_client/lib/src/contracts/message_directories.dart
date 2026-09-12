@@ -3,11 +3,18 @@ library;
 
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
+import '../network/forum_request.dart';
 
 /// Query parameters for forum notification.
 final class ForumNotificationQuery {
   /// Creates a [ForumNotificationQuery].
-  const ForumNotificationQuery();
+  const ForumNotificationQuery({this.page = 1, this.cancellation});
+
+  /// One-based page; reading can mark notifications as read on the server.
+  final int page;
+
+  /// Cancels an obsolete page or account read.
+  final ForumRequestCancellation? cancellation;
 }
 
 /// Source-neutral forum notification item.
@@ -135,8 +142,60 @@ abstract interface class ForumNotificationRepository {
 
 /// Query parameters for forum private message.
 final class ForumPrivateMessageQuery {
-  /// Creates a [ForumPrivateMessageQuery].
-  const ForumPrivateMessageQuery();
+  /// Reads the conversation directory in most-recent-first order.
+  const ForumPrivateMessageQuery({this.page = 1, this.cancellation})
+    : target = null;
+
+  /// Reads messages in chronological order within a conversation page.
+  ///
+  /// Zero selects the latest page. Older history has smaller page numbers.
+  const ForumPrivateMessageQuery.conversation({
+    required ForumConversationTarget this.target,
+    this.page = 0,
+    this.cancellation,
+  });
+
+  /// Null for the directory, otherwise the conversation to read.
+  final ForumConversationTarget? target;
+
+  /// One-based page, or zero for the latest conversation page.
+  final int page;
+
+  /// Cancels an obsolete page or account read.
+  final ForumRequestCancellation? cancellation;
+}
+
+/// A direct recipient and a group conversation use different server identities.
+enum ForumConversationKind {
+  /// A conversation with one other user.
+  direct,
+
+  /// An existing multi-user conversation.
+  group,
+}
+
+/// Identifies a conversation without exposing a transport URL.
+final class ForumConversationTarget {
+  /// Opens a direct conversation by recipient user ID.
+  const ForumConversationTarget.direct(this.id)
+    : kind = ForumConversationKind.direct;
+
+  /// Opens an existing group conversation by conversation ID.
+  const ForumConversationTarget.group(this.id)
+    : kind = ForumConversationKind.group;
+
+  /// Recipient user ID or group conversation ID, according to [kind].
+  final String id;
+
+  /// Determines which identity namespace [id] belongs to.
+  final ForumConversationKind kind;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ForumConversationTarget && other.kind == kind && other.id == id;
+
+  @override
+  int get hashCode => Object.hash(kind, id);
 }
 
 /// Source-neutral forum private message item.
@@ -154,6 +213,8 @@ final class ForumPrivateMessageItem {
     required this.message,
     required this.sentAt,
     required this.rawDateline,
+    this.isGroupConversation = false,
+    this.participantCount = 0,
   });
 
   /// Message id.
@@ -188,6 +249,23 @@ final class ForumPrivateMessageItem {
 
   /// Raw dateline.
   final String rawDateline;
+
+  /// Whether this directory entry represents a multi-user conversation.
+  final bool isGroupConversation;
+
+  /// Number of participants when supplied by the directory.
+  final int participantCount;
+
+  /// The directory's routable target, or null if the source omitted it.
+  ForumConversationTarget? get target {
+    if (!isGroupConversation && toUserId.isNotEmpty && toUserId != '0') {
+      return ForumConversationTarget.direct(toUserId);
+    }
+    final id = conversationId;
+    return id == null || id.isEmpty || id == '0'
+        ? null
+        : ForumConversationTarget.group(id);
+  }
 }
 
 /// Source-neutral forum private message page.
@@ -198,6 +276,8 @@ final class ForumPrivateMessagePage {
     required this.count,
     required this.page,
     required this.perPage,
+    this.currentUserId = '',
+    this.replyMessageId = '',
   });
 
   /// Items.
@@ -211,6 +291,18 @@ final class ForumPrivateMessagePage {
 
   /// Per page.
   final int perPage;
+
+  /// Account associated with this response; used to distinguish outgoing rows.
+  final String currentUserId;
+
+  /// Server-provided message anchor needed when replying to a group.
+  final String replyMessageId;
+
+  /// Whether a later page exists (newer messages for a conversation).
+  bool get hasNext => perPage > 0 && page * perPage < count;
+
+  /// Whether an earlier page exists (older messages for a conversation).
+  bool get hasPrevious => page > 1;
 }
 
 /// Capabilities exposed by forum private message.
