@@ -555,8 +555,13 @@ final class YamiboForumClient {
   loadUserBlogs(
     UserBlogDirectoryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) =>
-      sourcePlan.userBlogDirectory?.load(query, cachePolicy: cachePolicy) ??
+      sourcePlan.userBlogDirectory?.load(
+        query,
+        cachePolicy: cachePolicy,
+        cancellation: cancellation,
+      ) ??
       unsupported<UserBlogDirectoryData, UserBlogDirectoryReadCapabilities>();
 
   /// Loads user blog detail and returns a structured result.
@@ -564,8 +569,13 @@ final class YamiboForumClient {
   loadUserBlogDetail(
     UserBlogDetailQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) =>
-      sourcePlan.userBlogDetail?.load(query, cachePolicy: cachePolicy) ??
+      sourcePlan.userBlogDetail?.load(
+        query,
+        cachePolicy: cachePolicy,
+        cancellation: cancellation,
+      ) ??
       unsupported<UserBlogDetailData, UserBlogDetailReadCapabilities>();
 
   /// Starts a forum search.

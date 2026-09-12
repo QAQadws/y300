@@ -300,6 +300,7 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
   load(
     UserBlogDirectoryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) async {
     queries.add(query);
     policies.add(cachePolicy);
@@ -385,6 +386,7 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
   load(
     UserBlogDetailQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) async {
     queries.add(query);
     return DataReadSuccess(

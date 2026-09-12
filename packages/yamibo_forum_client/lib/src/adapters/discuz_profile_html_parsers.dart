@@ -6,6 +6,7 @@ import 'package:html/parser.dart' as html_parser;
 import '../contracts/data_read_contract.dart';
 import '../contracts/profile_and_blog.dart';
 import '../url/forum_uri_resolver.dart';
+import 'discuz_blog_pagination.dart';
 
 abstract final class DiscuzProfileAuthPageDetector {
   static bool isLoginPage(String html) {
@@ -178,6 +179,29 @@ final class UserBlogDirectoryHtmlParser {
     if (scope != query.scope || order != expectedOrder) {
       throw const FormatException('blog_directory_identity_mismatch');
     }
+    final activeScope = _validBlogUri(
+      document.querySelector('.dhnv a.mon, .dhnv .mon a')?.attributes['href'],
+    );
+    if (query.ownerUserId != null &&
+        activeScope?.queryParameters['uid'] != query.ownerUserId) {
+      throw const FormatException('blog_directory_owner_mismatch');
+    }
+    final selectedFilters = document
+        .querySelectorAll('#dhnavs_li li.mon a, #dhnavs_li a.mon')
+        .map((node) => _validBlogUri(node.attributes['href']))
+        .whereType<Uri>();
+    final selectedCategory = selectedFilters
+        .map((uri) => _filterId(uri.queryParameters['catid']))
+        .whereType<String>()
+        .toSet();
+    final selectedPersonal = selectedFilters
+        .map((uri) => _filterId(uri.queryParameters['classid']))
+        .whereType<String>()
+        .toSet();
+    if (!_matchesFilter(selectedCategory, query.categoryId) ||
+        !_matchesFilter(selectedPersonal, query.personalCategoryId)) {
+      throw const FormatException('blog_directory_category_mismatch');
+    }
     final resolver = ForumUriResolver(siteOrigin: siteOrigin);
     final items = <UserBlogSummary>[];
     final ids = <String>{};
@@ -195,6 +219,7 @@ final class UserBlogDirectoryHtmlParser {
         order: order,
         items: List.unmodifiable(items),
         pagination: pagination.$1,
+        categories: _categories(document, query),
       ),
       paginationPrecision: pagination.$2,
     );
@@ -233,7 +258,9 @@ final class UserBlogDirectoryHtmlParser {
     final blogId = uri?.queryParameters['id']?.trim() ?? '';
     final ownerId = uri?.queryParameters['uid']?.trim() ?? '';
     final title = _clean(row.querySelector('.threadlist_tit')?.text ?? '');
-    if (blogId.isEmpty || ownerId.isEmpty || title.isEmpty) {
+    if (!RegExp(r'^[1-9]\d*$').hasMatch(blogId) ||
+        !RegExp(r'^[1-9]\d*$').hasMatch(ownerId) ||
+        title.isEmpty) {
       throw const FormatException('blog_entry_identity_invalid');
     }
     final author = row.querySelector('.muser h3 a');
@@ -258,92 +285,57 @@ final class UserBlogDirectoryHtmlParser {
   (UserBlogPagination, PaginationPrecision) _pagination(
     html_dom.Document document,
     UserBlogDirectoryQuery query,
+  ) => DiscuzBlogPagination(siteOrigin).parse(
+    document,
+    requestedPage: query.page,
+    matchesContext: (uri) {
+      if (_validBlogUri(uri.toString()) == null ||
+          uri.queryParameters.containsKey('id')) {
+        return false;
+      }
+      final values = uri.queryParameters;
+      final scope = switch (query.scope) {
+        UserBlogFeedScope.friends => 'we',
+        UserBlogFeedScope.self => 'me',
+        UserBlogFeedScope.public => 'all',
+      };
+      final order = values['order'] ?? 'dateline';
+      return values['view'] == scope &&
+          order ==
+              (query.order == UserBlogOrder.recommended ? 'hot' : 'dateline') &&
+          (query.ownerUserId == null || values['uid'] == query.ownerUserId) &&
+          _filterId(values['catid']) == query.categoryId &&
+          _filterId(values['classid']) == query.personalCategoryId;
+    },
+  );
+
+  List<UserBlogCategory> _categories(
+    html_dom.Document document,
+    UserBlogDirectoryQuery query,
   ) {
-    final container = document.querySelector('.pg');
-    if (container == null) {
-      if (query.page != 1) {
-        throw const FormatException('blog_page_unverified');
+    final field = query.scope == UserBlogFeedScope.public ? 'catid' : 'classid';
+    final categories = <String, UserBlogCategory>{};
+    for (final anchor in document.querySelectorAll('#dhnavs_li a[href]')) {
+      final uri = _validBlogUri(anchor.attributes['href']);
+      final id = _filterId(uri?.queryParameters[field]);
+      final name = _optionalText(anchor.text);
+      if (uri == null || id == null || name == null) continue;
+      if (query.ownerUserId != null &&
+          uri.queryParameters['uid'] != query.ownerUserId) {
+        continue;
       }
-      return (
-        const UserBlogPagination(currentPage: 1),
-        PaginationPrecision.unknown,
-      );
+      categories[id] = UserBlogCategory(id: id, name: name);
     }
-    final current = _positiveInt(
-      _clean(container.querySelector('strong')?.text ?? ''),
-    );
-    if (current != query.page) {
-      throw const FormatException('blog_page_identity_mismatch');
-    }
-    int? total;
-    final totalNode = container.querySelector('label span');
-    if (totalNode != null) {
-      final match = RegExp(r'(\d+)\s*页').firstMatch(_clean(totalNode.text));
-      if (match == null) throw const FormatException('blog_total_invalid');
-      total = _positiveInt(match.group(1)!);
-      if (current > total) {
-        throw const FormatException('blog_pagination_inconsistent');
-      }
-    }
-    final previous = container.querySelector('a.prev');
-    final next = container.querySelector('a.nxt');
-    if (previous != null) {
-      _validatePageLink(previous, query, current - 1);
-    }
-    if (next != null) _validatePageLink(next, query, current + 1);
-    return (
-      UserBlogPagination(
-        currentPage: current,
-        totalPages: total,
-        hasPrevious: total != null
-            ? current > 1
-            : previous == null
-            ? null
-            : true,
-        hasNext: total != null
-            ? current < total
-            : next == null
-            ? null
-            : true,
-      ),
-      total != null
-          ? PaginationPrecision.exact
-          : previous != null || next != null
-          ? PaginationPrecision.directional
-          : PaginationPrecision.unknown,
-    );
+    return List.unmodifiable(categories.values);
   }
 
-  void _validatePageLink(
-    html_dom.Element anchor,
-    UserBlogDirectoryQuery query,
-    int expectedPage,
-  ) {
-    final uri = _validBlogUri(anchor.attributes['href']);
-    final page = int.tryParse(uri?.queryParameters['page'] ?? '');
-    final scope = switch (uri?.queryParameters['view']) {
-      'we' => UserBlogFeedScope.friends,
-      'me' => UserBlogFeedScope.self,
-      'all' => UserBlogFeedScope.public,
-      _ => null,
-    };
-    final order = switch (uri?.queryParameters['order']) {
-      null || '' || 'dateline' => UserBlogOrder.latest,
-      'hot' => UserBlogOrder.recommended,
-      _ => null,
-    };
-    final expectedOrder = query.scope == UserBlogFeedScope.public
-        ? (query.order ?? UserBlogOrder.latest)
-        : UserBlogOrder.latest;
-    final hasOrder = uri?.queryParameters.containsKey('order') ?? false;
-    if (uri == null ||
-        page != expectedPage ||
-        scope != query.scope ||
-        (query.scope == UserBlogFeedScope.public && order != expectedOrder) ||
-        (query.scope != UserBlogFeedScope.public && hasOrder)) {
-      throw const FormatException('blog_pagination_link_invalid');
-    }
-  }
+  String? _filterId(String? value) =>
+      value == null || value.isEmpty || value == '0' ? null : value;
+
+  bool _matchesFilter(Set<String> observed, String? expected) =>
+      expected == null
+      ? observed.isEmpty
+      : observed.length == 1 && observed.single == expected;
 
   Iterable<html_dom.Element> _directRows(html_dom.Element root) sync* {
     for (final child in root.children) {
@@ -425,6 +417,10 @@ final class UserBlogDetailHtmlParser {
       }
       comments.add(comment);
     }
+    if (query.commentId != null &&
+        comments.any((comment) => comment.commentId != query.commentId)) {
+      throw const FormatException('blog_comment_identity_mismatch');
+    }
     if (commentCount != null && commentCount < comments.length) {
       throw const FormatException('blog_comment_count_inconsistent');
     }
@@ -458,7 +454,25 @@ final class UserBlogDetailHtmlParser {
       viewCount: viewCount,
       commentCount: commentCount,
       comments: List.unmodifiable(comments),
-      commentsOpen: form == null ? null : true,
+      commentsOpen:
+          form != null &&
+          form.querySelector('textarea[name="message"]') != null,
+      commentPagination: DiscuzBlogPagination(siteOrigin)
+          .parse(
+            document,
+            requestedPage: query.page,
+            lastPage: query.lastCommentPage,
+            singleComment: query.commentId != null,
+            matchesContext: (uri) =>
+                uri.path.endsWith('/home.php') &&
+                uri.queryParameters['mod'] == 'space' &&
+                uri.queryParameters['do'] == 'blog' &&
+                uri.queryParameters['uid'] == query.ownerUserId &&
+                uri.queryParameters['id'] == query.blogId &&
+                !uri.queryParameters.containsKey('cid') &&
+                !uri.queryParameters.containsKey('goto'),
+          )
+          .$1,
     );
   }
 
@@ -467,7 +481,7 @@ final class UserBlogDetailHtmlParser {
       r'^comment_(\d+)_li$',
     ).firstMatch(row.id.trim())?.group(1);
     final author = row.querySelector('.muser h3 a');
-    final authorName = _clean(author?.text ?? '');
+    final authorName = _clean(row.querySelector('.muser h3')?.text ?? '');
     final body = row.querySelector('.do_comment')?.innerHtml.trim() ?? '';
     if (id == null || authorName.isEmpty || body.isEmpty) {
       throw const FormatException('blog_comment_invalid');
@@ -517,6 +531,11 @@ final class UserBlogDetailHtmlParser {
         uri.path.endsWith('misc.php') &&
         uri.queryParameters['mod'] == 'invite' &&
         uri.queryParameters['action'] == 'blog';
+    if (uri.path.endsWith('home.php') &&
+        uri.queryParameters['mod'] == 'spacecp' &&
+        uri.queryParameters['ac'] == 'blog') {
+      return _optionalText(uri.queryParameters['blogid']);
+    }
     return isSpaceAction || isInviteAction
         ? _optionalText(uri.queryParameters['id'])
         : null;
@@ -564,17 +583,6 @@ String? _optionalText(String? value) {
 String? _optionalMarkup(String? value) {
   final normalized = value?.trim() ?? '';
   return normalized.isEmpty ? null : normalized;
-}
-
-int _positiveInt(String value) {
-  if (!RegExp(r'^\d+$').hasMatch(value)) {
-    throw const FormatException('positive_integer_invalid');
-  }
-  final parsed = int.tryParse(value);
-  if (parsed == null || parsed < 1) {
-    throw const FormatException('positive_integer_invalid');
-  }
-  return parsed;
 }
 
 String _clean(String value) => value.replaceAll(RegExp(r'\s+'), ' ').trim();

@@ -3,6 +3,7 @@ library;
 
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
+import '../network/forum_request.dart' show ForumRequestCancellation;
 
 /// Source-neutral profile user identity.
 final class ProfileUserIdentity {
@@ -309,23 +310,45 @@ final class UserBlogDirectoryQuery {
     required this.scope,
     this.order,
     this.page = 1,
+    this.ownerUserId,
+    this.categoryId,
+    this.personalCategoryId,
   });
 
   /// Creates a [UserBlogDirectoryQuery].
   const UserBlogDirectoryQuery.public({
     this.order = UserBlogOrder.latest,
     this.page = 1,
-  }) : scope = UserBlogFeedScope.public;
+    this.categoryId,
+  }) : scope = UserBlogFeedScope.public,
+       ownerUserId = null,
+       personalCategoryId = null;
 
   /// Creates a [UserBlogDirectoryQuery].
   const UserBlogDirectoryQuery.friends({this.page = 1})
     : scope = UserBlogFeedScope.friends,
-      order = null;
+      order = null,
+      ownerUserId = null,
+      categoryId = null,
+      personalCategoryId = null;
 
   /// Creates a [UserBlogDirectoryQuery].
-  const UserBlogDirectoryQuery.self({this.page = 1})
-    : scope = UserBlogFeedScope.self,
-      order = null;
+  const UserBlogDirectoryQuery.self({
+    this.page = 1,
+    this.ownerUserId,
+    this.personalCategoryId,
+  }) : scope = UserBlogFeedScope.self,
+       order = null,
+       categoryId = null;
+
+  /// A specific author's journal; omitted for the signed-in user's own feed.
+  final String? ownerUserId;
+
+  /// Site category, available only for the public feed.
+  final String? categoryId;
+
+  /// Author-defined category, available only for an author's feed.
+  final String? personalCategoryId;
 
   /// Scope.
   final UserBlogFeedScope scope;
@@ -341,10 +364,20 @@ final class UserBlogDirectoryQuery {
       other is UserBlogDirectoryQuery &&
       other.scope == scope &&
       other.order == order &&
-      other.page == page;
+      other.page == page &&
+      other.ownerUserId == ownerUserId &&
+      other.categoryId == categoryId &&
+      other.personalCategoryId == personalCategoryId;
 
   @override
-  int get hashCode => Object.hash(scope, order, page);
+  int get hashCode => Object.hash(
+    scope,
+    order,
+    page,
+    ownerUserId,
+    categoryId,
+    personalCategoryId,
+  );
 }
 
 /// Source-neutral user blog directory data.
@@ -355,6 +388,7 @@ final class UserBlogDirectoryData {
     required this.order,
     required this.items,
     required this.pagination,
+    this.categories = const [],
   });
 
   /// Scope.
@@ -368,6 +402,21 @@ final class UserBlogDirectoryData {
 
   /// Pagination.
   final UserBlogPagination pagination;
+
+  /// Server-advertised filters for the current scope.
+  final List<UserBlogCategory> categories;
+}
+
+/// A site or personal category advertised by the selected journal feed.
+final class UserBlogCategory {
+  /// Creates a category with a source identifier and display name.
+  const UserBlogCategory({required this.id, required this.name});
+
+  /// Stable category identifier.
+  final String id;
+
+  /// Server-authored category name.
+  final String name;
 }
 
 /// Source-neutral user blog summary.
@@ -527,13 +576,29 @@ abstract interface class UserBlogDirectoryRepository {
   load(
     UserBlogDirectoryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   });
 }
 
 /// Query parameters for user blog detail.
 final class UserBlogDetailQuery {
   /// Creates a [UserBlogDetailQuery].
-  const UserBlogDetailQuery({required this.ownerUserId, required this.blogId});
+  const UserBlogDetailQuery({
+    required this.ownerUserId,
+    required this.blogId,
+    this.page = 1,
+    this.commentId,
+    this.lastCommentPage = false,
+  });
+
+  /// One-based comment page.
+  final int page;
+
+  /// A specific comment, used by links to replies and notifications.
+  final String? commentId;
+
+  /// Requests the server's last comment page after a confirmed submission.
+  final bool lastCommentPage;
 
   /// Owner user id.
   final String ownerUserId;
@@ -545,10 +610,14 @@ final class UserBlogDetailQuery {
   bool operator ==(Object other) =>
       other is UserBlogDetailQuery &&
       other.ownerUserId == ownerUserId &&
-      other.blogId == blogId;
+      other.blogId == blogId &&
+      other.page == page &&
+      other.commentId == commentId &&
+      other.lastCommentPage == lastCommentPage;
 
   @override
-  int get hashCode => Object.hash(ownerUserId, blogId);
+  int get hashCode =>
+      Object.hash(ownerUserId, blogId, page, commentId, lastCommentPage);
 }
 
 /// Source-neutral user blog detail data.
@@ -566,6 +635,7 @@ final class UserBlogDetailData {
     this.viewCount,
     this.commentCount,
     this.commentsOpen,
+    this.commentPagination = const UserBlogPagination(currentPage: 1),
   });
 
   /// Blog id.
@@ -600,6 +670,9 @@ final class UserBlogDetailData {
 
   /// Comments open.
   final bool? commentsOpen;
+
+  /// Paging evidence for comments, independent of the article body.
+  final UserBlogPagination commentPagination;
 }
 
 /// Source-neutral user blog comment.
@@ -726,5 +799,6 @@ abstract interface class UserBlogDetailRepository {
   load(
     UserBlogDetailQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   });
 }

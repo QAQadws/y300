@@ -10,6 +10,7 @@ import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
 import 'discuz_profile_html_parsers.dart';
+import 'discuz_blog_access.dart';
 
 final class DiscuzForumUserProfileRepository
     implements ForumUserProfileRepository {
@@ -130,9 +131,18 @@ final class DiscuzUserBlogDirectoryRepository
   load(
     UserBlogDirectoryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) async {
+    if (cancellation?.isCancelled ?? false) return _cancelledBlogRead();
     if (query.page < 1 ||
-        (query.scope != UserBlogFeedScope.public && query.order != null)) {
+        (query.scope != UserBlogFeedScope.public && query.order != null) ||
+        !_optionalId(query.ownerUserId) ||
+        !_optionalId(query.categoryId) ||
+        !_optionalId(query.personalCategoryId) ||
+        (query.ownerUserId != null && query.scope != UserBlogFeedScope.self) ||
+        (query.categoryId != null && query.scope != UserBlogFeedScope.public) ||
+        (query.personalCategoryId != null &&
+            query.scope != UserBlogFeedScope.self)) {
       return const DataReadFailure(
         kind: DataReadFailureKind.business,
         code: 'user_blog_directory_query_invalid',
@@ -148,6 +158,10 @@ final class DiscuzUserBlogDirectoryRepository
         'mod': 'space',
         'do': 'blog',
         'view': _scopeValue(query.scope),
+        if (query.ownerUserId != null) 'uid': query.ownerUserId!,
+        if (query.categoryId != null) 'catid': query.categoryId!,
+        if (query.personalCategoryId != null)
+          'classid': query.personalCategoryId!,
         'mobile': '2',
         if (order == UserBlogOrder.recommended) 'order': 'hot',
         if (query.page > 1) 'page': '${query.page}',
@@ -156,6 +170,7 @@ final class DiscuzUserBlogDirectoryRepository
     final result = await network.send(
       ForumRequest(
         method: ForumRequestMethod.get,
+        cancellation: cancellation,
         uri: uri,
         context: ForumRequestContext(
           operation: 'profile.blog.directory.html',
@@ -167,6 +182,7 @@ final class DiscuzUserBlogDirectoryRepository
             .headers,
       ),
     );
+    if (cancellation?.isCancelled ?? false) return _cancelledBlogRead();
     final body =
         _textOrFailure<
           UserBlogDirectoryData,
@@ -176,14 +192,12 @@ final class DiscuzUserBlogDirectoryRepository
       return failure.retype();
     }
     final html = (body as DataReadSuccess<String, Object?>).data;
-    if (query.scope != UserBlogFeedScope.public &&
-        DiscuzProfileAuthPageDetector.isLoginPage(html)) {
-      return const DataReadFailure(
-        kind: DataReadFailureKind.unauthorized,
-        code: 'user_blog_directory_unauthorized',
-        diagnosticMessage: 'user_blog_directory_unauthorized',
-      );
-    }
+    final accessFailure =
+        DiscuzBlogAccess.failure<
+          UserBlogDirectoryData,
+          UserBlogDirectoryReadCapabilities
+        >(html);
+    if (accessFailure != null) return accessFailure;
     try {
       final parsed = _parser.parse(html: html, query: query);
       return DataReadSuccess(
@@ -227,10 +241,18 @@ final class DiscuzUserBlogDetailRepository implements UserBlogDetailRepository {
   load(
     UserBlogDetailQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) async {
+    if (cancellation?.isCancelled ?? false) return _cancelledBlogRead();
     final ownerId = query.ownerUserId.trim();
     final blogId = query.blogId.trim();
-    if (ownerId.isEmpty || blogId.isEmpty) {
+    if (!_positiveId(ownerId) ||
+        !_positiveId(blogId) ||
+        query.page < 1 ||
+        !_optionalId(query.commentId) ||
+        (query.commentId != null &&
+            (query.page != 1 || query.lastCommentPage)) ||
+        (query.lastCommentPage && query.page != 1)) {
       return const DataReadFailure(
         kind: DataReadFailureKind.business,
         code: 'user_blog_detail_query_invalid',
@@ -244,12 +266,16 @@ final class DiscuzUserBlogDetailRepository implements UserBlogDetailRepository {
         'uid': ownerId,
         'do': 'blog',
         'id': blogId,
+        if (query.page > 1) 'page': '${query.page}',
+        if (query.commentId != null) 'cid': query.commentId!,
+        if (query.lastCommentPage) 'goto': 'last',
         'mobile': '2',
       },
     );
     final result = await network.send(
       ForumRequest(
         method: ForumRequestMethod.get,
+        cancellation: cancellation,
         uri: uri,
         context: const ForumRequestContext(
           operation: 'profile.blog.detail.html',
@@ -261,6 +287,7 @@ final class DiscuzUserBlogDetailRepository implements UserBlogDetailRepository {
             .headers,
       ),
     );
+    if (cancellation?.isCancelled ?? false) return _cancelledBlogRead();
     final body =
         _textOrFailure<UserBlogDetailData, UserBlogDetailReadCapabilities>(
           result,
@@ -268,11 +295,15 @@ final class DiscuzUserBlogDetailRepository implements UserBlogDetailRepository {
     if (body case DataReadFailure<String, Object?> failure) {
       return failure.retype();
     }
+    final html = (body as DataReadSuccess<String, Object?>).data;
+    final accessFailure =
+        DiscuzBlogAccess.failure<
+          UserBlogDetailData,
+          UserBlogDetailReadCapabilities
+        >(html);
+    if (accessFailure != null) return accessFailure;
     try {
-      final data = _parser.parse(
-        html: (body as DataReadSuccess<String, Object?>).data,
-        query: query,
-      );
+      final data = _parser.parse(html: html, query: query);
       return DataReadSuccess(
         data: data,
         capabilities: _blogDetailReadCapabilities(data),
@@ -454,4 +485,12 @@ final _blogDirectoryCapabilities = UserBlogDirectorySourceCapabilities(
 
 final _blogDetailCapabilities = UserBlogDetailSourceCapabilities(
   values: DataCapabilitySet.supported(UserBlogDetailCapability.values),
+);
+
+bool _positiveId(String value) => RegExp(r'^[1-9]\d*$').hasMatch(value);
+bool _optionalId(String? value) => value == null || _positiveId(value);
+DataReadFailure<T, C> _cancelledBlogRead<T, C>() => const DataReadFailure(
+  kind: DataReadFailureKind.cancelled,
+  code: 'user_blog_cancelled',
+  diagnosticMessage: 'user_blog_cancelled',
 );
