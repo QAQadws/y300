@@ -1,6 +1,13 @@
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 final class BlogNavigationFixture implements UserBlogNavigation {
+  UserBlogReadReference? readReference;
+  @override
+  UserBlogReadReference? resolveReadReference(
+    String reference, {
+    Uri? baseUri,
+    String? actorUserId,
+  }) => readReference;
   UserBlogCommentTarget? commentTarget;
   UserBlogDetailQuery? detailQuery;
   UserBlogDirectoryQuery? directoryQuery;

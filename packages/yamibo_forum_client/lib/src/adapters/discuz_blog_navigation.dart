@@ -2,6 +2,7 @@ import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_navigation.dart';
 import '../contracts/user_blog_operations.dart';
+import 'discuz_blog_read_reference_parser.dart';
 
 /// Canonical browser destinations, kept out of Host widgets and controllers.
 final class DiscuzBlogNavigation implements UserBlogNavigation {
@@ -10,6 +11,15 @@ final class DiscuzBlogNavigation implements UserBlogNavigation {
 
   /// Configured forum origin, shared with the journal read adapters.
   final Uri siteOrigin;
+
+  @override
+  UserBlogReadReference? resolveReadReference(
+    String reference, {
+    Uri? baseUri,
+    String? actorUserId,
+  }) => DiscuzBlogReadReferenceParser(
+    siteOrigin,
+  ).resolve(reference, baseUri: baseUri, actorUserId: actorUserId);
 
   @override
   Uri? directory(UserBlogDirectoryQuery query) {
