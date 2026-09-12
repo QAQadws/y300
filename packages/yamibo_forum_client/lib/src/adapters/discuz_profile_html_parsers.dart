@@ -5,6 +5,7 @@ import 'package:html/parser.dart' as html_parser;
 
 import '../contracts/data_read_contract.dart';
 import '../contracts/profile_and_blog.dart';
+import '../contracts/user_blog_comments.dart';
 import '../url/forum_uri_resolver.dart';
 import 'discuz_blog_pagination.dart';
 
@@ -496,7 +497,33 @@ final class UserBlogDetailHtmlParser {
         row.querySelector('.avatar img')?.attributes['src'],
       ),
       publishedAtText: _optionalText(row.querySelector('.mtime span')?.text),
+      actions: _commentActions(row, id),
     );
+  }
+
+  Set<UserBlogCommentAction> _commentActions(
+    html_dom.Element row,
+    String commentId,
+  ) {
+    final result = <UserBlogCommentAction>{};
+    for (final anchor in row.querySelectorAll('.doing_listgl a[href]')) {
+      final uri = _sameSite(anchor.attributes['href'], siteOrigin);
+      if (uri == null ||
+          !uri.path.endsWith('/home.php') ||
+          uri.queryParameters['mod'] != 'spacecp' ||
+          uri.queryParameters['ac'] != 'comment' ||
+          uri.queryParameters['cid'] != commentId) {
+        continue;
+      }
+      final action = switch (uri.queryParameters['op']) {
+        'reply' => UserBlogCommentAction.reply,
+        'edit' => UserBlogCommentAction.edit,
+        'delete' => UserBlogCommentAction.delete,
+        _ => null,
+      };
+      if (action != null) result.add(action);
+    }
+    return Set.unmodifiable(result);
   }
 
   int? _displayedCount(html_dom.Element? stats, String iconClass) {

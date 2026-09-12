@@ -69,6 +69,7 @@ void main() {
         sources.forumUserProfile,
         sources.userBlogDirectory,
         sources.userBlogDetail,
+        sources.blogComments,
         sources.forumSearch,
         sources.comicEpisodeCatalog,
         sources.comicThreadDiscovery,

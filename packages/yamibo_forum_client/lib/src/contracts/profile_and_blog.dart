@@ -3,6 +3,7 @@ library;
 
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
+import 'user_blog_comments.dart';
 import '../network/forum_request.dart' show ForumRequestCancellation;
 
 /// Source-neutral profile user identity.
@@ -685,6 +686,7 @@ final class UserBlogComment {
     this.authorUserId,
     this.avatarUrl,
     this.publishedAtText,
+    this.actions = const {},
   });
 
   /// Comment id.
@@ -704,6 +706,9 @@ final class UserBlogComment {
 
   /// Published at text.
   final String? publishedAtText;
+
+  /// Operations explicitly advertised for this comment in the current session.
+  final Set<UserBlogCommentAction> actions;
 }
 
 /// Capabilities exposed by user blog detail.
