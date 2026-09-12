@@ -5,6 +5,8 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -12,8 +14,68 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../test_support/blog_comment_fixture.dart';
+import '../test_support/blog_navigation_fixture.dart';
 
 void main() {
+  testWidgets(
+    'unsupported forms open an account-bound browser without a POST or receipt',
+    (tester) async {
+      final service = BlogCommentFixture();
+      final host = await _open(tester, service);
+      service.preparations.single.result.complete(
+        const DataReadFailure(
+          kind: DataReadFailureKind.unsupported,
+          diagnosticMessage: 'fixture_captcha',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('blog-comment-open-web')));
+      await tester.pumpAndSettle();
+      expect(
+        host.navigation.commentTarget,
+        blogCommentTarget(UserBlogCommentAction.add),
+      );
+      expect(host.webLaunches.single.expectedAccountId, '101');
+      expect(host.webLaunches.single.initialUri, host.navigation.uri);
+      expect(host.webLaunches.single.popOnRootBack, isTrue);
+      expect(await host.receipt, isNull);
+      expect(find.byType(BlogCommentPage), findsNothing);
+      expect(service.submissions, isEmpty);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(BlogCommentPage), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'browser fallback warns about unsent input and can be cancelled',
+    (tester) async {
+      final service = BlogCommentFixture(autoPrepare: true);
+      final host = await _open(tester, service);
+      final l10n = _l10n(tester);
+      await tester.enterText(find.byType(TextField), '还没有提交的修改');
+      await _submit(tester);
+      service.submissions.single.result.complete(
+        const DataCommandRejected(blogCommentWriteFailure),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('blog-comment-open-web')));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.profileBlogWebInputNotice), findsOneWidget);
+      await tester.tap(find.text(l10n.commonCancel));
+      await tester.pumpAndSettle();
+      expect(_input(tester).controller!.text, '还没有提交的修改');
+      expect(host.webLaunches, isEmpty);
+      await tester.tap(find.byKey(const Key('blog-comment-open-web')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('blog-comment-confirm-web')));
+      await tester.pumpAndSettle();
+      expect(host.webLaunches, hasLength(1));
+      expect(service.submissions, hasLength(1));
+      expect(await host.receipt, isNull);
+      expect(find.byType(BlogCommentPage), findsNothing);
+    },
+  );
   testWidgets('empty comments explain the missing input without submitting', (
     tester,
   ) async {
@@ -113,6 +175,7 @@ void main() {
     expect(find.text(l10n.profileBlogCommentOutcomeUnknown), findsOneWidget);
     expect(find.byKey(const Key('blog-comment-retry')), findsNothing);
     expect(find.byKey(const Key('blog-comment-submit')), findsNothing);
+    expect(find.byKey(const Key('blog-comment-open-web')), findsNothing);
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(find.text(l10n.profileBlogLeavePendingCommentBody), findsOneWidget);
@@ -348,18 +411,33 @@ Future<_Host> _open(
 }
 
 final class _Host {
-  _Host(this.service)
-    : container = ProviderContainer(
-        overrides: [
-          blogAccountIdProvider.overrideWithValue('101'),
-          userBlogCommentServiceProvider.overrideWithValue(service),
-        ],
-      );
+  _Host(this.service) {
+    container = ProviderContainer(
+      overrides: [
+        blogAccountIdProvider.overrideWithValue('101'),
+        userBlogCommentServiceProvider.overrideWithValue(service),
+        userBlogNavigationProvider.overrideWithValue(navigation),
+        forumWebViewRouteFactoryProvider.overrideWithValue(_webRoute),
+      ],
+    );
+  }
   final BlogCommentFixture service;
-  final ProviderContainer container;
+  late final ProviderContainer container;
+  final navigation = BlogNavigationFixture();
+  final webLaunches = <ForumWebViewLaunchConfig>[];
   late Future<UserBlogCommentReceipt?> receipt;
   void changeActor(String? actor) => container.updateOverrides([
     blogAccountIdProvider.overrideWithValue(actor),
     userBlogCommentServiceProvider.overrideWithValue(service),
+    userBlogNavigationProvider.overrideWithValue(navigation),
+    forumWebViewRouteFactoryProvider.overrideWithValue(_webRoute),
   ]);
+
+  Route<Object?> _webRoute(ForumWebViewLaunchConfig config) {
+    webLaunches.add(config);
+    return MaterialPageRoute(
+      builder: (_) =>
+          Scaffold(appBar: AppBar(), body: const Text('browser fixture')),
+    );
+  }
 }

@@ -6,6 +6,7 @@ import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_controller.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
+import 'package:y300/features/profile/presentation/blog/blog_web_navigation.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -187,6 +188,12 @@ class _BlogCommentPageState extends ConsumerState<BlogCommentPage> {
                         ),
                       ),
                     ),
+                  if (state.phase == BlogCommentPhase.failed)
+                    TextButton(
+                      key: const Key('blog-comment-open-web'),
+                      onPressed: _openWeb,
+                      child: Text(l10n.profileBlogOpenWeb),
+                    ),
                 ],
               ],
             ),
@@ -207,6 +214,42 @@ class _BlogCommentPageState extends ConsumerState<BlogCommentPage> {
     // A leave dialog can cover this route while the POST completes. Let that
     // dialog close first so the receipt never pops the dialog or its parent.
     if (!_confirmingLeave) Navigator.of(context).pop(receipt);
+  }
+
+  Future<void> _openWeb() async {
+    if (_confirmingLeave) return;
+    if (_controller.value.dirty) {
+      _confirmingLeave = true;
+      final l10n = AppLocalizations.of(context);
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l10n.profileBlogOpenWeb),
+          content: Text(l10n.profileBlogWebInputNotice),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l10n.commonCancel),
+            ),
+            TextButton(
+              key: const Key('blog-comment-confirm-web'),
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l10n.commonConfirm),
+            ),
+          ],
+        ),
+      );
+      _confirmingLeave = false;
+      if (!mounted || confirmed != true) return;
+    }
+    if (!mounted || _controller.value.phase != BlogCommentPhase.failed) return;
+    await openBlogWebPage(
+      context,
+      ref,
+      expectedActor: widget.target.actorUserId,
+      replaceCurrent: true,
+      destination: (navigation) => navigation.comment(widget.target),
+    );
   }
 
   Future<void> _confirmLeave() async {

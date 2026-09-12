@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_account_guard.dart';
 
 typedef ForumWebViewRouteFactory =
     Route<Object?> Function(ForumWebViewLaunchConfig config);
@@ -27,7 +28,12 @@ final forumWebViewRouteFactoryProvider = Provider<ForumWebViewRouteFactory>((
         }),
         forumWebViewControllerProvider.overrideWith(ForumWebViewController.new),
       ],
-      child: const ForumWebViewPage(),
+      child: config.expectedAccountId == null
+          ? const ForumWebViewPage()
+          : ForumWebViewAccountGuard(
+              accountId: config.expectedAccountId!,
+              builder: (_) => const ForumWebViewPage(),
+            ),
     ),
   );
 });

@@ -6573,6 +6573,42 @@ abstract class AppLocalizations {
   /// **'资料加载失败：{error}'**
   String profileLoadFailed(String error);
 
+  /// No description provided for @forumWebViewAccountChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'账号已变更，请关闭此页面后重新打开。'**
+  String get forumWebViewAccountChanged;
+
+  /// No description provided for @profileBlogOpenWeb.
+  ///
+  /// In zh, this message translates to:
+  /// **'在网页中打开'**
+  String get profileBlogOpenWeb;
+
+  /// No description provided for @profileBlogWebInputNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前输入不会自动带入网页。你可以取消并先复制内容，再打开网页继续操作。'**
+  String get profileBlogWebInputNotice;
+
+  /// No description provided for @profileBlogPasswordRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'这篇日志需要密码，可在网页中输入后阅读。'**
+  String get profileBlogPasswordRequired;
+
+  /// No description provided for @profileBlogPrivate.
+  ///
+  /// In zh, this message translates to:
+  /// **'作者限制了这篇日志的访问范围。'**
+  String get profileBlogPrivate;
+
+  /// No description provided for @profileBlogUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志暂时无法访问，可能已删除、尚未审核或没有查看权限。'**
+  String get profileBlogUnavailable;
+
   /// No description provided for @profileBlogTitle.
   ///
   /// In zh, this message translates to:

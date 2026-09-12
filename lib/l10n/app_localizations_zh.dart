@@ -4010,6 +4010,24 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get forumWebViewAccountChanged => '账号已变更，请关闭此页面后重新打开。';
+
+  @override
+  String get profileBlogOpenWeb => '在网页中打开';
+
+  @override
+  String get profileBlogWebInputNotice => '当前输入不会自动带入网页。你可以取消并先复制内容，再打开网页继续操作。';
+
+  @override
+  String get profileBlogPasswordRequired => '这篇日志需要密码，可在网页中输入后阅读。';
+
+  @override
+  String get profileBlogPrivate => '作者限制了这篇日志的访问范围。';
+
+  @override
+  String get profileBlogUnavailable => '日志暂时无法访问，可能已删除、尚未审核或没有查看权限。';
+
+  @override
   String get profileBlogTitle => '日志';
 
   @override
@@ -8456,6 +8474,24 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String profileLoadFailed(String error) {
     return '資料載入失敗：$error';
   }
+
+  @override
+  String get forumWebViewAccountChanged => '帳號已變更，請關閉此頁面後重新開啟。';
+
+  @override
+  String get profileBlogOpenWeb => '在網頁中開啟';
+
+  @override
+  String get profileBlogWebInputNotice => '目前輸入不會自動帶入網頁。你可以取消並先複製內容，再開啟網頁繼續操作。';
+
+  @override
+  String get profileBlogPasswordRequired => '這篇日誌需要密碼，可在網頁中輸入後閱讀。';
+
+  @override
+  String get profileBlogPrivate => '作者限制了這篇日誌的存取範圍。';
+
+  @override
+  String get profileBlogUnavailable => '日誌暫時無法存取，可能已刪除、尚未審核或沒有查看權限。';
 
   @override
   String get profileBlogTitle => '日誌';

@@ -6,6 +6,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_web_navigation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/presentation/blog/blog_feed_controller.dart';
 import 'package:y300/features/profile/presentation/blog/blog_detail_controller.dart';
@@ -123,6 +124,16 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
                       error: state.failure,
                       palette: palette,
                       onRetry: controller.refresh,
+                      onLogin: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(builder: (_) => const LoginPage()),
+                      ),
+                      onOpenWeb: () => openBlogWebPage(
+                        context,
+                        ref,
+                        expectedActor: ref.read(blogAccountIdProvider),
+                        destination: (navigation) =>
+                            navigation.directory(state.query),
+                      ),
                     ),
             ),
           ],
@@ -153,6 +164,19 @@ class ProfileBlogDetailPage extends ConsumerStatefulWidget {
 }
 
 class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
+  bool _allowInitialTitle = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final titleActor = ref.read(blogAccountIdProvider);
+    ref.listenManual(blogAccountIdProvider, (_, actor) {
+      if (actor != titleActor && _allowInitialTitle) {
+        setState(() => _allowInitialTitle = false);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final query = UserBlogDetailQuery(
@@ -173,8 +197,24 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
         backgroundColor: palette.background,
         appBar: AppBar(
           title: Text(
-            state.data?.title ?? widget.initialTitle ?? l10n.profileBlogTitle,
+            state.data?.title ??
+                (_allowInitialTitle ? widget.initialTitle : null) ??
+                l10n.profileBlogTitle,
           ),
+          actions: [
+            if (state.data != null)
+              IconButton(
+                key: const Key('blog-detail-open-web'),
+                tooltip: l10n.profileBlogOpenWeb,
+                icon: const Icon(Icons.open_in_browser),
+                onPressed: () => openBlogWebPage(
+                  context,
+                  ref,
+                  expectedActor: ref.read(blogAccountIdProvider),
+                  destination: (navigation) => navigation.detail(state.query),
+                ),
+              ),
+          ],
         ),
         body: state.data != null
             ? RefreshIndicator(
@@ -207,6 +247,15 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                 error: state.failure,
                 palette: palette,
                 onRetry: controller.refresh,
+                onLogin: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                ),
+                onOpenWeb: () => openBlogWebPage(
+                  context,
+                  ref,
+                  expectedActor: ref.read(blogAccountIdProvider),
+                  destination: (navigation) => navigation.detail(query),
+                ),
               ),
       ),
     );
@@ -1058,16 +1107,20 @@ class _ProfileBlogError extends StatelessWidget {
     required this.error,
     required this.palette,
     required this.onRetry,
+    required this.onOpenWeb,
+    required this.onLogin,
   });
 
   final Object? error;
   final _ProfileBlogPalette palette;
   final VoidCallback onRetry;
+  final VoidCallback onOpenWeb;
+  final VoidCallback onLogin;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1075,19 +1128,33 @@ class _ProfileBlogError extends StatelessWidget {
             Icon(Icons.error_outline, color: palette.accent, size: 34),
             const SizedBox(height: 12),
             Text(
-              AppLocalizations.of(context).profileBlogLoadFailed(
-                LocalizedErrorSummary.resolve(
-                  AppLocalizations.of(context),
-                  error,
-                ),
-              ),
+              _blogReadErrorText(AppLocalizations.of(context), error),
               textAlign: TextAlign.center,
               style: TextStyle(color: palette.body),
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: Text(AppLocalizations.of(context).commonRetry),
+            Wrap(
+              spacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                if (error case DataReadFailure(
+                  kind: DataReadFailureKind.unauthorized,
+                ))
+                  FilledButton(
+                    onPressed: onLogin,
+                    child: Text(AppLocalizations.of(context).authLoginTitle),
+                  )
+                else
+                  FilledButton(
+                    onPressed: onRetry,
+                    child: Text(AppLocalizations.of(context).commonRetry),
+                  ),
+                TextButton(
+                  key: const Key('blog-read-open-web'),
+                  onPressed: onOpenWeb,
+                  child: Text(AppLocalizations.of(context).profileBlogOpenWeb),
+                ),
+              ],
             ),
           ],
         ),
@@ -1095,6 +1162,19 @@ class _ProfileBlogError extends StatelessWidget {
     );
   }
 }
+
+String _blogReadErrorText(
+  AppLocalizations l10n,
+  Object? error,
+) => switch (error) {
+  DataReadFailure(code: 'user_blog_password_required') =>
+    l10n.profileBlogPasswordRequired,
+  DataReadFailure(code: 'user_blog_private') => l10n.profileBlogPrivate,
+  DataReadFailure(code: 'user_blog_unavailable') => l10n.profileBlogUnavailable,
+  DataReadFailure(kind: DataReadFailureKind.unauthorized) =>
+    l10n.threadLoginRequired,
+  _ => l10n.profileBlogLoadFailed(LocalizedErrorSummary.resolve(l10n, error)),
+};
 
 @immutable
 class _ProfileBlogPalette {
