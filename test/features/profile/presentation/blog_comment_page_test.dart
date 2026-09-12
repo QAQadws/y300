@@ -18,6 +18,29 @@ import '../test_support/blog_navigation_fixture.dart';
 
 void main() {
   testWidgets(
+    'only a confirmed comment publishes account-scoped invalidation',
+    (tester) async {
+      final service = BlogCommentFixture(autoPrepare: true);
+      final host = await _open(tester, service);
+      expect(host.container.read(blogMutationBusProvider).last, isNull);
+      await tester.enterText(find.byType(TextField), 'comment fixture');
+      await _submit(tester);
+      expect(host.container.read(blogMutationBusProvider).last, isNull);
+      service.applied();
+      await tester.pumpAndSettle();
+      final event = host.container.read(blogMutationBusProvider).last!;
+      expect(event.commentAction, UserBlogCommentAction.add);
+      expect(
+        event.ownerUserId,
+        blogCommentTarget(UserBlogCommentAction.add).ownerUserId,
+      );
+      expect(event.blogId, blogCommentTarget(UserBlogCommentAction.add).blogId);
+      expect(event.articleAction, isNull);
+      expect(event.origin, isNull);
+    },
+  );
+
+  testWidgets(
     'unsupported forms open an account-bound browser without a POST or receipt',
     (tester) async {
       final service = BlogCommentFixture();

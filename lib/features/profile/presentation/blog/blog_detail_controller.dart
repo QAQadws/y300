@@ -42,6 +42,7 @@ final class ProfileBlogDetailController
 
   final UserBlogDetailRepository _repository;
   final UserBlogDetailQuery _initialQuery;
+  final Object commentRefreshOrigin = Object();
   ForumRequestCancellation? _cancellation;
   Future<void>? _pending;
   bool _disposed = false;
@@ -125,14 +126,23 @@ final class ProfileBlogDetailController
 
   /// The editor can return before this route becomes current again. Defer its
   /// precise comment destination until activation instead of dropping refresh.
-  Future<void> refreshAfterComment(UserBlogCommentAction action) {
+  Future<void> refreshAfterComment(
+    UserBlogCommentAction action, {
+    bool followNewComment = true,
+  }) {
     if (_disposed || _deleted) return Future.value();
     _cancel();
     _refreshQuery =
-        action == UserBlogCommentAction.add ||
-            action == UserBlogCommentAction.reply
+        followNewComment &&
+            (action == UserBlogCommentAction.add ||
+                action == UserBlogCommentAction.reply)
         ? _query(last: true)
-        : _query(page: value.firstCommentPage);
+        : UserBlogDetailQuery(
+            ownerUserId: _initialQuery.ownerUserId,
+            blogId: _initialQuery.blogId,
+            page: value.firstCommentPage,
+            commentId: value.query.commentId,
+          );
     return setActive(_active);
   }
 

@@ -9,6 +9,103 @@ import 'package:y300/features/profile/presentation/blog/blog_feed_controller.dar
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 
 void main() {
+  for (final action in UserBlogCommentAction.values) {
+    test(
+      'a confirmed $action refreshes visited readers once, preserving other comment ranges',
+      () async {
+        final directory = _Directory();
+        final details = _Details();
+        final container = ProviderContainer(
+          overrides: [
+            blogAccountIdProvider.overrideWithValue('101'),
+            userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
+            userBlogDetailRepositoryProvider.overrideWithValue(details),
+          ],
+        );
+        addTearDown(container.dispose);
+        final readers =
+            [
+              const UserBlogDetailQuery(ownerUserId: '101', blogId: '11'),
+              const UserBlogDetailQuery(
+                ownerUserId: '101',
+                blogId: '11',
+                page: 3,
+              ),
+              const UserBlogDetailQuery(ownerUserId: '101', blogId: '12'),
+            ].map((query) {
+              final sub = container.listen(
+                profileBlogDetailProvider((query, Object())),
+                (_, _) {},
+              );
+              addTearDown(sub.close);
+              return sub.read();
+            }).toList();
+        final lists =
+            [
+              const ProfileBlogPageArgs(),
+              const ProfileBlogPageArgs(ownerUserId: '202'),
+            ].map((args) {
+              final sub = container.listen(
+                profileBlogListProvider(args),
+                (_, _) {},
+              );
+              addTearDown(sub.close);
+              return sub.read();
+            }).toList();
+        for (var i = 0; i < readers.length; i++) {
+          final pending = readers[i].setActive(true);
+          details.succeed(i);
+          await pending;
+          await readers[i].setActive(false);
+        }
+        for (var i = 0; i < lists.length; i++) {
+          final pending = lists[i].setActive(true);
+          directory.succeed(i);
+          await pending;
+          await lists[i].setActive(false);
+        }
+        final bus = container.read(blogMutationBusProvider);
+        bus.publishComment(
+          UserBlogCommentReceipt(
+            target: UserBlogCommentTarget(
+              actorUserId: '101',
+              ownerUserId: '101',
+              blogId: '11',
+              action: action,
+              commentId: action == UserBlogCommentAction.add ? null : '5',
+            ),
+            commentId: '41',
+          ),
+          origin: readers.first.commentRefreshOrigin,
+        );
+        expect(details.requests, hasLength(3));
+        expect(directory.requests, hasLength(2));
+        var pending = readers.first.setActive(true);
+        expect(
+          details.requests.last.query.lastCommentPage,
+          action == UserBlogCommentAction.add ||
+              action == UserBlogCommentAction.reply,
+        );
+        expect(readers.first.setActive(true), same(pending));
+        details.succeed(3);
+        await pending;
+        pending = readers[1].setActive(true);
+        expect(details.requests.last.query.page, 3);
+        expect(details.requests.last.query.lastCommentPage, isFalse);
+        details.succeed(4);
+        await pending;
+        await readers[2].setActive(true);
+        expect(details.requests, hasLength(5));
+        pending = lists.first.setActive(true);
+        directory.succeed(2);
+        await pending;
+        await lists[1].setActive(true);
+        expect(directory.requests, hasLength(3));
+        expect(details.requests.last.policy, CacheLoadPolicy.networkFirst);
+      },
+    );
+  }
+
   test(
     'article mutations invalidate only visited account-owned routes',
     () async {
@@ -74,6 +171,17 @@ void main() {
       final newBus = container.read(blogMutationBusProvider);
       bus.publish(const UserBlogReceipt(target: target, blogId: '11'));
       newBus.publish(const UserBlogReceipt(target: target, blogId: '11'));
+      const comment = UserBlogCommentReceipt(
+        target: UserBlogCommentTarget(
+          actorUserId: '101',
+          ownerUserId: '101',
+          blogId: '11',
+          action: UserBlogCommentAction.add,
+        ),
+        commentId: '41',
+      );
+      bus.publishComment(comment);
+      newBus.publishComment(comment);
       expect(newBus.last, isNull);
       expect(feedSub.read().value.data, isNull);
       expect(detailSub.read().value.data, isNull);
@@ -720,6 +828,36 @@ void main() {
       await pending;
       expect(controller.value.data!.comments.single.commentId, '80');
       expect(controller.value.firstCommentPage, 8);
+    },
+  );
+
+  test(
+    'comment invalidation preserves an explicit comment selection',
+    () async {
+      final repository = _Details();
+      final controller = detail(
+        repository,
+        query: const UserBlogDetailQuery(
+          ownerUserId: '101',
+          blogId: '11',
+          commentId: '6',
+        ),
+      );
+      var pending = controller.setActive(true);
+      repository.succeed(0, ids: ['6']);
+      await pending;
+      pending = controller.refreshAfterComment(
+        UserBlogCommentAction.add,
+        followNewComment: false,
+      );
+      expect(repository.requests.last.query.commentId, '6');
+      expect(repository.requests.last.query.lastCommentPage, isFalse);
+      repository.succeed(1, ids: ['6']);
+      await pending;
+      pending = controller.refreshAfterComment(UserBlogCommentAction.edit);
+      expect(repository.requests.last.query.commentId, '6');
+      repository.succeed(2, ids: ['6']);
+      await pending;
     },
   );
 

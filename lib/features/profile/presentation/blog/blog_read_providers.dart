@@ -27,7 +27,7 @@ final profileBlogListProvider = Provider.autoDispose
         final change = bus.last;
         if (change != null &&
             (args.ownerUserId == null ||
-                args.ownerUserId == change.target.ownerUserId)) {
+                args.ownerUserId == change.ownerUserId)) {
           unawaited(controller.invalidate());
         }
       }
@@ -56,12 +56,20 @@ final profileBlogDetailProvider = Provider.autoDispose
       void onChanged() {
         final change = bus.last;
         if (change != null &&
-            change.target.ownerUserId == target.$1.ownerUserId &&
+            change.ownerUserId == target.$1.ownerUserId &&
             change.blogId == target.$1.blogId) {
           unawaited(
-            controller.invalidate(
-              deleted: change.target.action == UserBlogAction.delete,
-            ),
+            change.commentAction != null
+                ? controller.refreshAfterComment(
+                    change.commentAction!,
+                    followNewComment: identical(
+                      change.origin,
+                      controller.commentRefreshOrigin,
+                    ),
+                  )
+                : controller.invalidate(
+                    deleted: change.articleAction == UserBlogAction.delete,
+                  ),
           );
         }
       }

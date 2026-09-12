@@ -24,9 +24,10 @@ String blogCommentActionLabel(
 /// One route owns the prepared form, original source text and submission.
 /// Inputs are deliberately transient and are cleared when the actor changes.
 class BlogCommentPage extends ConsumerStatefulWidget {
-  const BlogCommentPage({super.key, required this.target});
+  const BlogCommentPage({super.key, required this.target, this.refreshOrigin});
 
   final UserBlogCommentTarget target;
+  final Object? refreshOrigin;
 
   @override
   ConsumerState<BlogCommentPage> createState() => _BlogCommentPageState();
@@ -211,6 +212,9 @@ class _BlogCommentPageState extends ConsumerState<BlogCommentPage> {
       return;
     }
     _receipt = receipt;
+    ref
+        .read(blogMutationBusProvider)
+        .publishComment(receipt, origin: widget.refreshOrigin);
     // A leave dialog can cover this route while the POST completes. Let that
     // dialog close first so the receipt never pops the dialog or its parent.
     if (!_confirmingLeave) Navigator.of(context).pop(receipt);

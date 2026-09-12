@@ -380,6 +380,7 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
     final receipt = await Navigator.of(context).push<UserBlogCommentReceipt>(
       MaterialPageRoute(
         builder: (_) => BlogCommentPage(
+          refreshOrigin: controller.commentRefreshOrigin,
           target: UserBlogCommentTarget(
             actorUserId: actor,
             ownerUserId: widget.ownerUserId,
@@ -406,9 +407,6 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
         }),
       ),
     );
-    // Only a confirmed write refreshes the article. Editing/deleting keeps the
-    // current comment range; additions ask the server for its actual last page.
-    await controller.refreshAfterComment(action);
   }
 }
 
