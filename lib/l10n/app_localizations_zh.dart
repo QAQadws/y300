@@ -26,6 +26,90 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get messageNew => '发私信';
+
+  @override
+  String get messageSend => '发送';
+
+  @override
+  String get messageSending => '正在发送…';
+
+  @override
+  String get messageSent => '消息已发送';
+
+  @override
+  String get messageRecipient => '收件人用户名';
+
+  @override
+  String get messageRecipientHint => '输入一位用户的完整用户名';
+
+  @override
+  String get messageRecipientInvalid => '请填写一位用户的完整用户名，不支持逗号分隔的多个收件人。';
+
+  @override
+  String get messageInput => '输入消息';
+
+  @override
+  String get messageUnknownOutcome => '暂时无法确认消息是否送达。请先查看对话，确认未送达后再发送，避免重复。';
+
+  @override
+  String get messageSendAgain => '仍要再次发送？';
+
+  @override
+  String get messageLeaveTitle => '离开当前消息？';
+
+  @override
+  String get messageLeaveBody => '未发送的输入不会保存。';
+
+  @override
+  String get messageLeavePending => '消息正在发送，离开后仍可能送达。未发送的输入不会保存。';
+
+  @override
+  String get messageLeave => '离开';
+
+  @override
+  String get messageRefresh => '刷新消息';
+
+  @override
+  String get messageOlder => '加载更早的消息';
+
+  @override
+  String get messageLatest => '查看最新消息';
+
+  @override
+  String get messageHistoryChanged => '对话历史发生变化，请刷新后继续查看。';
+
+  @override
+  String get messageGroup => '群组对话';
+
+  @override
+  String get messageLoginRequired => '登录后查看消息和提醒';
+
+  @override
+  String get messageLinkFailed => '暂时无法打开此链接';
+
+  @override
+  String get messageOnlyFriends => '对方只接收好友发送的私信。';
+
+  @override
+  String get messageRecipientUnavailable => '收件人不存在或暂时不可用，请检查收件人信息。';
+
+  @override
+  String get messageCannotSendToSelf => '不能给自己发送私信。';
+
+  @override
+  String get messageSendDenied => '当前账号或对方的隐私设置不允许发送这条私信。';
+
+  @override
+  String get messageSendTooFast => '发送过于频繁，请稍后再试。';
+
+  @override
+  String get messageDailyLimit => '已达到论坛 24 小时内的消息或会话上限，请稍后再试。';
+
+  @override
+  String get messageConversationUnavailable => '这段对话已不可用，请刷新消息列表后重试。';
+
+  @override
   String get commonCancel => '取消';
 
   @override
@@ -4409,6 +4493,90 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String appLanguageSaveFailed(String error) {
     return '語言設定儲存失敗：$error';
   }
+
+  @override
+  String get messageNew => '發私訊';
+
+  @override
+  String get messageSend => '傳送';
+
+  @override
+  String get messageSending => '正在傳送…';
+
+  @override
+  String get messageSent => '訊息已傳送';
+
+  @override
+  String get messageRecipient => '收件人使用者名稱';
+
+  @override
+  String get messageRecipientHint => '輸入一位使用者的完整使用者名稱';
+
+  @override
+  String get messageRecipientInvalid => '請填寫一位使用者的完整使用者名稱，不支援逗號分隔的多個收件人。';
+
+  @override
+  String get messageInput => '輸入訊息';
+
+  @override
+  String get messageUnknownOutcome => '暫時無法確認訊息是否送達。請先查看對話，確認未送達後再傳送，避免重複。';
+
+  @override
+  String get messageSendAgain => '仍要再次傳送？';
+
+  @override
+  String get messageLeaveTitle => '離開目前訊息？';
+
+  @override
+  String get messageLeaveBody => '未傳送的輸入不會儲存。';
+
+  @override
+  String get messageLeavePending => '訊息正在傳送，離開後仍可能送達。未傳送的輸入不會儲存。';
+
+  @override
+  String get messageLeave => '離開';
+
+  @override
+  String get messageRefresh => '重新整理訊息';
+
+  @override
+  String get messageOlder => '載入更早的訊息';
+
+  @override
+  String get messageLatest => '查看最新訊息';
+
+  @override
+  String get messageHistoryChanged => '對話歷史發生變化，請重新整理後繼續查看。';
+
+  @override
+  String get messageGroup => '群組對話';
+
+  @override
+  String get messageLoginRequired => '登入後查看訊息與提醒';
+
+  @override
+  String get messageLinkFailed => '暫時無法開啟此連結';
+
+  @override
+  String get messageOnlyFriends => '對方只接收好友傳送的私訊。';
+
+  @override
+  String get messageRecipientUnavailable => '收件人不存在或暫時無法使用，請檢查收件人資訊。';
+
+  @override
+  String get messageCannotSendToSelf => '不能傳送私訊給自己。';
+
+  @override
+  String get messageSendDenied => '目前帳號或對方的隱私設定不允許傳送這則私訊。';
+
+  @override
+  String get messageSendTooFast => '傳送過於頻繁，請稍後再試。';
+
+  @override
+  String get messageDailyLimit => '已達到論壇 24 小時內的訊息或對話上限，請稍後再試。';
+
+  @override
+  String get messageConversationUnavailable => '這段對話已無法使用，請重新整理訊息列表後再試。';
 
   @override
   String get commonCancel => '取消';

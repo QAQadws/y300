@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
+import 'package:y300/app/navigation/message_routes.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
@@ -224,6 +225,17 @@ class UserProfilePage extends ConsumerWidget {
       appBar: AppBar(
         title: Text(_profilePageTitle(l10n, profile)),
         actions: [
+          if (profile != null)
+            IconButton(
+              tooltip: l10n.messageNew,
+              onPressed: () => Navigator.of(context).push(
+                ref.read(privateConversationRouteFactoryProvider)(
+                  ForumConversationTarget.direct(uid),
+                  title: profile.identity.displayName ?? uid,
+                ),
+              ),
+              icon: const Icon(Icons.chat_bubble_outline),
+            ),
           IconButton(
             tooltip: AppLocalizations.of(context).profileHome,
             onPressed: () =>

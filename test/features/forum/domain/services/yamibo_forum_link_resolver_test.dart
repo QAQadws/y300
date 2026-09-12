@@ -5,6 +5,19 @@ void main() {
   group('YamiboForumLinkResolver', () {
     const resolver = YamiboForumLinkResolver();
 
+    test('preserves page numbers for native thread and tag entry points', () {
+      expect(resolver.resolve('thread-572514-4-1.html')?.page, 4);
+      expect(
+        resolver.resolve('forum.php?mod=viewthread&tid=572514&page=3')?.page,
+        3,
+      );
+      expect(resolver.resolve('misc.php?mod=tag&id=28&page=2')?.page, 2);
+      expect(
+        resolver.resolve('forum.php?mod=viewthread&tid=572514&page=-2')?.page,
+        isNull,
+      );
+    });
+
     test('resolves pretty thread links as native thread destinations', () {
       final destination = resolver.resolve(
         'https://bbs.yamibo.com/thread-572514-1-1.html',

@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/app/navigation/message_routes.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -42,6 +44,32 @@ void main() {
     expect(find.byKey(const Key('user-profile-details')), findsOneWidget);
     expect(find.text('用户组'), findsOneWidget);
     expect(find.text('百合達人'), findsOneWidget);
+  });
+
+  testWidgets('public profile opens a direct conversation by UID', (
+    tester,
+  ) async {
+    ForumConversationTarget? opened;
+    String? openedTitle;
+    await _pumpPublicProfile(
+      tester,
+      repository: _FakeProfileRepository(),
+      conversationRoute: (target, {title = ''}) {
+        opened = target;
+        openedTitle = title;
+        return MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('conversation fixture')),
+        );
+      },
+    );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(UserProfilePage)),
+    );
+    await tester.tap(find.byTooltip(l10n.messageNew));
+    await tester.pumpAndSettle();
+    expect(opened, const ForumConversationTarget.direct('509957'));
+    expect(openedTitle, 'alice');
+    expect(find.text('conversation fixture'), findsOneWidget);
   });
 
   testWidgets('UserProfilePage gates optional sections by capability', (
@@ -268,11 +296,16 @@ Future<void> _pumpPublicProfile(
   required ForumUserProfileRepository repository,
   Locale locale = const Locale('zh'),
   ImageCacheService? imageCacheService,
+  PrivateConversationRouteFactory? conversationRoute,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         forumUserProfileRepositoryProvider.overrideWithValue(repository),
+        if (conversationRoute != null)
+          privateConversationRouteFactoryProvider.overrideWithValue(
+            conversationRoute,
+          ),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
         if (imageCacheService != null)
           imageCacheServiceProvider.overrideWithValue(imageCacheService),

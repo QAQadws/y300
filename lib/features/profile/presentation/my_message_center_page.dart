@@ -5,6 +5,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/profile/data/models/my_message_models.dart';
+import 'package:y300/features/messages/presentation/new_private_message_page.dart';
 import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -35,6 +36,17 @@ class MyMessageCenterPage extends ConsumerWidget {
       backgroundColor: palette.background,
       appBar: AppBar(
         title: Text(AppLocalizations.of(context).profileMessageCenterTitle),
+        actions: [
+          IconButton(
+            tooltip: AppLocalizations.of(context).messageNew,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const NewPrivateMessagePage(),
+              ),
+            ),
+            icon: const Icon(Icons.edit_square),
+          ),
+        ],
       ),
       body: asyncData.when(
         data: (data) => _MessageCenterContent(

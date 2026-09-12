@@ -127,6 +127,174 @@ abstract class AppLocalizations {
   /// **'语言设置保存失败：{error}'**
   String appLanguageSaveFailed(String error);
 
+  /// No description provided for @messageNew.
+  ///
+  /// In zh, this message translates to:
+  /// **'发私信'**
+  String get messageNew;
+
+  /// No description provided for @messageSend.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送'**
+  String get messageSend;
+
+  /// No description provided for @messageSending.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在发送…'**
+  String get messageSending;
+
+  /// No description provided for @messageSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息已发送'**
+  String get messageSent;
+
+  /// No description provided for @messageRecipient.
+  ///
+  /// In zh, this message translates to:
+  /// **'收件人用户名'**
+  String get messageRecipient;
+
+  /// No description provided for @messageRecipientHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入一位用户的完整用户名'**
+  String get messageRecipientHint;
+
+  /// No description provided for @messageRecipientInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写一位用户的完整用户名，不支持逗号分隔的多个收件人。'**
+  String get messageRecipientInvalid;
+
+  /// No description provided for @messageInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入消息'**
+  String get messageInput;
+
+  /// No description provided for @messageUnknownOutcome.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法确认消息是否送达。请先查看对话，确认未送达后再发送，避免重复。'**
+  String get messageUnknownOutcome;
+
+  /// No description provided for @messageSendAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'仍要再次发送？'**
+  String get messageSendAgain;
+
+  /// No description provided for @messageLeaveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开当前消息？'**
+  String get messageLeaveTitle;
+
+  /// No description provided for @messageLeaveBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'未发送的输入不会保存。'**
+  String get messageLeaveBody;
+
+  /// No description provided for @messageLeavePending.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息正在发送，离开后仍可能送达。未发送的输入不会保存。'**
+  String get messageLeavePending;
+
+  /// No description provided for @messageLeave.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开'**
+  String get messageLeave;
+
+  /// No description provided for @messageRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新消息'**
+  String get messageRefresh;
+
+  /// No description provided for @messageOlder.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载更早的消息'**
+  String get messageOlder;
+
+  /// No description provided for @messageLatest.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看最新消息'**
+  String get messageLatest;
+
+  /// No description provided for @messageHistoryChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'对话历史发生变化，请刷新后继续查看。'**
+  String get messageHistoryChanged;
+
+  /// No description provided for @messageGroup.
+  ///
+  /// In zh, this message translates to:
+  /// **'群组对话'**
+  String get messageGroup;
+
+  /// No description provided for @messageLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录后查看消息和提醒'**
+  String get messageLoginRequired;
+
+  /// No description provided for @messageLinkFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法打开此链接'**
+  String get messageLinkFailed;
+
+  /// No description provided for @messageOnlyFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方只接收好友发送的私信。'**
+  String get messageOnlyFriends;
+
+  /// No description provided for @messageRecipientUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'收件人不存在或暂时不可用，请检查收件人信息。'**
+  String get messageRecipientUnavailable;
+
+  /// No description provided for @messageCannotSendToSelf.
+  ///
+  /// In zh, this message translates to:
+  /// **'不能给自己发送私信。'**
+  String get messageCannotSendToSelf;
+
+  /// No description provided for @messageSendDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号或对方的隐私设置不允许发送这条私信。'**
+  String get messageSendDenied;
+
+  /// No description provided for @messageSendTooFast.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送过于频繁，请稍后再试。'**
+  String get messageSendTooFast;
+
+  /// No description provided for @messageDailyLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'已达到论坛 24 小时内的消息或会话上限，请稍后再试。'**
+  String get messageDailyLimit;
+
+  /// No description provided for @messageConversationUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这段对话已不可用，请刷新消息列表后重试。'**
+  String get messageConversationUnavailable;
+
   /// No description provided for @commonCancel.
   ///
   /// In zh, this message translates to:

@@ -21,6 +21,29 @@ void main() {
     );
   });
 
+  test(
+    'closing one of two consumers does not deactivate the surviving owner',
+    () async {
+      final controller = container
+          .listen(privateMessageFeedProvider(null), (_, _) {})
+          .read();
+      final firstOwner = Object();
+      final secondOwner = Object();
+      controller.setActive(true, owner: firstOwner);
+      controller.setActive(true, owner: secondOwner);
+      repository.messageReads.last.result.complete(_messages(['1']));
+      await controller.refresh();
+      controller.setActive(false, owner: firstOwner);
+      controller.invalidate();
+      expect(repository.messageReads, hasLength(2));
+      repository.messageReads.last.result.complete(_messages(['2']));
+      await controller.refresh();
+      controller.setActive(false, owner: secondOwner);
+      controller.invalidate();
+      expect(repository.messageReads, hasLength(2));
+    },
+  );
+
   test('feeds fail independently and never preload the other tab', () async {
     final pm = container
         .listen(privateMessageFeedProvider(null), (_, _) {})

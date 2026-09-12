@@ -21,7 +21,7 @@ final class MessageFeedState<P> {
 }
 
 /// Pagination and refresh lifecycle shared by the three independent feeds.
-/// Instances belong to one account and route; disposal invalidates every task.
+/// Instances belong to one account and feed; disposal invalidates every task.
 final class MessageFeedController<P>
     extends ValueNotifier<MessageFeedState<P>> {
   MessageFeedController({
@@ -43,7 +43,9 @@ final class MessageFeedController<P>
   final P Function(P current, P next)? mergeRefresh;
 
   bool _disposed = false;
-  bool _active = false;
+  final Set<Object> _activeOwners = {};
+  final Object _defaultOwner = Object();
+  bool get _active => _activeOwners.isNotEmpty;
   bool _dirty = false;
   int _generation = 0;
   ForumRequestCancellation? _cancellation;
@@ -51,9 +53,16 @@ final class MessageFeedController<P>
 
   bool get hasMore => value.data != null && nextPage(value.data as P) != null;
 
-  void setActive(bool active) {
-    if (_disposed || _active == active) return;
-    _active = active;
+  void setActive(bool active, {Object? owner}) {
+    if (_disposed) return;
+    final wasActive = _active;
+    final identity = owner ?? _defaultOwner;
+    if (active) {
+      _activeOwners.add(identity);
+    } else {
+      _activeOwners.remove(identity);
+    }
+    if (wasActive == _active) return;
     if (active && (value.data == null || _dirty) && !value.isBusy) {
       unawaited(refresh());
     }
