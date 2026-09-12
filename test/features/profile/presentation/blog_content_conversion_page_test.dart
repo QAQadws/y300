@@ -126,7 +126,14 @@ void main() {
       expect(find.byKey(ValueKey(category.query)), findsOneWidget);
       expect(_html(tester), contains('<p>內文</p>'));
       expect(_html(tester), contains('<p>評論</p>'));
-      expect(find.textContaining('作者 · 1 分鐘前'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('blog-detail-author')),
+          matching: find.text('作者'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('1 分鐘前'), findsOneWidget);
       expect(find.textContaining('作者變換'), findsNothing);
       expect(
         host.converter.inputs.where((value) => value.contains('标题')),

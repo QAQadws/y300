@@ -7,7 +7,7 @@ import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
 import 'package:y300/features/profile/presentation/blog/blog_content_projection.dart';
 import 'package:y300/features/profile/presentation/blog/blog_content_projection_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
-import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
 
 /// Preview is mounted only on demand. It uses the shared HTML reader without
 /// converting its rendered or translated text back into the editable source.
@@ -29,22 +29,14 @@ class BlogEditorPreview extends ConsumerWidget {
     final title = const HtmlEscape(
       HtmlEscapeMode.element,
     ).convert(display.text(draft.subject));
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: native.card,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: ForumNativeSurfaceShadows.card(native.stateLayer),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: ForumHtmlContentView(
-          html: '<h2>$title</h2>${display.html(draft.bodyHtml)}',
-          sourceId: 'blog-editor-preview-$ownerId',
-          imageCacheOwnerId: ownerId,
-          imageReferer: ref.watch(forumImageRefererProvider),
-          surfaceColor: native.card,
-          foregroundColor: native.body,
-        ),
+    return BlogSurface(
+      child: ForumHtmlContentView(
+        html: '<h2>$title</h2>${display.html(draft.bodyHtml)}',
+        sourceId: 'blog-editor-preview-$ownerId',
+        imageCacheOwnerId: ownerId,
+        imageReferer: ref.watch(forumImageRefererProvider),
+        surfaceColor: native.card,
+        foregroundColor: native.body,
       ),
     );
   }

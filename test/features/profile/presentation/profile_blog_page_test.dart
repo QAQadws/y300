@@ -580,10 +580,8 @@ void main() {
     expect(detailRepository.queries.single.ownerUserId, '257582');
     expect(detailRepository.queries.single.blogId, '117548');
     expect(find.byKey(const Key('profile-blog-detail')), findsOneWidget);
-    expect(
-      find.text('hsyhlj · 2026-6-18 00:25 · 浏览 39 · 评论 1'),
-      findsOneWidget,
-    );
+    expect(find.text('2026-6-18 00:25 · 浏览 39 · 评论 1'), findsOneWidget);
+    expect(find.text('hsyhlj'), findsOneWidget);
     expect(_richTextContaining('一直对着电脑屏幕'), findsOneWidget);
     expect(find.text('日志评论'), findsOneWidget);
     expect(_richTextContaining('探险的感觉'), findsOneWidget);

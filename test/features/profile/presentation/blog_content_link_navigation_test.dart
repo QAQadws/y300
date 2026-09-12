@@ -93,7 +93,13 @@ void main() {
       ),
     );
     final button = find.byKey(const ValueKey(query));
-    expect(tester.getSize(button).width, lessThanOrEqualTo(260));
+    final content = tester.getRect(
+      find.byKey(const Key('blog-detail-categories')),
+    );
+    final bounds = tester.getRect(button);
+    expect(bounds.left, greaterThanOrEqualTo(content.left));
+    expect(bounds.right, lessThanOrEqualTo(content.right));
+    expect(bounds.right, lessThan(tester.view.physicalSize.width));
     expect(tester.getSize(button).height, greaterThan(48));
     expect(tester.takeException(), isNull);
     expect(host.directory.queries, isEmpty);

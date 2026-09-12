@@ -6,6 +6,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
 import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_routes.dart';
 import 'package:y300/features/profile/presentation/blog/blog_web_navigation.dart';
@@ -77,7 +78,7 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
       initialPersonalCategoryId: widget.initialPersonalCategoryId,
     );
     final controller = ref.watch(profileBlogListProvider(args));
-    final palette = _ProfileBlogPalette.resolve(Theme.of(context));
+    final palette = Theme.of(context).y300NativeContent;
     final l10n = AppLocalizations.of(context);
     final referer = ref.watch(forumImageRefererProvider);
     return BlogReadView<UserBlogDirectoryPageState>(
@@ -249,7 +250,7 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
       lastCommentPage: widget.lastCommentPage,
     );
     final controller = ref.watch(profileBlogDetailProvider((query, this)));
-    final palette = _ProfileBlogPalette.resolve(Theme.of(context));
+    final palette = Theme.of(context).y300NativeContent;
     final referer = ref.watch(forumImageRefererProvider);
     final l10n = AppLocalizations.of(context);
     return BlogReadView<UserBlogDetailPageState>(
@@ -423,7 +424,7 @@ class _ProfileBlogListContent extends StatelessWidget {
 
   final UserBlogDirectoryPageState state;
   final String? accountId;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
   final String imageReferer;
   final ValueChanged<UserBlogSummary> onOpenBlog;
   final VoidCallback? onLoadNextPage;
@@ -559,13 +560,13 @@ class _ViewTabs extends StatelessWidget {
   });
 
   final UserBlogFeedScope activeScope;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
   final ValueChanged<UserBlogFeedScope> onSelect;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: palette.header,
+      color: palette.card,
       child: Row(
         key: const Key('profile-blog-view-tabs'),
         children: [
@@ -595,14 +596,14 @@ class _OrderTabs extends StatelessWidget {
   });
 
   final UserBlogOrder activeOrder;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
   final ValueChanged<UserBlogOrder> onSelect;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       key: const Key('profile-blog-order-tabs'),
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
       color: palette.background,
       child: Wrap(
         spacing: 8,
@@ -635,37 +636,40 @@ class _TabButton extends StatelessWidget {
 
   final String label;
   final bool selected;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 13, 8, 11),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: selected ? palette.accent : palette.muted,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 13, 8, 11),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: selected ? palette.accent : palette.muted,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                ),
               ),
-            ),
-            const SizedBox(height: 7),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              height: 2,
-              width: selected ? 28 : 0,
-              decoration: BoxDecoration(
-                color: palette.accent,
-                borderRadius: BorderRadius.circular(999),
+              const SizedBox(height: 7),
+              Container(
+                height: 2,
+                width: selected ? 28 : 0,
+                decoration: BoxDecoration(
+                  color: palette.accent,
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -685,7 +689,7 @@ class _ProfileBlogListCard extends ConsumerWidget {
 
   final UserBlogSummary item;
   final UserBlogDirectoryReadCapabilities? capabilities;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
   final String imageReferer;
   final VoidCallback onTap;
   final ValueChanged<UserBlogAction> onAction;
@@ -693,114 +697,107 @@ class _ProfileBlogListCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final display = watchBlogDisplayText(ref, BlogContentSource.summary(item));
-    return Material(
-      color: palette.card,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return BlogSurface(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  if (capabilities?.supports(
-                        UserBlogDirectoryCapability.avatarReference,
-                      ) ==
-                      true)
-                    _ProfileBlogAvatar(
-                      imageUrl: item.avatarUrl,
-                      ownerId: item.ownerUserId,
-                      userId: item.ownerUserId,
-                      radius: 17,
-                      imageReferer: imageReferer,
-                    ),
-                  if (capabilities?.supports(
-                        UserBlogDirectoryCapability.avatarReference,
-                      ) ==
-                      true)
-                    const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (capabilities?.supports(
-                                  UserBlogDirectoryCapability.author,
-                                ) ==
-                                true &&
-                            item.authorName != null)
-                          ProfileUserLink(
-                            key: Key('blog-list-author-${item.blogId}'),
-                            userId: item.ownerUserId,
-                            child: Text(
-                              item.authorName!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelLarge
-                                  ?.copyWith(
-                                    color: palette.title,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                            ),
-                          ),
-                        if (capabilities?.supports(
-                                  UserBlogDirectoryCapability.publishedAtText,
-                                ) ==
-                                true &&
-                            item.publishedAtText != null)
-                          Text(
-                            display.text(item.publishedAtText!),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelMedium
-                                ?.copyWith(color: palette.muted),
-                          ),
-                      ],
-                    ),
-                  ),
-                  BlogActionMenu(
-                    key: Key('blog-list-actions-${item.blogId}'),
-                    actions: item.actions,
-                    onSelected: onAction,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                display.text(item.title),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: palette.title,
-                  fontWeight: FontWeight.w800,
+              if (capabilities?.supports(
+                    UserBlogDirectoryCapability.avatarReference,
+                  ) ==
+                  true)
+                _ProfileBlogAvatar(
+                  imageUrl: item.avatarUrl,
+                  ownerId: item.ownerUserId,
+                  userId: item.ownerUserId,
+                  radius: 17,
+                  imageReferer: imageReferer,
+                ),
+              if (capabilities?.supports(
+                    UserBlogDirectoryCapability.avatarReference,
+                  ) ==
+                  true)
+                const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (capabilities?.supports(
+                              UserBlogDirectoryCapability.author,
+                            ) ==
+                            true &&
+                        item.authorName != null)
+                      ProfileUserLink(
+                        key: Key('blog-list-author-${item.blogId}'),
+                        userId: item.ownerUserId,
+                        child: Text(
+                          item.authorName!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: palette.author,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                    if (capabilities?.supports(
+                              UserBlogDirectoryCapability.publishedAtText,
+                            ) ==
+                            true &&
+                        item.publishedAtText != null)
+                      Text(
+                        display.text(item.publishedAtText!),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelMedium?.copyWith(color: palette.muted),
+                      ),
+                  ],
                 ),
               ),
-              if (item.categoryNames.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  item.categoryNames.map(display.text).join(' · '),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelMedium?.copyWith(color: palette.muted),
-                ),
-              ],
-              if (capabilities?.supports(UserBlogDirectoryCapability.excerpt) ==
-                      true &&
-                  item.excerpt != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  display.text(item.excerpt!),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.body,
-                    height: 1.45,
-                  ),
-                ),
-              ],
+              BlogActionMenu(
+                key: Key('blog-list-actions-${item.blogId}'),
+                actions: item.actions,
+                onSelected: onAction,
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          Text(
+            display.text(item.title),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: palette.itemTitle,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (item.categoryNames.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              item.categoryNames.map(display.text).join(' · '),
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: palette.muted),
+            ),
+          ],
+          if (capabilities?.supports(UserBlogDirectoryCapability.excerpt) ==
+                  true &&
+              item.excerpt != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              display.text(item.excerpt!),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: palette.body,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -814,7 +811,7 @@ class _PaginationBar extends StatelessWidget {
   });
 
   final UserBlogPagination pagination;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
   final VoidCallback? onLoadNextPage;
 
   @override
@@ -853,7 +850,7 @@ class _ProfileBlogEmptyState extends StatelessWidget {
   const _ProfileBlogEmptyState({required this.message, required this.palette});
 
   final String message;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
 
   @override
   Widget build(BuildContext context) {
@@ -893,7 +890,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
   final UserBlogDetailData data;
   final UserBlogDetailReadCapabilities? capabilities;
   final Object? failure;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
   final String imageReferer;
   final void Function(UserBlogCommentAction, UserBlogComment?) onComment;
   final VoidCallback? onLoadNextComments;
@@ -915,7 +912,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
       center: focusComments ? commentsStart : null,
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
           sliver: SliverList.list(
             children: [
               if (failure != null)
@@ -945,7 +942,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
         ),
         SliverPadding(
           key: commentsStart,
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+          padding: const EdgeInsets.fromLTRB(10, 12, 10, 24),
           sliver: SliverList.list(
             children: [
               if (capabilities?.supports(
@@ -956,8 +953,8 @@ class _ProfileBlogDetailContent extends StatelessWidget {
                   key: const Key('profile-blog-comments-heading'),
                   AppLocalizations.of(context).profileBlogComments,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: palette.title,
-                    fontWeight: FontWeight.w800,
+                    color: palette.itemTitle,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -977,7 +974,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
                     linkBaseUri: linkBaseUri,
                     onOpenLink: onOpenLink,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                 ],
               ],
               if (isLoading) const LinearProgressIndicator(),
@@ -1063,7 +1060,7 @@ class _BlogDetailCard extends ConsumerWidget {
 
   final UserBlogDetailData data;
   final UserBlogDetailReadCapabilities? capabilities;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
   final String imageReferer;
   final Uri? linkBaseUri;
   final ValueChanged<String> onOpenLink;
@@ -1071,17 +1068,15 @@ class _BlogDetailCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final display = watchBlogDisplayText(ref, BlogContentSource.article(data));
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(palette),
+    return BlogSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             display.text(data.title),
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: palette.title,
-              fontWeight: FontWeight.w900,
+              color: palette.itemTitle,
+              fontWeight: FontWeight.w700,
             ),
           ),
           if (data.categoryLinks.isNotEmpty) ...[
@@ -1133,17 +1128,15 @@ class _BlogDetailCard extends ConsumerWidget {
                 const SizedBox(width: 10),
               ],
               Expanded(
-                child: ProfileUserLink(
-                  key: const Key('blog-detail-author'),
+                child: _BlogAuthorMetadata(
+                  authorKey: const Key('blog-detail-author'),
                   userId: data.ownerUserId,
-                  child: Text(
-                    _detailMeta(context, data, display),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelMedium?.copyWith(color: palette.muted),
-                  ),
+                  name:
+                      capabilities?.supports(UserBlogDetailCapability.author) ==
+                          true
+                      ? data.authorName
+                      : null,
+                  metadata: _detailMeta(context, data, display),
                 ),
               ),
             ],
@@ -1177,9 +1170,6 @@ class _BlogDetailCard extends ConsumerWidget {
   ) {
     final l10n = AppLocalizations.of(context);
     final parts = <String>[
-      if (capabilities?.supports(UserBlogDetailCapability.author) == true &&
-          data.authorName != null)
-        data.authorName!,
       if (capabilities?.supports(UserBlogDetailCapability.publishedAtText) ==
               true &&
           data.publishedAtText != null)
@@ -1210,7 +1200,7 @@ class _CommentCard extends ConsumerWidget {
 
   final UserBlogComment comment;
   final UserBlogDetailReadCapabilities? capabilities;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
   final String imageReferer;
   final ValueChanged<UserBlogCommentAction> onAction;
   final Uri? linkBaseUri;
@@ -1222,9 +1212,7 @@ class _CommentCard extends ConsumerWidget {
       ref,
       BlogContentSource.comment(comment),
     );
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: _cardDecoration(palette),
+    return BlogSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1244,26 +1232,18 @@ class _CommentCard extends ConsumerWidget {
                 const SizedBox(width: 9),
               ],
               Expanded(
-                child: ProfileUserLink(
-                  key: Key('blog-comment-author-${comment.commentId}'),
+                child: _BlogAuthorMetadata(
+                  authorKey: Key('blog-comment-author-${comment.commentId}'),
                   userId: comment.authorUserId,
-                  child: Text(
-                    <String>[
-                      comment.authorName,
-                      if (capabilities?.supports(
+                  name: comment.authorName,
+                  metadata:
+                      capabilities?.supports(
                                 UserBlogDetailCapability.commentPublishedAtText,
                               ) ==
                               true &&
-                          comment.publishedAtText != null)
-                        display.text(comment.publishedAtText!),
-                    ].join(' · '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: palette.muted,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                          comment.publishedAtText != null
+                      ? display.text(comment.publishedAtText!)
+                      : '',
                 ),
               ),
               if (comment.actions.any(
@@ -1313,6 +1293,48 @@ class _CommentCard extends ConsumerWidget {
   }
 }
 
+class _BlogAuthorMetadata extends StatelessWidget {
+  const _BlogAuthorMetadata({
+    required this.authorKey,
+    required this.userId,
+    required this.name,
+    required this.metadata,
+  });
+
+  final Key authorKey;
+  final String? userId;
+  final String? name;
+  final String metadata;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final native = theme.y300NativeContent;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (name != null)
+          ProfileUserLink(
+            key: authorKey,
+            userId: userId,
+            child: Text(
+              name!,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: native.author,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        if (metadata.isNotEmpty)
+          Text(
+            metadata,
+            style: theme.textTheme.labelMedium?.copyWith(color: native.muted),
+          ),
+      ],
+    );
+  }
+}
+
 class _ProfileBlogAvatar extends StatelessWidget {
   const _ProfileBlogAvatar({
     required this.imageUrl,
@@ -1356,7 +1378,7 @@ class _ProfileBlogError extends StatelessWidget {
   });
 
   final Object? error;
-  final _ProfileBlogPalette palette;
+  final Y300NativeContentColors palette;
   final VoidCallback onRetry;
   final VoidCallback onOpenWeb;
   final VoidCallback onLogin;
@@ -1419,79 +1441,3 @@ String _blogReadErrorText(
     l10n.threadLoginRequired,
   _ => l10n.profileBlogLoadFailed(LocalizedErrorSummary.resolve(l10n, error)),
 };
-
-@immutable
-class _ProfileBlogPalette {
-  const _ProfileBlogPalette({
-    required this.background,
-    required this.header,
-    required this.card,
-    required this.title,
-    required this.body,
-    required this.muted,
-    required this.accent,
-    required this.iconBackground,
-    required this.border,
-    required this.shadow,
-  });
-
-  final Color background;
-  final Color header;
-  final Color card;
-  final Color title;
-  final Color body;
-  final Color muted;
-  final Color accent;
-  final Color iconBackground;
-  final Color border;
-  final Color shadow;
-
-  static _ProfileBlogPalette resolve(ThemeData theme) {
-    final scheme = theme.colorScheme;
-    final isDark = scheme.brightness == Brightness.dark;
-    final appBarBackground =
-        theme.appBarTheme.backgroundColor ?? scheme.primary;
-    final native = theme.y300NativeContent;
-    if (isDark) {
-      return _ProfileBlogPalette(
-        background: theme.scaffoldBackgroundColor,
-        header: scheme.surfaceContainer,
-        card: scheme.surfaceContainerHigh,
-        title: scheme.onSurface,
-        body: scheme.onSurface,
-        muted: scheme.onSurfaceVariant,
-        accent: scheme.primary,
-        iconBackground: scheme.primaryContainer,
-        border: scheme.outlineVariant.withValues(alpha: 0.40),
-        shadow: Colors.black.withValues(alpha: 0.20),
-      );
-    }
-    return _ProfileBlogPalette(
-      background: native.background,
-      header: native.card,
-      card: native.card,
-      title: native.title,
-      body: native.body,
-      muted: native.tertiaryText,
-      accent: appBarBackground,
-      iconBackground: appBarBackground.withValues(alpha: 0.10),
-      border: appBarBackground.withValues(alpha: 0.08),
-      shadow: appBarBackground.withValues(alpha: 0.07),
-    );
-  }
-}
-
-BoxDecoration _cardDecoration(_ProfileBlogPalette palette) {
-  return BoxDecoration(
-    color: palette.card,
-    borderRadius: BorderRadius.circular(12),
-    border: Border.all(color: palette.border),
-    boxShadow: [
-      BoxShadow(
-        color: palette.shadow,
-        blurRadius: 9,
-        offset: const Offset(0, 3),
-      ),
-    ],
-  );
-}
