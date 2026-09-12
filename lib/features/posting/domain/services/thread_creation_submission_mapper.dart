@@ -20,6 +20,7 @@ class ThreadCreationDraftInput {
     this.tags = const <String>[],
     this.special = NewThreadSpecial.normal,
     this.poll,
+    this.minimumReadAccess = 0,
   });
 
   final String subject;
@@ -35,6 +36,7 @@ class ThreadCreationDraftInput {
   final List<String> tags;
   final NewThreadSpecial special;
   final NewThreadPollDraft? poll;
+  final int minimumReadAccess;
 }
 
 abstract interface class ThreadCreationSubmissionMapper {
@@ -90,9 +92,7 @@ class DefaultThreadCreationSubmissionMapper
               publicVoters: normalizedPoll.overt,
               resultsAfterVote: normalizedPoll.visibilityPoll,
             ),
-      // readperm UI is intentionally a later Y300 slice. The package contract
-      // is ready now, while the current App preserves unrestricted posting.
-      minimumReadAccess: 0,
+      minimumReadAccess: input.minimumReadAccess,
     );
   }
 

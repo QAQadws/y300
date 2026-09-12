@@ -1,3 +1,4 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
@@ -16,6 +17,7 @@ class ThreadPollEditor extends StatelessWidget {
   const ThreadPollEditor({
     super.key,
     required this.poll,
+    this.constraints,
     required this.onOptionsChanged,
     required this.onMultipleChanged,
     required this.onMaxChoicesChanged,
@@ -35,6 +37,7 @@ class ThreadPollEditor extends StatelessWidget {
   });
 
   final NewThreadPollDraft poll;
+  final ThreadPollConstraints? constraints;
   final ValueChanged<List<String>> onOptionsChanged;
   final ValueChanged<bool> onMultipleChanged;
   final ValueChanged<int> onMaxChoicesChanged;
@@ -66,7 +69,10 @@ class ThreadPollEditor extends StatelessWidget {
   }
 
   void _addOption() {
-    if (poll.options.length >= NewThreadPollValidation.maxOptions) return;
+    if (constraints?.maximumOptions != null &&
+        poll.options.length >= constraints!.maximumOptions!) {
+      return;
+    }
     final next = List<String>.from(poll.options)..add('');
     onOptionsChanged(next);
   }
@@ -75,7 +81,9 @@ class ThreadPollEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
-    final canAddMore = poll.options.length < NewThreadPollValidation.maxOptions;
+    final canAddMore =
+        constraints?.maximumOptions == null ||
+        poll.options.length < constraints!.maximumOptions!;
     return Container(
       key: containerKey,
       padding: const EdgeInsets.all(12),
@@ -99,15 +107,27 @@ class ThreadPollEditor extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            l10n.postingPollConstraints(
-              NewThreadPollValidation.minOptions,
-              NewThreadPollValidation.maxOptions,
-              NewThreadPollValidation.maxOptionLength,
-            ),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            [
+              l10n.postingPollMinimumOptions(
+                NewThreadPollValidation.minOptions,
+              ),
+              if (constraints?.maximumOptions != null)
+                l10n.postingPollMaximumOptions(constraints!.maximumOptions!),
+              if (constraints?.maximumOptionLength != null)
+                l10n.postingPollMaximumOptionLength(
+                  constraints!.maximumOptionLength!,
+                ),
+            ].join(' · '),
+            style: theme.textTheme.bodySmall,
           ),
+          if (constraints?.maximumOptions != null &&
+              poll.options.where((option) => option.trim().isNotEmpty).length >
+                  constraints!.maximumOptions!)
+            Text(
+              l10n.postingPollTooManyOptions(constraints!.maximumOptions!),
+              key: const Key('posting-poll-options-exceeded'),
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
           const SizedBox(height: 12),
           for (var i = 0; i < poll.options.length; i += 1)
             Padding(
@@ -127,11 +147,6 @@ class ThreadPollEditor extends StatelessWidget {
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
-                      inputFormatters: [
-                        LengthLimitingTextInputFormatter(
-                          NewThreadPollValidation.maxOptionLength + 4,
-                        ),
-                      ],
                     ),
                   ),
                   IconButton(

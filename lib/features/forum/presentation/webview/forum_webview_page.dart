@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/composer_shared/presentation/services/read_access_feedback.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/forum/data/services/forum_webview_redirect_resolver.dart';
@@ -943,11 +944,12 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (messenger != null) {
       _showSnackBar(
         messenger,
-        ComposerTextResolver.submitSuccess(
-          l10n,
-          ComposerKind.newThread,
-          result.rawSuccessDetail,
-        ),
+        readAccessFeedback(l10n, result.readAccess) ??
+            ComposerTextResolver.submitSuccess(
+              l10n,
+              ComposerKind.newThread,
+              result.rawSuccessDetail,
+            ),
       );
     }
     // 方案 §4.2 本期保持简单：仅刷新当前 WebView。新帖 tid 已经在

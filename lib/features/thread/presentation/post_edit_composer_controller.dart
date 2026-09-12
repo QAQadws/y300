@@ -46,6 +46,8 @@ final class PostEditComposerController
   int _webReconcileGeneration = 0;
   int _submitGeneration = 0;
   final Map<String, int> _deleteGenerationByAid = <String, int>{};
+  ThreadReadAccessEvidence? lastReadAccessEvidence;
+  int? _lastUncertainReadAccess;
   String? _lastUncertainSubmitSubject;
   String? _lastUncertainSubmitMessage;
   List<String> _lastUncertainSubmitAttachNewAids = const <String>[];
@@ -171,6 +173,25 @@ final class PostEditComposerController
     );
   }
 
+  void updateMinimumReadAccess(int value) {
+    final current = state.value;
+    if (current == null ||
+        current.isSubmitting ||
+        current.submitState != PostEditSubmitState.idle ||
+        current.webReturnVerificationState ==
+            PostEditWebReturnVerificationState.verifying ||
+        !current.target.isFirstPost ||
+        !current.snapshot.readAccess.canModify ||
+        (value != current.snapshot.readAccess.currentValue &&
+            !current.snapshot.readAccess.allows(value))) {
+      return;
+    }
+    _webReconcileGeneration += 1;
+    setStateValue(
+      current.copyWith(minimumReadAccess: value, clearFailure: true),
+    );
+  }
+
   /// Returns only warnings; the builder remains the single source of truth
   /// for whether an attachment can be sent. The page uses this to ask for an
   /// explicit confirmation without rewriting the user's BBCode.
@@ -190,6 +211,8 @@ final class PostEditComposerController
     return value.copyWith(
       message: value.snapshot.message,
       subject: value.snapshot.subject,
+      resetReadAccess: true,
+      useSignature: value.snapshot.useSignature,
       messageRevision: value.messageRevision + 1,
       restoredDraft: false,
       imageAttachments: const [],
@@ -212,6 +235,11 @@ final class PostEditComposerController
 
   @override
   ComposerValidationFailure? preflightValidate(PostEditComposerState state) {
+    if (!state.isReadAccessValid) {
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.readAccessUnavailable,
+      );
+    }
     if (state.target.isFirstPost && state.subject.trim().isEmpty) {
       return const ComposerValidationFailure(
         code: ComposerValidationFailureCode.contentRequired,
@@ -226,10 +254,20 @@ final class PostEditComposerController
   }
 
   @override
+  Future<ComposerSubmitInvocationResult> submit() async {
+    final current = state.value;
+    if (current == null || !current.canSubmit) {
+      return ComposerSubmitInvocationResult.notSent(failure: current?.failure);
+    }
+    return super.submit();
+  }
+
+  @override
   Future<ComposerSubmissionOutcome> performSubmit({
     required PostEditComposerState state,
     required List<String> uploadedAids,
   }) async {
+    lastReadAccessEvidence = null;
     final generation = ++_submitGeneration;
     if (!_isCurrentSubmitGeneration(generation)) {
       _recordDiagnostic(
@@ -279,6 +317,11 @@ final class PostEditComposerController
             subject: current.subject,
             message: current.message,
             useSignature: current.useSignature,
+            minimumReadAccess:
+                current.minimumReadAccess ==
+                    current.snapshot.readAccess.currentValue
+                ? null
+                : current.minimumReadAccess,
             newImageAttachmentIds: projection.newAttachmentAids,
             removedImageAttachmentIds: current
                 .attachmentSession
@@ -294,7 +337,8 @@ final class PostEditComposerController
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
     switch (result) {
-      case DataCommandApplied<ThreadPostEditReceipt>():
+      case DataCommandApplied<ThreadPostEditReceipt>(:final receipt):
+        lastReadAccessEvidence = receipt.readAccess;
         return _confirmSuccess(current, generation: generation);
       case DataCommandRejected<ThreadPostEditReceipt>(:final failure):
         if (failure.kind == DataCommandFailureKind.staleFormhash) {
@@ -319,6 +363,7 @@ final class PostEditComposerController
           failure: failure,
         );
       case DataCommandOutcomeUnknown<ThreadPostEditReceipt>(:final failure):
+        _lastUncertainReadAccess = current.minimumReadAccess;
         _lastUncertainSubmitMessage = current.message;
         _lastUncertainSubmitSubject = current.subject;
         _lastUncertainSubmitAttachNewAids = projection.newAttachmentAids;
@@ -415,6 +460,7 @@ final class PostEditComposerController
       generation: generation,
       submittedSubject: subject,
       submittedMessage: message,
+      submittedReadAccess: _lastUncertainReadAccess,
     );
   }
 
@@ -424,6 +470,7 @@ final class PostEditComposerController
     required int generation,
     String? submittedSubject,
     String? submittedMessage,
+    int? submittedReadAccess,
   }) async {
     final prepareGeneration = ++_prepareGeneration;
     if (!_isCurrentSubmitGeneration(generation) ||
@@ -477,6 +524,7 @@ final class PostEditComposerController
       after: snapshot,
       submittedSubject: submittedSubject ?? current.subject,
       submittedMessage: submittedMessage ?? current.message,
+      submittedReadAccess: submittedReadAccess ?? current.minimumReadAccess,
       attachNewAids: attachNewAids,
     );
     switch (verification.kind) {
@@ -496,7 +544,9 @@ final class PostEditComposerController
         if (snapshot.revision != current.baselineFingerprint &&
             (_messageCanonicalizer.canonicalize(snapshot.message) !=
                     _messageCanonicalizer.canonicalize(current.message) ||
-                snapshot.subject.trim() != current.subject.trim())) {
+                snapshot.subject.trim() != current.subject.trim() ||
+                snapshot.readAccess.currentValue !=
+                    current.minimumReadAccess)) {
           return _markConflict(
             current,
             snapshot: snapshot,
@@ -783,6 +833,9 @@ final class PostEditComposerController
       baselineSubject: snapshot.subject,
       baselineMessage: snapshot.message,
       baselineFingerprint: snapshot.revision,
+      // No local threshold intent exists when the old form could not prove it.
+      minimumReadAccess:
+          current.minimumReadAccess ?? snapshot.readAccess.currentValue,
       attachmentSession: session,
     );
   }
@@ -794,6 +847,7 @@ final class PostEditComposerController
     return PostEditConflictState(
       localSubject: current.subject,
       localMessage: current.message,
+      localMinimumReadAccess: current.minimumReadAccess,
       localUseSignature: current.useSignature,
       localImageAttachments: current.imageAttachments,
       localAttachmentSession: current.attachmentSession,
@@ -875,6 +929,8 @@ final class PostEditComposerController
           baselineMessage: latestSnapshot.message,
           baselineFingerprint: latestSnapshot.revision,
           subject: latestSnapshot.subject,
+          resetReadAccess: true,
+          useSignature: latestSnapshot.useSignature,
           message: latestSnapshot.message,
           imageAttachments: const <ComposerImageAttachment>[],
           attachmentSession: PostEditAttachmentSession.fromImages(
@@ -912,6 +968,8 @@ final class PostEditComposerController
         baselineMessage: conflict.latestSnapshot.message,
         baselineFingerprint: conflict.latestSnapshot.revision,
         subject: conflict.latestSnapshot.subject,
+        resetReadAccess: true,
+        useSignature: conflict.latestSnapshot.useSignature,
         message: conflict.latestSnapshot.message,
         restoredDraft: false,
         imageAttachments: const <ComposerImageAttachment>[],
@@ -949,6 +1007,9 @@ final class PostEditComposerController
         baselineMessage: conflict.latestSnapshot.message,
         baselineFingerprint: conflict.latestSnapshot.revision,
         subject: conflict.localSubject,
+        minimumReadAccess:
+            conflict.localMinimumReadAccess ??
+            conflict.latestSnapshot.readAccess.currentValue,
         message: conflict.localMessage,
         useSignature: conflict.localUseSignature,
         imageAttachments: conflict.localImageAttachments,

@@ -119,7 +119,7 @@ currently verified by Y300:
 | Password login, session resolution, standard logout | Discuz v4 API |
 | Forum and thread favorite target-state commands | Discuz v4 API plus favorite-directory read-back |
 | Post rating/comment preparation and commands | Discuz HTML forms plus JSON/AJAX callback proof |
-| Thread creation and reply preparation/commands | Discuz v4 API plus HTML post-reply preparation |
+| Thread creation and reply preparation/commands | Mobile HTML creation preparation, desktop HTML post-reply preparation, Discuz v4 commands |
 | Thread poll-vote command | Discuz `pollvote version=2` API |
 
 Authentication contracts are deliberately independent. A future source may
@@ -157,13 +157,43 @@ only when a stable JSON message code or matching Discuz AJAX success callback
 proves success. Server text and raw response payloads never enter receipts.
 
 Thread creation and replies follow the same preparation/command boundary.
-Creation supports Y300's ordinary and poll fields, tags, attachment identities,
-signature/notification/parsing switches, and minimum read access. Post replies
-preserve dynamic hidden fields in an opaque preparation token; ordinary thread
-replies obtain formhash when submitted. Only positive, matching `tid`/`pid`
-values and an exact success code produce an applied receipt. A non-zero
-read-access request is read back without weakening already-proved creation
-success.
+Creation preparation GETs `forum.php?mod=post&action=newthread&fid={fid}&mobile=2`;
+`ThreadCreationPreparationRequest.kind=poll` also adds `special=1&cedit=yes`.
+The opaque token binds both forum and kind and retains validated formhash and
+posttime. Preparation never supplements missing HTML metadata using
+`forumdisplay`. Undeclared classification requirements and content limits are
+null (unknown), not inferred from absent JSON fields. Poll option limits come
+from the numeric `maxoptions` assignment emitted by the template; no JavaScript
+is executed and no fixed twenty-option truncation is applied. Unsupported
+captcha, structured-category and special forms fail with structured results.
+Creation POST remains `newthread version=4` and supports tags, attachment IDs,
+signature/notification/parsing switches, and permitted minimum read access.
+
+`ThreadReadAccess` is shared by creation and editing: `canModify`, nullable
+`currentValue` (null means unknown), and numeric threshold options with original
+server group names. Empty permission is zero; duplicate groups sharing a value
+merge into one choice. Only topic-level `readperm` is parsed; attachment
+permissions are separate. Multiple selected thresholds with different values
+are rejected. An editable edit selector without a selected value triggers an
+identity-checked `viewthread version=4` read; failed confirmation blocks native
+preparation. An obsolete current threshold may be retained even when absent
+from current options. Missing/disabled controls are not made editable and do
+not cause an injected `readperm=0`.
+
+Edit submission uses ordered HTML multipart. Its nullable `minimumReadAccess`
+means preserve when null and explicitly clear when zero. Permissions participate
+in revision fingerprints and ambiguous-result readback alongside content and
+attachments. Explicit changes (including clearing) are verified after a proven
+success; adjusted or unavailable permission evidence stays attached to an
+`applied` receipt, never changes it to a retryable failure. Poll first-post
+editing and other complex forms remain unsupported for native editing.
+
+Post replies preserve dynamic hidden fields in an opaque preparation token;
+ordinary thread replies obtain formhash when submitted. Only positive, matching
+`tid`/`pid` values and an exact success code produce an applied creation/reply
+receipt. A non-zero creation read-access request is read back without weakening
+already-proved creation success. Hosts should display adjusted/unverified access
+evidence explicitly and must never resend an outcome-unknown command.
 
 Thread poll voting is an independent command rather than a field on the HTML
 thread adapter. Callers submit stable `fid`, `tid`, and ordered option IDs; the

@@ -98,6 +98,10 @@ abstract final class ComposerTextResolver {
       ComposerValidationFailureCode.pollMissing => l10n.postingPollMissing,
       ComposerValidationFailureCode.pollTooFewOptions =>
         l10n.postingPollTooFewOptions(failure.limit ?? 0),
+      ComposerValidationFailureCode.pollTooManyOptions =>
+        l10n.postingPollTooManyOptions(failure.limit ?? 0),
+      ComposerValidationFailureCode.readAccessUnavailable =>
+        l10n.composerReadAccessInvalid,
       ComposerValidationFailureCode.pollOptionTooLong =>
         l10n.postingPollOptionTooLong(failure.limit ?? 0),
       ComposerValidationFailureCode.pollMultipleChoiceInvalid =>

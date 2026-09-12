@@ -1,3 +1,5 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_read_access_tile.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -378,6 +380,7 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
     if (state.subject.trim().isNotEmpty) return true;
     if (state.message.trim().isNotEmpty) return true;
     if (state.imageAttachments.isNotEmpty) return true;
+    if (state.minimumReadAccess != 0) return true;
     if (state.tags.isNotEmpty) return true;
     final pollOptions = state.poll?.options ?? const <String>[];
     if (pollOptions.any((option) => option.trim().isNotEmpty)) return true;
@@ -446,6 +449,15 @@ class _PostingComposerPageState extends ConsumerState<PostingComposerPage> {
               key: const Key('posting-composer-settings-sheet'),
               title: l10n.composerMoreSettings,
               children: [
+                ComposerReadAccessTile(
+                  key: const Key('posting-read-access'),
+                  access:
+                      sheetState?.metadata?.readAccess ??
+                      ThreadReadAccess.unavailable,
+                  selectedValue: sheetState?.minimumReadAccess,
+                  enabled: enabled && !sheetState.isLoadingMetadata,
+                  onChanged: notifier.updateMinimumReadAccess,
+                ),
                 ThreadTagsField(
                   containerKey: const Key('posting-composer-tags-field'),
                   inputFieldKey: const Key('posting-composer-tags-input'),
@@ -699,7 +711,7 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
             _MessageCounter(
               counterKey: const Key('posting-composer-message-counter'),
               currentLength: widget.state.message.length,
-              maxLength: widget.state.metadata!.maxMessageLength,
+              maxLength: widget.state.metadata!.maxMessageLength ?? 0,
             ),
           ..._buildTrailingFeedbackWidgets(context),
         ],
@@ -760,9 +772,7 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
   List<Widget> _buildTypeAndSpecialFields({required bool disabled}) {
     final state = widget.state;
     final metadata = state.metadata;
-    if (metadata != null &&
-        metadata.threadTypes.isNotEmpty &&
-        metadata.typeRequired) {
+    if (metadata != null && metadata.threadTypes.isNotEmpty) {
       return [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -776,36 +786,16 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
                 chipKeyBuilder: (type) =>
                     Key('posting-composer-type-${type.id}'),
                 types: metadata.threadTypes,
-                typeRequired: metadata.typeRequired,
+                typeRequired: metadata.typeRequired == true,
                 selectedTypeId: state.selectedTypeId,
                 onSelected: widget.onSelectedTypeIdChanged,
                 enabled: !disabled,
-                useDropdown: true,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(child: _buildSpecialSwitch(disabled: disabled)),
           ],
         ),
-        const SizedBox(height: 12),
-      ];
-    }
-    if (metadata != null && metadata.threadTypes.isNotEmpty) {
-      return [
-        ThreadTypeSelector(
-          containerKey: const Key('posting-composer-type-selector'),
-          toggleKey: const Key('posting-composer-type-toggle'),
-          summaryKey: const Key('posting-composer-type-summary'),
-          noneChipKey: const Key('posting-composer-type-none'),
-          chipKeyBuilder: (type) => Key('posting-composer-type-${type.id}'),
-          types: metadata.threadTypes,
-          typeRequired: metadata.typeRequired,
-          selectedTypeId: state.selectedTypeId,
-          onSelected: widget.onSelectedTypeIdChanged,
-          enabled: !disabled,
-        ),
-        const SizedBox(height: 12),
-        _buildSpecialSwitch(disabled: disabled),
         const SizedBox(height: 12),
       ];
     }
@@ -830,6 +820,7 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
   Widget _buildPollEditor({required bool disabled}) {
     final state = widget.state;
     return ThreadPollExpandableEditor(
+      constraints: widget.state.metadata?.pollConstraints,
       toggleKey: const Key('posting-composer-poll-config-toggle'),
       summaryKey: const Key('posting-composer-poll-config-summary'),
       panelKey: const Key('posting-composer-poll-config-panel'),
@@ -891,6 +882,14 @@ class _PostingComposerBodyState extends State<_PostingComposerBody> {
         textKey: const Key('posting-composer-metadata-error-text'),
         retryButtonKey: const Key('posting-composer-metadata-retry-button'),
         onRetry: widget.onRetryLoadMetadata,
+      );
+    }
+    if (!state.isLoadingMetadata &&
+        state.metadata != null &&
+        !state.isReadAccessValid) {
+      return ComposerStatusBanner.info(
+        key: const Key('posting-read-access-invalid'),
+        text: AppLocalizations.of(context).composerReadAccessInvalid,
       );
     }
     return const SizedBox.shrink();

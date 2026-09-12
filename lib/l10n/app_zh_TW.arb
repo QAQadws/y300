@@ -1363,5 +1363,78 @@
   "postEditLoadFailed": "讀取帖子編輯表單失敗：{error}",
   "@postEditLoadFailed": {"placeholders": {"error": {"type": "String"}}},
   "postEditServerVersion": "伺服器版本",
-  "postEditLocalVersion": "本地版本"
+  "postEditLocalVersion": "本地版本",
+  "composerReadAccess": "閱讀權限",
+  "composerReadAccessUnlimited": "不限",
+  "composerReadAccessHighest": "最高權限",
+  "composerReadAccessUnavailable": "目前無法修改閱讀權限",
+  "composerReadAccessUnknown": "目前權限未確認",
+  "composerReadAccessInvalid": "原閱讀權限已不可選，請重新選擇",
+  "composerReadAccessLevel": "閱讀權限 {value}",
+  "@composerReadAccessLevel": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "composerReadAccessKeep": "保留目前權限（{value}）",
+  "@composerReadAccessKeep": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "composerReadAccessAdjusted": "已儲存，但閱讀權限由 {requested} 調整為 {actual}，請檢查帖子設定。",
+  "@composerReadAccessAdjusted": {
+    "placeholders": {
+      "requested": {
+        "type": "int"
+      },
+      "actual": {
+        "type": "int"
+      }
+    }
+  },
+  "composerReadAccessUnverified": "已儲存，但暫時無法確認閱讀權限是否為 {value}，請檢查帖子設定。",
+  "@composerReadAccessUnverified": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "postingPollMinimumOptions": "至少填寫 {count} 個選項",
+  "@postingPollMinimumOptions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "postingPollMaximumOptions": "最多 {count} 個選項",
+  "@postingPollMaximumOptions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "postingPollMaximumOptionLength": "每個選項最多 {count} 個字元",
+  "@postingPollMaximumOptionLength": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "postingPollTooManyOptions": "投票選項超過 {count} 個，請調整後再發佈",
+  "@postingPollTooManyOptions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

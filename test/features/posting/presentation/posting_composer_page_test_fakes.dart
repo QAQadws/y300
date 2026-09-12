@@ -16,7 +16,7 @@ final ThreadCreationCapabilities _threadCreationCapabilities =
     );
 
 ThreadCreationPreparation _metadata({
-  bool typeRequired = false,
+  bool? typeRequired,
   String forumName = '日常版',
   List<ThreadCreationType> types = const [
     ThreadCreationType(id: '111', name: '日常'),
@@ -339,9 +339,28 @@ class _FakeMetadataRepository implements ThreadCreationPreparationRepository {
     if (_queue.isNotEmpty) {
       final next = _queue.removeAt(0);
       _last = next;
-      return next;
     }
-    return _last!;
+    final result = _last!;
+    final data = result.dataOrNull;
+    if (data == null) return result;
+    return DataReadSuccess(
+      data: ThreadCreationPreparation(
+        fid: data.fid,
+        forumName: data.forumName,
+        threadTypes: data.threadTypes,
+        threadSorts: data.threadSorts,
+        typeRequired: data.typeRequired,
+        sortRequired: data.sortRequired,
+        maxSubjectLength: data.maxSubjectLength,
+        maxMessageLength: data.maxMessageLength,
+        token: data.token,
+        kind: request.kind,
+        readAccess: data.readAccess,
+        pollConstraints: data.pollConstraints,
+      ),
+      capabilities: capabilities,
+      metadata: const DataReadMetadata.network(),
+    );
   }
 }
 

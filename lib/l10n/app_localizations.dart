@@ -7121,6 +7121,90 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'本地版本'**
   String get postEditLocalVersion;
+
+  /// No description provided for @composerReadAccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读权限'**
+  String get composerReadAccess;
+
+  /// No description provided for @composerReadAccessUnlimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'不限'**
+  String get composerReadAccessUnlimited;
+
+  /// No description provided for @composerReadAccessHighest.
+  ///
+  /// In zh, this message translates to:
+  /// **'最高权限'**
+  String get composerReadAccessHighest;
+
+  /// No description provided for @composerReadAccessUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前无法修改阅读权限'**
+  String get composerReadAccessUnavailable;
+
+  /// No description provided for @composerReadAccessUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前权限未确认'**
+  String get composerReadAccessUnknown;
+
+  /// No description provided for @composerReadAccessInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'原阅读权限已不可选，请重新选择'**
+  String get composerReadAccessInvalid;
+
+  /// No description provided for @composerReadAccessLevel.
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读权限 {value}'**
+  String composerReadAccessLevel(int value);
+
+  /// No description provided for @composerReadAccessKeep.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留当前权限（{value}）'**
+  String composerReadAccessKeep(int value);
+
+  /// No description provided for @composerReadAccessAdjusted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存，但阅读权限由 {requested} 调整为 {actual}，请检查帖子设置。'**
+  String composerReadAccessAdjusted(int requested, int actual);
+
+  /// No description provided for @composerReadAccessUnverified.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存，但暂时无法确认阅读权限是否为 {value}，请检查帖子设置。'**
+  String composerReadAccessUnverified(int value);
+
+  /// No description provided for @postingPollMinimumOptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少填写 {count} 个选项'**
+  String postingPollMinimumOptions(int count);
+
+  /// No description provided for @postingPollMaximumOptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'最多 {count} 个选项'**
+  String postingPollMaximumOptions(int count);
+
+  /// No description provided for @postingPollMaximumOptionLength.
+  ///
+  /// In zh, this message translates to:
+  /// **'每个选项最多 {count} 个字符'**
+  String postingPollMaximumOptionLength(int count);
+
+  /// No description provided for @postingPollTooManyOptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票选项超过 {count} 个，请调整后再发布'**
+  String postingPollTooManyOptions(int count);
 }
 
 class _AppLocalizationsDelegate

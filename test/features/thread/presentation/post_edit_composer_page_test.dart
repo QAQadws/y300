@@ -1,3 +1,4 @@
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +23,61 @@ import '../../../test_support/localized_test_app.dart';
 import '../test_support/post_edit_test_support.dart';
 
 void main() {
+  testWidgets(
+    'more restores old permission, enables permission-only saving and returns a specific warning',
+    (tester) async {
+      final results = <Object?>[];
+      final args = _args(
+        _snapshot(
+          message: 'server',
+          isFirstPost: true,
+          readAccess: const ThreadReadAccess(
+            canModify: true,
+            currentValue: 37,
+            options: [
+              ThreadReadAccessOption(value: 0),
+              ThreadReadAccessOption(value: 20),
+            ],
+          ),
+        ),
+      );
+      final command = _AppliedPermissionCommand();
+      await tester.pumpWidget(
+        _buildApp(args: args, results: results, command: command),
+      );
+      await _openEditor(tester);
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('post-edit-save-button')))
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.byKey(const Key('post-edit-composer-more-button')));
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byKey(const Key('post-edit-read-access'))),
+      );
+      expect(find.text(l10n.composerReadAccessKeep(37)), findsOneWidget);
+      await tester.tap(find.byKey(const Key('post-edit-read-access')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('read-access-option-0')));
+      await tester.pumpAndSettle();
+      Navigator.of(
+        tester.element(
+          find.byKey(const Key('post-edit-composer-settings-sheet')),
+        ),
+      ).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('post-edit-save-button')));
+      await tester.pumpAndSettle();
+      expect(command.submissions.single.minimumReadAccess, 0);
+      final result = results.single as PostEditRouteResult;
+      expect(result.outcome, PostEditRouteOutcome.saved);
+      expect(result.readAccess!.kind, ThreadReadAccessEvidenceKind.unverified);
+      expect(result.readAccess!.requested, 0);
+    },
+  );
+
   testWidgets('source action edits raw BBCode without opening WebView', (
     tester,
   ) async {
@@ -353,6 +409,7 @@ Widget _buildApp({
   required PostEditComposerArgs args,
   required List<Object?> results,
   ComposerPreferencesRepository? preferencesRepository,
+  ThreadPostEditCommand? command,
 }) {
   return ProviderScope(
     overrides: [
@@ -360,7 +417,7 @@ Widget _buildApp({
         const _UnusedPreparationRepository(),
       ),
       threadPostEditCommandProvider.overrideWithValue(
-        const _UnusedEditCommand(),
+        command ?? const _UnusedEditCommand(),
       ),
       postEditImageAttachmentDeleteCommandProvider.overrideWithValue(
         const _AppliedAttachmentDeleteCommand(),
@@ -429,6 +486,7 @@ ThreadPostEditPreparation _snapshot({
       const <ThreadPostEditImageAttachment>[],
   bool isFirstPost = false,
   String subject = 'subject',
+  ThreadReadAccess readAccess = ThreadReadAccess.unavailable,
 }) {
   final target = buildPostEditTarget(
     fid: '5',
@@ -443,6 +501,7 @@ ThreadPostEditPreparation _snapshot({
     message: message,
     existingImages: images,
     revision: 'baseline',
+    readAccess: readAccess,
   );
 }
 
@@ -545,5 +604,28 @@ class _NoopUploadCoordinator implements ComposerImageUploadCoordinator {
     required List<ComposerImageAttachment> attachments,
   }) {
     return const Stream<ComposerImageUploadEvent>.empty();
+  }
+}
+
+class _AppliedPermissionCommand implements ThreadPostEditCommand {
+  final submissions = <ThreadPostEditSubmission>[];
+  @override
+  ThreadPostEditCapabilities get capabilities => buildPostEditCapabilities();
+  @override
+  Future<DataCommandResult<ThreadPostEditReceipt>> execute(
+    ThreadPostEditSubmission submission,
+  ) async {
+    submissions.add(submission);
+    return DataCommandApplied(
+      ThreadPostEditReceipt(
+        target: submission.preparation.target,
+        publicationState: ThreadPostEditPublicationState.published,
+        confirmation: ThreadPostEditConfirmation.serverCallback,
+        readAccess: ThreadReadAccessEvidence(
+          kind: ThreadReadAccessEvidenceKind.unverified,
+          requested: submission.minimumReadAccess!,
+        ),
+      ),
+    );
   }
 }

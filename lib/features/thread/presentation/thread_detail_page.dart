@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/composer_shared/presentation/services/read_access_feedback.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
@@ -959,6 +960,15 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       return;
     }
     if (result is PostEditRouteResult && result.serverMutationPossible) {
+      final feedback = readAccessFeedback(
+        AppLocalizations.of(context),
+        result.readAccess,
+      );
+      if (feedback != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(feedback)));
+      }
       await controller.refreshAfterMutation();
     }
   }

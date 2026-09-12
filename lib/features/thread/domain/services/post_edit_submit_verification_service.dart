@@ -23,6 +23,7 @@ final class PostEditSubmitVerificationService {
     required String submittedSubject,
     required String submittedMessage,
     required Iterable<String> attachNewAids,
+    int? submittedReadAccess,
   }) {
     if (after.revision == before.revision) {
       return const PostEditSubmitVerification(
@@ -41,6 +42,15 @@ final class PostEditSubmitVerificationService {
       return const PostEditSubmitVerification(
         kind: PostEditSubmitResponseKind.ambiguous,
         detail: 'subject_mismatch',
+      );
+    }
+    final expectedAccess =
+        submittedReadAccess ?? before.readAccess.currentValue;
+    if (expectedAccess != null &&
+        after.readAccess.currentValue != expectedAccess) {
+      return const PostEditSubmitVerification(
+        kind: PostEditSubmitResponseKind.ambiguous,
+        detail: 'read_access_mismatch',
       );
     }
     final returnedAids = {for (final image in after.existingImages) image.aid};

@@ -4387,6 +4387,64 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get postEditLocalVersion => '本地版本';
+
+  @override
+  String get composerReadAccess => '阅读权限';
+
+  @override
+  String get composerReadAccessUnlimited => '不限';
+
+  @override
+  String get composerReadAccessHighest => '最高权限';
+
+  @override
+  String get composerReadAccessUnavailable => '当前无法修改阅读权限';
+
+  @override
+  String get composerReadAccessUnknown => '当前权限未确认';
+
+  @override
+  String get composerReadAccessInvalid => '原阅读权限已不可选，请重新选择';
+
+  @override
+  String composerReadAccessLevel(int value) {
+    return '阅读权限 $value';
+  }
+
+  @override
+  String composerReadAccessKeep(int value) {
+    return '保留当前权限（$value）';
+  }
+
+  @override
+  String composerReadAccessAdjusted(int requested, int actual) {
+    return '已保存，但阅读权限由 $requested 调整为 $actual，请检查帖子设置。';
+  }
+
+  @override
+  String composerReadAccessUnverified(int value) {
+    return '已保存，但暂时无法确认阅读权限是否为 $value，请检查帖子设置。';
+  }
+
+  @override
+  String postingPollMinimumOptions(int count) {
+    return '至少填写 $count 个选项';
+  }
+
+  @override
+  String postingPollMaximumOptions(int count) {
+    return '最多 $count 个选项';
+  }
+
+  @override
+  String postingPollMaximumOptionLength(int count) {
+    return '每个选项最多 $count 个字符';
+  }
+
+  @override
+  String postingPollTooManyOptions(int count) {
+    return '投票选项超过 $count 个，请调整后再发布';
+  }
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -8773,4 +8831,62 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get postEditLocalVersion => '本地版本';
+
+  @override
+  String get composerReadAccess => '閱讀權限';
+
+  @override
+  String get composerReadAccessUnlimited => '不限';
+
+  @override
+  String get composerReadAccessHighest => '最高權限';
+
+  @override
+  String get composerReadAccessUnavailable => '目前無法修改閱讀權限';
+
+  @override
+  String get composerReadAccessUnknown => '目前權限未確認';
+
+  @override
+  String get composerReadAccessInvalid => '原閱讀權限已不可選，請重新選擇';
+
+  @override
+  String composerReadAccessLevel(int value) {
+    return '閱讀權限 $value';
+  }
+
+  @override
+  String composerReadAccessKeep(int value) {
+    return '保留目前權限（$value）';
+  }
+
+  @override
+  String composerReadAccessAdjusted(int requested, int actual) {
+    return '已儲存，但閱讀權限由 $requested 調整為 $actual，請檢查帖子設定。';
+  }
+
+  @override
+  String composerReadAccessUnverified(int value) {
+    return '已儲存，但暫時無法確認閱讀權限是否為 $value，請檢查帖子設定。';
+  }
+
+  @override
+  String postingPollMinimumOptions(int count) {
+    return '至少填寫 $count 個選項';
+  }
+
+  @override
+  String postingPollMaximumOptions(int count) {
+    return '最多 $count 個選項';
+  }
+
+  @override
+  String postingPollMaximumOptionLength(int count) {
+    return '每個選項最多 $count 個字元';
+  }
+
+  @override
+  String postingPollTooManyOptions(int count) {
+    return '投票選項超過 $count 個，請調整後再發佈';
+  }
 }

@@ -27,6 +27,7 @@ ThreadPostEditPreparation buildPostEditPreparation({
   String message = '服务器正文',
   bool useSignature = true,
   String revision = 'revision-1',
+  ThreadReadAccess readAccess = ThreadReadAccess.unavailable,
   List<ThreadPostEditImageAttachment> existingImages =
       const <ThreadPostEditImageAttachment>[],
 }) {
@@ -40,6 +41,7 @@ ThreadPostEditPreparation buildPostEditPreparation({
     useSignature: useSignature,
     existingImages: existingImages,
     revision: revision,
+    readAccess: readAccess,
     token: const TestThreadPostEditPreparationToken(),
   );
 }
