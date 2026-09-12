@@ -279,6 +279,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     : (asyncState.hasError || state.errorMessage != null) &&
                           state.posts.isEmpty
                     ? _ThreadErrorView(
+                        subject: projection.displaySubject,
                         message: state.loadFailure == null
                             ? ThreadTextResolver.loadFailure(
                                 l10n,
@@ -1453,15 +1454,21 @@ class _ThreadPostActionSheet extends StatelessWidget {
 }
 
 class _ThreadErrorView extends StatelessWidget {
-  const _ThreadErrorView({required this.message, required this.onRetry});
+  const _ThreadErrorView({
+    required this.subject,
+    required this.message,
+    required this.onRetry,
+  });
 
+  final String subject;
   final String message;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return Center(
+    return ThreadDetailEntrySurface(
+      subject: subject,
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(

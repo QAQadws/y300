@@ -34,19 +34,51 @@ void main() {
     );
   }
 
-  testWidgets('unknown title stays a placeholder, not a fabricated subject', (
+  testWidgets(
+    'unknown title leaves a bare surface without fabricated content',
+    (tester) async {
+      await tester.pumpWidget(buildApp(subject: ''));
+      expect(
+        find.byKey(const Key('thread-detail-first-post-summary')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('thread-detail-loading')), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(ThreadDetailLoading),
+          matching: find.byType(DecoratedBox),
+        ),
+        findsNothing,
+      );
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(tester.binding.transientCallbackCount, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('known title only reserves a compact status below it', (
     tester,
   ) async {
-    await tester.pumpWidget(buildApp(subject: ''));
+    await tester.pumpWidget(buildApp());
+    final titleRect = tester.getRect(find.text('fixture-title'));
+    final statusFinder = find.byKey(const Key('thread-detail-loading-label'));
+    final statusRect = tester.getRect(statusFinder);
+    expect(statusRect.top - titleRect.bottom, inInclusiveRange(11, 24));
     expect(
-      find.byKey(const Key('thread-detail-first-post-summary')),
+      find.descendant(
+        of: find.byType(ThreadDetailLoading),
+        matching: find.byType(DecoratedBox),
+      ),
       findsNothing,
     );
-    expect(find.byKey(const Key('thread-detail-loading')), findsOneWidget);
-    expect(find.byType(Image), findsNothing);
+    expect(tester.widget<Text>(statusFinder).style!.color!.a, 0);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.getRect(find.text('fixture-title')), titleRect);
+    expect(tester.getRect(statusFinder), statusRect);
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('reduced motion keeps readable status without a ticker', (
@@ -55,10 +87,11 @@ void main() {
     final semantics = tester.ensureSemantics();
     try {
       await tester.pumpWidget(buildApp(reduceMotion: true));
-      await tester.pump(const Duration(milliseconds: 300));
       final l10n = AppLocalizations.of(
         tester.element(find.byType(ThreadDetailLoading)),
       );
+      expect(find.bySemanticsLabel(l10n.threadDetailLoading), findsNothing);
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.bySemanticsLabel(l10n.threadDetailLoading), findsOneWidget);
       expect(find.byType(LinearProgressIndicator), findsNothing);
       expect(tester.binding.transientCallbackCount, 0);
@@ -87,25 +120,18 @@ void main() {
             locale: const Locale('zh', 'TW'),
           ),
         );
-        final before = tester.getSize(
-          find
-              .descendant(
-                of: find.byType(ThreadDetailLoading),
-                matching: find.byType(DecoratedBox),
-              )
-              .first,
+        final titleFinder = find.byKey(
+          const Key('thread-detail-first-post-summary'),
         );
+        final statusFinder = find.byKey(
+          const Key('thread-detail-loading-label'),
+        );
+        final titleBefore = tester.getRect(titleFinder);
+        final statusBefore = tester.getRect(statusFinder);
         await tester.pump(const Duration(milliseconds: 300));
         expect(tester.takeException(), isNull);
-        final after = tester.getSize(
-          find
-              .descendant(
-                of: find.byType(ThreadDetailLoading),
-                matching: find.byType(DecoratedBox),
-              )
-              .first,
-        );
-        expect(after, before);
+        expect(tester.getRect(titleFinder), titleBefore);
+        expect(tester.getRect(statusFinder), statusBefore);
         await tester.drag(
           find.byKey(const Key('thread-detail-loading')),
           const Offset(0, -1400),

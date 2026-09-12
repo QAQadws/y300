@@ -114,15 +114,16 @@ void main() {
       expect(find.byType(ThreadPostHtmlFirstBody), findsNothing);
       expect(find.byType(ForumCachedAvatar), findsNothing);
       expect(history.drafts, isEmpty);
-      final titleOffset = tester.getTopLeft(find.text('测试主题'));
+      final titleRect = tester.getRect(find.text('测试主题'));
       final titleStyle = tester.widget<Text>(find.text('测试主题')).style;
-      final cardSize = tester.getSize(
-        find
-            .descendant(
-              of: find.byType(ThreadDetailLoading),
-              matching: find.byType(DecoratedBox),
-            )
-            .first,
+      final statusFinder = find.byKey(const Key('thread-detail-loading-label'));
+      final statusRect = tester.getRect(statusFinder);
+      expect(
+        find.descendant(
+          of: find.byType(ThreadDetailLoading),
+          matching: find.byType(DecoratedBox),
+        ),
+        findsNothing,
       );
 
       await tester.pump(const Duration(milliseconds: 299));
@@ -140,17 +141,8 @@ void main() {
       );
       expect(status.data, l10n.threadDetailLoading);
       expect(status.style!.color!.a, greaterThan(0));
-      expect(
-        tester.getSize(
-          find
-              .descendant(
-                of: find.byType(ThreadDetailLoading),
-                matching: find.byType(DecoratedBox),
-              )
-              .first,
-        ),
-        cardSize,
-      );
+      expect(tester.getRect(find.text('测试主题')), titleRect);
+      expect(tester.getRect(statusFinder), statusRect);
 
       result.complete(
         ApiSuccess(
@@ -176,11 +168,130 @@ void main() {
         find.byKey(const Key('thread-post-card-entry-p1')),
         findsOneWidget,
       );
-      expect(tester.getTopLeft(find.text('测试主题')), titleOffset);
+      expect(tester.getRect(find.text('测试主题')), titleRect);
       expect(tester.widget<Text>(find.text('测试主题')).style, titleStyle);
       expect(repository.queryHistory, hasLength(1));
       expect(history.drafts, hasLength(1));
     });
+
+    for (final dark in [false, true]) {
+      testWidgets(
+        'multiline entry title keeps its layout in ${dark ? 'dark' : 'light'} mode',
+        (tester) async {
+          tester.view.devicePixelRatio = 1;
+          tester.view.physicalSize = const Size(320, 800);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetPhysicalSize);
+          final subject = List.filled(3, '這是一個很長的測試標題').join();
+          final result = Completer<ApiResult<ThreadDetailData>>();
+          final repository = _FakeThreadRepository(
+            (tid, page) => result.future,
+          );
+          await tester.pumpWidget(
+            _buildTestApp(
+              repository,
+              theme: dark ? AppTheme.dark() : AppTheme.light(),
+              home: Builder(
+                builder: (context) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: const TextScaler.linear(1.6)),
+                  child: ThreadDetailPage(tid: '100', subject: subject),
+                ),
+              ),
+            ),
+          );
+          await tester.pump();
+          final titleFinder = find.text(subject);
+          final titleRect = tester.getRect(titleFinder);
+          final titleStyle = tester.widget<Text>(titleFinder).style;
+          List<Rect> lineBoxes() => tester
+              .renderObject<RenderParagraph>(titleFinder)
+              .getBoxesForSelection(
+                TextSelection(baseOffset: 0, extentOffset: subject.length),
+              )
+              .map((box) => box.toRect())
+              .toList();
+          final linesBefore = lineBoxes();
+          expect(linesBefore.length, greaterThan(1));
+          result.complete(
+            ApiSuccess(
+              _threadDetailData(
+                tid: '100',
+                subject: subject,
+                posts: [
+                  _post(
+                    pid: 'multiline-p1',
+                    author: 'fixture-user',
+                    authorId: '1',
+                    number: 1,
+                    isFirst: true,
+                    message: '<p>fixture-body</p>',
+                  ),
+                ],
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(ThreadDetailLoading), findsNothing);
+          expect(tester.getRect(titleFinder), titleRect);
+          expect(tester.widget<Text>(titleFinder).style, titleStyle);
+          expect(lineBoxes(), linesBefore);
+          expect(repository.queryHistory, hasLength(1));
+        },
+      );
+    }
+
+    for (final initialSubject in ['', 'fixture-old-title']) {
+      testWidgets(
+        'loaded title replaces ${initialSubject.isEmpty ? 'missing' : 'outdated'} route title',
+        (tester) async {
+          final result = Completer<ApiResult<ThreadDetailData>>();
+          final repository = _FakeThreadRepository(
+            (tid, page) => result.future,
+          );
+          await tester.pumpWidget(
+            _buildTestApp(
+              repository,
+              home: ThreadDetailPage(tid: '100', subject: initialSubject),
+            ),
+          );
+          if (initialSubject.isEmpty) {
+            expect(
+              find.byKey(const Key('thread-detail-first-post-summary')),
+              findsNothing,
+            );
+          } else {
+            expect(find.text(initialSubject), findsOneWidget);
+          }
+          result.complete(
+            ApiSuccess(
+              _threadDetailData(
+                tid: '100',
+                subject: 'fixture-current-title',
+                posts: [
+                  _post(
+                    pid: 'updated-title-p1',
+                    author: 'fixture-user',
+                    authorId: '1',
+                    number: 1,
+                    isFirst: true,
+                    message: '<p>fixture-body</p>',
+                  ),
+                ],
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('fixture-current-title'), findsOneWidget);
+          expect(find.byType(ThreadDetailLoading), findsNothing);
+          if (initialSubject.isNotEmpty) {
+            expect(find.text(initialSubject), findsNothing);
+          }
+          expect(repository.queryHistory, hasLength(1));
+        },
+      );
+    }
 
     testWidgets('fast entry does not wait for the loading indicator', (
       tester,
@@ -279,7 +390,7 @@ void main() {
     );
 
     testWidgets(
-      'failed entry replaces the skeleton and retry can load content',
+      'failure and retry preserve the title and restart the status delay',
       (tester) async {
         final first = Completer<ApiResult<ThreadDetailData>>();
         final retry = Completer<ApiResult<ThreadDetailData>>();
@@ -288,6 +399,9 @@ void main() {
           return ++requests == 1 ? first.future : retry.future;
         });
         await tester.pumpWidget(_buildTestApp(repository));
+        final titleRect = tester.getRect(find.text('测试主题'));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
         first.complete(
           const ApiFailure(
             ApiError(type: ApiErrorType.network, message: 'fixture-failure'),
@@ -295,9 +409,23 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.byType(ThreadDetailLoading), findsNothing);
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(tester.getRect(find.text('测试主题')), titleRect);
+        expect(
+          tester
+              .getTopLeft(find.byKey(const Key('thread-detail-retry-button')))
+              .dy,
+          greaterThan(titleRect.bottom),
+        );
         await tester.tap(find.byKey(const Key('thread-detail-retry-button')));
         await tester.pump();
         expect(find.byType(ThreadDetailLoading), findsOneWidget);
+        expect(tester.getRect(find.text('测试主题')), titleRect);
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        await tester.pump(const Duration(milliseconds: 299));
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
         retry.complete(
           ApiSuccess(
             _threadDetailData(
@@ -322,6 +450,7 @@ void main() {
           findsOneWidget,
         );
         expect(requests, 2);
+        expect(tester.getRect(find.text('测试主题')), titleRect);
       },
     );
 
@@ -341,6 +470,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('private-fixture-error'), findsNothing);
+      expect(find.text('测试主题'), findsOneWidget);
     });
 
     test('light chip background follows forum list thread tag chip', () {
@@ -5267,13 +5397,14 @@ class _RecordingHistoryDiagnostics implements HistoryDiagnosticRecorder {
 ThreadDetailData _threadDetailData({
   required String tid,
   required List<ThreadPost> posts,
+  String subject = '测试主题',
   int currentPage = 1,
   int lastPage = 1,
 }) {
   return ThreadDetailData(
     tid: tid,
     fid: '2',
-    subject: '测试主题',
+    subject: subject,
     author: 'alice',
     replies: posts.length,
     views: 12,
