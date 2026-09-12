@@ -32,7 +32,8 @@ final forumWebViewRouteFactoryProvider = Provider<ForumWebViewRouteFactory>((
           ? const ForumWebViewPage()
           : ForumWebViewAccountGuard(
               accountId: config.expectedAccountId!,
-              builder: (_) => const ForumWebViewPage(),
+              builder: (_, isCurrent) =>
+                  ForumWebViewPage(isAccountCurrent: isCurrent),
             ),
     ),
   );

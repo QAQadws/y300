@@ -23,7 +23,7 @@ void main() {
           child: LocalizedTestApp(
             home: ForumWebViewAccountGuard(
               accountId: '101',
-              builder: (_) {
+              builder: (_, _) {
                 builds++;
                 return const Text('private browser');
               },
@@ -53,7 +53,7 @@ void main() {
             child: LocalizedTestApp(
               home: ForumWebViewAccountGuard(
                 accountId: '101',
-                builder: (_) => _Browser(onDispose: () => disposed++),
+                builder: (_, _) => _Browser(onDispose: () => disposed++),
               ),
             ),
           ),
@@ -86,7 +86,7 @@ void main() {
           child: LocalizedTestApp(
             home: ForumWebViewAccountGuard(
               accountId: '101',
-              builder: (_) => _Browser(onDispose: () => disposed++),
+              builder: (_, _) => _Browser(onDispose: () => disposed++),
             ),
           ),
         ),
@@ -103,6 +103,42 @@ void main() {
     },
   );
 
+  testWidgets(
+    'account expiry is immediate and survives a switch back before build',
+    (tester) async {
+      final controller = _Session()..initial.complete(_identity('101'));
+      late bool Function() isCurrent;
+      var disposed = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authSessionControllerProvider.overrideWith(() => controller),
+          ],
+          child: LocalizedTestApp(
+            home: ForumWebViewAccountGuard(
+              accountId: '101',
+              builder: (_, current) {
+                isCurrent = current;
+                return _Browser(onDispose: () => disposed++);
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(isCurrent(), isTrue);
+      controller.change('202');
+      expect(isCurrent(), isFalse);
+      controller.change('101');
+      expect(isCurrent(), isFalse);
+      await tester.pumpAndSettle();
+      expect(disposed, 1);
+      expect(find.byType(_Browser), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      expect(isCurrent(), isFalse);
+    },
+  );
+
   testWidgets('a wrong initial actor never opens the form', (tester) async {
     final controller = _Session()..initial.complete(_identity('202'));
     var builds = 0;
@@ -114,7 +150,7 @@ void main() {
         child: LocalizedTestApp(
           home: ForumWebViewAccountGuard(
             accountId: '101',
-            builder: (_) {
+            builder: (_, _) {
               builds++;
               return const Text('private browser');
             },

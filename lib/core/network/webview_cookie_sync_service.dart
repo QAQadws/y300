@@ -90,18 +90,33 @@ class WebViewCookieSyncService {
 
   final WebViewCookieJar _cookieJar;
   final CookieStore _cookieStore;
+  int _clearGeneration = 0;
+  int _pendingClears = 0;
 
   /// 读取 [uri] 作用域下的 WebView cookie 并合并写入 dio 存储。
   ///
-  /// 返回本次读到的 cookie 快照，供调用方（如登录页）判定登录态；即使写入为
-  /// 空也返回快照本身。合并语义由 [CookieStore.saveCookies] 保证，不会误删
-  /// 该 host 下其它有效 cookie。
-  Future<Map<String, String>> syncToStore(Uri uri) async {
+  /// Returns only a committed snapshot. Page/account expiry, concurrent native
+  /// cookie mutations and browser clears invalidate an in-flight read.
+  Future<Map<String, String>> syncToStore(
+    Uri uri, {
+    bool Function()? isCurrent,
+  }) async {
+    final generation = _clearGeneration;
+    final revision = _cookieStore.revision;
+    bool canCommit() =>
+        _pendingClears == 0 &&
+        generation == _clearGeneration &&
+        isCurrent?.call() != false;
+    if (!canCommit()) return const {};
     final cookies = await _cookieJar.readCookies(uri);
-    if (cookies.isNotEmpty) {
-      await _cookieStore.saveCookies(uri, cookies);
-    }
-    return cookies;
+    if (cookies.isEmpty || !canCommit()) return const {};
+    final committed = await _cookieStore.saveCookiesIfCurrent(
+      uri,
+      cookies,
+      expectedRevision: revision,
+      isCurrent: canCommit,
+    );
+    return committed && canCommit() ? cookies : const {};
   }
 
   /// Seeds the browser with the native cookie snapshot before navigation.
@@ -117,7 +132,14 @@ class WebViewCookieSyncService {
   }
 
   /// 登出时清空 WebView 平台 cookie jar，与 dio 侧清理配合，保证重新登录干净。
-  Future<void> clearWebViewCookies() {
-    return _cookieJar.clear();
+  Future<void> clearWebViewCookies() async {
+    _clearGeneration++;
+    _pendingClears++;
+    try {
+      await _cookieJar.clear();
+    } finally {
+      _pendingClears--;
+      _clearGeneration++;
+    }
   }
 }

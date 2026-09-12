@@ -1017,7 +1017,10 @@ class _FakeWebViewCookieSyncService extends WebViewCookieSyncService {
   Future<void> clearWebViewCookies() async {}
 
   @override
-  Future<Map<String, String>> syncToStore(Uri uri) async {
+  Future<Map<String, String>> syncToStore(
+    Uri uri, {
+    bool Function()? isCurrent,
+  }) async {
     return const <String, String>{};
   }
 }

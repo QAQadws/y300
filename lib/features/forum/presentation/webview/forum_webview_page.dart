@@ -47,7 +47,10 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
 
 class ForumWebViewPage extends ConsumerStatefulWidget {
-  const ForumWebViewPage({super.key});
+  const ForumWebViewPage({super.key, this.isAccountCurrent});
+
+  /// Bound browser routes expire synchronously when their actor changes.
+  final bool Function()? isAccountCurrent;
 
   @override
   ConsumerState<ForumWebViewPage> createState() => _ForumWebViewPageState();
@@ -360,7 +363,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     // 逛论坛时持续把 WebView 赢得的 cookie（刷新过的 WAF 通行证 / 登录态）
     // 回灌 dio，让原生 API 功能（收藏、回复、搜索）始终握着有效凭证。
     // best-effort：同步失败不影响页面清理主流程。
-    unawaited(_syncWebViewCookiesToDio(uri));
+    unawaited(_syncWebViewCookiesToDio(uri, generation));
 
     await injector.cleanChrome(driver, visualPolicy: visualPolicy);
 
@@ -382,9 +385,17 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   /// 把当前 WebView 作用域下的 cookie 回灌 dio（WebView → dio 单向同步）。
-  Future<void> _syncWebViewCookiesToDio(Uri uri) async {
+  Future<void> _syncWebViewCookiesToDio(Uri uri, int generation) async {
     try {
-      await ref.read(webViewCookieSyncServiceProvider).syncToStore(uri);
+      await ref
+          .read(webViewCookieSyncServiceProvider)
+          .syncToStore(
+            uri,
+            isCurrent: () =>
+                mounted &&
+                generation == _navigationGeneration &&
+                widget.isAccountCurrent?.call() != false,
+          );
     } catch (_) {
       // 同步失败不影响浏览体验，下次 pageFinished 会再次尝试。
     }

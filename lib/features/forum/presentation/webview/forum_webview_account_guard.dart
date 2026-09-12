@@ -13,7 +13,8 @@ class ForumWebViewAccountGuard extends ConsumerStatefulWidget {
   });
 
   final String accountId;
-  final WidgetBuilder builder;
+  final Widget Function(BuildContext context, bool Function() isCurrent)
+  builder;
 
   @override
   ConsumerState<ForumWebViewAccountGuard> createState() =>
@@ -24,6 +25,22 @@ class _ForumWebViewAccountGuardState
     extends ConsumerState<ForumWebViewAccountGuard> {
   bool _opened = false;
   bool _expired = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Observe every transition, including switching away and back in one frame.
+    ref.listenManual(authSessionControllerProvider, (_, session) {
+      final identity = session.value;
+      final matches =
+          identity?.isLoggedIn == true &&
+          !identity!.isLoggingOut &&
+          identity.uid == widget.accountId;
+      if (!matches && (_opened || !session.isLoading)) _expired = true;
+    }, fireImmediately: true);
+  }
+
+  bool _isCurrent() => mounted && !_expired;
 
   @override
   void didUpdateWidget(covariant ForumWebViewAccountGuard oldWidget) {
@@ -42,7 +59,7 @@ class _ForumWebViewAccountGuardState
     if (!matches && (_opened || !session.isLoading)) _expired = true;
     if (!_expired && matches) {
       _opened = true;
-      return widget.builder(context);
+      return widget.builder(context, _isCurrent);
     }
     final l10n = AppLocalizations.of(context);
     return Scaffold(

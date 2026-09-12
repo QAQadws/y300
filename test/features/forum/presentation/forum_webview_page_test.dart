@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -55,6 +56,54 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
+
+  for (final action in ['stay', 'navigate', 'dispose', 'accountChange']) {
+    testWidgets(
+      'page-finished cookie sync respects $action while the read is pending',
+      (tester) async {
+        final driver = _FakeForumWebViewDriver();
+        final jar = _PendingWebViewCookieJar();
+        final store = CookieStore();
+        var active = true;
+        final uri = Uri.parse(
+          'https://bbs.yamibo.com/home.php?mod=space&do=blog&uid=101&id=42',
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              webViewCookieSyncServiceProvider.overrideWithValue(
+                WebViewCookieSyncService(cookieJar: jar, cookieStore: store),
+              ),
+            ],
+            child: _buildTestApp(
+              driver: driver,
+              isAccountCurrent: () => active,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await driver.dispatchPageFinished(uri.toString());
+        expect(jar.readCount, 1);
+        switch (action) {
+          case 'navigate':
+            await driver.dispatchPageStarted(
+              'https://bbs.yamibo.com/forum.php',
+            );
+          case 'dispose':
+            await tester.pumpWidget(const SizedBox());
+          case 'accountChange':
+            active = false;
+        }
+        jar.pending.complete({'auth': 'browser-actor'});
+        await tester.pumpAndSettle();
+        expect(
+          await store.readCookieMap(uri),
+          action == 'stay' ? {'auth': 'browser-actor'} : isEmpty,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('standalone forum home has a working route back button', (
     tester,
@@ -2087,6 +2136,7 @@ bool _isVisibleAndReady(
 
 Widget _buildTestApp({
   required _FakeForumWebViewDriver driver,
+  bool Function()? isAccountCurrent,
   CookieStore? cookieStore,
   ForumTagRepository? tagRepository,
   _FakeForumFavoriteRepository? favoriteRepository,
@@ -2152,7 +2202,9 @@ Widget _buildTestApp({
         historyRecorder ?? _NoopHistoryVisitRecorder(),
       ),
     ],
-    child: const LocalizedTestApp(home: ForumWebViewPage()),
+    child: LocalizedTestApp(
+      home: ForumWebViewPage(isAccountCurrent: isAccountCurrent),
+    ),
   );
 }
 
@@ -2730,6 +2782,23 @@ class _LoadRequestRecord {
 
   final Uri uri;
   final Map<String, String> headers;
+}
+
+class _PendingWebViewCookieJar implements WebViewCookieJar {
+  final pending = Completer<Map<String, String>>();
+  int readCount = 0;
+
+  @override
+  Future<Map<String, String>> readCookies(Uri uri) {
+    readCount++;
+    return pending.future;
+  }
+
+  @override
+  Future<void> writeCookies(Uri uri, Map<String, String> cookies) async {}
+
+  @override
+  Future<void> clear() async {}
 }
 
 class _FakeCookieStore extends CookieStore {
