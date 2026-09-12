@@ -41,6 +41,9 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
+import 'package:y300/features/library_shared/presentation/pages/unified_shelf_page.dart';
+import 'package:y300/features/more/presentation/navigation_management_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
@@ -56,6 +59,117 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
+
+  testWidgets(
+    'management opens hidden shelves with isolated working selection bars',
+    (tester) async {
+      final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      final shellHost = ShelfSelectionHostController();
+      addTearDown(queueSnapshot.dispose);
+      addTearDown(shellHost.dispose);
+      await _pumpSelectionShell(
+        tester,
+        queueSnapshot: queueSnapshot,
+        selectionHost: shellHost,
+        webViewDriver: _FakeForumWebViewDriver(),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MainShellPage)),
+      );
+      final settingsController = container.read(
+        mainNavigationSettingsControllerProvider.notifier,
+      );
+      for (final destination in [
+        MainShellDestination.comic,
+        MainShellDestination.novel,
+        MainShellDestination.favorites,
+      ]) {
+        await settingsController.setVisibility(destination, false);
+      }
+      await tester.pump();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(MainShellPage)),
+      );
+      await tester.tap(find.text(l10n.appNavigationMore).last);
+      await _pumpShellTab(tester);
+      await tester.tap(
+        find.byKey(const Key('more-navigation-management-entry')),
+      );
+      await tester.pumpAndSettle();
+      final settingsBefore = container
+          .read(mainNavigationSettingsControllerProvider)
+          .requireValue
+          .settings;
+
+      for (final destination in [
+        MainShellDestination.comic,
+        MainShellDestination.novel,
+        MainShellDestination.favorites,
+      ]) {
+        await tester.tap(
+          find.byKey(
+            ValueKey('navigation-management-open-${destination.name}'),
+          ),
+        );
+        await _pumpShellTab(tester);
+        final shelf = find.byType(UnifiedShelfPage);
+        expect(shelf, findsOneWidget);
+        final pageContainer = ProviderScope.containerOf(tester.element(shelf));
+        final pageHost = pageContainer.read(
+          shelfSelectionHostControllerProvider,
+        );
+        expect(pageHost, isNot(same(shellHost)));
+        expect(
+          tester.widget<UnifiedShelfPage>(shelf).selectionHost,
+          same(pageHost),
+        );
+        final calls = <String>[];
+        pageHost.activate(
+          ownerToken: Object(),
+          moduleKey: tester.widget<UnifiedShelfPage>(shelf).adapter.moduleKey,
+          activeCategoryId: 'default',
+          selectedCount: 1,
+          selectedWorkIds: {'fixture'},
+          selectionActions: const [
+            SelectionAction(
+              id: SelectionActionIds.download,
+              icon: Icons.download,
+            ),
+          ],
+          delegate: _selectionDelegate(
+            onRun: (request) async {
+              calls.add(request.actionId);
+              return const SelectionActionOutcome(
+                code: SelectionActionOutcomeCode.noChange,
+              );
+            },
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byKey(const Key('selection-action-bar')), findsOneWidget);
+        expect(shellHost.isActive, isFalse);
+        await tester.tap(find.byKey(const Key('selection-action-download')));
+        await tester.pump();
+        expect(calls, [SelectionActionIds.download]);
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        expect(find.byType(NavigationManagementPage), findsOneWidget);
+        expect(pageHost.isActive, isFalse);
+        expect(shellHost.isActive, isFalse);
+        expect(
+          container
+              .read(mainNavigationSettingsControllerProvider)
+              .requireValue
+              .settings,
+          settingsBefore,
+        );
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
 
   testWidgets('MainShellPage can switch across all six lazy tabs', (
     tester,

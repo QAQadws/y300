@@ -56,6 +56,27 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
+  testWidgets('standalone forum home has a working route back button', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [forumWebViewPopOnRootBackProvider.overrideWithValue(true)],
+        child: _buildRoutedTestApp(driver: driver),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('open-forum-webview-page')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('forum-webview-back-button')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('forum-webview-back-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('forum-webview-page')), findsNothing);
+    expect(find.byKey(const Key('open-forum-webview-page')), findsOneWidget);
+    expect(driver.goBackCallCount, 0);
+    expect(driver.loadedUris, hasLength(1));
+  });
+
   testWidgets(
     'ForumWebViewPage waits for bootstrap config without skeleton page',
     (tester) async {

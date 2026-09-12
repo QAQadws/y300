@@ -611,7 +611,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     return AppBar(
       automaticallyImplyLeading: false,
       systemOverlayStyle: overlayStyle,
-      leading: state.pageKind == ForumWebViewPageKind.home
+      leading: state.pageKind == ForumWebViewPageKind.home && !popOnRootBack
           ? null
           : BackButton(
               key: const Key('forum-webview-back-button'),
