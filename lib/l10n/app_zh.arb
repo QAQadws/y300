@@ -1754,5 +1754,15 @@
   "postEditLoadFailed": "读取帖子编辑表单失败：{error}",
   "@postEditLoadFailed": {"placeholders": {"error": {"type": "String"}}},
   "postEditServerVersion": "服务器版本",
-  "postEditLocalVersion": "本地版本"
+  "postEditLocalVersion": "本地版本",
+  "profileBlogEdit": "编辑日志",
+  "profileBlogDelete": "删除日志",
+  "profileBlogPin": "置顶日志",
+  "profileBlogUnpin": "取消置顶",
+  "profileBlogDeleteBody": "删除后将无法恢复这篇日志及其评论。请确认是否继续。",
+  "profileBlogPinBody": "将这篇日志置顶到作者的日志列表。",
+  "profileBlogUnpinBody": "取消这篇日志在作者日志列表中的置顶。",
+  "profileBlogPreparingAction": "正在读取确认信息…",
+  "profileBlogSubmittingAction": "正在提交，离开不会撤回操作。离开后请刷新日志核对结果。",
+  "profileBlogActionOutcomeUnknown": "暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交。"
 }

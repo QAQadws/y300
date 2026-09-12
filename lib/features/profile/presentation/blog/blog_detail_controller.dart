@@ -47,6 +47,8 @@ final class ProfileBlogDetailController
   bool _disposed = false;
   bool _active = false;
   bool _refreshing = false;
+  bool _deleted = false;
+  UserBlogDetailQuery? _refreshQuery;
   int _generation = 0;
 
   Future<void> setActive(bool active) {
@@ -65,13 +67,16 @@ final class ProfileBlogDetailController
       return Future.value();
     }
     if (_pending != null) return _pending!;
+    if (_refreshQuery != null && !_deleted) {
+      return _load(_refreshQuery!, refresh: true);
+    }
     return value.data == null && value.failure == null
         ? _load(value.query)
         : Future.value();
   }
 
   Future<void> refresh() {
-    if (!_active || _disposed) return Future.value();
+    if (!_active || _disposed || _deleted) return Future.value();
     if (_pending != null) {
       if (_refreshing || value.data == null) return _pending!;
       _cancel();
@@ -87,15 +92,48 @@ final class ProfileBlogDetailController
         );
 
   Future<void> selectCommentPage(int page, {bool refresh = false}) {
-    if (!_active || _disposed || page < 1) return Future.value();
+    if (!_active || _disposed || _deleted || page < 1) return Future.value();
     _cancel();
     return _load(_query(page: page), refresh: refresh);
   }
 
   Future<void> loadLastComments() {
-    if (!_active || _disposed) return Future.value();
+    if (!_active || _disposed || _deleted) return Future.value();
     _cancel();
     return _load(_query(last: true), refresh: true);
+  }
+
+  Future<void> invalidate({bool deleted = false}) {
+    if (_disposed || _deleted) return Future.value();
+    _cancel();
+    _deleted = deleted;
+    if (deleted) {
+      _refreshQuery = null;
+      value = UserBlogDetailPageState(
+        query: value.query,
+        failure: const DataReadFailure(
+          kind: DataReadFailureKind.business,
+          code: 'user_blog_unavailable',
+          diagnosticMessage: 'user_blog_unavailable',
+        ),
+      );
+      return Future.value();
+    }
+    _refreshQuery = _initialQuery;
+    return setActive(_active);
+  }
+
+  /// The editor can return before this route becomes current again. Defer its
+  /// precise comment destination until activation instead of dropping refresh.
+  Future<void> refreshAfterComment(UserBlogCommentAction action) {
+    if (_disposed || _deleted) return Future.value();
+    _cancel();
+    _refreshQuery =
+        action == UserBlogCommentAction.add ||
+            action == UserBlogCommentAction.reply
+        ? _query(last: true)
+        : _query(page: value.firstCommentPage);
+    return setActive(_active);
   }
 
   Future<void> _load(
@@ -124,6 +162,7 @@ final class ProfileBlogDetailController
       _pending = null;
       _cancellation = null;
       if (result case DataReadSuccess(:final data, :final capabilities)) {
+        _refreshQuery = null;
         value = UserBlogDetailPageState(
           query: query,
           data: append && previous.data != null

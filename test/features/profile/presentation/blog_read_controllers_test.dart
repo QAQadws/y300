@@ -9,6 +9,79 @@ import 'package:y300/features/profile/presentation/blog/blog_feed_controller.dar
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 
 void main() {
+  test(
+    'article mutations invalidate only visited account-owned routes',
+    () async {
+      final directory = _Directory();
+      final details = _Details();
+      final container = ProviderContainer(
+        overrides: [
+          blogAccountIdProvider.overrideWithValue('101'),
+          userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
+          userBlogDetailRepositoryProvider.overrideWithValue(details),
+        ],
+      );
+      addTearDown(container.dispose);
+      const args = ProfileBlogPageArgs();
+      final feedSub = container.listen(
+        profileBlogListProvider(args),
+        (_, _) {},
+      );
+      final detailKey = (
+        const UserBlogDetailQuery(ownerUserId: '101', blogId: '11'),
+        Object(),
+      );
+      final detailSub = container.listen(
+        profileBlogDetailProvider(detailKey),
+        (_, _) {},
+      );
+      addTearDown(feedSub.close);
+      addTearDown(detailSub.close);
+      final list = feedSub.read();
+      final article = detailSub.read();
+      var first = list.setActive(true);
+      directory.succeed(0);
+      await first;
+      first = article.setActive(true);
+      details.succeed(0);
+      await first;
+      await list.setActive(false);
+      await article.setActive(false);
+      final bus = container.read(blogMutationBusProvider);
+      const target = UserBlogTarget(
+        actorUserId: '101',
+        ownerUserId: '101',
+        blogId: '11',
+        action: UserBlogAction.pin,
+      );
+      bus.publish(const UserBlogReceipt(target: target, blogId: '11'));
+      expect(directory.requests, hasLength(1));
+      expect(details.requests, hasLength(1));
+      first = list.setActive(true);
+      directory.succeed(1);
+      await first;
+      first = article.setActive(true);
+      details.succeed(1);
+      await first;
+      expect(directory.requests.last.policy, CacheLoadPolicy.networkFirst);
+      expect(details.requests.last.policy, CacheLoadPolicy.networkFirst);
+      container.updateOverrides([
+        blogAccountIdProvider.overrideWithValue('202'),
+        userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
+        userBlogDetailRepositoryProvider.overrideWithValue(details),
+      ]);
+      await container.pump();
+      final newBus = container.read(blogMutationBusProvider);
+      bus.publish(const UserBlogReceipt(target: target, blogId: '11'));
+      newBus.publish(const UserBlogReceipt(target: target, blogId: '11'));
+      expect(newBus.last, isNull);
+      expect(feedSub.read().value.data, isNull);
+      expect(detailSub.read().value.data, isNull);
+      expect(directory.requests, hasLength(2));
+      expect(details.requests, hasLength(2));
+    },
+  );
+
   ProfileBlogPageController feed(
     _Directory repository, {
     ProfileBlogPageArgs args = const ProfileBlogPageArgs(),
@@ -54,6 +127,82 @@ void main() {
       await controller.setActive(false);
       await controller.setActive(true);
       expect(repository.requests, hasLength(1));
+    },
+  );
+
+  test(
+    'invalidated retained scopes keep filters and refresh only when selected',
+    () async {
+      final repository = _Directory();
+      final controller = feed(repository);
+      var pending = controller.setActive(true);
+      repository.succeed(0);
+      await pending;
+      pending = controller.selectCategory('8');
+      repository.succeed(1);
+      await pending;
+      pending = controller.selectScope(UserBlogFeedScope.friends);
+      repository.succeed(2);
+      await pending;
+      await controller.setActive(false);
+      await controller.invalidate();
+      expect(repository.requests, hasLength(3));
+      pending = controller.setActive(true);
+      repository.succeed(3);
+      await pending;
+      pending = controller.selectScope(UserBlogFeedScope.public);
+      expect(repository.requests.last.query.categoryId, '8');
+      expect(repository.requests.last.policy, CacheLoadPolicy.networkFirst);
+      repository.succeed(4);
+      await pending;
+      pending = controller.selectScope(UserBlogFeedScope.friends);
+      await pending;
+      expect(repository.requests, hasLength(5));
+    },
+  );
+
+  test(
+    'confirmed deletion cancels a pending body and never revives the route',
+    () async {
+      final repository = _Details();
+      final controller = detail(repository);
+      final pending = controller.setActive(true);
+      await controller.invalidate(deleted: true);
+      expect(repository.requests.single.cancellation.isCancelled, isTrue);
+      repository.succeed(0);
+      await pending;
+      expect(controller.value.data, isNull);
+      expect(controller.value.failure?.code, 'user_blog_unavailable');
+      await controller.setActive(false);
+      await controller.setActive(true);
+      await controller.refresh();
+      await controller.selectCommentPage(1);
+      await controller.invalidate();
+      expect(repository.requests, hasLength(1));
+    },
+  );
+
+  test(
+    'comment refresh waits for the covered article to become visible',
+    () async {
+      final repository = _Details();
+      final controller = detail(repository);
+      var pending = controller.setActive(true);
+      repository.succeed(0);
+      await pending;
+      await controller.setActive(false);
+      await controller.refreshAfterComment(UserBlogCommentAction.add);
+      expect(repository.requests, hasLength(1));
+      pending = controller.setActive(true);
+      expect(repository.requests.last.query.lastCommentPage, isTrue);
+      repository.succeed(1, page: 5);
+      await pending;
+      await controller.setActive(false);
+      await controller.refreshAfterComment(UserBlogCommentAction.edit);
+      pending = controller.setActive(true);
+      expect(repository.requests.last.query.page, 5);
+      repository.succeed(2);
+      await pending;
     },
   );
 

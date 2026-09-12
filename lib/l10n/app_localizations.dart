@@ -7277,6 +7277,66 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'本地版本'**
   String get postEditLocalVersion;
+
+  /// No description provided for @profileBlogEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑日志'**
+  String get profileBlogEdit;
+
+  /// No description provided for @profileBlogDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除日志'**
+  String get profileBlogDelete;
+
+  /// No description provided for @profileBlogPin.
+  ///
+  /// In zh, this message translates to:
+  /// **'置顶日志'**
+  String get profileBlogPin;
+
+  /// No description provided for @profileBlogUnpin.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消置顶'**
+  String get profileBlogUnpin;
+
+  /// No description provided for @profileBlogDeleteBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除后将无法恢复这篇日志及其评论。请确认是否继续。'**
+  String get profileBlogDeleteBody;
+
+  /// No description provided for @profileBlogPinBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'将这篇日志置顶到作者的日志列表。'**
+  String get profileBlogPinBody;
+
+  /// No description provided for @profileBlogUnpinBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消这篇日志在作者日志列表中的置顶。'**
+  String get profileBlogUnpinBody;
+
+  /// No description provided for @profileBlogPreparingAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取确认信息…'**
+  String get profileBlogPreparingAction;
+
+  /// No description provided for @profileBlogSubmittingAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在提交，离开不会撤回操作。离开后请刷新日志核对结果。'**
+  String get profileBlogSubmittingAction;
+
+  /// No description provided for @profileBlogActionOutcomeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交。'**
+  String get profileBlogActionOutcomeUnknown;
 }
 
 class _AppLocalizationsDelegate

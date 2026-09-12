@@ -1389,5 +1389,15 @@
   "postEditLoadFailed": "讀取帖子編輯表單失敗：{error}",
   "@postEditLoadFailed": {"placeholders": {"error": {"type": "String"}}},
   "postEditServerVersion": "伺服器版本",
-  "postEditLocalVersion": "本地版本"
+  "postEditLocalVersion": "本地版本",
+  "profileBlogEdit": "編輯日誌",
+  "profileBlogDelete": "刪除日誌",
+  "profileBlogPin": "置頂日誌",
+  "profileBlogUnpin": "取消置頂",
+  "profileBlogDeleteBody": "刪除後將無法恢復這篇日誌及其評論。請確認是否繼續。",
+  "profileBlogPinBody": "將這篇日誌置頂到作者的日誌列表。",
+  "profileBlogUnpinBody": "取消這篇日誌在作者日誌列表中的置頂。",
+  "profileBlogPreparingAction": "正在讀取確認資訊…",
+  "profileBlogSubmittingAction": "正在提交，離開不會撤回操作。離開後請重新整理日誌核對結果。",
+  "profileBlogActionOutcomeUnknown": "暫時無法確認操作結果。請返回並重新整理日誌核對，避免重複提交。"
 }

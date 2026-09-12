@@ -4467,6 +4467,36 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get postEditLocalVersion => '本地版本';
+
+  @override
+  String get profileBlogEdit => '编辑日志';
+
+  @override
+  String get profileBlogDelete => '删除日志';
+
+  @override
+  String get profileBlogPin => '置顶日志';
+
+  @override
+  String get profileBlogUnpin => '取消置顶';
+
+  @override
+  String get profileBlogDeleteBody => '删除后将无法恢复这篇日志及其评论。请确认是否继续。';
+
+  @override
+  String get profileBlogPinBody => '将这篇日志置顶到作者的日志列表。';
+
+  @override
+  String get profileBlogUnpinBody => '取消这篇日志在作者日志列表中的置顶。';
+
+  @override
+  String get profileBlogPreparingAction => '正在读取确认信息…';
+
+  @override
+  String get profileBlogSubmittingAction => '正在提交，离开不会撤回操作。离开后请刷新日志核对结果。';
+
+  @override
+  String get profileBlogActionOutcomeUnknown => '暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交。';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -8933,4 +8963,35 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get postEditLocalVersion => '本地版本';
+
+  @override
+  String get profileBlogEdit => '編輯日誌';
+
+  @override
+  String get profileBlogDelete => '刪除日誌';
+
+  @override
+  String get profileBlogPin => '置頂日誌';
+
+  @override
+  String get profileBlogUnpin => '取消置頂';
+
+  @override
+  String get profileBlogDeleteBody => '刪除後將無法恢復這篇日誌及其評論。請確認是否繼續。';
+
+  @override
+  String get profileBlogPinBody => '將這篇日誌置頂到作者的日誌列表。';
+
+  @override
+  String get profileBlogUnpinBody => '取消這篇日誌在作者日誌列表中的置頂。';
+
+  @override
+  String get profileBlogPreparingAction => '正在讀取確認資訊…';
+
+  @override
+  String get profileBlogSubmittingAction => '正在提交，離開不會撤回操作。離開後請重新整理日誌核對結果。';
+
+  @override
+  String get profileBlogActionOutcomeUnknown =>
+      '暫時無法確認操作結果。請返回並重新整理日誌核對，避免重複提交。';
 }

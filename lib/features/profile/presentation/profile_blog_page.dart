@@ -6,6 +6,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_web_navigation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/presentation/blog/blog_feed_controller.dart';
@@ -114,6 +115,13 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
                         onLoadNextPage: state.canLoadNext
                             ? controller.loadNextPage
                             : null,
+                        onAction: (item, action) => openBlogActionPage(
+                          context,
+                          ref,
+                          ownerUserId: item.ownerUserId,
+                          blogId: item.blogId,
+                          action: action,
+                        ),
                       ),
                     )
                   : !widget.isActive
@@ -202,6 +210,27 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                 l10n.profileBlogTitle,
           ),
           actions: [
+            if (state.data != null)
+              BlogActionMenu(
+                key: const Key('blog-detail-actions'),
+                actions: state.data!.actions,
+                onSelected: (action) async {
+                  final receipt = await openBlogActionPage(
+                    context,
+                    ref,
+                    ownerUserId: widget.ownerUserId,
+                    blogId: widget.blogId,
+                    action: action,
+                  );
+                  if (mounted &&
+                      receipt?.target.action == UserBlogAction.delete &&
+                      ref.read(blogAccountIdProvider) ==
+                          receipt?.target.actorUserId &&
+                      context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
             if (state.data != null)
               IconButton(
                 key: const Key('blog-detail-open-web'),
@@ -304,15 +333,7 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
     );
     // Only a confirmed write refreshes the article. Editing/deleting keeps the
     // current comment range; additions ask the server for its actual last page.
-    if (action == UserBlogCommentAction.add ||
-        action == UserBlogCommentAction.reply) {
-      await controller.loadLastComments();
-    } else {
-      await controller.selectCommentPage(
-        controller.value.firstCommentPage,
-        refresh: true,
-      );
-    }
+    await controller.refreshAfterComment(action);
   }
 }
 
@@ -324,6 +345,7 @@ class _ProfileBlogListContent extends StatelessWidget {
     required this.imageReferer,
     required this.onOpenBlog,
     required this.onLoadNextPage,
+    required this.onAction,
   });
 
   final UserBlogDirectoryPageState state;
@@ -332,6 +354,7 @@ class _ProfileBlogListContent extends StatelessWidget {
   final String imageReferer;
   final ValueChanged<UserBlogSummary> onOpenBlog;
   final VoidCallback? onLoadNextPage;
+  final void Function(UserBlogSummary item, UserBlogAction action) onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -397,6 +420,7 @@ class _ProfileBlogListContent extends StatelessWidget {
               palette: palette,
               imageReferer: imageReferer,
               onTap: () => onOpenBlog(item),
+              onAction: (action) => onAction(item, action),
             ),
           );
         },
@@ -577,6 +601,7 @@ class _ProfileBlogListCard extends StatelessWidget {
     required this.palette,
     required this.imageReferer,
     required this.onTap,
+    required this.onAction,
   });
 
   final UserBlogSummary item;
@@ -584,6 +609,7 @@ class _ProfileBlogListCard extends StatelessWidget {
   final _ProfileBlogPalette palette;
   final String imageReferer;
   final VoidCallback onTap;
+  final ValueChanged<UserBlogAction> onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -648,6 +674,11 @@ class _ProfileBlogListCard extends StatelessWidget {
                           ),
                       ],
                     ),
+                  ),
+                  BlogActionMenu(
+                    key: Key('blog-list-actions-${item.blogId}'),
+                    actions: item.actions,
+                    onSelected: onAction,
                   ),
                 ],
               ),

@@ -31,3 +31,7 @@ final userBlogCommentServiceProvider = Provider<UserBlogCommentService>((ref) {
 final userBlogNavigationProvider = Provider<UserBlogNavigation?>((ref) {
   return ref.watch(yamiboForumClientProvider).blogNavigation;
 });
+
+final userBlogOperationsProvider = Provider<UserBlogOperations>((ref) {
+  return ref.watch(yamiboForumClientProvider).blogOperations!;
+});

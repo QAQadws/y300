@@ -92,6 +92,7 @@ final class ProfileBlogPageController
   final String? accountId;
   final ProfileBlogPageArgs _args;
   final _retained = <UserBlogFeedScope, UserBlogDirectoryPageState>{};
+  final _staleScopes = <UserBlogFeedScope>{};
   ForumRequestCancellation? _cancellation;
   Future<void>? _pending;
   bool _active = false;
@@ -108,6 +109,9 @@ final class ProfileBlogPageController
       return Future.value();
     }
     if (_pending != null) return _pending!;
+    if (_staleScopes.contains(value.query.scope)) {
+      return _load(_page(value.query, 1), refresh: true);
+    }
     return value.data == null && value.failure == null
         ? _load(value.query)
         : Future.value();
@@ -120,6 +124,15 @@ final class ProfileBlogPageController
       _cancel();
     }
     return _load(_page(value.query, 1), refresh: true);
+  }
+
+  /// Invalidate all retained scopes, but fetch only when the route is visible.
+  Future<void> invalidate() {
+    if (_disposed) return Future.value();
+    _cancel();
+    _staleScopes.addAll(UserBlogFeedScope.values);
+    value = value.waiting(loading: false);
+    return setActive(_active);
   }
 
   Future<void> selectScope(UserBlogFeedScope scope) {
@@ -212,6 +225,7 @@ final class ProfileBlogPageController
       _pending = null;
       _cancellation = null;
       if (result case DataReadSuccess(:final data, :final capabilities)) {
+        _staleScopes.remove(query.scope);
         value = UserBlogDirectoryPageState(
           query: query,
           data: append && previous.data != null

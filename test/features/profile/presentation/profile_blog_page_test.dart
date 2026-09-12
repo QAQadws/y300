@@ -8,12 +8,115 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../test_support/blog_comment_fixture.dart';
+import '../test_support/blog_operation_fixture.dart';
 
 void main() {
+  for (final fromDetail in [false, true]) {
+    for (final action in blogManagementActions) {
+      for (final applied in [false, true]) {
+        testWidgets(
+          '$action from ${fromDetail ? 'detail' : 'list'} updates only when applied=$applied',
+          (tester) async {
+            final directory = _FakeBlogDirectoryRepository(
+              blogActions: {action},
+            );
+            final details = _FakeBlogDetailRepository(blogActions: {action});
+            final operations = BlogOperationFixture(autoPrepare: true);
+            await tester.pumpWidget(
+              ProviderScope(
+                overrides: [
+                  blogAccountIdProvider.overrideWithValue('257582'),
+                  userBlogDirectoryRepositoryProvider.overrideWithValue(
+                    directory,
+                  ),
+                  userBlogDetailRepositoryProvider.overrideWithValue(details),
+                  userBlogOperationsProvider.overrideWithValue(operations),
+                  forumImageRefererProvider.overrideWithValue(
+                    'https://example.test/',
+                  ),
+                ],
+                child: const LocalizedTestApp(home: ProfileBlogPage()),
+              ),
+            );
+            await tester.pumpAndSettle();
+            final l10n = AppLocalizations.of(
+              tester.element(find.byType(ProfileBlogPage)),
+            );
+            if (fromDetail) {
+              await tester.tap(
+                find.byKey(const Key('profile-blog-item-117558')),
+              );
+              await tester.pumpAndSettle();
+            }
+            await tester.tap(
+              find.byKey(
+                Key(
+                  fromDetail
+                      ? 'blog-detail-actions'
+                      : 'blog-list-actions-117558',
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            for (final other in blogManagementActions.where(
+              (other) => other != action,
+            )) {
+              expect(find.text(blogActionLabel(l10n, other)), findsNothing);
+            }
+            await tester.tap(find.text(blogActionLabel(l10n, action)));
+            await tester.pumpAndSettle();
+            expect(find.byType(BlogActionPage), findsOneWidget);
+            expect(operations.preparations.single.target.blogId, '117558');
+            expect(operations.preparations.single.target.ownerUserId, '257582');
+            expect(operations.submissions, isEmpty);
+            await tester.tap(find.byKey(const Key('blog-action-submit')));
+            await tester.pump();
+            expect(directory.queries, hasLength(1));
+            expect(details.queries, hasLength(fromDetail ? 1 : 0));
+            if (applied) {
+              directory.removed = action == UserBlogAction.delete;
+              operations.applied();
+            } else {
+              operations.submissions.last.result.complete(
+                const DataCommandOutcomeUnknown(blogActionWriteFailure),
+              );
+            }
+            await tester.pumpAndSettle();
+            if (!applied) {
+              expect(find.byType(BlogActionPage), findsOneWidget);
+              expect(find.byKey(const Key('blog-action-retry')), findsNothing);
+              await tester.tap(find.byType(BackButton));
+              await tester.pumpAndSettle();
+            }
+            if (fromDetail && !(applied && action == UserBlogAction.delete)) {
+              expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+              expect(details.queries, hasLength(applied ? 2 : 1));
+              await tester.tap(find.byType(BackButton));
+              await tester.pumpAndSettle();
+            }
+            expect(find.byType(ProfileBlogPage), findsOneWidget);
+            expect(directory.queries, hasLength(applied ? 2 : 1));
+            if (applied) {
+              expect(directory.policies.last, CacheLoadPolicy.networkFirst);
+            }
+            if (applied && action == UserBlogAction.delete) {
+              expect(
+                find.byKey(const Key('profile-blog-item-117558')),
+                findsNothing,
+              );
+            }
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
+
   for (final action in UserBlogCommentAction.values) {
     for (final applied in [true, false]) {
       testWidgets('$action refreshes comment data only when applied=$applied', (
@@ -504,6 +607,7 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
     this.failFirst = false,
     this.gate,
     this.longList = false,
+    this.blogActions = const {},
   }) : readCapabilities = capabilities ?? _directoryCapabilities();
 
   final UserBlogDirectoryReadCapabilities readCapabilities;
@@ -511,6 +615,8 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
   final bool failFirst;
   final Completer<void>? gate;
   final bool longList;
+  final Set<UserBlogAction> blogActions;
+  bool removed = false;
   final cancellations = <ForumRequestCancellation?>[];
   final List<UserBlogDirectoryQuery> queries = <UserBlogDirectoryQuery>[];
   final List<CacheLoadPolicy> policies = <CacheLoadPolicy>[];
@@ -599,14 +705,16 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
       scope: UserBlogFeedScope.public,
       order: query.order ?? UserBlogOrder.latest,
       items: <UserBlogSummary>[
-        UserBlogSummary(
-          blogId: recommended ? '117548' : '117558',
-          ownerUserId: '257582',
-          title: recommended ? '我们小区的公共交通极其不便利' : '一种体验',
-          authorName: recommended ? 'hsyhlj' : '抉择',
-          excerpt: '作为女生，见血是常有的事',
-          publishedAtText: '2026-6-21 13:06',
-        ),
+        if (!removed)
+          UserBlogSummary(
+            blogId: recommended ? '117548' : '117558',
+            ownerUserId: '257582',
+            title: recommended ? '我们小区的公共交通极其不便利' : '一种体验',
+            authorName: recommended ? 'hsyhlj' : '抉择',
+            excerpt: '作为女生，见血是常有的事',
+            publishedAtText: '2026-6-21 13:06',
+            actions: blogActions,
+          ),
       ],
       pagination: const UserBlogPagination(
         currentPage: 1,
@@ -623,10 +731,12 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
     UserBlogDetailReadCapabilities? capabilities,
     this.gate,
     this.commentActions = const {},
+    this.blogActions = const {},
   }) : readCapabilities = capabilities ?? _detailCapabilities();
 
   final UserBlogDetailReadCapabilities readCapabilities;
   final Set<UserBlogCommentAction> commentActions;
+  final Set<UserBlogAction> blogActions;
   final policies = <CacheLoadPolicy>[];
   final Completer<void>? gate;
   final cancellations = <ForumRequestCancellation?>[];
@@ -658,6 +768,7 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
         viewCount: 39,
         commentCount: 1,
         commentsOpen: true,
+        actions: blogActions,
         comments: <UserBlogComment>[
           UserBlogComment(
             commentId: '646846',

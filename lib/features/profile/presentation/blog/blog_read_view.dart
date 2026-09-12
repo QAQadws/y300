@@ -23,17 +23,19 @@ class BlogReadView<T> extends StatefulWidget {
 }
 
 class _BlogReadViewState<T> extends State<BlogReadView<T>> {
+  bool _routeIsCurrent = true;
   @override
-  void initState() {
-    super.initState();
-    unawaited(widget.setActive(widget.isActive));
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _routeIsCurrent = ModalRoute.isCurrentOf(context) ?? true;
+    unawaited(widget.setActive(widget.isActive && _routeIsCurrent));
   }
 
   @override
   void didUpdateWidget(covariant BlogReadView<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive != widget.isActive) {
-      unawaited(widget.setActive(widget.isActive));
+      unawaited(widget.setActive(widget.isActive && _routeIsCurrent));
     }
   }
 
