@@ -11,6 +11,7 @@ import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_operations.dart';
+import '../contracts/user_blog_navigation.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
@@ -46,6 +47,7 @@ final class ForumClientSourcePlan {
     this.userBlogDetail,
     this.blogComments,
     this.blogOperations,
+    this.blogNavigation,
     this.forumSearch,
     this.comicEpisodeCatalog,
     this.comicThreadDiscovery,
@@ -104,6 +106,7 @@ final class ForumClientSourcePlan {
     userBlogDetail: overrides.userBlogDetail ?? userBlogDetail,
     blogComments: overrides.blogComments ?? blogComments,
     blogOperations: overrides.blogOperations ?? blogOperations,
+    blogNavigation: overrides.blogNavigation ?? blogNavigation,
     forumSearch: overrides.forumSearch ?? forumSearch,
     comicEpisodeCatalog: overrides.comicEpisodeCatalog ?? comicEpisodeCatalog,
     comicThreadDiscovery:
@@ -200,6 +203,9 @@ final class ForumClientSourcePlan {
 
   /// Journal publishing, editing, and management.
   final UserBlogOperations? blogOperations;
+
+  /// Browser destinations for journal workflows requiring the complete site UI.
+  final UserBlogNavigation? blogNavigation;
 
   /// Source for forum search.
   final ForumSearchRepository? forumSearch;
