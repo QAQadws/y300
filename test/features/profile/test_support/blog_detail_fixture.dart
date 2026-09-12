@@ -5,6 +5,9 @@ final class BlogDetailFixture implements UserBlogDetailRepository {
   final queries = <UserBlogDetailQuery>[];
   String bodyHtml = '<p>article fixture</p>';
   String commentHtml = '<p>comment fixture</p>';
+  String? title;
+  String authorName = 'fixture author';
+  String? publishedAtText;
   bool emptyComments = false;
   @override
   final capabilities = UserBlogDetailSourceCapabilities(
@@ -24,9 +27,10 @@ final class BlogDetailFixture implements UserBlogDetailRepository {
       data: UserBlogDetailData(
         ownerUserId: query.ownerUserId,
         blogId: query.blogId,
-        title: 'Article ${query.blogId}',
+        title: title ?? 'Article ${query.blogId}',
         bodyHtml: bodyHtml,
-        authorName: 'fixture author',
+        authorName: authorName,
+        publishedAtText: publishedAtText,
         commentsOpen: true,
         commentPagination: UserBlogPagination(
           currentPage: page,

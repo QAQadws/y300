@@ -15,6 +15,8 @@ import 'package:y300/features/profile/presentation/blog/blog_detail_controller.d
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_view.dart';
 import 'package:y300/features/profile/presentation/blog/blog_content_link_navigation.dart';
+import 'package:y300/features/profile/presentation/blog/blog_content_projection.dart';
+import 'package:y300/features/profile/presentation/blog/blog_content_projection_provider.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 
 import 'package:y300/features/profile/presentation/profile_text_resolver.dart';
@@ -257,10 +259,9 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
       builder: (context, state, _) => Scaffold(
         backgroundColor: palette.background,
         appBar: AppBar(
-          title: Text(
-            state.data?.title ??
-                (_allowInitialTitle ? widget.initialTitle : null) ??
-                l10n.profileBlogTitle,
+          title: _BlogDetailTitle(
+            data: state.data,
+            initialTitle: _allowInitialTitle ? widget.initialTitle : null,
           ),
           actions: [
             if (state.data != null)
@@ -503,7 +504,7 @@ class _ProfileBlogListContent extends StatelessWidget {
   }
 }
 
-class _CategoryFilter extends StatelessWidget {
+class _CategoryFilter extends ConsumerWidget {
   const _CategoryFilter({
     required this.query,
     required this.categories,
@@ -513,7 +514,13 @@ class _CategoryFilter extends StatelessWidget {
   final List<UserBlogCategory> categories;
   final ValueChanged<String?> onSelect;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final display = watchBlogDisplayText(
+      ref,
+      BlogContentSource(
+        text: [for (final category in categories) category.name],
+      ),
+    );
     final selected = query.categoryId ?? query.personalCategoryId;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -535,7 +542,7 @@ class _CategoryFilter extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
-                  label: Text(category.name),
+                  label: Text(display.text(category.name)),
                   selected: selected == category.id,
                   onSelected: (_) => onSelect(category.id),
                 ),
@@ -667,7 +674,7 @@ class _TabButton extends StatelessWidget {
   }
 }
 
-class _ProfileBlogListCard extends StatelessWidget {
+class _ProfileBlogListCard extends ConsumerWidget {
   const _ProfileBlogListCard({
     super.key,
     required this.item,
@@ -686,7 +693,8 @@ class _ProfileBlogListCard extends StatelessWidget {
   final ValueChanged<UserBlogAction> onAction;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final display = watchBlogDisplayText(ref, BlogContentSource.summary(item));
     return Material(
       color: palette.card,
       borderRadius: BorderRadius.circular(12),
@@ -745,7 +753,7 @@ class _ProfileBlogListCard extends StatelessWidget {
                                 true &&
                             item.publishedAtText != null)
                           Text(
-                            item.publishedAtText!,
+                            display.text(item.publishedAtText!),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.labelMedium
@@ -763,7 +771,7 @@ class _ProfileBlogListCard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                item.title,
+                display.text(item.title),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: palette.title,
                   fontWeight: FontWeight.w800,
@@ -774,7 +782,7 @@ class _ProfileBlogListCard extends StatelessWidget {
                   item.excerpt != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  item.excerpt!,
+                  display.text(item.excerpt!),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -1016,7 +1024,27 @@ class _ProfileBlogDetailContent extends StatelessWidget {
   }
 }
 
-class _BlogDetailCard extends StatelessWidget {
+class _BlogDetailTitle extends ConsumerWidget {
+  const _BlogDetailTitle({required this.data, required this.initialTitle});
+  final UserBlogDetailData? data;
+  final String? initialTitle;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final title = data?.title ?? initialTitle;
+    if (title == null) {
+      return Text(AppLocalizations.of(context).profileBlogTitle);
+    }
+    final display = watchBlogDisplayText(
+      ref,
+      data == null
+          ? BlogContentSource(text: [title])
+          : BlogContentSource.article(data!),
+    );
+    return Text(display.text(title));
+  }
+}
+
+class _BlogDetailCard extends ConsumerWidget {
   const _BlogDetailCard({
     required this.data,
     required this.capabilities,
@@ -1034,7 +1062,8 @@ class _BlogDetailCard extends StatelessWidget {
   final ValueChanged<String> onOpenLink;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final display = watchBlogDisplayText(ref, BlogContentSource.article(data));
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: _cardDecoration(palette),
@@ -1042,7 +1071,7 @@ class _BlogDetailCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            data.title,
+            display.text(data.title),
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
               color: palette.title,
               fontWeight: FontWeight.w900,
@@ -1069,7 +1098,7 @@ class _BlogDetailCard extends StatelessWidget {
                   key: const Key('blog-detail-author'),
                   userId: data.ownerUserId,
                   child: Text(
-                    _detailMeta(context, data),
+                    _detailMeta(context, data, display),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(
@@ -1086,7 +1115,7 @@ class _BlogDetailCard extends StatelessWidget {
               context,
             ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.55),
             child: ForumHtmlContentView(
-              html: data.bodyHtml,
+              html: display.html(data.bodyHtml),
               sourceId: 'profile-blog-${data.blogId}',
               imageReferer: imageReferer,
               imageCacheOwnerId: data.blogId,
@@ -1102,7 +1131,11 @@ class _BlogDetailCard extends StatelessWidget {
     );
   }
 
-  String _detailMeta(BuildContext context, UserBlogDetailData data) {
+  String _detailMeta(
+    BuildContext context,
+    UserBlogDetailData data,
+    BlogDisplayText display,
+  ) {
     final l10n = AppLocalizations.of(context);
     final parts = <String>[
       if (capabilities?.supports(UserBlogDetailCapability.author) == true &&
@@ -1111,7 +1144,7 @@ class _BlogDetailCard extends StatelessWidget {
       if (capabilities?.supports(UserBlogDetailCapability.publishedAtText) ==
               true &&
           data.publishedAtText != null)
-        data.publishedAtText!,
+        display.text(data.publishedAtText!),
       if (capabilities?.supports(UserBlogDetailCapability.viewCount) == true &&
           data.viewCount != null)
         l10n.profileBlogViews(data.viewCount!),
@@ -1124,7 +1157,7 @@ class _BlogDetailCard extends StatelessWidget {
   }
 }
 
-class _CommentCard extends StatelessWidget {
+class _CommentCard extends ConsumerWidget {
   const _CommentCard({
     super.key,
     required this.comment,
@@ -1145,7 +1178,11 @@ class _CommentCard extends StatelessWidget {
   final ValueChanged<String> onOpenLink;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final display = watchBlogDisplayText(
+      ref,
+      BlogContentSource.comment(comment),
+    );
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: _cardDecoration(palette),
@@ -1179,7 +1216,7 @@ class _CommentCard extends StatelessWidget {
                               ) ==
                               true &&
                           comment.publishedAtText != null)
-                        comment.publishedAtText!,
+                        display.text(comment.publishedAtText!),
                     ].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1220,7 +1257,7 @@ class _CommentCard extends StatelessWidget {
               context,
             ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.45),
             child: ForumHtmlContentView(
-              html: comment.bodyHtml,
+              html: display.html(comment.bodyHtml),
               sourceId: 'profile-blog-comment-${comment.commentId}',
               imageReferer: imageReferer,
               imageCacheOwnerId: comment.commentId,

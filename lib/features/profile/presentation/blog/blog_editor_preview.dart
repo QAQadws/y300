@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
+import 'package:y300/features/profile/presentation/blog/blog_content_projection.dart';
+import 'package:y300/features/profile/presentation/blog/blog_content_projection_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
@@ -20,9 +22,13 @@ class BlogEditorPreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final native = Theme.of(context).y300NativeContent;
+    final display = watchBlogDisplayText(
+      ref,
+      BlogContentSource(text: [draft.subject], html: [draft.bodyHtml]),
+    );
     final title = const HtmlEscape(
       HtmlEscapeMode.element,
-    ).convert(draft.subject);
+    ).convert(display.text(draft.subject));
     return DecoratedBox(
       decoration: BoxDecoration(
         color: native.card,
@@ -32,7 +38,7 @@ class BlogEditorPreview extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: ForumHtmlContentView(
-          html: '<h2>$title</h2>${draft.bodyHtml}',
+          html: '<h2>$title</h2>${display.html(draft.bodyHtml)}',
           sourceId: 'blog-editor-preview-$ownerId',
           imageCacheOwnerId: ownerId,
           imageReferer: ref.watch(forumImageRefererProvider),
