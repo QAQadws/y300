@@ -23,3 +23,7 @@ final userBlogDetailRepositoryProvider = Provider<UserBlogDetailRepository>((
 ) {
   return ref.watch(yamiboForumClientProvider).userBlogDetail!;
 });
+
+final userBlogCommentServiceProvider = Provider<UserBlogCommentService>((ref) {
+  return ref.watch(yamiboForumClientProvider).blogComments!;
+});
