@@ -38,7 +38,7 @@ jobs:
       - name: Verify checkout identity
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          printf 'Validated commit: `%s`.\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Validated commit: %s.\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
       - name: Validate workflow
         run: |
           curl --fail --silent --show-error --location https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$RUNNER_TEMP/actionlint.tar.gz"
@@ -115,7 +115,10 @@ jobs:
       - name: Analyze app
         run: |
           started=$SECONDS
-          trap 'printf "Flutter analysis: exit %s, %ss.\n" "$?" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"' EXIT
+          summarize() {
+            printf 'Flutter analysis: exit %s, %ss.\n' "$?" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"
+          }
+          trap summarize EXIT
           flutter analyze --no-pub
       - *clean
 
@@ -136,7 +139,10 @@ jobs:
         working-directory: packages/yamibo_forum_client
         run: |
           started=$SECONDS
-          trap 'printf "Protocol analysis and tests: exit %s, %ss.\n" "$?" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"' EXIT
+          summarize() {
+            printf 'Protocol analysis and tests: exit %s, %ss.\n' "$?" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"
+          }
+          trap summarize EXIT
           dart analyze --fatal-infos
           dart test --reporter expanded
       - *clean
@@ -163,7 +169,10 @@ jobs:
           SHARD_INDEX: ${{ matrix.shard }}
         run: |
           started=$SECONDS
-          trap 'printf "App tests shard %s: exit %s, %ss.\n" "$SHARD_INDEX" "$?" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"' EXIT
+          summarize() {
+            printf 'App tests shard %s: exit %s, %ss.\n' "$SHARD_INDEX" "$?" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"
+          }
+          trap summarize EXIT
           flutter test --no-pub --reporter expanded --total-shards 2 --shard-index "$SHARD_INDEX"
       - *clean
       - name: Preserve failed visual comparisons
@@ -199,8 +208,13 @@ jobs:
       - name: Validate release compilation without distribution credentials
         run: |
           started=$SECONDS
-          # Keep the original exit status when restoring the executable bit.
-          trap 'status=$?; chmod -x android/gradlew; printf "Android release build check: exit %s, %ss.\n" "$status" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"; exit "$status"' EXIT
+          summarize() {
+            status=$?
+            chmod -x android/gradlew
+            printf 'Android release build check: exit %s, %ss.\n' "$status" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"
+            exit "$status"
+          }
+          trap summarize EXIT
           test ! -e android/key.properties
           chmod +x android/gradlew
           flutter build apk --no-pub --release --target-platform android-arm64
