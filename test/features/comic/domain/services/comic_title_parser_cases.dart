@@ -1,3 +1,130 @@
+typedef ComicDuplicateMetadataFixture = ({String title, String? author});
+
+const comicDuplicateMetadataBase = (title: '漫画标题', author: '作者名');
+const comicDuplicateMetadataOther = (title: '另一部漫画', author: '另一位作者');
+const comicDuplicateMetadataFormatted = (
+  title: '  Ｃｏｍｉｃ　　Ｔｉｔｌｅ &amp; Friends  ',
+  author: ' Ａｕｔｈｏｒ　 Ｎａｍｅ ',
+);
+const comicDuplicateMetadataPlain = (
+  title: 'Comic Title & Friends',
+  author: 'Author Name',
+);
+
+/// Duplicate matching consumes saved book names, not raw chapter subjects.
+const comicDuplicateMetadataCases =
+    <
+      ({
+        String id,
+        ComicDuplicateMetadataFixture left,
+        ComicDuplicateMetadataFixture right,
+        bool matches,
+      })
+    >[
+      (
+        id: 'same title and author',
+        left: comicDuplicateMetadataBase,
+        right: comicDuplicateMetadataBase,
+        matches: true,
+      ),
+      (
+        id: 'normalizes whitespace fullwidth variants and entities',
+        left: comicDuplicateMetadataFormatted,
+        right: comicDuplicateMetadataPlain,
+        matches: true,
+      ),
+      (
+        id: 'same title with different authors',
+        left: comicDuplicateMetadataBase,
+        right: (title: '漫画标题', author: '另一位作者'),
+        matches: false,
+      ),
+      (
+        id: 'same author with different titles',
+        left: comicDuplicateMetadataBase,
+        right: (title: '另一部漫画', author: '作者名'),
+        matches: false,
+      ),
+      (
+        id: 'one author missing',
+        left: comicDuplicateMetadataBase,
+        right: (title: '漫画标题', author: null),
+        matches: false,
+      ),
+      (
+        id: 'both authors missing',
+        left: (title: '漫画标题', author: null),
+        right: (title: '漫画标题', author: null),
+        matches: false,
+      ),
+      (
+        id: 'whitespace authors are missing',
+        left: (title: '漫画标题', author: ' \t '),
+        right: (title: '漫画标题', author: '　'),
+        matches: false,
+      ),
+      (
+        id: 'one title missing',
+        left: comicDuplicateMetadataBase,
+        right: (title: '', author: '作者名'),
+        matches: false,
+      ),
+      (
+        id: 'both titles missing',
+        left: (title: '', author: '作者名'),
+        right: (title: '　\t', author: '作者名'),
+        matches: false,
+      ),
+      (
+        id: 'title case is significant',
+        left: comicDuplicateMetadataPlain,
+        right: (title: 'comic title & friends', author: 'Author Name'),
+        matches: false,
+      ),
+      (
+        id: 'author case is significant',
+        left: comicDuplicateMetadataPlain,
+        right: (title: 'Comic Title & Friends', author: 'author name'),
+        matches: false,
+      ),
+      (
+        id: 'traditional title is distinct',
+        left: comicDuplicateMetadataBase,
+        right: (title: '漫畫標題', author: '作者名'),
+        matches: false,
+      ),
+      (
+        id: 'traditional author is distinct',
+        left: (title: '漫画标题', author: '桥本'),
+        right: (title: '漫画标题', author: '橋本'),
+        matches: false,
+      ),
+      (
+        id: 'full long names distinguish identical search prefixes',
+        left: (title: '这是一个超过十八个字符而且前半部分完全相同的标题甲', author: '作者名'),
+        right: (title: '这是一个超过十八个字符而且前半部分完全相同的标题乙', author: '作者名'),
+        matches: false,
+      ),
+      (
+        id: 'saved names are not reparsed as chapter subjects',
+        left: (title: '漫画标题 第1话', author: '作者名'),
+        right: (title: '漫画标题 第2话', author: '作者名'),
+        matches: false,
+      ),
+      (
+        id: 'internal spaces and punctuation are significant',
+        left: (title: 'Comic-Title', author: 'Author Name'),
+        right: (title: 'Comic Title', author: 'AuthorName'),
+        matches: false,
+      ),
+      (
+        id: 'metadata components cannot collide through a delimiter',
+        left: (title: 'Title|Author', author: 'Name'),
+        right: (title: 'Title', author: 'Author|Name'),
+        matches: false,
+      ),
+    ];
+
 class ComicTitleParserCase {
   const ComicTitleParserCase({
     required this.id,

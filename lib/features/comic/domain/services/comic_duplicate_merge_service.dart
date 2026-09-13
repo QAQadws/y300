@@ -1,8 +1,8 @@
 import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 
 /// Coordinates duplicate comic merging without exposing SQLite details to UI or
-/// favorite sync. A duplicate is any connected group of comics whose episodes
-/// share at least one source tid.
+/// favorite sync. Duplicate groups connect comics through shared source/episode
+/// tids or matching non-empty titles and authors.
 class ComicDuplicateMergeService {
   const ComicDuplicateMergeService({
     required ComicDuplicateMergeRepository repository,

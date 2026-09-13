@@ -338,6 +338,8 @@ class ComicDuplicateGroup {
   const ComicDuplicateGroup({required this.comicIds, required this.sharedTids});
 
   final Set<String> comicIds;
+
+  /// Empty when the group is connected only by matching titles and authors.
   final Set<String> sharedTids;
 }
 
