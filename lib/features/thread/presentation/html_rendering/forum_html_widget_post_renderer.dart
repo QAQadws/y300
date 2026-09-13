@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -31,6 +32,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.enableCaching,
     this.renderMode = RenderMode.column,
     this.onBodyBuilt,
+    this.bodyPresentation,
     this.collapseExpansion,
     this.sourceId,
     this.threadId,
@@ -59,6 +61,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   /// Only the outer chapter may be a sliver; nested collapse content stays a box.
   final RenderMode renderMode;
   final VoidCallback? onBodyBuilt;
+  final ThreadPostBodyPresentation? bodyPresentation;
 
   /// Chapter-owned expansion memory when offscreen sliver children unmount.
   final Map<String, bool>? collapseExpansion;
@@ -115,10 +118,18 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     final preparedHtml = document.preparedHtml;
     final imageAttachmentIdsByUrl = document.attachmentIdsByUrl;
     final handlesImageTapInFactory = threadId?.trim().isNotEmpty == true;
-    return HtmlWidget(
+    final presentation = bodyPresentation;
+    final baseStyle = stylePolicy.baseTextStyle(context);
+    Widget buildBody(VoidCallback? onReady) => HtmlWidget(
       preparedHtml,
       key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
       baseUrl: forumBaseUri,
+      onErrorBuilder: onReady == null
+          ? null
+          : (_, _, _) {
+              onReady();
+              return null;
+            },
       buildAsync: buildAsync,
       customStylesBuilder: stylePolicy.customStylesFor,
       customWidgetBuilder: (element) => _buildCustomWidget(
@@ -128,10 +139,10 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
         resolvedPreferences,
         document,
       ),
-      factoryBuilder: _cachedImageFactoryBuilder(),
+      factoryBuilder: _cachedImageFactoryBuilder(onReady),
       enableCaching: enableCaching,
       renderMode: renderMode,
-      textStyle: stylePolicy.baseTextStyle(context),
+      textStyle: baseStyle,
       onTapUrl: callbacks.onTapUrl == null
           ? null
           : (url) {
@@ -142,18 +153,36 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           ? null
           : (image) => _handleTapImage(image, imageAttachmentIdsByUrl),
     );
+    if (presentation == null || renderMode != RenderMode.column) {
+      return buildBody(onBodyBuilt);
+    }
+    final revision = (
+      preparedHtml,
+      baseStyle,
+      MediaQuery.textScalerOf(context),
+      resolvedPreferences,
+      theme.signature,
+    );
+    return ThreadPostBodyLayout(
+      key: ValueKey((presentation, revision)),
+      presentation: presentation,
+      sourceId: sourceId ?? 'anonymous',
+      revision: revision,
+      builder: (ready) => buildBody(() {
+        ready();
+        onBodyBuilt?.call();
+      }),
+    );
   }
 
-  WidgetFactory Function()? _cachedImageFactoryBuilder() {
+  WidgetFactory Function()? _cachedImageFactoryBuilder(VoidCallback? onReady) {
     final tid = threadId?.trim();
     if (tid == null || tid.isEmpty) {
-      return onBodyBuilt == null
-          ? null
-          : () => _BodyReadyWidgetFactory(onBodyBuilt!);
+      return onReady == null ? null : () => _BodyReadyWidgetFactory(onReady);
     }
     return () => ForumHtmlCachedImageWidgetFactory(
       threadId: tid,
-      onBodyBuilt: onBodyBuilt,
+      onBodyBuilt: onReady,
       imageReferer: imageReferer,
       imageCacheOwnerId: imageCacheOwnerId,
       onTapImageRequest: callbacks.onTapImage == null
@@ -215,6 +244,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           theme: theme,
           callbacks: callbacks,
           collapseExpansion: collapseExpansion,
+          bodyPresentation: bodyPresentation,
           preferences: resolvedPreferences,
           buildAsync: buildAsync,
           enableCaching: enableCaching,

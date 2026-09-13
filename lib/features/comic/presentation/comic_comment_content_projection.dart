@@ -14,6 +14,7 @@ final class ComicCommentContentProjection {
     required this.converterId,
     required this.sourceRevision,
     required this.isConverted,
+    this.bodyRevision = '',
   }) : items = List<ComicCommentItemProjection>.unmodifiable(items);
 
   factory ComicCommentContentProjection.raw(
@@ -41,14 +42,15 @@ final class ComicCommentContentProjection {
   final String converterId;
   final String sourceRevision;
   final bool isConverted;
+  final String bodyRevision;
 
   String get displayIdentity =>
-      '$sourceRevision:${mode.name}:$converterId:$isConverted';
+      '$sourceRevision:${mode.name}:$converterId:$isConverted:$bodyRevision';
 
   late final List<int> layoutFingerprints = List.unmodifiable([
     for (final item in items)
       Object.hashAll(
-        ThreadDetailContentProjector.postRevisionParts(item.displayPost),
+        ThreadDetailContentProjector.postRevisionParts(item.renderPost),
       ),
   ]);
 }
@@ -84,6 +86,7 @@ final class ComicCommentItemProjection {
     required this.displayMessage,
     required this.displayDateline,
     this.projectedPost,
+    this.renderedPost,
   });
 
   ComicCommentItemProjection.raw(ComicCommentItem sourceItem)
@@ -94,6 +97,22 @@ final class ComicCommentItemProjection {
       );
 
   final ThreadPost? projectedPost;
+  final ThreadPost? renderedPost;
+  ThreadPost get renderPost => renderedPost ?? displayPost;
+
+  ComicCommentItemProjection projectBody(
+    ThreadPost Function(ThreadPost) project,
+  ) {
+    final completePost = displayPost;
+    return ComicCommentItemProjection(
+      sourceItem: sourceItem,
+      displayMessage: displayMessage,
+      displayDateline: displayDateline,
+      projectedPost: completePost,
+      renderedPost: project(completePost),
+    );
+  }
+
   ThreadPost get displayPost {
     if (projectedPost != null) return projectedPost!;
     final collector = ThreadPlainTextCollector();

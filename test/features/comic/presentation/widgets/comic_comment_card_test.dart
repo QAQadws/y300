@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_interaction_controller.dart';
@@ -7,6 +10,12 @@ import 'package:y300/features/thread/presentation/thread_post_interaction_models
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import '../../data/comic_comment_fixtures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:y300/features/comic/presentation/comic_comment_body_projector.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,32 +35,243 @@ import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 void main() {
   testWidgets(
-    'first floor retains feedback and full source without mounting its comic body',
+    'parsed 53-image sample leaves ratings immediately after its text',
+    (tester) async {
+      final data =
+          ThreadDetailHtmlParser(
+            siteOrigin: Uri.parse('https://bbs.yamibo.com'),
+          ).parse(
+            File(
+              'test/features/comic/data/comic_comment_image_spacing.html',
+            ).readAsStringSync(),
+            fallbackTid: '573314',
+            fallbackPage: 1,
+          );
+      final source = data.posts.single;
+      final images = const DefaultForumImageSourcePipeline().collectFromPost(
+        source,
+      );
+      final projection =
+          ComicCommentBodyProjector(images.map((image) => image.normalizedUrl))
+              .project(
+                ComicCommentContentProjection.raw(
+                  ComicCommentLoadResult.fromRead(
+                    commentDetailPage(posts: [source]),
+                  ),
+                  mode: TextConversionMode.none,
+                  converterId: 'identity',
+                  sourceRevision: 'sample',
+                ),
+              )
+              .items
+              .single;
+      final cache = _NoopImageCacheService();
+      await tester.pumpWidget(
+        _host(
+          ComicCommentCard(projection: projection, sourceTid: '573314'),
+          imageCacheService: cache,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final bodyHeight = tester.getSize(find.byType(ThreadPostHtmlBody)).height;
+      final bodyBottom = tester
+          .getBottomLeft(find.byType(ThreadPostHtmlBody))
+          .dy;
+      final ratingTop = tester
+          .getTopLeft(find.byType(ThreadPostRatingSection))
+          .dy;
+      expect(ratingTop - bodyBottom, inInclusiveRange(0, 24));
+      expect(
+        find.descendant(
+          of: find.byType(ThreadPostHtmlBody),
+          matching: find.byType(CachedLibraryImage),
+        ),
+        findsNothing,
+      );
+      expect(
+        cache.requests.where(
+          (request) => request.role == ImageCacheRole.threadInline,
+        ),
+        isEmpty,
+      );
+
+      // An independently trimmed text-only body establishes the expected height.
+      final textOnly = commentPost(
+        1,
+        message: source.message.substring(
+          0,
+          source.message.lastIndexOf('</font>') + 7,
+        ),
+      );
+      await tester.pumpWidget(
+        _host(
+          ComicCommentCard(
+            projection: ComicCommentItemProjection.raw(
+              ComicCommentItem.fromPost(textOnly, 1),
+            ),
+            sourceTid: '573314',
+          ),
+          imageCacheService: cache,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        bodyHeight,
+        closeTo(tester.getSize(find.byType(ThreadPostHtmlBody)).height, 0.5),
+      );
+    },
+  );
+  testWidgets(
+    'first floor mounts its text and feedback without loading excluded comic images',
     (tester) async {
       final post = commentPost(
         1,
         message:
             '<p>comic body</p><img src="https://example.test/comic-page.jpg">',
       );
-      final projection = ComicCommentItemProjection.raw(
-        ComicCommentItem.fromPost(post, 1),
-      );
+      final projection = _filteredFirstPost(post);
+      final images = _NoopImageCacheService();
       await tester.pumpWidget(
         _host(
           ComicCommentCard(projection: projection, sourceTid: '100'),
+          imageCacheService: images,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ForumHtmlWidgetPostRenderer), findsOneWidget);
+      expect(find.byKey(const Key('thread-post-1')), findsOneWidget);
+      expect(find.text('comic body', findRichText: true), findsOneWidget);
+      final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
+        find.byType(ForumHtmlWidgetPostRenderer),
+      );
+      expect(renderer.preparedDocument!.sequence.entries, isEmpty);
+      expect(renderer.html, isNot(contains('comic-page.jpg')));
+      expect(
+        images.requests.where((r) => r.sourceUrl.contains('comic-page.jpg')),
+        isEmpty,
+      );
+      expect(
+        tester
+            .widgetList<CachedLibraryImage>(find.byType(CachedLibraryImage))
+            .where(
+              (image) =>
+                  image.request?.sourceUrl.contains('comic-page.jpg') == true,
+            ),
+        isEmpty,
+      );
+      expect(find.byType(ThreadPostRatingSection), findsOneWidget);
+      expect(find.byType(ThreadPostCommentSection), findsOneWidget);
+      expect(projection.displayPost.message, contains('comic-page.jpg'));
+      expect(ComicCommentCard.toThreadPost(projection).isFirst, isTrue);
+    },
+  );
+  testWidgets(
+    'remaining images open a gallery containing only visible images',
+    (tester) async {
+      final post = commentPost(
+        1,
+        message:
+            '<p>caption</p><img src="https://example.test/comic-page.jpg">'
+            '<img src="https://example.test/extra.jpg">'
+            '<img src="/static/image/smiley/face.gif">',
+      );
+      final projection = _filteredFirstPost(post);
+      ThreadPostImageOpenRequest? opened;
+      await tester.pumpWidget(
+        _host(
+          Builder(
+            builder: (context) => ThreadPostCard(
+              post: projection.renderPost,
+              imageReferer: null,
+              palette: ThreadDetailNativePalette.resolve(Theme.of(context)),
+              onOpenPostImages: (_, request) => opened = request,
+            ),
+          ),
           imageCacheService: _NoopImageCacheService(),
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
-      expect(find.byKey(const Key('thread-post-1')), findsNothing);
-      expect(find.byType(ThreadPostRatingSection), findsOneWidget);
-      expect(find.byType(ThreadPostCommentSection), findsOneWidget);
-      expect(
-        ComicCommentCard.toThreadPost(projection).message,
-        contains('comic-page.jpg'),
+      final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
+        find.byType(ForumHtmlWidgetPostRenderer),
       );
-      expect(ComicCommentCard.toThreadPost(projection).isFirst, isTrue);
+      expect(renderer.html, contains('/static/image/smiley/face.gif'));
+      expect(renderer.preparedDocument!.sequence.entries, hasLength(1));
+      renderer.callbacks.onTapImage!(
+        const ForumHtmlImageRequest(
+          url: 'https://example.test/extra.jpg',
+          readableIndex: 0,
+        ),
+      );
+      expect(opened!.imageUrls, ['https://example.test/extra.jpg']);
+      expect(opened!.readerRequest!.group.urls, [
+        'https://example.test/extra.jpg',
+      ]);
+    },
+  );
+  testWidgets(
+    'filtered first floor copies and opens selection with the complete body',
+    (tester) async {
+      final post = commentPost(
+        1,
+        message:
+            '<p>comic body</p><img src="https://example.test/comic-page.jpg"><p>after image</p>',
+      );
+      final session = ComicCommentSessionController(
+        key: const ComicCommentSessionKey(episodeId: 'e', sourceTid: '100'),
+        loader: DefaultComicCommentLoader(
+          repository: CommentDetailRepository(
+            respond: (_) => commentDetailPage(lastPage: 1, posts: [post]),
+          ),
+        ),
+      );
+      final controller = ComicCommentInteractionController(
+        session: session,
+        invalidateThread: (_) async {},
+      );
+      addTearDown(() {
+        controller.dispose();
+        session.dispose();
+      });
+      await session.load();
+      String? copied;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await tester.pumpWidget(
+        _host(
+          ComicCommentCard(
+            projection: _filteredFirstPost(post),
+            sourceTid: '100',
+            interactionController: controller,
+          ),
+          imageCacheService: _NoopImageCacheService(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.longPress(find.byKey(const Key('thread-author-avatar-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('thread-post-copy-all-action')));
+      await tester.pumpAndSettle();
+      expect(copied, contains('comic body'));
+      expect(copied, contains('after image'));
+      await tester.longPress(find.byKey(const Key('thread-author-avatar-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('thread-post-select-copy-action')));
+      await tester.pumpAndSettle();
+      final selection = tester.widget<ThreadPostHtmlSelectionCopyPage>(
+        find.byType(ThreadPostHtmlSelectionCopyPage),
+      );
+      expect(selection.sourcePost, same(post));
+      expect(selection.post.message, contains('comic-page.jpg'));
+      expect(selection.plan.images, isNotEmpty);
     },
   );
   testWidgets(
@@ -376,6 +596,19 @@ void main() {
   );
 }
 
+ComicCommentItemProjection _filteredFirstPost(ThreadPost post) =>
+    ComicCommentBodyProjector(['https://example.test/comic-page.jpg'])
+        .project(
+          ComicCommentContentProjection.raw(
+            ComicCommentLoadResult.fromRead(commentDetailPage(posts: [post])),
+            mode: TextConversionMode.none,
+            converterId: 'identity',
+            sourceRevision: 'fixture',
+          ),
+        )
+        .items
+        .single;
+
 ComicCommentItem _comment({
   String authorName = '用户',
   String dateline = '刚刚',
@@ -458,8 +691,10 @@ final class _FixedPreferencesRepository
 }
 
 final class _NoopImageCacheService implements ImageCacheService {
+  final List<ImageCacheRequest> requests = [];
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    requests.add(request);
     return CachedImageResult.failed;
   }
 

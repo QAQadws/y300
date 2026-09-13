@@ -1,10 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/comic/presentation/comic_comment_presentation_store.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_interaction_controller.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_actions.dart';
-import 'package:y300/features/thread/presentation/thread_detail_state.dart';
-import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
@@ -28,6 +25,7 @@ class ComicCommentCard extends ConsumerStatefulWidget {
     this.imageReferer,
     this.renderContext,
     this.interactionController,
+    this.presentation,
   });
 
   final ComicCommentInteractionController? interactionController;
@@ -35,13 +33,14 @@ class ComicCommentCard extends ConsumerStatefulWidget {
   final String sourceTid;
   final String? imageReferer;
   final ThreadPostRenderContext? renderContext;
+  final ComicCommentPostPresentation? presentation;
 
   /// Converts a comment to the existing parser-mode post-card input.
   ///
   /// Keeping this adapter public lets list surfaces prune the shared render
   /// plan cache without duplicating the post mapping rules.
   static ThreadPost toThreadPost(ComicCommentItemProjection projection) =>
-      projection.displayPost;
+      projection.renderPost;
 
   @override
   ConsumerState<ComicCommentCard> createState() => _ComicCommentCardState();
@@ -51,28 +50,52 @@ class _ComicCommentCardState extends ConsumerState<ComicCommentCard> {
   ThreadPostRenderContext? _ownedRenderContext;
   Object? _ownedRenderContextIdentity;
 
-  ThreadPostRatingsViewState _ratings = const ThreadPostRatingsViewState.idle();
-  ThreadPostRatingsViewState _displayRatings =
-      const ThreadPostRatingsViewState.idle();
-  int _ratingsGeneration = 0;
-  int _conversionGeneration = 0;
+  late ComicCommentPostPresentation _presentation;
+
+  @override
+  void initState() {
+    super.initState();
+    _bindPresentation();
+  }
+
+  void _bindPresentation() {
+    _presentation = widget.presentation ?? ComicCommentPostPresentation();
+    _presentation.addListener(_onPresentationChanged);
+    _convertRatings();
+  }
+
+  void _onPresentationChanged() {
+    if (mounted) {
+      setState(() {});
+      _convertRatings();
+    }
+  }
 
   @override
   void didUpdateWidget(covariant ComicCommentCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(
-      oldWidget.projection.sourceItem.sourcePost,
-      widget.projection.sourceItem.sourcePost,
-    )) {
-      _ratingsGeneration++;
-      _conversionGeneration++;
-      _ratings = _displayRatings = const ThreadPostRatingsViewState.idle();
+    if (!identical(oldWidget.presentation, widget.presentation) ||
+        (widget.presentation == null &&
+            !identical(
+              oldWidget.projection.sourceItem.sourcePost,
+              widget.projection.sourceItem.sourcePost,
+            ))) {
+      _presentation.removeListener(_onPresentationChanged);
+      if (oldWidget.presentation == null) _presentation.dispose();
+      _bindPresentation();
     }
+  }
+
+  @override
+  void dispose() {
+    _presentation.removeListener(_onPresentationChanged);
+    if (widget.presentation == null) _presentation.dispose();
+    super.dispose();
   }
 
   Future<void> _openActions(
     ThreadPostActions actions,
-    ThreadPostBodyRenderPlan plan,
+    ThreadPostRenderContext renderContext,
   ) async {
     ThreadPostMutation? mutation;
     final source = widget.projection.sourceItem;
@@ -81,7 +104,9 @@ class _ComicCommentCardState extends ConsumerState<ComicCommentCard> {
         mutation = await actions.show(
           sourcePost: source.post,
           displayPost: widget.projection.displayPost,
-          plan: plan,
+          // Copy/selection use the complete converted body, including images
+          // omitted only from the reader's comment surface.
+          plan: renderContext.planFor(widget.projection.displayPost),
         );
         return mutation != null;
       },
@@ -92,73 +117,28 @@ class _ComicCommentCardState extends ConsumerState<ComicCommentCard> {
 
   Future<void> _loadRatings() async {
     final url = widget.projection.sourceItem.post.ratingSummary?.viewAllUrl;
-    if (url == null ||
-        _ratings.status == ThreadPostRatingsLoadStatus.loading ||
-        _ratings.status == ThreadPostRatingsLoadStatus.loaded) {
-      return;
-    }
-    final generation = ++_ratingsGeneration;
-    setState(() {
-      _ratings = _displayRatings = const ThreadPostRatingsViewState.loading();
-    });
-    try {
-      final result = await ref
-          .read(threadPostRatingsRepositoryProvider)
-          .loadAll(url);
-      if (!mounted || generation != _ratingsGeneration) return;
-      setState(() {
-        _ratings = _displayRatings = switch (result) {
-          ApiSuccess<ThreadPostRatingDetails>(:final data) =>
-            ThreadPostRatingsViewState.loaded(data),
-          _ => const ThreadPostRatingsViewState.failureWith(
-            ThreadActionFailure(
-              code: ThreadUiErrorCode.unknown,
-              action: ThreadActionKind.ratings,
-            ),
-          ),
-        };
-      });
-      await _convertRatings();
-    } catch (_) {
-      if (mounted && generation == _ratingsGeneration) {
-        setState(() {
-          _ratings = _displayRatings =
-              const ThreadPostRatingsViewState.failureWith(
-                ThreadActionFailure(
-                  code: ThreadUiErrorCode.unknown,
-                  action: ThreadActionKind.ratings,
-                ),
-              );
-        });
-      }
-    }
+    if (url == null) return;
+    final repository = ref.read(threadPostRatingsRepositoryProvider);
+    await _presentation.loadRatings(() => repository.loadAll(url));
   }
 
   Future<void> _convertRatings() async {
-    final details = _ratings.details;
-    if (details == null) return;
-    final generation = ++_conversionGeneration;
-    final collector = ThreadPlainTextCollector();
-    final slots = ThreadRatingDetailsTextSlots.collect(details, collector);
-    final converter = ref.read(
-      textConverterProvider(ref.read(appServerContentConversionModeProvider)),
-    );
-    try {
-      final values = await ref
-          .read(plainTextBatchConversionServiceProvider)
-          .convertAll(sources: collector.sources, converter: converter);
-      if (mounted && generation == _conversionGeneration) {
-        setState(
-          () => _displayRatings = ThreadPostRatingsViewState.loaded(
-            slots.build(details, values),
-          ),
+    if (_presentation.ratings.details == null) return;
+    final mode = ref.read(appServerContentConversionModeProvider);
+    final converter = ref.read(textConverterProvider(mode));
+    final service = ref.read(plainTextBatchConversionServiceProvider);
+    await _presentation.convertRatings(
+      identity: (mode, converter.id),
+      convert: (details) async {
+        final collector = ThreadPlainTextCollector();
+        final slots = ThreadRatingDetailsTextSlots.collect(details, collector);
+        final values = await service.convertAll(
+          sources: collector.sources,
+          converter: converter,
         );
-      }
-    } catch (_) {
-      if (mounted && generation == _conversionGeneration) {
-        setState(() => _displayRatings = _ratings);
-      }
-    }
+        return slots.build(details, values);
+      },
+    );
   }
 
   @override
@@ -198,8 +178,15 @@ class _ComicCommentCardState extends ConsumerState<ComicCommentCard> {
       state: null,
       imageReferer: widget.imageReferer,
       palette: ThreadDetailNativePalette.resolve(Theme.of(context)),
-      showBody: !source.post.isFirst,
-      ratingsViewState: _displayRatings,
+      ratingsViewState: _presentation.displayRatings,
+      ratingsExpanded: _presentation.ratingsExpanded,
+      onRatingsExpansionChanged: (value) => setState(() {
+        _presentation.ratingsExpanded = value;
+      }),
+      commentsExpanded: _presentation.commentsExpanded,
+      onCommentsExpansionChanged: (value) => setState(() {
+        _presentation.commentsExpanded = value;
+      }),
       onOpenAuthorProfile: actions?.navigation.openAuthor,
       onOpenCommentAuthorProfile: actions?.navigation.openCommentAuthor,
       onOpenPostLink: actions?.navigation.openLink,
@@ -212,7 +199,7 @@ class _ComicCommentCardState extends ConsumerState<ComicCommentCard> {
           : null,
       onOpenPostActions: actions == null
           ? null
-          : (_, plan) => _openActions(actions, plan),
+          : (_, _) => _openActions(actions, renderContext),
       avatarFallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
       renderContext: renderContext,
     );
@@ -235,6 +222,11 @@ class _ComicCommentCardState extends ConsumerState<ComicCommentCard> {
       _ownedRenderContext = ThreadPostRenderContext(
         palette: palette,
         imageReferer: widget.imageReferer,
+        bodyPresentationFor: (_) => _presentation.body,
+        imageFallbackAspectRatioFor: (_, _, request) =>
+            _presentation.imageAspectRatio(request.cacheKey),
+        onBlockImageResolved: (_, _, request, size) =>
+            _presentation.recordImageSize(request.cacheKey, size),
         renderOwnerFor: (post) => ThreadPostRenderContext.commentRenderOwner(
           sourceTid: widget.sourceTid,
           pid: post.pid,

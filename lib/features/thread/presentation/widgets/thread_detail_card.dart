@@ -570,10 +570,18 @@ class ThreadPostCard extends StatelessWidget {
     this.renderContext,
     this.showBody = true,
     this.ratingsViewState,
+    this.ratingsExpanded,
+    this.onRatingsExpansionChanged,
+    this.commentsExpanded,
+    this.onCommentsExpansionChanged,
   });
 
   final bool showBody;
   final ThreadPostRatingsViewState? ratingsViewState;
+  final bool? ratingsExpanded;
+  final ValueChanged<bool>? onRatingsExpansionChanged;
+  final bool? commentsExpanded;
+  final ValueChanged<bool>? onCommentsExpansionChanged;
   final ThreadPost post;
   final ThreadDetailPageState? state;
   final bool highlighted;
@@ -718,6 +726,11 @@ class ThreadPostCard extends StatelessWidget {
                 ),
                 onImageFallback: imageFallback,
                 onImageDiagnostics: renderContext?.onImageDiagnostics,
+                bodyPresentation: renderContext?.bodyPresentationFor?.call(
+                  post,
+                ),
+                imageViewportCoordinator:
+                    renderContext?.imageViewportCoordinator,
                 onImageLayoutShift: renderContext?.onImageLayoutShift,
                 imageFallbackAspectRatioFor:
                     renderContext?.imageFallbackAspectRatioFor == null
@@ -764,12 +777,16 @@ class ThreadPostCard extends StatelessWidget {
               imageReferer: resolvedImageReferer,
               palette: resolvedPalette,
               onOpenAuthorProfile: commentAuthorProfileCallback,
+              expanded: commentsExpanded,
+              onExpansionChanged: onCommentsExpansionChanged,
             ),
           ],
           if (post.ratingSummary != null && interactionPolicy.showRating) ...[
             const SizedBox(height: 10),
             ThreadPostRatingSection(
               summary: post.ratingSummary!,
+              expanded: ratingsExpanded,
+              onExpansionChanged: onRatingsExpansionChanged,
               viewState:
                   ratingsViewState ??
                   detailState?.ratingsByPostId[post.pid.trim()] ??

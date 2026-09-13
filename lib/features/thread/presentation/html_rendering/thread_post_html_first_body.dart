@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
@@ -43,6 +44,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
     this.imageViewportCoordinator,
+    this.bodyPresentation,
     this.imagePrecacheService,
     this.fallback,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
@@ -70,6 +72,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   )?
   onBlockImageResolved;
   final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ThreadPostBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final Widget? fallback;
   final ForumHtmlRenderPreparer renderPreparer;
@@ -141,6 +144,8 @@ class _ThreadPostHtmlFirstBodyState
           imageFallbackAspectRatioFor: widget.imageFallbackAspectRatioFor,
           onBlockImageResolved: widget.onBlockImageResolved,
           imageViewportCoordinator: widget.imageViewportCoordinator,
+          bodyPresentation: widget.bodyPresentation,
+          collapseExpansion: widget.bodyPresentation?.collapseExpansion,
           imagePrecacheService: widget.imagePrecacheService,
           preferences: preferences,
           callbacks: ForumHtmlRenderCallbacks(
@@ -299,6 +304,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
     this.imageViewportCoordinator,
+    this.bodyPresentation,
     this.imagePrecacheService,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
@@ -325,6 +331,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   )?
   onBlockImageResolved;
   final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ThreadPostBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlRenderPreparer renderPreparer;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
@@ -346,6 +353,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
       onBlockImageResolved: onBlockImageResolved,
       imageViewportCoordinator: imageViewportCoordinator,
+      bodyPresentation: bodyPresentation,
       imagePrecacheService: imagePrecacheService,
       renderPreparer: renderPreparer,
       imageReaderBridge: imageReaderBridge,
