@@ -1,0 +1,229 @@
+name: Y300
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Check a ref, or create a release draft from an existing vX.Y.Z tag.
+        type: choice
+        options: [check, release]
+        default: check
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: y300-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && inputs.mode != 'release' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PUB_HOSTED_URL: https://pub.dev
+  FLUTTER_STORAGE_BASE_URL: https://storage.googleapis.com
+  PYTHONUTF8: '1'
+  GRADLE_OPTS: -Dorg.gradle.configuration-cache=false
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      release: ${{ steps.context.outputs.release }}
+      version: ${{ steps.context.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate run identity
+        id: context
+        run: python3 tool/ci/checks.py context
+      - name: Validate release before running builds
+        if: steps.context.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tool/ci/release.py validate
+      - name: Validate workflow and release tooling
+        run: |
+          python3 -m unittest discover -s tool/ci/tests -v
+          curl --fail --silent --show-error --location https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$RUNNER_TEMP/actionlint.tar.gz"
+          printf '%s  %s\n' 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 "$RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
+      - uses: ./.github/actions/flutter-setup
+      - name: Check changed Dart formatting
+        run: python3 tool/ci/checks.py format
+      - name: Check localization generation
+        run: |
+          flutter gen-l10n
+          python3 tool/ci/checks.py clean
+      - name: Analyze app
+        run: python3 tool/ci/measure.py 'Flutter analysis' flutter analyze --no-pub
+
+  package-tests:
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/flutter-setup
+        with:
+          package: 'true'
+      - name: Analyze and test protocol package
+        working-directory: packages/yamibo_forum_client
+        run: |
+          dart analyze --fatal-infos
+          python3 ../../tool/ci/measure.py 'Protocol package tests' dart test --reporter expanded
+      - name: Verify checkout stayed clean
+        run: python3 tool/ci/checks.py clean
+
+  app-tests:
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Install SQLite runtime
+        run: sudo apt-get update && sudo apt-get install --yes libsqlite3-0 libsqlite3-dev
+      - uses: ./.github/actions/flutter-setup
+      - name: Run all app tests across both shards
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: python3 tool/ci/measure.py "App tests shard $SHARD_INDEX" flutter test --no-pub --reporter expanded --total-shards 2 --shard-index "$SHARD_INDEX"
+      - name: Verify checkout stayed clean
+        run: python3 tool/ci/checks.py clean
+
+  android-check:
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      ORG_GRADLE_PROJECT_y300UseDebugSigning: 'true'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' || github.ref != 'refs/heads/main' }}
+          gradle-home-cache-includes: |
+            caches/modules-2
+            wrapper/dists
+      - uses: ./.github/actions/flutter-setup
+      - name: Validate release compilation without distribution credentials
+        run: |
+          chmod +x android/gradlew
+          python3 tool/ci/measure.py 'Android release build check' flutter build apk --no-pub --release --target-platform android-arm64
+          chmod -x android/gradlew
+          python3 tool/ci/checks.py clean
+
+  ci:
+    name: CI
+    if: always()
+    needs: [quality, package-tests, app-tests, android-check]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require every CI job to succeed
+        env:
+          CI_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: python3 tool/ci/checks.py gate
+
+  release:
+    if: needs.quality.outputs.release == 'true'
+    needs: [quality, ci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: android-release
+    concurrency:
+      group: y300-android-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      ORG_GRADLE_PROJECT_y300RequireReleaseSigning: 'true'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Revalidate release before accessing signing material
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tool/ci/release.py validate
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+        with:
+          cache-read-only: 'true'
+          gradle-home-cache-includes: |
+            caches/modules-2
+            wrapper/dists
+      - uses: ./.github/actions/flutter-setup
+      - name: Restore ephemeral release signing files
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: python3 tool/ci/signing.py restore
+      - name: Build distribution APK
+        run: |
+          chmod +x android/gradlew
+          python3 tool/ci/measure.py 'Signed Android release build' flutter build apk --no-pub --release --target-platform android-arm64
+          chmod -x android/gradlew
+          flutter --version --machine > "$RUNNER_TEMP/flutter-version.json"
+          python3 tool/ci/checks.py clean
+      - name: Remove signing material
+        if: always()
+        run: python3 tool/ci/signing.py cleanup
+      - name: Verify APK and prepare checksums and manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tool/ci/release.py package
+      - name: Preserve verified distribution artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: y300-v${{ needs.quality.outputs.version }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            build/ci-release/*.apk
+            build/ci-release/*.apk.sha256
+            build/ci-release/release-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Create or repair the unpublished release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tool/ci/release.py draft

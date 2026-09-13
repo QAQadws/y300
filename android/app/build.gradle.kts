@@ -12,10 +12,32 @@ import java.util.Properties
 import java.io.FileInputStream
 
 val keystoreProperties = Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
-val hasReleaseKeystore = keystorePropertiesFile.exists()
+// CI signing material lives outside the checkout. The explicit release guard
+// prevents a distribution build from silently falling back to a debug key.
+val requireReleaseSigning = providers.gradleProperty("y300RequireReleaseSigning")
+    .orNull == "true"
+val useDebugSigning = providers.gradleProperty("y300UseDebugSigning")
+    .orNull == "true"
+check(!(requireReleaseSigning && useDebugSigning)) {
+    "Release signing is required but debug signing was requested."
+}
+val keystorePropertiesFile = rootProject.file(
+    providers.gradleProperty("y300SigningProperties").orNull ?: "key.properties",
+)
+val hasReleaseKeystore = !useDebugSigning && keystorePropertiesFile.exists()
+check(!requireReleaseSigning || hasReleaseKeystore) {
+    "Release signing is required but the signing configuration is missing."
+}
 if (hasReleaseKeystore) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    if (requireReleaseSigning) {
+        check(listOf("storeFile", "storePassword", "keyAlias", "keyPassword").all {
+            !keystoreProperties.getProperty(it).isNullOrBlank()
+        }) { "Release signing configuration is incomplete." }
+        check(file(keystoreProperties.getProperty("storeFile")).isFile) {
+            "Release keystore is missing."
+        }
+    }
 }
 
 

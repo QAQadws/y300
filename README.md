@@ -32,25 +32,59 @@ y300-v<version>-android-arm64-v8a-release.apk
 
 ## 本地开发
 
-环境要求：最新版 Flutter stable、JDK 17 和 Android SDK。具体 SDK 兼容范围以 [`pubspec.yaml`](./pubspec.yaml) 为准。
+环境要求：使用 [`.flutter-version`](./.flutter-version) 固定的 Flutter（当前 3.44.4）、JDK 17 和 Android SDK。本地与 CI 使用相同 SDK；依赖以两个已提交的 `pubspec.lock` 为准。
 
 ```bash
 git clone https://github.com/QAQadws/y300.git
 cd y300
-flutter pub get
+flutter pub get --enforce-lockfile
 flutter run
 ```
 
 检查与构建：
 
 ```bash
-dart format .
-flutter test
-flutter analyze
-flutter build apk --release --target-platform android-arm64
+dart format <本次修改的Dart文件>
+flutter analyze --no-pub
+flutter test --no-pub
+cd packages/yamibo_forum_client
+dart pub get --enforce-lockfile
+dart analyze --fatal-infos
+dart test
+cd ../..
+flutter build apk --no-pub --release --target-platform android-arm64
 ```
 
-公开分发前请配置自己的 release keystore，不要提交签名文件、密码、账号凭据或包含认证信息的日志
+锁文件统一记录 `https://pub.dev`。使用镜像的本地环境在更新锁文件前，应将 `PUB_HOSTED_URL` 临时设置为 `https://pub.dev`；不要把镜像来源变化或无关依赖升级带入提交。修改 ARB 后运行 `flutter gen-l10n`，提交生成文件并确保未翻译报告为空。
+
+## CI 与发布
+
+每个面向 `main` 的 PR 和 `main` 提交都会运行静态分析、协议包全部测试、App 两个 shard 的全部测试及 Android release 构建验证。固定的 `CI` 检查汇总全部结果；正常合并要求检查通过且分支与 `main` 同步。PR 构建使用调试签名验证编译，其 APK 不上传。
+
+```bash
+gh pr checks --watch
+gh run view <run-id> --log-failed
+gh workflow run y300.yml --ref <branch> -f mode=check
+```
+
+发布前在 `main` 中提交新的 `X.Y.Z+buildNumber`，确认版本名和版本码均超过现有发布，然后为该提交创建 tag：
+
+```bash
+git tag -a vX.Y.Z <已合入main的提交SHA> -m "Release vX.Y.Z"
+git push origin vX.Y.Z
+gh run list --workflow y300.yml
+gh run watch <run-id>
+gh release view vX.Y.Z --web
+```
+
+正式 tag 触发相同的完整 CI，通过后才访问 `android-release` Environment 中的签名 Secret，校验 APK 的版本、包名、arm64 ABI 和发布证书，并上传 APK、同名 `.sha256` 与 `release-manifest.json` 到 GitHub 草稿。你核对发布说明和安装包后公开发布，再将相同产物上传 Gitee；应用内更新继续读取 Gitee。
+
+```bash
+gh workflow run y300.yml --ref vX.Y.Z -f mode=release
+gh run download <run-id> --dir <下载目录>
+```
+
+手动发布仅接受现有正式 tag；同一 tag／提交的草稿可重试补齐附件，保留人工编辑的说明与其中的工作流身份标记。已公开 Release 不覆盖，不移动或重建正式 tag。Actions 产物保留 30 天，公开仓库的产物不是私密存储。签名文件、密码及真实论坛样本不得上传。完整配置与故障恢复约定见 [CI/CD 维护说明](./tool/ci/README.md)。
 
 ## 设计参考
 
