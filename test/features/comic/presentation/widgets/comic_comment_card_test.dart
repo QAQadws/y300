@@ -1,3 +1,11 @@
+import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_comment_interaction_controller.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_comment_service.dart';
+import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import '../../data/comic_comment_fixtures.dart';
 import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,42 +25,172 @@ import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 void main() {
-  testWidgets('API comment edit notices use the shared single-line fitting', (
+  testWidgets(
+    'first floor retains feedback and full source without mounting its comic body',
+    (tester) async {
+      final post = commentPost(
+        1,
+        message:
+            '<p>comic body</p><img src="https://example.test/comic-page.jpg">',
+      );
+      final projection = ComicCommentItemProjection.raw(
+        ComicCommentItem.fromPost(post, 1),
+      );
+      await tester.pumpWidget(
+        _host(
+          ComicCommentCard(projection: projection, sourceTid: '100'),
+          imageCacheService: _NoopImageCacheService(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+      expect(find.byKey(const Key('thread-post-1')), findsNothing);
+      expect(find.byType(ThreadPostRatingSection), findsOneWidget);
+      expect(find.byType(ThreadPostCommentSection), findsOneWidget);
+      expect(
+        ComicCommentCard.toThreadPost(projection).message,
+        contains('comic-page.jpg'),
+      );
+      expect(ComicCommentCard.toThreadPost(projection).isFirst, isTrue);
+    },
+  );
+  testWidgets(
+    'mobile quote markup renders identically through thread and comment cards',
+    (tester) async {
+      final post = commentPost(2);
+      await tester.pumpWidget(
+        _host(
+          ComicCommentCard(
+            projection: ComicCommentItemProjection.raw(
+              ComicCommentItem.fromPost(post, 1),
+            ),
+            sourceTid: '100',
+          ),
+          imageCacheService: _NoopImageCacheService(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final commentHtml = tester
+          .widget<ForumHtmlWidgetPostRenderer>(
+            find.byType(ForumHtmlWidgetPostRenderer),
+          )
+          .html;
+      await tester.pumpWidget(
+        _host(
+          Builder(
+            builder: (context) => ThreadPostCard(
+              post: post,
+              imageReferer: null,
+              palette: ThreadDetailNativePalette.resolve(Theme.of(context)),
+            ),
+          ),
+          imageCacheService: _NoopImageCacheService(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ForumHtmlWidgetPostRenderer>(
+              find.byType(ForumHtmlWidgetPostRenderer),
+            )
+            .html,
+        commentHtml,
+      );
+      expect(commentHtml, contains('blockquote'));
+    },
+  );
+  testWidgets('a later floor opens the shared complete action drawer', (
     tester,
   ) async {
-    const notice = '本帖最后由 fixture-comment-author 于 2026-1-1 12:34 编辑';
+    final repo = CommentDetailRepository();
+    final session = ComicCommentSessionController(
+      key: const ComicCommentSessionKey(episodeId: 'e', sourceTid: '100'),
+      loader: DefaultComicCommentLoader(repository: repo),
+    );
+    final controller = ComicCommentInteractionController(
+      session: session,
+      invalidateThread: (_) async {},
+    );
+    addTearDown(() {
+      controller.dispose();
+      session.dispose();
+    });
+    await session.load();
+    await session.loadMore();
+    final item = session.state.result!.items[2];
+    final comment = _RecordingCommentService();
     await tester.pumpWidget(
       _host(
-        SizedBox(
-          width: 280,
-          child: ComicCommentCard(
-            projection: ComicCommentItemProjection.raw(
-              _comment(
-                rawMessage: '<i class="pstatus">$notice</i><br><br><p>评论正文</p>',
-              ),
-            ),
-            sourceTid: '10001',
-          ),
+        ComicCommentCard(
+          projection: ComicCommentItemProjection.raw(item),
+          sourceTid: '100',
+          interactionController: controller,
         ),
         imageCacheService: _NoopImageCacheService(),
+        commentService: comment,
       ),
     );
     await tester.pumpAndSettle();
-
-    final status = find.byKey(const Key('forum-html-discuz-edit-status'));
-    expect(tester.widget<Text>(status).data, notice);
-    expect(tester.widget<Text>(status).maxLines, 1);
-    expect(
-      tester
-          .widget<FittedBox>(
-            find.ancestor(of: status, matching: find.byType(FittedBox)),
-          )
-          .fit,
-      BoxFit.scaleDown,
-    );
-    expect(find.textContaining('评论正文', findRichText: true), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    await tester.longPress(find.byKey(const Key('thread-author-avatar-3')));
+    await tester.pumpAndSettle();
+    for (final name in [
+      'reply',
+      'rate',
+      'comment',
+      'select-copy',
+      'copy-all',
+      'copy-floor-link',
+    ]) {
+      expect(find.byKey(Key('thread-post-$name-action')), findsOneWidget);
+    }
+    expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
+    expect(repo.calls, [1, 2]);
+    await tester.tap(find.byKey(const Key('thread-post-comment-action')));
+    await tester.pumpAndSettle();
+    expect(comment.target, ('100', '3', 2));
+    expect(comment.referer?.queryParameters['page'], '2');
+    expect(comment.referer?.fragment, 'pid3');
+    expect(repo.calls, [1, 2]);
   });
+
+  testWidgets(
+    'Mobile comment edit notices use the shared single-line fitting',
+    (tester) async {
+      const notice = '本帖最后由 fixture-comment-author 于 2026-1-1 12:34 编辑';
+      await tester.pumpWidget(
+        _host(
+          SizedBox(
+            width: 280,
+            child: ComicCommentCard(
+              projection: ComicCommentItemProjection.raw(
+                _comment(
+                  rawMessage:
+                      '<i class="pstatus">$notice</i><br><br><p>评论正文</p>',
+                ),
+              ),
+              sourceTid: '10001',
+            ),
+          ),
+          imageCacheService: _NoopImageCacheService(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final status = find.byKey(const Key('forum-html-discuz-edit-status'));
+      expect(tester.widget<Text>(status).data, notice);
+      expect(tester.widget<Text>(status).maxLines, 1);
+      expect(
+        tester
+            .widget<FittedBox>(
+              find.ancestor(of: status, matching: find.byType(FittedBox)),
+            )
+            .fit,
+        BoxFit.scaleDown,
+      );
+      expect(find.textContaining('评论正文', findRichText: true), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('renders comment metadata and shared HTML body', (tester) async {
     await tester.pumpWidget(
@@ -261,9 +399,12 @@ Widget _host(
   ThemeData? theme,
   ForumHtmlReaderPreferences? preferences,
   ImageCacheService? imageCacheService,
+  ThreadPostCommentService? commentService,
 }) {
   return ProviderScope(
     overrides: [
+      if (commentService != null)
+        threadPostCommentServiceProvider.overrideWithValue(commentService),
       if (preferences != null)
         forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
           _FixedPreferencesRepository(preferences),
@@ -276,6 +417,31 @@ Widget _host(
       home: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   );
+}
+
+class _RecordingCommentService implements ThreadPostCommentService {
+  (String, String, int)? target;
+  Uri? referer;
+  @override
+  Future<DataReadResult<ThreadPostCommentForm, ThreadPostCommentCapabilities>>
+  load({
+    required String tid,
+    required int page,
+    required ThreadPost post,
+    Uri? referer,
+  }) async {
+    target = (tid, post.pid, page);
+    this.referer = referer;
+    return const DataReadFailure(
+      kind: DataReadFailureKind.unauthorized,
+      diagnosticMessage: 'fixture_requires_login',
+    );
+  }
+
+  @override
+  Future<DataCommandResult<ThreadPostCommentReceipt>> submit(
+    ThreadPostCommentDraft draft,
+  ) => throw StateError('An unauthorized preparation must not submit');
 }
 
 final class _FixedPreferencesRepository

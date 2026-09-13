@@ -11,6 +11,7 @@ ComicInteractionRead comicInteractionRead({
   int page = 1,
   bool first = true,
   bool rate = true,
+  bool comment = true,
   bool ambiguous = false,
   ThreadDetailReadCapabilities? capabilities,
 }) => DataReadSuccess(
@@ -33,6 +34,11 @@ ComicInteractionRead comicInteractionRead({
         number: first ? 1 : 2,
         isFirst: first,
         dateline: '',
+        commentUrl: comment
+            ? 'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=$tid&pid=200'
+            : null,
+        replyUrl:
+            'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=$fid&tid=$tid&repquote=200',
         rateUrl: rate
             ? 'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=$tid&pid=200'
             : null,

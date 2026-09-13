@@ -55,7 +55,8 @@ class _ReaderTestAuth extends AuthSessionController {
 
 class _ReaderTestComments implements ComicCommentLoader {
   @override
-  Future<ComicCommentLoadResult> loadAll({
+  Future<ComicCommentLoadResult> loadPage({
+    int page = 1,
     required String sourceTid,
     ComicCommentCancellationToken? cancellationToken,
   }) async => ComicCommentLoadResult(

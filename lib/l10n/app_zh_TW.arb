@@ -1442,5 +1442,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "comicPostCommentUnavailable": "目前無法點評"
 }

@@ -1,3 +1,4 @@
+import 'package:y300/features/comic/presentation/widgets/comic_comment_scroll_support.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -73,6 +74,7 @@ class ComicCommentTailSurface extends ChangeNotifier
   Object? _renderContextIdentity;
   String? _prunedProjectionIdentity;
   bool _disposed = false;
+  final _layoutRevision = ComicCommentLayoutRevisionTracker();
 
   ComicCommentSessionState get sessionState => _session.state;
 
@@ -89,6 +91,7 @@ class ComicCommentTailSurface extends ChangeNotifier
 
   @override
   bool get isAdjacentPreloadReady {
+    if (!sessionState.isExpanded) return false;
     final status = sessionState.result?.status;
     return status == ComicCommentLoadStatus.success ||
         status == ComicCommentLoadStatus.empty ||
@@ -99,12 +102,12 @@ class ComicCommentTailSurface extends ChangeNotifier
   int get verticalItemCount {
     final state = sessionState;
     final result = state.result;
-    if (state.isLoading || result == null) {
+    if (!state.isExpanded || state.isLoading || result == null) {
       return 1;
     }
     if (result.status == ComicCommentLoadStatus.success &&
         result.items.isNotEmpty) {
-      return result.items.length + (_hasNextEpisode ? 0 : 1);
+      return result.items.length + (result.hasMore ? 1 : 0);
     }
     if (result.status == ComicCommentLoadStatus.partialFailure &&
         result.items.isNotEmpty) {
@@ -117,30 +120,27 @@ class ComicCommentTailSurface extends ChangeNotifier
   Widget buildPaged(BuildContext context, ReaderTailActions actions) {
     final state = sessionState;
     final result = state.result;
-    if (state.isLoading || result == null) {
+    if (!state.isExpanded || state.isLoading || result == null) {
       return const ComicCommentFeedbackSurface(
         key: Key('comic-comment-tail-loading'),
         kind: ComicCommentFeedbackKind.loading,
       );
     }
-    final list = ComicCommentListSurface(
+    return ComicCommentListSurface(
       sourceTid: _session.key.sourceTid,
+      interactionController: interactionController,
       projection: _projectionFor(result),
       imageReferer: _imageReferer,
       onRetry: actions.onRetry,
+      onLoadMore: state.isRefreshing || state.isLoadingMore
+          ? null
+          : _session.loadMore,
+      appendError:
+          state.appendError ??
+          (state.refreshFailed
+              ? ComicCommentLoadErrorCode.pageUnavailable
+              : null),
       renderContext: _renderContextFor(context),
-    );
-    if (_hasNextEpisode) {
-      return list;
-    }
-    return Column(
-      children: [
-        Expanded(child: list),
-        const ComicCommentFeedbackSurface(
-          kind: ComicCommentFeedbackKind.lastChapter,
-          compact: true,
-        ),
-      ],
     );
   }
 
@@ -166,6 +166,7 @@ class ComicCommentTailSurface extends ChangeNotifier
   ) {
     final state = sessionState;
     final result = state.result;
+    if (!state.isExpanded) return _buildStatus(context, state, result);
     final loadedResult = result;
     final projection = loadedResult == null
         ? null
@@ -182,10 +183,37 @@ class ComicCommentTailSurface extends ChangeNotifier
           ),
           padding: EdgeInsets.fromLTRB(12, index == 0 ? 12 : 0, 12, 10),
           child: ComicCommentListItem(
+            layoutOwner: _session.key,
+            layoutRevision: _layoutRevision.update(projection),
+            interactionController: interactionController,
             projection: itemProjection,
             sourceTid: _session.key.sourceTid,
             imageReferer: _imageReferer,
             renderContext: _renderContextFor(context),
+          ),
+        );
+      }
+      if (loadedResult.hasMore) {
+        if (state.isLoadingMore || state.isRefreshing) {
+          return const ComicCommentFeedbackSurface(
+            kind: ComicCommentFeedbackKind.loading,
+            compact: true,
+          );
+        }
+        if (state.appendError != null || state.refreshFailed) {
+          return ComicCommentFeedbackSurface(
+            key: const Key('comic-comment-tail-append-failure'),
+            kind: ComicCommentFeedbackKind.unavailable,
+            onAction: _session.retry,
+            compact: true,
+          );
+        }
+        return ComicCommentLoadMoreTrigger(
+          identity: loadedResult.nextPage!,
+          onVisible: _session.loadMore,
+          child: const ComicCommentFeedbackSurface(
+            kind: ComicCommentFeedbackKind.loading,
+            compact: true,
           ),
         );
       }
@@ -194,13 +222,6 @@ class ComicCommentTailSurface extends ChangeNotifier
           key: const Key('comic-comment-tail-partial-failure'),
           kind: ComicCommentFeedbackKind.unavailable,
           onAction: () => unawaited(_handleVerticalRequest(context)),
-          compact: true,
-        );
-      }
-      if (!_hasNextEpisode && index == projection.items.length) {
-        return const ComicCommentFeedbackSurface(
-          key: Key('comic-comment-tail-last-chapter'),
-          kind: ComicCommentFeedbackKind.lastChapter,
           compact: true,
         );
       }
@@ -231,6 +252,13 @@ class ComicCommentTailSurface extends ChangeNotifier
     ComicCommentSessionState state,
     ComicCommentLoadResult? result,
   ) {
+    if (!state.isExpanded) {
+      return ComicCommentFeedbackSurface(
+        actionKey: const Key('comic-comment-tail-load-button'),
+        kind: ComicCommentFeedbackKind.open,
+        onAction: () => unawaited(_session.load()),
+      );
+    }
     if (state.isLoading) {
       return const ComicCommentFeedbackSurface(
         key: Key('comic-comment-tail-loading'),

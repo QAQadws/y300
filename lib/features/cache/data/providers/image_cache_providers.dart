@@ -1,3 +1,6 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
+    show ThreadReadInvalidation;
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -5,7 +8,6 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/media/encoded_image_dimension_probe.dart';
-import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
 import 'package:y300/features/cache/data/providers/cache_mutation_provider.dart';
@@ -107,7 +109,11 @@ final parsedSnapshotCacheServiceProvider = Provider<ParsedSnapshotCacheService>(
 
 final nativePageCacheInvalidationServiceProvider =
     Provider<NativePageCacheInvalidationService>((ref) {
+      final detail = ref.watch(yamiboForumClientProvider).threadDetail;
       return DefaultNativePageCacheInvalidationService(
+        beforeThreadInvalidation: detail is ThreadReadInvalidation
+            ? (detail as ThreadReadInvalidation).invalidatePendingReads
+            : null,
         documentCache: ref.watch(documentCacheServiceProvider),
         snapshotCache: ref.watch(parsedSnapshotCacheServiceProvider),
       );

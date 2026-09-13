@@ -568,8 +568,12 @@ class ThreadPostCard extends StatelessWidget {
     this.interactionPolicy = const ThreadPostCardInteractionPolicy.full(),
     this.avatarFallbackPolicy = ForumAvatarFallbackPolicy.neutralSurface,
     this.renderContext,
+    this.showBody = true,
+    this.ratingsViewState,
   });
 
+  final bool showBody;
+  final ThreadPostRatingsViewState? ratingsViewState;
   final ThreadPost post;
   final ThreadDetailPageState? state;
   final bool highlighted;
@@ -693,48 +697,51 @@ class ThreadPostCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          DefaultTextStyle.merge(
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: palette.bodyText,
-              height: 1.5,
-            ),
-            child: ThreadPostHtmlBody(
-              key: Key('thread-post-${post.pid}'),
-              post: post,
-              threadId: threadId,
-              imageReferer: resolvedImageReferer ?? '',
-              plan: plan,
-              onOpenPostLink: linkCallback,
-              onOpenPostImage: imageOpenCallback,
-              theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
-                palette: resolvedPalette,
-                brightness: Theme.of(context).brightness,
+          if (showBody) ...[
+            const SizedBox(height: 8),
+            DefaultTextStyle.merge(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: palette.bodyText,
+                height: 1.5,
               ),
-              onImageFallback: imageFallback,
-              onImageDiagnostics: renderContext?.onImageDiagnostics,
-              onImageLayoutShift: renderContext?.onImageLayoutShift,
-              imageFallbackAspectRatioFor:
-                  renderContext?.imageFallbackAspectRatioFor == null
-                  ? null
-                  : (spec, request) =>
-                        renderContext!.imageFallbackAspectRatioFor!(
-                          post,
-                          spec,
-                          request,
-                        ),
-              onBlockImageResolved: renderContext?.onBlockImageResolved == null
-                  ? null
-                  : (spec, request, size) =>
-                        renderContext!.onBlockImageResolved!(
-                          post,
-                          spec,
-                          request,
-                          size,
-                        ),
+              child: ThreadPostHtmlBody(
+                key: Key('thread-post-${post.pid}'),
+                post: post,
+                threadId: threadId,
+                imageReferer: resolvedImageReferer ?? '',
+                plan: plan,
+                onOpenPostLink: linkCallback,
+                onOpenPostImage: imageOpenCallback,
+                theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
+                  palette: resolvedPalette,
+                  brightness: Theme.of(context).brightness,
+                ),
+                onImageFallback: imageFallback,
+                onImageDiagnostics: renderContext?.onImageDiagnostics,
+                onImageLayoutShift: renderContext?.onImageLayoutShift,
+                imageFallbackAspectRatioFor:
+                    renderContext?.imageFallbackAspectRatioFor == null
+                    ? null
+                    : (spec, request) =>
+                          renderContext!.imageFallbackAspectRatioFor!(
+                            post,
+                            spec,
+                            request,
+                          ),
+                onBlockImageResolved:
+                    renderContext?.onBlockImageResolved == null
+                    ? null
+                    : (spec, request, size) =>
+                          renderContext!.onBlockImageResolved!(
+                            post,
+                            spec,
+                            request,
+                            size,
+                          ),
+              ),
             ),
-          ),
-          if (post.poll != null && interactionPolicy.showPoll) ...[
+          ],
+          if (showBody && post.poll != null && interactionPolicy.showPoll) ...[
             const SizedBox(height: 10),
             ThreadPollCard(
               poll: post.poll!,
@@ -764,6 +771,7 @@ class ThreadPostCard extends StatelessWidget {
             ThreadPostRatingSection(
               summary: post.ratingSummary!,
               viewState:
+                  ratingsViewState ??
                   detailState?.ratingsByPostId[post.pid.trim()] ??
                   const ThreadPostRatingsViewState.idle(),
               palette: resolvedPalette,

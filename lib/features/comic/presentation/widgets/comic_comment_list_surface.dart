@@ -1,3 +1,5 @@
+import 'package:y300/features/comic/presentation/widgets/comic_comment_scroll_support.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_comment_interaction_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
@@ -13,25 +15,36 @@ class ComicCommentListItem extends StatelessWidget {
     super.key,
     required this.projection,
     required this.sourceTid,
+    required this.layoutOwner,
+    required this.layoutRevision,
     this.imageReferer,
     this.renderContext,
+    this.interactionController,
   });
 
   final ComicCommentItemProjection projection;
+  final Object layoutOwner;
+  final Object layoutRevision;
+  final ComicCommentInteractionController? interactionController;
   final String sourceTid;
   final String? imageReferer;
   final ThreadPostRenderContext? renderContext;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      sortKey: OrdinalSortKey(projection.sourceItem.floorNumber.toDouble()),
-      child: ComicCommentCard(
-        projection: projection,
-        sourceTid: sourceTid,
-        imageReferer: imageReferer,
-        renderContext: renderContext,
+    return ComicCommentScrollAnchor(
+      owner: layoutOwner,
+      contentRevision: layoutRevision,
+      child: Semantics(
+        container: true,
+        sortKey: OrdinalSortKey(projection.sourceItem.floorNumber.toDouble()),
+        child: ComicCommentCard(
+          interactionController: interactionController,
+          projection: projection,
+          sourceTid: sourceTid,
+          imageReferer: imageReferer,
+          renderContext: renderContext,
+        ),
       ),
     );
   }
@@ -48,15 +61,21 @@ class ComicCommentListSurface extends StatefulWidget {
     required this.sourceTid,
     this.projection,
     this.isLoading = false,
+    this.onLoadMore,
+    this.appendError,
     this.imageReferer,
     this.onRetry,
     this.padding = const EdgeInsets.fromLTRB(12, 12, 12, 24),
     this.renderContext,
+    this.interactionController,
   });
 
+  final ComicCommentInteractionController? interactionController;
   final String sourceTid;
   final ComicCommentContentProjection? projection;
   final bool isLoading;
+  final VoidCallback? onLoadMore;
+  final ComicCommentLoadErrorCode? appendError;
   final String? imageReferer;
   final VoidCallback? onRetry;
   final EdgeInsetsGeometry padding;
@@ -68,6 +87,7 @@ class ComicCommentListSurface extends StatefulWidget {
 }
 
 class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
+  final _layoutRevision = ComicCommentLayoutRevisionTracker();
   ThreadPostRenderContext? _ownedRenderContext;
   Object? _ownedRenderContextIdentity;
 
@@ -120,13 +140,42 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
 
     final hasPartialFailure =
         loadResult.status == ComicCommentLoadStatus.partialFailure;
-    final itemCount = projection.items.length + (hasPartialFailure ? 1 : 0);
+    final itemCount =
+        projection.items.length +
+        (hasPartialFailure || loadResult.hasMore ? 1 : 0);
     return ListView.builder(
+      findChildIndexCallback: (key) {
+        if (key is! ValueKey<String>) return null;
+        final index = projection.items.indexWhere(
+          (item) => item.sourceItem.pid == key.value,
+        );
+        return index < 0 ? null : index;
+      },
       key: const Key('comic-comment-list'),
       padding: widget.padding,
       itemCount: itemCount,
       itemBuilder: (context, index) {
         if (index >= projection.items.length) {
+          if (loadResult.hasMore &&
+              widget.appendError == null &&
+              widget.onLoadMore == null) {
+            return const ComicCommentFeedbackSurface(
+              kind: ComicCommentFeedbackKind.loading,
+              compact: true,
+            );
+          }
+          if (loadResult.hasMore &&
+              widget.appendError == null &&
+              widget.onLoadMore != null) {
+            return ComicCommentLoadMoreTrigger(
+              identity: loadResult.nextPage!,
+              onVisible: widget.onLoadMore!,
+              child: const ComicCommentFeedbackSurface(
+                kind: ComicCommentFeedbackKind.loading,
+                compact: true,
+              ),
+            );
+          }
           return ComicCommentFeedbackSurface(
             key: const Key('comic-comment-failure-state'),
             kind: ComicCommentFeedbackKind.unavailable,
@@ -135,6 +184,11 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface> {
           );
         }
         return ComicCommentListItem(
+          key: ValueKey(projection.items[index].sourceItem.pid),
+          layoutOwner:
+              widget.interactionController?.session.key ?? widget.sourceTid,
+          layoutRevision: _layoutRevision.update(projection),
+          interactionController: widget.interactionController,
           projection: projection.items[index],
           sourceTid: widget.sourceTid,
           imageReferer: widget.imageReferer,

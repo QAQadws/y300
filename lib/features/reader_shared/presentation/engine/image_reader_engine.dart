@@ -1509,11 +1509,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (total == 0) {
       return;
     }
-    final ratio = position.maxScrollExtent <= 0
-        ? 0.0
-        : (position.pixels / position.maxScrollExtent)
-              .clamp(0.0, 1.0)
-              .toDouble();
     final viewport = _viewportTracker.resolve(
       items: items,
       extentRegistry: _extentRegistry,
@@ -1525,8 +1520,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final index =
         viewport.lastEndVisibleIndex ??
         viewport.lastVisibleIndex ??
-        viewport.firstVisibleIndex ??
-        ((total - 1) * ratio).round();
+        viewport.firstVisibleIndex;
+    // Tail rows contribute to scroll extent, but never to image progress or
+    // image preloading. Keep the last real image position in the comment feed.
+    if (index == null) return;
     _reportActualImageVisible(
       index: index,
       ownerId: _lastOwnerId ?? _capability.content.ownerId,

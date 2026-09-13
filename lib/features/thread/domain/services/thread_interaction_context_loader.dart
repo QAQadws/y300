@@ -10,6 +10,7 @@ final class ThreadInteractionContext {
     required this.firstPost,
     required this.canReply,
     required this.canRate,
+    this.canComment = false,
   });
 
   final String tid;
@@ -19,6 +20,7 @@ final class ThreadInteractionContext {
   final ThreadPost? firstPost;
   final bool canReply;
   final bool canRate;
+  final bool canComment;
 }
 
 class ThreadInteractionContextLoader {
@@ -31,6 +33,14 @@ class ThreadInteractionContextLoader {
     final tid = sourceTid.trim();
     if (!RegExp(r'^\d+$').hasMatch(tid)) return _invalid();
     final result = await _repository.getThreadDetail(tid: tid, page: 1);
+    return project(tid, result);
+  }
+
+  static DataReadResult<ThreadInteractionContext, ThreadDetailReadCapabilities>
+  project(
+    String tid,
+    DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities> result,
+  ) {
     if (result
         case DataReadFailure<
               ThreadDetailData,
@@ -62,6 +72,11 @@ class ThreadInteractionContextLoader {
         canReply:
             data.fid.trim().isNotEmpty &&
             caps.supports(ThreadDetailCapability.replyAction),
+        canComment:
+            first != null &&
+            caps.supports(ThreadDetailCapability.firstPostIdentity) &&
+            caps.supports(ThreadDetailCapability.commentAction) &&
+            first.commentUrl?.trim().isNotEmpty == true,
         canRate:
             first != null &&
             caps.supports(ThreadDetailCapability.firstPostIdentity) &&
@@ -73,7 +88,7 @@ class ThreadInteractionContextLoader {
     );
   }
 
-  DataReadFailure<ThreadInteractionContext, ThreadDetailReadCapabilities>
+  static DataReadFailure<ThreadInteractionContext, ThreadDetailReadCapabilities>
   _invalid() => const DataReadFailure(
     kind: DataReadFailureKind.parse,
     code: 'thread_interaction_identity_invalid',

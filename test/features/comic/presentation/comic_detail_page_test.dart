@@ -346,7 +346,8 @@ class _CountingNavigatorObserver extends NavigatorObserver {
 
 class _EmptyComicCommentLoader implements ComicCommentLoader {
   @override
-  Future<ComicCommentLoadResult> loadAll({
+  Future<ComicCommentLoadResult> loadPage({
+    int page = 1,
     required String sourceTid,
     ComicCommentCancellationToken? cancellationToken,
   }) async {

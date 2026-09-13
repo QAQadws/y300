@@ -7235,6 +7235,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'投票选项超过 {count} 个，请调整后再发布'**
   String postingPollTooManyOptions(int count);
+
+  /// No description provided for @comicPostCommentUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前无法点评'**
+  String get comicPostCommentUnavailable;
 }
 
 class _AppLocalizationsDelegate

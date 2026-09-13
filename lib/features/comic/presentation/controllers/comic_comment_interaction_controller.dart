@@ -1,130 +1,98 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
 import 'package:y300/features/thread/domain/services/thread_interaction_context_loader.dart';
 
-/// One chapter's action context. Comment pagination has its own lifecycle.
+/// Action availability is a projection of the feed's shared first-page read.
 class ComicCommentInteractionController extends ChangeNotifier {
   ComicCommentInteractionController({
-    required this.sourceTid,
-    required ThreadInteractionContextLoader loader,
+    required this.session,
     required Future<void> Function(String) invalidateThread,
-    required Future<void> Function() refreshComments,
-  }) : _loader = loader,
-       _invalidateThread = invalidateThread,
-       _refreshComments = refreshComments;
-
-  final String sourceTid;
-  final ThreadInteractionContextLoader _loader;
+  }) : _invalidateThread = invalidateThread {
+    session.addListener(_changed);
+  }
+  final ComicCommentSessionController session;
   final Future<void> Function(String) _invalidateThread;
-  final Future<void> Function() _refreshComments;
-  DataReadResult<ThreadInteractionContext, ThreadDetailReadCapabilities>?
-  result;
-  bool isLoading = false;
+  String get sourceTid => session.key.sourceTid;
   bool isBusy = false;
-  bool _visible = false;
   bool _disposed = false;
-  int _generation = 0;
-  Future<void>? _flight;
+  bool get isLoading => session.state.isLoading;
+  DataReadResult<ThreadInteractionContext, ThreadDetailReadCapabilities>?
+  get result {
+    final source = session.state.result;
+    if (source == null) return null;
+    final read = source.reads[1];
+    if (read != null) {
+      return ThreadInteractionContextLoader.project(sourceTid, read);
+    }
+    return DataReadFailure(
+      kind: source.errorCode == ComicCommentLoadErrorCode.unauthorized
+          ? DataReadFailureKind.unauthorized
+          : DataReadFailureKind.network,
+      code: 'thread_interaction_unavailable',
+      diagnosticMessage: 'thread_interaction_unavailable',
+    );
+  }
 
   ThreadInteractionContext? get context => result?.dataOrNull;
-
   void setVisible(bool visible) {
-    if (_disposed) return;
-    _visible = visible;
-    if (visible && result == null) unawaited(load());
-  }
-
-  Future<void> load({bool force = false}) {
-    if (_disposed) return Future.value();
-    if (_flight != null) return _flight!;
-    if (!force && result != null) return Future.value();
-    final generation = _generation;
-    isLoading = true;
-    notifyListeners();
-    late final Future<void> flight;
-    flight = _load(generation).whenComplete(() {
-      if (identical(_flight, flight)) _flight = null;
-    });
-    return _flight = flight;
-  }
-
-  Future<void> _load(int generation) async {
-    DataReadResult<ThreadInteractionContext, ThreadDetailReadCapabilities> next;
-    try {
-      next = await _loader.load(sourceTid);
-    } catch (_) {
-      next = const DataReadFailure(
-        kind: DataReadFailureKind.network,
-        code: 'thread_interaction_unavailable',
-        diagnosticMessage: 'thread_interaction_unavailable',
-      );
+    if (!_disposed && visible && result == null) {
+      unawaited(session.loadContext());
     }
-    if (!_isCurrent(generation)) return;
-    result = next;
-    isLoading = false;
-    notifyListeners();
   }
 
+  Future<void> load({bool force = false}) =>
+      force ? session.retry() : session.loadContext();
   void resetSession() {
-    if (_disposed) return;
-    _generation++;
-    _flight = null;
-    result = null;
-    isBusy = false;
-    isLoading = false;
-    notifyListeners();
-    unawaited(_reloadSession(_generation));
+    if (!_disposed) unawaited(session.resetSession());
   }
 
-  Future<void> _reloadSession(int generation) async {
-    await _invalidate();
-    if (_isCurrent(generation) && _visible) await load();
-  }
-
-  /// The invocation reports only a proven write, never an optimistic update.
   Future<void> perform({
     required Future<bool> Function(ThreadInteractionContext, bool Function())
     invoke,
-    required bool refreshComments,
+    bool refreshComments = true,
+    int? page,
+    int? Function()? refreshPage,
   }) async {
     if (_disposed || isBusy || isLoading) return;
-    final generation = _generation;
+    final generation = session.generation;
+    bool current() => !_disposed && session.isCurrent(generation);
     isBusy = true;
     notifyListeners();
     try {
       if (context == null) await load(force: true);
-      if (!_isCurrent(generation) || context == null) return;
-      final applied = await invoke(context!, () => _isCurrent(generation));
+      if (!current() || context == null) return;
+      final applied = await invoke(context!, current);
       if (!applied) return;
-      // Even if the chapter was disposed during submission, invalidate the
-      // original thread; only the active chapter may receive UI refreshes.
-      await _invalidate();
-      if (!_isCurrent(generation)) return;
-      if (refreshComments) unawaited(_refreshComments());
-      await load(force: true);
+      try {
+        await _invalidateThread(sourceTid);
+      } catch (_) {
+        /* Retain the confirmed write. */
+      }
+      if (!current()) return;
+      await session.refreshAfterMutation(
+        page: refreshPage != null
+            ? refreshPage()
+            : page ?? (refreshComments ? null : 1),
+      );
     } finally {
-      if (_isCurrent(generation)) {
+      if (!_disposed) {
         isBusy = false;
         notifyListeners();
       }
     }
   }
 
-  Future<void> _invalidate() async {
-    try {
-      await _invalidateThread(sourceTid);
-    } catch (_) {
-      // A cache maintenance failure cannot undo a confirmed remote write.
-    }
+  void _changed() {
+    if (!_disposed) notifyListeners();
   }
-
-  bool _isCurrent(int generation) => !_disposed && generation == _generation;
 
   @override
   void dispose() {
     _disposed = true;
-    _generation++;
+    session.removeListener(_changed);
     super.dispose();
   }
 }

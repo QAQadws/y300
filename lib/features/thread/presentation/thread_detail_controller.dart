@@ -1,3 +1,4 @@
+import 'package:y300/features/thread/presentation/services/thread_post_comment_service.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -604,66 +605,21 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
   }
 
   Future<DataReadResult<ThreadPostCommentForm, ThreadPostCommentCapabilities>>
-  loadCommentForm(ThreadPost post) async {
-    final current = state.value;
-    final pid = post.pid.trim();
-    if (pid.isEmpty) {
-      return const DataReadFailure(
-        kind: DataReadFailureKind.business,
-        code: 'thread_post_comment_pid_missing',
-        diagnosticMessage: 'thread_post_comment_pid_missing',
+  loadCommentForm(ThreadPost post) => ref
+      .read(threadPostCommentServiceProvider)
+      .load(
+        tid: state.value?.tid ?? _args.tid,
+        page: state.value?.currentPage ?? 1,
+        post: post,
+        referer: Uri.tryParse(_rateReferer(state.value, post)),
       );
-    }
-    final tid = current?.tid.trim().isNotEmpty == true
-        ? current!.tid.trim()
-        : _args.tid;
-    final page = current?.currentPage ?? 1;
-    final commentUrl = post.commentUrl?.trim();
-    if (commentUrl == null || commentUrl.isEmpty) {
-      return const DataReadFailure(
-        kind: DataReadFailureKind.business,
-        code: 'thread_post_comment_entry_missing',
-        diagnosticMessage: 'thread_post_comment_entry_missing',
-      );
-    }
-    final result = await ref
-        .read(threadPostCommentPreparationProvider)
-        .load(
-          ThreadPostCommentPreparationRequest(
-            tid: tid,
-            pid: pid,
-            page: page <= 0 ? 1 : page,
-            referer: Uri.tryParse(_rateReferer(current, post)),
-          ),
-        );
-    return switch (result) {
-      DataReadFailure<
-        ThreadPostCommentPreparation,
-        ThreadPostCommentCapabilities
-      >() =>
-        result.failureOrNull!.retype(),
-      DataReadSuccess<
-        ThreadPostCommentPreparation,
-        ThreadPostCommentCapabilities
-      >(
-        :final data,
-        :final capabilities,
-        :final metadata,
-      ) =>
-        DataReadSuccess(
-          data: ThreadPostCommentForm(preparation: data),
-          capabilities: capabilities,
-          metadata: metadata,
-        ),
-    };
-  }
 
   Future<DataCommandResult<ThreadPostCommentReceipt>> submitPostComment(
     ThreadPostCommentDraft draft,
   ) async {
     final result = await ref
-        .read(threadPostCommentCommandProvider)
-        .execute(draft.toSubmission());
+        .read(threadPostCommentServiceProvider)
+        .submit(draft);
     if (result is! DataCommandApplied<ThreadPostCommentReceipt>) {
       return result;
     }

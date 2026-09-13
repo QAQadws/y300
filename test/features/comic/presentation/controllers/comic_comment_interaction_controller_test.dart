@@ -1,3 +1,5 @@
+import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -60,59 +62,37 @@ void main() {
     },
   );
 
+  test('visibility and explicit expansion share the first read', () async {
+    final pending = Completer<ComicInteractionRead>();
+    final repo = ComicInteractionRepository([pending.future]);
+    final controller = _controller(repo);
+    controller.setVisible(true);
+    final load = controller.session.load();
+    pending.complete(comicInteractionRead());
+    await load;
+    expect(repo.calls, hasLength(1));
+    expect(controller.context?.canComment, isTrue);
+    expect(controller.session.state.isExpanded, isTrue);
+  });
   test(
-    'visibility loads once, concurrent loads share a flight, failed reads can retry',
-    () async {
-      final pending = Completer<ComicInteractionRead>();
-      final repo = ComicInteractionRepository([pending.future]);
-      final controller = _controller(repo);
-      addTearDown(controller.dispose);
-      controller.setVisible(true);
-      final flight = controller.load();
-      controller.setVisible(true);
-      expect(repo.calls, hasLength(1));
-      pending.complete(
-        const DataReadFailure(
-          kind: DataReadFailureKind.unauthorized,
-          diagnosticMessage: 'unauthorized',
-        ),
-      );
-      await flight;
-      expect(
-        controller.result?.failureOrNull?.kind,
-        DataReadFailureKind.unauthorized,
-      );
-      await controller.load(force: true);
-      expect(controller.context?.tid, '100');
-    },
-  );
-
-  test(
-    'only a proven reply refreshes comments and concurrent actions are suppressed',
+    'only proven writes refresh and concurrent actions are suppressed',
     () async {
       final repo = ComicInteractionRepository();
       final invalidated = <String>[];
-      var refreshed = 0;
       final controller = _controller(
         repo,
         invalidate: (tid) async => invalidated.add(tid),
-        refresh: () async => refreshed++,
       );
-      addTearDown(controller.dispose);
       await controller.load();
       final pending = Completer<bool>();
       var invoked = 0;
       final action = controller.perform(
-        refreshComments: true,
-        invoke: (target, guard) {
-          expect(target.tid, '100');
-          expect(target.firstPost?.pid, '200');
+        invoke: (_, _) {
           invoked++;
           return pending.future;
         },
       );
       await controller.perform(
-        refreshComments: true,
         invoke: (_, _) async {
           invoked++;
           return true;
@@ -122,36 +102,27 @@ void main() {
       pending.complete(true);
       await action;
       expect(invalidated, ['100']);
-      expect(refreshed, 1);
-      await controller.perform(
-        refreshComments: true,
-        invoke: (_, _) async => false,
-      );
-      expect(refreshed, 1);
-      await controller.perform(
-        refreshComments: false,
-        invoke: (_, _) async => true,
-      );
-      expect(invalidated, ['100', '100']);
-      expect(refreshed, 1);
+      expect(repo.calls, hasLength(2));
+      await controller.perform(invoke: (_, _) async => false);
+      expect(repo.calls, hasLength(2));
+      await controller.perform(page: 1, invoke: (_, _) async => true);
+      expect(repo.calls, hasLength(3));
     },
   );
-
   test(
-    'disposed chapter still invalidates its proven write without refreshing a new chapter',
+    'disposed owner invalidates its applied write without refreshing',
     () async {
+      final repo = ComicInteractionRepository();
       final invalidated = <String>[];
-      var refreshed = 0;
       final controller = _controller(
-        ComicInteractionRepository(),
+        repo,
         invalidate: (tid) async => invalidated.add(tid),
-        refresh: () async => refreshed++,
+        autoDispose: false,
       );
       await controller.load();
       final pending = Completer<bool>();
       late bool Function() guard;
       final action = controller.perform(
-        refreshComments: true,
         invoke: (_, current) {
           guard = current;
           return pending.future;
@@ -162,36 +133,44 @@ void main() {
       pending.complete(true);
       await action;
       expect(invalidated, ['100']);
-      expect(refreshed, 0);
+      expect(repo.calls, hasLength(1));
+      controller.session.dispose();
     },
   );
-
-  test('session reset discards a late context load', () async {
-    final old = Completer<ComicInteractionRead>();
+  test('account reset rejects the late old first-page read', () async {
+    final pending = Completer<ComicInteractionRead>();
     final repo = ComicInteractionRepository([
-      old.future,
+      pending.future,
       comicInteractionRead(fid: '88'),
     ]);
     final controller = _controller(repo);
-    addTearDown(controller.dispose);
     controller.setVisible(true);
-    final flight = controller.load();
-    controller.resetSession();
-    await Future<void>.delayed(Duration.zero);
-    await controller.load();
-    old.complete(comicInteractionRead(fid: '33'));
-    await flight;
+    final old = controller.load();
+    await controller.session.resetSession();
+    pending.complete(comicInteractionRead(fid: '33'));
+    await old;
     expect(controller.context?.fid, '88');
   });
 }
 
 ComicCommentInteractionController _controller(
-  ComicInteractionRepository repository, {
+  ComicInteractionRepository repo, {
   Future<void> Function(String)? invalidate,
-  Future<void> Function()? refresh,
-}) => ComicCommentInteractionController(
-  sourceTid: '100',
-  loader: ThreadInteractionContextLoader(repository),
-  invalidateThread: invalidate ?? (_) async {},
-  refreshComments: refresh ?? () async {},
-);
+  bool autoDispose = true,
+}) {
+  final session = ComicCommentSessionController(
+    key: const ComicCommentSessionKey(episodeId: 'e', sourceTid: '100'),
+    loader: DefaultComicCommentLoader(repository: repo),
+  );
+  final controller = ComicCommentInteractionController(
+    session: session,
+    invalidateThread: invalidate ?? (_) async {},
+  );
+  if (autoDispose) {
+    addTearDown(() {
+      controller.dispose();
+      session.dispose();
+    });
+  }
+  return controller;
+}

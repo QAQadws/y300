@@ -1,3 +1,4 @@
+import 'package:y300/features/thread/presentation/services/thread_post_comment_service.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +15,6 @@ import 'package:y300/features/reply/presentation/reply_composer_controller.dart'
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
-import 'package:y300/features/thread/domain/services/thread_interaction_context_loader.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_rating_service.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import '../../../../test_support/localized_test_app.dart';
@@ -83,7 +83,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(fixture.rating.submissions, 1);
         expect(fixture.invalidated, applied ? ['100'] : isEmpty);
-        expect(fixture.comments.calls, 0);
+        expect(fixture.comments.calls, applied ? 2 : 1);
         final l10n = AppLocalizations.of(
           tester.element(find.byType(ComicCommentActionBar)),
         );
@@ -95,6 +95,40 @@ void main() {
           ),
           findsOneWidget,
         );
+      },
+    );
+  }
+
+  for (final applied in [true, false]) {
+    testWidgets(
+      'bottom comment targets first floor and respects applied=$applied',
+      (tester) async {
+        final fixture = _Fixture();
+        fixture.comment.applied = applied;
+        addTearDown(fixture.dispose);
+        await fixture.controller.load();
+        await tester.pumpWidget(fixture.host());
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('comic-comment-comment-button')));
+        await tester.pumpAndSettle();
+        expect(fixture.comment.request?.pid, '200');
+        expect(fixture.comment.request?.page, 1);
+        expect(
+          find.byKey(const Key('thread-post-comment-sheet')),
+          findsOneWidget,
+        );
+        await tester.enterText(
+          find.byKey(const Key('thread-post-comment-message-input')),
+          '点评',
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const Key('thread-post-comment-submit-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(fixture.comment.submissions, 1);
+        expect(fixture.invalidated, applied ? ['100'] : isEmpty);
+        expect(fixture.comments.calls, applied ? 2 : 1);
       },
     );
   }
@@ -143,22 +177,20 @@ void main() {
 
 class _Fixture {
   _Fixture([ComicInteractionRepository? repository]) {
+    comments = _Comments(repository ?? ComicInteractionRepository());
     session = ComicCommentSessionController(
       key: const ComicCommentSessionKey(episodeId: 'chapter', sourceTid: '100'),
       loader: comments,
     );
     controller = ComicCommentInteractionController(
-      sourceTid: '100',
-      loader: ThreadInteractionContextLoader(
-        repository ?? ComicInteractionRepository(),
-      ),
+      session: session,
       invalidateThread: (tid) async => invalidated.add(tid),
-      refreshComments: session.refreshAfterMutation,
     );
   }
   final navigator = GlobalKey<NavigatorState>();
-  final comments = _Comments();
+  late final _Comments comments;
   final rating = _Rating();
+  final comment = _Comment();
   final invalidated = <String>[];
   late final ComicCommentSessionController session;
   late final ComicCommentInteractionController controller;
@@ -168,6 +200,9 @@ class _Fixture {
     bool dark = false,
   }) => ProviderScope(
     overrides: [
+      threadPostCommentServiceProvider.overrideWithValue(
+        ThreadPostCommentService(comment, comment),
+      ),
       threadPostRatingServiceProvider.overrideWithValue(
         ThreadPostRatingService(rating, rating),
       ),
@@ -203,20 +238,20 @@ class _Fixture {
   }
 }
 
-class _Comments implements ComicCommentLoader {
+class _Comments extends DefaultComicCommentLoader {
+  _Comments(ThreadRepository repository) : super(repository: repository);
   int calls = 0;
   @override
-  Future<ComicCommentLoadResult> loadAll({
+  Future<ComicCommentLoadResult> loadPage({
     required String sourceTid,
+    int page = 1,
     ComicCommentCancellationToken? cancellationToken,
-  }) async {
+  }) {
     calls++;
-    return ComicCommentLoadResult(
+    return super.loadPage(
       sourceTid: sourceTid,
-      status: ComicCommentLoadStatus.empty,
-      items: const [],
-      loadedPages: const {1},
-      expectedPages: 1,
+      page: page,
+      cancellationToken: cancellationToken,
     );
   }
 }
@@ -295,4 +330,61 @@ class _Rating
 
 final class _Token implements ThreadPostRatingPreparationToken {
   const _Token();
+}
+
+class _Comment
+    implements
+        ThreadPostCommentPreparationRepository,
+        ThreadPostCommentCommand {
+  ThreadPostCommentPreparationRequest? request;
+  bool applied = true;
+  int submissions = 0;
+  @override
+  ThreadPostCommentCapabilities get capabilities =>
+      ThreadPostCommentCapabilities(
+        values: DataCapabilitySet.supported(ThreadPostCommentCapability.values),
+      );
+  @override
+  Future<
+    DataReadResult<ThreadPostCommentPreparation, ThreadPostCommentCapabilities>
+  >
+  load(ThreadPostCommentPreparationRequest request) async {
+    this.request = request;
+    return DataReadSuccess(
+      data: ThreadPostCommentPreparation(
+        tid: request.tid,
+        pid: request.pid,
+        maxLength: 200,
+        token: const _CommentToken(),
+      ),
+      capabilities: capabilities,
+      metadata: const DataReadMetadata.network(),
+    );
+  }
+
+  @override
+  Future<DataCommandResult<ThreadPostCommentReceipt>> execute(
+    ThreadPostCommentSubmission submission,
+  ) async {
+    submissions++;
+    return applied
+        ? DataCommandApplied(
+            ThreadPostCommentReceipt(
+              tid: submission.preparation.tid,
+              pid: submission.preparation.pid,
+            ),
+          )
+        : const DataCommandOutcomeUnknown(
+            DataCommandFailure(
+              kind: DataCommandFailureKind.network,
+              code: 'unknown',
+              retryPolicy: DataCommandRetryPolicy.explicitOnly,
+              diagnosticMessage: 'unknown',
+            ),
+          );
+  }
+}
+
+class _CommentToken implements ThreadPostCommentPreparationToken {
+  const _CommentToken();
 }

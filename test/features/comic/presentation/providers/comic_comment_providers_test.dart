@@ -101,7 +101,8 @@ final class _ProviderLoader implements ComicCommentLoader {
   int calls = 0;
 
   @override
-  Future<ComicCommentLoadResult> loadAll({
+  Future<ComicCommentLoadResult> loadPage({
+    int page = 1,
     required String sourceTid,
     ComicCommentCancellationToken? cancellationToken,
   }) async {

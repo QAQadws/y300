@@ -4460,6 +4460,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String postingPollTooManyOptions(int count) {
     return '投票选项超过 $count 个，请调整后再发布';
   }
+
+  @override
+  String get comicPostCommentUnavailable => '当前无法点评';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -8919,4 +8922,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String postingPollTooManyOptions(int count) {
     return '投票選項超過 $count 個，請調整後再發佈';
   }
+
+  @override
+  String get comicPostCommentUnavailable => '目前無法點評';
 }

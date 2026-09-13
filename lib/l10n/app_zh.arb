@@ -1807,5 +1807,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "comicPostCommentUnavailable": "当前无法点评"
 }

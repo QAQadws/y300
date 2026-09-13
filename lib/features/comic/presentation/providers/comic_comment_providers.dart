@@ -3,8 +3,6 @@ import 'package:y300/app/localization/app_server_content_conversion_provider.dar
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
-import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
-import 'package:y300/features/thread/domain/services/thread_interaction_context_loader.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_interaction_controller.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projector.dart';
@@ -21,6 +19,9 @@ final comicCommentSessionControllerProvider = Provider.autoDispose
       final controller = ComicCommentSessionController(
         key: key,
         loader: ref.watch(comicCommentLoaderProvider),
+        invalidateThread: ref
+            .watch(nativePageCacheInvalidationServiceProvider)
+            .invalidateThread,
       );
       ref.onDispose(controller.dispose);
       return controller;
@@ -85,12 +86,8 @@ final comicCommentInteractionControllerProvider = Provider.autoDispose
       );
       final session = ref.watch(comicCommentSessionControllerProvider(key));
       final controller = ComicCommentInteractionController(
-        sourceTid: key.sourceTid,
-        loader: ThreadInteractionContextLoader(
-          ref.watch(threadRepositoryProvider),
-        ),
+        session: session,
         invalidateThread: invalidation.invalidateThread,
-        refreshComments: session.refreshAfterMutation,
       );
       ref.listen(
         authSessionControllerProvider.select(
