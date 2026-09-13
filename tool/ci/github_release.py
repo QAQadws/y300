@@ -43,10 +43,12 @@ def draft_identity(release, tag, commit, code):
 def check_release_history(history, tag, commit, code, baseline):
     for release in history:
         name = release.get("tag_name", "")
-        if not TAG.fullmatch(name) or release.get("prerelease"):
+        if not TAG.fullmatch(name):
             continue
         if name == tag:
             draft_identity(release, tag, commit, code)
+            continue
+        if release.get("prerelease"):
             continue
         require(version_tuple(tag[1:]) > version_tuple(name[1:]), "Version must exceed existing stable releases and drafts")
         if version_tuple(name[1:]) <= version_tuple(baseline["version_name"]):
@@ -60,7 +62,7 @@ def check_release_history(history, tag, commit, code, baseline):
             require(len(manifests) == 1, "Release after the baseline has no unique manifest")
             previous = json.loads(run("gh", "api", f"repos/{repository()}/releases/assets/{manifests[0]['id']}", "-H", "Accept: application/octet-stream"))
             require(previous["tag"] == name, "Published manifest tag mismatch")
-        require(isinstance(previous.get("version_code"), int) and code > previous["version_code"], "versionCode must exceed release history")
+        require(type(previous.get("version_code")) is int and code > previous["version_code"], "versionCode must exceed release history")
 
 
 def publish_draft(directory, manifest):

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import shutil
 
-from android import inspect_apk, verify_metadata
+from android import inspect_apk, sha256, verify_metadata
 from common import ROOT, TAG, apk_name, pubspec_version, read_json, require, run, summary, version_tuple, write_json
 import github_release
 
@@ -51,12 +51,24 @@ def package(directory):
     shutil.copyfile(source, directory / name)
     (directory / (name + ".sha256")).write_text(f"{metadata['sha256']}  {name}\n", encoding="utf-8")
     sdk = read_json(Path(os.environ["RUNNER_TEMP"]) / "flutter-version.json")
+    require(sdk["frameworkVersion"] == (ROOT / ".flutter-version").read_text(encoding="utf-8").strip(),
+            "Actual Flutter version differs from the repository pin")
     manifest = {"schema": 1, "tag": tag, "commit": commit, **metadata, "apk": name,
                 "flutter_version": sdk["frameworkVersion"], "dart_version": sdk["dartSdkVersion"],
                 "built_at": datetime.now(timezone.utc).isoformat(),
                 "run_url": f"https://github.com/{github_release.repository()}/actions/runs/{os.environ['GITHUB_RUN_ID']}"}
     write_json(directory / "release-manifest.json", manifest)
     summary(f"Verified signed APK `{name}` for `{commit}`; SHA-256 `{metadata['sha256']}`.")
+
+
+def verify_distribution(directory, manifest):
+    name = apk_name(manifest["version_name"])
+    require(manifest["schema"] == 1 and manifest["apk"] == name, "Invalid distribution manifest")
+    apk = directory / name
+    require(apk.stat().st_size == manifest["size"] and sha256(apk) == manifest["sha256"],
+            "Prepared APK no longer matches the verified manifest")
+    require((directory / (name + ".sha256")).read_bytes() ==
+            f"{manifest['sha256']}  {name}\n".encode("utf-8"), "Checksum is not the canonical APK checksum")
 
 
 if __name__ == "__main__":
@@ -71,6 +83,7 @@ if __name__ == "__main__":
         manifest = read_json(args.directory / "release-manifest.json")
         require((manifest["tag"], manifest["commit"], manifest["version_code"], manifest["apk"]) ==
                 (tag, commit, code, apk_name(version)), "Prepared manifest identity mismatch")
+        verify_distribution(args.directory, manifest)
         summary("Draft ready for manual review: " + github_release.publish_draft(args.directory, manifest))
     else:
         validate()

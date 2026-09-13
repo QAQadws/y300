@@ -183,6 +183,32 @@ class DraftTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 github.draft_identity({**self.draft(), key: value}, "v1.1.6", COMMIT, 44)
 
+    def test_existing_prerelease_is_rejected_during_preflight(self):
+        with self.assertRaises(ValueError):
+            github.check_release_history([{**self.draft(), "prerelease": True}],
+                                         "v1.1.6", COMMIT, 44, BASELINE)
+
+    def test_corrupted_distribution_or_noncanonical_checksum_cannot_upload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            name = apk_name("1.1.6")
+            apk = path / name
+            apk.write_bytes(b"fixture-apk")
+            digest = android.sha256(apk)
+            manifest = {"schema": 1, "apk": name, "version_name": "1.1.6",
+                        "sha256": digest, "size": apk.stat().st_size}
+            checksum = path / (name + ".sha256")
+            canonical = f"{digest}  {name}\n".encode()
+            checksum.write_bytes(canonical)
+            release.verify_distribution(path, manifest)
+            checksum.write_bytes(canonical.replace(b"  ", b" "))
+            with self.assertRaises(ValueError):
+                release.verify_distribution(path, manifest)
+            checksum.write_bytes(canonical)
+            apk.write_bytes(b"changed-apk")
+            with self.assertRaises(ValueError):
+                release.verify_distribution(path, manifest)
+
     def test_history_handles_legacy_baseline_and_rejects_unknown_new_release(self):
         legacy = {"tag_name": "v1.1.5", "prerelease": False, "draft": False, "assets": []}
         github.check_release_history([legacy], "v1.1.6", COMMIT, 44, BASELINE)
