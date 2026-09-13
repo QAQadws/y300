@@ -85,15 +85,8 @@ jobs:
                [[ "$(jq -r '.before // ""' "$GITHUB_EVENT_PATH")" =~ [1-9a-f] ]]; then
             base="$(jq -r .before "$GITHUB_EVENT_PATH")"
           else
-            # Manual/tag checks cover changes since the previous reachable stable tag.
-            base="$(git hash-object -t tree --stdin < /dev/null)"
-            while IFS= read -r tag; do
-              if [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] &&
-                 [[ "$(git rev-list -n 1 "$tag")" != "$GITHUB_SHA" ]]; then
-                base="$tag"
-                break
-              fi
-            done < <(git tag --merged HEAD --sort=-version:refname)
+            # Manual/tag checks validate the selected commit's own changes.
+            base="$(git rev-parse HEAD^ 2>/dev/null || git hash-object -t tree --stdin < /dev/null)"
           fi
           git diff --name-only --diff-filter=ACMR -z "$base" HEAD > "$RUNNER_TEMP/changed-files"
           files=()
