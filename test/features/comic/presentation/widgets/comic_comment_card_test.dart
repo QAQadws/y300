@@ -1,5 +1,6 @@
 import 'dart:io';
-import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
+import 'package:y300/features/thread/data/services/thread_detail_document_decoder.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
@@ -38,9 +39,9 @@ void main() {
     'parsed 53-image sample leaves ratings immediately after its text',
     (tester) async {
       final data =
-          ThreadDetailHtmlParser(
-            siteOrigin: Uri.parse('https://bbs.yamibo.com'),
-          ).parse(
+          ThreadDetailDocumentDecoder(
+            createY300ThreadDetailHtmlDecoder(),
+          ).decode(
             File(
               'test/features/comic/data/comic_comment_image_spacing.html',
             ).readAsStringSync(),

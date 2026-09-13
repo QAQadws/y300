@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:io';
-import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
+import 'package:y300/features/thread/data/services/thread_detail_document_decoder.dart';
 import 'package:html/parser.dart' as html;
 import 'package:html/dom.dart' as dom;
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
@@ -37,9 +38,9 @@ void main() {
     'mobile sample removes all 52 separators between its 53 reader images',
     () {
       final data =
-          ThreadDetailHtmlParser(
-            siteOrigin: Uri.parse('https://bbs.yamibo.com'),
-          ).parse(
+          ThreadDetailDocumentDecoder(
+            createY300ThreadDetailHtmlDecoder(),
+          ).decode(
             File(
               'test/features/comic/data/comic_comment_image_spacing.html',
             ).readAsStringSync(),
