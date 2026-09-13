@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Match the hosted source already recorded in the app lockfile.
+  PUB_HOSTED_URL: https://pub.flutter-io.cn
+
+jobs:
+  test:
+    name: Analyze and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.44.4'
+          channel: stable
+          cache: true
+      - name: Install SQLite
+        run: sudo apt-get update && sudo apt-get install --yes libsqlite3-0 libsqlite3-dev
+      - name: Install app dependencies
+        run: flutter pub get
+      - name: Analyze app
+        run: flutter analyze --no-pub
+      - name: Test app
+        run: flutter test --no-pub --reporter expanded
+      - name: Install protocol package dependencies
+        working-directory: packages/yamibo_forum_client
+        run: dart pub get
+      - name: Analyze protocol package
+        working-directory: packages/yamibo_forum_client
+        run: dart analyze --fatal-infos
+      - name: Test protocol package
+        working-directory: packages/yamibo_forum_client
+        run: dart test --reporter expanded
