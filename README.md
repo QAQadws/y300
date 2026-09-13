@@ -57,34 +57,21 @@ flutter build apk --no-pub --release --target-platform android-arm64
 
 锁文件统一记录 `https://pub.dev`。使用镜像的本地环境在更新锁文件前，应将 `PUB_HOSTED_URL` 临时设置为 `https://pub.dev`；不要把镜像来源变化或无关依赖升级带入提交。修改 ARB 后运行 `flutter gen-l10n`，提交生成文件并确保未翻译报告为空。
 
-## CI 与发布
+## CI
 
-每个面向 `main` 的 PR 和 `main` 提交都会运行静态分析、协议包全部测试、App 两个 shard 的全部测试及 Android release 构建验证。固定的 `CI` 检查汇总全部结果；正常合并要求检查通过且分支与 `main` 同步。PR 构建使用调试签名验证编译，其 APK 不上传。
+`.github/workflows/y300.yml` 是唯一工作流入口。面向 `main` 的 PR、`main` push、`v*` tag 和手动运行均验证当前事件的固定提交，覆盖工作流校验、变更 Dart 格式、本地化生成、静态分析、协议包全部测试、App 两个 shard 的全部测试及 Android arm64 release 构建。
+
+固定的 `CI` 检查要求所有必要任务成功；失败、取消或跳过均不能放行。正常合并要求 PR、检查通过且基于最新 `main` 验证，不要求额外审阅人数，管理员保留紧急绕过。构建使用临时调试签名验证编译，APK 不上传。
 
 ```bash
 gh pr checks --watch
 gh run view <run-id> --log-failed
-gh workflow run y300.yml --ref <branch> -f mode=check
+gh workflow run y300.yml --ref <branch-or-tag>
 ```
 
-发布前在 `main` 中提交新的 `X.Y.Z+buildNumber`，确认版本名和版本码均超过现有发布，然后为该提交创建 tag：
+各任务的分析、测试及构建结果和耗时写入运行摘要。截图测试失败时保留比较图片 7 天，可用 `gh run download <run-id> --dir <下载目录>` 下载并检查差异。修复后提交 PR 即可重新运行，不自动重试失败测试。
 
-```bash
-git tag -a vX.Y.Z <已合入main的提交SHA> -m "Release vX.Y.Z"
-git push origin vX.Y.Z
-gh run list --workflow y300.yml
-gh run watch <run-id>
-gh release view vX.Y.Z --web
-```
-
-正式 tag 触发相同的完整 CI，通过后才访问 `android-release` Environment 中的签名 Secret，校验 APK 的版本、包名、arm64 ABI 和发布证书，并上传 APK、同名 `.sha256` 与 `release-manifest.json` 到 GitHub 草稿。你核对发布说明和安装包后公开发布，再将相同产物上传 Gitee；应用内更新继续读取 Gitee。
-
-```bash
-gh workflow run y300.yml --ref vX.Y.Z -f mode=release
-gh run download <run-id> --dir <下载目录>
-```
-
-手动发布仅接受现有正式 tag；同一 tag／提交的草稿可重试补齐附件，保留人工编辑的说明与其中的工作流身份标记。已公开 Release 不覆盖，不移动或重建正式 tag。Actions 产物保留 30 天，公开仓库的产物不是私密存储。签名文件、密码及真实论坛样本不得上传。完整配置与故障恢复约定见 [CI/CD 维护说明](./tool/ci/README.md)。
+当前工作流只负责 CI 检查，不读取签名 Secret，也不创建或公开 Release。正式签名、发布校验和 Release 草稿自动化暂缓；推送 tag 不会发布安装包。
 
 ## 设计参考
 

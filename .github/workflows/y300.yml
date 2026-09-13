@@ -7,20 +7,13 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      mode:
-        description: Check a ref, or create a release draft from an existing vX.Y.Z tag.
-        type: choice
-        options: [check, release]
-        default: check
-        required: true
 
 permissions:
   contents: read
 
 concurrency:
   group: y300-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && inputs.mode != 'release' }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 defaults:
   run:
@@ -29,66 +22,124 @@ defaults:
 env:
   PUB_HOSTED_URL: https://pub.dev
   FLUTTER_STORAGE_BASE_URL: https://storage.googleapis.com
-  PYTHONUTF8: '1'
   GRADLE_OPTS: -Dorg.gradle.configuration-cache=false
 
 jobs:
   quality:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    outputs:
-      release: ${{ steps.context.outputs.release }}
-      version: ${{ steps.context.outputs.version }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - &checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Validate run identity
-        id: context
-        run: python3 tool/ci/checks.py context
-      - name: Validate release before running builds
-        if: steps.context.outputs.release == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 tool/ci/release.py validate
-      - name: Validate workflow and release tooling
+      - name: Verify checkout identity
         run: |
-          python3 -m unittest discover -s tool/ci/tests -v
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          printf 'Validated commit: `%s`.\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - name: Validate workflow
+        run: |
           curl --fail --silent --show-error --location https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$RUNNER_TEMP/actionlint.tar.gz"
           printf '%s  %s\n' 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 "$RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
           tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint" -color
-      - uses: ./.github/actions/flutter-setup
-      - name: Check changed Dart formatting
-        run: python3 tool/ci/checks.py format
-      - name: Check localization generation
+      # Reuse setup steps directly; no custom action or setup script is needed.
+      - &sdk
+        name: Read pinned SDK
+        id: sdk
         run: |
-          flutter gen-l10n
-          python3 tool/ci/checks.py clean
+          version="$(tr -d '\r\n' < .flutter-version)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - &flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ steps.sdk.outputs.version }}
+          channel: stable
+          cache: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      - &pub-restore
+        name: Restore pub dependencies
+        id: pub-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ steps.sdk.outputs.version }}-${{ hashFiles('pubspec.lock', 'packages/yamibo_forum_client/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-${{ steps.sdk.outputs.version }}-
+      - &app-dependencies
+        name: Install frozen app dependencies
+        run: flutter pub get --enforce-lockfile
+      - &pub-save
+        name: Save trusted dependencies
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.pub-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.pub-cache
+          key: ${{ steps.pub-cache.outputs.cache-primary-key }}
+      - name: Check changed Dart formatting
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            base="$(git merge-base "$(jq -r '.pull_request.base.sha' "$GITHUB_EVENT_PATH")" HEAD)"
+          elif [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/* ]] &&
+               [[ "$(jq -r '.before // ""' "$GITHUB_EVENT_PATH")" =~ [1-9a-f] ]]; then
+            base="$(jq -r .before "$GITHUB_EVENT_PATH")"
+          else
+            # Manual/tag checks cover changes since the previous reachable stable tag.
+            base="$(git hash-object -t tree --stdin < /dev/null)"
+            while IFS= read -r tag; do
+              if [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] &&
+                 [[ "$(git rev-list -n 1 "$tag")" != "$GITHUB_SHA" ]]; then
+                base="$tag"
+                break
+              fi
+            done < <(git tag --merged HEAD --sort=-version:refname)
+          fi
+          git diff --name-only --diff-filter=ACMR -z "$base" HEAD > "$RUNNER_TEMP/changed-files"
+          files=()
+          while IFS= read -r -d '' file; do
+            if [[ "$file" == *.dart && -f "$file" ]]; then files+=("$file"); fi
+          done < "$RUNNER_TEMP/changed-files"
+          for ((start=0; start<${#files[@]}; start+=60)); do
+            dart format --output=none --set-exit-if-changed "${files[@]:start:60}"
+          done
+          printf 'Formatting checked: %s changed Dart files.\n' "${#files[@]}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Regenerate localizations
+        run: flutter gen-l10n
+      - &clean
+        name: Verify dependencies and generated sources stayed clean
+        run: |
+          git diff --exit-code HEAD
+          test -z "$(git ls-files --others --exclude-standard)"
+          jq -e 'type == "object" and all(.[]; length == 0)' l10n_untranslated.json
       - name: Analyze app
-        run: python3 tool/ci/measure.py 'Flutter analysis' flutter analyze --no-pub
+        run: |
+          started=$SECONDS
+          trap 'printf "Flutter analysis: exit %s, %ss.\n" "$?" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"' EXIT
+          flutter analyze --no-pub
+      - *clean
 
   package-tests:
     needs: quality
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: ./.github/actions/flutter-setup
-        with:
-          package: 'true'
+      - *checkout
+      - *sdk
+      - *flutter
+      - *pub-restore
+      - name: Install frozen package dependencies
+        working-directory: packages/yamibo_forum_client
+        run: dart pub get --enforce-lockfile
+      - *pub-save
       - name: Analyze and test protocol package
         working-directory: packages/yamibo_forum_client
         run: |
+          started=$SECONDS
+          trap 'printf "Protocol analysis and tests: exit %s, %ss.\n" "$?" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"' EXIT
           dart analyze --fatal-infos
-          python3 ../../tool/ci/measure.py 'Protocol package tests' dart test --reporter expanded
-      - name: Verify checkout stayed clean
-        run: python3 tool/ci/checks.py clean
+          dart test --reporter expanded
+      - *clean
 
   app-tests:
     needs: quality
@@ -99,31 +150,37 @@ jobs:
       matrix:
         shard: [0, 1]
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
+      - *checkout
       - name: Install SQLite runtime
         run: sudo apt-get update && sudo apt-get install --yes libsqlite3-0 libsqlite3-dev
-      - uses: ./.github/actions/flutter-setup
+      - *sdk
+      - *flutter
+      - *pub-restore
+      - *app-dependencies
+      - *pub-save
       - name: Run all app tests across both shards
         env:
           SHARD_INDEX: ${{ matrix.shard }}
-        run: python3 tool/ci/measure.py "App tests shard $SHARD_INDEX" flutter test --no-pub --reporter expanded --total-shards 2 --shard-index "$SHARD_INDEX"
-      - name: Verify checkout stayed clean
-        run: python3 tool/ci/checks.py clean
+        run: |
+          started=$SECONDS
+          trap 'printf "App tests shard %s: exit %s, %ss.\n" "$SHARD_INDEX" "$?" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"' EXIT
+          flutter test --no-pub --reporter expanded --total-shards 2 --shard-index "$SHARD_INDEX"
+      - *clean
+      - name: Preserve failed visual comparisons
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: golden-failures-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: test/**/failures/*.png
+          if-no-files-found: ignore
+          retention-days: 7
 
   android-check:
     needs: quality
     runs-on: ubuntu-24.04
     timeout-minutes: 40
-    env:
-      ORG_GRADLE_PROJECT_y300UseDebugSigning: 'true'
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
+      - *checkout
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -134,13 +191,20 @@ jobs:
           gradle-home-cache-includes: |
             caches/modules-2
             wrapper/dists
-      - uses: ./.github/actions/flutter-setup
+      - *sdk
+      - *flutter
+      - *pub-restore
+      - *app-dependencies
+      - *pub-save
       - name: Validate release compilation without distribution credentials
         run: |
+          started=$SECONDS
+          # Keep the original exit status when restoring the executable bit.
+          trap 'status=$?; chmod -x android/gradlew; printf "Android release build check: exit %s, %ss.\n" "$status" "$((SECONDS-started))" >> "$GITHUB_STEP_SUMMARY"; exit "$status"' EXIT
+          test ! -e android/key.properties
           chmod +x android/gradlew
-          python3 tool/ci/measure.py 'Android release build check' flutter build apk --no-pub --release --target-platform android-arm64
-          chmod -x android/gradlew
-          python3 tool/ci/checks.py clean
+          flutter build apk --no-pub --release --target-platform android-arm64
+      - *clean
 
   ci:
     name: CI
@@ -149,81 +213,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
       - name: Require every CI job to succeed
         env:
           CI_JOB_RESULTS: ${{ toJSON(needs) }}
-        run: python3 tool/ci/checks.py gate
-
-  release:
-    if: needs.quality.outputs.release == 'true'
-    needs: [quality, ci]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    environment: android-release
-    concurrency:
-      group: y300-android-release
-      cancel-in-progress: false
-    permissions:
-      contents: write
-    env:
-      ORG_GRADLE_PROJECT_y300RequireReleaseSigning: 'true'
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Revalidate release before accessing signing material
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 tool/ci/release.py validate
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
-        with:
-          cache-read-only: 'true'
-          gradle-home-cache-includes: |
-            caches/modules-2
-            wrapper/dists
-      - uses: ./.github/actions/flutter-setup
-      - name: Restore ephemeral release signing files
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: python3 tool/ci/signing.py restore
-      - name: Build distribution APK
         run: |
-          chmod +x android/gradlew
-          python3 tool/ci/measure.py 'Signed Android release build' flutter build apk --no-pub --release --target-platform android-arm64
-          chmod -x android/gradlew
-          flutter --version --machine > "$RUNNER_TEMP/flutter-version.json"
-          python3 tool/ci/checks.py clean
-      - name: Remove signing material
-        if: always()
-        run: python3 tool/ci/signing.py cleanup
-      - name: Verify APK and prepare checksums and manifest
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 tool/ci/release.py package
-      - name: Preserve verified distribution artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: y300-v${{ needs.quality.outputs.version }}-${{ github.sha }}-${{ github.run_attempt }}
-          path: |
-            build/ci-release/*.apk
-            build/ci-release/*.apk.sha256
-            build/ci-release/release-manifest.json
-          if-no-files-found: error
-          retention-days: 30
-      - name: Create or repair the unpublished release draft
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 tool/ci/release.py draft
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$CI_JOB_RESULTS" | tee -a "$GITHUB_STEP_SUMMARY"
+          jq -e 'keys == ["android-check", "app-tests", "package-tests", "quality"] and all(.[]; .result == "success")' <<< "$CI_JOB_RESULTS"
