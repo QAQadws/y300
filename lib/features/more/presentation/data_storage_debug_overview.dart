@@ -29,7 +29,7 @@ class _StorageUsageOverview extends StatelessWidget {
       tilePadding: EdgeInsets.zero,
       title: Text(
         l10n.moreStorageUsageOverview,
-        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
       ),
       subtitle: Text(
         l10n.moreStorageUsageTotal(formatDataStorageBytes(report.totalBytes)),

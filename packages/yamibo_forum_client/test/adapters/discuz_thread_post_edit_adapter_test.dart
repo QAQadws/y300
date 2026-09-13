@@ -222,6 +222,297 @@ void main() {
     },
   );
 
+  const callback =
+      "<script>succeedhandle_postform('forum.php?mod=redirect&goto=findpost&ptid=10001&pid=20001', '', {'fid':'30','tid':'10001','pid':'20001'});</script>";
+  Map<String, Object?> permission(
+    int value, {
+    String tid = '10001',
+    String fid = '30',
+  }) => {
+    'Version': '4',
+    'Variables': {
+      'fid': fid,
+      'thread': {'tid': tid, 'readperm': '$value'},
+    },
+  };
+  String withAccess(String control) => _editForm().replaceFirst(
+    RegExp(r'<select name="readperm">.*?</select>'),
+    control,
+  );
+
+  test(
+    'unselected edit permissions use identity-checked v4 readback and preserve obsolete values',
+    () async {
+      final network = _QueueNetwork([
+        _editForm().replaceFirst(' selected', ''),
+        permission(37),
+        callback,
+      ]);
+      final adapter = ForumClientAdapterFactory(
+        config: config,
+        network: network,
+      ).createThreadPostEdit();
+      final prepared = (await adapter.preparation.load(
+        ThreadPostEditPreparationRequest(target: target()),
+      )).dataOrNull!;
+      expect(prepared.readAccess.currentValue, 37);
+      expect(prepared.readAccess.allows(37), isFalse);
+      expect(
+        network.requests[1].uri.queryParameters,
+        containsPair('module', 'viewthread'),
+      );
+      expect(
+        network.requests[1].uri.queryParameters,
+        containsPair('version', '4'),
+      );
+      final result = await adapter.command.execute(
+        ThreadPostEditSubmission(
+          preparation: prepared,
+          subject: prepared.subject,
+          message: 'updated',
+          useSignature: true,
+        ),
+      );
+      expect(result, isA<DataCommandApplied<ThreadPostEditReceipt>>());
+      expect(
+        (network.requests.last.body as ForumMultipartFields).entries
+            .where((e) => e.key == 'readperm')
+            .single
+            .value,
+        '37',
+      );
+    },
+  );
+
+  test(
+    'unresolved or mismatched permission readback blocks native preparation',
+    () async {
+      for (final response in [
+        permission(20, tid: '999'),
+        permission(20, fid: '99'),
+        {'Version': '4', 'Variables': <String, Object?>{}},
+        const ForumTransportFailure(
+          kind: ForumTransportFailureKind.timeout,
+          code: 'timeout',
+        ),
+      ]) {
+        final network = _QueueNetwork([
+          _editForm().replaceFirst(' selected', ''),
+          response,
+        ]);
+        final adapter = ForumClientAdapterFactory(
+          config: config,
+          network: network,
+        ).createThreadPostEdit();
+        final result = await adapter.preparation.load(
+          ThreadPostEditPreparationRequest(target: target()),
+        );
+        expect(result.dataOrNull, isNull);
+        expect(network.requests, hasLength(2));
+      }
+    },
+  );
+
+  test(
+    'same-valued selections serialize once and permission affects revision',
+    () async {
+      final same = withAccess(
+        '<select name="readperm"><option value="20" selected>A</option><option value="20" selected>B</option></select>',
+      );
+      final network = _QueueNetwork([
+        same,
+        callback,
+        same.replaceAll('value="20"', 'value="40"'),
+      ]);
+      final adapter = ForumClientAdapterFactory(
+        config: config,
+        network: network,
+      ).createThreadPostEdit();
+      final prepared = (await adapter.preparation.load(
+        ThreadPostEditPreparationRequest(target: target()),
+      )).dataOrNull!;
+      await adapter.command.execute(
+        ThreadPostEditSubmission(
+          preparation: prepared,
+          subject: prepared.subject,
+          message: 'updated',
+          useSignature: true,
+        ),
+      );
+      expect(
+        (network.requests[1].body as ForumMultipartFields).entries.where(
+          (e) => e.key == 'readperm',
+        ),
+        hasLength(1),
+      );
+      final changed = (await adapter.preparation.load(
+        ThreadPostEditPreparationRequest(target: target()),
+      )).dataOrNull!;
+      expect(changed.revision, isNot(prepared.revision));
+    },
+  );
+
+  test(
+    'missing or disabled controls are omitted, without supplementary requests',
+    () async {
+      for (final control in [
+        '',
+        '<select name="readperm" disabled><option value="20" selected>A</option></select>',
+        '<fieldset disabled><select name="readperm"><option value="20" selected>A</option></select></fieldset>',
+      ]) {
+        final network = _QueueNetwork([withAccess(control), callback]);
+        final adapter = ForumClientAdapterFactory(
+          config: config,
+          network: network,
+        ).createThreadPostEdit();
+        final prepared = (await adapter.preparation.load(
+          ThreadPostEditPreparationRequest(target: target()),
+        )).dataOrNull!;
+        expect(prepared.readAccess.canModify, isFalse);
+        final rejected = await adapter.command.execute(
+          ThreadPostEditSubmission(
+            preparation: prepared,
+            subject: prepared.subject,
+            message: 'updated',
+            useSignature: true,
+            minimumReadAccess: 0,
+          ),
+        );
+        expect(rejected, isA<DataCommandNotSent<ThreadPostEditReceipt>>());
+        await adapter.command.execute(
+          ThreadPostEditSubmission(
+            preparation: prepared,
+            subject: prepared.subject,
+            message: 'updated',
+            useSignature: true,
+          ),
+        );
+        expect(
+          (network.requests.last.body as ForumMultipartFields).entries.where(
+            (e) => e.key == 'readperm',
+          ),
+          isEmpty,
+        );
+        expect(network.requests, hasLength(2));
+      }
+    },
+  );
+
+  test(
+    'clearing permissions reads back zero; adjusted and unavailable evidence stays applied',
+    () async {
+      for (final actual in <int?>[0, 20, null]) {
+        final network = _QueueNetwork([
+          _editForm(),
+          callback,
+          actual == null
+              ? const ForumTransportFailure(
+                  kind: ForumTransportFailureKind.timeout,
+                  code: 'timeout',
+                )
+              : permission(actual),
+        ]);
+        final adapter = ForumClientAdapterFactory(
+          config: config,
+          network: network,
+        ).createThreadPostEdit();
+        final prepared = (await adapter.preparation.load(
+          ThreadPostEditPreparationRequest(target: target()),
+        )).dataOrNull!;
+        final result = await adapter.command.execute(
+          ThreadPostEditSubmission(
+            preparation: prepared,
+            subject: prepared.subject,
+            message: prepared.message,
+            useSignature: true,
+            minimumReadAccess: 0,
+          ),
+        );
+        expect(result, isA<DataCommandApplied<ThreadPostEditReceipt>>());
+        expect(
+          result.receiptOrNull!.readAccess!.kind,
+          actual == null
+              ? ThreadReadAccessEvidenceKind.unverified
+              : actual == 0
+              ? ThreadReadAccessEvidenceKind.confirmed
+              : ThreadReadAccessEvidenceKind.serverAdjusted,
+        );
+        expect(
+          (network.requests[1].body as ForumMultipartFields).entries
+              .where((e) => e.key == 'readperm')
+              .single
+              .value,
+          '0',
+        );
+        expect(
+          network.requests.where((r) => r.method == ForumRequestMethod.post),
+          hasLength(1),
+        );
+      }
+    },
+  );
+
+  test(
+    'unknown outcome with a mismatched permission is never confirmed or resent',
+    () async {
+      final network = _QueueNetwork([
+        _editForm(),
+        const ForumTransportFailure(
+          kind: ForumTransportFailureKind.timeout,
+          code: 'timeout',
+        ),
+        _editForm(message: 'updated'),
+      ]);
+      final adapter = ForumClientAdapterFactory(
+        config: config,
+        network: network,
+      ).createThreadPostEdit();
+      final prepared = (await adapter.preparation.load(
+        ThreadPostEditPreparationRequest(target: target()),
+      )).dataOrNull!;
+      final result = await adapter.command.execute(
+        ThreadPostEditSubmission(
+          preparation: prepared,
+          subject: prepared.subject,
+          message: 'updated',
+          useSignature: true,
+          minimumReadAccess: 0,
+        ),
+      );
+      expect(result, isA<DataCommandOutcomeUnknown<ThreadPostEditReceipt>>());
+      expect(
+        network.requests.where((r) => r.method == ForumRequestMethod.post),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('replies omit topic permission even if a template exposes it', () async {
+    final network = _QueueNetwork([_editForm(), callback]);
+    final adapter = ForumClientAdapterFactory(
+      config: config,
+      network: network,
+    ).createThreadPostEdit();
+    final prepared = (await adapter.preparation.load(
+      ThreadPostEditPreparationRequest(target: target(firstPost: false)),
+    )).dataOrNull!;
+    expect(prepared.readAccess.canModify, isFalse);
+    await adapter.command.execute(
+      ThreadPostEditSubmission(
+        preparation: prepared,
+        subject: prepared.subject,
+        message: 'updated',
+        useSignature: true,
+      ),
+    );
+    expect(
+      (network.requests.last.body as ForumMultipartFields).entries.where(
+        (e) => e.key == 'readperm',
+      ),
+      isEmpty,
+    );
+  });
+
   test('standard builder installs one edit adapter for both slots', () {
     final client = YamiboForumClientBuilder(
       config: config,

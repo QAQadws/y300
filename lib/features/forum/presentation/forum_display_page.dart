@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/composer_shared/presentation/services/read_access_feedback.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
@@ -509,14 +510,27 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     );
   }
 
-  void _openComposer(BuildContext context, ForumDisplayPageState state) {
-    Navigator.of(context).push(
+  Future<void> _openComposer(
+    BuildContext context,
+    ForumDisplayPageState state,
+  ) async {
+    final result = await Navigator.of(context).push(
       MaterialPageRoute<PostingComposerResult>(
         builder: (_) => PostingComposerPage(
           args: PostingComposerArgs(target: PostingTarget(fid: state.fid)),
         ),
       ),
     );
+    if (!context.mounted || result?.sent != true) return;
+    final feedback = readAccessFeedback(
+      AppLocalizations.of(context),
+      result!.readAccess,
+    );
+    if (feedback != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(feedback)));
+    }
   }
 }
 

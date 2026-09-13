@@ -16,7 +16,12 @@ abstract class StorageLocationRepository {
   Future<String?> pickDirectory();
 }
 
-class StorageLocationRepositoryImpl implements StorageLocationRepository {
+abstract interface class ExistingStorageRootLocator {
+  Future<String?> getExistingStorageRoot();
+}
+
+class StorageLocationRepositoryImpl
+    implements StorageLocationRepository, ExistingStorageRootLocator {
   StorageLocationRepositoryImpl({
     String androidPackageName = 'com.example.y300',
     PreferencesStore? preferencesStore,
@@ -25,6 +30,33 @@ class StorageLocationRepositoryImpl implements StorageLocationRepository {
 
   final String _androidPackageName;
   final PreferencesStore _preferencesStore;
+
+  @override
+  Future<String?> getExistingStorageRoot() async {
+    final custom = await getCustomStorageRoot();
+    if (custom != null) {
+      return await io.Directory(custom).exists() ? custom : null;
+    }
+    final candidates = <String>[];
+    if (io.Platform.isAndroid) {
+      candidates.add(
+        p.join(
+          '/storage/emulated/0/Android/media',
+          _androidPackageName,
+          'Y300',
+        ),
+      );
+      final external = await getExternalStorageDirectory();
+      if (external != null) candidates.add(p.join(external.path, 'Y300'));
+    }
+    candidates.add(
+      p.join((await getApplicationDocumentsDirectory()).path, 'Y300'),
+    );
+    for (final path in candidates) {
+      if (await io.Directory(path).exists()) return path;
+    }
+    return null;
+  }
 
   @override
   Future<String> getDefaultStorageRoot() async {

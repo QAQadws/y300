@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
@@ -5,6 +6,30 @@ import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.d
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 
 void main() {
+  test(
+    'thread invalidation fences pending cache writes before deletion',
+    () async {
+      final barrier = Completer<void>();
+      final documents = _RecordingDocumentCacheService();
+      final snapshots = _RecordingParsedSnapshotCacheService();
+      final service = DefaultNativePageCacheInvalidationService(
+        documentCache: documents,
+        snapshotCache: snapshots,
+        beforeThreadInvalidation: (tid) {
+          expect(tid, '560713');
+          return barrier.future;
+        },
+      );
+      final pending = service.invalidateThread(' 560713 ');
+      await Future<void>.delayed(Duration.zero);
+      expect(documents.deletedPrefixes, isEmpty);
+      expect(snapshots.deletedPrefixes, isEmpty);
+      barrier.complete();
+      await pending;
+      expect(documents.deletedPrefixes, hasLength(1));
+      expect(snapshots.deletedPrefixes, hasLength(1));
+    },
+  );
   test(
     'invalidateThread deletes document and snapshot variants by tid prefix',
     () async {

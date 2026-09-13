@@ -129,12 +129,12 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
         segments: <ButtonSegment<NovelChapterOpenMode>>[
           ButtonSegment<NovelChapterOpenMode>(
             value: NovelChapterOpenMode.reader,
-            icon: Icon(Icons.book_outlined, size: 18),
+            icon: const Icon(Icons.book_outlined, size: 18),
             label: Text(l10n.novelOpenInReader),
           ),
           ButtonSegment<NovelChapterOpenMode>(
             value: NovelChapterOpenMode.sourcePost,
-            icon: Icon(Icons.chat_bubble_outline, size: 18),
+            icon: const Icon(Icons.chat_bubble_outline, size: 18),
             label: Text(l10n.novelOpenSourcePost),
           ),
         ],

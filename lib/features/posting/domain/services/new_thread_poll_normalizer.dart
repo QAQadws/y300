@@ -20,7 +20,6 @@ class NewThreadPollNormalizer {
       final trimmed = option.trim();
       if (trimmed.isEmpty) continue;
       cleanedOptions.add(trimmed);
-      if (cleanedOptions.length >= NewThreadPollValidation.maxOptions) break;
     }
 
     final expirationDays = source.expirationDays < 0

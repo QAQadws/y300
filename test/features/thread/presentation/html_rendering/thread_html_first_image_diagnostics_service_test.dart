@@ -32,7 +32,7 @@ void main() {
         imageCacheOwnerId: '100',
       );
       final legacyPlan = _planWithImages(<RichImageBlock>[
-        RichImageBlock(
+        const RichImageBlock(
           url: 'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
           rawUrl: 'data/attachment/forum/page-1.jpg',
           index: 0,

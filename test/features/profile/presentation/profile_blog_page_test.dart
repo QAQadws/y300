@@ -204,9 +204,9 @@ void main() {
             'https://bbs.yamibo.com/',
           ),
         ],
-        child: MediaQuery(
-          data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
-          child: const LocalizedTestApp(home: ProfileBlogPage()),
+        child: const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          child: LocalizedTestApp(home: ProfileBlogPage()),
         ),
       ),
     );

@@ -90,7 +90,10 @@ void main() {
       final draftRepository = _MemoryReplyDraftRepository();
       await draftRepository.saveDraft(
         ComposerDraftSnapshot(
-          identity: ComposerDraftIdentity.thread(fid: '33', tid: '572063'),
+          identity: const ComposerDraftIdentity.thread(
+            fid: '33',
+            tid: '572063',
+          ),
           message: '旧帖子草稿',
           useSignature: true,
           updatedAt: DateTime.utc(2026, 6, 6),
@@ -651,7 +654,11 @@ void main() {
         );
         final uploadCoordinator = _FakeReplyImageUploadCoordinator(
           events: [
-            ComposerImageUploadEvent.started(localId: '', current: 1, total: 2),
+            const ComposerImageUploadEvent.started(
+              localId: '',
+              current: 1,
+              total: 2,
+            ),
             ComposerImageUploadEvent.uploaded(
               localId: '',
               current: 1,
@@ -662,7 +669,11 @@ void main() {
                 uploadedAt: DateTime.utc(2026, 6, 8),
               ),
             ),
-            ComposerImageUploadEvent.started(localId: '', current: 2, total: 2),
+            const ComposerImageUploadEvent.started(
+              localId: '',
+              current: 2,
+              total: 2,
+            ),
             ComposerImageUploadEvent.uploaded(
               localId: '',
               current: 2,
@@ -763,11 +774,11 @@ void main() {
         );
         final uploadCoordinator = _FakeReplyImageUploadCoordinator(
           events: [
-            ComposerImageUploadEvent.failed(
+            const ComposerImageUploadEvent.failed(
               localId: '',
               current: 1,
               total: 2,
-              failure: const ComposerImageUploadFailure(
+              failure: ComposerImageUploadFailure(
                 code: ComposerImageUploadFailureCode.server,
                 detail: '第一张失败',
               ),
@@ -1087,11 +1098,11 @@ void main() {
         replyComposerControllerProvider(args).notifier,
       );
 
-      final mutation = ComposerTextMutation(
+      const mutation = ComposerTextMutation(
         previousSource: '旧',
         nextSource: '新',
-        replacedSelection: const ComposerSelection(start: 0, end: 1),
-        resultSelection: const ComposerSelection(start: 1, end: 1),
+        replacedSelection: ComposerSelection(start: 0, end: 1),
+        resultSelection: ComposerSelection(start: 1, end: 1),
         revision: 9,
       );
       final applied = controller.applyPatch(
@@ -1114,16 +1125,16 @@ void main() {
           messageRevision: 7,
           lastMessageMutation: mutation,
           pendingAttachmentAids: const ['888'],
-          pendingAttachmentNotice: ComposerPendingAttachmentNotice(
+          pendingAttachmentNotice: const ComposerPendingAttachmentNotice(
             code: ComposerPendingAttachmentNoticeCode.readyToReinsert,
             count: 1,
           ),
-          failure: ComposerSubmissionFailure(
+          failure: const ComposerSubmissionFailure(
             code: ComposerSubmissionFailureCode.unknown,
             kind: ComposerKind.reply,
             detail: '错误',
           ),
-          imageUploadFailure: ComposerImageUploadFailure(
+          imageUploadFailure: const ComposerImageUploadFailure(
             code: ComposerImageUploadFailureCode.unknown,
             detail: '上传错误',
           ),

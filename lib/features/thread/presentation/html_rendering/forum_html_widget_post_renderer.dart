@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -29,6 +30,10 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.preferences,
     this.buildAsync,
     this.enableCaching,
+    this.renderMode = RenderMode.column,
+    this.onBodyBuilt,
+    this.bodyPresentation,
+    this.collapseExpansion,
     this.sourceId,
     this.threadId,
     this.imageReferer,
@@ -52,6 +57,14 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ForumHtmlReaderPreferences? preferences;
   final bool? buildAsync;
   final bool? enableCaching;
+
+  /// Only the outer chapter may be a sliver; nested collapse content stays a box.
+  final RenderMode renderMode;
+  final VoidCallback? onBodyBuilt;
+  final ThreadPostBodyPresentation? bodyPresentation;
+
+  /// Chapter-owned expansion memory when offscreen sliver children unmount.
+  final Map<String, bool>? collapseExpansion;
   final String? sourceId;
   final String? threadId;
   final String? imageReferer;
@@ -105,10 +118,18 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     final preparedHtml = document.preparedHtml;
     final imageAttachmentIdsByUrl = document.attachmentIdsByUrl;
     final handlesImageTapInFactory = threadId?.trim().isNotEmpty == true;
-    return HtmlWidget(
+    final presentation = bodyPresentation;
+    final baseStyle = stylePolicy.baseTextStyle(context);
+    Widget buildBody(VoidCallback? onReady) => HtmlWidget(
       preparedHtml,
       key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
       baseUrl: forumBaseUri,
+      onErrorBuilder: onReady == null
+          ? null
+          : (_, _, _) {
+              onReady();
+              return null;
+            },
       buildAsync: buildAsync,
       customStylesBuilder: stylePolicy.customStylesFor,
       customWidgetBuilder: (element) => _buildCustomWidget(
@@ -118,10 +139,10 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
         resolvedPreferences,
         document,
       ),
-      factoryBuilder: _cachedImageFactoryBuilder(),
+      factoryBuilder: _cachedImageFactoryBuilder(onReady),
       enableCaching: enableCaching,
-      renderMode: RenderMode.column,
-      textStyle: stylePolicy.baseTextStyle(context),
+      renderMode: renderMode,
+      textStyle: baseStyle,
       onTapUrl: callbacks.onTapUrl == null
           ? null
           : (url) {
@@ -132,15 +153,36 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           ? null
           : (image) => _handleTapImage(image, imageAttachmentIdsByUrl),
     );
+    if (presentation == null || renderMode != RenderMode.column) {
+      return buildBody(onBodyBuilt);
+    }
+    final revision = (
+      preparedHtml,
+      baseStyle,
+      MediaQuery.textScalerOf(context),
+      resolvedPreferences,
+      theme.signature,
+    );
+    return ThreadPostBodyLayout(
+      key: ValueKey((presentation, revision)),
+      presentation: presentation,
+      sourceId: sourceId ?? 'anonymous',
+      revision: revision,
+      builder: (ready) => buildBody(() {
+        ready();
+        onBodyBuilt?.call();
+      }),
+    );
   }
 
-  WidgetFactory Function()? _cachedImageFactoryBuilder() {
+  WidgetFactory Function()? _cachedImageFactoryBuilder(VoidCallback? onReady) {
     final tid = threadId?.trim();
     if (tid == null || tid.isEmpty) {
-      return null;
+      return onReady == null ? null : () => _BodyReadyWidgetFactory(onReady);
     }
     return () => ForumHtmlCachedImageWidgetFactory(
       threadId: tid,
+      onBodyBuilt: onReady,
       imageReferer: imageReferer,
       imageCacheOwnerId: imageCacheOwnerId,
       onTapImageRequest: callbacks.onTapImage == null
@@ -181,12 +223,19 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     }
 
     final collapseId = _collapseSourceId(element);
-    return ForumCollapseBlock(
-      titleHtml:
-          _firstChildWithClass(element, 'showcollapse_title')?.innerHtml ??
-          AppLocalizations.of(context).threadHtmlCollapseContent,
-      contentHtml: _collapseContentHtml(element),
-      initiallyExpanded: stylePolicy.isForumCollapseInitiallyExpanded(element),
+    final titleHtml =
+        _firstChildWithClass(element, 'showcollapse_title')?.innerHtml ??
+        AppLocalizations.of(context).threadHtmlCollapseContent;
+    final contentHtml = _collapseContentHtml(element);
+    Widget buildCollapse(BuildContext context) => ForumCollapseBlock(
+      titleHtml: titleHtml,
+      contentHtml: contentHtml,
+      initiallyExpanded:
+          collapseExpansion?[collapseId] ??
+          stylePolicy.isForumCollapseInitiallyExpanded(element),
+      onExpandedChanged: collapseExpansion == null
+          ? null
+          : (expanded) => collapseExpansion![collapseId] = expanded,
       sourceId: collapseId,
       onInteraction: callbacks.onInteraction,
       nestedRendererBuilder: (html, {required sourceId}) {
@@ -194,6 +243,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           html: html,
           theme: theme,
           callbacks: callbacks,
+          collapseExpansion: collapseExpansion,
+          bodyPresentation: bodyPresentation,
           preferences: resolvedPreferences,
           buildAsync: buildAsync,
           enableCaching: enableCaching,
@@ -213,6 +264,11 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
         );
       },
     );
+    // HtmlWidget caches its widget tree. Re-read chapter-owned state when a
+    // lazy sliver remounts this child instead of freezing the initial value.
+    return collapseExpansion == null
+        ? buildCollapse(context)
+        : Builder(builder: buildCollapse);
   }
 
   String _collapseContentHtml(html_dom.Element element) {
@@ -314,8 +370,22 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   }
 }
 
+class _BodyReadyWidgetFactory extends WidgetFactory {
+  _BodyReadyWidgetFactory(this.onBodyBuilt);
+  final VoidCallback onBodyBuilt;
+
+  @override
+  Widget buildBodyWidget(BuildContext context, Widget child) {
+    final body = super.buildBodyWidget(context, child);
+    onBodyBuilt();
+    return body;
+  }
+}
+
 class _DiscuzEditStatusText extends StatelessWidget {
   const _DiscuzEditStatusText({required this.text, required this.baseStyle});
+
+  static final _whitespace = RegExp(r'[\s\u0085\u00a0\u2028\u2029]+');
 
   final String text;
   final TextStyle Function(BuildContext context) baseStyle;
@@ -331,13 +401,23 @@ class _DiscuzEditStatusText extends StatelessWidget {
         Theme.of(context).colorScheme.onSurface;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        key: const Key('forum-html-discuz-edit-status'),
-        style: source.copyWith(
-          fontSize: baseFontSize == null ? null : baseFontSize * 0.88,
-          fontStyle: FontStyle.italic,
-          color: baseColor.withValues(alpha: 0.62),
+      // Lay out the complete line at the reader's chosen size once. Scaling
+      // only when necessary avoids iterative font-size measurement and keeps
+      // both the painted line and its layout height within the available box.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: AlignmentDirectional.centerStart,
+        child: Text(
+          text.replaceAll(_whitespace, ' ').trim(),
+          key: const Key('forum-html-discuz-edit-status'),
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.visible,
+          style: source.copyWith(
+            fontSize: baseFontSize == null ? null : baseFontSize * 0.88,
+            fontStyle: FontStyle.italic,
+            color: baseColor.withValues(alpha: 0.62),
+          ),
         ),
       ),
     );

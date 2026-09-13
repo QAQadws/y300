@@ -60,8 +60,8 @@ void main() {
         initialScore: 0,
         todayRemaining: 2,
       );
-      final form = ThreadPostRateForm(
-        preparation: const ThreadPostRatingPreparation(
+      const form = ThreadPostRateForm(
+        preparation: ThreadPostRatingPreparation(
           tid: '100',
           pid: '1',
           dimensions: <ThreadPostRatingDimension>[primary, secondary],
@@ -73,7 +73,7 @@ void main() {
         dimension: primary,
       );
 
-      final submission = ThreadPostRateDraft(
+      final submission = const ThreadPostRateDraft(
         form: form,
         score: 5,
         reason: '服务器理由',

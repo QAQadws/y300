@@ -34,13 +34,13 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      LocalizedTestApp(
+      const LocalizedTestApp(
         home: Scaffold(
           body: SizedBox(
             width: 400,
             height: 240,
             child: ComposerQuillEditorSurface(
-              key: const Key('spacing-quill-surface'),
+              key: Key('spacing-quill-surface'),
               keyPrefix: 'spacing-quill',
               minHeight: 120,
             ),

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projector.dart';
+import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_content_projection_controller.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
@@ -12,8 +13,66 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/pla
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_diagnostics.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
+import '../../data/comic_comment_fixtures.dart';
 
 void main() {
+  test(
+    'layout revisions ignore metadata and append, but track replacements and conversion',
+    () {
+      ComicCommentContentProjection projection(
+        int count, {
+        String message = '<p>软件</p>',
+        bool converted = false,
+        String metadata = 'same',
+      }) {
+        final source = ComicCommentLoadResult.fromRead(
+          commentDetailPage(
+            posts: List.generate(
+              count,
+              (i) => commentPost(i + 1, message: message),
+            ),
+          ),
+        );
+        return ComicCommentContentProjection(
+          sourceResult: source,
+          items: [
+            for (final item in source.items)
+              ComicCommentItemProjection(
+                sourceItem: item,
+                displayMessage: converted
+                    ? item.rawMessage.replaceAll('软件', '軟體')
+                    : item.rawMessage,
+                displayDateline: item.dateline,
+              ),
+          ],
+          mode: converted
+              ? TextConversionMode.toTraditional
+              : TextConversionMode.none,
+          converterId: 'fixture',
+          sourceRevision: metadata,
+          isConverted: converted,
+        );
+      }
+
+      final tracker = ComicCommentLayoutRevisionTracker();
+      expect(tracker.update(projection(2)), 0);
+      expect(tracker.update(projection(2, metadata: 'updated counters')), 0);
+      expect(tracker.update(projection(5)), 0);
+      expect(tracker.update(projection(5, converted: true)), 1);
+      expect(
+        tracker.update(
+          projection(5, message: '<p>edited 软件</p>', converted: true),
+        ),
+        2,
+      );
+      expect(
+        tracker.update(
+          projection(3, message: '<p>edited 软件</p>', converted: true),
+        ),
+        3,
+      );
+    },
+  );
   test(
     'projects loaded comments and mode changes never reload the session',
     () async {
@@ -253,7 +312,8 @@ final class _SequenceLoader implements ComicCommentLoader {
   int calls = 0;
 
   @override
-  Future<ComicCommentLoadResult> loadAll({
+  Future<ComicCommentLoadResult> loadPage({
+    int page = 1,
     required String sourceTid,
     ComicCommentCancellationToken? cancellationToken,
   }) async {

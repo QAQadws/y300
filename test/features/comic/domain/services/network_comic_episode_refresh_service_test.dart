@@ -30,8 +30,8 @@ void main() {
         },
       );
       final searchCoordinator = _FakeForumSearchCoordinator(
-        response: SearchTestResponse(
-          items: const <SearchTestTopic>[
+        response: const SearchTestResponse(
+          items: <SearchTestTopic>[
             SearchTestTopic(
               tid: '301',
               title: '百合情结 第14话',
@@ -90,8 +90,8 @@ void main() {
           },
         );
         final searchCoordinator = _FakeForumSearchCoordinator(
-          response: SearchTestResponse(
-            items: const <SearchTestTopic>[
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[
               SearchTestTopic(
                 tid: '503102',
                 title: '[百合會][サンデーうぇぶり][古鉢るか]はなにあらし(好事多磨)第82話下',
@@ -558,8 +558,8 @@ void main() {
           },
         );
         final searchCoordinator = _FakeForumSearchCoordinator(
-          response: SearchTestResponse(
-            items: const <SearchTestTopic>[
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[
               SearchTestTopic(
                 tid: '301',
                 title: '百合情结 第15话',
@@ -636,8 +636,8 @@ void main() {
           },
         );
         final searchCoordinator = _FakeForumSearchCoordinator(
-          response: SearchTestResponse(
-            items: const <SearchTestTopic>[
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[
               SearchTestTopic(
                 tid: '100',
                 title: '百合情结 第14话',
@@ -736,8 +736,8 @@ void main() {
         },
       );
       final searchCoordinator = _FakeForumSearchCoordinator(
-        response: SearchTestResponse(
-          items: const <SearchTestTopic>[
+        response: const SearchTestResponse(
+          items: <SearchTestTopic>[
             SearchTestTopic(
               tid: '301',
               title: '真正标题 第1话',
@@ -1755,8 +1755,8 @@ class _RecordingCandidateRanker implements ComicSearchCandidateRanker {
 
 class _RecordingEpisodeLinkMerger implements ComicEpisodeLinkMerger {
   _RecordingEpisodeLinkMerger()
-    : _delegate = DefaultComicEpisodeLinkMerger(
-        subjectParser: const RuleBasedComicSubjectParser(),
+    : _delegate = const DefaultComicEpisodeLinkMerger(
+        subjectParser: RuleBasedComicSubjectParser(),
       );
 
   final DefaultComicEpisodeLinkMerger _delegate;

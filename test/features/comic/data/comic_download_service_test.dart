@@ -70,6 +70,14 @@ void main() {
         p.join(temp.path, 'comics', '测试漫画-${_fnv('yamibo:100')}', 'meta.json'),
       ).readAsString();
       expect(meta, contains('"contentType": "comic"'));
+      expect(meta, contains('"coverFile": null'));
+      expect(meta, contains('"customCoverFile": null'));
+      expect(
+        await io.File(
+          p.join(io.File(result.cbzPath).parent.path, 'cover.jpg'),
+        ).exists(),
+        isFalse,
+      );
       expect(meta, contains('"cbzFile": "001-第1话.cbz"'));
       expect(
         repository.cacheWrites.where((item) => item.cacheStatus == 'done'),
@@ -186,51 +194,60 @@ void main() {
     },
   );
 
-  test(
-    'offline package reads cover through the dedicated cover store',
-    () async {
-      final temp = await io.Directory.systemTemp.createTemp(
-        'y300-comic-download-cover-limit-test-',
-      );
-      addTearDown(() async {
-        if (await temp.exists()) {
-          await temp.delete(recursive: true);
-        }
-      });
-      final cover = io.File(p.join(temp.path, 'source-cover.jpg'))
-        ..writeAsBytesSync(<int>[7, 8, 9]);
-      final image1 = io.File(p.join(temp.path, 'source-1.jpg'))
-        ..writeAsBytesSync(<int>[1, 2, 3]);
-      final image2 = io.File(p.join(temp.path, 'source-2.png'))
-        ..writeAsBytesSync(<int>[4, 5, 6]);
-      final governor = _RecordingGovernor();
-      final coverStore = _CoverStoreFake(cover);
-      final service = DefaultComicDownloadService(
-        repository: _ComicDownloadRepositoryFake(
-          coverImageUrl: 'https://img.test/cover.jpg',
-        ),
-        readerServiceFuture: Future<ComicReaderService>.value(
-          _ComicReaderServiceFake(<String, String>{
-            'https://img.test/1.jpg': image1.path,
-            'https://img.test/2.png': image2.path,
-          }),
-        ),
-        storageService: DefaultDownloadStorageService(
-          locationRepository: _FakeStorageLocationRepository(temp.path),
-        ),
-        imageRequestGovernor: governor,
-        coverStore: coverStore,
-      );
+  for (final coverFails in [false, true]) {
+    test(
+      'download uses unified cover store; failure=$coverFails never blocks chapters',
+      () async {
+        final temp = await io.Directory.systemTemp.createTemp(
+          'y300-comic-download-cover-limit-test-',
+        );
+        addTearDown(() async {
+          if (await temp.exists()) {
+            await temp.delete(recursive: true);
+          }
+        });
+        final cover = io.File(p.join(temp.path, 'source-cover.jpg'))
+          ..writeAsBytesSync(<int>[7, 8, 9]);
+        final image1 = io.File(p.join(temp.path, 'source-1.jpg'))
+          ..writeAsBytesSync(<int>[1, 2, 3]);
+        final image2 = io.File(p.join(temp.path, 'source-2.png'))
+          ..writeAsBytesSync(<int>[4, 5, 6]);
+        final governor = _RecordingGovernor();
+        final coverStore = _CoverStoreFake(cover)..fail = coverFails;
+        final service = DefaultComicDownloadService(
+          repository: _ComicDownloadRepositoryFake(
+            coverImageUrl: 'https://img.test/cover.jpg',
+          ),
+          readerServiceFuture: Future<ComicReaderService>.value(
+            _ComicReaderServiceFake(<String, String>{
+              'https://img.test/1.jpg': image1.path,
+              'https://img.test/2.png': image2.path,
+            }),
+          ),
+          storageService: DefaultDownloadStorageService(
+            locationRepository: _FakeStorageLocationRepository(temp.path),
+          ),
+          imageRequestGovernor: governor,
+          coverStore: coverStore,
+        );
 
-      await service.downloadEpisode(
-        comicId: 'yamibo:100',
-        episodeId: 'yamibo:100:101',
-      );
+        await service.downloadEpisode(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:101',
+        );
 
-      expect(governor.waitCount, 2);
-      expect(coverStore.ensureCalls, 1);
-    },
-  );
+        expect(governor.waitCount, 2);
+        expect(coverStore.ensureCalls, 1);
+        expect(
+          temp
+              .listSync(recursive: true)
+              .whereType<io.File>()
+              .where((file) => p.basename(file.path) == 'cover.jpg'),
+          isEmpty,
+        );
+      },
+    );
+  }
 
   test(
     'concurrent reader extraction shares one immutable generation',
@@ -398,10 +415,12 @@ final class _CoverStoreFake implements LibraryCoverStore {
 
   final io.File file;
   int ensureCalls = 0;
+  bool fail = false;
 
   @override
   Future<io.File> ensureAvailable(LibraryCoverAssetRef asset) async {
     ensureCalls++;
+    if (fail) throw StateError('Cover unavailable');
     return file;
   }
 

@@ -40,7 +40,7 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
       onLongPress: () => onOpenPostActions(sourcePost, plan),
       child: Container(
         key: Key('thread-post-card-${post.pid}'),
-        padding: EdgeInsets.fromLTRB(
+        padding: const EdgeInsets.fromLTRB(
           ForumContentSpacing.postBodyHorizontal,
           ForumContentSpacing.postCardHeaderTop,
           ForumContentSpacing.postBodyHorizontal,
@@ -156,7 +156,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
       behavior: HitTestBehavior.translucent,
       onLongPress: () => onOpenPostActions(sourcePost, plan),
       child: Container(
-        padding: EdgeInsets.fromLTRB(
+        padding: const EdgeInsets.fromLTRB(
           ForumContentSpacing.postBodyHorizontal,
           ForumContentSpacing.postCardBodyTop,
           ForumContentSpacing.postBodyHorizontal,
@@ -568,8 +568,20 @@ class ThreadPostCard extends StatelessWidget {
     this.interactionPolicy = const ThreadPostCardInteractionPolicy.full(),
     this.avatarFallbackPolicy = ForumAvatarFallbackPolicy.neutralSurface,
     this.renderContext,
+    this.showBody = true,
+    this.ratingsViewState,
+    this.ratingsExpanded,
+    this.onRatingsExpansionChanged,
+    this.commentsExpanded,
+    this.onCommentsExpansionChanged,
   });
 
+  final bool showBody;
+  final ThreadPostRatingsViewState? ratingsViewState;
+  final bool? ratingsExpanded;
+  final ValueChanged<bool>? onRatingsExpansionChanged;
+  final bool? commentsExpanded;
+  final ValueChanged<bool>? onCommentsExpansionChanged;
   final ThreadPost post;
   final ThreadDetailPageState? state;
   final bool highlighted;
@@ -638,7 +650,7 @@ class ThreadPostCard extends StatelessWidget {
     final card = Container(
       key: Key('thread-post-card-${post.pid}'),
       margin: const EdgeInsets.only(bottom: ForumContentSpacing.postCardGap),
-      padding: EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         ForumContentSpacing.postBodyHorizontal,
         ForumContentSpacing.postCardHeaderTop,
         ForumContentSpacing.postBodyHorizontal,
@@ -693,48 +705,56 @@ class ThreadPostCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          DefaultTextStyle.merge(
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: palette.bodyText,
-              height: 1.5,
-            ),
-            child: ThreadPostHtmlBody(
-              key: Key('thread-post-${post.pid}'),
-              post: post,
-              threadId: threadId,
-              imageReferer: resolvedImageReferer ?? '',
-              plan: plan,
-              onOpenPostLink: linkCallback,
-              onOpenPostImage: imageOpenCallback,
-              theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
-                palette: resolvedPalette,
-                brightness: Theme.of(context).brightness,
+          if (showBody) ...[
+            const SizedBox(height: 8),
+            DefaultTextStyle.merge(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: palette.bodyText,
+                height: 1.5,
               ),
-              onImageFallback: imageFallback,
-              onImageDiagnostics: renderContext?.onImageDiagnostics,
-              onImageLayoutShift: renderContext?.onImageLayoutShift,
-              imageFallbackAspectRatioFor:
-                  renderContext?.imageFallbackAspectRatioFor == null
-                  ? null
-                  : (spec, request) =>
-                        renderContext!.imageFallbackAspectRatioFor!(
-                          post,
-                          spec,
-                          request,
-                        ),
-              onBlockImageResolved: renderContext?.onBlockImageResolved == null
-                  ? null
-                  : (spec, request, size) =>
-                        renderContext!.onBlockImageResolved!(
-                          post,
-                          spec,
-                          request,
-                          size,
-                        ),
+              child: ThreadPostHtmlBody(
+                key: Key('thread-post-${post.pid}'),
+                post: post,
+                threadId: threadId,
+                imageReferer: resolvedImageReferer ?? '',
+                plan: plan,
+                onOpenPostLink: linkCallback,
+                onOpenPostImage: imageOpenCallback,
+                theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
+                  palette: resolvedPalette,
+                  brightness: Theme.of(context).brightness,
+                ),
+                onImageFallback: imageFallback,
+                onImageDiagnostics: renderContext?.onImageDiagnostics,
+                bodyPresentation: renderContext?.bodyPresentationFor?.call(
+                  post,
+                ),
+                imageViewportCoordinator:
+                    renderContext?.imageViewportCoordinator,
+                onImageLayoutShift: renderContext?.onImageLayoutShift,
+                imageFallbackAspectRatioFor:
+                    renderContext?.imageFallbackAspectRatioFor == null
+                    ? null
+                    : (spec, request) =>
+                          renderContext!.imageFallbackAspectRatioFor!(
+                            post,
+                            spec,
+                            request,
+                          ),
+                onBlockImageResolved:
+                    renderContext?.onBlockImageResolved == null
+                    ? null
+                    : (spec, request, size) =>
+                          renderContext!.onBlockImageResolved!(
+                            post,
+                            spec,
+                            request,
+                            size,
+                          ),
+              ),
             ),
-          ),
-          if (post.poll != null && interactionPolicy.showPoll) ...[
+          ],
+          if (showBody && post.poll != null && interactionPolicy.showPoll) ...[
             const SizedBox(height: 10),
             ThreadPollCard(
               poll: post.poll!,
@@ -757,13 +777,18 @@ class ThreadPostCard extends StatelessWidget {
               imageReferer: resolvedImageReferer,
               palette: resolvedPalette,
               onOpenAuthorProfile: commentAuthorProfileCallback,
+              expanded: commentsExpanded,
+              onExpansionChanged: onCommentsExpansionChanged,
             ),
           ],
           if (post.ratingSummary != null && interactionPolicy.showRating) ...[
             const SizedBox(height: 10),
             ThreadPostRatingSection(
               summary: post.ratingSummary!,
+              expanded: ratingsExpanded,
+              onExpansionChanged: onRatingsExpansionChanged,
               viewState:
+                  ratingsViewState ??
                   detailState?.ratingsByPostId[post.pid.trim()] ??
                   const ThreadPostRatingsViewState.idle(),
               palette: resolvedPalette,

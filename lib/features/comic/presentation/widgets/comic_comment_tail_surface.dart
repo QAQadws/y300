@@ -1,10 +1,16 @@
+import 'package:y300/features/comic/presentation/widgets/comic_comment_scroll_support.dart';
 import 'dart:async';
+import 'package:y300/features/comic/presentation/comic_comment_presentation_store.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:y300/features/comic/presentation/comic_comment_body_projector.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_content_projection_controller.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_comment_interaction_controller.dart';
+import 'package:y300/features/comic/presentation/widgets/comic_comment_action_bar.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_list_surface.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_surface.dart';
@@ -20,7 +26,7 @@ import 'package:y300/l10n/app_localizations.dart';
 /// individual lazy rows to the reader's existing ListView, so it never nests a
 /// second scrollable list inside the image stream.
 class ComicCommentTailSurface extends ChangeNotifier
-    implements ReaderTailSurface {
+    implements ReaderTailSurface, ReaderTailActionSurface {
   ComicCommentTailSurface({
     required ComicCommentSessionController session,
     required ComicCommentContentProjectionController
@@ -28,11 +34,15 @@ class ComicCommentTailSurface extends ChangeNotifier
     required String? imageReferer,
     bool hasNextEpisode = false,
     FutureOr<void> Function()? onAdvanceEpisode,
-  }) : _session = session,
+    this.interactionController,
+    ComicCommentPresentationStore? presentationStore,
+  }) : _presentation = presentationStore ?? ComicCommentPresentationStore(),
+       _session = session,
        _contentProjectionController = contentProjectionController,
        _imageReferer = imageReferer,
        _hasNextEpisode = hasNextEpisode,
        _onAdvanceEpisode = onAdvanceEpisode {
+    _presentationGeneration = _session.generation;
     _session.addListener(_onSessionChanged);
     _contentProjectionController.addListener(_onProjectionChanged);
   }
@@ -40,6 +50,24 @@ class ComicCommentTailSurface extends ChangeNotifier
   final ComicCommentSessionController _session;
   final ComicCommentContentProjectionController _contentProjectionController;
   final String? _imageReferer;
+  final ComicCommentInteractionController? interactionController;
+
+  @override
+  Widget buildActionBar(BuildContext context) => interactionController == null
+      ? const SizedBox.shrink()
+      : ComicCommentActionBar(
+          controller: interactionController!,
+          session: _session,
+        );
+
+  @override
+  void onVisibilityChanged(bool visible) {
+    if (!_disposed) {
+      _presentation.imageViewport.setActive(visible);
+      interactionController?.setVisible(visible);
+    }
+  }
+
   bool _hasNextEpisode;
   FutureOr<void> Function()? _onAdvanceEpisode;
 
@@ -52,9 +80,29 @@ class ComicCommentTailSurface extends ChangeNotifier
   }
 
   ThreadPostRenderContext? _renderContext;
+  ComicCommentPresentationStore _presentation;
+  int _presentationGeneration = 0;
+  ComicCommentBodyProjector _bodyProjector = ComicCommentBodyProjector(
+    const [],
+  );
+  ComicCommentContentProjection? _bodyProjectionSource;
+  ComicCommentContentProjection? _bodyProjection;
+
+  /// Supplied by the reader before building either tail orientation. Image
+  /// progress/cache updates must not change this content-only identity.
+  void updateChapterImages(Iterable<String> imageUrls) {
+    if (_disposed) return;
+    final projector = ComicCommentBodyProjector(imageUrls);
+    if (setEquals(projector.imageKeys, _bodyProjector.imageKeys)) return;
+    _bodyProjector = projector;
+    _bodyProjectionSource = null;
+    _bodyProjection = null;
+  }
+
   Object? _renderContextIdentity;
   String? _prunedProjectionIdentity;
   bool _disposed = false;
+  final _layoutRevision = ComicCommentLayoutRevisionTracker();
 
   ComicCommentSessionState get sessionState => _session.state;
 
@@ -71,6 +119,7 @@ class ComicCommentTailSurface extends ChangeNotifier
 
   @override
   bool get isAdjacentPreloadReady {
+    if (!sessionState.isExpanded) return false;
     final status = sessionState.result?.status;
     return status == ComicCommentLoadStatus.success ||
         status == ComicCommentLoadStatus.empty ||
@@ -81,12 +130,12 @@ class ComicCommentTailSurface extends ChangeNotifier
   int get verticalItemCount {
     final state = sessionState;
     final result = state.result;
-    if (state.isLoading || result == null) {
+    if (!state.isExpanded || state.isLoading || result == null) {
       return 1;
     }
     if (result.status == ComicCommentLoadStatus.success &&
         result.items.isNotEmpty) {
-      return result.items.length + (_hasNextEpisode ? 0 : 1);
+      return result.items.length + (result.hasMore ? 1 : 0);
     }
     if (result.status == ComicCommentLoadStatus.partialFailure &&
         result.items.isNotEmpty) {
@@ -99,30 +148,29 @@ class ComicCommentTailSurface extends ChangeNotifier
   Widget buildPaged(BuildContext context, ReaderTailActions actions) {
     final state = sessionState;
     final result = state.result;
-    if (state.isLoading || result == null) {
+    if (!state.isExpanded || state.isLoading || result == null) {
       return const ComicCommentFeedbackSurface(
         key: Key('comic-comment-tail-loading'),
         kind: ComicCommentFeedbackKind.loading,
       );
     }
-    final list = ComicCommentListSurface(
+    return ComicCommentListSurface(
+      key: ValueKey(_presentation),
+      presentationStore: _presentation,
       sourceTid: _session.key.sourceTid,
+      interactionController: interactionController,
       projection: _projectionFor(result),
       imageReferer: _imageReferer,
       onRetry: actions.onRetry,
+      onLoadMore: state.isRefreshing || state.isLoadingMore
+          ? null
+          : _session.loadMore,
+      appendError:
+          state.appendError ??
+          (state.refreshFailed
+              ? ComicCommentLoadErrorCode.pageUnavailable
+              : null),
       renderContext: _renderContextFor(context),
-    );
-    if (_hasNextEpisode) {
-      return list;
-    }
-    return Column(
-      children: [
-        Expanded(child: list),
-        const ComicCommentFeedbackSurface(
-          kind: ComicCommentFeedbackKind.lastChapter,
-          compact: true,
-        ),
-      ],
     );
   }
 
@@ -148,6 +196,7 @@ class ComicCommentTailSurface extends ChangeNotifier
   ) {
     final state = sessionState;
     final result = state.result;
+    if (!state.isExpanded) return _buildStatus(context, state, result);
     final loadedResult = result;
     final projection = loadedResult == null
         ? null
@@ -164,10 +213,38 @@ class ComicCommentTailSurface extends ChangeNotifier
           ),
           padding: EdgeInsets.fromLTRB(12, index == 0 ? 12 : 0, 12, 10),
           child: ComicCommentListItem(
+            layoutOwner: _presentation,
+            layoutRevision: _layoutRevision.update(projection),
+            interactionController: interactionController,
             projection: itemProjection,
             sourceTid: _session.key.sourceTid,
             imageReferer: _imageReferer,
             renderContext: _renderContextFor(context),
+            presentation: _presentation[itemProjection.sourceItem.pid],
+          ),
+        );
+      }
+      if (loadedResult.hasMore) {
+        if (state.isLoadingMore || state.isRefreshing) {
+          return const ComicCommentFeedbackSurface(
+            kind: ComicCommentFeedbackKind.loading,
+            compact: true,
+          );
+        }
+        if (state.appendError != null || state.refreshFailed) {
+          return ComicCommentFeedbackSurface(
+            key: const Key('comic-comment-tail-append-failure'),
+            kind: ComicCommentFeedbackKind.unavailable,
+            onAction: _session.retry,
+            compact: true,
+          );
+        }
+        return ComicCommentLoadMoreTrigger(
+          identity: loadedResult.nextPage!,
+          onVisible: _session.loadMore,
+          child: const ComicCommentFeedbackSurface(
+            kind: ComicCommentFeedbackKind.loading,
+            compact: true,
           ),
         );
       }
@@ -176,13 +253,6 @@ class ComicCommentTailSurface extends ChangeNotifier
           key: const Key('comic-comment-tail-partial-failure'),
           kind: ComicCommentFeedbackKind.unavailable,
           onAction: () => unawaited(_handleVerticalRequest(context)),
-          compact: true,
-        );
-      }
-      if (!_hasNextEpisode && index == projection.items.length) {
-        return const ComicCommentFeedbackSurface(
-          key: Key('comic-comment-tail-last-chapter'),
-          kind: ComicCommentFeedbackKind.lastChapter,
           compact: true,
         );
       }
@@ -213,6 +283,13 @@ class ComicCommentTailSurface extends ChangeNotifier
     ComicCommentSessionState state,
     ComicCommentLoadResult? result,
   ) {
+    if (!state.isExpanded) {
+      return ComicCommentFeedbackSurface(
+        actionKey: const Key('comic-comment-tail-load-button'),
+        kind: ComicCommentFeedbackKind.open,
+        onAction: () => unawaited(_session.load()),
+      );
+    }
     if (state.isLoading) {
       return const ComicCommentFeedbackSurface(
         key: Key('comic-comment-tail-loading'),
@@ -284,10 +361,21 @@ class ComicCommentTailSurface extends ChangeNotifier
       palette: palette.card.toARGB32(),
     );
     if (_renderContextIdentity != identity || _renderContext == null) {
+      // Capture this generation's store. Old image callbacks must not resolve
+      // a PID against a replacement account/chapter store.
+      final presentation = _presentation;
       _renderContextIdentity = identity;
       _renderContext = ThreadPostRenderContext(
         palette: palette,
         imageReferer: _imageReferer,
+        bodyPresentationFor: (post) => presentation.forRenderedPost(post)?.body,
+        imageViewportCoordinator: presentation.imageViewport,
+        imageFallbackAspectRatioFor: (post, _, request) => presentation
+            .forRenderedPost(post)
+            ?.imageAspectRatio(request.cacheKey),
+        onBlockImageResolved: (post, _, request, size) => presentation
+            .forRenderedPost(post)
+            ?.recordImageSize(request.cacheKey, size),
         renderOwnerFor: (post) => ThreadPostRenderContext.commentRenderOwner(
           sourceTid: _session.key.sourceTid,
           pid: post.pid,
@@ -308,11 +396,30 @@ class ComicCommentTailSurface extends ChangeNotifier
   }
 
   ComicCommentContentProjection _projectionFor(ComicCommentLoadResult result) {
-    return _contentProjectionController.projectionFor(result);
+    final source = _contentProjectionController.projectionFor(result);
+    if (!identical(source, _bodyProjectionSource)) {
+      _bodyProjectionSource = source;
+      _bodyProjection = _bodyProjector.project(source);
+      _presentation.synchronize(_bodyProjection!);
+    }
+    return _bodyProjection!;
   }
 
   void _onSessionChanged() {
     if (!_disposed) {
+      if (_presentationGeneration != _session.generation) {
+        _presentationGeneration = _session.generation;
+        _presentation.dispose();
+        _presentation = ComicCommentPresentationStore();
+        _renderContext = null;
+        _prunedProjectionIdentity = null;
+        _bodyProjectionSource = null;
+        _bodyProjection = null;
+      }
+      if (_session.state.result == null) {
+        _bodyProjectionSource = null;
+        _bodyProjection = null;
+      }
       notifyListeners();
     }
   }
@@ -329,6 +436,7 @@ class ComicCommentTailSurface extends ChangeNotifier
       return;
     }
     _disposed = true;
+    _presentation.dispose();
     _session.removeListener(_onSessionChanged);
     _contentProjectionController.removeListener(_onProjectionChanged);
     super.dispose();

@@ -128,7 +128,7 @@ void main() {
     test(
       'late writes increment visits without replacing the newer snapshot',
       () async {
-        final target = const HistoryTargetKey(
+        const target = HistoryTargetKey(
           type: HistoryTargetType.thread,
           id: '100',
         );
@@ -167,7 +167,7 @@ void main() {
     test(
       'newer sparse snapshots preserve optional cover and route fields',
       () async {
-        final target = const HistoryTargetKey(
+        const target = HistoryTargetKey(
           type: HistoryTargetType.comic,
           id: 'comic:1',
         );

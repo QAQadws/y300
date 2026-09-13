@@ -1,3 +1,6 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
+    show ThreadReadInvalidation;
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -5,10 +8,9 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/media/encoded_image_dimension_probe.dart';
-import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
-import 'package:y300/features/cache/data/services/cache_mutation_bus.dart';
+import 'package:y300/features/cache/data/providers/cache_mutation_provider.dart';
 import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
 import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
@@ -40,6 +42,8 @@ import 'package:y300/features/cache/presentation/services/default_forum_image_pr
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+
+export 'cache_mutation_provider.dart';
 
 final imageCacheDirectoryResolverProvider =
     Provider<ImageCacheDirectoryResolver>((ref) {
@@ -83,12 +87,6 @@ final encodedImageDimensionProbeProvider = Provider<EncodedImageDimensionProbe>(
   },
 );
 
-final cacheMutationBusProvider = Provider<CacheMutationBus>((ref) {
-  final bus = CacheMutationBus();
-  ref.onDispose(() => unawaited(bus.dispose()));
-  return bus;
-});
-
 final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
   return LocalDocumentCacheService.lazy(
     // The thread repository can be created by a widget test before the
@@ -111,7 +109,11 @@ final parsedSnapshotCacheServiceProvider = Provider<ParsedSnapshotCacheService>(
 
 final nativePageCacheInvalidationServiceProvider =
     Provider<NativePageCacheInvalidationService>((ref) {
+      final detail = ref.watch(yamiboForumClientProvider).threadDetail;
       return DefaultNativePageCacheInvalidationService(
+        beforeThreadInvalidation: detail is ThreadReadInvalidation
+            ? (detail as ThreadReadInvalidation).invalidatePendingReads
+            : null,
         documentCache: ref.watch(documentCacheServiceProvider),
         snapshotCache: ref.watch(parsedSnapshotCacheServiceProvider),
       );
@@ -218,6 +220,7 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
     adapters: <StorageAccountingAdapter>[
       ImageCacheStorageAccountingAdapter(repository: imageCacheRepository),
       LibraryCoverStorageAccountingAdapter(
+        thumbnails: ref.watch(libraryCoverThumbnailStoreProvider),
         store: ref.watch(libraryCoverStoreProvider),
       ),
       PageCacheStorageAccountingAdapter(

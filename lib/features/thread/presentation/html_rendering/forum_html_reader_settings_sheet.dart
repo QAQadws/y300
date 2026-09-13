@@ -119,14 +119,14 @@ class _ConversionModeSegmentedControl extends StatelessWidget {
             value: TextConversionMode.toSimplified,
             label: Text(
               l10n.threadHtmlConversionSimplified,
-              key: Key('forum-html-reader-conversion-simplified'),
+              key: const Key('forum-html-reader-conversion-simplified'),
             ),
           ),
           ButtonSegment(
             value: TextConversionMode.toTraditional,
             label: Text(
               l10n.threadHtmlConversionTraditional,
-              key: Key('forum-html-reader-conversion-traditional'),
+              key: const Key('forum-html-reader-conversion-traditional'),
             ),
           ),
         ],

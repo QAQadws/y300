@@ -93,7 +93,7 @@ Widget _build(
           maxWidth: 320,
           localFileExists: localFileExists ?? (_) => false,
           localImageBuilder: (File _, Key key) {
-            return SizedBox(key: const Key('local-preview'));
+            return const SizedBox(key: Key('local-preview'));
           },
         ),
       ),

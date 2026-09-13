@@ -12,6 +12,13 @@ class ReaderTailActions {
   final VoidCallback onAdvance;
 }
 
+/// Optional fixed chrome for a tail. The engine owns geometry and visibility;
+/// the business surface owns the actions and their loading lifecycle.
+abstract interface class ReaderTailActionSurface {
+  Widget buildActionBar(BuildContext context);
+  void onVisibilityChanged(bool visible);
+}
+
 /// Neutral non-image content attached to one reader owner.
 ///
 /// The surface owns its loading/error/content UI. The reader only decides

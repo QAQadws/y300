@@ -125,14 +125,14 @@ void main() {
           ),
           comicDownloadQueueSnapshotProvider.overrideWithValue(snapshot),
         ],
-        child: LocalizedTestApp(
-          locale: const Locale('zh', 'TW'),
+        child: const LocalizedTestApp(
+          locale: Locale('zh', 'TW'),
           home: MediaQuery(
-            data: const MediaQueryData(
+            data: MediaQueryData(
               size: Size(360, 720),
               textScaler: TextScaler.linear(1.6),
             ),
-            child: const ComicDownloadQueuePage(),
+            child: ComicDownloadQueuePage(),
           ),
         ),
       ),

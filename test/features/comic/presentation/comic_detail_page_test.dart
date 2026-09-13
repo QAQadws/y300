@@ -1,8 +1,9 @@
+import 'package:y300/features/comic/data/providers/comic_download_cover_providers.dart';
+import 'package:y300/features/comic/data/services/comic_download_cover_maintenance.dart';
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -41,6 +42,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            comicDownloadCoverMaintenanceProvider.overrideWithValue(
+              _NoopCoverMaintenance(),
+            ),
             historyVisitRecorderProvider.overrideWithValue(historyRecorder),
             comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
             comicEpisodeRefreshServiceProvider.overrideWithValue(
@@ -87,14 +91,7 @@ void main() {
         find.byKey(const Key('unified-detail-appbar-download')),
         findsNothing,
       );
-      expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is FaIcon &&
-              widget.icon == FontAwesomeIcons.circleDown.data,
-        ),
-        findsOneWidget,
-      );
+      expect(find.byIcon(Icons.offline_pin_outlined), findsOneWidget);
       expect(
         find.byKey(const Key('novel-chapter-open-mode-control')),
         findsNothing,
@@ -115,6 +112,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          comicDownloadCoverMaintenanceProvider.overrideWithValue(
+            _NoopCoverMaintenance(),
+          ),
           historyVisitRecorderProvider.overrideWithValue(
             const _NoopHistoryVisitRecorder(),
           ),
@@ -165,6 +165,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          comicDownloadCoverMaintenanceProvider.overrideWithValue(
+            _NoopCoverMaintenance(),
+          ),
           historyVisitRecorderProvider.overrideWithValue(historyRecorder),
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           comicEpisodeRefreshServiceProvider.overrideWithValue(
@@ -225,6 +228,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            comicDownloadCoverMaintenanceProvider.overrideWithValue(
+              _NoopCoverMaintenance(),
+            ),
             historyVisitRecorderProvider.overrideWithValue(
               const _NoopHistoryVisitRecorder(),
             ),
@@ -332,7 +338,8 @@ class _CountingNavigatorObserver extends NavigatorObserver {
 
 class _EmptyComicCommentLoader implements ComicCommentLoader {
   @override
-  Future<ComicCommentLoadResult> loadAll({
+  Future<ComicCommentLoadResult> loadPage({
+    int page = 1,
     required String sourceTid,
     ComicCommentCancellationToken? cancellationToken,
   }) async {
@@ -1074,4 +1081,11 @@ class _RecordingReadingStateWriter implements ComicReadingStateWriter {
       readAt: isRead ? readAt ?? DateTime(2026, 1, 1) : null,
     );
   }
+}
+
+class _NoopCoverMaintenance implements ComicDownloadCoverMaintenance {
+  @override
+  void schedule(String comicId) {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

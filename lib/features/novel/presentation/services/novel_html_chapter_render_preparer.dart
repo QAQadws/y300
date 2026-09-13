@@ -2,6 +2,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/htm
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_background_work.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_legacy_markup_normalizer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -62,6 +63,26 @@ class NovelHtmlChapterRenderPreparer implements NovelHtmlChapterPreparer {
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
+  }) => prepareAndProject(
+    rawHtml: rawHtml,
+    preferences: preferences,
+    theme: theme,
+    sourceId: sourceId,
+    threadId: threadId,
+    imageCacheOwnerId: imageCacheOwnerId,
+    project: (chapter) => chapter,
+  );
+
+  /// Completes a data-only projection in the same worker as HTML preparation,
+  /// without a second isolate startup or transferring the intermediate tree.
+  Future<T> prepareAndProject<T>({
+    required String rawHtml,
+    required ForumHtmlReaderPreferences preferences,
+    required ForumHtmlThemeContext theme,
+    required String sourceId,
+    required String? threadId,
+    required String? imageCacheOwnerId,
+    required T Function(NovelHtmlPreparedChapter) project,
   }) async {
     var html = rawHtml;
     var convertedTextNodeCount = 0;
@@ -75,21 +96,53 @@ class NovelHtmlChapterRenderPreparer implements NovelHtmlChapterPreparer {
       html = converted.html;
       convertedTextNodeCount = converted.convertedTextNodeCount;
     }
-    final normalization = _legacyMarkupNormalizer.normalize(html);
-    html = normalization.html;
-    final document = _renderPreparer.prepare(
-      html: html,
+    // Conversion may use OpenCC's platform channel, so it stays above this
+    // data-only boundary. Do not capture this service (and its channel) below.
+    return _prepareMarkup(
+      html,
+      convertedTextNodeCount,
+      _legacyMarkupNormalizer,
+      _renderPreparer,
+      preferences,
+      theme,
+      sourceId,
+      threadId,
+      imageCacheOwnerId,
+      project,
+    );
+  }
+}
+
+Future<T> _prepareMarkup<T>(
+  String html,
+  int convertedTextNodeCount,
+  NovelReaderLegacyMarkupNormalizer normalizer,
+  ForumHtmlRenderPreparer preparer,
+  ForumHtmlReaderPreferences preferences,
+  ForumHtmlThemeContext theme,
+  String sourceId,
+  String? threadId,
+  String? imageCacheOwnerId,
+  T Function(NovelHtmlPreparedChapter) project,
+) => NovelReaderBackgroundWork.run(
+  codeUnits: html.length,
+  transform: () {
+    final normalization = normalizer.normalize(html);
+    final document = preparer.prepare(
+      html: normalization.html,
       preferences: preferences,
       theme: theme,
       sourceId: sourceId,
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,
     );
-    return NovelHtmlPreparedChapter(
-      html: html,
-      document: document,
-      convertedTextNodeCount: convertedTextNodeCount,
-      legacyMarkupNormalization: normalization.summary,
+    return project(
+      NovelHtmlPreparedChapter(
+        html: normalization.html,
+        document: document,
+        convertedTextNodeCount: convertedTextNodeCount,
+        legacyMarkupNormalization: normalization.summary,
+      ),
     );
-  }
-}
+  },
+);

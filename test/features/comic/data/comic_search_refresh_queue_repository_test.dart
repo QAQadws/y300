@@ -107,10 +107,10 @@ void main() {
           now: now,
         );
         final other = await repository.enqueue(
-          ComicSearchRefreshQueueDraft(
+          const ComicSearchRefreshQueueDraft(
             title: '其他漫画',
             origin: ComicSearchRefreshOrigin.favoriteSync,
-            request: const ComicEpisodeRefreshRequest(
+            request: ComicEpisodeRefreshRequest(
               comicId: 'comic:2',
               sourceTid: '200',
               displayTitle: '其他漫画',

@@ -272,7 +272,6 @@ class _ComposerAnchoredDropdownOverlay<T> extends StatelessWidget {
                       child: ListView.builder(
                         padding: EdgeInsets.zero,
                         itemExtent: _itemHeight,
-                        shrinkWrap: true,
                         itemCount: items.length,
                         itemBuilder: (context, index) {
                           final item = items[index];

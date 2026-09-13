@@ -64,7 +64,7 @@ final comicReaderFeatureFlagsProvider = Provider<ComicReaderFeatureFlags>((
 
 final comicCommentLoaderProvider = Provider<ComicCommentLoader>((ref) {
   return DefaultComicCommentLoader(
-    repository: ref.watch(threadReplyPageRepositoryProvider),
+    repository: ref.watch(threadRepositoryProvider),
     diagnosticRecorder: ref.watch(comicCommentDiagnosticRecorderProvider),
   );
 });

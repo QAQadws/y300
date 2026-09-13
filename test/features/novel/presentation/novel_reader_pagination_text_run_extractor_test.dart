@@ -348,33 +348,55 @@ void main() {
     );
   });
 
-  test('accepts only the controlled pstatus class', () {
-    final editStatus = classifier.classify(
-      atom: _atom(
-        '<i class="pstatus">最后编辑时间</i>',
-        kind: NovelReaderPaginationAtomKind.inlineText,
-      ),
-      baseStyle: _baseStyle,
-      preferences: _preferences,
-      theme: _lightTheme,
-    );
-    final unknownClass = classifier.classify(
-      atom: _atom(
-        '<i class="custom-status">正文</i>',
-        kind: NovelReaderPaginationAtomKind.inlineText,
-      ),
-      baseStyle: _baseStyle,
-      preferences: _preferences,
-      theme: _lightTheme,
-    );
+  test(
+    'measures pstatus intact instead of extracting splittable text runs',
+    () {
+      final editStatus = classifier.classify(
+        atom: _atom(
+          '<i class="pstatus">最后编辑时间</i>',
+          kind: NovelReaderPaginationAtomKind.inlineText,
+        ),
+        baseStyle: _baseStyle,
+        preferences: _preferences,
+        theme: _lightTheme,
+      );
+      final unknownClass = classifier.classify(
+        atom: _atom(
+          '<i class="custom-status">正文</i>',
+          kind: NovelReaderPaginationAtomKind.inlineText,
+        ),
+        baseStyle: _baseStyle,
+        preferences: _preferences,
+        theme: _lightTheme,
+      );
 
-    expect(editStatus.route, NovelReaderPaginationRoute.safeText);
-    expect(unknownClass.route, NovelReaderPaginationRoute.flowableComplexText);
-    expect(
-      unknownClass.reason,
-      NovelReaderPaginationRouteReason.unsupportedAttribute,
-    );
-  });
+      expect(editStatus.route, NovelReaderPaginationRoute.editStatus);
+      expect(
+        editStatus.reason,
+        NovelReaderPaginationRouteReason.containsEditStatus,
+      );
+      expect(editStatus.isBreakable, isFalse);
+      expect(editStatus.layoutPolicy.isDedicated, isFalse);
+      expect(editStatus.layoutPolicy.keepPageOpenAfterAppend, isTrue);
+      expect(
+        () => extractor.extract(
+          classifiedAtom: editStatus,
+          baseStyle: _baseStyle,
+          preferences: _preferences,
+          theme: _lightTheme,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        unknownClass.route,
+        NovelReaderPaginationRoute.flowableComplexText,
+      );
+      expect(
+        unknownClass.reason,
+        NovelReaderPaginationRouteReason.unsupportedAttribute,
+      );
+    },
+  );
 
   test('maps common Song typeface names through the shared resolver', () {
     for (final family in const <String>['宋体', 'SimSun']) {

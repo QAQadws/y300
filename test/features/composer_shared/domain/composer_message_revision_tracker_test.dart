@@ -5,7 +5,7 @@ import 'package:y300/features/composer_shared/domain/services/composer_message_r
 void main() {
   test('adjusts an anchor when text is inserted before it', () {
     final tracker = ComposerMessageRevisionTracker(initialSource: 'abcd');
-    final anchor = const ComposerInsertionAnchor(
+    const anchor = ComposerInsertionAnchor(
       baseRevision: 0,
       selection: ComposerSelection(start: 2, end: 2),
       mode: ComposerEditorMode.source,
@@ -21,7 +21,7 @@ void main() {
 
   test('does not move a collapsed anchor when typing at the same offset', () {
     final tracker = ComposerMessageRevisionTracker(initialSource: 'abcd');
-    final anchor = const ComposerInsertionAnchor(
+    const anchor = ComposerInsertionAnchor(
       baseRevision: 0,
       selection: ComposerSelection(start: 2, end: 2),
       mode: ComposerEditorMode.source,

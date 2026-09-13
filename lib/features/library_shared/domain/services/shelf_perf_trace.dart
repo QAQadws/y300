@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
 
 /// Lightweight shelf performance tracing for debug/profile builds.
@@ -47,5 +49,14 @@ class ShelfPerfTrace {
       for (final entry in _metrics.entries) '${entry.key}=${entry.value}',
     ];
     debugPrint('[ShelfPerfTrace][$name] ${parts.join(' ')}');
+  }
+
+  /// Separate from finish: preference persistence can outlive visible content.
+  void snapshotReady() {
+    if (kReleaseMode || !const bool.fromEnvironment('Y300_COVER_TRACE')) return;
+    developer.Timeline.instantSync(
+      'LibraryCover.snapshotReady',
+      arguments: <String, Object>{'elapsedUs': _total.elapsedMicroseconds},
+    );
   }
 }

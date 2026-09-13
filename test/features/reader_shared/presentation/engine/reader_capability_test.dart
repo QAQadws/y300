@@ -50,9 +50,9 @@ void main() {
 
 class _MinimalCapability extends ReaderCapability {
   @override
-  ReaderContent get content => ReaderContent(
+  ReaderContent get content => const ReaderContent(
     ownerId: 'owner',
-    items: const <ContinuousImageItem>[
+    items: <ContinuousImageItem>[
       ContinuousImageItem(
         ownerId: 'owner',
         id: 'owner:0:key',

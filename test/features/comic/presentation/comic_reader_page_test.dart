@@ -5,6 +5,12 @@ import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
+import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
+import '../data/comic_interaction_fixtures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,6 +39,34 @@ import 'package:y300/features/library_shared/data/providers/library_cover_provid
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
+
+// Keep reader geometry tests independent of remote session and action reads.
+List<Override> _interactionOverrides() => [
+  threadRepositoryProvider.overrideWithValue(ComicInteractionRepository()),
+  authSessionControllerProvider.overrideWith(_ReaderTestAuth.new),
+  comicCommentLoaderProvider.overrideWithValue(_ReaderTestComments()),
+];
+
+class _ReaderTestAuth extends AuthSessionController {
+  @override
+  Future<AuthSessionViewState> build() async =>
+      const AuthSessionViewState.signedOut();
+}
+
+class _ReaderTestComments implements ComicCommentLoader {
+  @override
+  Future<ComicCommentLoadResult> loadPage({
+    int page = 1,
+    required String sourceTid,
+    ComicCommentCancellationToken? cancellationToken,
+  }) async => ComicCommentLoadResult(
+    sourceTid: sourceTid,
+    status: ComicCommentLoadStatus.empty,
+    items: const [],
+    loadedPages: const {1},
+    expectedPages: 1,
+  );
+}
 
 void main() {
   setUp(() {
@@ -122,6 +156,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ..._interactionOverrides(),
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReadingStateWriterProvider.overrideWithValue(
             _NoopReadingStateWriter(),
@@ -231,6 +266,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ..._interactionOverrides(),
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReadingStateWriterProvider.overrideWithValue(
             _NoopReadingStateWriter(),
@@ -269,6 +305,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ..._interactionOverrides(),
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReadingStateWriterProvider.overrideWithValue(
             _NoopReadingStateWriter(),
@@ -332,6 +369,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ..._interactionOverrides(),
             comicRepositoryProvider.overrideWithValue(
               _ReaderFakeRepository(includeNextEpisode: true),
             ),
@@ -377,6 +415,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ..._interactionOverrides(),
             comicRepositoryProvider.overrideWithValue(repository),
             comicReadingStateWriterProvider.overrideWithValue(
               _NoopReadingStateWriter(),
@@ -423,6 +462,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ..._interactionOverrides(),
           comicRepositoryProvider.overrideWithValue(
             _ReaderFakeRepository(
               images: const <ComicEpisodeImageItem>[
@@ -528,6 +568,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ..._interactionOverrides(),
             comicRepositoryProvider.overrideWithValue(repository),
             comicReadingStateWriterProvider.overrideWithValue(
               _NoopReadingStateWriter(),
@@ -582,6 +623,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ..._interactionOverrides(),
           comicRepositoryProvider.overrideWithValue(repository),
           comicReadingStateWriterProvider.overrideWithValue(
             _NoopReadingStateWriter(),
@@ -603,7 +645,8 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    // Mode controls do not depend on the file image decoder settling.
+    await pumpReaderUiTransition(tester);
     expect(find.byKey(const Key('comic-reader-image-list')), findsOneWidget);
 
     await openReaderMenu(tester);
@@ -651,6 +694,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ..._interactionOverrides(),
             comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
             comicReadingStateWriterProvider.overrideWithValue(
               _NoopReadingStateWriter(),
@@ -717,6 +761,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ..._interactionOverrides(),
           comicRepositoryProvider.overrideWithValue(repository),
           comicReadingStateWriterProvider.overrideWithValue(
             _NoopReadingStateWriter(),
@@ -795,6 +840,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ..._interactionOverrides(),
             comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
             comicReadingStateWriterProvider.overrideWithValue(
               _NoopReadingStateWriter(),
@@ -855,6 +901,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ..._interactionOverrides(),
           comicRepositoryProvider.overrideWithValue(
             _ReaderFakeRepository(
               images: const <ComicEpisodeImageItem>[
@@ -956,6 +1003,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ..._interactionOverrides(),
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReadingStateWriterProvider.overrideWithValue(
             _NoopReadingStateWriter(),
@@ -1005,6 +1053,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ..._interactionOverrides(),
             comicRepositoryProvider.overrideWithValue(
               _ReaderFakeRepository(
                 images: const <ComicEpisodeImageItem>[
@@ -1064,6 +1113,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ..._interactionOverrides(),
           comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
           comicReadingStateWriterProvider.overrideWithValue(
             _NoopReadingStateWriter(),
@@ -1119,6 +1169,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ..._interactionOverrides(),
             comicRepositoryProvider.overrideWithValue(_ReaderFakeRepository()),
             comicReadingStateWriterProvider.overrideWithValue(
               _NoopReadingStateWriter(),
@@ -1548,7 +1599,7 @@ class _ReaderFakeRepository
     bool descending = true,
   }) async {
     final episodes = <ComicEpisodeItem>[
-      ComicEpisodeItem(
+      const ComicEpisodeItem(
         episodeId: 'yamibo:100:101',
         comicId: 'yamibo:100',
         episodeTitle: '第1话',

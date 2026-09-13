@@ -416,7 +416,7 @@ void main() {
         repository,
         stateRepository: _FakeLibraryStateRepository(
           episodeStates: <String, LibraryEpisodeState>{
-            'comic:1:120': LibraryEpisodeState(
+            'comic:1:120': const LibraryEpisodeState(
               moduleKey: LibraryModuleKey.comic,
               episodeId: 'comic:1:120',
               workId: 'comic:1',
@@ -490,7 +490,7 @@ void main() {
   test('downloadUnread only enqueues unread episodes', () async {
     final stateRepository = _RecordingLibraryStateRepository(
       episodeStates: <String, LibraryEpisodeState>{
-        'comic:1:120': LibraryEpisodeState(
+        'comic:1:120': const LibraryEpisodeState(
           moduleKey: LibraryModuleKey.comic,
           episodeId: 'comic:1:120',
           workId: 'comic:1',
@@ -708,7 +708,7 @@ void main() {
         repository,
         stateRepository: _FakeLibraryStateRepository(
           episodeStates: <String, LibraryEpisodeState>{
-            'comic:1:120': LibraryEpisodeState(
+            'comic:1:120': const LibraryEpisodeState(
               moduleKey: LibraryModuleKey.comic,
               episodeId: 'comic:1:120',
               workId: 'comic:1',
@@ -744,7 +744,7 @@ void main() {
         repository,
         stateRepository: _FakeLibraryStateRepository(
           episodeStates: <String, LibraryEpisodeState>{
-            'comic:1:120': LibraryEpisodeState(
+            'comic:1:120': const LibraryEpisodeState(
               moduleKey: LibraryModuleKey.comic,
               episodeId: 'comic:1:120',
               workId: 'comic:1',
@@ -770,7 +770,7 @@ void main() {
         repository,
         stateRepository: _FakeLibraryStateRepository(
           episodeStates: <String, LibraryEpisodeState>{
-            'comic:1:90': LibraryEpisodeState(
+            'comic:1:90': const LibraryEpisodeState(
               moduleKey: LibraryModuleKey.comic,
               episodeId: 'comic:1:90',
               workId: 'comic:1',

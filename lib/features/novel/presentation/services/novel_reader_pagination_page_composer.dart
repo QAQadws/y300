@@ -290,7 +290,8 @@ final class NovelReaderPaginationPageComposer {
     return switch (route) {
       NovelReaderPaginationRoute.isolatedImage =>
         NovelReaderPageGapReason.isolatedImage,
-      NovelReaderPaginationRoute.safeText =>
+      NovelReaderPaginationRoute.safeText ||
+      NovelReaderPaginationRoute.editStatus =>
         NovelReaderPageGapReason.algorithmBoundary,
       NovelReaderPaginationRoute.tableBlock =>
         NovelReaderPageGapReason.dedicatedTable,

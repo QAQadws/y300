@@ -1039,7 +1039,7 @@ class _FailDeleteOnceCoverStore implements LibraryCoverStore {
   Future<void> deleteAsset(String assetId) {
     if (_shouldFailDelete) {
       _shouldFailDelete = false;
-      throw io.FileSystemException('simulated cleanup failure');
+      throw const io.FileSystemException('simulated cleanup failure');
     }
     return delegate.deleteAsset(assetId);
   }

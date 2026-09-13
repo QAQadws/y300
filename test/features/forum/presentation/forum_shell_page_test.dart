@@ -256,7 +256,7 @@ void main() {
     expect(driverRegistry.instances.single.loadCallCount, 1);
 
     authRepository.setSession(
-      SessionInfo(
+      const SessionInfo(
         uid: '1',
         username: 'alice',
         formhash: 'hash',
@@ -284,7 +284,7 @@ void main() {
   ) async {
     final driverRegistry = _FakeForumWebViewDriverRegistry();
     final authRepository = _FakeAuthRepository(
-      session: SessionInfo(
+      session: const SessionInfo(
         uid: '1',
         username: 'alice',
         formhash: 'hash',
@@ -359,7 +359,7 @@ void main() {
       final initialDriverCount = driverRegistry.instances.length;
 
       authRepository.setSession(
-        SessionInfo(
+        const SessionInfo(
           uid: '1',
           username: 'alice',
           formhash: 'hash',
@@ -477,7 +477,7 @@ class _FakeAuthRepository implements AuthRepository {
   Future<ApiResult<SessionInfo>> refreshSession() async {
     final session = _session;
     if (session == null) {
-      return ApiSuccess<SessionInfo>(
+      return const ApiSuccess<SessionInfo>(
         SessionInfo(uid: '0', username: '', formhash: '', isLoggedIn: false),
       );
     }

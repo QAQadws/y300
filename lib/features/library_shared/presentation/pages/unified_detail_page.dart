@@ -287,7 +287,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     final l10n = AppLocalizations.of(context);
     final state = _controller.state;
     final header = state.header;
-    final topInset = MediaQuery.of(context).padding.top;
+    final topInset = MediaQuery.paddingOf(context).top;
     final detailPalette = const UnifiedDetailPaletteResolver().resolve(
       Theme.of(context),
     );
@@ -325,8 +325,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                 color: appBarForeground,
                 fontWeight: FontWeight.normal,
               ),
-              title: Opacity(
-                opacity: progress,
+              // Fade this single text directly, without an opacity layer.
+              title: ExcludeSemantics(
+                excluding: progress == 0,
                 child: Text(
                   header == null
                       ? ''
@@ -339,6 +340,11 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                   key: const Key('unified-detail-collapsed-title'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: appBarForeground.withValues(
+                      alpha: appBarForeground.a * progress,
+                    ),
+                  ),
                 ),
               ),
               actions: [

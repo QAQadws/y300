@@ -542,7 +542,7 @@ class _FakeAuthRepository implements AuthRepository {
     return ApiSuccess(
       _isLoggedIn
           ? _session
-          : SessionInfo(
+          : const SessionInfo(
               uid: '0',
               username: '',
               formhash: '',
@@ -557,7 +557,7 @@ class _FakeAuthRepository implements AuthRepository {
   }
 
   SessionInfo get _session {
-    return SessionInfo(
+    return const SessionInfo(
       uid: '100',
       username: 'tester',
       formhash: 'fh',

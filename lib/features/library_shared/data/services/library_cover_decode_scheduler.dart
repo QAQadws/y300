@@ -1,28 +1,32 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
-/// Bounds cover codec creation independently from network fetch concurrency.
-/// Requests with the same key share one queued or running decode.
+/// Bounds codec creation AND first-frame decoding, independently of downloads.
+/// ImageCache owns request deduplication. Codecs are stateful and must never
+/// be shared by independently owned ImageStreamCompleters.
 class LibraryCoverDecodeScheduler {
   LibraryCoverDecodeScheduler({required int maxConcurrent})
     : _maxConcurrent = maxConcurrent.clamp(1, 3).toInt();
 
   final int _maxConcurrent;
   final List<_QueuedDecode> _pending = <_QueuedDecode>[];
-  final Map<Object, _QueuedDecode> _byKey = <Object, _QueuedDecode>{};
   int _running = 0;
+  Completer<void>? _idle;
+
+  int get activeCount => _running;
+  int get pendingCount => _pending.length;
+
+  Future<void> whenIdle() {
+    if (_running == 0 && _pending.isEmpty) return Future<void>.value();
+    return (_idle ??= Completer<void>()).future;
+  }
 
   Future<ui.Codec> schedule({
     required Object key,
     required Future<ui.Codec> Function() action,
   }) {
-    final existing = _byKey[key];
-    if (existing != null) {
-      return existing.completer.future;
-    }
     final task = _QueuedDecode(key: key, action: action);
     _pending.add(task);
-    _byKey[key] = task;
     _drain();
     return task.completer.future;
   }
@@ -41,9 +45,12 @@ class LibraryCoverDecodeScheduler {
     } catch (error, stackTrace) {
       task.completer.completeError(error, stackTrace);
     } finally {
-      _byKey.remove(task.key);
       _running -= 1;
       _drain();
+      if (_running == 0 && _pending.isEmpty) {
+        _idle?.complete();
+        _idle = null;
+      }
     }
   }
 }

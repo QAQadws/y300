@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
@@ -16,18 +18,18 @@ void main() {
 
       final preparation = result.dataOrNull!;
       expect(preparation.fid, '30');
-      expect(preparation.forumName, 'Fixture forum');
+      expect(preparation.forumName, isEmpty);
       expect(preparation.threadTypes.map((item) => item.id), <String>[
         '101',
         '102',
       ]);
-      expect(preparation.typeRequired, isTrue);
-      expect(preparation.maxSubjectLength, 80);
-      expect(preparation.maxMessageLength, 10000);
+      expect(preparation.typeRequired, isNull);
+      expect(preparation.maxSubjectLength, isNull);
+      expect(preparation.maxMessageLength, isNull);
       expect(preparation.token.toString(), contains('redacted'));
       expect(
         network.requests.single.uri.queryParameters,
-        containsPair('page', '1'),
+        containsPair('action', 'newthread'),
       );
     });
 
@@ -35,7 +37,7 @@ void main() {
       'submits all supported fields and returns no raw server text',
       () async {
         final network = _QueueNetwork(<Object?>[
-          _preparationEnvelope,
+          _pollPreparation,
           _commandEnvelope(
             code: 'post_newthread_succeed',
             tid: '40001',
@@ -46,7 +48,10 @@ void main() {
           network,
         ).createThreadCreation(const _FixtureFormhashProvider());
         final preparation = (await adapter.preparation.load(
-          const ThreadCreationPreparationRequest(fid: '30'),
+          const ThreadCreationPreparationRequest(
+            fid: '30',
+            kind: ThreadCreationKind.poll,
+          ),
         )).dataOrNull!;
 
         final result = await adapter.command.execute(
@@ -131,6 +136,107 @@ void main() {
           network.requests.last.uri.queryParameters['module'],
           'viewthread',
         );
+      },
+    );
+
+    test(
+      'ordinary preparation cannot authorize a poll and sends no mutation',
+      () async {
+        final network = _QueueNetwork([_preparationEnvelope]);
+        final adapter = _factory(
+          network,
+        ).createThreadCreation(const _FixtureFormhashProvider());
+        final prepared = (await adapter.preparation.load(
+          const ThreadCreationPreparationRequest(fid: '30'),
+        )).dataOrNull!;
+        final result = await adapter.command.execute(
+          ThreadCreationSubmission(
+            preparation: prepared,
+            subject: 'subject',
+            message: 'body',
+            typeId: '0',
+            useSignature: true,
+            notifyAuthor: false,
+            disableBbCode: false,
+            disableSmileys: false,
+            disableUrlParsing: false,
+            kind: ThreadCreationKind.poll,
+            poll: const ThreadPollSubmission(
+              options: ['A', 'B'],
+              maximumChoices: 1,
+              expirationDays: 0,
+              publicVoters: false,
+              resultsAfterVote: false,
+            ),
+          ),
+        );
+        expect(result, isA<DataCommandNotSent<ThreadCreationReceipt>>());
+        expect(network.requests, hasLength(1));
+      },
+    );
+
+    test(
+      'poll HTML URL and dynamic maximum permit more than twenty options',
+      () async {
+        final network = _QueueNetwork([
+          _pollPreparation,
+          _commandEnvelope(
+            code: 'post_newthread_succeed',
+            tid: '40001',
+            pid: '50001',
+          ),
+        ]);
+        final adapter = _factory(
+          network,
+        ).createThreadCreation(const _FixtureFormhashProvider());
+        final prepared = (await adapter.preparation.load(
+          const ThreadCreationPreparationRequest(
+            fid: '30',
+            kind: ThreadCreationKind.poll,
+          ),
+        )).dataOrNull!;
+        expect(network.requests.single.uri.queryParameters, {
+          'mod': 'post',
+          'action': 'newthread',
+          'fid': '30',
+          'mobile': '2',
+          'special': '1',
+          'cedit': 'yes',
+        });
+        ThreadCreationSubmission submission(int count) =>
+            ThreadCreationSubmission(
+              preparation: prepared,
+              subject: 'subject',
+              message: 'body',
+              typeId: '0',
+              useSignature: true,
+              notifyAuthor: false,
+              disableBbCode: false,
+              disableSmileys: false,
+              disableUrlParsing: false,
+              kind: ThreadCreationKind.poll,
+              poll: ThreadPollSubmission(
+                options: List.generate(count, (i) => 'option $i'),
+                maximumChoices: 1,
+                expirationDays: 0,
+                publicVoters: false,
+                resultsAfterVote: false,
+              ),
+            );
+        expect(
+          await adapter.command.execute(submission(33)),
+          isA<DataCommandNotSent<ThreadCreationReceipt>>(),
+        );
+        expect(
+          await adapter.command.execute(submission(25)),
+          isA<DataCommandApplied<ThreadCreationReceipt>>(),
+        );
+        expect(
+          network.requests.last.uri.queryParameters['module'],
+          'newthread',
+        );
+        expect(network.requests.last.body, containsPair('typeid', '0'));
+        expect(network.requests.last.body, containsPair('posttime', '100000'));
       },
     );
 
@@ -403,26 +509,12 @@ Map<String, Object?> _commandEnvelope({
   },
 };
 
-final _preparationEnvelope = <String, Object?>{
-  'Version': '4',
-  'Variables': <String, Object?>{
-    'formhash': 'fixture-formhash',
-    'forum': <String, Object?>{
-      'fid': '30',
-      'name': 'Fixture forum',
-      'maxsubject': '80',
-      'maxpostsize': '10000',
-    },
-    'threadtypes': <String, Object?>{
-      'required': '1',
-      'types': <String, Object?>{'101': 'Type A', '102': 'Type B'},
-    },
-    'threadsorts': <String, Object?>{
-      'required': '0',
-      'types': <String, Object?>{},
-    },
-  },
-};
+final _preparationEnvelope = File(
+  'test/fixtures/thread_creation/ordinary.html',
+).readAsStringSync();
+final _pollPreparation = File(
+  'test/fixtures/thread_creation/poll.html',
+).readAsStringSync();
 
 const _replyForm = '''
 <html><body id="nv_forum" class="pg_post">

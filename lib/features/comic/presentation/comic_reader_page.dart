@@ -87,6 +87,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
           final commentSession = ref.watch(
             comicCommentSessionControllerProvider(commentSessionKey),
           );
+          commentTail.updateChapterImages(
+            viewState.images.map((image) => image.imageUrl),
+          );
           commentTail.updateNavigation(
             hasNextEpisode: viewState.hasNextEpisode,
             onAdvanceEpisode: viewState.nextChapter == null

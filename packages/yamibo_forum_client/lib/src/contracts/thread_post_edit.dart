@@ -4,6 +4,8 @@ library;
 import '../network/forum_request.dart';
 import 'data_command_contract.dart';
 import 'data_read_contract.dart';
+import 'thread_read_access.dart';
+import 'thread_composer_commands.dart' show ThreadReadAccessEvidence;
 
 /// Capabilities proved by a post-edit source.
 enum ThreadPostEditCapability {
@@ -27,6 +29,9 @@ enum ThreadPostEditCapability {
 
   /// An inconclusive command can be checked with a fresh preparation read.
   readbackConfirmation,
+
+  /// The source exposes and verifies thread-level reading access.
+  minimumReadAccess,
 }
 
 /// Fail-closed capabilities for post editing.
@@ -162,6 +167,7 @@ final class ThreadPostEditPreparation {
     required this.existingImages,
     required this.revision,
     required this.token,
+    this.readAccess = ThreadReadAccess.unavailable,
   });
 
   /// Proven edit target.
@@ -187,6 +193,9 @@ final class ThreadPostEditPreparation {
 
   /// Dynamic server proof required for submission.
   final ThreadPostEditPreparationToken token;
+
+  /// Topic permission capability and current-value evidence from preparation.
+  final ThreadReadAccess readAccess;
 }
 
 /// User-authored changes submitted through a prepared edit form.
@@ -197,6 +206,7 @@ final class ThreadPostEditSubmission {
     required this.subject,
     required this.message,
     required this.useSignature,
+    this.minimumReadAccess,
     this.newImageAttachmentIds = const <String>[],
     this.removedImageAttachmentIds = const <String>[],
     this.cancellation,
@@ -213,6 +223,9 @@ final class ThreadPostEditSubmission {
 
   /// Whether the edited post should show the user's signature.
   final bool useSignature;
+
+  /// Null preserves the prepared value; zero explicitly removes the limit.
+  final int? minimumReadAccess;
 
   /// Ordered newly uploaded image attachment identities referenced by message.
   final List<String> newImageAttachmentIds;
@@ -249,6 +262,7 @@ final class ThreadPostEditReceipt {
     required this.target,
     required this.publicationState,
     required this.confirmation,
+    this.readAccess,
   });
 
   /// Edited target.
@@ -259,6 +273,9 @@ final class ThreadPostEditReceipt {
 
   /// Evidence used to confirm the command.
   final ThreadPostEditConfirmation confirmation;
+
+  /// Present when an explicit access change was submitted successfully.
+  final ThreadReadAccessEvidence? readAccess;
 }
 
 /// Loads thread post edit preparation data through a source-neutral contract.

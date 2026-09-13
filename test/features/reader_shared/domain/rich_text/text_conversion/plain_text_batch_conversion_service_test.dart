@@ -51,7 +51,7 @@ void main() {
       () async {
         final converter = _RecordingConverter();
         final service = DefaultPlainTextBatchConversionService();
-        final sourceWithDelimiter =
+        const sourceWithDelimiter =
             '前${DefaultPlainTextBatchConversionService.delimiter}后';
 
         final result = await service.convertAll(

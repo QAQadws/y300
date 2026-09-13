@@ -26,6 +26,129 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_text
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 void main() {
+  test(
+    'collapse followed by style and line breaks has no blank final page',
+    () async {
+      const content =
+          '<p>正文介绍。</p>'
+          '<div class="showcollapse_box">'
+          '<div class="showcollapse_title">合成目录</div>'
+          '<div class="showcollapse_content">'
+          '<div class="showcollapse_box">'
+          '<div class="showcollapse_title">第一组</div>'
+          '<div class="showcollapse_content">'
+          '<a href="forum.php?mod=viewthread&amp;tid=10001">第一章</a>'
+          '</div></div></div></div>';
+      final chapter = await _prepare(
+        '$content<br>\r\n<br>\r\n<br>\r\n'
+        '<style>.showcollapse_content{display:none}</style>'
+        '<br>\r\n<br>\r\n',
+      );
+      final adapter = _RecordingMeasureAdapter(
+        heightFor: (request, _) => request.html.contains('<style>') ? 0 : 10,
+      );
+      final plan = await _planner(
+        adapter,
+      ).paginate(chapter, _key(chapter, height: 120));
+
+      expect(plan.pages, hasLength(2));
+      expect(plan.pages.first.html, contains('正文介绍。'));
+      expect(plan.pages.last.isDedicatedContentPage, isTrue);
+      expect(plan.pages.last.html, contains('第一章'));
+      expect(plan.dedicatedCollapsePageCount, 1);
+      expect(plan.atomicWidgetPageCount, 0);
+      expect(
+        adapter.requests.where((request) => request.html.contains('<style>')),
+        isEmpty,
+      );
+      final baseline = await _prepare(content);
+      final baselinePlan = await _planner(
+        _RecordingMeasureAdapter(),
+      ).paginate(baseline, _key(baseline, height: 120));
+      expect(
+        plan.pages.map((page) => page.html),
+        baselinePlan.pages.map((page) => page.html),
+      );
+    },
+  );
+
+  test('incremental pages never publish metadata-only content', () async {
+    final chapter = await _prepare(
+      '<p>前文</p>'
+      '<table><tr><td>表格</td></tr></table>'
+      '<br><style>.fixture{color:red}</style>'
+      '<div><script>fixtureCallback();</script><!-- fixture --></div>'
+      '<p>后文</p><br><br>',
+    );
+    final updates = await _planner(_RecordingMeasureAdapter())
+        .planIncrementally(
+          chapter: chapter,
+          key: _key(chapter, height: 120),
+          cancellationToken: NovelReaderPaginationCancellationToken(),
+        )
+        .toList();
+
+    expect(updates.last.isComplete, isTrue);
+    expect(updates.last.plan.pageCount, 3);
+    for (final update in updates) {
+      for (final page in update.plan.pages) {
+        final fragment = html_parser.parseFragment(page.html);
+        fragment
+            .querySelectorAll('style,script')
+            .forEach((node) => node.remove());
+        expect((fragment.text ?? '').trim(), isNotEmpty);
+        expect(page.html, isNot(contains('fixture')));
+      }
+    }
+    expect(updates.last.plan.pages.last.html, '<p>后文</p>');
+  });
+
+  test(
+    'keeps a long edit notice intact on the same page as the following prose',
+    () async {
+      final notice =
+          '本帖最后由 ${List.filled(30, 'fixture-user').join()} 于 2026-1-1 12:34 编辑';
+      final chapter = await _prepare(
+        '<i class="pstatus">$notice</i><br><br><p>正文第一段。</p>',
+      );
+      final adapter = _RecordingMeasureAdapter();
+      final plan = await _planner(
+        adapter,
+      ).paginate(chapter, _key(chapter, height: 160));
+
+      expect(plan.pageCount, 1);
+      expect(plan.pages.single.html, contains(notice));
+      expect(plan.pages.single.html, contains('正文第一段。'));
+      expect(plan.pages.single.requiresInnerScroll, isFalse);
+      expect(plan.pages.single.isDedicatedContentPage, isFalse);
+      expect(plan.routeCounts[NovelReaderPaginationRoute.editStatus], 1);
+      expect(plan.routeCounts[NovelReaderPaginationRoute.safeText], 1);
+      expect(plan.textLayoutCount, 1);
+      expect(
+        adapter.requests.where(
+          (r) => r.html.contains(notice) && !r.html.contains('正文第一段。'),
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'an edit notice joins preceding content without forcing a new page',
+    () async {
+      final chapter = await _prepare(
+        '<p>前文</p><i class="pstatus">编辑提示</i><p>后文</p>',
+      );
+      final plan = await _planner(
+        _RecordingMeasureAdapter(),
+      ).paginate(chapter, _key(chapter, height: 160));
+      expect(plan.pageCount, 1);
+      expect(plan.pages.single.html, contains('前文'));
+      expect(plan.pages.single.html, contains('编辑提示'));
+      expect(plan.pages.single.html, contains('后文'));
+    },
+  );
+
   test('pure text uses TextPainter with bounded HTML validation', () async {
     final chapter = await _prepare(
       '<p>${List<String>.filled(60, '混合分页正文 mixed 123。').join()}</p>',

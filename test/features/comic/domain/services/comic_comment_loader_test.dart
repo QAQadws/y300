@@ -1,364 +1,133 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/core/network/yamibo_forum_client_provider.dart';
-import '../../data/comic_comment_fixtures.dart';
-import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
+import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
+import 'package:y300/features/comic/data/providers/comic_providers.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import '../../data/comic_comment_fixtures.dart';
 
 void main() {
   test(
-    'loads both pages, excludes only the first floor, and maps avatars',
+    'production comments consume the HTML detail provider and retain all floor data',
     () async {
-      final page1 = _fixturePage(1);
-      final page2 = _fixturePage(2);
-      final repository = _FakeReplyPageRepository(
-        <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-          1: _success(page1),
-          2: _success(page2),
-        },
+      final repo = CommentDetailRepository();
+      final container = ProviderContainer(
+        overrides: [threadRepositoryProvider.overrideWithValue(repo)],
       );
-      final loader = DefaultComicCommentLoader(repository: repository);
-
-      final result = await loader.loadAll(sourceTid: '570140');
-
-      expect(result.status, ComicCommentLoadStatus.success);
-      expect(result.isComplete, isTrue);
-      expect(result.items, hasLength(39));
-      expect(result.loadedPages, <int>{1, 2});
-      expect(result.expectedPages, 2);
-      expect(result.items.any((item) => item.pid == '41519747'), isFalse);
-      expect(
-        result.items.any(
-          (item) => item.authorName == 'thread-owner' && item.floorNumber == 2,
-        ),
-        isTrue,
-      );
-      expect(
-        result.items.firstWhere((item) => item.authorId == '422014').avatarUrl,
-        'https://bbs.yamibo.com/uc_server/data/avatar/000/42/20/14_avatar_middle.jpg',
-      );
-      expect(
-        result.items.firstWhere((item) => item.authorId == '8').avatarUrl,
-        'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/08_avatar_middle.jpg',
-      );
-      expect(result.items.first.rawMessage, contains('<p>'));
+      addTearDown(container.dispose);
+      final result = await container
+          .read(comicCommentLoaderProvider)
+          .loadPage(sourceTid: '100');
+      expect(repo.calls, [1]);
+      expect(result.items.map((p) => p.pid), ['1', '2']);
+      final first = result.items.first;
+      expect(first.post.isFirst, isTrue);
+      expect(first.post.ratingSummary?.scoreText, '+2');
+      expect(first.post.comments, hasLength(1));
+      expect(first.post.commentUrl, isNotEmpty);
+      expect(first.post.message, contains('blockquote'));
+      expect(result.reads[1]?.metadata.origin, DataReadOrigin.network);
+      expect(result.nextPage, 2);
     },
   );
-
-  test('ignores nested comments and deduplicates pid across pages', () async {
-    final page1 = _fixturePage(1);
-    final sourcePage2 = _fixturePage(2);
-    final page2 = ThreadReplyPage(
-      tid: sourcePage2.tid,
-      page: sourcePage2.page,
-      perPage: sourcePage2.perPage,
-      replyCount: sourcePage2.replyCount,
-      posts: <ThreadReplyEntry>[sourcePage2.posts.first, page1.posts[1]],
-    );
-    final repository = _FakeReplyPageRepository(
-      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-        1: _success(page1),
-        2: _success(page2),
-      },
-    );
-
-    final result = await DefaultComicCommentLoader(
-      repository: repository,
-    ).loadAll(sourceTid: '570140');
-
-    expect(result.status, ComicCommentLoadStatus.success);
-    expect(result.items, hasLength(20));
-    expect(
-      result.items.where((item) => item.pid == page1.posts[1].pid),
-      hasLength(1),
-    );
+  test('loads only requested pages and honors the HTML last page', () async {
+    final repo = CommentDetailRepository();
+    final loader = DefaultComicCommentLoader(repository: repo);
+    final page = await loader.loadPage(sourceTid: '100', page: 3);
+    expect(repo.calls, [3]);
+    expect(page.nextPage, isNull);
+    expect(page.items.first.sourcePage, 3);
   });
-
-  test('returns partial failure when a later page cannot be loaded', () async {
-    final repository = _FakeReplyPageRepository(
-      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-        1: _success(_fixturePage(1)),
-        2: _failure(DataReadFailureKind.timeout),
-      },
-    );
-
-    final result = await DefaultComicCommentLoader(
-      repository: repository,
-    ).loadAll(sourceTid: '570140');
-
-    expect(result.status, ComicCommentLoadStatus.partialFailure);
-    expect(result.isComplete, isFalse);
-    expect(result.items, hasLength(19));
-    expect(result.errorCode, ComicCommentLoadErrorCode.pageTimeout);
-    expect(result.loadedPages, <int>{1});
-  });
-
-  test('coalesces concurrent loads for the same source thread', () async {
-    final repository = _FakeReplyPageRepository(
-      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-        1: _success(_fixturePage(1)),
-        2: _success(_fixturePage(2)),
-      },
-      delay: const Duration(milliseconds: 10),
-    );
-    final loader = DefaultComicCommentLoader(repository: repository);
-
-    final results = await Future.wait<ComicCommentLoadResult>([
-      loader.loadAll(sourceTid: '570140'),
-      loader.loadAll(sourceTid: '570140'),
-    ]);
-
-    expect(results[0].items, hasLength(39));
-    expect(results[1].items, hasLength(39));
-    expect(repository.calls, <String>['570140:1', '570140:2']);
-  });
-
   test(
-    'cancellation stops waiting while the shared request continues',
+    'concurrent readers share a page flight, cancellation only releases its waiter',
     () async {
-      final repository = _FakeReplyPageRepository(
-        <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-          1: _success(_fixturePage(1)),
-        },
-        delay: const Duration(milliseconds: 30),
-      );
-      final loader = DefaultComicCommentLoader(repository: repository);
+      final pending = Completer<CommentDetailRead>();
+      final repo = CommentDetailRepository(respond: (_) => pending.future);
+      final loader = DefaultComicCommentLoader(repository: repo);
       final token = ComicCommentCancellationToken();
-      final future = loader.loadAll(
-        sourceTid: '570140',
-        cancellationToken: token,
-      );
-
+      final one = loader.loadPage(sourceTid: '100', cancellationToken: token);
+      final two = loader.loadPage(sourceTid: '100');
       token.cancel();
-      final result = await future;
-
-      expect(result.status, ComicCommentLoadStatus.cancelled);
-      await Future<void>.delayed(const Duration(milliseconds: 40));
-      expect(repository.calls, <String>['570140:1', '570140:2']);
+      expect((await one).status, ComicCommentLoadStatus.cancelled);
+      pending.complete(commentDetailPage());
+      expect((await two).items, hasLength(2));
+      expect(repo.calls, [1]);
     },
   );
-
-  test('returns empty for a thread with only the first floor', () async {
-    final page = ThreadReplyPage(
-      tid: '570140',
-      page: 1,
-      perPage: 20,
-      replyCount: 0,
-      posts: const <ThreadReplyEntry>[
-        ThreadReplyEntry(
-          pid: '41519747',
-          authorId: '365616',
-          authorName: 'owner',
-          rawMessage: 'first',
-          floorNumber: 1,
-          isFirst: true,
-          dateline: 'today',
+  test(
+    'invalidation detaches an old flight and never introduces a private result cache',
+    () async {
+      final old = Completer<CommentDetailRead>();
+      var count = 0;
+      final repo = CommentDetailRepository(
+        respond: (_) => ++count == 1
+            ? old.future
+            : commentDetailPage(posts: [commentPost(2)]),
+      );
+      final loader = DefaultComicCommentLoader(repository: repo);
+      final stale = loader.loadPage(sourceTid: '100');
+      loader.invalidate('100');
+      expect((await loader.loadPage(sourceTid: '100')).items.single.pid, '2');
+      old.complete(commentDetailPage());
+      await stale;
+      expect((await loader.loadPage(sourceTid: '100')).items.single.pid, '2');
+      expect(repo.calls, [1, 1, 1]);
+    },
+  );
+  test(
+    'invalid input and mismatched identities fail without pretending to be empty',
+    () async {
+      final repo = CommentDetailRepository(
+        respond: (_) => commentDetailPage(page: 2),
+      );
+      final loader = DefaultComicCommentLoader(repository: repo);
+      expect(
+        (await loader.loadPage(sourceTid: 'invalid')).errorCode,
+        ComicCommentLoadErrorCode.invalidSourceTid,
+      );
+      expect(repo.calls, isEmpty);
+      expect(
+        (await loader.loadPage(sourceTid: '100')).errorCode,
+        ComicCommentLoadErrorCode.invalidPageResponse,
+      );
+      final mismatch = DefaultComicCommentLoader(
+        repository: CommentDetailRepository(
+          respond: (_) => commentDetailPage(tid: '999'),
         ),
-      ],
-    );
-
-    final result = await DefaultComicCommentLoader(
-      repository: _FakeReplyPageRepository(
-        <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-          1: _success(page),
-        },
-      ),
-    ).loadAll(sourceTid: '570140');
-
-    expect(result.status, ComicCommentLoadStatus.empty);
-    expect(result.items, isEmpty);
-  });
-
-  test('rejects an invalid source tid without a network request', () async {
-    final repository = _FakeReplyPageRepository(
-      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{},
-    );
-
-    final result = await DefaultComicCommentLoader(
-      repository: repository,
-    ).loadAll(sourceTid: 'not-a-tid');
-
-    expect(result.status, ComicCommentLoadStatus.failure);
-    expect(result.errorCode, ComicCommentLoadErrorCode.invalidSourceTid);
-    expect(repository.calls, isEmpty);
-  });
-
-  test('reports truncation when the page safety limit is reached', () async {
-    final repository = _FakeReplyPageRepository(
-      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-        1: _success(_fixturePage(1)),
-      },
-    );
-
-    final result = await DefaultComicCommentLoader(
-      repository: repository,
-      maxPageRequests: 1,
-    ).loadAll(sourceTid: '570140');
-
-    expect(result.status, ComicCommentLoadStatus.partialFailure);
-    expect(result.errorCode, ComicCommentLoadErrorCode.maxPageRequestsReached);
-    expect(result.expectedPages, 1);
-  });
-
-  test('reuses complete results within the short memory TTL', () async {
-    var now = DateTime(2026, 7, 19, 12);
-    final repository = _FakeReplyPageRepository(
-      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-        1: _success(_fixturePage(1)),
-        2: _success(_fixturePage(2)),
-      },
-    );
-    final loader = DefaultComicCommentLoader(
-      repository: repository,
-      cacheTtl: const Duration(minutes: 2),
-      now: () => now,
-    );
-
-    await loader.loadAll(sourceTid: '570140');
-    await loader.loadAll(sourceTid: '570140');
-    expect(repository.calls, <String>['570140:1', '570140:2']);
-
-    now = now.add(const Duration(minutes: 3));
-    await loader.loadAll(sourceTid: '570140');
-    expect(repository.calls, <String>[
-      '570140:1',
-      '570140:2',
-      '570140:1',
-      '570140:2',
-    ]);
-  });
-
-  test('invalidate removes a complete result before the next load', () async {
-    final repository = _FakeReplyPageRepository(
-      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-        1: _success(_fixturePage(1)),
-        2: _success(_fixturePage(2)),
-      },
-    );
-    final loader = DefaultComicCommentLoader(repository: repository);
-
-    await loader.loadAll(sourceTid: '570140');
-    loader.invalidate('570140');
-    await loader.loadAll(sourceTid: '570140');
-
-    expect(repository.calls, <String>[
-      '570140:1',
-      '570140:2',
-      '570140:1',
-      '570140:2',
-    ]);
-  });
-
-  test('maps rate limiting to a stable error code', () async {
-    final repository = _FakeReplyPageRepository(
-      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-        1: _failure(DataReadFailureKind.server, statusCode: 429),
-      },
-    );
-
-    final result = await DefaultComicCommentLoader(
-      repository: repository,
-    ).loadAll(sourceTid: '570140');
-
-    expect(result.errorCode, ComicCommentLoadErrorCode.rateLimited);
-    expect(result.diagnosticDetail, DataReadFailureKind.server.name);
-  });
-
-  test('times out a slow page without blocking the reader forever', () async {
-    final repository = _FakeReplyPageRepository(
-      <int, DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>{
-        1: _success(_fixturePage(1)),
-      },
-      delay: const Duration(milliseconds: 20),
-    );
-
-    final result = await DefaultComicCommentLoader(
-      repository: repository,
-      pageRequestTimeout: const Duration(milliseconds: 1),
-    ).loadAll(sourceTid: '570140');
-
-    expect(result.errorCode, ComicCommentLoadErrorCode.pageTimeout);
-  });
-}
-
-ThreadReplyPage _fixturePage(int page) {
-  final data = createY300ThreadDetailApiDecoder()(
-    comicCommentPageVariables(page: page),
-    page: page,
+      );
+      expect(
+        (await mismatch.loadPage(sourceTid: '100')).status,
+        ComicCommentLoadStatus.failure,
+      );
+    },
   );
-  return ThreadReplyPage(
-    tid: data.tid,
-    page: data.currentPage,
-    perPage: data.perPage,
-    replyCount: data.replies,
-    lastPage: data.lastPage,
-    hasNext: data.hasMore,
-    posts: data.posts
-        .map(
-          (post) => ThreadReplyEntry(
-            pid: post.pid,
-            authorId: post.authorId,
-            authorName: post.author,
-            dateline: post.dateline,
-            floorNumber: post.number,
-            isFirst: post.isFirst,
-            rawMessage: post.message,
+  test(
+    'timeouts and authorization keep distinct retry classifications',
+    () async {
+      final timeout = DefaultComicCommentLoader(
+        repository: CommentDetailRepository(
+          respond: (_) => Completer<CommentDetailRead>().future,
+        ),
+        pageRequestTimeout: const Duration(milliseconds: 1),
+      );
+      expect(
+        (await timeout.loadPage(sourceTid: '100')).errorCode,
+        ComicCommentLoadErrorCode.pageTimeout,
+      );
+      final denied = DefaultComicCommentLoader(
+        repository: CommentDetailRepository(
+          respond: (_) => const DataReadFailure(
+            kind: DataReadFailureKind.unauthorized,
+            diagnosticMessage: 'private payload',
           ),
-        )
-        .toList(growable: false),
+        ),
+      );
+      final result = await denied.loadPage(sourceTid: '100');
+      expect(result.errorCode, ComicCommentLoadErrorCode.unauthorized);
+      expect(result.isTransientFailure, isFalse);
+      expect(result.diagnosticDetail, isNull);
+    },
   );
-}
-
-final _replyCapabilities = ThreadReplyPageReadCapabilities(
-  DataCapabilitySet<ThreadReplyPageCapability>({
-    ThreadReplyPageCapability.stableThreadIdentity:
-        DataCapabilitySupport.supported,
-    ThreadReplyPageCapability.orderedReplies: DataCapabilitySupport.supported,
-    ThreadReplyPageCapability.stablePostIdentity:
-        DataCapabilitySupport.supported,
-    ThreadReplyPageCapability.pagination: DataCapabilitySupport.supported,
-  }),
-);
-
-DataReadSuccess<ThreadReplyPage, ThreadReplyPageReadCapabilities> _success(
-  ThreadReplyPage page,
-) {
-  return DataReadSuccess(
-    data: page,
-    capabilities: _replyCapabilities,
-    metadata: const DataReadMetadata.network(),
-  );
-}
-
-DataReadFailure<ThreadReplyPage, ThreadReplyPageReadCapabilities> _failure(
-  DataReadFailureKind kind, {
-  int? statusCode,
-}) {
-  return DataReadFailure(
-    kind: kind,
-    statusCode: statusCode,
-    diagnosticMessage: kind.name,
-  );
-}
-
-class _FakeReplyPageRepository implements ThreadReplyPageRepository {
-  _FakeReplyPageRepository(this.responses, {this.delay = Duration.zero});
-
-  final Map<
-    int,
-    DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>
-  >
-  responses;
-  final Duration delay;
-  final List<String> calls = <String>[];
-
-  @override
-  Future<DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>
-  loadPage({required String tid, required int page}) async {
-    calls.add('$tid:$page');
-    if (delay > Duration.zero) {
-      await Future<void>.delayed(delay);
-    }
-    return responses[page] ?? _failure(DataReadFailureKind.server);
-  }
 }

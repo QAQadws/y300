@@ -284,15 +284,16 @@ void main() {
     const text = '甲👩‍👩‍👧‍👦e\u0301乙';
 
     for (var mask = 1; mask < (1 << wrappers.length); mask += 1) {
-      var open = '';
-      var close = '';
+      final open = StringBuffer();
+      final closingTags = <String>[];
       for (var index = 0; index < wrappers.length; index += 1) {
         if (mask & (1 << index) == 0) {
           continue;
         }
-        open += wrappers[index].$1;
-        close = '${wrappers[index].$2}$close';
+        open.write(wrappers[index].$1);
+        closingTags.add(wrappers[index].$2);
       }
+      final close = closingTags.reversed.join();
       final html = '<div>$open$text$close</div>';
       final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
           .prepare(html: html, startAnchor: _anchor);

@@ -62,6 +62,7 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
     NovelReaderDocument? semanticDocument,
   }) {
     final fragment = html_parser.parseFragment(renderDocument.preparedHtml);
+    _removeNonRenderingNodes(fragment);
     final occurrences = <String, int>{};
     final units = <NovelReaderFlowUnit>[];
     var semanticIndex = 0;
@@ -107,6 +108,21 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
         imageIndices: const <int>[],
       ),
     ];
+  }
+
+  void _removeNonRenderingNodes(html_dom.Node parent) {
+    // The HTML renderer hides style/script and ignores comments. Their source
+    // text must not create pages or contribute to readable anchor offsets.
+    // Only this parsed layout projection is changed; prepared HTML stays intact.
+    for (final node in parent.nodes.toList(growable: false)) {
+      if (node is html_dom.Comment ||
+          (node is html_dom.Element &&
+              (node.localName == 'style' || node.localName == 'script'))) {
+        node.remove();
+      } else if (node is html_dom.Element) {
+        _removeNonRenderingNodes(node);
+      }
+    }
   }
 
   NovelReaderFlowUnit? _describeNode(

@@ -45,7 +45,7 @@ void main() {
   test(
     'preserves existing line breaks and inserts multiple codes in order',
     () {
-      final source = '前\n\n后';
+      const source = '前\n\n后';
       final mutation = service.insertAttachmentBlock(
         source: source,
         selection: const ComposerSelection(start: 3, end: 3),

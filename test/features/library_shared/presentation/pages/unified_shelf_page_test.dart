@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
@@ -8,6 +10,8 @@ import 'package:y300/features/cache/presentation/widgets/library_cached_image.da
 import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_decode_scheduler.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
+import 'package:y300/features/library_shared/domain/contracts/library_view_preferences_repository.dart';
+import 'package:y300/features/library_shared/domain/models/library_view_preferences.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
@@ -29,6 +33,31 @@ import '../../../../test_support/localized_test_app.dart';
 import '../../../../test_support/unavailable_library_cover_store.dart';
 
 void main() {
+  testWidgets(
+    'snapshot displays before initial category preference write completes',
+    (tester) async {
+      final preferences = _PendingPreferences();
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          home: UnifiedShelfPage(
+            adapter: _FakeShelfAdapter(
+              initialDisplayMode: LibraryDisplayMode.grid,
+            ),
+            viewPreferencesRepository: preferences,
+            onOpenWork: (_, _) async {},
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(preferences.saveStarted, isTrue);
+      expect(preferences.saved.isCompleted, isFalse);
+      expect(find.byType(ShelfCoverCard), findsWidgets);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      preferences.saved.complete();
+      await tester.pumpAndSettle();
+    },
+  );
   testWidgets('search mode switches app bar layout', (tester) async {
     await tester.pumpWidget(
       LocalizedTestApp(
@@ -1395,6 +1424,20 @@ LibraryWorkItem _item({
     addedAt: DateTime(2026, 1, 1),
     hasBookmarks: hasBookmarks,
   );
+}
+
+class _PendingPreferences implements LibraryViewPreferencesRepository {
+  final saved = Completer<void>();
+  bool saveStarted = false;
+  @override
+  Future<LibraryShelfViewPreferences> load({
+    required LibraryShelfViewPreferences defaults,
+  }) async => defaults;
+  @override
+  Future<void> save(LibraryShelfViewPreferences preferences) {
+    saveStarted = true;
+    return saved.future;
+  }
 }
 
 class _FakeShelfAdapter

@@ -1,5 +1,7 @@
 import 'dart:io' as io;
+import 'dart:typed_data';
 
+import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
@@ -15,6 +17,8 @@ import 'package:y300/features/composer_shared/data/local/composer_draft_local_db
 import 'package:y300/features/composer_shared/data/repositories/sqflite_composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
@@ -94,6 +98,58 @@ void main() {
         100,
       ]);
 
+      final directory = await io.Directory.systemTemp.createTemp(
+        'cover-usage-test-',
+      );
+      final thumbnails = LibraryCoverThumbnailStore(
+        rootPath: () async => directory.path,
+      );
+      addTearDown(() async {
+        await thumbnails.dispose();
+        await directory.delete(recursive: true);
+      });
+      final key = LibraryCoverThumbnailKey(
+        asset: const LibraryCoverAssetRef(
+          assetId: 'fixture/source',
+          revision: 1,
+          kind: LibraryCoverAssetKind.source,
+        ),
+        width: 32,
+        height: 48,
+      );
+      await thumbnails.write(
+        key: key,
+        ticket: thumbnails.ticket(key),
+        bytes: Uint8List(16),
+      );
+      final originalStore = LocalLibraryCoverStore(
+        rootPath: Future.value('${directory.path}/originals'),
+        downloader: _NoCoverDownload(),
+      );
+      final original = await originalStore.fileFor(
+        const LibraryCoverAssetRef(
+          assetId: 'fixture/source',
+          revision: 1,
+          kind: LibraryCoverAssetKind.source,
+        ),
+      );
+      await original.parent.create(recursive: true);
+      await original.writeAsBytes(Uint8List(24));
+      final withThumbnails = await LibraryCoverStorageAccountingAdapter(
+        store: originalStore,
+        thumbnails: thumbnails,
+      ).calculateUsage();
+      expect(withThumbnails.bucket, StorageBucket.libraryCover);
+      expect(withThumbnails.bytes, 40);
+      expect(withThumbnails.clearable, isFalse);
+      expect(withThumbnails.slices.single.protected, isTrue);
+      expect(
+        (await ImageCacheStorageAccountingAdapter(
+          repository: repository,
+        ).calculateUsage()).bytes,
+        160,
+      );
+
       await deleteDatabase(dbName);
     },
   );
@@ -169,7 +225,7 @@ void main() {
       );
       await repository.saveDraft(
         ComposerDraftSnapshot(
-          identity: ComposerDraftIdentity.thread(fid: '33', tid: '100'),
+          identity: const ComposerDraftIdentity.thread(fid: '33', tid: '100'),
           message: '百合 draft',
           useSignature: true,
           updatedAt: DateTime.utc(2026, 7, 18),
@@ -397,4 +453,10 @@ class _FakeDownloadStorageService implements DownloadStorageService {
   }) async {
     return null;
   }
+}
+
+class _NoCoverDownload implements LibraryCoverDownloader {
+  @override
+  Future<void> download({required String url, required String targetPath}) =>
+      throw StateError('No network');
 }

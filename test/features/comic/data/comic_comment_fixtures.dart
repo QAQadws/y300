@@ -1,75 +1,87 @@
-import 'package:y300/core/utils/parse_utils.dart';
+import 'dart:async';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import '../domain/services/comic_title_parser_cases.dart';
 
-/// Sanitized shape fixture based on a Discuz `viewthread` JSON response.
-/// It intentionally contains no cookies, auth values or real user content.
-JsonMap comicCommentPageVariables({required int page, int replyCount = 39}) {
-  final start = page == 1 ? 1 : 21;
-  final end = page == 1 ? 20 : 40;
-  final posts = <JsonMap>[
-    if (page == 1)
-      _post(
-        pid: '41519747',
-        number: 1,
-        first: true,
-        author: 'thread-owner',
-        authorId: '365616',
-        message: '<p>首楼正文<img src="https://example.com/cover.jpg" /></p>',
-      ),
-    for (var number = start == 1 ? 2 : start; number <= end; number++)
-      _post(
-        pid: '415197${number.toString().padLeft(2, '0')}',
-        number: number,
-        author: number == 2 ? 'thread-owner' : 'reply-$number',
-        authorId: number == 2
-            ? '365616'
-            : number == 20
-            ? '422014'
-            : number == 21
-            ? '8'
-            : '$number',
-        message: number == 2
-            ? '<p>楼主的后续回复 <img src="/static/image/smiley/test.gif" /></p>'
-            : '<p>回帖 $number</p>',
-      ),
-  ];
+typedef CommentDetailRead =
+    DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>;
+DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>
+commentDetailPage({
+  int page = 1,
+  int lastPage = 3,
+  String tid = '100',
+  List<ThreadPost>? posts,
+}) => DataReadSuccess(
+  data: ThreadDetailData(
+    tid: tid,
+    fid: '33',
+    subject: comicInteractionThreadTitle,
+    author: 'author',
+    replies: lastPage * 2 - 1,
+    views: 1,
+    currentPage: page,
+    perPage: 2,
+    lastPage: lastPage,
+    nextPageUrl: page < lastPage
+        ? 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid&page=${page + 1}&mobile=2'
+        : null,
+    desktopUrl:
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid&page=$page&mobile=2',
+    posts: posts ?? [commentPost(page * 2 - 1), commentPost(page * 2)],
+  ),
+  capabilities: ThreadDetailSourceCapabilities.full.toReadCapabilities(),
+  metadata: const DataReadMetadata.network(),
+);
 
-  return <String, dynamic>{
-    'fid': '30',
-    'ppp': '20',
-    'thread': <String, dynamic>{
-      'tid': '570140',
-      'fid': '30',
-      'subject': '脱敏漫画帖子',
-      'author': 'thread-owner',
-      'authorid': '365616',
-      'replies': '$replyCount',
-      'views': '1',
-    },
-    'postlist': posts,
-    // The loader must ignore these nested discussion entries.
-    'comments': <String, dynamic>{'41519747': <dynamic>[]},
-    'commentcount': <String, dynamic>{'41519747': null},
-  };
-}
+ThreadPost commentPost(int number, {String? message}) => ThreadPost(
+  pid: '$number',
+  author: 'author',
+  authorId: '7',
+  message:
+      message ??
+      '<div class="quote"><blockquote>quoted $number</blockquote></div><p>body $number</p>',
+  number: number,
+  isFirst: number == 1,
+  dateline: 'today',
+  replyUrl:
+      'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=33&tid=100&repquote=$number',
+  rateUrl:
+      'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=100&pid=$number',
+  commentUrl:
+      'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=100&pid=$number',
+  ratingSummary: ThreadPostRatingSummary(
+    participantText: '1',
+    scoreText: '+2',
+    ratings: const [
+      ThreadPostRating(userName: 'rater', score: '+2', reason: '支持'),
+    ],
+    viewAllUrl:
+        'https://bbs.yamibo.com/forum.php?mod=misc&action=viewratings&tid=100&pid=$number',
+  ),
+  comments: const [
+    ThreadPostCommentEntry(
+      author: 'reviewer',
+      authorId: '8',
+      message: '点评内容',
+      dateline: 'today',
+    ),
+  ],
+);
 
-JsonMap _post({
-  required String pid,
-  required int number,
-  bool first = false,
-  required String author,
-  required String authorId,
-  required String message,
-}) {
-  return <String, dynamic>{
-    'pid': pid,
-    'tid': '570140',
-    'first': first ? '1' : '0',
-    'author': author,
-    'authorid': authorId,
-    'dateline': '2026-07-$number 12:00',
-    'message': message,
-    'position': '$number',
-    'number': '$number',
-    'comments': <dynamic>['should not be rendered'],
-  };
+class CommentDetailRepository implements ThreadRepository {
+  CommentDetailRepository({this.respond});
+  final FutureOr<CommentDetailRead> Function(int page)? respond;
+  final List<int> calls = [];
+  @override
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+  @override
+  Future<CommentDetailRead> getThreadDetail({
+    required String tid,
+    int page = 1,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    calls.add(page);
+    return await (respond?.call(page) ??
+        commentDetailPage(page: page, tid: tid));
+  }
 }

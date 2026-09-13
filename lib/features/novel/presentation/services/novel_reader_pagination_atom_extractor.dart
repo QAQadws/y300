@@ -4,6 +4,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_background_work.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 
 /// Converts existing prepared flow units into pagination atoms.
@@ -13,6 +14,10 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_prep
 /// whole-chapter image sequence. Stickers remain inside text atoms.
 final class NovelReaderPaginationAtomExtractor {
   const NovelReaderPaginationAtomExtractor();
+
+  Future<List<NovelReaderPaginationAtom>> extractInBackground(
+    NovelReaderPreparedChapter chapter,
+  ) => _extractInBackground(this, chapter);
 
   List<NovelReaderPaginationAtom> extract(NovelReaderPreparedChapter chapter) {
     final atoms = <NovelReaderPaginationAtom>[];
@@ -276,6 +281,14 @@ final class NovelReaderPaginationAtomExtractor {
     return node.text ?? '';
   }
 }
+
+Future<List<NovelReaderPaginationAtom>> _extractInBackground(
+  NovelReaderPaginationAtomExtractor extractor,
+  NovelReaderPreparedChapter chapter,
+) => NovelReaderBackgroundWork.run(
+  codeUnits: chapter.renderDocument.preparedHtml.length,
+  transform: () => extractor.extract(chapter),
+);
 
 final class _AtomPart {
   const _AtomPart({

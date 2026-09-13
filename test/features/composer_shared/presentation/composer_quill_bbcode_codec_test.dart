@@ -222,7 +222,7 @@ void main() {
     );
     expect(
       composerQuillAttachEmbedTagKind(
-        Embeddable(composerQuillAttachEmbedType, '7'),
+        const Embeddable(composerQuillAttachEmbedType, '7'),
       ),
       ComposerAttachTagKind.attach,
     );

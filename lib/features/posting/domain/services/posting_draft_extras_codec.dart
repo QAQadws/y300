@@ -13,6 +13,7 @@ import 'package:y300/features/posting/domain/models/posting_models.dart';
 class PostingDraftExtrasCodec {
   const PostingDraftExtrasCodec();
 
+  static const String _kReadAccess = 'readAccess';
   static const String _kTypeid = 'typeid';
   static const String _kAllowNoticeAuthor = 'allowNoticeAuthor';
   static const String _kBbCodeOff = 'bbCodeOff';
@@ -34,6 +35,7 @@ class PostingDraftExtrasCodec {
 
   Map<String, String> encode({
     required String? selectedTypeId,
+    int minimumReadAccess = 0,
     required bool allowNoticeAuthor,
     required bool bbCodeOff,
     required bool smileyOff,
@@ -42,7 +44,9 @@ class PostingDraftExtrasCodec {
     required NewThreadSpecial special,
     required NewThreadPollDraft? poll,
   }) {
-    final result = <String, String>{};
+    final result = <String, String>{
+      if (minimumReadAccess != 0) _kReadAccess: minimumReadAccess.toString(),
+    };
     if (selectedTypeId != null && selectedTypeId.trim().isNotEmpty) {
       result[_kTypeid] = selectedTypeId.trim();
     }
@@ -80,6 +84,9 @@ class PostingDraftExtrasCodec {
 
   PostingDraftExtras decode(Map<String, String> raw) {
     return PostingDraftExtras(
+      minimumReadAccess: raw.containsKey(_kReadAccess)
+          ? _readInt(raw[_kReadAccess], fallback: -1)
+          : 0,
       selectedTypeId: _readNonEmpty(raw[_kTypeid]),
       allowNoticeAuthor: _readBool(raw[_kAllowNoticeAuthor]),
       bbCodeOff: _readBool(raw[_kBbCodeOff]),
@@ -173,6 +180,7 @@ class PostingDraftExtrasCodec {
 class PostingDraftExtras {
   const PostingDraftExtras({
     this.selectedTypeId,
+    this.minimumReadAccess = 0,
     this.allowNoticeAuthor = false,
     this.bbCodeOff = false,
     this.smileyOff = false,
@@ -185,6 +193,7 @@ class PostingDraftExtras {
   static const PostingDraftExtras empty = PostingDraftExtras();
 
   final String? selectedTypeId;
+  final int minimumReadAccess;
   final bool allowNoticeAuthor;
   final bool bbCodeOff;
   final bool smileyOff;

@@ -1,3 +1,7 @@
+import 'dart:io' as io;
+import 'dart:typed_data';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
+import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
@@ -10,6 +14,76 @@ import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.d
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 
 void main() {
+  for (final scope in CacheClearScope.values) {
+    test(
+      'ordinary $scope preserves persistent covers and their write tickets',
+      () async {
+        final images = _FakeImageCacheService();
+        final root = await io.Directory.systemTemp.createTemp(
+          'persistent-covers-',
+        );
+        final thumbnails = LibraryCoverThumbnailStore(
+          rootPath: () async => root.path,
+        );
+        addTearDown(() async {
+          await thumbnails.dispose();
+          await root.delete(recursive: true);
+        });
+        final key = LibraryCoverThumbnailKey(
+          asset: const LibraryCoverAssetRef(
+            assetId: 'comic/test/source',
+            revision: 1,
+            kind: LibraryCoverAssetKind.source,
+          ),
+          width: 32,
+          height: 48,
+        );
+        final ticket = thumbnails.ticket(key);
+        await thumbnails.write(key: key, ticket: ticket, bytes: Uint8List(256));
+        final regular = _FakeBudgetParticipant(bytes: 1024, entryCount: 4);
+        final budget = CacheBudgetCoordinator(participants: [regular]);
+        final pruned = await budget.pruneToLimit(maxBytes: 512);
+        expect(pruned.targetBytes, 256);
+        expect(pruned.afterBytes, lessThanOrEqualTo(256));
+        final service = DefaultCacheMaintenanceService(
+          imageCacheService: images,
+          documentCacheService: _FakeDocumentCacheService(
+            deleteOlderThanResult: 0,
+          ),
+          snapshotCacheService: _FakeSnapshotCacheService(
+            deleteExpiredResult: 0,
+          ),
+          storageAccountingService: const _FakeStorageAccountingService(),
+          cacheBudgetCoordinator: budget,
+        );
+        final pendingKey = LibraryCoverThumbnailKey(
+          asset: const LibraryCoverAssetRef(
+            assetId: 'comic/pending/source',
+            revision: 1,
+            kind: LibraryCoverAssetKind.source,
+          ),
+          width: 32,
+          height: 48,
+        );
+        final pendingTicket = thumbnails.ticket(pendingKey);
+        final result = await service.clear(CacheClearRequest(scope: scope));
+        expect(await thumbnails.calculateUsageBytes(), 256);
+        expect(ticket.isValid, isTrue);
+        expect(await thumbnails.lookup(key), isNotNull);
+        expect(
+          await thumbnails.write(
+            key: pendingKey,
+            ticket: pendingTicket,
+            bytes: Uint8List(8),
+          ),
+          isTrue,
+        );
+        expect(result.deletedProtectedCoverRecords, 0);
+        expect(result.failedParticipantIds, isEmpty);
+      },
+    );
+  }
+
   test('clear default cache clears only ordinary cache domains', () async {
     final imageCache = _FakeImageCacheService();
     final documentCache = _FakeDocumentCacheService(deleteOlderThanResult: 2);
@@ -115,6 +189,7 @@ class _FakeBudgetParticipant implements CacheBudgetParticipant {
   _FakeBudgetParticipant({required this.bytes, required this.entryCount});
 
   int bytes;
+  bool failClear = false;
   final int entryCount;
 
   @override
@@ -153,6 +228,7 @@ class _FakeBudgetParticipant implements CacheBudgetParticipant {
 
   @override
   Future<CacheParticipantClearResult> clearRegular() async {
+    if (failClear) throw StateError('fixture failure');
     final deletedBytes = bytes;
     bytes = 0;
     return CacheParticipantClearResult(

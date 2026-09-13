@@ -19,15 +19,15 @@ void main() {
   );
 
   test('v1 shelf snapshot round-trips every persistent field', () {
-    final source = LibraryShelfViewPreferences(
+    const source = LibraryShelfViewPreferences(
       moduleKey: LibraryModuleKey.novel,
       displayMode: LibraryDisplayMode.grid,
       gridColumnCount: 4,
-      sortOption: const LibraryShelfSortOption(
+      sortOption: LibraryShelfSortOption(
         field: LibraryShelfSortField.chapterCount,
         direction: LibrarySortDirection.desc,
       ),
-      filters: const LibraryFilterSet(bookmarked: TriStateFilterValue.include),
+      filters: LibraryFilterSet(bookmarked: TriStateFilterValue.include),
       lastCategoryId: 'favorites',
     );
 

@@ -13,6 +13,21 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 import 'forum_html_test_theme.dart';
 
 void main() {
+  test('fragment serialization keeps comments out of visible text and DOM', () {
+    const codec = HtmlPackageForumHtmlFragmentCodec();
+    const html =
+        '<!-- fixture comment --><p>正文</p>'
+        '<!-- <img src="https://example.invalid/fixture.png"> -->';
+
+    final serialized = codec.serialize(codec.parse(html));
+    final reparsed = codec.parse(serialized);
+
+    expect(serialized, html);
+    expect(reparsed.nodes.whereType<html_dom.Comment>(), hasLength(2));
+    expect(reparsed.text, '正文');
+    expect(reparsed.querySelector('img'), isNull);
+  });
+
   group('DefaultForumHtmlRenderPreparer pipeline', () {
     test('parses and serializes exactly once', () {
       final codec = _CountingFragmentCodec();

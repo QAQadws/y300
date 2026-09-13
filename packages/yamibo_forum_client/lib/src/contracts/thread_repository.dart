@@ -233,3 +233,11 @@ abstract interface class ThreadRepository {
     ThreadDetailQuery query = const ThreadDetailQuery(),
   });
 }
+
+/// Optional lifetime fence for hosts invalidating persisted thread documents.
+/// Call before deleting cached data: old reads may complete for their existing
+/// callers, but cannot commit their documents/snapshots after this barrier.
+abstract interface class ThreadReadInvalidation {
+  /// Detaches old cache writers and waits for a commit already in progress.
+  Future<void> invalidatePendingReads(String tid);
+}

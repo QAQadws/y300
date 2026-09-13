@@ -15,9 +15,11 @@ class DefaultNativePageCacheInvalidationService
   const DefaultNativePageCacheInvalidationService({
     required DocumentCacheService documentCache,
     required ParsedSnapshotCacheService snapshotCache,
+    this.beforeThreadInvalidation,
   }) : _documentCache = documentCache,
        _snapshotCache = snapshotCache;
 
+  final Future<void> Function(String)? beforeThreadInvalidation;
   final DocumentCacheService _documentCache;
   final ParsedSnapshotCacheService _snapshotCache;
 
@@ -27,6 +29,7 @@ class DefaultNativePageCacheInvalidationService
     if (trimmed.isEmpty) {
       return;
     }
+    await beforeThreadInvalidation?.call(trimmed);
     await _deleteOwnerPrefix(
       ownerType: CacheOwnerType.thread,
       ownerIdPrefix: 'tid=$trimmed',

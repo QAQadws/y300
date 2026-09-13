@@ -68,16 +68,20 @@ void main() {
     expect(result.message, contains('ACT01'));
     expect(result.message.length, greaterThan(8000));
     expect(result.report.totalTextCharacters, greaterThan(1500));
-    expect(result.report.safeAtomRate, greaterThan(0.97));
-    expect(result.report.safeTextCharacterRate, greaterThan(0.95));
+    // The fitted metadata line is intentionally measured by the renderer;
+    // keep the original fast-path coverage requirements for actual prose.
+    expect(result.report.bodySafeAtomRate, greaterThan(0.97));
+    expect(result.report.bodySafeTextCharacterRate, greaterThan(0.95));
     expect(result.report.routeCounts, <NovelReaderPaginationRoute, int>{
-      NovelReaderPaginationRoute.safeText: 95,
+      NovelReaderPaginationRoute.editStatus: 1,
+      NovelReaderPaginationRoute.safeText: 94,
       NovelReaderPaginationRoute.rubyInline: 2,
     });
     expect(result.plan.pageCount, inInclusiveRange(7, 15));
     expect(result.plan.pageCount, lessThan(96));
     expect(result.plan.averageTextPageFullness, greaterThan(0.8));
-    expect(result.plan.complexBlockCount, 2);
+    expect(result.plan.complexBlockCount, 3);
+    expect(result.plan.atomicWidgetPageCount, 0);
     expect(result.plan.rendererValidationCount, lessThan(10));
   });
 }
@@ -188,12 +192,18 @@ _SafeTextCoverage _coverage(List<NovelReaderClassifiedPaginationAtom> atoms) {
   var safeAtoms = 0;
   var totalTextCharacters = 0;
   var safeTextCharacters = 0;
+  var editStatusAtoms = 0;
+  var editStatusCharacters = 0;
   final routeCounts = <NovelReaderPaginationRoute, int>{};
   final reasonCounts = <NovelReaderPaginationRouteReason, int>{};
   for (final atom in atoms) {
     routeCounts.update(atom.route, (value) => value + 1, ifAbsent: () => 1);
     reasonCounts.update(atom.reason, (value) => value + 1, ifAbsent: () => 1);
     totalTextCharacters += atom.atom.textLength;
+    if (atom.route == NovelReaderPaginationRoute.editStatus) {
+      editStatusAtoms += 1;
+      editStatusCharacters += atom.atom.textLength;
+    }
     if (atom.route == NovelReaderPaginationRoute.safeText) {
       safeAtoms += 1;
       safeTextCharacters += atom.atom.textLength;
@@ -204,6 +214,8 @@ _SafeTextCoverage _coverage(List<NovelReaderClassifiedPaginationAtom> atoms) {
     safeAtoms: safeAtoms,
     totalTextCharacters: totalTextCharacters,
     safeTextCharacters: safeTextCharacters,
+    editStatusAtoms: editStatusAtoms,
+    editStatusCharacters: editStatusCharacters,
     routeCounts: routeCounts,
     reasonCounts: reasonCounts,
   );
@@ -215,6 +227,8 @@ final class _SafeTextCoverage {
     required this.safeAtoms,
     required this.totalTextCharacters,
     required this.safeTextCharacters,
+    required this.editStatusAtoms,
+    required this.editStatusCharacters,
     required this.routeCounts,
     required this.reasonCounts,
   });
@@ -223,6 +237,8 @@ final class _SafeTextCoverage {
   final int safeAtoms;
   final int totalTextCharacters;
   final int safeTextCharacters;
+  final int editStatusAtoms;
+  final int editStatusCharacters;
   final Map<NovelReaderPaginationRoute, int> routeCounts;
   final Map<NovelReaderPaginationRouteReason, int> reasonCounts;
 
@@ -230,6 +246,15 @@ final class _SafeTextCoverage {
 
   double get safeTextCharacterRate =>
       totalTextCharacters == 0 ? 0 : safeTextCharacters / totalTextCharacters;
+
+  double get bodySafeAtomRate => totalAtoms == editStatusAtoms
+      ? 0
+      : safeAtoms / (totalAtoms - editStatusAtoms);
+
+  double get bodySafeTextCharacterRate =>
+      totalTextCharacters == editStatusCharacters
+      ? 0
+      : safeTextCharacters / (totalTextCharacters - editStatusCharacters);
 }
 
 final class _FixtureMeasureAdapter

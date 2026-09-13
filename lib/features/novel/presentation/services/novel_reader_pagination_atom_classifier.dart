@@ -93,6 +93,20 @@ final class NovelReaderPaginationAtomClassifier {
         NovelReaderPaginationRouteReason.containsTable,
       );
     }
+    final editStatus = fragment.querySelector('.pstatus');
+    if (editStatus != null) {
+      final roots = fragment.nodes.where(_isMeaningful).toList(growable: false);
+      // TextPainter cannot reproduce the renderer's width-dependent fitting.
+      // Keep the normal standalone notice in the page flow, without splitting
+      // its text. Use the existing atomic fallback for unusual mixed wrappers.
+      return _classified(
+        atom,
+        roots.length == 1 && identical(roots.single, editStatus)
+            ? NovelReaderPaginationRoute.editStatus
+            : NovelReaderPaginationRoute.atomicWidget,
+        NovelReaderPaginationRouteReason.containsEditStatus,
+      );
+    }
     final protectedInlineElements = fragment.querySelectorAll(
       'img,[data-y300-protected-inline]',
     );

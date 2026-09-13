@@ -21,13 +21,10 @@ void main() {
       expect(result.options, ['A', 'B']);
     });
 
-    test('caps options at maxOptions', () {
-      final tooMany = List<String>.generate(
-        NewThreadPollValidation.maxOptions + 5,
-        (i) => 'opt$i',
-      );
+    test('preserves options beyond the former fixed maximum', () {
+      final tooMany = List<String>.generate(25, (i) => 'opt$i');
       final result = normalizer.normalize(NewThreadPollDraft(options: tooMany));
-      expect(result.options.length, NewThreadPollValidation.maxOptions);
+      expect(result.options, tooMany);
     });
 
     test('single mode forces maxChoices to 1 even if input lied', () {

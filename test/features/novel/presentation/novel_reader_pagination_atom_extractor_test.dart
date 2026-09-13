@@ -150,7 +150,7 @@ Future<NovelReaderPreparedChapter> _prepare(String html) {
   return const DefaultNovelReaderHtmlPreparationService().prepare(
     rawHtml: html,
     episode: episode,
-    preferences: NovelHtmlReaderPreferencesAdapter().map(
+    preferences: const NovelHtmlReaderPreferencesAdapter().map(
       NovelReaderPreferences.defaults(),
     ),
     theme: _theme,

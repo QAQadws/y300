@@ -18,6 +18,8 @@ class NovelReaderPreparedChapter {
     required this.themeSignature,
     required this.imageDimensionRevision,
     required this.convertedTextNodeCount,
+    this.scrollHtml,
+    this.scrollFragments,
     this.legacyMarkupNormalization =
         NovelReaderLegacyMarkupNormalizationSummary.none,
   });
@@ -25,6 +27,13 @@ class NovelReaderPreparedChapter {
   final String episodeId;
   final String contentHash;
   final String html;
+
+  /// Optional display-only projection for lazily laying out long v1 text runs.
+  /// Never used by pagination, image identity or persisted chapter content.
+  final String? scrollHtml;
+
+  /// Safe block boundaries for building only the visible HTML widget trees.
+  final List<String>? scrollFragments;
   final ForumHtmlPreparedRenderDocument renderDocument;
   final List<NovelReaderFlowUnit> flowUnits;
   final String themeSignature;

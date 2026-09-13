@@ -87,6 +87,7 @@ class UnifiedDetailHeaderSection extends ConsumerWidget {
             devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
             store: ref.watch(libraryCoverStoreProvider),
             scheduler: ref.watch(libraryCoverDecodeSchedulerProvider),
+            usage: LibraryCoverUsage.detail,
           );
     return Stack(
       key: const Key('unified-detail-header-section'),

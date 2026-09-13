@@ -132,8 +132,8 @@ class _ThreadTagsFieldState extends State<ThreadTagsField> {
         ),
         const SizedBox(height: 8),
         InputDecorator(
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(),
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
             isDense: true,
             // hintText 由内部 TextField 接管，外层只画边框。
           ),

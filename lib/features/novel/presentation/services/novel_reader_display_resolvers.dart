@@ -55,15 +55,15 @@ class NovelReaderThemeResolver {
           quoteBackground: const Color(0xFF242424),
         );
       case NovelReaderThemePreset.sepia:
-        return NovelReaderPalette(
+        return const NovelReaderPalette(
           brightness: Brightness.light,
-          background: const Color(0xFFF4EAD7),
-          foreground: const Color(0xFF4C3A21),
-          muted: const Color(0xFF8B7355),
-          accent: const Color(0xFF7A5A28),
-          surface: const Color(0xFFEFE0C4),
-          link: const Color(0xFF6A55A3),
-          quoteBackground: const Color(0xFFE8D8B8),
+          background: Color(0xFFF4EAD7),
+          foreground: Color(0xFF4C3A21),
+          muted: Color(0xFF8B7355),
+          accent: Color(0xFF7A5A28),
+          surface: Color(0xFFEFE0C4),
+          link: Color(0xFF6A55A3),
+          quoteBackground: Color(0xFFE8D8B8),
         );
       case NovelReaderThemePreset.light:
         return NovelReaderPalette(

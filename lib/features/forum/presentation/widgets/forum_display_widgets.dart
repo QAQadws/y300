@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
@@ -138,21 +140,19 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
           if (displayThreads.isEmpty)
             SliverToBoxAdapter(child: _EmptyThreadList(palette: palette))
           else
-            SliverToBoxAdapter(
-              child: _ThreadListSection(
-                signature: _threadListSignature(state),
-                threads: displayThreads,
-                onOpenThread: (item) => widget.onOpenThread(
-                  _sourceThread(item, widget.projection.threads),
-                ),
-                onOpenThreadTag: (item) => widget.onOpenThreadTag(
-                  _sourceThread(item, widget.projection.threads),
-                ),
-                onCopyThreadLink: (item) => widget.onCopyThreadLink(
-                  _sourceThread(item, widget.projection.threads),
-                ),
-                palette: palette,
+            _ThreadListSection(
+              signature: _threadListSignature(state),
+              threads: displayThreads,
+              onOpenThread: (item) => widget.onOpenThread(
+                _sourceThread(item, widget.projection.threads),
               ),
+              onOpenThreadTag: (item) => widget.onOpenThreadTag(
+                _sourceThread(item, widget.projection.threads),
+              ),
+              onCopyThreadLink: (item) => widget.onCopyThreadLink(
+                _sourceThread(item, widget.projection.threads),
+              ),
+              palette: palette,
             ),
           SliverToBoxAdapter(
             child: _LoadMoreSection(
@@ -481,46 +481,43 @@ class _SoftDivider extends StatelessWidget {
   }
 }
 
-class _SeparatedColumn extends StatelessWidget {
-  const _SeparatedColumn({
-    required this.children,
-    required this.palette,
-    this.gap = 0,
-    this.showDividers = true,
-  });
-
-  final List<Widget> children;
-  final ForumDisplayThemePalette palette;
-  final double gap;
-  final bool showDividers;
+class ForumDisplayInitialLoading extends StatefulWidget {
+  const ForumDisplayInitialLoading({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    if (children.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var index = 0; index < children.length; index++) ...[
-          if (index > 0 && showDividers) _SoftDivider(palette: palette),
-          if (index > 0 && gap > 0) SizedBox(height: gap),
-          children[index],
-        ],
-      ],
-    );
-  }
+  State<ForumDisplayInitialLoading> createState() =>
+      _ForumDisplayInitialLoadingState();
 }
 
-class ForumDisplayInitialLoading extends StatelessWidget {
-  const ForumDisplayInitialLoading({super.key});
+class _ForumDisplayInitialLoadingState
+    extends State<ForumDisplayInitialLoading> {
+  late final Timer _indicatorTimer;
+  bool _showIndicator = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fast cache/network results should not flash a spinner during navigation.
+    // Only delay the indicator: requests and ready content remain immediate.
+    _indicatorTimer = Timer(const Duration(milliseconds: 150), () {
+      setState(() => _showIndicator = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _indicatorTimer.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final palette = ForumDisplayThemePalette.resolve(Theme.of(context));
     return ColoredBox(
       color: palette.background,
-      child: const Center(child: CircularProgressIndicator()),
+      child: Center(
+        child: _showIndicator ? const CircularProgressIndicator() : null,
+      ),
     );
   }
 }
@@ -933,7 +930,6 @@ class _TypeFilterMenuOverlay extends StatelessWidget {
                       child: ListView.builder(
                         padding: EdgeInsets.zero,
                         itemExtent: _itemHeight,
-                        shrinkWrap: true,
                         itemCount: items.length,
                         itemBuilder: (context, index) {
                           final item = items[index];
@@ -1404,33 +1400,6 @@ class _TopEntryTile extends StatelessWidget {
   }
 }
 
-class _ThreadAppear extends StatelessWidget {
-  const _ThreadAppear({super.key, required this.index, required this.child});
-
-  final int index;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final cappedIndex = index.clamp(0, 6).toInt();
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: 1),
-      duration: Duration(milliseconds: 170 + cappedIndex * 24),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - value) * 10),
-            child: child,
-          ),
-        );
-      },
-      child: child,
-    );
-  }
-}
-
 class _ThreadListSection extends StatelessWidget {
   const _ThreadListSection({
     required this.signature,
@@ -1450,45 +1419,35 @@ class _ThreadListSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) {
-        final offsetAnimation = Tween<Offset>(
-          begin: const Offset(0, 0.025),
-          end: Offset.zero,
-        ).animate(animation);
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(position: offsetAnimation, child: child),
-        );
-      },
-      child: Padding(
-        key: ValueKey('forum-thread-list-$signature'),
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-        child: KeyedSubtree(
-          key: const Key('forum-thread-list-group'),
-          child: _SeparatedColumn(
-            palette: palette,
-            gap: 8,
-            showDividers: false,
-            children: [
-              for (var index = 0; index < threads.length; index++)
-                _ThreadAppear(
-                  key: ValueKey('forum-thread-appear-${threads[index].tid}'),
-                  index: index,
-                  child: _ThreadCard(
-                    thread: threads[index],
-                    onTap: () => onOpenThread(threads[index]),
-                    onLongPress: () => onCopyThreadLink(threads[index]),
-                    onTapTag: () => onOpenThreadTag(threads[index]),
-                    palette: palette,
-                  ),
-                ),
-            ],
-          ),
-        ),
+    final indices = <Key, int>{
+      for (var index = 0; index < threads.length; index++)
+        ValueKey('forum-thread-row-${threads[index].tid}'): index,
+    };
+    // Keep only the viewport/cache extent alive. Cross-fading whole pages
+    // would retain both lists and start offscreen avatar work on page changes.
+    return SliverPadding(
+      key: ValueKey('forum-thread-list-$signature'),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+      sliver: SliverList.builder(
+        key: const Key('forum-thread-list-group'),
+        itemCount: threads.length,
+        findChildIndexCallback: (key) => indices[key],
+        itemBuilder: (context, index) {
+          final thread = threads[index];
+          // Lazy rows may be recreated when scrolling back. Keep ready cards
+          // visible immediately instead of replaying an entrance fade each time.
+          return Padding(
+            key: ValueKey('forum-thread-row-${thread.tid}'),
+            padding: EdgeInsets.only(top: index == 0 ? 0 : 8),
+            child: _ThreadCard(
+              thread: thread,
+              onTap: () => onOpenThread(thread),
+              onLongPress: () => onCopyThreadLink(thread),
+              onTapTag: () => onOpenThreadTag(thread),
+              palette: palette,
+            ),
+          );
+        },
       ),
     );
   }

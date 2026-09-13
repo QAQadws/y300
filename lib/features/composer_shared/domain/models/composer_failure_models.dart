@@ -53,6 +53,8 @@ enum ComposerValidationFailureCode {
   bodyTooLong,
   pollMissing,
   pollTooFewOptions,
+  pollTooManyOptions,
+  readAccessUnavailable,
   pollOptionTooLong,
   pollMultipleChoiceInvalid,
 }

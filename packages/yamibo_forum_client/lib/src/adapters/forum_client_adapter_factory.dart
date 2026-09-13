@@ -192,6 +192,8 @@ final class ForumClientAdapterFactory {
   })
   createThreadCreation(ForumFormhashProvider formhash) {
     final adapter = DiscuzThreadCreationAdapter(
+      network: network,
+      requestProfiles: requestProfiles,
       api: _api,
       config: config,
       formhashProvider: formhash,
@@ -219,6 +221,7 @@ final class ForumClientAdapterFactory {
   })
   createThreadPostEdit() {
     final adapter = DiscuzThreadPostEditAdapter(
+      api: _api,
       config: config,
       network: network,
       requestProfiles: requestProfiles,

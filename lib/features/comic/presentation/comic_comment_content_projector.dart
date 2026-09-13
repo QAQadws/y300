@@ -1,3 +1,5 @@
+import 'package:y300/features/thread/presentation/thread_post_text_slots.dart';
+import 'package:y300/features/thread/presentation/thread_detail_content_projector.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
@@ -34,6 +36,11 @@ final class ComicCommentContentProjector {
       );
     }
 
+    final collector = ThreadPlainTextCollector();
+    final slots = [
+      for (final item in source.items)
+        ThreadPostTextSlots.collect(item.post, collector),
+    ];
     final batch =
         await TextContentProjectionBatchExecutor(
           plainTextBatchConversionService: plainTextBatchConversionService,
@@ -41,13 +48,13 @@ final class ComicCommentContentProjector {
           diagnosticRecorder: diagnosticRecorder,
         ).convert(
           surface: TextConversionSurface.comicComments,
-          plainSources: [for (final item in source.items) item.dateline],
+          plainSources: collector.sources,
           htmlFragments: [for (final item in source.items) item.rawMessage],
           converter: converter,
           sourceRevision: revision,
         );
     if (!batch.succeeded ||
-        batch.plainValues.length != source.items.length ||
+        batch.plainValues.length != collector.sources.length ||
         batch.htmlValues.length != source.items.length) {
       return ComicCommentContentProjection.raw(
         source,
@@ -64,7 +71,12 @@ final class ComicCommentContentProjector {
           ComicCommentItemProjection(
             sourceItem: source.items[index],
             displayMessage: batch.htmlValues[index].html,
-            displayDateline: batch.plainValues[index],
+            displayDateline: slots[index].dateline.value(batch.plainValues),
+            projectedPost: slots[index].build(
+              source.items[index].post,
+              values: batch.plainValues,
+              displayHtml: batch.htmlValues[index].html,
+            ),
           ),
       ],
       mode: converter.mode,
@@ -89,6 +101,7 @@ final class ComicCommentContentProjector {
       ...loadedPages,
     ];
     for (final item in source.items) {
+      parts.addAll(ThreadDetailContentProjector.postRevisionParts(item.post));
       parts.addAll(<Object?>[
         item.pid,
         item.authorId,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
@@ -40,6 +42,7 @@ part 'thread_detail_sheets.dart';
 part 'thread_detail_footer.dart';
 part 'thread_detail_atoms.dart';
 part 'thread_detail_card.dart';
+part 'thread_detail_loading.dart';
 
 class ThreadDetailContent extends StatefulWidget {
   const ThreadDetailContent({
@@ -264,7 +267,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         controller: widget.scrollController,
         // 只有一楼的短帖也要能下拉刷新，见 ForumPullToRefresh.scrollPhysics。
         physics: ForumPullToRefresh.scrollPhysics,
-        padding: EdgeInsets.fromLTRB(
+        padding: const EdgeInsets.fromLTRB(
           ForumContentSpacing.pageHorizontal,
           ForumContentSpacing.listTop,
           ForumContentSpacing.pageHorizontal,
@@ -316,7 +319,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     return SizedBox.expand(
       key: _viewportKey,
       child: Padding(
-        padding: EdgeInsets.symmetric(
+        padding: const EdgeInsets.symmetric(
           horizontal: ForumContentSpacing.pageHorizontal,
         ),
         child: CustomScrollView(

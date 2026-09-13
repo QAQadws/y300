@@ -1,454 +1,152 @@
 import 'dart:async';
-
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_diagnostics.dart';
-import 'package:y300/features/thread/domain/services/forum_avatar_url_builder.dart';
 
 abstract interface class ComicCommentLoader {
-  Future<ComicCommentLoadResult> loadAll({
+  Future<ComicCommentLoadResult> loadPage({
     required String sourceTid,
+    int page = 1,
     ComicCommentCancellationToken? cancellationToken,
   });
 }
 
-/// Optional cache control exposed separately so existing test doubles and
-/// other comment loaders do not need to implement cache-specific behavior.
 abstract interface class ComicCommentLoaderCache {
   void invalidate(String sourceTid);
 }
 
-/// Small, dependency-free cancellation primitive for a reader-scoped load.
-///
-/// It lets the caller stop waiting for a stale episode without making the
-/// domain layer depend on Dio. The shared request may finish in the background
-/// and is still single-flight for other callers of the same source thread.
+/// Cancels this waiter; another chapter can still share the underlying read.
 class ComicCommentCancellationToken {
   final Completer<void> _cancelled = Completer<void>();
-
   bool get isCancelled => _cancelled.isCompleted;
-
   Future<void> get whenCancelled => _cancelled.future;
-
   void cancel() {
-    if (!_cancelled.isCompleted) {
-      _cancelled.complete();
-    }
+    if (!isCancelled) _cancelled.complete();
   }
 }
 
 class DefaultComicCommentLoader
     implements ComicCommentLoader, ComicCommentLoaderCache {
   DefaultComicCommentLoader({
-    required ThreadReplyPageRepository repository,
-    ForumAvatarUrlBuilder avatarUrlBuilder =
-        const DefaultForumAvatarUrlBuilder(),
-    this.maxConcurrentPages = 2,
-    this.maxPageRequests = 100,
+    required ThreadRepository repository,
     this.pageRequestTimeout = const Duration(seconds: 20),
-    this.cacheTtl = const Duration(minutes: 2),
-    this.maxCachedResults = 8,
     ComicCommentDiagnosticRecorder? diagnosticRecorder,
-    DateTime Function()? now,
   }) : _repository = repository,
-       _avatarUrlBuilder = avatarUrlBuilder,
        _diagnosticRecorder =
-           diagnosticRecorder ?? const NoopComicCommentDiagnosticRecorder(),
-       _now = now ?? DateTime.now,
-       assert(maxConcurrentPages > 0),
-       assert(maxPageRequests > 0),
-       assert(pageRequestTimeout > Duration.zero),
-       assert(cacheTtl > Duration.zero),
-       assert(maxCachedResults > 0);
-
-  final ThreadReplyPageRepository _repository;
-  final ForumAvatarUrlBuilder _avatarUrlBuilder;
-  final int maxConcurrentPages;
-  final int maxPageRequests;
+           diagnosticRecorder ?? const NoopComicCommentDiagnosticRecorder();
+  final ThreadRepository _repository;
   final Duration pageRequestTimeout;
-  final Duration cacheTtl;
-  final int maxCachedResults;
-  final Map<String, Future<ComicCommentLoadResult>> _inFlight =
-      <String, Future<ComicCommentLoadResult>>{};
-  final Map<String, _ComicCommentCacheEntry> _cache =
-      <String, _ComicCommentCacheEntry>{};
   final ComicCommentDiagnosticRecorder _diagnosticRecorder;
-  final DateTime Function() _now;
+  // Document/snapshot caching belongs to the forum client, not this loader.
+  final Map<(String, int), Future<ComicCommentLoadResult>> _inFlight = {};
 
   @override
-  Future<ComicCommentLoadResult> loadAll({
+  Future<ComicCommentLoadResult> loadPage({
     required String sourceTid,
+    int page = 1,
     ComicCommentCancellationToken? cancellationToken,
   }) {
-    final normalizedTid = sourceTid.trim();
+    final tid = sourceTid.trim();
+    if (!RegExp(r'^\d+$').hasMatch(tid) || page < 1) {
+      return Future.value(
+        ComicCommentLoadResult.failure(
+          tid,
+          ComicCommentLoadErrorCode.invalidSourceTid,
+        ),
+      );
+    }
     final token = cancellationToken ?? ComicCommentCancellationToken();
-    if (!_isValidTid(normalizedTid)) {
-      return Future<ComicCommentLoadResult>.value(
-        _failure(
-          sourceTid: normalizedTid,
-          errorCode: ComicCommentLoadErrorCode.invalidSourceTid,
-          diagnosticDetail: 'invalid_source_tid',
-          startedAt: _now(),
-          page: 0,
-        ),
-      );
-    }
     if (token.isCancelled) {
-      return Future<ComicCommentLoadResult>.value(
-        ComicCommentLoadResult.cancelled(sourceTid: normalizedTid),
-      );
+      return Future.value(ComicCommentLoadResult.cancelled(sourceTid: tid));
     }
-
-    final cached = _freshCached(normalizedTid);
-    if (cached != null) {
-      return Future<ComicCommentLoadResult>.value(cached);
-    }
-
-    final existing = _inFlight[normalizedTid];
-    final task = existing ?? _startAndCache(normalizedTid);
-    if (existing == null) {
-      _inFlight[normalizedTid] = task;
-      unawaited(
-        task.whenComplete(() {
-          if (identical(_inFlight[normalizedTid], task)) {
-            _inFlight.remove(normalizedTid);
-          }
-        }),
-      );
-    }
-    return _waitForTask(
-      sourceTid: normalizedTid,
-      task: task,
-      cancellationToken: token,
-    );
-  }
-
-  @override
-  void invalidate(String sourceTid) {
-    _cache.remove(sourceTid.trim());
-  }
-
-  Future<ComicCommentLoadResult> _startAndCache(String sourceTid) async {
-    final result = await _start(sourceTid);
-    if (result.isComplete) {
-      _cache[sourceTid] = _ComicCommentCacheEntry(result, _now());
-      _trimCache();
-    }
-    return result;
-  }
-
-  Future<ComicCommentLoadResult> _start(String sourceTid) async {
-    final startedAt = _now();
-    try {
-      final firstResult = await _getPage(sourceTid, 1);
-      final firstPage = firstResult.dataOrNull;
-      if (firstPage == null) {
-        final error = firstResult.failureOrNull;
-        return _failure(
-          sourceTid: sourceTid,
-          errorCode: _errorCode(error, firstPage: true),
-          diagnosticDetail: error?.kind.name,
-          startedAt: startedAt,
-          page: 1,
-        );
-      }
-      if (!_isValidPage(firstPage, sourceTid, 1)) {
-        return _failure(
-          sourceTid: sourceTid,
-          errorCode: ComicCommentLoadErrorCode.invalidPageResponse,
-          diagnosticDetail: 'invalid_page_response',
-          startedAt: startedAt,
-          page: 1,
-        );
-      }
-
-      final pages = <int, ThreadReplyPage>{1: firstPage};
-      final uncappedPageCount =
-          firstPage.lastPage ?? firstPage.expectedPageCount;
-      final expectedPages = _boundedPageCount(uncappedPageCount);
-      final failures = <ComicCommentLoadErrorCode>[];
-      if (uncappedPageCount > maxPageRequests) {
-        failures.add(ComicCommentLoadErrorCode.maxPageRequestsReached);
-      }
-      if (expectedPages > 1) {
-        await _loadRemainingPages(
-          sourceTid: sourceTid,
-          expectedPages: expectedPages,
-          pages: pages,
-          failures: failures,
-        );
-      }
-
-      failures.sort(_compareErrorCodes);
-
-      final orderedPages = pages.keys.toList()..sort();
-      final orderedValues = orderedPages
-          .map((pageNumber) => pages[pageNumber]!)
-          .toList(growable: false);
-      final result = ComicCommentLoadResult.fromPages(
-        sourceTid: sourceTid,
-        pages: orderedValues,
-        loadedPages: pages.keys.toSet(),
-        expectedPages: expectedPages,
-        mapPost: _mapPost,
-        errorCode: failures.isEmpty ? null : failures.first,
-        diagnosticDetail: failures.isEmpty ? null : failures.first.name,
-      );
-      _recordDiagnostic(
-        sourceTid: sourceTid,
-        event: result.status.name,
-        page: 0,
-        expectedPages: expectedPages,
-        postCount: orderedValues.fold<int>(
-          0,
-          (count, page) => count + page.posts.length,
-        ),
-        filteredFirstCount: orderedValues.fold<int>(
-          0,
-          (count, page) =>
-              count + page.posts.where((post) => post.isFirst).length,
-        ),
-        deduplicatedCount: result.items.length,
-        startedAt: startedAt,
-        errorCode: result.errorCode,
-      );
-      return result;
-    } on TimeoutException {
-      return _failure(
-        sourceTid: sourceTid,
-        errorCode: ComicCommentLoadErrorCode.pageTimeout,
-        diagnosticDetail: 'timeout',
-        startedAt: startedAt,
-        page: 1,
-      );
-    } catch (_) {
-      return _failure(
-        sourceTid: sourceTid,
-        errorCode: ComicCommentLoadErrorCode.firstPageUnavailable,
-        diagnosticDetail: 'unexpected_failure',
-        startedAt: startedAt,
-        page: 1,
-      );
-    }
-  }
-
-  Future<DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>
-  _getPage(String sourceTid, int page) {
-    return _repository
-        .loadPage(tid: sourceTid, page: page)
-        .timeout(pageRequestTimeout);
-  }
-
-  Future<void> _loadRemainingPages({
-    required String sourceTid,
-    required int expectedPages,
-    required Map<int, ThreadReplyPage> pages,
-    required List<ComicCommentLoadErrorCode> failures,
-  }) async {
-    var nextPage = 2;
-    final remaining = expectedPages - 1;
-    final workerCount = remaining < maxConcurrentPages
-        ? remaining
-        : maxConcurrentPages;
-
-    Future<void> worker() async {
-      while (true) {
-        final pageNumber = nextPage;
-        if (pageNumber > expectedPages) {
-          return;
-        }
-        nextPage += 1;
-        try {
-          final result = await _getPage(sourceTid, pageNumber);
-          final page = result.dataOrNull;
-          if (page == null) {
-            failures.add(_errorCode(result.failureOrNull));
-            continue;
-          }
-          if (page.page != pageNumber ||
-              (page.tid.isNotEmpty && page.tid != sourceTid)) {
-            failures.add(ComicCommentLoadErrorCode.invalidPageResponse);
-            continue;
-          }
-          if (page.posts.isEmpty && page.replyCount > 0) {
-            failures.add(ComicCommentLoadErrorCode.emptyPageResponse);
-            continue;
-          }
-          pages[pageNumber] = page;
-        } on TimeoutException {
-          failures.add(ComicCommentLoadErrorCode.pageTimeout);
-        } catch (_) {
-          failures.add(ComicCommentLoadErrorCode.pageUnavailable);
-        }
-      }
-    }
-
-    await Future.wait<void>(
-      List<Future<void>>.generate(workerCount, (_) => worker()),
-    );
-  }
-
-  int _boundedPageCount(int count) {
-    if (count < 1) {
-      count = 1;
-    }
-    return count > maxPageRequests ? maxPageRequests : count;
-  }
-
-  ComicCommentItem _mapPost(
-    String pid,
-    String authorId,
-    String authorName,
-    String dateline,
-    int floorNumber,
-    String rawMessage,
-  ) {
-    return ComicCommentItem(
-      pid: pid,
-      authorId: authorId,
-      authorName: authorName,
-      dateline: dateline,
-      floorNumber: floorNumber,
-      rawMessage: rawMessage,
-      avatarUrl: _avatarUrlBuilder.buildMiddleAvatar(authorId)?.toString(),
-    );
-  }
-
-  Future<ComicCommentLoadResult> _waitForTask({
-    required String sourceTid,
-    required Future<ComicCommentLoadResult> task,
-    required ComicCommentCancellationToken cancellationToken,
-  }) {
+    final key = (tid, page);
+    final task = _inFlight.putIfAbsent(key, () => _fetch(tid, page));
     return Future.any<ComicCommentLoadResult>([
-      task,
-      cancellationToken.whenCancelled.then(
-        (_) => ComicCommentLoadResult.cancelled(sourceTid: sourceTid),
+      task.whenComplete(() {
+        if (identical(_inFlight[key], task)) _inFlight.remove(key);
+      }),
+      token.whenCancelled.then(
+        (_) => ComicCommentLoadResult.cancelled(sourceTid: tid),
       ),
     ]);
   }
 
-  ComicCommentLoadResult _failure({
-    required String sourceTid,
-    required ComicCommentLoadErrorCode errorCode,
-    Object? diagnosticDetail,
-    required DateTime startedAt,
-    required int page,
-  }) {
-    _recordDiagnostic(
-      sourceTid: sourceTid,
-      event: 'failure',
-      page: page,
-      expectedPages: 0,
-      postCount: 0,
-      filteredFirstCount: 0,
-      deduplicatedCount: 0,
-      startedAt: startedAt,
-      errorCode: errorCode,
-    );
-    return ComicCommentLoadResult(
-      sourceTid: sourceTid,
-      status: ComicCommentLoadStatus.failure,
-      items: const <ComicCommentItem>[],
-      loadedPages: const <int>{},
-      expectedPages: 0,
-      errorCode: errorCode,
-      diagnosticDetail: diagnosticDetail,
-    );
-  }
+  @override
+  void invalidate(String sourceTid) =>
+      _inFlight.removeWhere((key, _) => key.$1 == sourceTid.trim());
 
-  ComicCommentLoadErrorCode _errorCode(
-    DataReadFailure<ThreadReplyPage, ThreadReplyPageReadCapabilities>? error, {
-    bool firstPage = false,
-  }) {
-    if (error?.statusCode == 429) {
-      return ComicCommentLoadErrorCode.rateLimited;
-    }
-    return switch (error?.kind) {
-      DataReadFailureKind.timeout => ComicCommentLoadErrorCode.pageTimeout,
-      DataReadFailureKind.unauthorized =>
-        ComicCommentLoadErrorCode.unauthorized,
-      _ =>
-        firstPage
+  Future<ComicCommentLoadResult> _fetch(String tid, int page) async {
+    final watch = Stopwatch()..start();
+    ComicCommentLoadResult result;
+    try {
+      final read = await _repository
+          .getThreadDetail(tid: tid, page: page)
+          .timeout(pageRequestTimeout);
+      final data = read.dataOrNull;
+      if (data == null) {
+        final failure = read.failureOrNull;
+        result = ComicCommentLoadResult.failure(
+          tid,
+          failure?.statusCode == 429
+              ? ComicCommentLoadErrorCode.rateLimited
+              : switch (failure?.kind) {
+                  DataReadFailureKind.unauthorized =>
+                    ComicCommentLoadErrorCode.unauthorized,
+                  DataReadFailureKind.timeout =>
+                    ComicCommentLoadErrorCode.pageTimeout,
+                  DataReadFailureKind.parse =>
+                    ComicCommentLoadErrorCode.invalidPageResponse,
+                  _ =>
+                    page == 1
+                        ? ComicCommentLoadErrorCode.firstPageUnavailable
+                        : ComicCommentLoadErrorCode.pageUnavailable,
+                },
+        );
+      } else if (data.tid.trim() != tid ||
+          data.currentPage != page ||
+          data.posts.isEmpty ||
+          data.posts.any((post) => post.pid.trim().isEmpty)) {
+        result = ComicCommentLoadResult.failure(
+          tid,
+          ComicCommentLoadErrorCode.invalidPageResponse,
+        );
+      } else {
+        result = ComicCommentLoadResult.fromRead(
+          read
+              as DataReadSuccess<
+                ThreadDetailData,
+                ThreadDetailReadCapabilities
+              >,
+        );
+      }
+    } on TimeoutException {
+      result = ComicCommentLoadResult.failure(
+        tid,
+        ComicCommentLoadErrorCode.pageTimeout,
+      );
+    } catch (_) {
+      result = ComicCommentLoadResult.failure(
+        tid,
+        page == 1
             ? ComicCommentLoadErrorCode.firstPageUnavailable
             : ComicCommentLoadErrorCode.pageUnavailable,
-    };
-  }
-
-  int _compareErrorCodes(
-    ComicCommentLoadErrorCode left,
-    ComicCommentLoadErrorCode right,
-  ) {
-    return left.index.compareTo(right.index);
-  }
-
-  bool _isValidPage(ThreadReplyPage page, String sourceTid, int pageNumber) {
-    if (page.page != pageNumber ||
-        (page.tid.isNotEmpty && page.tid != sourceTid)) {
-      return false;
+      );
     }
-    return page.posts.isNotEmpty || page.replyCount == 0;
-  }
-
-  ComicCommentLoadResult? _freshCached(String sourceTid) {
-    final entry = _cache[sourceTid];
-    if (entry == null) {
-      return null;
+    if (_diagnosticRecorder.enabled) {
+      _diagnosticRecorder.record(
+        ComicCommentDiagnosticEvent(
+          sourceTidHash: comicCommentTidHash(tid),
+          event: result.status.name,
+          page: page,
+          expectedPages: result.expectedPages,
+          postCount: result.items.length,
+          filteredFirstCount: 0,
+          deduplicatedCount: result.items.length,
+          duration: watch.elapsed,
+          errorCode: result.errorCode?.name,
+        ),
+      );
     }
-    if (_now().difference(entry.createdAt) > cacheTtl) {
-      _cache.remove(sourceTid);
-      return null;
-    }
-    // Reinsert to keep the bounded cache LRU-like without another data
-    // structure. Cache reads must not mutate the immutable result itself.
-    _cache
-      ..remove(sourceTid)
-      ..[sourceTid] = entry;
-    return entry.result;
+    return result;
   }
-
-  void _trimCache() {
-    while (_cache.length > maxCachedResults) {
-      _cache.remove(_cache.keys.first);
-    }
-  }
-
-  void _recordDiagnostic({
-    required String sourceTid,
-    required String event,
-    required int page,
-    required int expectedPages,
-    required int postCount,
-    required int filteredFirstCount,
-    required int deduplicatedCount,
-    required DateTime startedAt,
-    ComicCommentLoadErrorCode? errorCode,
-  }) {
-    if (!_diagnosticRecorder.enabled) {
-      return;
-    }
-    _diagnosticRecorder.record(
-      ComicCommentDiagnosticEvent(
-        sourceTidHash: comicCommentTidHash(sourceTid),
-        event: event,
-        page: page,
-        expectedPages: expectedPages,
-        postCount: postCount,
-        filteredFirstCount: filteredFirstCount,
-        deduplicatedCount: deduplicatedCount,
-        duration: _now().difference(startedAt),
-        errorCode: errorCode?.name,
-      ),
-    );
-  }
-
-  bool _isValidTid(String tid) {
-    return RegExp(r'^\d+$').hasMatch(tid);
-  }
-}
-
-final class _ComicCommentCacheEntry {
-  const _ComicCommentCacheEntry(this.result, this.createdAt);
-
-  final ComicCommentLoadResult result;
-  final DateTime createdAt;
 }

@@ -296,7 +296,7 @@ void main() {
       await tester.pumpWidget(
         _buildPanel(
           source: '[attach]123456[/attach]',
-          renderer: FlutterBbCodeForumRenderer(
+          renderer: const FlutterBbCodeForumRenderer(
             attachImageBuilder: _buildTestAttachPreviewImage,
           ),
           imageAttachments: [
@@ -425,7 +425,7 @@ ComposerImageAttachment _uploadedAttachment({
   );
 }
 
-final _testRenderer = FlutterBbCodeForumRenderer(
+const _testRenderer = FlutterBbCodeForumRenderer(
   attachImageBuilder: _buildTestAttachPreviewImage,
   attachFileExists: _testAttachFileExists,
   stickerImageBuilder: _buildTestStickerPreviewImage,

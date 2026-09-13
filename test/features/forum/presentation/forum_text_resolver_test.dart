@@ -40,11 +40,11 @@ void main() {
   });
 
   test('maps structured failures and empty details to localized messages', () {
-    final notice = ForumHomeNotice(
+    const notice = ForumHomeNotice(
       code: ForumHomeNoticeCode.refreshFailed,
       detail: 'network unavailable',
     );
-    final failure = ForumDisplayFailure(
+    const failure = ForumDisplayFailure(
       code: ForumDisplayFailureCode.loadFailed,
       detail: '',
     );

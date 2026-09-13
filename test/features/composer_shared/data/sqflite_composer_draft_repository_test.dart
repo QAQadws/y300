@@ -55,7 +55,7 @@ void main() {
   });
 
   test('saves and restores an explicit draft signature setting', () async {
-    final identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
+    const identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
     await repository.saveDraft(
       ComposerDraftSnapshot(
         identity: identity,
@@ -73,8 +73,8 @@ void main() {
   });
 
   test('keeps identities isolated and lists one thread newest first', () async {
-    final thread = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
-    final post = ComposerDraftIdentity.post(
+    const thread = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
+    const post = ComposerDraftIdentity.post(
       fid: '33',
       tid: '572063',
       repquote: '41554317',
@@ -83,7 +83,7 @@ void main() {
     await repository.saveDraft(_draft(post, 'post', minute: 2));
     await repository.saveDraft(
       _draft(
-        ComposerDraftIdentity.thread(fid: '33', tid: 'other'),
+        const ComposerDraftIdentity.thread(fid: '33', tid: 'other'),
         'other',
         minute: 3,
       ),
@@ -98,7 +98,7 @@ void main() {
   });
 
   test('empty content removes the existing snapshot', () async {
-    final identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
+    const identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
     await repository.saveDraft(_draft(identity, 'draft'));
 
     await repository.saveDraft(_draft(identity, '   '));
@@ -109,7 +109,7 @@ void main() {
   test(
     'load expires only 14-day managed copies and preserves aid data',
     () async {
-      final identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
+      const identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
       await repository.saveDraft(
         ComposerDraftSnapshot(
           identity: identity,
@@ -141,8 +141,8 @@ void main() {
   test(
     'invalidates one aid across drafts while preserving all BBCode',
     () async {
-      final first = ComposerDraftIdentity.thread(fid: '33', tid: 'one');
-      final second = ComposerDraftIdentity.thread(fid: '33', tid: 'two');
+      const first = ComposerDraftIdentity.thread(fid: '33', tid: 'one');
+      const second = ComposerDraftIdentity.thread(fid: '33', tid: 'two');
       await repository.saveDraft(
         ComposerDraftSnapshot(
           identity: first,
@@ -193,7 +193,7 @@ void main() {
   test('prunes expired and overflow snapshots while keeping newest', () async {
     await repository.saveDraft(
       ComposerDraftSnapshot(
-        identity: ComposerDraftIdentity.thread(fid: '33', tid: 'expired'),
+        identity: const ComposerDraftIdentity.thread(fid: '33', tid: 'expired'),
         message: 'expired',
         useSignature: true,
         updatedAt: now.subtract(const Duration(days: 31)),
@@ -215,20 +215,20 @@ void main() {
     expect(result.keptCount, 2);
     expect(
       await repository.loadDraft(
-        ComposerDraftIdentity.thread(fid: '33', tid: 'expired'),
+        const ComposerDraftIdentity.thread(fid: '33', tid: 'expired'),
       ),
       isNull,
     );
     expect(
       await repository.loadDraft(
-        ComposerDraftIdentity.thread(fid: '33', tid: '0'),
+        const ComposerDraftIdentity.thread(fid: '33', tid: '0'),
       ),
       isNull,
     );
   });
 
   test('migrates legacy SharedPreferences drafts once', () async {
-    final identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
+    const identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
     const codec = ComposerDraftSnapshotJsonCodec();
     final legacyKey =
         '${SharedPreferencesComposerDraftLegacyStore.draftKeyPrefix}'
@@ -259,7 +259,7 @@ void main() {
   });
 
   test('SQLite snapshot wins over stale legacy data', () async {
-    final identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
+    const identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
     await repository.saveDraft(_draft(identity, 'sqlite'));
     const codec = ComposerDraftSnapshotJsonCodec();
     final legacyKey =
@@ -283,7 +283,7 @@ void main() {
   test(
     'completed migration marker prevents legacy draft resurrection',
     () async {
-      final identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
+      const identity = ComposerDraftIdentity.thread(fid: '33', tid: '572063');
       const codec = ComposerDraftSnapshotJsonCodec();
       final legacyKey =
           '${SharedPreferencesComposerDraftLegacyStore.draftKeyPrefix}'

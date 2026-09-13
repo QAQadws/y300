@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -101,25 +100,49 @@ void main() {
       findsOneWidget,
     );
     expect(
-      tester.widget<Opacity>(
-        find.ancestor(
-          of: find.byKey(const Key('unified-detail-collapsed-title')),
-          matching: find.byType(Opacity),
-        ),
-      ),
-      isA<Opacity>().having((w) => w.opacity, 'opacity', 0),
+      tester
+          .widget<Text>(find.byKey(const Key('unified-detail-collapsed-title')))
+          .style
+          ?.color
+          ?.a,
+      0,
+    );
+    expect(
+      tester
+          .widget<ExcludeSemantics>(
+            find
+                .ancestor(
+                  of: find.byKey(const Key('unified-detail-collapsed-title')),
+                  matching: find.byType(ExcludeSemantics),
+                )
+                .first,
+          )
+          .excluding,
+      isTrue,
     );
 
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<Opacity>(
-        find.ancestor(
-          of: find.byKey(const Key('unified-detail-collapsed-title')),
-          matching: find.byType(Opacity),
-        ),
-      ),
-      isA<Opacity>().having((w) => w.opacity, 'opacity', 1),
+      tester
+          .widget<Text>(find.byKey(const Key('unified-detail-collapsed-title')))
+          .style
+          ?.color
+          ?.a,
+      1,
+    );
+    expect(
+      tester
+          .widget<ExcludeSemantics>(
+            find
+                .ancestor(
+                  of: find.byKey(const Key('unified-detail-collapsed-title')),
+                  matching: find.byType(ExcludeSemantics),
+                )
+                .first,
+          )
+          .excluding,
+      isFalse,
     );
 
     // 章节列表位于下方 sliver，测试中需要滚动后再断言。
@@ -139,10 +162,7 @@ void main() {
     expect(find.textContaining('Pid:5001'), findsOneWidget);
 
     expect(find.text('继续'), findsOneWidget);
-    expect(
-      _findFaIcon(FontAwesomeIcons.solidCircleDown),
-      findsAtLeastNWidgets(1),
-    );
+    expect(find.byIcon(Icons.offline_pin), findsAtLeastNWidgets(1));
     expect(find.byIcon(Icons.filter_list), findsAtLeastNWidgets(1));
     expect(find.byKey(const Key('unified-detail-tag-strip')), findsOneWidget);
     expect(find.text('韩国漫画'), findsOneWidget);
@@ -1311,8 +1331,8 @@ void main() {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
     await tester.pumpAndSettle();
 
-    expect(_findFaIcon(FontAwesomeIcons.circleDown), findsOneWidget);
-    expect(_findFaIcon(FontAwesomeIcons.solidCircleDown), findsNothing);
+    expect(find.byIcon(Icons.offline_pin_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.offline_pin), findsNothing);
     expect(
       find.byKey(
         const ValueKey<String>('unified-detail-chapter-bookmark-indicator-e1'),
@@ -1688,8 +1708,8 @@ void main() {
     );
     expect(find.text('已缓存'), findsNothing);
     expect(find.byTooltip('已缓存，点击删除缓存'), findsOneWidget);
-    expect(_findFaIcon(FontAwesomeIcons.solidCircleDown), findsOneWidget);
-    expect(_findFaIcon(FontAwesomeIcons.circleDown), findsNothing);
+    expect(find.byIcon(Icons.offline_pin), findsOneWidget);
+    expect(find.byIcon(Icons.offline_pin_outlined), findsNothing);
 
     await tester.tap(find.byTooltip('已缓存，点击删除缓存'));
     await tester.pumpAndSettle();
@@ -2758,10 +2778,4 @@ LinearGradient _headerGradient(WidgetTester tester) {
   );
   final decoration = gradientBox.decoration as BoxDecoration;
   return decoration.gradient! as LinearGradient;
-}
-
-Finder _findFaIcon(FaIconData icon) {
-  return find.byWidgetPredicate(
-    (widget) => widget is FaIcon && widget.icon == icon.data,
-  );
 }

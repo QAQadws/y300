@@ -6,7 +6,7 @@ void main() {
   test(
     'LibraryShelfSnapshotDiffer reports add remove metadata and order changes',
     () {
-      final differ = LibraryShelfSnapshotDiffer();
+      const differ = LibraryShelfSnapshotDiffer();
       final previous = LibraryShelfSnapshot(
         categories: [_category('default')],
         itemsByCategory: {

@@ -13,19 +13,26 @@ import 'package:y300/features/history/data/local/history_local_db.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 
 class LibraryCoverStorageAccountingAdapter implements StorageAccountingAdapter {
-  const LibraryCoverStorageAccountingAdapter({required LibraryCoverStore store})
-    : _store = store;
+  const LibraryCoverStorageAccountingAdapter({
+    required LibraryCoverStore store,
+    LibraryCoverThumbnailStore? thumbnails,
+  }) : _store = store,
+       _thumbnails = thumbnails;
 
   final LibraryCoverStore _store;
+  final LibraryCoverThumbnailStore? _thumbnails;
 
   @override
   StorageBucket get bucket => StorageBucket.libraryCover;
 
   @override
   Future<StorageUsageSection> calculateUsage() async {
-    final bytes = await _store.calculateUsageBytes();
+    final bytes =
+        await _store.calculateUsageBytes() +
+        (await _thumbnails?.calculateUsageBytes() ?? 0);
     return StorageUsageSection(
       bucket: bucket,
       labelRef: StorageUsageLabelRef(
@@ -77,7 +84,7 @@ class ImageCacheStorageAccountingAdapter implements StorageAccountingAdapter {
           );
         })
         .where((slice) => slice.bytes > 0)
-        .toList(growable: false);
+        .toList();
     final total = slices.fold<int>(0, (sum, slice) => sum + slice.bytes);
     final categories = _imageCategories(groups);
     return StorageUsageSection(

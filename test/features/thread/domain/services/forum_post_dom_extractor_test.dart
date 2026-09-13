@@ -109,7 +109,7 @@ plain text thread-999-1-1.html should not count
     });
 
     test('skips one malformed href without dropping valid anchors', () {
-      final safeExtractor = ForumPostDomExtractor(
+      const safeExtractor = ForumPostDomExtractor(
         urlParser: _ThrowingThreadUrlParser(),
       );
       final anchors = safeExtractor.extractAnchors('''

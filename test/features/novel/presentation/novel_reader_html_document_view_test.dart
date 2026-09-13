@@ -19,6 +19,175 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 void main() {
+  testWidgets('long v1 br text uses background preparation and lazy chunks', (
+    tester,
+  ) async {
+    final rawHtml = List.generate(
+      400,
+      (index) => 'fixture-line-$index ${'正文🙂完整保留' * 12}<br><br>',
+    ).join();
+    var ready = false;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: LocalizedTestApp(
+          home: CustomScrollView(
+            slivers: [
+              NovelReaderHtmlDocumentView(
+                asSliver: true,
+                rawHtml: rawHtml,
+                episode: _episode,
+                preferences: NovelReaderPreferences.defaults(),
+                typography: _typography,
+                theme: _lightTheme,
+                imageReferer: 'https://bbs.yamibo.com/',
+                onContentReady: () => ready = true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    // Isolates (including HtmlWidget's async DOM parse) run outside FakeAsync.
+    // Wait for the real completion signal, not a fixed number of fake frames.
+    for (var attempt = 0; attempt < 300 && !ready; attempt++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+      await tester.pump();
+    }
+    expect(ready, isTrue);
+    final htmlWidgets = tester.widgetList<HtmlWidget>(find.byType(HtmlWidget));
+    expect(htmlWidgets.length, lessThan(10));
+    // This assertion rejects the previous whole-chapter HtmlWidget even though
+    // that implementation mounted only nearby RichText render objects.
+    expect(
+      htmlWidgets.map((widget) => widget.html.length),
+      everyElement(lessThan(2500)),
+    );
+    expect(
+      find.textContaining('fixture-line-0 ', findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('fixture-line-399 ', findRichText: true),
+      findsNothing,
+    );
+    final paragraphs = tester.widgetList<RichText>(find.byType(RichText));
+    expect(paragraphs.length, lessThan(10));
+    expect(
+      paragraphs.map((widget) => widget.text.toPlainText().length),
+      everyElement(lessThan(2000)),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'sliver chapter mounts only nearby paragraphs and reaches its tail',
+    (tester) async {
+      final body = List.generate(
+        160,
+        (index) => '<p>fixture paragraph $index 正文正文正文</p>',
+      ).join();
+      final rawHtml =
+          '<div id="fixture-collapse" class="showcollapse_box">'
+          '<div class="showcollapse_title">目录</div>'
+          '<div class="showcollapse_content">fixture expanded</div></div>$body';
+      final scroll = ScrollController();
+      addTearDown(scroll.dispose);
+      var ready = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: LocalizedTestApp(
+            home: Scaffold(
+              body: CustomScrollView(
+                controller: scroll,
+                slivers: [
+                  NovelReaderHtmlDocumentView(
+                    asSliver: true,
+                    rawHtml: rawHtml,
+                    episode: _episode,
+                    preferences: NovelReaderPreferences.defaults(),
+                    typography: _typography,
+                    theme: _lightTheme,
+                    imageReferer: 'https://bbs.yamibo.com/',
+                    onContentReady: () => ready++,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(ready, 1);
+      expect(
+        find.textContaining('fixture paragraph 0 ', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('fixture paragraph 159 ', findRichText: true),
+        findsNothing,
+      );
+      expect(find.byType(RichText).evaluate().length, lessThan(30));
+      await tester.tap(
+        find.byKey(
+          const Key('forum-html-collapse-toggle-episode-1-fixture-collapse'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('fixture expanded', findRichText: true),
+        findsOneWidget,
+      );
+      scroll.jumpTo(scroll.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      scroll.jumpTo(scroll.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('fixture paragraph 159 ', findRichText: true),
+        findsOneWidget,
+      );
+      scroll.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('fixture expanded', findRichText: true),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'v1-style chapter edit notices use the shared single-line fitting',
+    (tester) async {
+      const notice = '本帖最后由 fixture-novel-author 于 2026-1-1 12:34 编辑';
+      await tester.pumpWidget(
+        _host(
+          theme: _lightTheme,
+          preparer: const NovelHtmlChapterRenderPreparer(),
+          rawHtml:
+              '<i class="pstatus"> $notice </i><br />\n<br /><div>小说正文</div>',
+          preferences: NovelReaderPreferences.defaults().copyWith(fontSize: 24),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final status = find.byKey(const Key('forum-html-discuz-edit-status'));
+      expect(tester.widget<Text>(status).data, notice);
+      expect(tester.widget<Text>(status).maxLines, 1);
+      expect(
+        tester
+            .widget<FittedBox>(
+              find.ancestor(of: status, matching: find.byType(FittedBox)),
+            )
+            .fit,
+        BoxFit.scaleDown,
+      );
+      expect(find.textContaining('小说正文', findRichText: true), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'theme changes prepare a new document and ignore the old late future',
     (tester) async {

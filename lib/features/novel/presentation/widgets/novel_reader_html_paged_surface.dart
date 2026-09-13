@@ -326,7 +326,7 @@ class _NovelReaderHtmlPagedSurfaceState
                 ),
                 themeSignature: widget.theme.signature,
                 imageDimensionRevision: prepared.imageDimensionRevision,
-                rendererRevision: 14,
+                rendererRevision: 16,
                 topChromeInsetPx: NovelReaderPaginationKey.logicalPixels(
                   topChromeInset,
                 ),
@@ -776,6 +776,9 @@ class _NovelReaderHtmlPagedSurfaceState
         callback();
       }
     });
+    // A background result/timer can arrive with no frame scheduled. Do not
+    // leave the fallback waiting until the user's next gesture.
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _cancelPerformanceTimers() {
@@ -802,7 +805,7 @@ class _NovelReaderHtmlPagedSurfaceState
     required BuildContext context,
     required ForumHtmlReaderPreferences htmlPreferences,
   }) {
-    final blockSpacingMode = ForumHtmlBlockSpacingMode.discuzLineDivs;
+    const blockSpacingMode = ForumHtmlBlockSpacingMode.discuzLineDivs;
     final rendererBaseStyle = ForumHtmlStylePolicy(
       htmlPreferences,
       theme: widget.theme,

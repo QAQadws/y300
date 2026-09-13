@@ -19,6 +19,7 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_page_indi
 import 'package:y300/features/reader_shared/presentation/engine/reader_paged_image_fit_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_position_state.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
+import 'package:y300/features/reader_shared/presentation/engine/reader_tail_action_controller.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_vertical_position_driver.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
@@ -74,6 +75,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   final Set<String> _reportedTailSurfaceKeys = <String>{};
   final Set<String> _reportedAdvanceSurfaceKeys = <String>{};
   final Set<String> _reportedAdjacentPreloadKeys = <String>{};
+  final ReaderTailActionController _tailActionController =
+      ReaderTailActionController();
 
   // 滑块拖动会话 + commit 锁状态机（迁移自 ComicReaderPage）。
   int? _sliderPreviewIndex;
@@ -135,6 +138,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_onVerticalScroll);
+    _scrollController.addListener(_tailActionController.schedule);
+    _tailActionController.addListener(_onTailActionChanged);
     _overlayController = ReaderOverlayController()
       ..addListener(_onOverlayVisibilityChanged);
     _gestureCoordinator = ReaderGestureCoordinator(
@@ -184,7 +189,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _sessionPreloadCoordinator.dispose();
     _imageSessionStore.dispose();
     _disposeTailSurface();
+    _tailActionController.dispose();
     super.dispose();
+  }
+
+  void _onTailActionChanged() {
+    if (mounted) setState(() {});
   }
   // ENGINE_BODY_PLACEHOLDER
 
@@ -212,6 +222,16 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
     final total = content.length;
     final engineContext = _engineContext(preferences, total);
+    final tail = _tailSurface;
+    final actionSurface = tail is ReaderTailActionSurface
+        ? tail as ReaderTailActionSurface
+        : null;
+    _tailActionController.configure(
+      identity: (content.ownerId, tail, preferences.readerMode),
+      surface: actionSurface,
+      vertical: mode == ContinuousImageReaderMode.vertical,
+      pagedVisible: _pagedPosition.isTail,
+    );
 
     return Scaffold(
       body: Stack(
@@ -250,12 +270,20 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           ReaderPageIndicatorOverlay(
             visible:
                 !_overlayController.isMenuVisible &&
+                !_tailActionController.visible &&
                 preferences.showPageIndicator,
             highlighted: _isPageIndicatorHighlighted,
             currentPage: (_sliderPreviewIndex ?? _lastKnownIndex) + 1,
             totalPages: total,
             positionLabel: _sequencePositionLabel(),
           ),
+          if (actionSurface != null)
+            ReaderTailActionOverlay(
+              key: ValueKey(_tailActionController.identity),
+              controller: _tailActionController,
+              surface: actionSurface,
+              menuVisible: _overlayController.isMenuVisible,
+            ),
         ],
       ),
     );
@@ -723,11 +751,20 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (tailCount <= 0) {
       return _ReaderVerticalTrailingSpec.single(legacyTrailing);
     }
+    final hasActionBar = tail is ReaderTailActionSurface;
     return _ReaderVerticalTrailingSpec(
-      itemCount: tailCount + (legacyTrailing == null ? 0 : 1),
+      itemCount:
+          tailCount + (hasActionBar ? 1 : 0) + (legacyTrailing == null ? 0 : 1),
       indexedBuilder: (context, index) {
         if (index < tailCount) {
           return _buildVerticalTailItem(context, tail!, index);
+        }
+        if (hasActionBar && index == tailCount) {
+          return ReaderTailVisibilityItem(
+            controller: _tailActionController,
+            identity: _tailActionController.identity,
+            child: SizedBox(height: _tailActionController.barHeight),
+          );
         }
         return legacyTrailing!(context);
       },
@@ -738,7 +775,14 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _scheduleAdjacentPreloadIfReady(tail);
     return KeyedSubtree(
       key: Key('reader-tail-${tail.id}'),
-      child: tail.buildPaged(context, _tailActions(tail)),
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: tail is ReaderTailActionSurface
+              ? _tailActionController.barHeight
+              : 0,
+        ),
+        child: tail.buildPaged(context, _tailActions(tail)),
+      ),
     );
   }
 
@@ -758,9 +802,16 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       _scheduleTailVisible(tail);
     }
     _scheduleAdjacentPreloadIfReady(tail);
-    return KeyedSubtree(
+    final child = KeyedSubtree(
       key: Key('reader-tail-vertical-${tail.id}-$index'),
       child: tail.buildVerticalItem(context, _tailActions(tail), index),
+    );
+    if (tail is! ReaderTailActionSurface) return child;
+    return ReaderTailVisibilityItem(
+      key: ValueKey((_tailActionController.identity, index)),
+      controller: _tailActionController,
+      identity: _tailActionController.identity,
+      child: child,
     );
   }
 
@@ -1458,11 +1509,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (total == 0) {
       return;
     }
-    final ratio = position.maxScrollExtent <= 0
-        ? 0.0
-        : (position.pixels / position.maxScrollExtent)
-              .clamp(0.0, 1.0)
-              .toDouble();
     final viewport = _viewportTracker.resolve(
       items: items,
       extentRegistry: _extentRegistry,
@@ -1474,8 +1520,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final index =
         viewport.lastEndVisibleIndex ??
         viewport.lastVisibleIndex ??
-        viewport.firstVisibleIndex ??
-        ((total - 1) * ratio).round();
+        viewport.firstVisibleIndex;
+    // Tail rows contribute to scroll extent, but never to image progress or
+    // image preloading. Keep the last real image position in the comment feed.
+    if (index == null) return;
     _reportActualImageVisible(
       index: index,
       ownerId: _lastOwnerId ?? _capability.content.ownerId,
@@ -2284,7 +2332,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final currentMode =
         ref.read(readerPreferencesControllerProvider).value?.readerMode ??
         ReaderPreferences.defaults().readerMode;
-    final modes = ReaderModePreference.values;
+    const modes = ReaderModePreference.values;
     final nextMode = modes[(currentMode.index + 1) % modes.length];
     unawaited(_onReaderModeChanged(nextMode));
   }

@@ -62,12 +62,10 @@ void main() {
           favoriteLinkService: _FakeFavoriteLinkService(
             workIdByTid: const <String, String?>{'100': 'yamibo:100'},
             linksByWorkId: <String, FavoriteWorkLinks>{
-              'yamibo:100': FavoriteWorkLinks(
+              'yamibo:100': const FavoriteWorkLinks(
                 workId: 'yamibo:100',
                 kind: ThreadContentKind.comic,
-                threads: const <FavoriteThreadRef>[
-                  FavoriteThreadRef(tid: '100'),
-                ],
+                threads: <FavoriteThreadRef>[FavoriteThreadRef(tid: '100')],
               ),
             },
             activeByWorkId: const <String, bool>{'yamibo:100': false},
@@ -101,10 +99,10 @@ void main() {
         favoriteLinkService: _FakeFavoriteLinkService(
           workIdByTid: const <String, String?>{'100': 'yamibo:100'},
           linksByWorkId: <String, FavoriteWorkLinks>{
-            'yamibo:100': FavoriteWorkLinks(
+            'yamibo:100': const FavoriteWorkLinks(
               workId: 'yamibo:100',
               kind: ThreadContentKind.comic,
-              threads: const <FavoriteThreadRef>[FavoriteThreadRef(tid: '100')],
+              threads: <FavoriteThreadRef>[FavoriteThreadRef(tid: '100')],
             ),
           },
           activeByWorkId: const <String, bool>{'yamibo:100': true},
@@ -134,12 +132,10 @@ void main() {
           favoriteLinkService: _FakeFavoriteLinkService(
             workIdByTid: const <String, String?>{'100': 'thread:100'},
             linksByWorkId: <String, FavoriteWorkLinks>{
-              'thread:100': FavoriteWorkLinks(
+              'thread:100': const FavoriteWorkLinks(
                 workId: 'thread:100',
                 kind: ThreadContentKind.forum,
-                threads: const <FavoriteThreadRef>[
-                  FavoriteThreadRef(tid: '100'),
-                ],
+                threads: <FavoriteThreadRef>[FavoriteThreadRef(tid: '100')],
               ),
             },
             activeByWorkId: const <String, bool>{'thread:100': false},
@@ -200,12 +196,10 @@ void main() {
           favoriteLinkService: _FakeFavoriteLinkService(
             workIdByTid: const <String, String?>{'100': 'yamibo:100'},
             linksByWorkId: <String, FavoriteWorkLinks>{
-              'yamibo:100': FavoriteWorkLinks(
+              'yamibo:100': const FavoriteWorkLinks(
                 workId: 'yamibo:100',
                 kind: ThreadContentKind.comic,
-                threads: const <FavoriteThreadRef>[
-                  FavoriteThreadRef(tid: '100'),
-                ],
+                threads: <FavoriteThreadRef>[FavoriteThreadRef(tid: '100')],
               ),
             },
             activeByWorkId: const <String, bool>{'yamibo:100': true},

@@ -48,10 +48,7 @@ void main() {
     expect(stateRepository.countReadCalls, 0);
     expect(items.single.coverAsset?.assetId, 'novel/novel-1/source');
     expect(items.single.coverAsset?.kind, LibraryCoverAssetKind.source);
-    expect(
-      items.single.coverAsset?.sourceUrl,
-      'https://img.test/novel-1.jpg',
-    );
+    expect(items.single.coverAsset?.sourceUrl, 'https://img.test/novel-1.jpg');
     expect(repository.lastCoverLocalPath, isNull);
   });
 
@@ -349,11 +346,11 @@ class _FakeUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
     required String workId,
     required ThreadContentKind kind,
   }) async {
-    return UnfavoriteResult(
-      requestedTids: const <String>['200'],
-      succeededTids: const <String>['200'],
-      failedTids: const <String>[],
-      purgedWorkIds: const <String>[],
+    return const UnfavoriteResult(
+      requestedTids: <String>['200'],
+      succeededTids: <String>['200'],
+      failedTids: <String>[],
+      purgedWorkIds: <String>[],
     );
   }
 
@@ -362,11 +359,11 @@ class _FakeUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
     required Map<String, ThreadContentKind> workKinds,
   }) async {
     lastWorkKinds = workKinds;
-    return UnfavoriteResult(
-      requestedTids: const <String>['200'],
-      succeededTids: const <String>['200'],
-      failedTids: const <String>[],
-      purgedWorkIds: const <String>[],
+    return const UnfavoriteResult(
+      requestedTids: <String>['200'],
+      succeededTids: <String>['200'],
+      failedTids: <String>[],
+      purgedWorkIds: <String>[],
     );
   }
 }

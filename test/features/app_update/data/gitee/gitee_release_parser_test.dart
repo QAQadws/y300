@@ -7,7 +7,7 @@ import 'package:y300/features/app_update/domain/models/app_update_failure.dart';
 import '../../test_support/gitee_release_phase0_fixture.dart';
 
 void main() {
-  final parser = GiteeReleaseParser();
+  const parser = GiteeReleaseParser();
 
   group('GiteeReleaseParser Phase 0 fixture', () {
     test('locks the redacted response and signed APK baseline', () async {

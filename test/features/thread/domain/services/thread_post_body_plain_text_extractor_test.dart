@@ -80,7 +80,7 @@ void main() {
         ],
       );
 
-      final extractor = const ThreadPostBodyPlainTextExtractor();
+      const extractor = ThreadPostBodyPlainTextExtractor();
 
       expect(
         extractor.extract(
@@ -122,7 +122,7 @@ void main() {
         ],
       );
 
-      final extractor = const ThreadPostBodyPlainTextExtractor();
+      const extractor = ThreadPostBodyPlainTextExtractor();
 
       expect(extractor.extract(document), 'A开心B');
       expect(

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/navigation/main_destination_page.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
@@ -74,44 +75,69 @@ class NavigationManagementPage extends ConsumerWidget {
                     ),
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      ListTile(
-                        leading: Icon(destination.icon),
-                        title: Text(
-                          MoreTextResolver.navigationLabel(l10n, destination),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Switch(
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ListTile(
                               key: ValueKey<String>(
-                                'navigation-management-visible-${destination.name}',
+                                'navigation-management-open-${destination.name}',
                               ),
-                              value: visible,
-                              onChanged: state.isSaving
-                                  ? null
-                                  : (nextVisible) => unawaited(
-                                      _runMutation(
-                                        context,
-                                        () => controller.setVisibility(
-                                          destination,
-                                          nextVisible,
-                                        ),
-                                      ),
-                                    ),
-                            ),
-                            Tooltip(
-                              message: l10n.moreNavigationDragToReorder,
-                              child: ReorderableDragStartListener(
-                                index: index,
-                                enabled: !state.isSaving,
-                                child: const Padding(
-                                  padding: EdgeInsets.all(12),
-                                  child: Icon(Icons.drag_handle),
+                              leading: Icon(destination.icon),
+                              title: Text(
+                                MoreTextResolver.navigationLabel(
+                                  l10n,
+                                  destination,
+                                ),
+                              ),
+                              onTap: () => unawaited(
+                                Navigator.of(context).push<void>(
+                                  ref.read(mainDestinationRouteFactoryProvider)(
+                                    destination,
+                                  ),
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(end: 16),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Switch(
+                                  key: ValueKey<String>(
+                                    'navigation-management-visible-${destination.name}',
+                                  ),
+                                  value: visible,
+                                  onChanged: state.isSaving
+                                      ? null
+                                      : (nextVisible) => unawaited(
+                                          _runMutation(
+                                            context,
+                                            () => controller.setVisibility(
+                                              destination,
+                                              nextVisible,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                                Tooltip(
+                                  message: l10n.moreNavigationDragToReorder,
+                                  child: ReorderableDragStartListener(
+                                    key: ValueKey<String>(
+                                      'navigation-management-drag-${destination.name}',
+                                    ),
+                                    index: index,
+                                    enabled: !state.isSaving,
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: Icon(Icons.drag_handle),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                       if (index != order.length - 1)
                         const Divider(height: 1, indent: 56),

@@ -5,7 +5,7 @@ final class PostEditMessageCanonicalizer {
 
   String canonicalize(String message) {
     final normalized = message.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-    final grammar = const ComposerAttachBbCodeGrammar();
+    const grammar = ComposerAttachBbCodeGrammar();
     if (grammar.scan(normalized).isEmpty) {
       return normalized;
     }

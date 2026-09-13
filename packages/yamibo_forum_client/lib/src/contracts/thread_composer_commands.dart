@@ -5,6 +5,7 @@ library;
 import '../network/forum_request.dart';
 import 'data_command_contract.dart';
 import 'data_read_contract.dart';
+import 'thread_read_access.dart';
 
 /// Capabilities exposed by a thread-creation source.
 enum ThreadCreationCapability {
@@ -62,11 +63,16 @@ final class ThreadCreationPreparationRequest {
   /// Creates a preparation request for [fid].
   const ThreadCreationPreparationRequest({
     required this.fid,
+    this.kind = ThreadCreationKind.ordinary,
     this.cancellation,
   });
 
   /// Stable forum identity.
   final String fid;
+
+  /// The form must be prepared for the same kind as the eventual submission.
+  /// Topic kind bound to this request or prepared form.
+  final ThreadCreationKind kind;
 
   /// Optional caller-owned cancellation signal.
   final ForumRequestCancellation? cancellation;
@@ -109,6 +115,9 @@ final class ThreadCreationPreparation {
     required this.maxSubjectLength,
     required this.maxMessageLength,
     required this.token,
+    this.kind = ThreadCreationKind.ordinary,
+    this.readAccess = ThreadReadAccess.unavailable,
+    this.pollConstraints,
   });
 
   /// Proven forum identity.
@@ -124,7 +133,7 @@ final class ThreadCreationPreparation {
   final List<ThreadCreationSort> threadSorts;
 
   /// Whether a non-zero thread type is required.
-  final bool typeRequired;
+  final bool? typeRequired;
 
   /// Whether a structured category is required.
   ///
@@ -132,20 +141,29 @@ final class ThreadCreationPreparation {
   /// closed when this value is true.
   final bool sortRequired;
 
-  /// Maximum subject length, or zero when the source declares no limit.
-  final int maxSubjectLength;
+  /// Maximum subject length; null means unknown, zero explicitly unlimited.
+  final int? maxSubjectLength;
 
-  /// Maximum message length, or zero when the source declares no limit.
-  final int maxMessageLength;
+  /// Maximum message length; null means unknown, zero explicitly unlimited.
+  final int? maxMessageLength;
+
+  /// Topic kind bound to this request or prepared form.
+  final ThreadCreationKind kind;
+
+  /// Topic permission capability and current-value evidence from preparation.
+  final ThreadReadAccess readAccess;
+
+  /// Limits explicitly declared by the poll form, or null for ordinary topics.
+  final ThreadPollConstraints? pollConstraints;
 
   /// Opaque adapter proof required for safe submission.
   final ThreadCreationPreparationToken token;
 
   /// Whether the preparation declares a subject limit.
-  bool get hasSubjectLimit => maxSubjectLength > 0;
+  bool get hasSubjectLimit => (maxSubjectLength ?? 0) > 0;
 
   /// Whether the preparation declares a message limit.
-  bool get hasMessageLimit => maxMessageLength > 0;
+  bool get hasMessageLimit => (maxMessageLength ?? 0) > 0;
 }
 
 /// Thread kind supported by the source-neutral creation command.
@@ -239,6 +257,7 @@ final class ThreadCreationSubmission {
   final List<String> tags;
 
   /// Ordinary or poll thread kind.
+  /// Topic kind bound to this request or prepared form.
   final ThreadCreationKind kind;
 
   /// Poll fields when [kind] is [ThreadCreationKind.poll].

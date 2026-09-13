@@ -438,6 +438,7 @@ class UnifiedShelfController {
           clearError: true,
         ),
       );
+      trace.snapshotReady();
       if (shouldPersistResolvedCategory) {
         await _persistViewPreferences();
       }

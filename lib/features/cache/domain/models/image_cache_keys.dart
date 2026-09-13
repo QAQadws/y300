@@ -107,7 +107,7 @@ abstract final class ImageCacheKeys {
     }
     final uri = _resolveToUri(value);
     final path = uri?.path ?? value.split('?').first.split('#').first;
-    final marker = '/static/image/smiley/';
+    const marker = '/static/image/smiley/';
     final lower = path.toLowerCase();
     final markerIndex = lower.indexOf(marker);
     final smileyPath = markerIndex >= 0

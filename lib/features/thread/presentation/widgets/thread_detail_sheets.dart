@@ -132,7 +132,7 @@ class _ThreadPostRateSheetState extends State<ThreadPostRateSheet> {
               maxLines: 3,
               decoration: InputDecoration(
                 labelText: l10n.threadRatingReasonHint,
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (value) {
                 if (_selectedDisplayReason != value) {
@@ -254,7 +254,7 @@ class _ThreadPostCommentSheetState extends State<ThreadPostCommentSheet> {
               maxLength: maxLength,
               decoration: InputDecoration(
                 labelText: l10n.threadCommentContent,
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (_) => setState(() {}),
             ),

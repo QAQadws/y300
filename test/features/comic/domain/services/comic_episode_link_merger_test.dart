@@ -6,8 +6,8 @@ import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 
 void main() {
   group('DefaultComicEpisodeLinkMerger', () {
-    final merger = DefaultComicEpisodeLinkMerger(
-      subjectParser: const RuleBasedComicSubjectParser(),
+    const merger = DefaultComicEpisodeLinkMerger(
+      subjectParser: RuleBasedComicSubjectParser(),
     );
 
     test('deduplicates by tid identity across query and thread urls', () {

@@ -76,7 +76,7 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
 class _FakeAuthRepository implements AuthRepository {
   @override
   Future<ApiResult<SessionInfo>> refreshSession() async {
-    return ApiSuccess(
+    return const ApiSuccess(
       SessionInfo(uid: '0', username: '', formhash: '', isLoggedIn: false),
     );
   }
