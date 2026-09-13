@@ -5,6 +5,8 @@ import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_content_projection_controller.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
+import 'package:y300/features/comic/presentation/controllers/comic_comment_interaction_controller.dart';
+import 'package:y300/features/comic/presentation/widgets/comic_comment_action_bar.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_list_surface.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_surface.dart';
@@ -20,7 +22,7 @@ import 'package:y300/l10n/app_localizations.dart';
 /// individual lazy rows to the reader's existing ListView, so it never nests a
 /// second scrollable list inside the image stream.
 class ComicCommentTailSurface extends ChangeNotifier
-    implements ReaderTailSurface {
+    implements ReaderTailSurface, ReaderTailActionSurface {
   ComicCommentTailSurface({
     required ComicCommentSessionController session,
     required ComicCommentContentProjectionController
@@ -28,6 +30,7 @@ class ComicCommentTailSurface extends ChangeNotifier
     required String? imageReferer,
     bool hasNextEpisode = false,
     FutureOr<void> Function()? onAdvanceEpisode,
+    this.interactionController,
   }) : _session = session,
        _contentProjectionController = contentProjectionController,
        _imageReferer = imageReferer,
@@ -40,6 +43,21 @@ class ComicCommentTailSurface extends ChangeNotifier
   final ComicCommentSessionController _session;
   final ComicCommentContentProjectionController _contentProjectionController;
   final String? _imageReferer;
+  final ComicCommentInteractionController? interactionController;
+
+  @override
+  Widget buildActionBar(BuildContext context) => interactionController == null
+      ? const SizedBox.shrink()
+      : ComicCommentActionBar(
+          controller: interactionController!,
+          session: _session,
+        );
+
+  @override
+  void onVisibilityChanged(bool visible) {
+    if (!_disposed) interactionController?.setVisible(visible);
+  }
+
   bool _hasNextEpisode;
   FutureOr<void> Function()? _onAdvanceEpisode;
 

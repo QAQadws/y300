@@ -1,5 +1,7 @@
 typedef ComicDuplicateMetadataFixture = ({String title, String? author});
 
+const comicInteractionThreadTitle = '漫画互动测试';
+
 const comicDuplicateMetadataBase = (title: '漫画标题', author: '作者名');
 const comicDuplicateMetadataOther = (title: '另一部漫画', author: '另一位作者');
 const comicDuplicateMetadataFormatted = (

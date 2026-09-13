@@ -16,6 +16,7 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_rating_service.dart';
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 
 class ThreadDetailArgs {
@@ -573,56 +574,13 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
   }
 
   Future<DataReadResult<ThreadPostRateForm, ThreadPostRatingCapabilities>>
-  loadRateForm(ThreadPost post) async {
-    final current = state.value;
-    final rateUrl = post.rateUrl?.trim();
-    if (rateUrl == null || rateUrl.isEmpty) {
-      return const DataReadFailure(
-        kind: DataReadFailureKind.business,
-        code: 'thread_post_rating_entry_missing',
-        diagnosticMessage: 'thread_post_rating_entry_missing',
+  loadRateForm(ThreadPost post) => ref
+      .read(threadPostRatingServiceProvider)
+      .load(
+        tid: state.value?.tid ?? _args.tid,
+        post: post,
+        referer: Uri.tryParse(_rateReferer(state.value, post)),
       );
-    }
-    final result = await ref
-        .read(threadPostRatingPreparationProvider)
-        .load(
-          ThreadPostRatingPreparationRequest(
-            tid: current?.tid ?? _args.tid,
-            pid: post.pid,
-            referer: Uri.tryParse(_rateReferer(current, post)),
-          ),
-        );
-    return switch (result) {
-      DataReadFailure<
-        ThreadPostRatingPreparation,
-        ThreadPostRatingCapabilities
-      >() =>
-        result.failureOrNull!.retype(),
-      DataReadSuccess<
-        ThreadPostRatingPreparation,
-        ThreadPostRatingCapabilities
-      >(
-        :final data,
-        :final capabilities,
-        :final metadata,
-      ) =>
-        data.dimensions.isEmpty
-            ? const DataReadFailure(
-                kind: DataReadFailureKind.parse,
-                code: 'thread_post_rating_dimensions_missing',
-                diagnosticMessage: 'thread_post_rating_dimensions_missing',
-              )
-            : DataReadSuccess(
-                data: ThreadPostRateForm(
-                  preparation: data,
-                  dimension: data.dimensions.first,
-                ),
-                capabilities: capabilities,
-                metadata: metadata,
-              ),
-    };
-  }
-
   ThreadPost? _findPostByPid(List<ThreadPost> posts, String pid) {
     for (final post in posts) {
       if (post.pid.trim() == pid) {
@@ -636,8 +594,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     ThreadPostRateDraft draft,
   ) async {
     final result = await ref
-        .read(threadPostRatingCommandProvider)
-        .execute(draft.toSubmission());
+        .read(threadPostRatingServiceProvider)
+        .submit(draft);
     if (result is! DataCommandApplied<ThreadPostRatingReceipt>) {
       return result;
     }

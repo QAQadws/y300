@@ -9,6 +9,21 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get comicInteractionLoadFailed => '互动信息加载失败，点击评分或回复重试';
+
+  @override
+  String get comicInteractionUnavailable => '当前帖子暂不支持评分和回复';
+
+  @override
+  String get comicRatingUnavailable => '当前帖子暂不支持评分';
+
+  @override
+  String get comicReplyUnavailable => '当前帖子暂不支持回复';
+
+  @override
+  String get comicCommentRefreshFailed => '评论刷新失败，已保留原有评论';
+
+  @override
   String get appLanguageSectionTitle => '界面语言';
 
   @override
@@ -4450,6 +4465,21 @@ class AppLocalizationsZh extends AppLocalizations {
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
 class AppLocalizationsZhTw extends AppLocalizationsZh {
   AppLocalizationsZhTw() : super('zh_TW');
+
+  @override
+  String get comicInteractionLoadFailed => '互動資訊載入失敗，點擊評分或回覆重試';
+
+  @override
+  String get comicInteractionUnavailable => '目前帖子暫不支援評分和回覆';
+
+  @override
+  String get comicRatingUnavailable => '目前帖子暫不支援評分';
+
+  @override
+  String get comicReplyUnavailable => '目前帖子暫不支援回覆';
+
+  @override
+  String get comicCommentRefreshFailed => '評論重新整理失敗，已保留原有評論';
 
   @override
   String get appLanguageSectionTitle => '介面語言';

@@ -26,7 +26,6 @@ import 'package:y300/features/history/domain/services/history_visit_recorder.dar
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
-import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
@@ -60,7 +59,7 @@ import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_page.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 import 'package:y300/features/thread/presentation/post_edit_native_entry_gate.dart';
-import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_rating_flow.dart';
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_button.dart';
@@ -597,76 +596,25 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     await _handleReplyComposerResult(args, result);
   }
 
+  bool _ratingFlowActive = false;
+
   Future<void> _openPostRateSheet(
     ThreadDetailArgs args,
     ThreadDetailController controller,
     ThreadPost post,
   ) async {
-    final formResult = await controller.loadRateForm(post);
-    if (!mounted) {
-      return;
-    }
-    if (formResult
-        case DataReadFailure<ThreadPostRateForm, ThreadPostRatingCapabilities>(
-          :final kind,
-        )) {
-      _showActionFailure(
-        ThreadActionFailure(
-          code: kind == DataReadFailureKind.unauthorized
-              ? ThreadUiErrorCode.loginRequired
-              : ThreadUiErrorCode.rateFailed,
-          action: ThreadActionKind.rate,
-        ),
+    if (_ratingFlowActive) return;
+    _ratingFlowActive = true;
+    try {
+      await showThreadPostRatingFlow(
+        context: context,
+        ref: ref,
+        load: () => controller.loadRateForm(post),
+        submit: controller.submitPostRate,
+        isCurrent: () => mounted && widget.tid == args.tid,
       );
-      return;
-    }
-    final form =
-        (formResult
-                as DataReadSuccess<
-                  ThreadPostRateForm,
-                  ThreadPostRatingCapabilities
-                >)
-            .data;
-    final conversionMode = ref.read(appServerContentConversionModeProvider);
-    final converter = ref.read(textConverterProvider(conversionMode));
-    final formProjection = await ThreadPostRateFormProjector(
-      plainTextBatchConversionService: ref.read(
-        plainTextBatchConversionServiceProvider,
-      ),
-    ).project(form, converter: converter);
-    if (!mounted) {
-      return;
-    }
-    final result = await showModalBottomSheet<ThreadPostRateDraft>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => ThreadPostRateSheet(projection: formProjection),
-    );
-    if (!mounted || result == null) {
-      return;
-    }
-    final submitResult = await ref
-        .read(threadDetailControllerProvider(args).notifier)
-        .submitPostRate(result);
-    if (!mounted) {
-      return;
-    }
-    switch (submitResult) {
-      case DataCommandApplied<ThreadPostRatingReceipt>():
-        _showActionNotice(
-          const ThreadActionNotice(
-            code: ThreadActionNoticeCode.success,
-            action: ThreadActionKind.rate,
-          ),
-        );
-      case final DataCommandResult<ThreadPostRatingReceipt> failure:
-        _showActionNotice(
-          ThreadActionNotice(
-            code: _noticeCodeForCommandResult(failure),
-            action: ThreadActionKind.rate,
-            commandFailure: failure.failureOrNull,
-          ),
-        );
+    } finally {
+      _ratingFlowActive = false;
     }
   }
 

@@ -97,6 +97,36 @@ abstract class AppLocalizations {
     Locale('zh', 'TW'),
   ];
 
+  /// No description provided for @comicInteractionLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'互动信息加载失败，点击评分或回复重试'**
+  String get comicInteractionLoadFailed;
+
+  /// No description provided for @comicInteractionUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前帖子暂不支持评分和回复'**
+  String get comicInteractionUnavailable;
+
+  /// No description provided for @comicRatingUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前帖子暂不支持评分'**
+  String get comicRatingUnavailable;
+
+  /// No description provided for @comicReplyUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前帖子暂不支持回复'**
+  String get comicReplyUnavailable;
+
+  /// No description provided for @comicCommentRefreshFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论刷新失败，已保留原有评论'**
+  String get comicCommentRefreshFailed;
+
   /// 应用设置中的界面语言分区标题
   ///
   /// In zh, this message translates to:

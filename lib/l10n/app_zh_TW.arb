@@ -1,4 +1,10 @@
 {
+  "comicInteractionLoadFailed": "互動資訊載入失敗，點擊評分或回覆重試",
+  "comicInteractionUnavailable": "目前帖子暫不支援評分和回覆",
+  "comicRatingUnavailable": "目前帖子暫不支援評分",
+  "comicReplyUnavailable": "目前帖子暫不支援回覆",
+  "comicCommentRefreshFailed": "評論重新整理失敗，已保留原有評論",
+
   "@@locale": "zh_TW",
 
   "appLanguageSectionTitle": "介面語言",

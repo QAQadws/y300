@@ -6,6 +6,52 @@ import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
 
 void main() {
+  test(
+    'refresh retains comments and failed refresh never replaces them',
+    () async {
+      final pending = Completer<ComicCommentLoadResult>();
+      final loader = _FakeCommentLoader([
+        _successResult(),
+        pending.future,
+        _successResult(),
+      ]);
+      final controller = ComicCommentSessionController(
+        key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
+        loader: loader,
+      );
+      addTearDown(controller.dispose);
+      await controller.load();
+      final original = controller.state.result;
+      final refresh = controller.refreshAfterMutation();
+      expect(controller.state.isLoading, isFalse);
+      expect(controller.state.isRefreshing, isTrue);
+      expect(controller.state.result, same(original));
+      pending.complete(_failureResult());
+      await refresh;
+      expect(controller.state.result, same(original));
+      expect(controller.state.refreshFailed, isTrue);
+      await controller.retry();
+      expect(controller.state.refreshFailed, isFalse);
+    },
+  );
+
+  test('successful mutation supersedes an unfinished initial load', () async {
+    final pending = Completer<ComicCommentLoadResult>();
+    final loader = _FakeCommentLoader([pending.future, _successResult()]);
+    final controller = ComicCommentSessionController(
+      key: const ComicCommentSessionKey(episodeId: 'e1', sourceTid: '573279'),
+      loader: loader,
+    );
+    addTearDown(controller.dispose);
+    final initial = controller.load();
+    await controller.refreshAfterMutation();
+    final refreshed = controller.state.result;
+    pending.complete(_failureResult());
+    await initial;
+    expect(controller.state.result, same(refreshed));
+    expect(controller.state.result?.items, hasLength(1));
+  });
+
   test('loads one session once and reuses the completed result', () async {
     final loader = _FakeCommentLoader(<ComicCommentLoadResult>[
       _successResult(),

@@ -105,7 +105,18 @@ class DefaultComicCommentLoader
     }
 
     final existing = _inFlight[normalizedTid];
-    final task = existing ?? _startAndCache(normalizedTid);
+    late final Future<ComicCommentLoadResult> task;
+    task =
+        existing ??
+        _start(normalizedTid).then((result) {
+          // Invalidating detaches the old flight. It may finish for its existing
+          // callers, but must never repopulate a cache after a successful reply.
+          if (identical(_inFlight[normalizedTid], task) && result.isComplete) {
+            _cache[normalizedTid] = _ComicCommentCacheEntry(result, _now());
+            _trimCache();
+          }
+          return result;
+        });
     if (existing == null) {
       _inFlight[normalizedTid] = task;
       unawaited(
@@ -125,16 +136,9 @@ class DefaultComicCommentLoader
 
   @override
   void invalidate(String sourceTid) {
-    _cache.remove(sourceTid.trim());
-  }
-
-  Future<ComicCommentLoadResult> _startAndCache(String sourceTid) async {
-    final result = await _start(sourceTid);
-    if (result.isComplete) {
-      _cache[sourceTid] = _ComicCommentCacheEntry(result, _now());
-      _trimCache();
-    }
-    return result;
+    final tid = sourceTid.trim();
+    _cache.remove(tid);
+    _inFlight.remove(tid);
   }
 
   Future<ComicCommentLoadResult> _start(String sourceTid) async {

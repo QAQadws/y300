@@ -1,4 +1,10 @@
 {
+  "comicInteractionLoadFailed": "互动信息加载失败，点击评分或回复重试",
+  "comicInteractionUnavailable": "当前帖子暂不支持评分和回复",
+  "comicRatingUnavailable": "当前帖子暂不支持评分",
+  "comicReplyUnavailable": "当前帖子暂不支持回复",
+  "comicCommentRefreshFailed": "评论刷新失败，已保留原有评论",
+
   "@@locale": "zh",
 
   "appLanguageSectionTitle": "界面语言",

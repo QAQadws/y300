@@ -32,6 +32,8 @@ class ComicCommentSessionState {
     required this.key,
     required this.isLoading,
     this.result,
+    this.isRefreshing = false,
+    this.refreshFailed = false,
   });
 
   const ComicCommentSessionState.initial(ComicCommentSessionKey key)
@@ -40,6 +42,8 @@ class ComicCommentSessionState {
   final ComicCommentSessionKey key;
   final bool isLoading;
   final ComicCommentLoadResult? result;
+  final bool isRefreshing;
+  final bool refreshFailed;
 
   bool get hasAttempted => isLoading || result != null;
 }
@@ -79,10 +83,19 @@ class ComicCommentSessionController extends ChangeNotifier {
 
   Future<void> load() => _run(force: false);
 
-  Future<void> retry() => _run(force: true);
+  Future<void> retry() => _run(force: true, preserveResult: true);
 
-  Future<void> _run({required bool force}) async {
-    if (_disposed || _state.isLoading) {
+  /// A proven write supersedes even an unfinished initial comment load.
+  Future<void> refreshAfterMutation() =>
+      _run(force: true, preserveResult: true, supersede: true);
+
+  Future<void> _run({
+    required bool force,
+    bool preserveResult = false,
+    bool supersede = false,
+  }) async {
+    if (_disposed ||
+        (!supersede && (_state.isLoading || _state.isRefreshing))) {
       return;
     }
     if (!force && _state.result != null) {
@@ -93,12 +106,18 @@ class ComicCommentSessionController extends ChangeNotifier {
     }
 
     final generation = ++_generation;
+    final previous = _state.result;
+    final keepResult =
+        preserveResult &&
+        previous != null &&
+        (previous.hasItems || previous.isComplete);
     _activeToken?.cancel();
     final token = ComicCommentCancellationToken();
     _activeToken = token;
     _state = ComicCommentSessionState(
       key: _key,
-      isLoading: true,
+      isLoading: !keepResult,
+      isRefreshing: keepResult,
       result: _state.result,
     );
     notifyListeners();
@@ -145,7 +164,8 @@ class ComicCommentSessionController extends ChangeNotifier {
     _state = ComicCommentSessionState(
       key: _key,
       isLoading: false,
-      result: result!,
+      result: keepResult && !result!.isComplete ? previous : result!,
+      refreshFailed: keepResult && !result.isComplete,
     );
     notifyListeners();
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
@@ -6,6 +7,32 @@ import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 
 void main() {
+  test(
+    'invalidating detaches an old flight and prevents stale cache writes',
+    () async {
+      final repo = _DeferredReplyPageRepository();
+      final loader = DefaultComicCommentLoader(repository: repo);
+      final old = loader.loadAll(sourceTid: '570140');
+      loader.invalidate('570140');
+      final fresh = loader.loadAll(sourceTid: '570140');
+      expect(repo.requests, hasLength(2));
+      final source = _fixturePage(1);
+      ThreadReplyPage page(bool hasReply) => ThreadReplyPage(
+        tid: source.tid,
+        page: 1,
+        perPage: 20,
+        replyCount: hasReply ? 1 : 0,
+        posts: source.posts.take(hasReply ? 2 : 1).toList(),
+      );
+      repo.requests[1].complete(_success(page(true)));
+      expect((await fresh).items, hasLength(1));
+      repo.requests[0].complete(_success(page(false)));
+      expect((await old).items, isEmpty);
+      expect((await loader.loadAll(sourceTid: '570140')).items, hasLength(1));
+      expect(repo.requests, hasLength(2));
+    },
+  );
+
   test(
     'loads both pages, excludes only the first floor, and maps avatars',
     () async {
@@ -360,5 +387,24 @@ class _FakeReplyPageRepository implements ThreadReplyPageRepository {
       await Future<void>.delayed(delay);
     }
     return responses[page] ?? _failure(DataReadFailureKind.server);
+  }
+}
+
+class _DeferredReplyPageRepository implements ThreadReplyPageRepository {
+  final requests =
+      <
+        Completer<
+          DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>
+        >
+      >[];
+  @override
+  Future<DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>>
+  loadPage({required String tid, required int page}) {
+    final request =
+        Completer<
+          DataReadResult<ThreadReplyPage, ThreadReplyPageReadCapabilities>
+        >();
+    requests.add(request);
+    return request.future;
   }
 }
