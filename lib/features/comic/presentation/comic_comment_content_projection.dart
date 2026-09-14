@@ -81,7 +81,7 @@ class ComicCommentLayoutRevisionTracker {
 
 @immutable
 final class ComicCommentItemProjection {
-  const ComicCommentItemProjection({
+  ComicCommentItemProjection({
     required this.sourceItem,
     required this.displayMessage,
     required this.displayDateline,
@@ -113,13 +113,19 @@ final class ComicCommentItemProjection {
     );
   }
 
-  ThreadPost get displayPost {
+  late final ThreadPost displayPost = _buildDisplayPost();
+
+  ThreadPost _buildDisplayPost() {
     if (projectedPost != null) return projectedPost!;
+    final post = sourceItem.post;
+    if (displayMessage == post.message && displayDateline == post.dateline) {
+      return post;
+    }
     final collector = ThreadPlainTextCollector();
-    final slots = ThreadPostTextSlots.collect(sourceItem.post, collector);
+    final slots = ThreadPostTextSlots.collect(post, collector);
     collector.sources[slots.dateline.index] = displayDateline;
     return slots.build(
-      sourceItem.post,
+      post,
       values: collector.sources,
       displayHtml: displayMessage,
     );

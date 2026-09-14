@@ -88,12 +88,16 @@ class _ThreadPostHtmlFirstBodyState
   bool _loggedEmptyBody = false;
   String? _lastPreparedLogKey;
   String? _lastRenderFailureLogKey;
+  Object? _preparedIdentity;
+  ForumHtmlPreparedRenderDocument? _preparedDocument;
 
   @override
   Widget build(BuildContext context) {
     final html = widget.post.message.trim();
     final sourcePost = widget.sourcePost ?? widget.post;
     if (html.isEmpty) {
+      _preparedIdentity = null;
+      _preparedDocument = null;
       if (!_loggedEmptyBody) {
         _loggedEmptyBody = true;
         _logNative(
@@ -118,14 +122,30 @@ class _ThreadPostHtmlFirstBodyState
       final sourceId = sourcePost.pid.trim().isEmpty
           ? 'post'
           : sourcePost.pid.trim();
-      final preparedDocument = widget.renderPreparer.prepare(
-        html: html,
-        preferences: preferences,
-        theme: widget.theme,
-        sourceId: sourceId,
-        threadId: widget.threadId,
-        imageCacheOwnerId: widget.threadId,
+      final identity = (
+        html,
+        preferences,
+        widget.theme.signature,
+        sourceId,
+        widget.threadId,
+        widget.renderPreparer,
       );
+      // Keep only this mounted body's document. Unrelated card/chrome updates
+      // must not repeat DOM parsing and theme adaptation.
+      if (_preparedIdentity != identity || _preparedDocument == null) {
+        _preparedDocument = null;
+        _preparedIdentity = null;
+        _preparedDocument = widget.renderPreparer.prepare(
+          html: html,
+          preferences: preferences,
+          theme: widget.theme,
+          sourceId: sourceId,
+          threadId: widget.threadId,
+          imageCacheOwnerId: widget.threadId,
+        );
+        _preparedIdentity = identity;
+      }
+      final preparedDocument = _preparedDocument!;
       _logPreparedDocument(
         sourceId: sourceId,
         htmlLength: html.length,

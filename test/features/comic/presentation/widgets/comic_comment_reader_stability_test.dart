@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
 import 'package:y300/features/comic/presentation/comic_comment_presentation_store.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
@@ -36,6 +37,88 @@ import '../../data/comic_comment_fixtures.dart';
 import '../../domain/services/comic_title_parser_cases.dart';
 
 void main() {
+  for (final count in [20, 200, 1000]) {
+    testWidgets(
+      '$count text comments do not rebuild stable rows while dragging or coasting',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({
+          'reader_pref_mode': 'vertical',
+        });
+        final fixture = _Fixture(
+          CommentDetailRepository(
+            respond: (_) => commentDetailPage(
+              lastPage: 1,
+              posts: List.generate(
+                count,
+                (i) => commentPost(
+                  i + 1,
+                  message:
+                      '<p>comment ${i + 1}</p><blockquote>quoted text</blockquote><p>body</p>',
+                ),
+              ),
+            ),
+          ),
+        );
+        addTearDown(fixture.dispose);
+        await fixture.session.load();
+        await tester.pumpWidget(fixture.host());
+        await _pumpFrames(tester);
+        final scroll = fixture.scroll(tester);
+        scroll.jumpTo(8600);
+        await _pumpFrames(tester);
+
+        final tracked = <Element>{
+          ...find.byType(ComicCommentCard).evaluate(),
+          ...find.byType(ThreadPostHtmlFirstBody).evaluate(),
+        };
+        expect(tracked, isNotEmpty);
+        expect(find.byType(ComicCommentCard).evaluate().length, lessThan(20));
+        final rebuilds = <Element, int>{};
+        var engineRebuilds = 0;
+        final previousHook = debugOnRebuildDirtyWidget;
+        debugOnRebuildDirtyWidget = (element, builtOnce) {
+          previousHook?.call(element, builtOnce);
+          if (element.widget is ImageReaderEngine) engineRebuilds++;
+          if (tracked.contains(element)) {
+            rebuilds.update(element, (n) => n + 1, ifAbsent: () => 1);
+          }
+        };
+        addTearDown(() => debugOnRebuildDirtyWidget = previousHook);
+
+        final initialOffset = scroll.offset;
+        final gesture = await tester.startGesture(const Offset(400, 350));
+        for (var i = 0; i < 30; i++) {
+          await gesture.moveBy(const Offset(0, -3));
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        expect(scroll.offset, greaterThan(initialOffset + 30));
+        await gesture.up();
+        await tester.fling(
+          find.byKey(const Key('comment-stability-list')),
+          const Offset(0, -100),
+          500,
+        );
+        final releasedOffset = scroll.offset;
+        for (var i = 0; i < 90; i++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        expect(scroll.offset, greaterThan(releasedOffset + 1));
+        expect(engineRebuilds, 0);
+        final retained = tracked.where((element) => element.mounted).toList();
+        expect(retained, isNotEmpty);
+        for (final element in retained) {
+          expect(
+            rebuilds[element] ?? 0,
+            0,
+            reason:
+                'Stable ${element.widget.runtimeType} must not rebuild for scroll ticks.',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'paged long bodies retain their measured height when recycled above the viewport',
     (tester) async {

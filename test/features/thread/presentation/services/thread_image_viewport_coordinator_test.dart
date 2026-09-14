@@ -56,6 +56,22 @@ void main() {
       hasLength(1),
     );
 
+    final prefetch = handles.singleWhere(
+      (handle) => handle.value == ThreadImageViewportMode.prefetch,
+    );
+    final transitions = <ThreadImageViewportMode>[];
+    prefetch.addListener(() => transitions.add(prefetch.value));
+    for (var i = 1; i <= 30; i++) {
+      controller.jumpTo(i.toDouble());
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(prefetch.value, ThreadImageViewportMode.prefetch);
+    expect(
+      transitions,
+      isEmpty,
+      reason: 'The same prefetch must remain stable during scrolling.',
+    );
+
     handles.first.reportLoadStarted();
     await tester.pump();
     await tester.pump();

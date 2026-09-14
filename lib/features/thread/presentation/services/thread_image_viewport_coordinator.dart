@@ -137,6 +137,7 @@ final class ThreadImageViewportCoordinator {
     placements.sort((left, right) => left.distance.compareTo(right.distance));
 
     var waitingVisible = 0;
+    final modes = <ThreadImageViewportHandle, ThreadImageViewportMode>{};
     for (final placement in placements) {
       final handle = placement.handle;
       var mode = ThreadImageViewportMode.dormant;
@@ -149,7 +150,7 @@ final class ThreadImageViewportCoordinator {
           }
         }
       }
-      handle._applyMode(mode);
+      modes[handle] = mode;
     }
 
     // A nearby disk prefetch may use only the capacity left by visible images.
@@ -166,10 +167,15 @@ final class ThreadImageViewportCoordinator {
       }
       if (!placement.visible &&
           placement.near &&
-          placement.handle.value == ThreadImageViewportMode.dormant) {
-        placement.handle._applyMode(ThreadImageViewportMode.prefetch);
+          modes[placement.handle] == ThreadImageViewportMode.dormant) {
+        modes[placement.handle] = ThreadImageViewportMode.prefetch;
         prefetched += 1;
       }
+    }
+    // Commit once: an unchanged prefetch must not emit dormant/prefetch on
+    // every scroll tick and rebuild its image placeholder again.
+    for (final entry in modes.entries) {
+      entry.key._applyMode(entry.value);
     }
   }
 

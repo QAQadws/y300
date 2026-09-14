@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
@@ -16,6 +17,134 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import '../../data/comic_comment_fixtures.dart';
 
 void main() {
+  for (final count in [20, 200, 1000]) {
+    test(
+      '$count comments reuse snapshots without scanning posts per row',
+      () async {
+        final items = List.generate(count, (i) => _CountingCommentItem(i));
+        final source = ComicCommentLoadResult(
+          sourceTid: '573279',
+          status: ComicCommentLoadStatus.success,
+          items: items,
+          loadedPages: const {1},
+          expectedPages: 1,
+        );
+        final session = _session(_SequenceLoader([source]));
+        final controller = _controller(
+          session: session,
+          plainService: _ImmediatePlainService(),
+          initialMode: TextConversionMode.none,
+          initialConverter: const IdentityTextConverter(),
+        );
+        addTearDown(session.dispose);
+        addTearDown(controller.dispose);
+        await session.load();
+        final snapshot = session.state.result!;
+        final projection = controller.projectionFor(snapshot);
+        for (final item in items) {
+          item.postReads = 0;
+        }
+        for (var i = 0; i < 120; i++) {
+          expect(controller.projectionFor(snapshot), same(projection));
+        }
+        expect(items.fold(0, (sum, item) => sum + item.postReads), 0);
+
+        final row = projection.items.first;
+        expect(row.displayPost, same(row.displayPost));
+        expect(items.first.postReads, 1);
+      },
+    );
+  }
+
+  test(
+    'equal body revisions still replace pagination and command snapshots',
+    () async {
+      final first = ComicCommentLoadResult.fromRead(commentDetailPage());
+      final second = ComicCommentLoadResult(
+        sourceTid: first.sourceTid,
+        status: first.status,
+        items: first.items,
+        loadedPages: first.loadedPages,
+        expectedPages: first.expectedPages,
+        nextPage: 3,
+        reads: {1: commentDetailPage()},
+      );
+      final session = _session(_SequenceLoader([first, second]));
+      final controller = _controller(
+        session: session,
+        plainService: _ImmediatePlainService(),
+        initialMode: TextConversionMode.none,
+        initialConverter: const IdentityTextConverter(),
+      );
+      addTearDown(session.dispose);
+      addTearDown(controller.dispose);
+      await session.load();
+      final before = controller.projection!;
+      await session.refreshAfterMutation(page: 1);
+      final after = controller.projection!;
+      expect(after.sourceRevision, before.sourceRevision);
+      expect(after.sourceResult, same(session.state.result));
+      expect(after.sourceResult.nextPage, 3);
+      expect(after.sourceResult.reads[1], same(second.reads[1]));
+      expect(controller.projectionFor(session.state.result!), same(after));
+    },
+  );
+
+  test('converted display models are created once per projection', () {
+    final source = _result('正文').items.single;
+    final projection = ComicCommentItemProjection(
+      sourceItem: source,
+      displayMessage: '<p>轉換後</p>',
+      displayDateline: '轉換時間',
+    );
+    final post = projection.displayPost;
+    expect(post.message, '<p>轉換後</p>');
+    expect(post.dateline, '轉換時間');
+    expect(projection.displayPost, same(post));
+    expect(source.rawMessage, '<p>正文</p>');
+  });
+
+  test(
+    'unchanged refresh keeps converted text with fresh source items',
+    () async {
+      final first = _result('正文');
+      final second = _result('正文');
+      final session = _session(_SequenceLoader([first, second]));
+      final plain = _ImmediatePlainService();
+      final controller = _controller(
+        session: session,
+        plainService: plain,
+        initialMode: TextConversionMode.toTraditional,
+        initialConverter: const _ModeConverter(
+          mode: TextConversionMode.toTraditional,
+          converterId: 'traditional',
+        ),
+      );
+      addTearDown(session.dispose);
+      addTearDown(controller.dispose);
+      await session.load();
+      await _drain();
+      final before = controller.projection!;
+      final convertedStates = <bool>[];
+      controller.addListener(
+        () => convertedStates.add(controller.projection!.isConverted),
+      );
+      await session.refreshAfterMutation(page: 1);
+      await _drain();
+      expect(plain.callCount, 1);
+      expect(convertedStates, [true]);
+      expect(
+        controller.projection!.items.single.sourceItem,
+        same(second.items.single),
+      );
+      expect(
+        controller.projection!.items.single.displayPost,
+        same(before.items.single.displayPost),
+      );
+      expect(controller.projection!.sourceResult, same(session.state.result));
+    },
+  );
+
   test(
     'layout revisions ignore metadata and append, but track replacements and conversion',
     () {
@@ -318,6 +447,26 @@ final class _SequenceLoader implements ComicCommentLoader {
     ComicCommentCancellationToken? cancellationToken,
   }) async {
     return results[calls++];
+  }
+}
+
+class _CountingCommentItem extends ComicCommentItem {
+  _CountingCommentItem(int i)
+    : super(
+        pid: 'p$i',
+        authorId: '8',
+        authorName: 'author',
+        dateline: 'date',
+        floorNumber: i + 1,
+        rawMessage: '<p>comment $i</p>',
+        avatarUrl: null,
+      );
+
+  int postReads = 0;
+  @override
+  ThreadPost get post {
+    postReads++;
+    return super.post;
   }
 }
 

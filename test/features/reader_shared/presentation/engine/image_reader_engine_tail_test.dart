@@ -11,6 +11,54 @@ import 'package:y300/features/reader_shared/domain/continuous_image/continuous_i
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 
 void main() {
+  testWidgets(
+    'page highlight updates locally, dims after 900ms and resets when hidden',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'reader_pref_mode': 'vertical'});
+      await tester.pumpWidget(_host(_ActionTail()));
+      await tester.pumpAndSettle();
+      final scroll = tester
+          .widget<ListView>(find.byKey(const Key('tail-test-list')))
+          .controller!;
+      final beforeHook = debugOnRebuildDirtyWidget;
+      var builds = 0;
+      debugOnRebuildDirtyWidget = (element, builtOnce) {
+        beforeHook?.call(element, builtOnce);
+        if (element.widget is ImageReaderEngine) builds++;
+      };
+      addTearDown(() => debugOnRebuildDirtyWidget = beforeHook);
+      ReaderPageIndicatorOverlay indicator() =>
+          tester.widget<ReaderPageIndicatorOverlay>(
+            find.byType(ReaderPageIndicatorOverlay),
+          );
+      scroll.jumpTo(10);
+      await tester.pump();
+      expect(indicator().highlighted, isTrue);
+      for (var i = 1; i <= 20; i++) {
+        scroll.jumpTo(10.0 + i);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await tester.pump(const Duration(milliseconds: 880));
+      expect(indicator().highlighted, isTrue);
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(indicator().highlighted, isFalse);
+      expect(builds, 0);
+
+      scroll.jumpTo(1500);
+      await tester.pumpAndSettle();
+      expect(indicator().visible, isFalse);
+      expect(indicator().highlighted, isFalse);
+      builds = 0;
+      scroll.jumpTo(1550);
+      await tester.pumpAndSettle();
+      expect(builds, 0);
+      scroll.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(indicator().visible, isTrue);
+      expect(indicator().highlighted, isFalse);
+    },
+  );
+
   for (final mode in ['ltr', 'rtl']) {
     testWidgets(
       '$mode fixed actions follow the tail and yield to the reader menu',

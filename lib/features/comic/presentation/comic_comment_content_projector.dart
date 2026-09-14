@@ -25,8 +25,11 @@ final class ComicCommentContentProjector {
     required ComicCommentSessionKey sessionKey,
     required ComicCommentLoadResult source,
     required TextConverter converter,
+    String? sourceRevision,
   }) async {
-    final revision = sourceRevisionFor(sessionKey: sessionKey, source: source);
+    final revision =
+        sourceRevision ??
+        sourceRevisionFor(sessionKey: sessionKey, source: source);
     if (converter.mode == TextConversionMode.none || source.items.isEmpty) {
       return ComicCommentContentProjection.raw(
         source,

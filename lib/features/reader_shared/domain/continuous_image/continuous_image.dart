@@ -2,6 +2,7 @@ export 'diagnostics/continuous_image_diagnostic_event.dart';
 export 'diagnostics/continuous_image_diagnostic_recorder.dart';
 export 'continuous_image_extent_registry.dart';
 export 'continuous_image_layout_resolver.dart';
+export 'continuous_image_layout_index.dart';
 export 'continuous_image_models.dart';
 export 'continuous_image_prefetch_coordinator.dart';
 export 'continuous_image_scroll_anchor_coordinator.dart';
