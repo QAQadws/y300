@@ -39,7 +39,10 @@ import 'package:y300/features/thread/presentation/services/thread_post_image_dim
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_button.dart';
+import 'package:y300/features/thread/domain/models/thread_quick_scroll_dock_side.dart';
+import 'package:y300/features/thread/presentation/thread_quick_scroll_preferences_controller.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_dock.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_quick_scroll_dock_location.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
@@ -161,6 +164,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       },
     );
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    final quickScrollSide =
+        ref.watch(threadQuickScrollPreferencesControllerProvider).value ??
+        ThreadQuickScrollDockSide.right;
     _schedulePrewarmImageDimensions(state);
     if (state.posts.isNotEmpty) {
       _scheduleQuickScrollMetricsSync();
@@ -332,14 +338,17 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       ),
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 12),
-        child: ThreadDetailQuickScrollButton(
+        child: ThreadDetailQuickScrollDock(
           coordinator: _quickScrollCoordinator,
           hasContent: state.posts.isNotEmpty,
           backgroundColor: palette.cardElevated,
           foregroundColor: palette.title,
         ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButtonLocation: ThreadQuickScrollDockLocation(
+        quickScrollSide,
+      ),
+      floatingActionButtonAnimator: FloatingActionButtonAnimator.noAnimation,
     );
   }
 

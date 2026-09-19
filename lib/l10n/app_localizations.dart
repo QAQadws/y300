@@ -5045,6 +5045,30 @@ abstract class AppLocalizations {
   /// **'滚动到顶部'**
   String get threadDetailScrollTop;
 
+  /// No description provided for @threadQuickScrollDragHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'长按拖动，松手后吸附到左下角或右下角'**
+  String get threadQuickScrollDragHint;
+
+  /// No description provided for @threadQuickScrollMoveLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'移动到左下角'**
+  String get threadQuickScrollMoveLeft;
+
+  /// No description provided for @threadQuickScrollMoveRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'移动到右下角'**
+  String get threadQuickScrollMoveRight;
+
+  /// No description provided for @threadQuickScrollPositionSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'按钮位置保存失败，已恢复之前的位置'**
+  String get threadQuickScrollPositionSaveFailed;
+
   /// No description provided for @threadDetailScrollBottom.
   ///
   /// In zh, this message translates to:

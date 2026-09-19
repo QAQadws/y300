@@ -3060,6 +3060,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadDetailScrollTop => '滚动到顶部';
 
   @override
+  String get threadQuickScrollDragHint => '长按拖动，松手后吸附到左下角或右下角';
+
+  @override
+  String get threadQuickScrollMoveLeft => '移动到左下角';
+
+  @override
+  String get threadQuickScrollMoveRight => '移动到右下角';
+
+  @override
+  String get threadQuickScrollPositionSaveFailed => '按钮位置保存失败，已恢复之前的位置';
+
+  @override
   String get threadDetailScrollBottom => '滚动到底部';
 
   @override
@@ -7519,6 +7531,18 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadDetailScrollTop => '滾動到頂部';
+
+  @override
+  String get threadQuickScrollDragHint => '長按拖曳，放開後吸附到左下角或右下角';
+
+  @override
+  String get threadQuickScrollMoveLeft => '移動到左下角';
+
+  @override
+  String get threadQuickScrollMoveRight => '移動到右下角';
+
+  @override
+  String get threadQuickScrollPositionSaveFailed => '按鈕位置儲存失敗，已恢復先前的位置';
 
   @override
   String get threadDetailScrollBottom => '滾動到底部';

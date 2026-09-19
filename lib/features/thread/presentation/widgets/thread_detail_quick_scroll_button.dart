@@ -11,12 +11,16 @@ class ThreadDetailQuickScrollButton extends StatelessWidget {
     required this.hasContent,
     required this.backgroundColor,
     required this.foregroundColor,
+    this.elevation = 2,
+    this.surfaceKey = const Key('thread-detail-quick-scroll-button'),
   });
 
   final ThreadDetailQuickScrollCoordinator coordinator;
   final bool hasContent;
   final Color backgroundColor;
   final Color foregroundColor;
+  final double elevation;
+  final Key surfaceKey;
 
   @override
   Widget build(BuildContext context) {
@@ -39,11 +43,12 @@ class ThreadDetailQuickScrollButton extends StatelessWidget {
           ),
           child: visible
               ? _QuickScrollButtonSurface(
-                  key: const Key('thread-detail-quick-scroll-button'),
+                  key: surfaceKey,
                   coordinator: coordinator,
                   animationsDisabled: animationsDisabled,
                   backgroundColor: backgroundColor,
                   foregroundColor: foregroundColor,
+                  elevation: elevation,
                 )
               : const SizedBox.shrink(
                   key: Key('thread-detail-quick-scroll-button-hidden'),
@@ -61,12 +66,14 @@ class _QuickScrollButtonSurface extends StatelessWidget {
     required this.animationsDisabled,
     required this.backgroundColor,
     required this.foregroundColor,
+    required this.elevation,
   });
 
   final ThreadDetailQuickScrollCoordinator coordinator;
   final bool animationsDisabled;
   final Color backgroundColor;
   final Color foregroundColor;
+  final double elevation;
 
   @override
   Widget build(BuildContext context) {
@@ -85,10 +92,13 @@ class _QuickScrollButtonSurface extends StatelessWidget {
       label: label,
       child: Tooltip(
         message: label,
+        // Long press belongs to the draggable host; hover still shows a tooltip.
+        triggerMode: TooltipTriggerMode.manual,
         excludeFromSemantics: true,
         child: Material(
           color: backgroundColor.withValues(alpha: 0.72),
-          elevation: 2,
+          elevation: elevation,
+          animationDuration: Duration.zero,
           shadowColor: Colors.black.withValues(alpha: 0.18),
           borderRadius: borderRadius,
           clipBehavior: Clip.antiAlias,

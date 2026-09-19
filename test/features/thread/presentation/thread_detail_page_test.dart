@@ -537,7 +537,7 @@ void main() {
     });
 
     testWidgets(
-      'quick scroll button moves within the loaded page without fetching',
+      'quick scroll button drags and scrolls within the loaded page without fetching',
       (tester) async {
         var requestCount = 0;
         final repository = _FakeThreadRepository((tid, page, query) async {
@@ -571,7 +571,8 @@ void main() {
           const Key('thread-detail-quick-scroll-button'),
         );
         expect(button, findsOneWidget);
-        expect(find.byTooltip('滚动到底部'), findsOneWidget);
+        final l10n = AppLocalizations.of(tester.element(button));
+        expect(find.byTooltip(l10n.threadDetailScrollBottom), findsOneWidget);
         expect(requestCount, 1);
 
         final list = tester.widget<ListView>(
@@ -584,6 +585,22 @@ void main() {
         final scrollController = list.controller!;
         expect(scrollController.position.pixels, 0);
 
+        final originalCenter = tester.getCenter(button);
+        final gesture = await tester.startGesture(originalCenter);
+        await tester.pump(const Duration(milliseconds: 650));
+        expect(
+          find.byKey(const Key('thread-quick-scroll-drag-feedback')),
+          findsOneWidget,
+        );
+        await gesture.moveTo(const Offset(100, 200));
+        await tester.pump();
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(tester.getCenter(button).dx, lessThan(originalCenter.dx));
+        expect(tester.getCenter(button).dy, originalCenter.dy);
+        expect(scrollController.position.pixels, 0);
+        expect(requestCount, 1);
+
         await tester.tap(button);
         await tester.pumpAndSettle();
 
@@ -591,7 +608,7 @@ void main() {
           scrollController.position.pixels,
           closeTo(scrollController.position.maxScrollExtent, 0.5),
         );
-        expect(find.byTooltip('滚动到顶部'), findsOneWidget);
+        expect(find.byTooltip(l10n.threadDetailScrollTop), findsOneWidget);
         expect(requestCount, 1);
 
         await tester.tap(button);
@@ -601,7 +618,7 @@ void main() {
           scrollController.position.pixels,
           closeTo(scrollController.position.minScrollExtent, 0.5),
         );
-        expect(find.byTooltip('滚动到底部'), findsOneWidget);
+        expect(find.byTooltip(l10n.threadDetailScrollBottom), findsOneWidget);
         expect(requestCount, 1);
       },
     );
