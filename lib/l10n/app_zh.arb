@@ -1812,5 +1812,9 @@
       }
     }
   },
-  "comicPostCommentUnavailable": "当前无法点评"
+  "comicPostCommentUnavailable": "当前无法点评",
+  "threadPostLocationFailedTitle": "无法定位楼层",
+  "threadPostTargetUnconfirmed": "无法确认目标楼层。你可以重试，或打开主题首页。",
+  "threadPostLocationNetworkFailed": "读取目标楼层失败，请检查网络后重试。",
+  "threadPostOpenHome": "打开主题首页"
 }

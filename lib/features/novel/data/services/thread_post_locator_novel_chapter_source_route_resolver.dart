@@ -1,8 +1,9 @@
-import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/novel/domain/models/novel_interaction_models.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_source_route_resolver.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/services/thread_post_route_resolver.dart';
 
 class ThreadPostLocatorNovelChapterSourceRouteResolver
     implements NovelChapterSourceRouteResolver {
@@ -24,17 +25,11 @@ class ThreadPostLocatorNovelChapterSourceRouteResolver
       reference.pid,
       NovelChapterSourceRouteFailureCode.invalidPid,
     );
-    final sourceUri = Uri.parse('${AppConfig.siteBaseUrl}/forum.php').replace(
-      queryParameters: <String, String>{
-        'mod': 'redirect',
-        'goto': 'findpost',
-        'ptid': tid,
-        'pid': pid,
-      },
-    );
     late final ApiResult<ThreadPostLocation> result;
     try {
-      result = await _locator.locate(tid: tid, pid: pid, sourceUri: sourceUri);
+      result = await ThreadPostRouteResolver(
+        _locator,
+      ).resolve(ThreadPostTarget(tid: tid, pid: pid));
     } catch (error) {
       throw NovelChapterSourceRouteException(
         NovelChapterSourceRouteFailureCode.locatorFailed,

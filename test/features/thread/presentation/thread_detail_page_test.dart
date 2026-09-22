@@ -89,6 +89,149 @@ void main() {
   });
 
   group('ThreadDetailPage', () {
+    testWidgets(
+      'target recovery invalidates a same-page snapshot and commits only verified history',
+      (tester) async {
+        final cache = _FakeNativePageCacheInvalidationService();
+        final history = _RecordingHistoryVisitRecorder();
+        final locator = _FakeThreadPostLocator(
+          const ThreadPostLocation(tid: '100', pid: '200', page: 2, url: ''),
+        );
+        final repository = _FakeThreadRepository((tid, page, query) async {
+          expect(query, isEmpty);
+          return ApiSuccess(
+            _navigationData(
+              page,
+              pid: cache.invalidatedThreadIds.isEmpty || page == 3
+                  ? '199'
+                  : '200',
+            ),
+          );
+        });
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            threadPostLocator: locator,
+            pageCacheInvalidationService: cache,
+            historyVisitRecorder: history,
+            home: const ThreadDetailPage(
+              tid: '100',
+              initialPage: 2,
+              targetPid: '200',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(repository.queryHistory, hasLength(2));
+        expect(cache.invalidatedThreadIds, ['100']);
+        expect(locator.calls, 1);
+        expect(find.byKey(const Key('thread-post-card-200')), findsOneWidget);
+        expect(history.drafts, hasLength(1));
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        await container
+            .read(
+              threadDetailControllerProvider(
+                const ThreadDetailArgs(
+                  tid: '100',
+                  initialPage: 2,
+                  targetPid: '200',
+                ),
+              ).notifier,
+            )
+            .loadPage(3);
+        await tester.pumpAndSettle();
+        expect(locator.calls, 1);
+        expect(repository.queryHistory, hasLength(3));
+        expect(find.byKey(const Key('thread-post-card-199')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'unconfirmed target stops, retry is bounded and home requires user action',
+      (tester) async {
+        final history = _RecordingHistoryVisitRecorder();
+        final locator = _FakeThreadPostLocator(
+          const ThreadPostLocation(tid: '100', pid: '200', page: 3, url: ''),
+        );
+        final repository = _FakeThreadRepository(
+          (tid, page) async => ApiSuccess(_navigationData(page, pid: '199')),
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            threadPostLocator: locator,
+            historyVisitRecorder: history,
+            home: const ThreadDetailPage(
+              tid: '100',
+              initialPage: 9,
+              targetPid: '200',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        expect(find.text(l10n.threadPostTargetUnconfirmed), findsOneWidget);
+        expect(repository.queryHistory, hasLength(2));
+        expect(history.drafts, isEmpty);
+        await tester.tap(find.byKey(const Key('thread-detail-retry-button')));
+        await tester.pumpAndSettle();
+        expect(repository.queryHistory, hasLength(4));
+        expect(locator.calls, 2);
+        expect(history.drafts, isEmpty);
+        await tester.tap(find.text(l10n.threadPostOpenHome));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<ThreadDetailPage>(find.byType(ThreadDetailPage))
+              .targetPid,
+          isNull,
+        );
+        expect(history.drafts, hasLength(1));
+        expect(locator.calls, 2);
+      },
+    );
+
+    testWidgets(
+      'target network failure never relocates or exposes raw payload',
+      (tester) async {
+        final locator = _FakeThreadPostLocator(null);
+        final history = _RecordingHistoryVisitRecorder();
+        final repository = _FakeThreadRepository(
+          (tid, page) async => const ApiFailure<ThreadDetailData>(
+            ApiError(
+              type: ApiErrorType.network,
+              message: 'private server payload',
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            threadPostLocator: locator,
+            historyVisitRecorder: history,
+            home: const ThreadDetailPage(
+              tid: '100',
+              initialPage: 9,
+              targetPid: '200',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        expect(find.text(l10n.threadPostLocationNetworkFailed), findsOneWidget);
+        expect(find.textContaining('private server payload'), findsNothing);
+        expect(repository.queryHistory, hasLength(1));
+        expect(locator.calls, 0);
+        expect(history.drafts, isEmpty);
+      },
+    );
+
     testWidgets('cold entry keeps the title anchored until content is ready', (
       tester,
     ) async {
@@ -5208,6 +5351,30 @@ void main() {
   });
 }
 
+ThreadDetailData _navigationData(int page, {required String pid}) =>
+    ThreadDetailData(
+      tid: '100',
+      fid: '33',
+      subject: 'Navigation fixture',
+      author: 'Author',
+      replies: 60,
+      views: 1,
+      currentPage: page,
+      perPage: 20,
+      lastPage: 4,
+      posts: [
+        ThreadPost(
+          pid: pid,
+          author: 'Author',
+          authorId: '10',
+          message: '<p>Verified body</p>',
+          number: 21,
+          isFirst: false,
+          dateline: '',
+        ),
+      ],
+    );
+
 Widget _buildTestApp(
   ThreadRepository repository, {
   ThreadReplyCommand? replyRepository,
@@ -5804,6 +5971,7 @@ class _FakeThreadPostLocator implements ThreadPostLocator {
   _FakeThreadPostLocator(this.location);
 
   final ThreadPostLocation? location;
+  int calls = 0;
   String? lastTid;
   String? lastPid;
   Uri? lastSourceUri;
@@ -5814,6 +5982,7 @@ class _FakeThreadPostLocator implements ThreadPostLocator {
     required String pid,
     required Uri sourceUri,
   }) async {
+    calls++;
     lastTid = tid;
     lastPid = pid;
     lastSourceUri = sourceUri;

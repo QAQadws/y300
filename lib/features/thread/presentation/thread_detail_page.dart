@@ -3,6 +3,7 @@ import 'package:y300/features/thread/presentation/services/thread_post_actions.d
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
@@ -86,6 +87,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       ThreadHistoryCommitGuard();
   bool _didReportHistoryDuplicate = false;
   bool _postActionActive = false;
+  final _postRouteSession = ThreadPostNavigationSession();
 
   @override
   void initState() {
@@ -100,6 +102,11 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   @override
   void didUpdateWidget(covariant ThreadDetailPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.tid != widget.tid ||
+        oldWidget.targetPid != widget.targetPid ||
+        oldWidget.initialPage != widget.initialPage) {
+      _postRouteSession.invalidate();
+    }
     if (oldWidget.targetPid?.trim() != widget.targetPid?.trim()) {
       _activateTargetHighlight(widget.targetPid);
     }
@@ -107,6 +114,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
 
   @override
   void dispose() {
+    _postRouteSession.dispose();
     _highlightClearTimer?.cancel();
     _quickScrollCoordinator.dispose();
     _scrollController.dispose();
@@ -275,6 +283,18 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                                 state.loadFailure!.detail,
                               ),
                         onRetry: controller.refresh,
+                        onOpenHome: widget.targetPid == null
+                            ? null
+                            : () {
+                                Navigator.of(context).pushReplacement(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => ThreadDetailPage(
+                                      tid: widget.tid,
+                                      subject: widget.subject,
+                                    ),
+                                  ),
+                                );
+                              },
                       )
                     : ForumPullToRefresh(
                         onRefresh: () => controller.refresh(forceNetwork: true),
@@ -617,6 +637,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   }
 
   ThreadPostNavigation get _postNavigation => ThreadPostNavigation(
+    routeSession: _postRouteSession,
     context: context,
     ref: ref,
     tid: widget.tid,
@@ -830,11 +851,13 @@ class _ThreadErrorView extends StatelessWidget {
     required this.subject,
     required this.message,
     required this.onRetry,
+    this.onOpenHome,
   });
 
   final String subject;
   final String message;
   final VoidCallback onRetry;
+  final VoidCallback? onOpenHome;
 
   @override
   Widget build(BuildContext context) {
@@ -853,6 +876,11 @@ class _ThreadErrorView extends StatelessWidget {
               onPressed: onRetry,
               child: Text(l10n.commonRetry),
             ),
+            if (onOpenHome != null)
+              TextButton(
+                onPressed: onOpenHome,
+                child: Text(l10n.threadPostOpenHome),
+              ),
           ],
         ),
       ),

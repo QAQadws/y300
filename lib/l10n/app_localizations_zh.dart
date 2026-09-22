@@ -4475,6 +4475,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get comicPostCommentUnavailable => '当前无法点评';
+
+  @override
+  String get threadPostLocationFailedTitle => '无法定位楼层';
+
+  @override
+  String get threadPostTargetUnconfirmed => '无法确认目标楼层。你可以重试，或打开主题首页。';
+
+  @override
+  String get threadPostLocationNetworkFailed => '读取目标楼层失败，请检查网络后重试。';
+
+  @override
+  String get threadPostOpenHome => '打开主题首页';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -8949,4 +8961,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get comicPostCommentUnavailable => '目前無法點評';
+
+  @override
+  String get threadPostLocationFailedTitle => '無法定位樓層';
+
+  @override
+  String get threadPostTargetUnconfirmed => '無法確認目標樓層。你可以重試，或開啟主題首頁。';
+
+  @override
+  String get threadPostLocationNetworkFailed => '讀取目標樓層失敗，請檢查網路後重試。';
+
+  @override
+  String get threadPostOpenHome => '開啟主題首頁';
 }

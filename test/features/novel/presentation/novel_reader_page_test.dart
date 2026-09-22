@@ -37,6 +37,8 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 
 void main() {
   testWidgets('short paged chapter starts preparing during route entrance', (
@@ -1655,6 +1657,87 @@ void main() {
     expect(find.byType(ThreadDetailPage), findsOneWidget);
   });
 
+  for (final filtered in [false, true]) {
+    testWidgets(
+      'reader floor link preserves identity and return position filtered=$filtered',
+      (tester) async {
+        final locator = _ReaderPostLocator();
+        final repository = _FakeNovelRepository(
+          firstRawHtml:
+              '<p><a href="forum.php?mod=viewthread&amp;tid=200&amp;page=4${filtered ? '&amp;authorid=10&amp;ordertype=1' : ''}#pid5001">Target floor</a></p>'
+              '${List.filled(80, '<p>Chapter body.</p>').join()}',
+          firstParagraphs: const ['Target floor'],
+        );
+        await tester.pumpWidget(
+          _buildReaderApp(
+            repository: repository,
+            threadRepository: _FakeThreadRepository(targetPid: '5001'),
+            threadPostLocator: locator,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final scrollable = find.descendant(
+          of: find.byKey(const Key('novel-reader-paragraph-list')),
+          matching: find.byType(Scrollable),
+        );
+        final position = tester.state<ScrollableState>(scrollable).position;
+        final before = position.pixels;
+        await tester.tapAt(
+          tester.getTopLeft(_readerText('Target floor')) + const Offset(8, 8),
+        );
+        await tester.pumpAndSettle();
+        final page = tester.widget<ThreadDetailPage>(
+          find.byType(ThreadDetailPage),
+        );
+        expect(page.tid, '200');
+        expect(page.targetPid, '5001');
+        expect(page.initialPage, filtered ? 2 : 4);
+        expect(locator.calls, filtered ? 1 : 0);
+        Navigator.of(tester.element(find.byType(ThreadDetailPage))).pop();
+        await tester.pumpAndSettle();
+        expect(position.pixels, closeTo(before, 0.01));
+        expect(find.byType(NovelReaderPage), findsOneWidget);
+      },
+    );
+  }
+
+  testWidgets(
+    'reader double click opens once and chapter switch discards late location',
+    (tester) async {
+      final locator = _ReaderPostLocator()
+        ..pending = Completer<ApiResult<ThreadPostLocation>>();
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: _FakeNovelRepository(
+            firstRawHtml:
+                '<p><a href="forum.php?mod=redirect&amp;goto=findpost&amp;ptid=200&amp;pid=5001">Target floor</a></p>',
+            firstParagraphs: const ['Target floor'],
+          ),
+          threadPostLocator: locator,
+          threadRepository: _FakeThreadRepository(targetPid: '5001'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final point =
+          tester.getTopLeft(_readerText('Target floor')) + const Offset(8, 8);
+      await tester.tapAt(point);
+      await tester.tapAt(point);
+      await tester.pump();
+      expect(locator.calls, 1);
+      await _showReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-catalog')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('第2章').last);
+      await tester.pumpAndSettle();
+      locator.pending!.complete(locator.location);
+      await tester.pumpAndSettle();
+      expect(find.byType(ThreadDetailPage), findsNothing);
+      expect(_readerText('第三段。'), findsOneWidget);
+    },
+  );
+
   testWidgets('NovelReaderPage toggles episode bookmark', (tester) async {
     final repository = _FakeNovelRepository.threeEpisodes();
     await tester.pumpWidget(_buildReaderApp(repository: repository));
@@ -1875,6 +1958,7 @@ Widget _buildReaderApp({
   required _FakeNovelRepository repository,
   LibraryStateRepository? stateRepository,
   ThreadRepository? threadRepository,
+  ThreadPostLocator? threadPostLocator,
   NovelReaderDocumentBuildService? documentBuildService,
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
   NovelChapterUpdateService? chapterUpdateService,
@@ -1910,6 +1994,8 @@ Widget _buildReaderApp({
       ),
       if (threadRepository != null)
         threadRepositoryProvider.overrideWithValue(threadRepository),
+      if (threadPostLocator != null)
+        threadPostLocatorProvider.overrideWithValue(threadPostLocator),
     ],
     child: themeListenable == null
         ? LocalizedTestApp(
@@ -2051,7 +2137,26 @@ class _NoopImageCacheService implements ImageCacheService {
   Future<void> clearUnprotected() async {}
 }
 
+class _ReaderPostLocator implements ThreadPostLocator {
+  var calls = 0;
+  Completer<ApiResult<ThreadPostLocation>>? pending;
+  final location = const ApiSuccess(
+    ThreadPostLocation(tid: '200', pid: '5001', page: 2, url: ''),
+  );
+  @override
+  Future<ApiResult<ThreadPostLocation>> locate({
+    required String tid,
+    required String pid,
+    required Uri sourceUri,
+  }) async {
+    calls++;
+    return pending == null ? location : await pending!.future;
+  }
+}
+
 class _FakeThreadRepository implements ThreadRepository {
+  _FakeThreadRepository({this.targetPid});
+  final String? targetPid;
   @override
   ThreadDetailSourceCapabilities get capabilities =>
       ThreadDetailSourceCapabilities.full;
@@ -2073,7 +2178,18 @@ class _FakeThreadRepository implements ThreadRepository {
         views: 1,
         currentPage: page,
         perPage: 20,
-        posts: const <ThreadPost>[],
+        posts: [
+          if (targetPid != null)
+            ThreadPost(
+              pid: targetPid!,
+              author: 'Author',
+              authorId: '10',
+              message: '<p>Target body</p>',
+              number: 21,
+              isFirst: false,
+              dateline: '',
+            ),
+        ],
       ),
       capabilities: capabilities.toReadCapabilities(),
       metadata: const DataReadMetadata.network(),

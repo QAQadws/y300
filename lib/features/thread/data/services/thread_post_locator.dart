@@ -1,28 +1,8 @@
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     as forum;
 import 'package:y300/core/network/api_result.dart';
-
-class ThreadPostLocation {
-  const ThreadPostLocation({
-    required this.tid,
-    required this.pid,
-    required this.page,
-    required this.url,
-  });
-
-  final String tid;
-  final String pid;
-  final int page;
-  final String url;
-}
-
-abstract class ThreadPostLocator {
-  Future<ApiResult<ThreadPostLocation>> locate({
-    required String tid,
-    required String pid,
-    required Uri sourceUri,
-  });
-}
+import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
+export 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 
 /// Compatibility projection for existing App routing consumers.
 final class PackageThreadPostLocator implements ThreadPostLocator {

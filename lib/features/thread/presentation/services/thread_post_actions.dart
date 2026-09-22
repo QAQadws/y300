@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -43,7 +44,7 @@ class ThreadPostActionContext {
 
 /// Shares interaction routes and forms; each host owns its refresh lifecycle.
 class ThreadPostActions {
-  const ThreadPostActions({
+  ThreadPostActions({
     required this.context,
     required this.ref,
     required this.target,
@@ -56,10 +57,11 @@ class ThreadPostActions {
   final bool Function() isCurrent;
   final String? imageReferer;
   bool get active => context.mounted && isCurrent();
-  ThreadPostNavigation get navigation => ThreadPostNavigation(
+  late final ThreadPostNavigation navigation = ThreadPostNavigation(
     context: context,
     ref: ref,
     tid: target.tid,
+    routeSession: ThreadPostNavigationSession(),
     imageReferer: imageReferer,
     isCurrent: isCurrent,
   );
@@ -115,20 +117,35 @@ class ThreadPostActions {
         ).open(editTarget);
         return changed ? ThreadPostMutation.post : null;
       case ThreadPostAction.selectCopy:
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute(
-            builder: (_) => ThreadPostHtmlSelectionCopyPage(
-              post: displayPost,
-              sourcePost: sourcePost,
-              threadId: target.tid,
-              imageReferer: imageReferer ?? '',
-              plan: plan,
-              onOpenPostLink: navigation.openLink,
-              onOpenPostImage: navigation.openImages,
-              onImageFallback: navigation.copyImageUrl,
+        final selectionSession = ThreadPostNavigationSession();
+        try {
+          await Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (selectionContext) {
+                final selectionNavigation = ThreadPostNavigation(
+                  context: selectionContext,
+                  ref: ref,
+                  tid: target.tid,
+                  imageReferer: imageReferer,
+                  isCurrent: () => active && selectionContext.mounted,
+                  routeSession: selectionSession,
+                );
+                return ThreadPostHtmlSelectionCopyPage(
+                  post: displayPost,
+                  sourcePost: sourcePost,
+                  threadId: target.tid,
+                  imageReferer: imageReferer ?? '',
+                  plan: plan,
+                  onOpenPostLink: selectionNavigation.openLink,
+                  onOpenPostImage: selectionNavigation.openImages,
+                  onImageFallback: selectionNavigation.copyImageUrl,
+                );
+              },
             ),
-          ),
-        );
+          );
+        } finally {
+          selectionSession.dispose();
+        }
       case ThreadPostAction.copyAll:
         await navigation.copyPlainText(sourcePost, plan);
       case ThreadPostAction.copyFloorLink:

@@ -7265,6 +7265,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前无法点评'**
   String get comicPostCommentUnavailable;
+
+  /// No description provided for @threadPostLocationFailedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法定位楼层'**
+  String get threadPostLocationFailedTitle;
+
+  /// No description provided for @threadPostTargetUnconfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法确认目标楼层。你可以重试，或打开主题首页。'**
+  String get threadPostTargetUnconfirmed;
+
+  /// No description provided for @threadPostLocationNetworkFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取目标楼层失败，请检查网络后重试。'**
+  String get threadPostLocationNetworkFailed;
+
+  /// No description provided for @threadPostOpenHome.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开主题首页'**
+  String get threadPostOpenHome;
 }
 
 class _AppLocalizationsDelegate

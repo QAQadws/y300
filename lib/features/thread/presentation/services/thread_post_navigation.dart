@@ -3,13 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
-import 'package:y300/features/thread/data/services/thread_post_locator.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
@@ -29,12 +30,14 @@ class ThreadPostNavigation {
     required this.tid,
     required this.imageReferer,
     required this.isCurrent,
+    required this.routeSession,
   });
   final BuildContext context;
   final WidgetRef ref;
   final String tid;
   final String? imageReferer;
   final bool Function() isCurrent;
+  final ThreadPostNavigationSession routeSession;
   bool get mounted => context.mounted && isCurrent();
   ThreadFloorLinkBuilder get _floorLinkBuilder => ThreadFloorLinkBuilder();
   void _showSnackBar(String text) {
@@ -148,6 +151,9 @@ class ThreadPostNavigation {
 
   void openLink(String url) {
     final destination = const YamiboForumLinkResolver().resolve(url);
+    if (destination?.kind != YamiboForumLinkKind.threadPost) {
+      routeSession.invalidate();
+    }
     if (destination == null) {
       copyUrl(AppLocalizations.of(context).threadDetailCopyLink, url);
       return;
@@ -207,35 +213,17 @@ class ThreadPostNavigation {
       );
       return;
     }
-    final directPage = destination.page;
-    if (directPage != null && directPage > 0) {
-      _pushThreadPost(tid: tid, page: directPage, pid: pid);
-      return;
-    }
-    final result = await ref
-        .read(threadPostLocatorProvider)
-        .locate(tid: tid, pid: pid, sourceUri: destination.uri);
-    if (!context.mounted || !isCurrent()) {
-      return;
-    }
-    if (result case ApiSuccess<ThreadPostLocation>(:final data)) {
-      _pushThreadPost(tid: data.tid, page: data.page, pid: data.pid);
-      return;
-    }
-    _showSnackBar(AppLocalizations.of(context).threadDetailFloorLocatorFailed);
-    _pushThreadPost(tid: tid, page: 1, pid: pid);
-  }
-
-  void _pushThreadPost({
-    required String tid,
-    required int page,
-    required String pid,
-  }) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            ThreadDetailPage(tid: tid, initialPage: page, targetPid: pid),
+    await launchThreadPostRoute(
+      context: context,
+      session: routeSession,
+      resolver: ref.read(threadPostRouteResolverProvider),
+      target: ThreadPostTarget.fromLink(
+        tid: tid,
+        pid: pid,
+        sourceUri: destination.uri,
+        pageHint: destination.page,
       ),
+      isCurrent: isCurrent,
     );
   }
 

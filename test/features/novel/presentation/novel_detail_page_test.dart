@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:y300/l10n/app_localizations.dart';
 
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
@@ -446,6 +447,34 @@ void main() {
     );
   });
 
+  testWidgets('source route double click resolves and pushes only once', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final resolver = _FakeNovelChapterSourceRouteResolver.success()
+      ..waitFor = gate.future;
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(
+        NovelChapterOpenMode.sourcePost,
+      ),
+      routeResolver: resolver,
+      threadRepository: _FakeThreadRepository(),
+    );
+    await _scrollNovelChapterIntoTapArea(tester);
+    await tester.tap(find.text('Chapter 1'));
+    await tester.tap(find.text('Chapter 1'));
+    await tester.pump();
+    expect(resolver.callCount, 1);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(ThreadDetailPage, skipOffstage: false), findsOneWidget);
+    Navigator.of(tester.element(find.byType(ThreadDetailPage))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(ThreadDetailPage, skipOffstage: false), findsNothing);
+    expect(find.byType(NovelDetailPage), findsOneWidget);
+  });
+
   testWidgets('source route failure offers opening the thread home', (
     tester,
   ) async {
@@ -467,14 +496,17 @@ void main() {
       find.byKey(const Key('novel-source-route-failure-dialog')),
       findsOneWidget,
     );
-    expect(find.text('原帖楼层定位失败：test_failure'), findsOneWidget);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(NovelDetailPage)),
+    );
+    expect(find.text(l10n.threadPostTargetUnconfirmed), findsOneWidget);
+    expect(find.textContaining('test_failure'), findsNothing);
+    expect(find.byType(ThreadDetailPage), findsNothing);
     expect(
-      find.byKey(const Key('novel-source-route-open-thread-home')),
+      find.byKey(const Key('thread-post-route-open-home')),
       findsOneWidget,
     );
-    await tester.tap(
-      find.byKey(const Key('novel-source-route-open-thread-home')),
-    );
+    await tester.tap(find.byKey(const Key('thread-post-route-open-home')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -700,6 +732,7 @@ class _FakeNovelChapterSourceRouteResolver
   final NovelChapterSourceRouteException? error;
   NovelChapterSourceReference? lastReference;
   int callCount = 0;
+  Future<void>? waitFor;
 
   @override
   Future<NovelChapterSourceRoute> resolve(
@@ -707,6 +740,7 @@ class _FakeNovelChapterSourceRouteResolver
   ) async {
     callCount++;
     lastReference = reference;
+    await waitFor;
     final failure = error;
     if (failure != null) {
       throw failure;

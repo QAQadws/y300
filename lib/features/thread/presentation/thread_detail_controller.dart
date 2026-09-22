@@ -3,6 +3,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/services/thread_post_target_loader.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -61,9 +63,12 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
   final ThreadDetailArgs _args;
   final Map<String, Object> _ratingsLoadTokens = <String, Object>{};
   var _ratingsContentGeneration = 0;
+  var _pageLoadGeneration = 0;
+  bool _initialTargetValidated = false;
 
   @override
   FutureOr<ThreadDetailPageState> build() async {
+    ref.onDispose(() => _pageLoadGeneration++);
     final initialPage = _args.initialPage == null || _args.initialPage! <= 0
         ? 1
         : _args.initialPage!;
@@ -71,6 +76,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       page: initialPage,
       previous: const <ThreadPost>[],
       queryParameters: const <String, String>{},
+      validateTarget: true,
     );
   }
 
@@ -83,17 +89,22 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     if (forceNetwork) {
       await _invalidateCurrentThreadCache(state.value?.tid ?? _args.tid);
     }
+    if (!ref.mounted) return;
     final current = state.value;
     final currentPage = current?.currentPage;
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final next = AsyncValue.guard(
       () => _loadPage(
         page: currentPage == null || currentPage <= 0 ? 1 : currentPage,
         previous: const <ThreadPost>[],
         queryParameters: current?.queryParameters ?? const <String, String>{},
         failureCode: ThreadUiErrorCode.refreshFailed,
+        validateTarget: !_initialTargetValidated,
       ),
     );
+    final generation = _pageLoadGeneration;
+    final value = await next;
+    if (ref.mounted && generation == _pageLoadGeneration) state = value;
   }
 
   Future<void> refreshAfterMutation() => refresh(forceNetwork: true);
@@ -105,12 +116,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
 
     state = AsyncData(current.copyWith(isLoadingMore: true, clearError: true));
+    final generation = ++_pageLoadGeneration;
     final result = await _readRepository().getThreadDetail(
       tid: _args.tid,
       page: current.currentPage + 1,
       query: ThreadDetailQuery.fromLegacyParameters(current.queryParameters),
     );
 
+    if (!ref.mounted || generation != _pageLoadGeneration) return;
     state = result.when(
       success: (data, capabilities, metadata) {
         final effectiveCapabilities = current.capabilities == null
@@ -471,12 +484,13 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
 
     await _invalidateCurrentThreadCache(afterSubmit.tid);
+    final generation = _pageLoadGeneration + 1;
     final reloaded = await _loadPage(
       page: afterSubmit.currentPage <= 0 ? 1 : afterSubmit.currentPage,
       previous: const <ThreadPost>[],
       queryParameters: afterSubmit.queryParameters,
     );
-    if (!ref.mounted) {
+    if (!ref.mounted || generation != _pageLoadGeneration) {
       return;
     }
     state = AsyncData(
@@ -631,12 +645,13 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     final current = state.value;
     if (current != null) {
       await _invalidateCurrentThreadCache(current.tid);
+      final generation = _pageLoadGeneration + 1;
       final reloaded = await _loadPage(
         page: current.currentPage <= 0 ? 1 : current.currentPage,
         previous: const <ThreadPost>[],
         queryParameters: current.queryParameters,
       );
-      if (ref.mounted) {
+      if (ref.mounted && generation == _pageLoadGeneration) {
         state = AsyncData(
           reloaded.copyWith(
             isThreadFavorited: current.isThreadFavorited,
@@ -723,11 +738,13 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         return;
       }
       await _invalidateCurrentThreadCache(latest.tid);
+      final generation = _pageLoadGeneration + 1;
       final reloaded = await _loadPage(
         page: latest.currentPage <= 0 ? 1 : latest.currentPage,
         previous: const <ThreadPost>[],
         queryParameters: latest.queryParameters,
       );
+      if (!ref.mounted || generation != _pageLoadGeneration) return;
       state = AsyncData(
         reloaded.copyWith(
           replyHint: latest.replyHint,
@@ -746,7 +763,10 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     required List<ThreadPost> previous,
     required Map<String, String> queryParameters,
     ThreadUiErrorCode? failureCode,
+    bool validateTarget = false,
   }) async {
+    final generation = ++_pageLoadGeneration;
+    bool isCurrent() => ref.mounted && generation == _pageLoadGeneration;
     _ratingsContentGeneration += 1;
     _ratingsLoadTokens.clear();
     _logNative(
@@ -754,11 +774,34 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       'tid=${_args.tid} page=$page previous=${previous.length} '
           'query=${_formatQuery(queryParameters)}',
     );
-    final result = await _readRepository().getThreadDetail(
-      tid: _args.tid,
-      page: page,
-      query: ThreadDetailQuery.fromLegacyParameters(queryParameters),
-    );
+    final targetPid = _args.targetPid?.trim();
+    final checkTarget =
+        validateTarget && targetPid != null && targetPid.isNotEmpty;
+    Future<ThreadPostTargetRead> readPage(int requestedPage) =>
+        _readRepository().getThreadDetail(
+          tid: _args.tid,
+          page: requestedPage,
+          query: ThreadDetailQuery.fromLegacyParameters(queryParameters),
+        );
+    final result = checkTarget
+        ? await ThreadPostTargetLoader(
+            readPage: readPage,
+            resolver: ref.read(threadPostRouteResolverProvider),
+            invalidate: () => ref
+                .read(nativePageCacheInvalidationServiceProvider)
+                .invalidateThread(_args.tid),
+          ).load(
+            target: ThreadPostTarget(tid: _args.tid, pid: targetPid),
+            page: page,
+            isCurrent: isCurrent,
+          )
+        : await readPage(page);
+    if (!isCurrent()) {
+      return ThreadDetailPageState.initial(
+        tid: _args.tid,
+        subject: _args.subject,
+      );
+    }
 
     if (result
         case DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>(
@@ -803,6 +846,12 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           fid: data.fid,
           typeid: data.typeid,
         );
+        if (!isCurrent()) {
+          return ThreadDetailPageState.initial(
+            tid: _args.tid,
+            subject: _args.subject,
+          );
+        }
         tagLookupStopwatch.stop();
         _logNative(
           'controller_tag_lookup_done',
@@ -894,6 +943,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
               'firstPid=${merged.isEmpty ? '-' : merged.first.pid} '
               'firstMessageLength=${merged.isEmpty ? 0 : merged.first.message.length}',
         );
+        if (checkTarget) _initialTargetValidated = true;
         return viewState;
       } catch (error, stackTrace) {
         _logNative(
@@ -936,6 +986,17 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       failure: ThreadActionFailure(
         code: failure.kind == DataReadFailureKind.unauthorized
             ? ThreadUiErrorCode.loginRequired
+            : checkTarget &&
+                  (failure.statusCode == 403 ||
+                      failure.code == 'thread_post_location_permission_denied')
+            ? ThreadUiErrorCode.permissionDenied
+            : checkTarget &&
+                  (failure.kind == DataReadFailureKind.network ||
+                      failure.kind == DataReadFailureKind.timeout ||
+                      failure.kind == DataReadFailureKind.server)
+            ? ThreadUiErrorCode.targetNetworkFailed
+            : checkTarget
+            ? ThreadUiErrorCode.targetUnconfirmed
             : (failureCode ??
                   (page == 1
                       ? ThreadUiErrorCode.loadFailed
@@ -1005,12 +1066,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
     final nextQuery = queryParameters ?? current.queryParameters;
     state = AsyncData(current.copyWith(isLoadingMore: true, clearError: true));
+    final generation = _pageLoadGeneration + 1;
     final next = await _loadPage(
       page: page,
       previous: const <ThreadPost>[],
       queryParameters: nextQuery,
       failureCode: ThreadUiErrorCode.pageLoadFailed,
     );
+    if (!ref.mounted || generation != _pageLoadGeneration) return;
     final afterLoading = state.value ?? current;
     state = AsyncData(
       next.copyWith(

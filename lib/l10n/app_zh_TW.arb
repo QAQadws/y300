@@ -1447,5 +1447,9 @@
       }
     }
   },
-  "comicPostCommentUnavailable": "目前無法點評"
+  "comicPostCommentUnavailable": "目前無法點評",
+  "threadPostLocationFailedTitle": "無法定位樓層",
+  "threadPostTargetUnconfirmed": "無法確認目標樓層。你可以重試，或開啟主題首頁。",
+  "threadPostLocationNetworkFailed": "讀取目標樓層失敗，請檢查網路後重試。",
+  "threadPostOpenHome": "開啟主題首頁"
 }

@@ -577,6 +577,7 @@ final class DiscuzThreadPostLocatorRepository
         'goto': 'findpost',
         'ptid': query.tid,
         'pid': query.pid,
+        'mobile': '2',
       },
     );
     final response = await network.send(
@@ -603,8 +604,67 @@ final class DiscuzThreadPostLocatorRepository
       if (!_sameSite(value.uri)) {
         throw const FormatException('thread_post_location_cross_site');
       }
+      if (value.statusCode == 401) {
+        return const DataReadFailure(
+          kind: DataReadFailureKind.unauthorized,
+          code: 'thread_post_location_login_required',
+          diagnosticMessage: 'thread_post_location_login_required',
+        );
+      }
+      if (value.statusCode == 403) {
+        return _businessFailure('thread_post_location_permission_denied');
+      }
+      final statusCode = value.statusCode;
+      if (statusCode != null && statusCode >= 500) {
+        return DataReadFailure(
+          kind: DataReadFailureKind.server,
+          code: 'thread_post_location_server_failed',
+          statusCode: value.statusCode,
+          diagnosticMessage: 'thread_post_location_server_failed',
+        );
+      }
+      if (statusCode == null || statusCode < 200 || statusCode >= 300) {
+        return _parseFailure(
+          'thread_post_location_response_unconfirmed',
+          const FormatException('unsuccessful final response'),
+        );
+      }
       if (value.body is! String) {
         throw const FormatException('thread_post_location_text_expected');
+      }
+      final document = html_parser.parse(value.body as String);
+      if (document.querySelector('form[action*="mod=logging"]') != null &&
+          document.querySelector('.viewthread .plc[id^="pid"]') == null) {
+        return const DataReadFailure(
+          kind: DataReadFailureKind.unauthorized,
+          code: 'thread_post_location_login_required',
+          diagnosticMessage: 'thread_post_location_login_required',
+        );
+      }
+      final resolvedTid =
+          value.uri.queryParameters['tid'] ??
+          RegExp(
+            r'^/?thread-(\d+)-\d+-\d+\.html$',
+          ).firstMatch(value.uri.path)?.group(1);
+      if (resolvedTid != query.tid) {
+        return _parseFailure(
+          'thread_post_location_identity_mismatch',
+          const FormatException('identity mismatch'),
+        );
+      }
+      // A mobile UA alone is not proof: Discuz's mobile=no cookie can select
+      // desktop pagination. Require the actual mobile thread structure.
+      if (document.body?.id != 'forum' ||
+          document.querySelector('.viewthread .plc[id^="pid"]') == null ||
+          value.uri.queryParameters['mobile'] == 'no' ||
+          (value.uri.queryParameters['authorid']?.isNotEmpty == true &&
+              value.uri.queryParameters['authorid'] != '0') ||
+          value.uri.queryParameters.containsKey('viewpid') ||
+          value.uri.queryParameters.containsKey('ppp')) {
+        return _parseFailure(
+          'thread_post_location_view_unconfirmed',
+          const FormatException('unconfirmed mobile view'),
+        );
       }
       final detail = _parser.parse(
         value.body as String,
@@ -613,7 +673,10 @@ final class DiscuzThreadPostLocatorRepository
       );
       if (detail.tid.trim() != query.tid ||
           !detail.posts.any((post) => post.pid.trim() == query.pid)) {
-        throw const FormatException('thread_post_location_identity_mismatch');
+        return _parseFailure(
+          'thread_post_location_identity_mismatch',
+          const FormatException('identity mismatch'),
+        );
       }
       return DataReadSuccess(
         data: ThreadPostLocationData(

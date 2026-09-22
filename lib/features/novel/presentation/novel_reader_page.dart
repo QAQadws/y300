@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
@@ -94,6 +98,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _isProgressSeekInFlight = false;
   String? _progressControlOwner;
   String? _readyReaderSurfaceIdentity;
+  final _postRouteSession = ThreadPostNavigationSession();
+  String? _postRouteOwner;
 
   NovelReaderArgs get _args => NovelReaderArgs(
     novelId: widget.novelId,
@@ -123,6 +129,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   @override
   void dispose() {
+    _postRouteSession.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _overlayController.dispose();
     _readerGestureCoordinator.dispose();
@@ -182,6 +189,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           data: (viewState) {
             final systemPadding = MediaQuery.paddingOf(context);
             final readerSurfaceIdentity = _readerSurfaceIdentity(viewState);
+            if (_postRouteOwner != readerSurfaceIdentity) {
+              _postRouteOwner = readerSurfaceIdentity;
+              _postRouteSession.invalidate();
+            }
             final restoreOwner = _verticalRestoreOwnerFor(
               readerSurfaceIdentity,
             );
@@ -1590,8 +1601,25 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     ForumWebViewExternalLauncher externalLauncher,
   ) async {
     final destination = const YamiboForumLinkResolver().resolve(link.url);
-    if (destination?.kind == YamiboForumLinkKind.thread ||
-        destination?.kind == YamiboForumLinkKind.threadPost) {
+    if (destination?.kind == YamiboForumLinkKind.threadPost) {
+      final owner = _postRouteOwner;
+      await launchThreadPostRoute(
+        context: context,
+        session: _postRouteSession,
+        resolver: ref.read(threadPostRouteResolverProvider),
+        target: ThreadPostTarget.fromLink(
+          tid: destination!.tid ?? '',
+          pid: destination.pid ?? '',
+          sourceUri: destination.uri,
+          pageHint: destination.page,
+        ),
+        subject: link.text,
+        isCurrent: () => owner != null && _isCurrentReaderSurface(owner),
+      );
+      return;
+    }
+    _postRouteSession.invalidate();
+    if (destination?.kind == YamiboForumLinkKind.thread) {
       final tid = destination?.tid;
       if (tid != null && tid.trim().isNotEmpty) {
         await Navigator.of(context).push(

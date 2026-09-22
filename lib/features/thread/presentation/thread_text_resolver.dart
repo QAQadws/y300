@@ -35,6 +35,12 @@ final class ThreadTextResolver {
     if (code == ThreadUiErrorCode.permissionDenied) {
       return l10n.threadPermissionDenied;
     }
+    if (code == ThreadUiErrorCode.targetUnconfirmed) {
+      return l10n.threadPostTargetUnconfirmed;
+    }
+    if (code == ThreadUiErrorCode.targetNetworkFailed) {
+      return l10n.threadPostLocationNetworkFailed;
+    }
     final safe = _detailOrUnknown(l10n, detail);
     return switch (code) {
       ThreadUiErrorCode.refreshFailed => l10n.threadDetailRefreshFailed(safe),

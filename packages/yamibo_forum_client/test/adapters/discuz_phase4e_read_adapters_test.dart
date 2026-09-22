@@ -6,6 +6,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 import 'package:yamibo_forum_client/src/adapters/forum_home_snapshot_codec.dart';
 
 import '../support/data_source_contracts/repository_contract_suites.dart';
+import '../fixtures/thread_post_navigation_fixtures.dart';
 
 void main() {
   late ForumClientConfig config;
@@ -77,7 +78,7 @@ void main() {
       createRepository: () => ForumClientAdapterFactory(
         config: config,
         network: _FixtureNetwork(
-          (_) => _threadHtml,
+          (_) => mobilePostLocationHtml,
           responseUri: Uri.parse(
             'https://bbs.example.test/forum.php?mod=viewthread&tid=100&page=3',
           ),
@@ -257,7 +258,7 @@ void main() {
 
   test('post locator validates the final page identity', () async {
     final network = _FixtureNetwork(
-      (_) => _threadHtml,
+      (_) => mobilePostLocationHtml,
       responseUri: Uri.parse(
         'https://bbs.example.test/forum.php?mod=viewthread&tid=100&page=3',
       ),
@@ -273,10 +274,190 @@ void main() {
 
     final request = network.requests.single.uri.queryParameters;
     expect(request['goto'], 'findpost');
+    expect(request['mobile'], '2');
+    expect(
+      request.keys,
+      unorderedEquals(['mod', 'goto', 'ptid', 'pid', 'mobile']),
+    );
+    expect(network.requests.single.headers['User-Agent'], 'mobile-fixture');
     expect(request['ptid'], '100');
     expect(request['pid'], '200');
     expect(result.dataOrNull!.page, 3);
   });
+
+  for (final path in [
+    '/forum.php?mod=viewthread&tid=100&page=3&mobile=2',
+    '/thread-100-3-1.html',
+    '/forum.php?mod=viewthread&tid=100&page=3&ordertype=1',
+  ]) {
+    test('post locator accepts verified ordinary mobile view $path', () async {
+      final network = _FixtureNetwork(
+        (_) => mobilePostLocationHtml,
+        responseUri: config.siteOrigin.resolve(path),
+      );
+      final result =
+          await ForumClientAdapterFactory(config: config, network: network)
+              .createThreadPostLocator()
+              .locate(const ThreadPostLocationQuery(tid: '100', pid: '200'));
+      expect(result.dataOrNull?.page, 3);
+      expect(result.dataOrNull?.pid, '200');
+    });
+  }
+
+  final rejected = <String, (String, String)>{
+    'wrong URL identity': (
+      '/forum.php?mod=viewthread&tid=101&page=3',
+      mobilePostLocationHtml,
+    ),
+    'wrong document identity': (
+      '/forum.php?mod=viewthread&tid=100&page=3',
+      mobilePostLocationHtml.replaceAll('thread-100-', 'thread-101-'),
+    ),
+    'target missing on home': (
+      '/forum.php?mod=viewthread&tid=100',
+      mobilePostMissingHtml,
+    ),
+    'forum home': ('/index.php', _forumHomeHtml),
+    'unresolved redirect': (
+      '/forum.php?mod=redirect&goto=findpost&ptid=100&pid=200',
+      mobilePostLocationHtml,
+    ),
+    'desktop pagination': (
+      '/forum.php?mod=viewthread&tid=100&page=7',
+      desktopPostLocationHtml,
+    ),
+    'mobile disabled': (
+      '/forum.php?mod=viewthread&tid=100&page=3&mobile=no',
+      mobilePostLocationHtml,
+    ),
+    'filtered view': (
+      '/forum.php?mod=viewthread&tid=100&page=3&authorid=10',
+      mobilePostLocationHtml,
+    ),
+    'cross site': (
+      'https://elsewhere.example/thread-100-3-1.html',
+      mobilePostLocationHtml,
+    ),
+  };
+  for (final item in rejected.entries) {
+    test('post locator rejects ${item.key}', () async {
+      final result =
+          await ForumClientAdapterFactory(
+            config: config,
+            network: _FixtureNetwork(
+              (_) => item.value.$2,
+              responseUri: config.siteOrigin.resolve(item.value.$1),
+            ),
+          ).createThreadPostLocator().locate(
+            const ThreadPostLocationQuery(tid: '100', pid: '200'),
+          );
+      expect(result.isSuccess, isFalse);
+    });
+  }
+
+  for (final status in [200, 401, 403]) {
+    test('post locator classifies permission evidence $status', () async {
+      final result =
+          await ForumClientAdapterFactory(
+            config: config,
+            network: _FixtureNetwork(
+              (_) => loginRequiredPostHtml,
+              statusCode: status,
+              responseUri: config.siteOrigin.resolve(
+                '/forum.php?mod=viewthread&tid=100',
+              ),
+            ),
+          ).createThreadPostLocator().locate(
+            const ThreadPostLocationQuery(tid: '100', pid: '200'),
+          );
+      expect(result.isSuccess, isFalse);
+      expect(
+        result.failureOrNull?.code,
+        status == 403
+            ? 'thread_post_location_permission_denied'
+            : 'thread_post_location_login_required',
+      );
+    });
+  }
+
+  test('post locator does not retry transport errors', () async {
+    final result =
+        await ForumClientAdapterFactory(
+          config: config,
+          network: _FailingNetwork(),
+        ).createThreadPostLocator().locate(
+          const ThreadPostLocationQuery(tid: '100', pid: '200'),
+        );
+    expect(result.failureOrNull?.kind, DataReadFailureKind.network);
+  });
+
+  test('custom page size is not an ordinary pagination environment', () async {
+    final result =
+        await ForumClientAdapterFactory(
+          config: config,
+          network: _FixtureNetwork(
+            (_) => mobilePostLocationHtml,
+            responseUri: config.siteOrigin.resolve(
+              '/forum.php?mod=viewthread&tid=100&page=3&ppp=200',
+            ),
+          ),
+        ).createThreadPostLocator().locate(
+          const ThreadPostLocationQuery(tid: '100', pid: '200'),
+        );
+    expect(result.failureOrNull?.code, 'thread_post_location_view_unconfirmed');
+  });
+
+  for (final status in [301, 404]) {
+    test(
+      'unsuccessful status $status cannot pass by carrying post markup',
+      () async {
+        final result =
+            await ForumClientAdapterFactory(
+              config: config,
+              network: _FixtureNetwork(
+                (_) => mobilePostLocationHtml,
+                statusCode: status,
+                responseUri: config.siteOrigin.resolve('/thread-100-3-1.html'),
+              ),
+            ).createThreadPostLocator().locate(
+              const ThreadPostLocationQuery(tid: '100', pid: '200'),
+            );
+        expect(result.isSuccess, isFalse);
+      },
+    );
+  }
+
+  test('server error cannot pass by carrying cached post markup', () async {
+    final result =
+        await ForumClientAdapterFactory(
+          config: config,
+          network: _FixtureNetwork(
+            (_) => mobilePostLocationHtml,
+            statusCode: 503,
+            responseUri: config.siteOrigin.resolve('/thread-100-3-1.html'),
+          ),
+        ).createThreadPostLocator().locate(
+          const ThreadPostLocationQuery(tid: '100', pid: '200'),
+        );
+    expect(result.failureOrNull?.kind, DataReadFailureKind.server);
+  });
+
+  test(
+    'long body and empty interactions do not affect post identity',
+    () async {
+      final result =
+          await ForumClientAdapterFactory(
+            config: config,
+            network: _FixtureNetwork(
+              (_) => longMobilePostLocationHtml,
+              responseUri: config.siteOrigin.resolve('/thread-100-3-1.html'),
+            ),
+          ).createThreadPostLocator().locate(
+            const ThreadPostLocationQuery(tid: '100', pid: '200'),
+          );
+      expect(result.dataOrNull?.page, 3);
+    },
+  );
 
   test('author posts are permanently wired to viewthread version 1', () async {
     final network = _FixtureNetwork((_) => _authorPostEnvelope);
@@ -312,7 +493,9 @@ void main() {
 }
 
 final class _FixtureNetwork implements ForumClientNetwork {
-  _FixtureNetwork(this.bodyFor, {this.responseUri});
+  _FixtureNetwork(this.bodyFor, {this.responseUri, this.statusCode = 200});
+
+  final int statusCode;
 
   final Object? Function(ForumRequest request) bodyFor;
   final Uri? responseUri;
@@ -326,7 +509,7 @@ final class _FixtureNetwork implements ForumClientNetwork {
     return ForumTransportSuccess(
       ForumResponse<Object?>(
         uri: responseUri ?? request.uri,
-        statusCode: 200,
+        statusCode: statusCode,
         headers: const {},
         body: bodyFor(request),
       ),
@@ -441,24 +624,6 @@ const _ratingsAjax = '''
 <tr><td>积分 +2 点</td><td><a href="space-uid-10.html">Alice</a></td><td>2026-01-01</td><td>Agree</td></tr>
 </table></div><div class="o pns">总计: 积分 +2 点</div>
 ]]></root>
-''';
-
-const _threadHtml = '''
-<html><body id="nv_forum" class="pg_viewthread">
-  <a href="javascript:;" rel="curforum" fid="33" class="curtype">Forum</a>
-  <div id="postlist" class="pl bm">
-    <table><tr><td class="pls"><div class="hm ptn"><span>Views:</span><span>12</span><span>Replies:</span><span>1</span></div></td>
-      <td class="plc ptm pbn vwthd"><h1 class="ts"><span id="thread_subject">Fixture thread</span></h1></td></tr></table>
-    <div id="post_200"><table id="pid200" class="plhin"><tr>
-      <td class="pls"><div class="pi"><div class="authi"><a href="space-uid-10.html" class="xw1">Alice</a></div></div></td>
-      <td class="plc"><div class="pi"><strong><a id="postnum200"><em>1</em><sup>#</sup></a></strong>
-        <div class="pti"><div class="authi"><em id="authorposton200">2026-01-01</em></div></div></div>
-        <div class="pcb"><table><tr><td class="t_f" id="postmessage_200">Body</td></tr></table></div>
-      </td>
-    </tr></table></div>
-  </div>
-  <div class="pg"><strong>3</strong></div>
-</body></html>
 ''';
 
 const _authorPostEnvelope = <String, Object?>{
