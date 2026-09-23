@@ -11,6 +11,9 @@ class ThreadPostCommentSection extends StatefulWidget {
     this.onOpenAuthorProfile,
     this.expanded,
     this.onExpansionChanged,
+    this.continuation,
+    this.nextPage,
+    this.onLoadMore,
   });
 
   final List<ThreadPostCommentEntry> comments;
@@ -19,6 +22,9 @@ class ThreadPostCommentSection extends StatefulWidget {
   final ValueChanged<ThreadPostCommentEntry>? onOpenAuthorProfile;
   final bool? expanded;
   final ValueChanged<bool>? onExpansionChanged;
+  final ThreadPostCommentsViewState? continuation;
+  final int? nextPage;
+  final VoidCallback? onLoadMore;
 
   @override
   State<ThreadPostCommentSection> createState() =>
@@ -84,6 +90,31 @@ class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection> {
                     imageReferer: widget.imageReferer,
                     palette: widget.palette,
                     onOpenAuthorProfile: widget.onOpenAuthorProfile,
+                  ),
+                ],
+                if (widget.nextPage != null ||
+                    widget.continuation?.hasFailure == true) ...[
+                  const SizedBox(height: 9),
+                  if (widget.continuation?.hasFailure == true)
+                    Text(switch (widget.continuation!.failure) {
+                      ThreadPostCommentsFailure.loginRequired =>
+                        l10n.threadCommentLoginRequired,
+                      ThreadPostCommentsFailure.permissionDenied =>
+                        l10n.threadCommentPermissionDenied,
+                      _ => l10n.threadCommentLoadFailed,
+                    }),
+                  TextButton(
+                    key: const Key('thread-comment-load-more'),
+                    onPressed: widget.continuation?.isLoading == true
+                        ? null
+                        : widget.onLoadMore,
+                    child: widget.continuation?.isLoading == true
+                        ? Text(l10n.threadCommentLoadingMore)
+                        : Text(
+                            widget.continuation?.hasFailure == true
+                                ? l10n.threadCommentRetry
+                                : l10n.threadCommentLoadMore,
+                          ),
                   ),
                 ],
               ],

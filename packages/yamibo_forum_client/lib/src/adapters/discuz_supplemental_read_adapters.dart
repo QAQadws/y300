@@ -372,6 +372,197 @@ final class DiscuzForumStickerCatalogRepository
   }
 }
 
+final class DiscuzThreadPostCommentsRepository
+    implements ThreadPostCommentsRepository {
+  DiscuzThreadPostCommentsRepository({
+    required this.config,
+    required this.network,
+    required this.requestProfiles,
+  }) : _commentParser = ThreadDetailHtmlParser(siteOrigin: config.siteOrigin);
+
+  final ForumClientConfig config;
+  final ForumClientNetwork network;
+  final ForumRequestProfileResolver requestProfiles;
+  final ThreadDetailHtmlParser _commentParser;
+
+  @override
+  ThreadPostCommentsSourceCapabilities get capabilities =>
+      _commentsCapabilities;
+
+  @override
+  Future<
+    DataReadResult<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>
+  >
+  load(
+    ThreadPostCommentsQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.networkFirst,
+  }) async {
+    if (!_positive(query.tid) || !_positive(query.pid) || query.page < 2) {
+      return _businessFailure('thread_post_comments_query_invalid');
+    }
+    final uri = config.siteOrigin.replace(
+      path: '/forum.php',
+      queryParameters: {
+        'mod': 'misc',
+        'action': 'commentmore',
+        'tid': query.tid,
+        'pid': query.pid,
+        'page': '${query.page}',
+        'mobile': '2',
+        'inajax': '1',
+      },
+    );
+    final referer = config.siteOrigin.replace(
+      path: '/forum.php',
+      queryParameters: {'mod': 'viewthread', 'tid': query.tid, 'mobile': '2'},
+    );
+    final result = await network.send(
+      ForumRequest(
+        method: ForumRequestMethod.get,
+        uri: uri,
+        context: const ForumRequestContext(
+          operation: 'thread.post.comments',
+          pageKind: 'thread.detail',
+        ),
+        headers: requestProfiles
+            .resolve(ForumRequestProfileKind.mobileHtml, referer: referer)
+            .headers,
+      ),
+    );
+    if (result case ForumTransportError<ForumResponse<Object?>>(
+      :final failure,
+    )) {
+      return _failure(failure);
+    }
+    final response =
+        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
+    if (response.uri.scheme != config.siteOrigin.scheme ||
+        response.uri.host != config.siteOrigin.host ||
+        response.uri.port != config.siteOrigin.port) {
+      return _parseFailure(
+        'thread_post_comments_cross_site',
+        const FormatException('comment response left site'),
+      );
+    }
+    if (response.statusCode == 401) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.unauthorized,
+        code: 'thread_post_comments_login_required',
+        diagnosticMessage: 'thread_post_comments_login_required',
+      );
+    }
+    if (response.statusCode == 403) {
+      return _businessFailure('thread_post_comments_permission_denied');
+    }
+    if (response.statusCode != null && response.statusCode! >= 500) {
+      return DataReadFailure(
+        kind: DataReadFailureKind.server,
+        code: 'thread_post_comments_server_failed',
+        statusCode: response.statusCode,
+        diagnosticMessage: 'thread_post_comments_server_failed',
+      );
+    }
+    if (response.statusCode != 200 ||
+        response.uri.path != '/forum.php' ||
+        response.uri.queryParameters['mod'] != 'misc' ||
+        response.uri.queryParameters['action'] != 'commentmore' ||
+        response.uri.queryParameters['tid'] != query.tid ||
+        response.uri.queryParameters['pid'] != query.pid ||
+        response.uri.queryParameters['page'] != '${query.page}') {
+      return _parseFailure(
+        'thread_post_comments_response_unconfirmed',
+        const FormatException('comment response identity unconfirmed'),
+      );
+    }
+    try {
+      if (response.body is! String) {
+        throw const FormatException('comment response is not text');
+      }
+      final xml = RegExp(
+        r'<root(?:\s[^>]*)?>[\s\S]*?<!\[CDATA\[([\s\S]*?)\]\]>[\s\S]*?</root\s*>',
+        caseSensitive: false,
+      ).firstMatch(response.body as String);
+      if (xml == null) {
+        throw const FormatException('comment AJAX payload missing');
+      }
+      final document = html_parser.parse(xml.group(1)!);
+      if (document.querySelector('form[action*="mod=logging"]') != null) {
+        return const DataReadFailure(
+          kind: DataReadFailureKind.unauthorized,
+          code: 'thread_post_comments_login_required',
+          diagnosticMessage: 'thread_post_comments_login_required',
+        );
+      }
+      if (document.querySelector('.alert_error, .showmessage, #messagetext') !=
+          null) {
+        return _businessFailure('thread_post_comments_permission_denied');
+      }
+      final rows = document.querySelectorAll('.plc[id^="commentdetail_"]');
+      final current = int.tryParse(
+        document.querySelector('.pg strong')?.text.trim() ?? '',
+      );
+      if (rows.isEmpty || current != query.page) {
+        throw const FormatException('comment page or mobile rows missing');
+      }
+      final comments = _commentParser.parseMobileCommentRows(document.body!);
+      if (comments.isEmpty) {
+        throw const FormatException('comment rows contained no readable items');
+      }
+      int? next;
+      for (final link in document.querySelectorAll('.pg a.nxt')) {
+        final href = link.attributes['href'];
+        final parsed = _sameSiteUrl(href);
+        if (parsed == null) {
+          throw const FormatException('comment next link left site');
+        }
+        final params = Uri.parse(parsed).queryParameters;
+        if (params['mod'] != 'misc' ||
+            params['action'] != 'commentmore' ||
+            params['tid'] != query.tid ||
+            params['pid'] != query.pid) {
+          throw const FormatException('comment next link identity invalid');
+        }
+        final candidate = int.tryParse(params['page'] ?? '');
+        if (candidate != query.page + 1) {
+          throw const FormatException('comment continuation did not advance');
+        }
+        next = candidate;
+      }
+      return DataReadSuccess(
+        data: ThreadPostCommentsPage(
+          tid: query.tid,
+          pid: query.pid,
+          page: query.page,
+          comments: List.unmodifiable(comments),
+          nextPage: next,
+        ),
+        capabilities: ThreadPostCommentsReadCapabilities(
+          values: capabilities.values.withSupport(
+            ThreadPostCommentsCapability.commentIdentity,
+            comments.every((comment) => comment.commentId != null)
+                ? DataCapabilitySupport.supported
+                : DataCapabilitySupport.unknown,
+          ),
+        ),
+        metadata: const DataReadMetadata.network(),
+      );
+    } on FormatException catch (error) {
+      return _parseFailure('thread_post_comments_parse_failed', error);
+    }
+  }
+
+  String? _sameSiteUrl(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    final uri = config.siteOrigin.resolve(raw.replaceAll('&amp;', '&'));
+    if (uri.scheme != config.siteOrigin.scheme ||
+        uri.host != config.siteOrigin.host ||
+        uri.port != config.siteOrigin.port) {
+      return null;
+    }
+    return uri.toString();
+  }
+}
+
 final class DiscuzThreadPostRatingsRepository
     implements ThreadPostRatingsRepository {
   DiscuzThreadPostRatingsRepository({
@@ -839,6 +1030,9 @@ final _stickerCapabilities = ForumStickerCatalogSourceCapabilities(
 );
 final _ratingsCapabilities = ThreadPostRatingsSourceCapabilities(
   values: DataCapabilitySet.supported(ThreadPostRatingsCapability.values),
+);
+final _commentsCapabilities = ThreadPostCommentsSourceCapabilities(
+  values: DataCapabilitySet.supported(ThreadPostCommentsCapability.values),
 );
 final _locatorCapabilities = ThreadPostLocatorSourceCapabilities(
   values: DataCapabilitySet.supported(ThreadPostLocatorCapability.values),

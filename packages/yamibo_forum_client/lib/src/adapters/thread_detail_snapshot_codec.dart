@@ -17,7 +17,7 @@ class ThreadDetailSnapshotCodec
   int get codecVersion => 1;
 
   @override
-  int get parserVersion => 1;
+  int get parserVersion => 2;
 
   @override
   bool canDecodeVersion({
@@ -104,6 +104,7 @@ class ThreadDetailSnapshotCodec
       'poll': _encodePoll(value.poll),
       'tagLinks': value.tagLinks.map(_encodeTagLink).toList(growable: false),
       'comments': value.comments.map(_encodeComment).toList(growable: false),
+      'commentNextPage': value.commentNextPage,
       'attachmentImages': value.attachmentImages
           .map(_encodeAttachmentImage)
           .toList(growable: false),
@@ -133,6 +134,7 @@ class ThreadDetailSnapshotCodec
       comments: LooseJson.list(map['comments'])
           .map((item) => _decodeComment(LooseJson.map(item)))
           .toList(growable: false),
+      commentNextPage: _nullableInt(map['commentNextPage']),
       attachmentImages: LooseJson.list(map['attachmentImages'])
           .map((item) => _decodeAttachmentImage(LooseJson.map(item)))
           .toList(growable: false),
@@ -265,6 +267,7 @@ class ThreadDetailSnapshotCodec
       'authorId': value.authorId,
       'authorUrl': value.authorUrl,
       'avatarUrl': value.avatarUrl,
+      'commentId': value.commentId,
     };
   }
 
@@ -276,6 +279,7 @@ class ThreadDetailSnapshotCodec
       authorId: _nullableString(map['authorId']),
       authorUrl: _nullableString(map['authorUrl']),
       avatarUrl: _nullableString(map['avatarUrl']),
+      commentId: _nullableString(map['commentId']),
     );
   }
 

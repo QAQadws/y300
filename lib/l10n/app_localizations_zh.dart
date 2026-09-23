@@ -2987,6 +2987,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadCommentTitle => '点评';
 
   @override
+  String get threadCommentLoadMore => '加载更多点评';
+
+  @override
+  String get threadCommentLoadingMore => '正在加载点评…';
+
+  @override
+  String get threadCommentLoadFailed => '点评加载失败，可重试';
+
+  @override
+  String get threadCommentLoginRequired => '请先登录后查看后续点评';
+
+  @override
+  String get threadCommentPermissionDenied => '当前账号无法查看后续点评';
+
+  @override
+  String get threadCommentRetry => '重试加载点评';
+
+  @override
+  String get threadInteractionsEmpty => '暂无可显示的点评与评分';
+
+  @override
   String get threadCommentSubmit => '发布';
 
   @override
@@ -7482,6 +7503,27 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadCommentTitle => '點評';
+
+  @override
+  String get threadCommentLoadMore => '載入更多點評';
+
+  @override
+  String get threadCommentLoadingMore => '正在載入點評…';
+
+  @override
+  String get threadCommentLoadFailed => '點評載入失敗，可重試';
+
+  @override
+  String get threadCommentLoginRequired => '請先登入後查看後續點評';
+
+  @override
+  String get threadCommentPermissionDenied => '目前帳號無法查看後續點評';
+
+  @override
+  String get threadCommentRetry => '重試載入點評';
+
+  @override
+  String get threadInteractionsEmpty => '暫無可顯示的點評與評分';
 
   @override
   String get threadCommentSubmit => '發佈';

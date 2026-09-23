@@ -299,6 +299,7 @@ class ThreadDetailHtmlParser {
       ratingSummary: _parseMobileRatingSummary(container, pid),
       poll: isFirst ? _parseMobilePoll(container) : null,
       comments: _parseMobilePostComments(container, pid),
+      commentNextPage: _parseMobileCommentNextPage(container, pid, expectedTid),
     );
   }
 
@@ -515,10 +516,13 @@ class ThreadDetailHtmlParser {
     if (commentRoot == null) {
       return const <ThreadPostCommentEntry>[];
     }
+    return parseMobileCommentRows(commentRoot);
+  }
+
+  /// Parses the same mobile comment rows from an AJAX continuation fragment.
+  List<ThreadPostCommentEntry> parseMobileCommentRows(html_dom.Element root) {
     final output = <ThreadPostCommentEntry>[];
-    for (final item in commentRoot.querySelectorAll(
-      'div[id^="commentdetail_"]',
-    )) {
+    for (final item in root.querySelectorAll('div[id^="commentdetail_"]')) {
       final authorAnchor = item.querySelector('.authi .mtit .z a[href]');
       final author = _cleanText(authorAnchor?.text ?? '');
       final dateline = _cleanText(
@@ -531,6 +535,9 @@ class ThreadDetailHtmlParser {
       final authorUrl = _resolve(authorAnchor?.attributes['href']);
       output.add(
         ThreadPostCommentEntry(
+          commentId: RegExp(
+            r'^commentdetail_(\d+)$',
+          ).firstMatch(item.id)?.group(1),
           author: author,
           authorId: _extractUid(authorUrl),
           authorUrl: authorUrl,
@@ -543,6 +550,33 @@ class ThreadDetailHtmlParser {
       );
     }
     return List<ThreadPostCommentEntry>.unmodifiable(output);
+  }
+
+  int? _parseMobileCommentNextPage(
+    html_dom.Element container,
+    String pid,
+    String tid,
+  ) {
+    final root = container.querySelector('#comment_$pid');
+    if (root == null) return null;
+    for (final item in root.querySelectorAll('[onclick]')) {
+      final action = item.attributes['onclick'] ?? '';
+      final url = RegExp(
+        r'''ajaxget\(['"]([^'"]+)['"]''',
+      ).firstMatch(action)?.group(1);
+      if (url == null) continue;
+      final resolved = _resolve(url.replaceAll('&amp;', '&'));
+      if (resolved == null) continue;
+      final query = Uri.parse(resolved).queryParameters;
+      if (query['mod'] == 'misc' &&
+          query['action'] == 'commentmore' &&
+          query['tid'] == tid &&
+          query['pid'] == pid &&
+          query['page'] == '2') {
+        return 2;
+      }
+    }
+    return null;
   }
 
   ThreadPoll? _parseMobilePoll(html_dom.Element postContainer) {

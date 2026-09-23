@@ -217,6 +217,9 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
     required this.onLoadAllRatings,
+    this.onLoadMoreComments,
+    this.displayExtraComments,
+    this.showEmptyInteractionHint = false,
     required this.palette,
   });
 
@@ -235,15 +238,36 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
   final ValueChanged<ThreadPost> onLoadAllRatings;
+  final ValueChanged<ThreadPost>? onLoadMoreComments;
+  final List<ThreadPostCommentEntry>? displayExtraComments;
+  final bool showEmptyInteractionHint;
   final ThreadDetailNativePalette palette;
 
   @override
   Widget build(BuildContext context) {
     final post = displayPost;
+    final commentState = state.commentsByPostId[sourcePost.pid];
+    final extraComments =
+        displayExtraComments != null &&
+            displayExtraComments!.length == commentState?.comments.length
+        ? displayExtraComments!
+        : commentState?.comments ?? const <ThreadPostCommentEntry>[];
+    final visibleComments = <ThreadPostCommentEntry>[
+      ...post.comments,
+      ...extraComments,
+    ];
+    final nextCommentPage =
+        commentState?.nextPage ??
+        (commentState == null ? sourcePost.commentNextPage : null);
+    final showComments =
+        visibleComments.isNotEmpty ||
+        nextCommentPage != null ||
+        commentState?.hasFailure == true;
     final hasFooterContent =
         post.poll != null ||
-        post.comments.isNotEmpty ||
-        post.ratingSummary != null;
+        showComments ||
+        post.ratingSummary != null ||
+        showEmptyInteractionHint;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onLongPress: () => onOpenPostActions(sourcePost, plan),
@@ -295,23 +319,34 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
                 palette: palette,
               ),
             ],
-            if (post.comments.isNotEmpty) ...[
+            if (showComments) ...[
               if (post.poll != null) const SizedBox(height: 10),
               ThreadPostCommentSection(
-                comments: post.comments,
+                comments: visibleComments,
+                continuation: commentState,
+                nextPage: nextCommentPage,
+                onLoadMore: onLoadMoreComments == null
+                    ? null
+                    : () => onLoadMoreComments!(sourcePost),
                 imageReferer: imageReferer,
                 palette: palette,
                 onOpenAuthorProfile: (displayComment) {
-                  final index = post.comments.indexOf(displayComment);
+                  final index = visibleComments.indexOf(displayComment);
                   if (index >= 0 && index < sourcePost.comments.length) {
                     onOpenCommentAuthorProfile(sourcePost.comments[index]);
+                  } else if (index >= sourcePost.comments.length &&
+                      index - sourcePost.comments.length <
+                          (commentState?.comments.length ?? 0)) {
+                    onOpenCommentAuthorProfile(
+                      commentState!.comments[index -
+                          sourcePost.comments.length],
+                    );
                   }
                 },
               ),
             ],
             if (post.ratingSummary != null) ...[
-              if (post.poll != null || post.comments.isNotEmpty)
-                const SizedBox(height: 10),
+              if (post.poll != null || showComments) const SizedBox(height: 10),
               ThreadPostRatingSection(
                 summary: post.ratingSummary!,
                 viewState:
@@ -321,6 +356,10 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
                 onLoadAllRatings: () => onLoadAllRatings(sourcePost),
               ),
             ],
+            if (showEmptyInteractionHint &&
+                !showComments &&
+                post.ratingSummary == null)
+              Text(AppLocalizations.of(context).threadInteractionsEmpty),
           ],
         ),
       ),
@@ -353,6 +392,9 @@ class _ThreadPostCardEntry extends StatefulWidget {
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
     required this.onLoadAllRatings,
+    this.onLoadMoreComments,
+    this.displayExtraComments,
+    this.showEmptyInteractionHint = false,
     required this.onPostBuilt,
     required this.imageViewportCoordinator,
     required this.imagePrecacheService,
@@ -395,6 +437,9 @@ class _ThreadPostCardEntry extends StatefulWidget {
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
   final ValueChanged<ThreadPost> onLoadAllRatings;
+  final ValueChanged<ThreadPost>? onLoadMoreComments;
+  final List<ThreadPostCommentEntry>? displayExtraComments;
+  final bool showEmptyInteractionHint;
   final ValueChanged<int>? onPostBuilt;
   final ThreadImageViewportCoordinator? imageViewportCoordinator;
   final ForumImagePrecacheService? imagePrecacheService;
@@ -475,6 +520,9 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           onTogglePollOption: widget.onTogglePollOption,
           onSubmitPollVote: widget.onSubmitPollVote,
           onLoadAllRatings: widget.onLoadAllRatings,
+          onLoadMoreComments: widget.onLoadMoreComments,
+          displayExtraComments: widget.displayExtraComments,
+          showEmptyInteractionHint: widget.showEmptyInteractionHint,
           palette: widget.palette,
         ),
       ],

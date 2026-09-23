@@ -4,6 +4,7 @@ import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 import 'package:yamibo_forum_client/src/adapters/forum_home_snapshot_codec.dart';
+import 'package:yamibo_forum_client/src/adapters/thread_detail_snapshot_codec.dart';
 
 import '../support/data_source_contracts/repository_contract_suites.dart';
 import '../fixtures/thread_post_navigation_fixtures.dart';
@@ -254,6 +255,194 @@ void main() {
     expect(result.dataOrNull!.participantCount, 1);
     expect(result.dataOrNull!.ratings.single.userId, '10');
     expect(result.dataOrNull!.totalScoreText, '积分 +2 点');
+  });
+
+  test(
+    'mobile comment continuation preserves order and server pager',
+    () async {
+      final network = _FixtureNetwork(
+        (request) => _commentAjax(
+          page: int.parse(request.uri.queryParameters['page']!),
+          nextPage: request.uri.queryParameters['page'] == '2' ? 3 : null,
+        ),
+      );
+      final repository = ForumClientAdapterFactory(
+        config: config,
+        network: network,
+      ).createThreadPostComments();
+      final second = await repository.load(
+        const ThreadPostCommentsQuery(tid: '100', pid: '200', page: 2),
+      );
+      final third = await repository.load(
+        const ThreadPostCommentsQuery(tid: '100', pid: '200', page: 3),
+      );
+
+      expect(network.requests, hasLength(2));
+      final query = network.requests.first.uri.queryParameters;
+      expect(query['action'], 'commentmore');
+      expect(query['mobile'], '2');
+      expect(query['inajax'], '1');
+      expect(second.dataOrNull!.comments.single.commentId, '902');
+      expect(second.dataOrNull!.comments.single.authorId, '10');
+      expect(
+        (second
+                as DataReadSuccess<
+                  ThreadPostCommentsPage,
+                  ThreadPostCommentsReadCapabilities
+                >)
+            .capabilities
+            .values
+            .supports(ThreadPostCommentsCapability.commentIdentity),
+        isTrue,
+      );
+      expect(second.dataOrNull!.nextPage, 3);
+      expect(third.dataOrNull!.nextPage, isNull);
+    },
+  );
+
+  test(
+    'comment continuation rejects wrong page and desktop fragments',
+    () async {
+      for (final body in [
+        _commentAjax(page: 3, nextPage: null),
+        _commentAjax(page: 2, nextPage: 4),
+        _commentAjax(
+          page: 2,
+          nextPage: 3,
+        ).replaceFirst('tid=100&pid=200&page=3', 'tid=999&pid=200&page=3'),
+        '<root><![CDATA[<table><tr><td>Desktop</td></tr></table>]]></root>',
+        '<root><![CDATA[<div class="showmessage">Denied</div>]]></root>',
+      ]) {
+        final repository = ForumClientAdapterFactory(
+          config: config,
+          network: _FixtureNetwork((_) => body),
+        ).createThreadPostComments();
+        final result = await repository.load(
+          const ThreadPostCommentsQuery(tid: '100', pid: '200', page: 2),
+        );
+        expect(
+          result,
+          isA<
+            DataReadFailure<
+              ThreadPostCommentsPage,
+              ThreadPostCommentsReadCapabilities
+            >
+          >(),
+        );
+      }
+    },
+  );
+
+  test('comment continuation rejects cross-site redirects and login', () async {
+    final crossSite = ForumClientAdapterFactory(
+      config: config,
+      network: _FixtureNetwork(
+        (_) => _commentAjax(page: 2, nextPage: null),
+        responseUri: Uri.parse('https://outside.example/forum.php'),
+      ),
+    ).createThreadPostComments();
+    final login = ForumClientAdapterFactory(
+      config: config,
+      network: _FixtureNetwork(
+        (_) =>
+            '<root><![CDATA[<form action="member.php?mod=logging"></form>]]></root>',
+      ),
+    ).createThreadPostComments();
+    final server = ForumClientAdapterFactory(
+      config: config,
+      network: _FixtureNetwork((_) => '', statusCode: 500),
+    ).createThreadPostComments();
+    expect(
+      await crossSite.load(
+        const ThreadPostCommentsQuery(tid: '100', pid: '200', page: 2),
+      ),
+      isA<
+        DataReadFailure<
+          ThreadPostCommentsPage,
+          ThreadPostCommentsReadCapabilities
+        >
+      >(),
+    );
+    final loginResult = await login.load(
+      const ThreadPostCommentsQuery(tid: '100', pid: '200', page: 2),
+    );
+    expect(
+      (loginResult
+              as DataReadFailure<
+                ThreadPostCommentsPage,
+                ThreadPostCommentsReadCapabilities
+              >)
+          .kind,
+      DataReadFailureKind.unauthorized,
+    );
+    final serverResult = await server.load(
+      const ThreadPostCommentsQuery(tid: '100', pid: '200', page: 2),
+    );
+    expect(serverResult.failureOrNull?.kind, DataReadFailureKind.server);
+  });
+
+  test(
+    'comments without a stable ID keep unknown identity capability',
+    () async {
+      final repository = ForumClientAdapterFactory(
+        config: config,
+        network: _FixtureNetwork(
+          (_) => _commentAjax(
+            page: 2,
+            nextPage: null,
+          ).replaceFirst('commentdetail_902', 'commentdetail_unknown'),
+        ),
+      ).createThreadPostComments();
+      final result = await repository.load(
+        const ThreadPostCommentsQuery(tid: '100', pid: '200', page: 2),
+      );
+      expect(result.dataOrNull!.comments.single.commentId, isNull);
+      expect(
+        (result
+                as DataReadSuccess<
+                  ThreadPostCommentsPage,
+                  ThreadPostCommentsReadCapabilities
+                >)
+            .capabilities
+            .values
+            .supportOf(ThreadPostCommentsCapability.commentIdentity),
+        DataCapabilitySupport.unknown,
+      );
+    },
+  );
+
+  test('initial mobile detail keeps comment IDs and continuation', () {
+    final html = mobilePostLocationHtml.replaceFirst(
+      '<div id="comment_200"></div>',
+      commentPaginationHtml.replaceFirst(
+        '<div id="comment_200">',
+        '''<div id="comment_200"><div id="commentdetail_901">
+      <div class="authi"><div class="mtit"><span class="z">
+      <a href="home.php?mod=space&amp;uid=10">Alice</a></span></div>
+      <div class="mtime">Today</div><div class="mtxt">First</div></div>
+      </div>''',
+      ),
+    );
+    final detail = ThreadDetailHtmlParser(
+      siteOrigin: config.siteOrigin,
+    ).parse(html, fallbackTid: '100', fallbackPage: 3);
+    expect(detail.posts.single.comments.single.commentId, '901');
+    expect(detail.posts.single.commentNextPage, 2);
+  });
+
+  test('detail snapshot invalidates old parser and retains comment cursor', () {
+    const codec = ThreadDetailSnapshotCodec();
+    expect(codec.canDecodeVersion(codecVersion: 1, parserVersion: 1), isFalse);
+    final detail = ThreadDetailHtmlParser(siteOrigin: config.siteOrigin).parse(
+      mobilePostLocationHtml.replaceFirst(
+        '<div id="comment_200"></div>',
+        commentPaginationHtml,
+      ),
+      fallbackTid: '100',
+      fallbackPage: 3,
+    );
+    final restored = codec.decode(codec.encode(detail));
+    expect(restored.posts.single.commentNextPage, 2);
   });
 
   test('post locator validates the final page identity', () async {
@@ -623,6 +812,19 @@ const _ratingsAjax = '''
 <tr><td>积分</td><td>用户名</td><td>时间</td><td>理由</td></tr>
 <tr><td>积分 +2 点</td><td><a href="space-uid-10.html">Alice</a></td><td>2026-01-01</td><td>Agree</td></tr>
 </table></div><div class="o pns">总计: 积分 +2 点</div>
+]]></root>
+''';
+
+String _commentAjax({required int page, required int? nextPage}) =>
+    '''
+<root><![CDATA[
+<div class="plc" id="commentdetail_90$page"><div class="avatar">
+<img src="/avatar.png"></div><div class="authi"><div class="mtit">
+<span class="z"><a href="home.php?mod=space&uid=10">Alice</a></span>
+</div><div class="mtime">Today</div><div class="mtxt">Comment $page</div></div></div>
+<div class="pgs page mpage mbm cl"><div class="pg"><strong>$page</strong>
+${nextPage == null ? '' : '<a class="nxt" href="forum.php?mod=misc&action=commentmore&tid=100&pid=200&page=$nextPage">Next</a>'}
+</div></div>
 ]]></root>
 ''';
 

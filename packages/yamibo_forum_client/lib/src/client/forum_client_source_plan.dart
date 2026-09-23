@@ -65,6 +65,7 @@ final class ForumClientSourcePlan {
     this.unusedImageAttachmentDelete,
     this.postImageAttachmentDelete,
     this.postRatings,
+    this.postComments,
     this.postLocator,
     this.threadAuthorPosts,
     this.session,
@@ -137,6 +138,7 @@ final class ForumClientSourcePlan {
     postImageAttachmentDelete:
         overrides.postImageAttachmentDelete ?? postImageAttachmentDelete,
     postRatings: overrides.postRatings ?? postRatings,
+    postComments: overrides.postComments ?? postComments,
     postLocator: overrides.postLocator ?? postLocator,
     threadAuthorPosts: overrides.threadAuthorPosts ?? threadAuthorPosts,
     session: overrides.session ?? session,
@@ -258,6 +260,9 @@ final class ForumClientSourcePlan {
 
   /// Source for complete post-rating details.
   final ThreadPostRatingsRepository? postRatings;
+
+  /// Source for paginated post comments.
+  final ThreadPostCommentsRepository? postComments;
 
   /// Source for locating a post within a paginated thread.
   final ThreadPostLocatorRepository? postLocator;

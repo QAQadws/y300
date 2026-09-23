@@ -31,6 +31,7 @@ import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
+import 'package:y300/features/thread/presentation/thread_post_comment_projection_provider.dart';
 import 'package:y300/features/thread/presentation/thread_content_projection_providers.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projector.dart';
@@ -159,6 +160,13 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       converterId: converter.id,
       candidate: projectionCandidate,
     );
+    final extraCommentProjection = ref
+        .watch(threadPostCommentProjectionProvider(args))
+        .value;
+    final extraComments =
+        extraCommentProjection?.matches(state.commentsByPostId) == true
+        ? extraCommentProjection!.displayLists
+        : const <String, List<ThreadPostCommentEntry>>{};
     final imageReferer = ref.watch(
       forumImageRefererForSourceProvider(_imageRefererFor(state)),
     );
@@ -313,6 +321,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                         child: ThreadDetailContent(
                           state: state,
                           projection: projection,
+                          displayExtraCommentsByPostId: extraComments,
                           scrollController: _scrollController,
                           highlightPostPid: _highlightPostPid,
                           targetPid: widget.targetPid,
@@ -363,6 +372,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                           onTogglePollOption: controller.togglePollOption,
                           onSubmitPollVote: controller.submitPollVote,
                           onLoadAllRatings: controller.loadAllRatings,
+                          onLoadMoreComments: controller.loadMoreComments,
                         ),
                       ),
               ),

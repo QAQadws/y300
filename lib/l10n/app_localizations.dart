@@ -4907,6 +4907,48 @@ abstract class AppLocalizations {
   /// **'点评'**
   String get threadCommentTitle;
 
+  /// No description provided for @threadCommentLoadMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载更多点评'**
+  String get threadCommentLoadMore;
+
+  /// No description provided for @threadCommentLoadingMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在加载点评…'**
+  String get threadCommentLoadingMore;
+
+  /// No description provided for @threadCommentLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'点评加载失败，可重试'**
+  String get threadCommentLoadFailed;
+
+  /// No description provided for @threadCommentLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先登录后查看后续点评'**
+  String get threadCommentLoginRequired;
+
+  /// No description provided for @threadCommentPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号无法查看后续点评'**
+  String get threadCommentPermissionDenied;
+
+  /// No description provided for @threadCommentRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试加载点评'**
+  String get threadCommentRetry;
+
+  /// No description provided for @threadInteractionsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无可显示的点评与评分'**
+  String get threadInteractionsEmpty;
+
   /// No description provided for @threadCommentSubmit.
   ///
   /// In zh, this message translates to:

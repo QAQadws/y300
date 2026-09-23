@@ -92,6 +92,7 @@ void main() {
         sources.unusedImageAttachmentDelete,
         sources.postImageAttachmentDelete,
         sources.postRatings,
+        sources.postComments,
         sources.postLocator,
         sources.threadAuthorPosts,
         sources.session,

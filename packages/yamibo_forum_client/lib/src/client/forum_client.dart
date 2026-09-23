@@ -317,6 +317,9 @@ final class YamiboForumClient {
   /// Configured complete-rating source, if installed.
   ThreadPostRatingsRepository? get postRatings => sourcePlan.postRatings;
 
+  /// Configured paginated-comment source, if installed.
+  ThreadPostCommentsRepository? get postComments => sourcePlan.postComments;
+
   /// Configured post-location source, if installed.
   ThreadPostLocatorRepository? get postLocator => sourcePlan.postLocator;
 
@@ -453,6 +456,14 @@ final class YamiboForumClient {
   loadPostRatings(ThreadPostRatingsQuery query) =>
       sourcePlan.postRatings?.load(query) ??
       unsupported<ThreadPostRatingsData, ThreadPostRatingsReadCapabilities>();
+
+  /// Loads one server-confirmed continuation page of post comments.
+  Future<
+    DataReadResult<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>
+  >
+  loadPostComments(ThreadPostCommentsQuery query) =>
+      sourcePlan.postComments?.load(query) ??
+      unsupported<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>();
 
   /// Resolves the exact page and URI containing the requested post.
   Future<

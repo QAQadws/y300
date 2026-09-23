@@ -17,13 +17,16 @@ import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     hide ThreadPostRatingsRepository;
+import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum_client;
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
@@ -93,6 +96,345 @@ void main() {
   });
 
   group('ThreadDetailPage', () {
+    testWidgets(
+      'loads one comment page, deduplicates IDs, and retries failure',
+      (tester) async {
+        final pending =
+            Completer<
+              DataReadResult<
+                ThreadPostCommentsPage,
+                ThreadPostCommentsReadCapabilities
+              >
+            >();
+        var thirdAttempts = 0;
+        final comments = _FakePagedCommentsRepository((query) async {
+          if (query.page == 2) return pending.future;
+          thirdAttempts++;
+          if (thirdAttempts == 1) {
+            return const DataReadFailure(
+              kind: DataReadFailureKind.network,
+              code: 'offline',
+              diagnosticMessage: 'offline',
+            );
+          }
+          if (thirdAttempts == 2) {
+            return const DataReadFailure(
+              kind: DataReadFailureKind.unauthorized,
+              code: 'thread_post_comments_login_required',
+              diagnosticMessage: 'thread_post_comments_login_required',
+            );
+          }
+          if (thirdAttempts == 3) {
+            return const DataReadFailure(
+              kind: DataReadFailureKind.business,
+              code: 'thread_post_comments_permission_denied',
+              diagnosticMessage: 'thread_post_comments_permission_denied',
+            );
+          }
+          return DataReadSuccess(
+            data: const ThreadPostCommentsPage(
+              tid: '100',
+              pid: '200',
+              page: 3,
+              comments: [
+                ThreadPostCommentEntry(
+                  author: 'Carol',
+                  message: 'Third page',
+                  dateline: 'today',
+                  commentId: '903',
+                ),
+              ],
+              nextPage: null,
+            ),
+            capabilities: commentsCapabilities,
+            metadata: const DataReadMetadata.network(),
+          );
+        });
+        final client = _clientWithPagedComments(comments);
+        final converter = _ThreadProjectionTestConverter(
+          TextConversionMode.toTraditional,
+        );
+        final sessionStore = YamiboSessionStore()
+          ..saveExtracted(
+            YamiboSessionSnapshot(
+              isLoggedIn: true,
+              uid: '10',
+              username: 'Alice',
+              formhash: '',
+              updatedAt: DateTime(2026, 1, 1),
+              source: 'test',
+            ),
+          );
+        final repository = _FakeThreadRepository(
+          (String tid, int page) async => ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '33',
+              subject: 'Comments',
+              author: 'Alice',
+              replies: 1,
+              views: 1,
+              currentPage: page,
+              perPage: 20,
+              posts: [
+                ThreadPost(
+                  pid: '200',
+                  author: 'Alice',
+                  authorId: '10',
+                  message: '<p>Body</p>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                  commentNextPage: 2,
+                  comments: const [
+                    ThreadPostCommentEntry(
+                      author: 'Alice',
+                      message: 'First page',
+                      dateline: 'today',
+                      commentId: '901',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            additionalOverrides: [
+              yamiboForumClientProvider.overrideWithValue(client),
+              yamiboSessionStoreProvider.overrideWithValue(sessionStore),
+              appServerContentConversionModeProvider.overrideWithValue(
+                TextConversionMode.toTraditional,
+              ),
+              textConverterProvider.overrideWith((ref, mode) => converter),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        expect(find.text(l10n.threadCommentLoadMore), findsOneWidget);
+        await tester.tap(find.byKey(const Key('thread-comment-load-more')));
+        await tester.pump();
+        expect(comments.queries, hasLength(1));
+        expect(find.text(l10n.threadCommentLoadingMore), findsOneWidget);
+        pending.complete(
+          DataReadSuccess(
+            data: const ThreadPostCommentsPage(
+              tid: '100',
+              pid: '200',
+              page: 2,
+              comments: [
+                ThreadPostCommentEntry(
+                  author: 'Alice',
+                  message: 'Duplicate',
+                  dateline: 'today',
+                  commentId: '901',
+                ),
+                ThreadPostCommentEntry(
+                  author: 'Bob',
+                  message: '软件内容',
+                  dateline: 'today',
+                  commentId: '902',
+                ),
+                ThreadPostCommentEntry(
+                  author: 'Bob',
+                  message: 'Duplicate again',
+                  dateline: 'today',
+                  commentId: '902',
+                ),
+              ],
+              nextPage: 3,
+            ),
+            capabilities: commentsCapabilities,
+            metadata: const DataReadMetadata.network(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('軟體內容'), findsOneWidget);
+        expect(find.text('Duplicate'), findsNothing);
+        await tester.tap(find.byKey(const Key('thread-comment-load-more')));
+        await tester.pumpAndSettle();
+        expect(find.text('軟體內容'), findsOneWidget);
+        expect(find.text(l10n.threadCommentRetry), findsOneWidget);
+        expect(find.text(l10n.threadCommentLoadFailed), findsOneWidget);
+        await tester.tap(find.byKey(const Key('thread-comment-load-more')));
+        await tester.pumpAndSettle();
+        expect(find.text(l10n.threadCommentLoginRequired), findsOneWidget);
+        await tester.tap(find.byKey(const Key('thread-comment-load-more')));
+        await tester.pumpAndSettle();
+        expect(find.text(l10n.threadCommentPermissionDenied), findsOneWidget);
+        await tester.tap(find.byKey(const Key('thread-comment-load-more')));
+        await tester.pumpAndSettle();
+        expect(comments.queries.map((query) => query.page), [2, 3, 3, 3, 3]);
+        expect(find.text('Third page'), findsOneWidget);
+        expect(find.byKey(const Key('thread-comment-load-more')), findsNothing);
+        sessionStore.saveExtracted(
+          YamiboSessionSnapshot(
+            isLoggedIn: true,
+            uid: '11',
+            username: 'Bob',
+            formhash: '',
+            updatedAt: DateTime(2026, 1, 2),
+            source: 'test',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('軟體內容'), findsNothing);
+        expect(find.text('Third page'), findsNothing);
+        expect(find.text('First page'), findsOneWidget);
+      },
+    );
+    testWidgets(
+      'late comment page cannot attach to a replacement thread page',
+      (tester) async {
+        final pending =
+            Completer<
+              DataReadResult<
+                ThreadPostCommentsPage,
+                ThreadPostCommentsReadCapabilities
+              >
+            >();
+        final comments = _FakePagedCommentsRepository((_) => pending.future);
+        final repository = _FakeThreadRepository(
+          (String tid, int page) async => ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '33',
+              subject: 'Comments',
+              author: 'Alice',
+              replies: 1,
+              views: 1,
+              currentPage: page,
+              perPage: 20,
+              posts: [
+                ThreadPost(
+                  pid: page == 1 ? '200' : '201',
+                  author: 'Alice',
+                  authorId: '10',
+                  message: '<p>Body</p>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                  commentNextPage: 2,
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            additionalOverrides: [
+              yamiboForumClientProvider.overrideWithValue(
+                _clientWithPagedComments(comments),
+              ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        const args = ThreadDetailArgs(tid: '100', subject: '测试主题');
+        final controller = container.read(
+          threadDetailControllerProvider(args).notifier,
+        );
+        final post = container
+            .read(threadDetailControllerProvider(args))
+            .value!
+            .posts
+            .single;
+        final loading = controller.loadMoreComments(post);
+        await tester.pump();
+        await controller.loadPage(2);
+        pending.complete(
+          DataReadSuccess(
+            data: const ThreadPostCommentsPage(
+              tid: '100',
+              pid: '200',
+              page: 2,
+              comments: [
+                ThreadPostCommentEntry(
+                  author: 'Old',
+                  message: 'Late',
+                  dateline: 'today',
+                  commentId: '902',
+                ),
+              ],
+              nextPage: null,
+            ),
+            capabilities: commentsCapabilities,
+            metadata: const DataReadMetadata.network(),
+          ),
+        );
+        await loading;
+        await tester.pumpAndSettle();
+        final current = container
+            .read(threadDetailControllerProvider(args))
+            .value!;
+        expect(current.posts.single.pid, '201');
+        expect(current.commentsByPostId, isEmpty);
+        expect(find.text('Late'), findsNothing);
+      },
+    );
+
+    testWidgets('empty interaction hint belongs only to body-end target', (
+      tester,
+    ) async {
+      final state = ThreadDetailPageState.initial(tid: '100', subject: 'Title')
+          .copyWith(
+            posts: [
+              ThreadPost(
+                pid: '200',
+                author: 'Alice',
+                authorId: '10',
+                message: '<p>Body</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          );
+      Widget content(ThreadPostLanding landing) => ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+        ],
+        child: LocalizedTestApp(
+          home: Scaffold(
+            body: ThreadDetailContent(
+              state: state,
+              targetPid: '200',
+              landing: landing,
+              imageReferer:
+                  'https://bbs.example.test/forum.php?mod=viewthread&tid=100',
+              onLoadPreviousPage: () {},
+              onLoadNextPage: () {},
+              onLoadPageNumber: (_) {},
+              onOpenAuthorProfile: (_) {},
+              onOpenCommentAuthorProfile: (_) {},
+              onCopyActionUrl: (_, _) {},
+              onOpenPostLink: (_) {},
+              onOpenPostActions: (_, _) {},
+              onTogglePollOption: (_, _) {},
+              onSubmitPollVote: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(content(ThreadPostLanding.bodyEnd));
+      await tester.pump();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ThreadDetailContent)),
+      );
+      expect(find.text(l10n.threadInteractionsEmpty), findsOneWidget);
+      await tester.pumpWidget(content(ThreadPostLanding.top));
+      await tester.pump();
+      expect(find.text(l10n.threadInteractionsEmpty), findsNothing);
+    });
     testWidgets(
       'target recovery invalidates a same-page snapshot and commits only verified history',
       (tester) async {
@@ -5665,6 +6007,63 @@ void main() {
       expect(find.text('回复成功'), findsOneWidget);
     });
   });
+}
+
+final commentsCapabilities = ThreadPostCommentsReadCapabilities(
+  values: DataCapabilitySet.supported(ThreadPostCommentsCapability.values),
+);
+
+forum_client.YamiboForumClient _clientWithPagedComments(
+  ThreadPostCommentsRepository repository,
+) => forum_client.YamiboForumClient(
+  config: forum_client.ForumClientConfig(
+    siteOrigin: Uri.parse('https://bbs.example.test'),
+    apiOrigin: Uri.parse('https://api.example.test/mobile/index.php'),
+    userAgent: 'test',
+    desktopUserAgent: 'test',
+  ),
+  network: _UnusedForumNetwork(),
+  sourcePlan: forum_client.ForumClientSourcePlan(postComments: repository),
+);
+
+final class _FakePagedCommentsRepository
+    implements ThreadPostCommentsRepository {
+  _FakePagedCommentsRepository(this._load);
+
+  final Future<
+    DataReadResult<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>
+  >
+  Function(ThreadPostCommentsQuery)
+  _load;
+  final List<ThreadPostCommentsQuery> queries = [];
+
+  @override
+  ThreadPostCommentsSourceCapabilities get capabilities =>
+      ThreadPostCommentsSourceCapabilities(
+        values: DataCapabilitySet.supported(
+          ThreadPostCommentsCapability.values,
+        ),
+      );
+
+  @override
+  Future<
+    DataReadResult<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>
+  >
+  load(
+    ThreadPostCommentsQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.networkFirst,
+  }) {
+    queries.add(query);
+    return _load(query);
+  }
+}
+
+final class _UnusedForumNetwork implements forum_client.ForumClientNetwork {
+  @override
+  Future<forum_client.ForumTransportResult<forum_client.ForumResponse<Object?>>>
+  send(forum_client.ForumRequest request) {
+    throw StateError('The comment repository should handle this read');
+  }
 }
 
 ThreadDetailData _navigationData(int page, {required String pid}) =>

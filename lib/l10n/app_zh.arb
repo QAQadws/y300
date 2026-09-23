@@ -1271,6 +1271,13 @@
     "placeholders": {"error": {"type": "String"}}
   },
   "threadCommentTitle": "点评",
+  "threadCommentLoadMore": "加载更多点评",
+  "threadCommentLoadingMore": "正在加载点评…",
+  "threadCommentLoadFailed": "点评加载失败，可重试",
+  "threadCommentLoginRequired": "请先登录后查看后续点评",
+  "threadCommentPermissionDenied": "当前账号无法查看后续点评",
+  "threadCommentRetry": "重试加载点评",
+  "threadInteractionsEmpty": "暂无可显示的点评与评分",
   "threadCommentSubmit": "发布",
   "threadCommentContent": "点评内容",
   "threadCommentSuccess": "点评成功",

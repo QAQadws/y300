@@ -907,6 +907,13 @@
     "placeholders": {"error": {"type": "String"}}
   },
   "threadCommentTitle": "點評",
+  "threadCommentLoadMore": "載入更多點評",
+  "threadCommentLoadingMore": "正在載入點評…",
+  "threadCommentLoadFailed": "點評載入失敗，可重試",
+  "threadCommentLoginRequired": "請先登入後查看後續點評",
+  "threadCommentPermissionDenied": "目前帳號無法查看後續點評",
+  "threadCommentRetry": "重試載入點評",
+  "threadInteractionsEmpty": "暫無可顯示的點評與評分",
   "threadCommentSubmit": "發佈",
   "threadCommentContent": "點評內容",
   "threadCommentSuccess": "點評成功",

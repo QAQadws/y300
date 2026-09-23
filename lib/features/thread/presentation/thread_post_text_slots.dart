@@ -102,6 +102,7 @@ final class _ThreadPostTextSlots {
         for (var index = 0; index < source.comments.length; index += 1)
           comments[index].build(source.comments[index], values),
       ],
+      commentNextPage: source.commentNextPage,
       attachmentImages: [
         for (var index = 0; index < source.attachmentImages.length; index += 1)
           attachments[index].build(source.attachmentImages[index], values),
@@ -221,6 +222,7 @@ final class _CommentSlots {
       authorId: source.authorId,
       authorUrl: source.authorUrl,
       avatarUrl: source.avatarUrl,
+      commentId: source.commentId,
     );
   }
 }

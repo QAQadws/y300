@@ -194,6 +194,7 @@ final class YamiboForumClientBuilder {
         formhash,
       ),
       postRatings: factory.createThreadPostRatings(),
+      postComments: factory.createThreadPostComments(),
       postLocator: factory.createThreadPostLocator(),
       threadAuthorPosts: factory.createThreadAuthorPosts(),
       session: authentication.session,

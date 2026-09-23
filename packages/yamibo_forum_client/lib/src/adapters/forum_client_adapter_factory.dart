@@ -149,6 +149,14 @@ final class ForumClientAdapterFactory {
         requestProfiles: requestProfiles,
       );
 
+  /// Creates the mobile AJAX source for paginated post comments.
+  ThreadPostCommentsRepository createThreadPostComments() =>
+      DiscuzThreadPostCommentsRepository(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+      );
+
   /// Creates a shared preparation/command pair for post ratings.
   ({
     ThreadPostRatingPreparationRepository preparation,

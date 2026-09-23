@@ -72,6 +72,8 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
     this.onLoadAllRatings,
+    this.onLoadMoreComments,
+    this.displayExtraCommentsByPostId = const {},
   });
 
   final ThreadDetailPageState state;
@@ -105,6 +107,8 @@ class ThreadDetailContent extends StatefulWidget {
   onTogglePollOption;
   final ValueChanged<ThreadPoll> onSubmitPollVote;
   final ValueChanged<ThreadPost>? onLoadAllRatings;
+  final ValueChanged<ThreadPost>? onLoadMoreComments;
+  final Map<String, List<ThreadPostCommentEntry>> displayExtraCommentsByPostId;
 
   @override
   State<ThreadDetailContent> createState() => _ThreadDetailContentState();
@@ -545,6 +549,12 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
             onTogglePollOption: widget.onTogglePollOption,
             onSubmitPollVote: widget.onSubmitPollVote,
             onLoadAllRatings: widget.onLoadAllRatings ?? _ignoreRatingLoad,
+            onLoadMoreComments: widget.onLoadMoreComments,
+            displayExtraComments:
+                widget.displayExtraCommentsByPostId[entry.sourcePost!.pid],
+            showEmptyInteractionHint:
+                widget.landing == ThreadPostLanding.bodyEnd &&
+                widget.targetPid == entry.sourcePost!.pid,
             onPostBuilt: _handlePostBuilt,
           ),
         );
@@ -614,6 +624,12 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
             onTogglePollOption: widget.onTogglePollOption,
             onSubmitPollVote: widget.onSubmitPollVote,
             onLoadAllRatings: widget.onLoadAllRatings ?? _ignoreRatingLoad,
+            onLoadMoreComments: widget.onLoadMoreComments,
+            displayExtraComments:
+                widget.displayExtraCommentsByPostId[entry.sourcePost!.pid],
+            showEmptyInteractionHint:
+                widget.landing == ThreadPostLanding.bodyEnd &&
+                widget.targetPid == entry.sourcePost!.pid,
             palette: palette,
           ),
         );

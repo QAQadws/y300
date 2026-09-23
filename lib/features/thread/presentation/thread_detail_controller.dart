@@ -21,6 +21,7 @@ import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_rating_service.dart';
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 
 class ThreadDetailArgs {
   const ThreadDetailArgs({
@@ -62,13 +63,32 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   final ThreadDetailArgs _args;
   final Map<String, Object> _ratingsLoadTokens = <String, Object>{};
+  final Map<String, Object> _commentsLoadTokens = <String, Object>{};
+  var _commentsContentGeneration = 0;
   var _ratingsContentGeneration = 0;
   var _pageLoadGeneration = 0;
   bool _initialTargetValidated = false;
 
   @override
   FutureOr<ThreadDetailPageState> build() async {
-    ref.onDispose(() => _pageLoadGeneration++);
+    final sessionStore = ref.read(yamiboSessionStoreProvider);
+    final identitySubscription = sessionStore.identityChanges.listen((_) {
+      _commentsContentGeneration++;
+      _commentsLoadTokens.clear();
+      final current = state.value;
+      if (ref.mounted && current != null) {
+        state = AsyncData(
+          current.copyWith(
+            commentsByPostId: const <String, ThreadPostCommentsViewState>{},
+          ),
+        );
+      }
+    });
+    ref.onDispose(() {
+      _pageLoadGeneration++;
+      _commentsContentGeneration++;
+      unawaited(identitySubscription.cancel());
+    });
     final initialPage = _args.initialPage == null || _args.initialPage! <= 0
         ? 1
         : _args.initialPage!;
@@ -588,6 +608,123 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     _ratingsLoadTokens.remove(pid);
   }
 
+  /// Loads exactly one confirmed continuation page for a visible post.
+  Future<void> loadMoreComments(ThreadPost post) async {
+    final current = state.value;
+    final pid = post.pid.trim();
+    final currentPost = current == null
+        ? null
+        : _findPostByPid(current.posts, pid);
+    if (current == null || pid.isEmpty || currentPost == null) {
+      return;
+    }
+    final previous =
+        current.commentsByPostId[pid] ??
+        ThreadPostCommentsViewState(
+          comments: const <ThreadPostCommentEntry>[],
+          nextPage: currentPost.commentNextPage,
+        );
+    final page = previous.nextPage;
+    if (page == null || previous.isLoading) {
+      return;
+    }
+    final token = Object();
+    final generation = _commentsContentGeneration;
+    _commentsLoadTokens[pid] = token;
+    state = AsyncData(
+      current.copyWith(
+        commentsByPostId: Map.unmodifiable({
+          ...current.commentsByPostId,
+          pid: previous.copyWith(isLoading: true, clearFailure: true),
+        }),
+      ),
+    );
+    final result = await ref
+        .read(yamiboForumClientProvider)
+        .loadPostComments(
+          ThreadPostCommentsQuery(tid: current.tid, pid: pid, page: page),
+        );
+    if (!ref.mounted ||
+        generation != _commentsContentGeneration ||
+        !identical(_commentsLoadTokens[pid], token)) {
+      return;
+    }
+    _commentsLoadTokens.remove(pid);
+    final latest = state.value;
+    final activePost = latest == null
+        ? null
+        : _findPostByPid(latest.posts, pid);
+    final active = latest?.commentsByPostId[pid];
+    if (latest == null ||
+        latest.tid != current.tid ||
+        activePost == null ||
+        active == null ||
+        active.nextPage != page ||
+        active.isLoading != true) {
+      return;
+    }
+    result.when(
+      success: (data, capabilities, metadata) {
+        if (data.tid != latest.tid || data.pid != pid || data.page != page) {
+          state = AsyncData(
+            latest.copyWith(
+              commentsByPostId: Map.unmodifiable({
+                ...latest.commentsByPostId,
+                pid: active.copyWith(
+                  isLoading: false,
+                  failure: ThreadPostCommentsFailure.other,
+                ),
+              }),
+            ),
+          );
+          return;
+        }
+        final ids = <String>{
+          for (final comment in activePost.comments)
+            if (comment.commentId != null) comment.commentId!,
+          for (final comment in active.comments)
+            if (comment.commentId != null) comment.commentId!,
+        };
+        final appended = <ThreadPostCommentEntry>[];
+        for (final comment in data.comments) {
+          final id = comment.commentId;
+          if (id == null || ids.add(id)) appended.add(comment);
+        }
+        state = AsyncData(
+          latest.copyWith(
+            commentsByPostId: Map.unmodifiable({
+              ...latest.commentsByPostId,
+              pid: active.copyWith(
+                comments: List.unmodifiable([...active.comments, ...appended]),
+                nextPage: data.nextPage,
+                clearNextPage: data.nextPage == null,
+                isLoading: false,
+                clearFailure: true,
+              ),
+            }),
+          ),
+        );
+      },
+      failure: (failure) {
+        state = AsyncData(
+          latest.copyWith(
+            commentsByPostId: Map.unmodifiable({
+              ...latest.commentsByPostId,
+              pid: active.copyWith(
+                isLoading: false,
+                failure: failure.kind == DataReadFailureKind.unauthorized
+                    ? ThreadPostCommentsFailure.loginRequired
+                    : failure.code == 'thread_post_comments_permission_denied'
+                    ? ThreadPostCommentsFailure.permissionDenied
+                    : ThreadPostCommentsFailure.other,
+              ),
+            }),
+          ),
+        );
+      },
+    );
+  }
+
   Future<DataReadResult<ThreadPostRateForm, ThreadPostRatingCapabilities>>
   loadRateForm(ThreadPost post) => ref
       .read(threadPostRatingServiceProvider)
@@ -769,6 +906,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     bool isCurrent() => ref.mounted && generation == _pageLoadGeneration;
     _ratingsContentGeneration += 1;
     _ratingsLoadTokens.clear();
+    _commentsContentGeneration += 1;
+    _commentsLoadTokens.clear();
     _logNative(
       'controller_load',
       'tid=${_args.tid} page=$page previous=${previous.length} '

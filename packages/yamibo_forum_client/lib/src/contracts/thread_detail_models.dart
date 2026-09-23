@@ -173,6 +173,7 @@ class ThreadPostCommentEntry {
     this.authorId,
     this.authorUrl,
     this.avatarUrl,
+    this.commentId,
   });
 
   /// Source-provided comment author display name.
@@ -192,6 +193,9 @@ class ThreadPostCommentEntry {
 
   /// Validated author avatar URL, when available.
   final String? avatarUrl;
+
+  /// Stable server comment identifier, when exposed by the template.
+  final String? commentId;
 }
 
 /// Source-neutral thread post.
@@ -215,6 +219,7 @@ class ThreadPost {
     this.poll,
     this.tagLinks = const <ThreadPostTagLink>[],
     this.comments = const <ThreadPostCommentEntry>[],
+    this.commentNextPage,
     this.attachmentImages = const <ForumPostAttachmentImage>[],
   });
 
@@ -268,6 +273,9 @@ class ThreadPost {
 
   /// Post comments in source order.
   final List<ThreadPostCommentEntry> comments;
+
+  /// Server-confirmed next comment page; null means no known continuation.
+  final int? commentNextPage;
 
   /// Raw Discuz attachment metadata. Entries may be images or non-image files.
   final List<ForumPostAttachmentImage> attachmentImages;

@@ -5,6 +5,104 @@ import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 import 'thread_detail_models.dart';
 
+/// One explicitly requested continuation page of post comments.
+final class ThreadPostCommentsQuery {
+  /// Creates a comment-page query.
+  const ThreadPostCommentsQuery({
+    required this.tid,
+    required this.pid,
+    required this.page,
+  });
+
+  /// Stable thread identifier.
+  final String tid;
+
+  /// Stable post identifier.
+  final String pid;
+
+  /// Server-confirmed one-based continuation page.
+  final int page;
+}
+
+/// Ordered comments and the next confirmed continuation, if any.
+final class ThreadPostCommentsPage {
+  /// Creates a comment page.
+  const ThreadPostCommentsPage({
+    required this.tid,
+    required this.pid,
+    required this.page,
+    required this.comments,
+    required this.nextPage,
+  });
+
+  /// Stable thread identifier.
+  final String tid;
+
+  /// Stable post identifier.
+  final String pid;
+
+  /// Confirmed page number.
+  final int page;
+
+  /// Comments in server order.
+  final List<ThreadPostCommentEntry> comments;
+
+  /// Next page from the server pager, or null at the end.
+  final int? nextPage;
+}
+
+/// Source capabilities for paginated post comments.
+enum ThreadPostCommentsCapability {
+  /// Post identity is verified.
+  stablePostIdentity,
+
+  /// Comment order is preserved.
+  orderedComments,
+
+  /// Server continuation is available.
+  continuation,
+
+  /// Stable comment IDs are extracted when present.
+  commentIdentity,
+}
+
+/// Capabilities declared by a comment-page source.
+final class ThreadPostCommentsSourceCapabilities {
+  /// Creates source capabilities.
+  const ThreadPostCommentsSourceCapabilities({required this.values});
+
+  /// Support map.
+  final DataCapabilitySet<ThreadPostCommentsCapability> values;
+
+  /// Converts to read capabilities.
+  ThreadPostCommentsReadCapabilities toReadCapabilities() =>
+      ThreadPostCommentsReadCapabilities(values: values);
+}
+
+/// Capabilities effective for a comment-page read.
+final class ThreadPostCommentsReadCapabilities {
+  /// Creates read capabilities.
+  const ThreadPostCommentsReadCapabilities({required this.values});
+
+  /// Support map.
+  final DataCapabilitySet<ThreadPostCommentsCapability> values;
+}
+
+/// Reads one post-comment continuation through the shared client.
+abstract interface class ThreadPostCommentsRepository {
+  /// Source capabilities.
+  ThreadPostCommentsSourceCapabilities get capabilities;
+
+  /// Reads one page without guessing subsequent pages.
+  Future<
+    DataReadResult<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>
+  >
+  load(
+    ThreadPostCommentsQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.networkFirst,
+  });
+}
+
 /// Query parameters for thread post ratings.
 final class ThreadPostRatingsQuery {
   /// Creates a [ThreadPostRatingsQuery].
