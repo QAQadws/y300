@@ -65,6 +65,124 @@ void main() {
   });
 
   group('paged surface chapter turns', () {
+    testWidgets('single page chapter exposes action without an extra page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: _FixedPlanPaginationCoordinator(pageCount: 1),
+          chapterInteractionsAvailable: true,
+          onOpenChapterInteractions: () {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('novel-reader-paged-chapter-interactions')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('novel-reader-paged-page-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('novel-reader-paged-page-1')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('tiny viewport keeps content and hides inline action', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(800, 120));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: _FixedPlanPaginationCoordinator(pageCount: 1),
+          chapterInteractionsAvailable: true,
+          onOpenChapterInteractions: () {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('novel-reader-paged-page-view')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('novel-reader-paged-chapter-interactions')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('chapter action appears only on a final last page', (
+      tester,
+    ) async {
+      final navigationController = NovelReaderPagedNavigationController();
+      addTearDown(navigationController.dispose);
+      var opens = 0;
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: _FixedPlanPaginationCoordinator(pageCount: 2),
+          navigationController: navigationController,
+          chapterInteractionsAvailable: true,
+          onOpenChapterInteractions: () => opens++,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('novel-reader-paged-chapter-interactions')),
+        findsNothing,
+      );
+      final firstInset = tester.widget<Padding>(
+        find.byKey(
+          const ValueKey<String>('novel-reader-paged-content-inset-0'),
+        ),
+      );
+      expect((firstInset.padding as EdgeInsets).bottom, greaterThan(48));
+
+      expect(navigationController.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      final action = find.byKey(
+        const Key('novel-reader-paged-chapter-interactions-button'),
+      );
+      expect(action, findsOneWidget);
+      final lastInset = tester.widget<Padding>(
+        find.byKey(
+          const ValueKey<String>('novel-reader-paged-content-inset-1'),
+        ),
+      );
+      expect(lastInset.padding, firstInset.padding);
+      expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
+      await tester.tap(action);
+      await tester.pump();
+      expect(opens, 1);
+    });
+
+    testWidgets('progressive provisional last page has no chapter action', (
+      tester,
+    ) async {
+      final coordinator = _GrowingPlanPaginationCoordinator();
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: coordinator,
+          chapterInteractionsAvailable: true,
+          onOpenChapterInteractions: () {},
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const Key('novel-reader-paged-chapter-interactions')),
+        findsNothing,
+      );
+      coordinator.complete();
+      await tester.pumpAndSettle();
+      await _advanceToLastPage(tester);
+      expect(
+        find.byKey(const Key('novel-reader-paged-chapter-interactions')),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('tap controller animates between pages and rejects overlap', (
       tester,
     ) async {
@@ -566,6 +684,8 @@ Widget _buildSurface({
   NovelReaderChapterTurnHandler? onTurnToAdjacentChapter,
   ValueChanged<NovelReaderChapterEntryRequest>? onChapterEntryApplied,
   ValueChanged<NovelReaderPaginationPosition>? onPositionChanged,
+  bool chapterInteractionsAvailable = false,
+  VoidCallback? onOpenChapterInteractions,
 }) {
   final preferences = NovelReaderPreferences.defaults().copyWith(
     flowMode: NovelReaderFlowMode.pagedLtr,
@@ -606,6 +726,8 @@ Widget _buildSurface({
         onChapterEntryApplied: onChapterEntryApplied,
         onTurnToAdjacentChapter: onTurnToAdjacentChapter,
         onPositionChanged: onPositionChanged,
+        chapterInteractionsAvailable: chapterInteractionsAvailable,
+        onOpenChapterInteractions: onOpenChapterInteractions,
         coordinatorBuilder:
             ({
               required BuildContext context,

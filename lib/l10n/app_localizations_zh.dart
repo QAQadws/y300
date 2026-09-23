@@ -1973,6 +1973,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelOpenSourceThread => '打开原帖';
 
   @override
+  String get novelViewChapterInteractions => '查看本章点评与评分';
+
+  @override
+  String get novelViewChapterInteractionsSemantics => '查看本章正文后的点评与评分';
+
+  @override
+  String get novelOpeningChapterInteractions => '正在打开本章点评与评分…';
+
+  @override
+  String get novelSaveReadingProgressFailed => '保存阅读进度失败，请重试';
+
+  @override
   String get novelCatalog => '目录';
 
   @override
@@ -6456,6 +6468,18 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelOpenSourceThread => '開啟原帖';
+
+  @override
+  String get novelViewChapterInteractions => '查看本章點評與評分';
+
+  @override
+  String get novelViewChapterInteractionsSemantics => '查看本章正文後的點評與評分';
+
+  @override
+  String get novelOpeningChapterInteractions => '正在開啟本章點評與評分…';
+
+  @override
+  String get novelSaveReadingProgressFailed => '儲存閱讀進度失敗，請重試';
 
   @override
   String get novelCatalog => '目錄';

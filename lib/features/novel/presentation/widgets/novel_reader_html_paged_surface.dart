@@ -31,6 +31,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_chapter_interactions_button.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
@@ -105,6 +106,9 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.onOpenImage,
     this.onImageFallback,
     this.onContentInteraction,
+    this.chapterInteractionsAvailable = false,
+    this.chapterInteractionsBusy = false,
+    this.onOpenChapterInteractions,
     this.onFallbackToVertical,
     this.onPositionChanged,
     this.onContentReady,
@@ -154,6 +158,9 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
   final VoidCallback? onContentInteraction;
+  final bool chapterInteractionsAvailable;
+  final bool chapterInteractionsBusy;
+  final VoidCallback? onOpenChapterInteractions;
   final VoidCallback? onFallbackToVertical;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final VoidCallback? onContentReady;
@@ -265,10 +272,39 @@ class _NovelReaderHtmlPagedSurfaceState
                 ),
               )
               .toDouble();
+          final textScaler = MediaQuery.textScalerOf(context);
+          final actionLabelLineHeight =
+              textScaler.scale(
+                Theme.of(context).textTheme.labelLarge?.fontSize ?? 14,
+              ) *
+              (Theme.of(context).textTheme.labelLarge?.height ?? 1.3);
+          final desiredActionRailHeight = math.max(
+            56.0,
+            actionLabelLineHeight * 2 + 20,
+          );
+          // The rail participates in the pagination key on every page. A tiny
+          // viewport keeps enough room for readable body content and uses the
+          // menu action instead of rendering an inline button.
+          final actionRailHeight =
+              widget.chapterInteractionsAvailable &&
+                  availableHeight -
+                          pageIndicatorReservedHeight -
+                          NovelReaderPagedIndicatorLayout.rendererSafetyInset -
+                          desiredActionRailHeight >=
+                      math.max(
+                        72.0,
+                        textScaler.scale(
+                              widget.typography.body.fontSize ?? 16,
+                            ) *
+                            3,
+                      )
+              ? desiredActionRailHeight
+              : 0.0;
           final paginationHeight =
               availableHeight -
               pageIndicatorReservedHeight -
-              NovelReaderPagedIndicatorLayout.rendererSafetyInset;
+              NovelReaderPagedIndicatorLayout.rendererSafetyInset -
+              actionRailHeight;
           final contentMaxWidth = widget.typography.contentMaxWidth < 160
               ? 160
               : widget.typography.contentMaxWidth;
@@ -470,7 +506,15 @@ class _NovelReaderHtmlPagedSurfaceState
                           contentBottomInset:
                               pageIndicatorReservedHeight +
                               NovelReaderPagedIndicatorLayout
-                                  .rendererSafetyInset,
+                                  .rendererSafetyInset +
+                              actionRailHeight,
+                          pageIndicatorReservedHeight:
+                              pageIndicatorReservedHeight,
+                          actionRailHeight: actionRailHeight,
+                          chapterInteractionsBusy:
+                              widget.chapterInteractionsBusy,
+                          onOpenChapterInteractions:
+                              widget.onOpenChapterInteractions,
                           theme: widget.theme,
                           htmlPreferences: htmlPreferences,
                           typography: widget.typography,
@@ -1054,6 +1098,10 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     this.chapterTurnIsInFlight = false,
     this.onTurnToAdjacentChapter,
     required this.contentBottomInset,
+    required this.pageIndicatorReservedHeight,
+    required this.actionRailHeight,
+    required this.chapterInteractionsBusy,
+    this.onOpenChapterInteractions,
     required this.theme,
     required this.htmlPreferences,
     required this.typography,
@@ -1085,6 +1133,10 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final bool chapterTurnIsInFlight;
   final NovelReaderChapterTurnHandler? onTurnToAdjacentChapter;
   final double contentBottomInset;
+  final double pageIndicatorReservedHeight;
+  final double actionRailHeight;
+  final bool chapterInteractionsBusy;
+  final VoidCallback? onOpenChapterInteractions;
   final ForumHtmlThemeContext theme;
   final ForumHtmlReaderPreferences htmlPreferences;
   final NovelReaderTypography typography;
@@ -1289,6 +1341,30 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
             hint: _chapterTurnHint,
             bottomInset: widget.contentBottomInset,
           ),
+          if (widget.actionRailHeight >= 48 &&
+              widget.isPageCountFinal &&
+              _currentPage == pageCount - 1 &&
+              widget.onOpenChapterInteractions != null)
+            Positioned(
+              key: const Key('novel-reader-paged-chapter-interactions'),
+              left: 4,
+              right: 4,
+              bottom: widget.pageIndicatorReservedHeight,
+              height: widget.actionRailHeight,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: NovelReaderChapterInteractionsButton(
+                    key: const Key(
+                      'novel-reader-paged-chapter-interactions-button',
+                    ),
+                    busy: widget.chapterInteractionsBusy,
+                    onPointerDown: widget.onContentInteraction,
+                    onPressed: widget.onOpenChapterInteractions!,
+                  ),
+                ),
+              ),
+            ),
           if (widget.showProgressIndicator)
             Positioned(
               key: const Key('novel-reader-page-indicator'),

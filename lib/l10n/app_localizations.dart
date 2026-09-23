@@ -3206,6 +3206,30 @@ abstract class AppLocalizations {
   /// **'打开原帖'**
   String get novelOpenSourceThread;
 
+  /// No description provided for @novelViewChapterInteractions.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看本章点评与评分'**
+  String get novelViewChapterInteractions;
+
+  /// No description provided for @novelViewChapterInteractionsSemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看本章正文后的点评与评分'**
+  String get novelViewChapterInteractionsSemantics;
+
+  /// No description provided for @novelOpeningChapterInteractions.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在打开本章点评与评分…'**
+  String get novelOpeningChapterInteractions;
+
+  /// No description provided for @novelSaveReadingProgressFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存阅读进度失败，请重试'**
+  String get novelSaveReadingProgressFailed;
+
   /// No description provided for @novelCatalog.
   ///
   /// In zh, this message translates to:

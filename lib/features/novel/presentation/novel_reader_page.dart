@@ -33,6 +33,7 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_display_se
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_chapter_interactions_button.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -100,6 +101,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   String? _readyReaderSurfaceIdentity;
   final _postRouteSession = ThreadPostNavigationSession();
   String? _postRouteOwner;
+  String? _chapterInteractionsPendingOwner;
+  ThreadPostTarget? _chapterInteractionsPendingTarget;
 
   NovelReaderArgs get _args => NovelReaderArgs(
     novelId: widget.novelId,
@@ -192,6 +195,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             if (_postRouteOwner != readerSurfaceIdentity) {
               _postRouteOwner = readerSurfaceIdentity;
               _postRouteSession.invalidate();
+              _chapterInteractionsPendingOwner = null;
+              _chapterInteractionsPendingTarget = null;
+            } else if (_chapterInteractionsPendingOwner ==
+                    readerSurfaceIdentity &&
+                _chapterInteractionsPendingTarget !=
+                    _chapterInteractionsTarget(viewState)) {
+              _postRouteSession.invalidate();
+              _chapterInteractionsPendingOwner = null;
+              _chapterInteractionsPendingTarget = null;
             }
             final restoreOwner = _verticalRestoreOwnerFor(
               readerSurfaceIdentity,
@@ -398,6 +410,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   ReaderTopBarConfig _buildTopBarConfig(NovelReaderViewState viewState) {
     final l10n = AppLocalizations.of(context);
+    final surfaceIdentity = _readerSurfaceIdentity(viewState);
+    final chapterTarget = _chapterInteractionsTarget(viewState);
     return ReaderTopBarConfig(
       title: _novelTitle(viewState),
       subtitle: NovelTextResolver.chapterTitle(
@@ -423,6 +437,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           label: l10n.novelOpenSourceThread,
           onPressed: () => _openSourceThread(viewState),
         ),
+        if (chapterTarget != null)
+          ReaderToolbarAction(
+            id: 'chapter-interactions',
+            icon: Icons.rate_review_outlined,
+            label: _chapterInteractionsPendingOwner == surfaceIdentity
+                ? l10n.novelOpeningChapterInteractions
+                : l10n.novelViewChapterInteractions,
+            enabled: _chapterInteractionsPendingOwner != surfaceIdentity,
+            onPressed: () => _openChapterInteractions(surfaceIdentity),
+          ),
       ],
     );
   }
@@ -612,6 +636,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     ReaderChromeInsets chromeInsets, {
     required String surfaceIdentity,
   }) {
+    final chapterInteractionsAvailable =
+        _chapterInteractionsTarget(viewState) != null;
+    final chapterInteractionsBusy =
+        _chapterInteractionsPendingOwner == surfaceIdentity;
     if (viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
       return NovelReaderHtmlPagedSurface(
         preparedChapterCache: _preparedChapterCache,
@@ -623,6 +651,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         imageReferer: _imageRefererFor(viewState),
         progressSnapshot: viewState.progressSnapshot,
         chromeInsets: chromeInsets,
+        chapterInteractionsAvailable: chapterInteractionsAvailable,
+        chapterInteractionsBusy: chapterInteractionsBusy,
+        onOpenChapterInteractions: () =>
+            _openChapterInteractions(surfaceIdentity),
         semanticDocument: viewState.document,
         pageSeekRequest: _pendingPageSeekRequest,
         navigationController: _pagedNavigationController,
@@ -749,6 +781,22 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           }
         },
       ),
+      if (chapterInteractionsAvailable)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.only(
+              top: viewState.preferences.paragraphSpacing * 2,
+            ),
+            child: Center(
+              child: NovelReaderChapterInteractionsButton(
+                key: const Key('novel-reader-vertical-chapter-interactions'),
+                busy: chapterInteractionsBusy,
+                onPointerDown: _cancelPendingReaderTap,
+                onPressed: () => _openChapterInteractions(surfaceIdentity),
+              ),
+            ),
+          ),
+        ),
       if (viewState.nextEpisode != null)
         SliverToBoxAdapter(
           child: Padding(
@@ -1558,6 +1606,91 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             ThreadDetailPage(tid: tid, subject: _novelTitle(viewState)),
       ),
     );
+  }
+
+  ThreadPostTarget? _chapterInteractionsTarget(NovelReaderViewState viewState) {
+    final target = ThreadPostTarget(
+      tid: viewState.currentEpisode.sourceTid,
+      pid: viewState.currentEpisode.sourcePid ?? '',
+      landing: ThreadPostLanding.bodyEnd,
+    );
+    return target.isValid ? target : null;
+  }
+
+  Future<void> _openChapterInteractions(String surfaceIdentity) async {
+    _cancelPendingReaderTap();
+    if (!_isCurrentReaderSurface(surfaceIdentity)) {
+      return;
+    }
+    final viewState = ref
+        .read(novelReaderControllerProvider(_args))
+        .asData
+        ?.value;
+    final target = viewState == null
+        ? null
+        : _chapterInteractionsTarget(viewState);
+    if (target == null) return;
+    if (_chapterInteractionsPendingOwner == surfaceIdentity &&
+        _chapterInteractionsPendingTarget == target) {
+      return;
+    }
+    if (_chapterInteractionsPendingOwner == surfaceIdentity) {
+      _postRouteSession.invalidate();
+    }
+    setState(() {
+      _chapterInteractionsPendingOwner = surfaceIdentity;
+      _chapterInteractionsPendingTarget = target;
+    });
+    _overlayController.hideMenu();
+    try {
+      try {
+        await _saveVisibleProgressNow(reason: 'before_chapter_interactions');
+      } catch (_) {
+        if (mounted && _isCurrentReaderSurface(surfaceIdentity)) {
+          _showReaderSnackBar(
+            AppLocalizations.of(context).novelSaveReadingProgressFailed,
+          );
+        }
+        return;
+      }
+      if (!_isCurrentReaderSurface(surfaceIdentity)) return;
+      final current = ref
+          .read(novelReaderControllerProvider(_args))
+          .asData
+          ?.value;
+      if (current == null || _chapterInteractionsTarget(current) != target) {
+        return;
+      }
+      if (!mounted) return;
+      await launchThreadPostRoute(
+        context: context,
+        session: _postRouteSession,
+        resolver: ref.read(threadPostRouteResolverProvider),
+        target: target,
+        subject: NovelTextResolver.chapterTitle(
+          AppLocalizations.of(context),
+          current.currentEpisode.episodeTitle,
+          current.currentEpisode.sourceTid,
+        ),
+        isCurrent: () {
+          if (!_isCurrentReaderSurface(surfaceIdentity)) return false;
+          final latest = ref
+              .read(novelReaderControllerProvider(_args))
+              .asData
+              ?.value;
+          return latest != null && _chapterInteractionsTarget(latest) == target;
+        },
+      );
+    } finally {
+      if (mounted &&
+          _chapterInteractionsPendingOwner == surfaceIdentity &&
+          _chapterInteractionsPendingTarget == target) {
+        setState(() {
+          _chapterInteractionsPendingOwner = null;
+          _chapterInteractionsPendingTarget = null;
+        });
+      }
+    }
   }
 
   String _imageRefererFor(NovelReaderViewState viewState) {
