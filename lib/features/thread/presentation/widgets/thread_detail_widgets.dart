@@ -10,6 +10,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
@@ -52,6 +53,8 @@ class ThreadDetailContent extends StatefulWidget {
     this.scrollController,
     this.highlightPostPid,
     this.targetPid,
+    this.landing = ThreadPostLanding.top,
+    this.onTargetVisible,
     required this.imageReferer,
     required this.onLoadPreviousPage,
     required this.onLoadNextPage,
@@ -76,6 +79,8 @@ class ThreadDetailContent extends StatefulWidget {
   final ScrollController? scrollController;
   final String? highlightPostPid;
   final String? targetPid;
+  final ThreadPostLanding landing;
+  final ValueChanged<String>? onTargetVisible;
   final String imageReferer;
   final VoidCallback onLoadPreviousPage;
   final VoidCallback onLoadNextPage;
@@ -111,6 +116,10 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   final GlobalKey _targetCenterKey = GlobalKey(
     debugLabel: 'thread-detail-target-center',
   );
+  final GlobalKey _targetVisibilityKey = GlobalKey(
+    debugLabel: 'thread-detail-target-visible',
+  );
+  String? _reportedTargetIdentity;
   late ThreadDetailScrollStabilizer _scrollStabilizer;
   late ThreadPostViewportAnchorCoordinator _projectionAnchorCoordinator;
   ThreadImageViewportCoordinator? _imageViewportCoordinator;
@@ -149,6 +158,11 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   @override
   void didUpdateWidget(covariant ThreadDetailContent oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.tid != widget.state.tid ||
+        oldWidget.targetPid != widget.targetPid ||
+        oldWidget.landing != widget.landing) {
+      _reportedTargetIdentity = null;
+    }
     final oldProjection = oldWidget.projection;
     final newProjection = widget.projection;
     final shouldRestoreProjectionAnchor =
@@ -240,6 +254,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     final entries = _entryPlanner.buildProjectionEntries(
       posts: _postProjections,
       targetPid: widget.targetPid,
+      landing: widget.landing,
     );
     _projectionAnchorCoordinator.prune(
       _postProjections.map((post) => post.sourcePost.pid),
@@ -250,7 +265,10 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         ? -1
         : entries.indexWhere(
             (entry) =>
-                entry.kind == ThreadDetailRenderEntryKind.postCard &&
+                entry.kind ==
+                    (widget.landing == ThreadPostLanding.bodyEnd
+                        ? ThreadDetailRenderEntryKind.postFooter
+                        : ThreadDetailRenderEntryKind.postCard) &&
                 entry.sourcePost?.pid == targetPid,
           );
     if (targetEntryIndex >= 0) {
@@ -316,49 +334,103 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     required int targetEntryIndex,
     required ThreadDetailNativePalette palette,
   }) {
+    final atBodyEnd = widget.landing == ThreadPostLanding.bodyEnd;
+    _scheduleTargetVisibilityCheck();
     return SizedBox.expand(
       key: _viewportKey,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: ForumContentSpacing.pageHorizontal,
-        ),
-        child: CustomScrollView(
-          key: const Key('thread-detail-list'),
-          controller: widget.scrollController,
-          physics: ForumPullToRefresh.scrollPhysics,
-          center: _targetCenterKey,
-          scrollCacheExtent: const ScrollCacheExtent.pixels(900),
-          semanticChildCount: entries.length,
-          slivers: [
-            _buildTargetEntrySliver(
-              entries: entries,
-              start: 0,
-              count: targetEntryIndex,
-              reverse: true,
-              stabilizeImageLayout: false,
-              addPageTopPadding: true,
-              palette: palette,
-            ),
-            SliverPadding(
-              key: _targetCenterKey,
-              padding: const EdgeInsets.only(
-                top: ForumContentSpacing.listTop,
-                bottom: ForumContentSpacing.listBottom,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final height = constraints.maxHeight.isFinite
+              ? constraints.maxHeight
+              : MediaQuery.sizeOf(context).height;
+          final textStyle = Theme.of(context).textTheme.bodyMedium;
+          final lineHeight =
+              MediaQuery.textScalerOf(
+                context,
+              ).scale(textStyle?.fontSize ?? 14) *
+              (textStyle?.height ?? 1.5);
+          // The footer starts below a small, viewport-relative glimpse of
+          // the rendered body; the center remains stable as that body grows.
+          final reveal = atBodyEnd
+              ? (lineHeight * 2.5).clamp(height * 0.06, height * 0.18)
+              : 0.0;
+          return NotificationListener<ScrollNotification>(
+            onNotification: (_) {
+              _scheduleTargetVisibilityCheck();
+              return false;
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: ForumContentSpacing.pageHorizontal,
               ),
-              sliver: _buildTargetEntrySliver(
-                entries: entries,
-                start: targetEntryIndex,
-                count: entries.length - targetEntryIndex,
-                reverse: false,
-                stabilizeImageLayout: true,
-                addPageTopPadding: false,
-                palette: palette,
+              child: CustomScrollView(
+                key: const Key('thread-detail-list'),
+                controller: widget.scrollController,
+                physics: ForumPullToRefresh.scrollPhysics,
+                center: _targetCenterKey,
+                anchor: height <= 0 ? 0 : reveal / height,
+                scrollCacheExtent: const ScrollCacheExtent.pixels(900),
+                semanticChildCount: entries.length,
+                slivers: [
+                  _buildTargetEntrySliver(
+                    entries: entries,
+                    start: 0,
+                    count: targetEntryIndex,
+                    reverse: true,
+                    stabilizeImageLayout: false,
+                    addPageTopPadding: true,
+                    palette: palette,
+                  ),
+                  SliverPadding(
+                    key: _targetCenterKey,
+                    padding: EdgeInsets.only(
+                      top: atBodyEnd ? 0 : ForumContentSpacing.listTop,
+                      bottom: ForumContentSpacing.listBottom,
+                    ),
+                    sliver: _buildTargetEntrySliver(
+                      entries: entries,
+                      start: targetEntryIndex,
+                      count: entries.length - targetEntryIndex,
+                      reverse: false,
+                      stabilizeImageLayout: true,
+                      addPageTopPadding: false,
+                      palette: palette,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
+  }
+
+  void _scheduleTargetVisibilityCheck() {
+    final pid = widget.targetPid?.trim();
+    if (pid == null || pid.isEmpty || widget.onTargetVisible == null) return;
+    final identity = '${widget.state.tid}:$pid:${widget.landing.name}';
+    if (_reportedTargetIdentity == identity) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.targetPid?.trim() != pid ||
+          '${widget.state.tid}:$pid:${widget.landing.name}' != identity ||
+          _reportedTargetIdentity == identity) {
+        return;
+      }
+      final viewport = _viewportKey.currentContext?.findRenderObject();
+      final marker = _targetVisibilityKey.currentContext?.findRenderObject();
+      if (viewport is! RenderBox || marker is! RenderBox || !marker.attached) {
+        return;
+      }
+      final top = marker.localToGlobal(Offset.zero, ancestor: viewport).dy;
+      // A built keep-alive child can be offscreen. Highlight only after its
+      // landing edge is actually visible, and report it once per destination.
+      if (top >= -1 && top < viewport.size.height) {
+        _reportedTargetIdentity = identity;
+        widget.onTargetVisible?.call(pid);
+      }
+    });
   }
 
   SliverList _buildTargetEntrySliver({
@@ -383,6 +455,21 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
             palette,
             stabilizeImageLayout: stabilizeImageLayout,
           );
+          if (entry.sourcePost?.pid == widget.targetPid?.trim() &&
+              (entry.kind == ThreadDetailRenderEntryKind.postFooter &&
+                      widget.landing == ThreadPostLanding.bodyEnd ||
+                  entry.kind == ThreadDetailRenderEntryKind.postCard &&
+                      widget.landing == ThreadPostLanding.top)) {
+            child = KeyedSubtree(key: _targetVisibilityKey, child: child);
+          }
+          if (entry.kind == ThreadDetailRenderEntryKind.postHeader ||
+              entry.kind == ThreadDetailRenderEntryKind.postBody ||
+              entry.kind == ThreadDetailRenderEntryKind.postFooter) {
+            child = _TargetPostSegmentKeepAlive(
+              key: Key('keep-alive-${entry.key}'),
+              child: child,
+            );
+          }
           if (addPageTopPadding && entryIndex == 0) {
             child = Padding(
               padding: const EdgeInsets.only(top: ForumContentSpacing.listTop),
@@ -508,24 +595,27 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         );
       case ThreadDetailRenderEntryKind.postFooter:
         final plan = _entryPlanner.planFor(entry.displayPost!);
-        return _ThreadPostCardFooterEntry(
-          key: Key(entry.key),
-          sourcePost: entry.sourcePost!,
-          displayPost: entry.displayPost!,
-          displayRatingsByPostId:
-              widget.projection?.displayRatingsByPostId ??
-              widget.state.ratingsByPostId,
-          state: widget.state,
-          plan: plan,
-          highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
-          imageReferer: widget.imageReferer,
-          onOpenPostActions: widget.onOpenPostActions,
-          onOpenPostLink: widget.onOpenPostLink,
-          onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
-          onTogglePollOption: widget.onTogglePollOption,
-          onSubmitPollVote: widget.onSubmitPollVote,
-          onLoadAllRatings: widget.onLoadAllRatings ?? _ignoreRatingLoad,
-          palette: palette,
+        return KeyedSubtree(
+          key: _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
+          child: _ThreadPostCardFooterEntry(
+            key: Key(entry.key),
+            sourcePost: entry.sourcePost!,
+            displayPost: entry.displayPost!,
+            displayRatingsByPostId:
+                widget.projection?.displayRatingsByPostId ??
+                widget.state.ratingsByPostId,
+            state: widget.state,
+            plan: plan,
+            highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
+            imageReferer: widget.imageReferer,
+            onOpenPostActions: widget.onOpenPostActions,
+            onOpenPostLink: widget.onOpenPostLink,
+            onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
+            onTogglePollOption: widget.onTogglePollOption,
+            onSubmitPollVote: widget.onSubmitPollVote,
+            onLoadAllRatings: widget.onLoadAllRatings ?? _ignoreRatingLoad,
+            palette: palette,
+          ),
         );
       case ThreadDetailRenderEntryKind.pagination:
         return ThreadLoadMoreSection(
@@ -590,6 +680,29 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       request: request,
       size: size,
     );
+  }
+}
+
+class _TargetPostSegmentKeepAlive extends StatefulWidget {
+  const _TargetPostSegmentKeepAlive({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_TargetPostSegmentKeepAlive> createState() =>
+      _TargetPostSegmentKeepAliveState();
+}
+
+class _TargetPostSegmentKeepAliveState
+    extends State<_TargetPostSegmentKeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
 

@@ -27,6 +27,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
@@ -57,13 +58,19 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
     this.subject = '',
     this.initialPage,
     this.targetPid,
+    this.landing = ThreadPostLanding.top,
     this.initialForumName,
-  });
+  }) : assert(
+         landing == ThreadPostLanding.top ||
+             (targetPid != null && targetPid != ''),
+         'A body-end landing requires a target post.',
+       );
 
   final String tid;
   final String subject;
   final int? initialPage;
   final String? targetPid;
+  final ThreadPostLanding landing;
   final String? initialForumName;
 
   @override
@@ -75,6 +82,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   late final ThreadDetailQuickScrollCoordinator _quickScrollCoordinator;
   Timer? _highlightClearTimer;
   String? _highlightPostPid;
+  bool _targetHighlightStarted = false;
   String? _latestImageReferer;
   bool _quickScrollMetricsSyncScheduled = false;
 
@@ -96,7 +104,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     _quickScrollCoordinator = ThreadDetailQuickScrollCoordinator(
       scrollController: _scrollController,
     );
-    _activateTargetHighlight(widget.targetPid);
   }
 
   @override
@@ -104,11 +111,16 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tid != widget.tid ||
         oldWidget.targetPid != widget.targetPid ||
-        oldWidget.initialPage != widget.initialPage) {
+        oldWidget.initialPage != widget.initialPage ||
+        oldWidget.landing != widget.landing) {
       _postRouteSession.invalidate();
     }
-    if (oldWidget.targetPid?.trim() != widget.targetPid?.trim()) {
-      _activateTargetHighlight(widget.targetPid);
+    if (oldWidget.tid != widget.tid ||
+        oldWidget.targetPid?.trim() != widget.targetPid?.trim() ||
+        oldWidget.landing != widget.landing) {
+      _highlightClearTimer?.cancel();
+      _highlightPostPid = null;
+      _targetHighlightStarted = false;
     }
   }
 
@@ -304,6 +316,8 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                           scrollController: _scrollController,
                           highlightPostPid: _highlightPostPid,
                           targetPid: widget.targetPid,
+                          landing: widget.landing,
+                          onTargetVisible: _onTargetVisible,
                           imageReferer: _imageRefererFor(state),
                           imageDimensionStore: _imageDimensionStore,
                           onLoadPreviousPage: () {
@@ -689,13 +703,14 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   void _openCommentAuthorProfile(ThreadPostCommentEntry comment) =>
       _postNavigation.openCommentAuthor(comment);
 
-  void _activateTargetHighlight(String? rawPid) {
-    _highlightClearTimer?.cancel();
-    final pid = rawPid?.trim();
-    _highlightPostPid = pid == null || pid.isEmpty ? null : pid;
-    if (_highlightPostPid == null) {
+  void _onTargetVisible(String pid) {
+    if (!mounted ||
+        _targetHighlightStarted ||
+        widget.targetPid?.trim() != pid) {
       return;
     }
+    _targetHighlightStarted = true;
+    setState(() => _highlightPostPid = pid);
     _highlightClearTimer = Timer(const Duration(milliseconds: 1500), () {
       if (mounted && _highlightPostPid == pid) {
         setState(() => _highlightPostPid = null);

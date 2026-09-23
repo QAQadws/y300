@@ -64,6 +64,9 @@ import 'package:y300/features/thread/data/repositories/thread_post_ratings_repos
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -72,6 +75,7 @@ import 'package:y300/features/thread/presentation/html_rendering/thread_post_htm
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
@@ -3330,6 +3334,318 @@ void main() {
         );
       },
     );
+
+    testWidgets('body-end landing reveals the target body above its footer', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 520);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final repository = _FakeThreadRepository(
+        (tid, page) async => ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '正文末尾定位',
+            author: 'author',
+            replies: 1,
+            views: 12,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'before',
+                author: 'author',
+                authorId: '1',
+                message: List.generate(70, (i) => '<p>前楼 $i</p>').join(),
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+              ThreadPost(
+                pid: 'target',
+                author: 'author',
+                authorId: '1',
+                message: List.generate(45, (i) => '<p>目标正文 $i</p>').join(),
+                number: 2,
+                isFirst: false,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final textScale = ValueNotifier<double>(1);
+      addTearDown(textScale.dispose);
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          home: ValueListenableBuilder<double>(
+            valueListenable: textScale,
+            builder: (context, scale, _) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: const ThreadDetailPage(
+                tid: '100',
+                targetPid: 'target',
+                landing: ThreadPostLanding.bodyEnd,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final viewport = find.byKey(const Key('thread-detail-list'));
+      final body = find.byKey(const Key('thread-post-body-entry-target'));
+      final footer = find.byKey(const Key('thread-post-footer-entry-target'));
+      expect(body, findsOneWidget);
+      expect(footer, findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-post-card-entry-before')),
+        findsNothing,
+      );
+      final viewportTop = tester.getTopLeft(viewport).dy;
+      final footerTop = tester.getTopLeft(footer).dy;
+      final viewportHeight = tester.getSize(viewport).height;
+      expect(
+        footerTop - viewportTop,
+        inInclusiveRange(25, viewportHeight * 0.18 + 2),
+      );
+      expect(tester.getBottomLeft(body).dy, closeTo(footerTop, 1));
+      final initialAnchor = tester.widget<CustomScrollView>(viewport).anchor;
+      expect(initialAnchor, greaterThan(0));
+
+      await _longPressVisibleTop(tester, footer);
+      await _pumpThreadUiTransition(tester);
+      expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
+      Navigator.of(
+        tester.element(find.byKey(const Key('thread-post-action-sheet'))),
+      ).pop();
+      await tester.pumpAndSettle();
+
+      await tester.drag(viewport, const Offset(0, -90));
+      await tester.pumpAndSettle();
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(of: viewport, matching: find.byType(Scrollable)),
+      );
+      final scrolledPixels = scrollable.position.pixels;
+      expect(scrolledPixels, greaterThan(0));
+      textScale.value = 1.4;
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<CustomScrollView>(viewport).anchor,
+        greaterThan(initialAnchor),
+      );
+      expect(scrollable.position.pixels, closeTo(scrolledPixels, 1));
+    });
+
+    testWidgets('body-end landing keeps an empty footer on a short last post', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository(
+        (tid, page) async => ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '短正文定位',
+            author: 'author',
+            replies: 0,
+            views: 12,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'only',
+                author: 'author',
+                authorId: '1',
+                message: '<p>短正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          home: const ThreadDetailPage(
+            tid: '100',
+            targetPid: 'only',
+            landing: ThreadPostLanding.bodyEnd,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final footer = find.byKey(const Key('thread-post-footer-entry-only'));
+      final body = find.byKey(const Key('thread-post-body-entry-only'));
+      expect(footer, findsOneWidget);
+      expect(
+        tester.getBottomLeft(body).dy,
+        closeTo(tester.getTopLeft(footer).dy, 1),
+      );
+      expect(
+        find.byKey(const Key('thread-detail-target-scroll-spacer')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('late body image dimensions keep the footer landing stable', (
+      tester,
+    ) async {
+      const message =
+          '<p>章节末段</p>'
+          '<img file="data/attachment/forum/late.jpg">'
+          '<p>正文最后一行</p>';
+      final post = ThreadPost(
+        pid: 'image-target',
+        author: 'alice',
+        authorId: '1',
+        message: message,
+        number: 1,
+        isFirst: true,
+        dateline: 'today',
+      );
+      final state = ThreadDetailPageState.initial(
+        tid: '100',
+        subject: '图片定位',
+      ).copyWith(posts: [post]);
+      final image = const ThreadPostBodyRenderPlanner()
+          .plan(message)
+          .images
+          .single;
+      final imageKey = ThreadPostResourceLayoutHints.blockImageKey(image);
+      final dimensions = ThreadPostImageDimensionStore();
+      final controller = ScrollController();
+      addTearDown(dimensions.dispose);
+      addTearDown(controller.dispose);
+      var visibleCount = 0;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _NoopImageCacheService(),
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: Scaffold(
+              body: ThreadDetailContent(
+                state: state,
+                scrollController: controller,
+                targetPid: post.pid,
+                landing: ThreadPostLanding.bodyEnd,
+                onTargetVisible: (_) => visibleCount++,
+                imageDimensionStore: dimensions,
+                imageReferer:
+                    'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+                onLoadPreviousPage: () {},
+                onLoadNextPage: () {},
+                onLoadPageNumber: (_) {},
+                onOpenAuthorProfile: (_) {},
+                onOpenCommentAuthorProfile: (_) {},
+                onCopyActionUrl: (_, _) {},
+                onOpenPostLink: (_) {},
+                onOpenPostActions: (_, _) {},
+                onTogglePollOption: (_, _) {},
+                onSubmitPollVote: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final footer = find.byKey(
+        const Key('thread-post-footer-entry-image-target'),
+      );
+      final initialTop = tester.getTopLeft(footer).dy;
+      expect(visibleCount, 1);
+
+      dimensions.recordAll(
+        blockDimensions: {
+          imageKey: const ThreadPostResourceDimension(width: 100, height: 280),
+        },
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(footer).dy, closeTo(initialTop, 1));
+      expect(controller.offset, closeTo(0, 1));
+      expect(visibleCount, 1);
+    });
+
+    testWidgets('rating expansion does not move a body-end landing', (
+      tester,
+    ) async {
+      final ratings = _FakeThreadPostRatingsRepository();
+      final repository = _FakeThreadRepository(
+        (tid, page) async => ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '评分定位',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'rated',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文尾声</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                ratingSummary: const ThreadPostRatingSummary(
+                  participantText: '参与人数 1',
+                  scoreText: '积分 +2',
+                  viewAllUrl:
+                      'https://bbs.yamibo.com/forum.php?mod=misc&action=viewratings&tid=100&pid=rated',
+                  ratings: [
+                    ThreadPostRating(
+                      userName: '预览用户',
+                      score: '+2',
+                      reason: '预览理由',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          postRatingsRepository: ratings,
+          home: const ThreadDetailPage(
+            tid: '100',
+            targetPid: 'rated',
+            landing: ThreadPostLanding.bodyEnd,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final footer = find.byKey(const Key('thread-post-footer-entry-rated'));
+      final initialTop = tester.getTopLeft(footer).dy;
+      await tester.tap(find.byKey(const Key('thread-post-rating-body')));
+      await tester.pumpAndSettle();
+      expect(ratings.loadCount, 1);
+      expect(find.text('完整评分用户'), findsOneWidget);
+      expect(tester.getTopLeft(footer).dy, closeTo(initialTop, 1));
+    });
 
     testWidgets('locates findpost link before opening native thread page', (
       tester,

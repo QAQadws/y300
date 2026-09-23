@@ -18,6 +18,23 @@ void main() {
     expect(locator.calls, 0);
   });
 
+  test('visual landing does not change the findpost request', () async {
+    final top = ThreadPostTarget(tid: '100', pid: '200');
+    final bodyEnd = ThreadPostTarget(
+      tid: '100',
+      pid: '200',
+      landing: ThreadPostLanding.bodyEnd,
+    );
+    final topLocator = _Locator();
+    final bodyEndLocator = _Locator();
+
+    await ThreadPostRouteResolver(topLocator).resolve(top);
+    await ThreadPostRouteResolver(bodyEndLocator).resolve(bodyEnd);
+
+    expect(top, isNot(bodyEnd));
+    expect(topLocator.sourceUri, bodyEndLocator.sourceUri);
+  });
+
   for (final parameter in [
     'authorid=10',
     'ordertype=1',

@@ -21,7 +21,7 @@ Future<void> launchThreadPostRoute({
 }) {
   final ownerRoute = ModalRoute.of(context);
   return session.run(
-    key: (target.tid, target.pid),
+    key: (target.tid, target.pid, target.landing),
     isCurrent: () => context.mounted && isCurrent(),
     action: (current) async {
       while (current() && (ownerRoute?.isCurrent ?? true)) {
@@ -47,6 +47,7 @@ Future<void> launchThreadPostRoute({
               builder: (_) => ThreadDetailPage(
                 tid: data.tid,
                 targetPid: data.pid,
+                landing: target.landing,
                 initialPage: data.page,
                 subject: subject,
               ),
