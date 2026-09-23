@@ -104,6 +104,93 @@ void main() {
     expect(invalidations, 0);
   });
 
+  test('verified initial handoff avoids the ordinary detail read', () async {
+    final locator = _Locator();
+    final handoff = _Handoff();
+    var reads = 0;
+    var handoffReads = 0;
+    final result =
+        await ThreadPostTargetLoader(
+          readPage: (page) async {
+            reads++;
+            return _page(page);
+          },
+          readHandoff: (candidate, page) async {
+            expect(candidate, same(handoff));
+            handoffReads++;
+            return _page(page);
+          },
+          resolver: ThreadPostRouteResolver(locator),
+          invalidate: () async => fail('unexpected invalidation'),
+        ).load(
+          target: target,
+          page: 3,
+          initialHandoff: handoff,
+          isCurrent: () => true,
+        );
+    expect(result.dataOrNull?.posts.single.pid, '200');
+    expect((reads, handoffReads, locator.calls), (0, 1, 0));
+  });
+
+  test(
+    'rejected initial handoff falls back to the ordinary detail read',
+    () async {
+      var reads = 0;
+      final result =
+          await ThreadPostTargetLoader(
+            readPage: (page) async {
+              reads++;
+              return _page(page);
+            },
+            readHandoff: (_, _) async => null,
+            resolver: ThreadPostRouteResolver(_Locator()),
+            invalidate: () async => fail('unexpected invalidation'),
+          ).load(
+            target: target,
+            page: 3,
+            initialHandoff: _Handoff(),
+            isCurrent: () => true,
+          );
+      expect(result.dataOrNull?.posts.single.pid, '200');
+      expect(reads, 1);
+    },
+  );
+
+  test(
+    'recovery invalidates before locating and consumes its handoff',
+    () async {
+      final handoff = _Handoff();
+      final locator = _Locator()
+        ..result = ApiSuccess(
+          ThreadPostLocation(
+            tid: '100',
+            pid: '200',
+            page: 3,
+            url: '',
+            detailHandoff: handoff,
+          ),
+        );
+      var invalidated = false;
+      final reads = <int>[];
+      final result = await ThreadPostTargetLoader(
+        readPage: (page) async {
+          reads.add(page);
+          return _page(page, pid: '199');
+        },
+        readHandoff: (candidate, page) async {
+          expect(invalidated, isTrue);
+          expect(candidate, same(handoff));
+          return _page(page);
+        },
+        resolver: ThreadPostRouteResolver(locator),
+        invalidate: () async => invalidated = true,
+      ).load(target: target, page: 9, isCurrent: () => true);
+      expect(result.dataOrNull?.posts.single.pid, '200');
+      expect(reads, [9]);
+      expect(locator.calls, 1);
+    },
+  );
+
   for (final locatedPage in [3, 9]) {
     test(
       'relocates and invalidates before rereading page $locatedPage',
@@ -193,29 +280,30 @@ void main() {
     expect(locator.calls, 0);
   });
 
-  test(
-    'owner invalidation during locate prevents cache mutation and reread',
-    () async {
-      final pending = Completer<ApiResult<ThreadPostLocation>>();
-      final locator = _Locator()..pending = pending.future;
-      var current = true;
-      var reads = 0;
-      final future = ThreadPostTargetLoader(
-        readPage: (page) async {
-          reads++;
-          return _page(page, pid: '199');
-        },
-        resolver: ThreadPostRouteResolver(locator),
-        invalidate: () async => fail('stale invalidation'),
-      ).load(target: target, page: 9, isCurrent: () => current);
-      await Future<void>.delayed(Duration.zero);
-      current = false;
-      pending.complete(locator.result);
-      expect((await future).failureOrNull?.kind, DataReadFailureKind.cancelled);
-      expect(reads, 1);
-    },
-  );
+  test('owner invalidation during locate prevents a stale reread', () async {
+    final pending = Completer<ApiResult<ThreadPostLocation>>();
+    final locator = _Locator()..pending = pending.future;
+    var current = true;
+    var reads = 0;
+    var invalidations = 0;
+    final future = ThreadPostTargetLoader(
+      readPage: (page) async {
+        reads++;
+        return _page(page, pid: '199');
+      },
+      resolver: ThreadPostRouteResolver(locator),
+      invalidate: () async => invalidations++,
+    ).load(target: target, page: 9, isCurrent: () => current);
+    await Future<void>.delayed(Duration.zero);
+    current = false;
+    pending.complete(locator.result);
+    expect((await future).failureOrNull?.kind, DataReadFailureKind.cancelled);
+    expect(reads, 1);
+    expect(invalidations, 1);
+  });
 }
+
+final class _Handoff implements ThreadDetailHandoff {}
 
 ThreadPostTargetRead _page(
   int page, {

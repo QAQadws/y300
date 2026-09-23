@@ -15,6 +15,7 @@ import 'discuz_api_client.dart';
 import 'thread_detail_api_mapper.dart';
 import 'thread_detail_html_parser.dart';
 import 'thread_detail_snapshot_codec.dart';
+import 'thread_detail_handoff_coordinator.dart';
 
 final class ApiThreadRepository implements ThreadRepository {
   const ApiThreadRepository(
@@ -86,7 +87,10 @@ final class ApiThreadRepository implements ThreadRepository {
 }
 
 final class ThreadDetailHtmlRepository
-    implements ThreadRepository, ThreadReadInvalidation {
+    implements
+        ThreadRepository,
+        ThreadReadInvalidation,
+        ThreadDetailHandoffReader {
   ThreadDetailHtmlRepository({
     required ForumClientConfig config,
     required this.network,
@@ -101,6 +105,7 @@ final class ThreadDetailHtmlRepository
       keepStaleFor: Duration(days: 7),
     ),
     DateTime Function()? now,
+    this.handoffCoordinator,
   }) : _config = config,
        _parser =
            parser ?? ThreadDetailHtmlParser(siteOrigin: config.siteOrigin),
@@ -115,6 +120,7 @@ final class ThreadDetailHtmlRepository
   @override
   Future<void> invalidatePendingReads(String tid) async {
     _cacheGenerations[tid] = (_cacheGenerations[tid] ?? 0) + 1;
+    handoffCoordinator?.invalidate(tid);
     await _cacheCommits[tid];
   }
 
@@ -145,6 +151,31 @@ final class ThreadDetailHtmlRepository
   final ThreadDetailSnapshotCodec _snapshotCodec;
   final ForumSnapshotPolicy _snapshotPolicy;
   final DateTime Function() _now;
+  final ThreadDetailHandoffCoordinator? handoffCoordinator;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>?>
+  consumeHandoff(
+    ThreadDetailHandoff handoff, {
+    required String tid,
+    required String pid,
+    required int page,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    final detail = await handoffCoordinator?.consume(
+      handoff,
+      tid: tid,
+      pid: pid,
+      page: page,
+      query: query,
+    );
+    if (detail == null) return null;
+    return _validated(
+      detail,
+      requestedTid: tid,
+      capabilities: _htmlReadCapabilities(detail),
+    );
+  }
 
   @override
   ThreadDetailSourceCapabilities get capabilities => _htmlCapabilities;

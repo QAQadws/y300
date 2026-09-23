@@ -4,6 +4,7 @@ library;
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 import 'thread_detail_models.dart';
+import 'thread_repository.dart';
 
 /// One explicitly requested continuation page of post comments.
 final class ThreadPostCommentsQuery {
@@ -215,6 +216,7 @@ final class ThreadPostLocationData {
     required this.pid,
     required this.page,
     required this.resolvedUri,
+    this.detailHandoff,
   });
 
   /// Stable thread identifier.
@@ -228,6 +230,9 @@ final class ThreadPostLocationData {
 
   /// Resolved uri.
   final Uri resolvedUri;
+
+  /// Optional one-use detail from this location response.
+  final ThreadDetailHandoff? detailHandoff;
 }
 
 /// Capabilities exposed by thread post locator.

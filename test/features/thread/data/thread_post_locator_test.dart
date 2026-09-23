@@ -5,12 +5,14 @@ import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 
 void main() {
   test('projects a package location for existing App routes', () async {
+    final handoff = _Handoff();
     final source = _FakePostLocator(
       forum.DataReadSuccess(
         data: forum.ThreadPostLocationData(
           tid: '100',
           pid: '200',
           page: 3,
+          detailHandoff: handoff,
           resolvedUri: Uri.parse(
             'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=3',
           ),
@@ -37,6 +39,7 @@ void main() {
     expect(source.queries.single.pid, '200');
     expect(result.dataOrNull?.page, 3);
     expect(result.dataOrNull?.url, contains('page=3'));
+    expect(result.dataOrNull?.detailHandoff, same(handoff));
   });
 
   test('does not hide a package identity failure', () async {
@@ -60,6 +63,8 @@ void main() {
     expect(result.errorOrNull?.code, 'thread_post_location_identity_mismatch');
   });
 }
+
+final class _Handoff implements forum.ThreadDetailHandoff {}
 
 final class _FakePostLocator implements forum.ThreadPostLocatorRepository {
   _FakePostLocator(this.result);

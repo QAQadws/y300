@@ -49,6 +49,7 @@ Future<void> launchThreadPostRoute({
                 targetPid: data.pid,
                 landing: target.landing,
                 initialPage: data.page,
+                initialHandoff: data.detailHandoff,
                 subject: subject,
               ),
             ),

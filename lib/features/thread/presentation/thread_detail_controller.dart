@@ -29,12 +29,14 @@ class ThreadDetailArgs {
     this.subject = '',
     this.initialPage,
     this.targetPid,
+    this.initialHandoff,
   });
 
   final String tid;
   final String subject;
   final int? initialPage;
   final String? targetPid;
+  final ThreadDetailHandoff? initialHandoff;
 
   @override
   bool operator ==(Object other) {
@@ -45,11 +47,13 @@ class ThreadDetailArgs {
         other.tid == tid &&
         other.subject == subject &&
         other.initialPage == initialPage &&
-        other.targetPid == targetPid;
+        other.targetPid == targetPid &&
+        identical(other.initialHandoff, initialHandoff);
   }
 
   @override
-  int get hashCode => Object.hash(tid, subject, initialPage, targetPid);
+  int get hashCode =>
+      Object.hash(tid, subject, initialPage, targetPid, initialHandoff);
 }
 
 final threadDetailControllerProvider = AsyncNotifierProvider.autoDispose
@@ -925,6 +929,18 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     final result = checkTarget
         ? await ThreadPostTargetLoader(
             readPage: readPage,
+            readHandoff: (handoff, requestedPage) {
+              final repository = _readRepository();
+              if (repository is! ThreadDetailHandoffReader) {
+                return Future<ThreadPostTargetRead?>.value();
+              }
+              return (repository as ThreadDetailHandoffReader).consumeHandoff(
+                handoff,
+                tid: _args.tid,
+                pid: targetPid,
+                page: requestedPage,
+              );
+            },
             resolver: ref.read(threadPostRouteResolverProvider),
             invalidate: () => ref
                 .read(nativePageCacheInvalidationServiceProvider)
@@ -932,6 +948,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           ).load(
             target: ThreadPostTarget(tid: _args.tid, pid: targetPid),
             page: page,
+            initialHandoff: _args.initialHandoff,
             isCurrent: isCurrent,
           )
         : await readPage(page);

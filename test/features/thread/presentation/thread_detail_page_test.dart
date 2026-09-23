@@ -494,6 +494,36 @@ void main() {
       },
     );
 
+    testWidgets('body-end target consumes the initial detail handoff once', (
+      tester,
+    ) async {
+      final handoff = _PageHandoff();
+      final history = _RecordingHistoryVisitRecorder();
+      final repository = _HandoffThreadRepository(handoff);
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          historyVisitRecorder: history,
+          home: ThreadDetailPage(
+            tid: '100',
+            initialPage: 3,
+            targetPid: '200',
+            landing: ThreadPostLanding.bodyEnd,
+            initialHandoff: handoff,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repository.handoffReads, 1);
+      expect(repository.ordinaryReads, 0);
+      expect(
+        find.byKey(const Key('thread-post-body-entry-200')),
+        findsOneWidget,
+      );
+      expect(history.drafts, hasLength(1));
+    });
+
     testWidgets(
       'unconfirmed target stops, retry is bounded and home requires user action',
       (tester) async {
@@ -7081,6 +7111,60 @@ class _FakeThreadRepository implements ThreadRepository {
       capabilities: capabilities.toReadCapabilities(),
     );
   }
+}
+
+final class _PageHandoff implements ThreadDetailHandoff {}
+
+final class _HandoffThreadRepository
+    implements ThreadRepository, ThreadDetailHandoffReader {
+  _HandoffThreadRepository(this._handoff);
+
+  final _PageHandoff _handoff;
+  int handoffReads = 0;
+  int ordinaryReads = 0;
+
+  @override
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
+    required String tid,
+    int page = 1,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    ordinaryReads++;
+    return _result(page);
+  }
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>?>
+  consumeHandoff(
+    ThreadDetailHandoff handoff, {
+    required String tid,
+    required String pid,
+    required int page,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    handoffReads++;
+    if (!identical(handoff, _handoff) ||
+        tid != '100' ||
+        pid != '200' ||
+        page != 3 ||
+        !query.isEmpty) {
+      return null;
+    }
+    return _result(page);
+  }
+
+  DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities> _result(
+    int page,
+  ) => DataReadSuccess(
+    data: _navigationData(page, pid: '200'),
+    capabilities: capabilities.toReadCapabilities(),
+    metadata: const DataReadMetadata.network(),
+  );
 }
 
 class _ThreadProjectionTestConverter implements TextConverter {

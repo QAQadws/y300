@@ -59,6 +59,7 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
     this.subject = '',
     this.initialPage,
     this.targetPid,
+    this.initialHandoff,
     this.landing = ThreadPostLanding.top,
     this.initialForumName,
   }) : assert(
@@ -71,6 +72,7 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
   final String subject;
   final int? initialPage;
   final String? targetPid;
+  final ThreadDetailHandoff? initialHandoff;
   final ThreadPostLanding landing;
   final String? initialForumName;
 
@@ -113,6 +115,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     if (oldWidget.tid != widget.tid ||
         oldWidget.targetPid != widget.targetPid ||
         oldWidget.initialPage != widget.initialPage ||
+        !identical(oldWidget.initialHandoff, widget.initialHandoff) ||
         oldWidget.landing != widget.landing) {
       _postRouteSession.invalidate();
     }
@@ -143,6 +146,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       subject: widget.subject,
       initialPage: widget.initialPage,
       targetPid: widget.targetPid,
+      initialHandoff: widget.initialHandoff,
     );
     final asyncState = ref.watch(threadDetailControllerProvider(args));
     final controller = ref.read(threadDetailControllerProvider(args).notifier);

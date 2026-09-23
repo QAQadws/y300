@@ -31,6 +31,7 @@ final class PackageThreadPostLocator implements ThreadPostLocator {
             pid: data.pid,
             page: data.page,
             url: data.resolvedUri.toString(),
+            detailHandoff: data.detailHandoff,
           ),
         ),
       final forum.DataReadFailure<

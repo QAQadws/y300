@@ -10,20 +10,39 @@ typedef ThreadPostTargetRead =
 final class ThreadPostTargetLoader {
   const ThreadPostTargetLoader({
     required this.readPage,
+    this.readHandoff,
     required this.resolver,
     required this.invalidate,
   });
 
   final Future<ThreadPostTargetRead> Function(int page) readPage;
+  final Future<ThreadPostTargetRead?> Function(
+    ThreadDetailHandoff handoff,
+    int page,
+  )?
+  readHandoff;
   final ThreadPostRouteResolver resolver;
   final Future<void> Function() invalidate;
 
   Future<ThreadPostTargetRead> load({
     required ThreadPostTarget target,
     required int page,
+    ThreadDetailHandoff? initialHandoff,
     required bool Function() isCurrent,
   }) async {
-    var result = await readPage(page);
+    Future<ThreadPostTargetRead> readInitial(
+      int requestedPage,
+      ThreadDetailHandoff? handoff,
+    ) async {
+      if (handoff != null && readHandoff != null) {
+        final reused = await readHandoff!(handoff, requestedPage);
+        if (!isCurrent()) return _cancelled;
+        if (reused != null) return reused;
+      }
+      return readPage(requestedPage);
+    }
+
+    var result = await readInitial(page, initialHandoff);
     if (!isCurrent()) return _cancelled;
     if (result
         is DataReadFailure<ThreadDetailData, ThreadDetailReadCapabilities>) {
@@ -33,6 +52,14 @@ final class ThreadPostTargetLoader {
     if (data.tid.trim() != target.tid) return _unconfirmed;
     if (_contains(data, target.pid)) return result;
 
+    // Fence old cache writers before locating again. The new locator response
+    // can then be handed to the detail page without being invalidated itself.
+    try {
+      await invalidate();
+    } catch (_) {
+      return _unconfirmed;
+    }
+    if (!isCurrent()) return _cancelled;
     final located = await resolver.resolve(
       ThreadPostTarget(tid: target.tid, pid: target.pid),
     );
@@ -51,15 +78,8 @@ final class ThreadPostTargetLoader {
         diagnosticMessage: 'thread_post_target_unconfirmed',
       );
     }
-    // The locator read is current, but the normal repository may still hold a
-    // fresh snapshot without this post, including on the same page number.
-    try {
-      await invalidate();
-    } catch (_) {
-      return _unconfirmed;
-    }
-    if (!isCurrent()) return _cancelled;
-    result = await readPage(located.dataOrNull!.page);
+    final destination = located.dataOrNull!;
+    result = await readInitial(destination.page, destination.detailHandoff);
     if (!isCurrent()) return _cancelled;
     if (result
         is DataReadFailure<ThreadDetailData, ThreadDetailReadCapabilities>) {

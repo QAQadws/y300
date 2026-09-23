@@ -477,7 +477,6 @@ void main() {
   for (final path in [
     '/forum.php?mod=viewthread&tid=100&page=3&mobile=2',
     '/thread-100-3-1.html',
-    '/forum.php?mod=viewthread&tid=100&page=3&ordertype=1',
   ]) {
     test('post locator accepts verified ordinary mobile view $path', () async {
       final network = _FixtureNetwork(
@@ -521,6 +520,10 @@ void main() {
     ),
     'filtered view': (
       '/forum.php?mod=viewthread&tid=100&page=3&authorid=10',
+      mobilePostLocationHtml,
+    ),
+    'sorted view': (
+      '/forum.php?mod=viewthread&tid=100&page=3&ordertype=1',
       mobilePostLocationHtml,
     ),
     'cross site': (

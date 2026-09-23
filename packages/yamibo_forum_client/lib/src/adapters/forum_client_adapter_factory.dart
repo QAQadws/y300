@@ -46,6 +46,7 @@ import 'discuz_thread_poll_vote_command.dart';
 import 'discuz_thread_composer_commands.dart';
 import 'discuz_thread_post_edit_adapter.dart';
 import 'discuz_supplemental_read_adapters.dart';
+import 'thread_detail_handoff_coordinator.dart';
 import '../session/forum_formhash_provider.dart';
 
 /// Creates the concrete Discuz sources used by the standard client.
@@ -65,6 +66,11 @@ final class ForumClientAdapterFactory {
     this.snapshotStore,
   }) : requestProfiles =
            requestProfiles ?? DefaultForumRequestProfileResolver(config),
+       _handoffCoordinator = ThreadDetailHandoffCoordinator(
+         siteOrigin: config.siteOrigin,
+         cookies: cookieStore,
+         sessions: sessionStore,
+       ),
        _api = DiscuzApiClient(
          config: config,
          network: network,
@@ -82,6 +88,7 @@ final class ForumClientAdapterFactory {
   /// Request profiles.
   final ForumRequestProfileResolver requestProfiles;
   final DiscuzApiClient _api;
+  final ThreadDetailHandoffCoordinator _handoffCoordinator;
 
   /// Optional reproducible session projection store.
   final ForumSessionStore? sessionStore;
@@ -285,6 +292,7 @@ final class ForumClientAdapterFactory {
         config: config,
         network: network,
         requestProfiles: requestProfiles,
+        handoffCoordinator: _handoffCoordinator,
       );
 
   /// Creates the fixed-version-1 author-post source used by novel ingestion.
@@ -440,6 +448,7 @@ final class ForumClientAdapterFactory {
     requestProfiles: requestProfiles,
     documentStore: documentStore,
     snapshotStore: snapshotStore,
+    handoffCoordinator: _handoffCoordinator,
   );
 
   /// Creates a Discuz thread source fixed to [apiVersion].

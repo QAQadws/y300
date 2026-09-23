@@ -21,6 +21,7 @@ import '../parsing/loose_json.dart';
 import 'discuz_api_client.dart';
 import 'thread_detail_api_mapper.dart';
 import 'thread_detail_html_parser.dart';
+import 'thread_detail_handoff_coordinator.dart';
 
 final class DiscuzForumNotificationRepository
     implements ForumNotificationRepository {
@@ -738,6 +739,7 @@ final class DiscuzThreadPostLocatorRepository
     required this.network,
     required this.requestProfiles,
     ThreadDetailHtmlParser? parser,
+    this.handoffCoordinator,
   }) : _config = config,
        _parser =
            parser ?? ThreadDetailHtmlParser(siteOrigin: config.siteOrigin);
@@ -746,6 +748,7 @@ final class DiscuzThreadPostLocatorRepository
   final ForumClientNetwork network;
   final ForumRequestProfileResolver requestProfiles;
   final ThreadDetailHtmlParser _parser;
+  final ThreadDetailHandoffCoordinator? handoffCoordinator;
 
   @override
   ThreadPostLocatorSourceCapabilities get capabilities => _locatorCapabilities;
@@ -761,6 +764,7 @@ final class DiscuzThreadPostLocatorRepository
     if (!_positive(query.tid) || !_positive(query.pid)) {
       return _businessFailure('thread_post_location_query_invalid');
     }
+    final handoffBoundary = await handoffCoordinator?.capture(query.tid);
     final uri = _config.siteOrigin.replace(
       path: '/forum.php',
       queryParameters: {
@@ -850,6 +854,8 @@ final class DiscuzThreadPostLocatorRepository
           value.uri.queryParameters['mobile'] == 'no' ||
           (value.uri.queryParameters['authorid']?.isNotEmpty == true &&
               value.uri.queryParameters['authorid'] != '0') ||
+          value.uri.queryParameters.containsKey('ordertype') ||
+          value.uri.queryParameters.containsKey('filter') ||
           value.uri.queryParameters.containsKey('viewpid') ||
           value.uri.queryParameters.containsKey('ppp')) {
         return _parseFailure(
@@ -869,12 +875,26 @@ final class DiscuzThreadPostLocatorRepository
           const FormatException('identity mismatch'),
         );
       }
+      final page = detail.currentPage <= 0 ? 1 : detail.currentPage;
+      // The parser's page and the final ordinary mobile URL must agree before
+      // its parsed document can stand in for a normal detail read.
+      final urlPage = _pageFromUri(value.uri) ?? 1;
+      final handoff = page == urlPage
+          ? await handoffCoordinator?.issue(
+              boundary: handoffBoundary,
+              tid: query.tid,
+              pid: query.pid,
+              page: page,
+              detail: detail,
+            )
+          : null;
       return DataReadSuccess(
         data: ThreadPostLocationData(
           tid: query.tid,
           pid: query.pid,
-          page: detail.currentPage <= 0 ? 1 : detail.currentPage,
+          page: page,
           resolvedUri: value.uri,
+          detailHandoff: handoff,
         ),
         capabilities: capabilities.toReadCapabilities(),
         metadata: const DataReadMetadata.network(),

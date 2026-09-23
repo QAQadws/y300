@@ -234,6 +234,24 @@ abstract interface class ThreadRepository {
   });
 }
 
+/// Opaque, short-lived detail captured by a successful post-location read.
+/// The producing source owns validation and consumption of this value.
+abstract interface class ThreadDetailHandoff {}
+
+/// Optional fast path for a matching HTML detail source.
+/// A null result means the caller must use [ThreadRepository.getThreadDetail].
+abstract interface class ThreadDetailHandoffReader {
+  /// Consumes a compatible handoff, or returns null for a normal detail read.
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>?>
+  consumeHandoff(
+    ThreadDetailHandoff handoff, {
+    required String tid,
+    required String pid,
+    required int page,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  });
+}
+
 /// Optional lifetime fence for hosts invalidating persisted thread documents.
 /// Call before deleting cached data: old reads may complete for their existing
 /// callers, but cannot commit their documents/snapshots after this barrier.
