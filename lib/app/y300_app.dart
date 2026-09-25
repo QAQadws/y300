@@ -7,6 +7,7 @@ import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/app_update/presentation/widgets/app_update_alert_host.dart';
 import 'package:y300/features/forum/presentation/webview/waf_challenge_recovery_host.dart';
+import 'package:y300/features/startup/presentation/daily_sign_in_automation_host.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -14,7 +15,7 @@ import 'package:y300/l10n/app_localizations.dart';
 class Y300App extends ConsumerWidget {
   const Y300App({
     super.key,
-    this.home = const MainShellPage(),
+    this.home = const DailySignInAutomationHost(child: MainShellPage()),
     this.enableAppUpdatePrompt = true,
   });
 

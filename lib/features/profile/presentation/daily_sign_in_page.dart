@@ -6,6 +6,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
+import 'package:y300/features/profile/domain/daily_sign_in_attempt_ledger.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -60,6 +61,7 @@ class _DailySignInPanelState extends ConsumerState<DailySignInPanel> {
     final canAct = owner != null && !current.isLoading && !current.isSubmitting;
     final canSign =
         canAct &&
+        !current.storageUnavailable &&
         snapshot?.status == ForumDailySignInStatus.unsigned &&
         failure == null;
     final offerWebFallback =
@@ -115,6 +117,54 @@ class _DailySignInPanelState extends ConsumerState<DailySignInPanel> {
                 commandMessage,
                 key: const Key('daily-sign-in-command-message'),
               ),
+            ],
+            if (owner != null) ...[
+              const SizedBox(height: 16),
+              SwitchListTile.adaptive(
+                key: const Key('daily-auto-sign-in-toggle'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.dailyAutoSignInToggle),
+                subtitle: Text(
+                  current.isSavingAutoPreference
+                      ? l10n.dailyAutoSignInSaving
+                      : l10n.dailyAutoSignInDescription,
+                ),
+                value: current.autoEnabled ?? false,
+                onChanged:
+                    current.autoEnabled != null &&
+                        !current.isSavingAutoPreference &&
+                        !current.settingsUnavailable
+                    ? (enabled) => unawaited(
+                        ref
+                            .read(dailySignInControllerProvider.notifier)
+                            .setAutomaticEnabled(enabled),
+                      )
+                    : null,
+              ),
+              if (current.storageUnavailable)
+                Text(
+                  l10n.dailyAutoSignInStorageUnavailable,
+                  key: const Key('daily-sign-in-storage-error'),
+                )
+              else if (snapshot?.status == ForumDailySignInStatus.unsigned &&
+                  current.automaticPolicy ==
+                      DailySignInAutomaticPolicy.pausedPreviousDay)
+                Text(
+                  l10n.dailyAutoSignInPausedPreviousDay,
+                  key: const Key('daily-auto-sign-in-paused'),
+                )
+              else if (snapshot?.status == ForumDailySignInStatus.unsigned &&
+                  current.automaticPolicy ==
+                      DailySignInAutomaticPolicy.blockedToday &&
+                  current.commandResult == null)
+                Text(
+                  current.checkpointState == DailySignInAttemptState.pending ||
+                          current.checkpointState ==
+                              DailySignInAttemptState.unknown
+                      ? l10n.dailyAutoSignInPendingToday
+                      : l10n.dailyAutoSignInBlockedToday,
+                  key: const Key('daily-auto-sign-in-blocked'),
+                ),
             ],
             if (snapshot?.statistics case final statistics?
                 when statistics.isNotEmpty) ...[

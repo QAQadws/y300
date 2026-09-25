@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
@@ -31,6 +32,8 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import '../../../support/favorite_command_test_support.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
   testWidgets('MorePage builds dark theme chrome', (tester) async {
     await tester.pumpWidget(
       ProviderScope(

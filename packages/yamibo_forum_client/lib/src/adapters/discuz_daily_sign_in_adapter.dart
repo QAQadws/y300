@@ -145,6 +145,51 @@ final class DiscuzDailySignInAdapter {
         ),
       );
     }
+    if (request.beforeSend case final beforeSend?) {
+      ForumDailySignInSendAuthorization authorization;
+      try {
+        authorization = await beforeSend(
+          ForumDailySignInPreparedAttempt(
+            userId: page.snapshot.userId,
+            forumDay: page.snapshot.forumDay,
+          ),
+        );
+      } catch (_) {
+        authorization = ForumDailySignInSendAuthorization.unavailable;
+      }
+      switch (authorization) {
+        case ForumDailySignInSendAuthorization.allow:
+          break;
+        case ForumDailySignInSendAuthorization.suppress:
+          return const DataCommandNotSent(
+            DataCommandFailure(
+              kind: DataCommandFailureKind.validation,
+              retryPolicy: DataCommandRetryPolicy.explicitOnly,
+              code: 'daily_sign_in_send_suppressed',
+              diagnosticMessage: 'daily_sign_in_send_suppressed',
+            ),
+          );
+        case ForumDailySignInSendAuthorization.unavailable:
+          return const DataCommandNotSent(
+            DataCommandFailure(
+              kind: DataCommandFailureKind.unknown,
+              retryPolicy: DataCommandRetryPolicy.explicitOnly,
+              code: 'daily_sign_in_send_gate_failed',
+              diagnosticMessage: 'daily_sign_in_send_gate_failed',
+            ),
+          );
+      }
+    }
+    if (request.cancellation?.isCancelled ?? false) {
+      return const DataCommandNotSent(
+        DataCommandFailure(
+          kind: DataCommandFailureKind.cancelled,
+          retryPolicy: DataCommandRetryPolicy.explicitOnly,
+          code: 'daily_sign_in_cancelled_before_send',
+          diagnosticMessage: 'daily_sign_in_cancelled_before_send',
+        ),
+      );
+    }
     ForumTransportResult<ForumResponse<Object?>> sent;
     try {
       sent = await network.send(

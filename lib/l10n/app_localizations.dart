@@ -7559,6 +7559,48 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'上次请求可能已经生效，即使当前页面仍显示未签到。继续将重新读取页面并发送一次新的签到请求。'**
   String get dailySignInRetryBody;
+
+  /// No description provided for @dailyAutoSignInToggle.
+  ///
+  /// In zh, this message translates to:
+  /// **'每天自动签到'**
+  String get dailyAutoSignInToggle;
+
+  /// No description provided for @dailyAutoSignInDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开应用或回到前台时，核验论坛状态并在未签到时自动尝试一次。'**
+  String get dailyAutoSignInDescription;
+
+  /// No description provided for @dailyAutoSignInSaving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存自动签到设置…'**
+  String get dailyAutoSignInSaving;
+
+  /// No description provided for @dailyAutoSignInStorageUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法安全读取或保存签到记录，当前不能提交签到。请稍后重试。'**
+  String get dailyAutoSignInStorageUnavailable;
+
+  /// No description provided for @dailyAutoSignInPausedPreviousDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'前一论坛日的签到结果仍未确认，今天暂停自动提交。你可以核验状态，或确认后手动重试。'**
+  String get dailyAutoSignInPausedPreviousDay;
+
+  /// No description provided for @dailyAutoSignInPendingToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日已有结果未明的签到尝试，自动提交已暂停。请核验状态；手动重试需要确认。'**
+  String get dailyAutoSignInPendingToday;
+
+  /// No description provided for @dailyAutoSignInBlockedToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日签到记录与论坛当前状态不一致，自动提交已暂停。请先核验状态。'**
+  String get dailyAutoSignInBlockedToday;
 }
 
 class _AppLocalizationsDelegate

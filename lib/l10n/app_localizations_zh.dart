@@ -4623,6 +4623,30 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get dailySignInRetryBody =>
       '上次请求可能已经生效，即使当前页面仍显示未签到。继续将重新读取页面并发送一次新的签到请求。';
+
+  @override
+  String get dailyAutoSignInToggle => '每天自动签到';
+
+  @override
+  String get dailyAutoSignInDescription => '打开应用或回到前台时，核验论坛状态并在未签到时自动尝试一次。';
+
+  @override
+  String get dailyAutoSignInSaving => '正在保存自动签到设置…';
+
+  @override
+  String get dailyAutoSignInStorageUnavailable =>
+      '无法安全读取或保存签到记录，当前不能提交签到。请稍后重试。';
+
+  @override
+  String get dailyAutoSignInPausedPreviousDay =>
+      '前一论坛日的签到结果仍未确认，今天暂停自动提交。你可以核验状态，或确认后手动重试。';
+
+  @override
+  String get dailyAutoSignInPendingToday =>
+      '今日已有结果未明的签到尝试，自动提交已暂停。请核验状态；手动重试需要确认。';
+
+  @override
+  String get dailyAutoSignInBlockedToday => '今日签到记录与论坛当前状态不一致，自动提交已暂停。请先核验状态。';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -9245,4 +9269,28 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String get dailySignInRetryBody =>
       '上次請求可能已經生效，即使目前頁面仍顯示未簽到。繼續將重新讀取頁面並傳送一次新的簽到請求。';
+
+  @override
+  String get dailyAutoSignInToggle => '每天自動簽到';
+
+  @override
+  String get dailyAutoSignInDescription => '開啟應用或回到前景時，核對論壇狀態並在尚未簽到時自動嘗試一次。';
+
+  @override
+  String get dailyAutoSignInSaving => '正在儲存自動簽到設定…';
+
+  @override
+  String get dailyAutoSignInStorageUnavailable =>
+      '無法安全讀取或儲存簽到記錄，目前無法提交簽到。請稍後重試。';
+
+  @override
+  String get dailyAutoSignInPausedPreviousDay =>
+      '前一論壇日的簽到結果仍未確認，今天暫停自動提交。你可以核對狀態，或確認後手動重試。';
+
+  @override
+  String get dailyAutoSignInPendingToday =>
+      '今日已有結果未明的簽到嘗試，自動提交已暫停。請核對狀態；手動重試需要確認。';
+
+  @override
+  String get dailyAutoSignInBlockedToday => '今日簽到記錄與論壇目前狀態不一致，自動提交已暫停。請先核對狀態。';
 }

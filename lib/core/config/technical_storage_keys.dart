@@ -8,4 +8,6 @@ abstract final class TechnicalStorageKeys {
   static const String searchLastSearchAtMs = 'search.last_search_at_ms';
   static const String downloadStorageRootMigrationV1 =
       'storage.download_root_migration.v1';
+  static const String dailySignInAttemptV1Prefix =
+      'profile.daily_sign_in.attempt.v1.';
 }

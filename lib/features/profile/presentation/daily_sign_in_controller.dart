@@ -3,9 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
+import 'package:y300/features/profile/data/providers/daily_sign_in_storage_providers.dart';
+import 'package:y300/features/profile/domain/daily_sign_in_attempt_ledger.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 
-/// The state is owned by an authenticated session, not by a particular page.
+const _unchanged = Object();
+
+/// The snapshot belongs to one verified session. The durable attempt record
+/// belongs to the UID and therefore survives logout and process restart.
 final class DailySignInViewState {
   const DailySignInViewState({
     this.owner,
@@ -13,9 +18,15 @@ final class DailySignInViewState {
     this.readFailure,
     this.commandResult,
     this.attemptForumDay,
+    this.automaticPolicy,
+    this.checkpointState,
+    this.autoEnabled,
     this.requiresExplicitRetry = false,
     this.isLoading = false,
     this.isSubmitting = false,
+    this.isSavingAutoPreference = false,
+    this.settingsUnavailable = false,
+    this.checkpointUnavailable = false,
   });
 
   final VerifiedProfileOwner? owner;
@@ -27,15 +38,74 @@ final class DailySignInViewState {
   readFailure;
   final DataCommandResult<ForumDailySignInReceipt>? commandResult;
   final String? attemptForumDay;
+  final DailySignInAutomaticPolicy? automaticPolicy;
+  final DailySignInAttemptState? checkpointState;
+  final bool? autoEnabled;
   final bool requiresExplicitRetry;
   final bool isLoading;
   final bool isSubmitting;
+  final bool isSavingAutoPreference;
+  final bool settingsUnavailable;
+  final bool checkpointUnavailable;
 
-  // A command can cross forum midnight after preparation. A later page date
-  // alone cannot prove which day the sent GET affected.
-  bool get needsExplicitRetry =>
-      requiresExplicitRetry ||
-      commandResult is DataCommandOutcomeUnknown<ForumDailySignInReceipt>;
+  bool get storageUnavailable => settingsUnavailable || checkpointUnavailable;
+
+  // A fresh forum date can release an older uncertain command after the
+  // one-day pause. The previous command result alone cannot block forever.
+  bool get needsExplicitRetry => requiresExplicitRetry;
+
+  DailySignInViewState copyWith({
+    Object? owner = _unchanged,
+    Object? snapshot = _unchanged,
+    Object? readFailure = _unchanged,
+    Object? commandResult = _unchanged,
+    Object? attemptForumDay = _unchanged,
+    Object? automaticPolicy = _unchanged,
+    Object? checkpointState = _unchanged,
+    Object? autoEnabled = _unchanged,
+    bool? requiresExplicitRetry,
+    bool? isLoading,
+    bool? isSubmitting,
+    bool? isSavingAutoPreference,
+    bool? settingsUnavailable,
+    bool? checkpointUnavailable,
+  }) => DailySignInViewState(
+    owner: identical(owner, _unchanged)
+        ? this.owner
+        : owner as VerifiedProfileOwner?,
+    snapshot: identical(snapshot, _unchanged)
+        ? this.snapshot
+        : snapshot as ForumDailySignInSnapshot?,
+    readFailure: identical(readFailure, _unchanged)
+        ? this.readFailure
+        : readFailure
+              as DataReadFailure<
+                ForumDailySignInSnapshot,
+                ForumDailySignInReadCapabilities
+              >?,
+    commandResult: identical(commandResult, _unchanged)
+        ? this.commandResult
+        : commandResult as DataCommandResult<ForumDailySignInReceipt>?,
+    attemptForumDay: identical(attemptForumDay, _unchanged)
+        ? this.attemptForumDay
+        : attemptForumDay as String?,
+    automaticPolicy: identical(automaticPolicy, _unchanged)
+        ? this.automaticPolicy
+        : automaticPolicy as DailySignInAutomaticPolicy?,
+    checkpointState: identical(checkpointState, _unchanged)
+        ? this.checkpointState
+        : checkpointState as DailySignInAttemptState?,
+    autoEnabled: identical(autoEnabled, _unchanged)
+        ? this.autoEnabled
+        : autoEnabled as bool?,
+    requiresExplicitRetry: requiresExplicitRetry ?? this.requiresExplicitRetry,
+    isLoading: isLoading ?? this.isLoading,
+    isSubmitting: isSubmitting ?? this.isSubmitting,
+    isSavingAutoPreference:
+        isSavingAutoPreference ?? this.isSavingAutoPreference,
+    settingsUnavailable: settingsUnavailable ?? this.settingsUnavailable,
+    checkpointUnavailable: checkpointUnavailable ?? this.checkpointUnavailable,
+  );
 }
 
 final dailySignInControllerProvider =
@@ -43,44 +113,99 @@ final dailySignInControllerProvider =
       DailySignInController.new,
     );
 
-/// Shared manual coordinator. A later startup trigger can call the same
-/// submit method without creating another transport path or in-flight command.
+/// Shared coordinator for the native panel and foreground automation.
 class DailySignInController extends Notifier<DailySignInViewState> {
   int _generation = 0;
+  int _automaticEpoch = 0;
   Future<void>? _readFlight;
   Future<void>? _submitFlight;
   String? _submitFlightUid;
-  final Set<String> _uncertainUids = <String>{};
+  Future<void>? _automaticFlight;
+  VerifiedProfileOwner? _automaticFlightOwner;
+  bool _submittingAutomatically = false;
   ForumRequestCancellation? _readCancellation;
   ForumRequestCancellation? _submitCancellation;
 
   @override
   DailySignInViewState build() {
-    // One coordinator persists across the two native entry points. Stage 3
-    // can reuse it for startup triggers without a second single-flight guard.
     final owner = ref.watch(verifiedProfileOwnerProvider);
     _generation++;
+    _automaticEpoch++;
     _readCancellation?.cancel();
     _submitCancellation?.cancel();
     _readFlight = null;
-    // Riverpod clears lifecycle callbacks on each dependency rebuild.
     ref.onDispose(() {
       _generation++;
+      _automaticEpoch++;
       _readCancellation?.cancel();
       _submitCancellation?.cancel();
     });
     if (owner != null) {
-      unawaited(Future<void>.microtask(ensureLoaded));
+      unawaited(
+        Future<void>.microtask(() async {
+          await Future.wait([
+            _loadAutoPreference(owner, _generation),
+            ensureLoaded(),
+          ]);
+        }),
+      );
     }
     return DailySignInViewState(
       owner: owner,
-      requiresExplicitRetry:
-          owner != null && _uncertainUids.contains(owner.uid),
       isSubmitting:
           owner != null &&
           _submitFlight != null &&
           _submitFlightUid == owner.uid,
     );
+  }
+
+  Future<void> _loadAutoPreference(
+    VerifiedProfileOwner owner,
+    int generation,
+  ) async {
+    try {
+      final enabled = await ref
+          .read(dailyAutoSignInSettingsProvider)
+          .isEnabled(owner.uid);
+      if (_isCurrent(owner, generation)) {
+        state = state.copyWith(
+          autoEnabled: enabled,
+          settingsUnavailable: false,
+        );
+      }
+    } on Object {
+      if (_isCurrent(owner, generation)) {
+        state = state.copyWith(autoEnabled: null, settingsUnavailable: true);
+      }
+    }
+  }
+
+  Future<void> setAutomaticEnabled(bool enabled) async {
+    final owner = state.owner;
+    if (owner == null || state.isSavingAutoPreference) return;
+    if (!enabled) cancelAutomaticPending();
+    final generation = _generation;
+    final previous = state.autoEnabled;
+    state = state.copyWith(autoEnabled: enabled, isSavingAutoPreference: true);
+    try {
+      await ref
+          .read(dailyAutoSignInSettingsProvider)
+          .setEnabled(owner.uid, enabled);
+      if (_isCurrent(owner, generation)) {
+        state = state.copyWith(
+          isSavingAutoPreference: false,
+          settingsUnavailable: false,
+        );
+      }
+    } on Object {
+      if (_isCurrent(owner, generation)) {
+        state = state.copyWith(
+          autoEnabled: previous,
+          isSavingAutoPreference: false,
+          settingsUnavailable: true,
+        );
+      }
+    }
   }
 
   Future<void> ensureLoaded() async {
@@ -92,6 +217,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     await refresh();
   }
 
+  /// Every foreground trigger and panel entry performs a network-only read.
   Future<void> refresh() {
     final owner = state.owner;
     if (owner == null) return Future<void>.value();
@@ -108,14 +234,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     final previous = state;
     final cancellation = ForumRequestCancellation();
     _readCancellation = cancellation;
-    state = DailySignInViewState(
-      owner: owner,
-      commandResult: previous.commandResult,
-      attemptForumDay: previous.attemptForumDay,
-      requiresExplicitRetry: _uncertainUids.contains(owner.uid),
-      isLoading: true,
-      isSubmitting: previous.isSubmitting,
-    );
+    state = state.copyWith(snapshot: null, readFailure: null, isLoading: true);
     late final DataReadResult<
       ForumDailySignInSnapshot,
       ForumDailySignInReadCapabilities
@@ -148,42 +267,148 @@ class DailySignInController extends Notifier<DailySignInViewState> {
         when data.userId == owner.uid &&
             metadata.origin == DataReadOrigin.network &&
             metadata.freshness == DataReadFreshness.current) {
+      DailySignInAutomaticPolicy? policy;
+      DailySignInAttemptState? checkpointState;
+      var checkpointUnavailable = false;
+      try {
+        final ledger = ref.read(dailySignInAttemptLedgerProvider);
+        if (data.status == ForumDailySignInStatus.signed) {
+          await ledger.markConfirmedSigned(
+            userId: owner.uid,
+            forumDay: data.forumDay,
+          );
+        }
+        policy = await ledger.automaticPolicy(
+          userId: owner.uid,
+          forumDay: data.forumDay,
+        );
+        final checkpoint = await ledger.readCheckpoint(owner.uid);
+        if (checkpoint?.forumDay == data.forumDay) {
+          checkpointState = checkpoint?.state;
+        }
+      } on Object {
+        checkpointUnavailable = true;
+      }
+      if (!_isCurrent(owner, generation)) return;
       final sameAttemptDay = previous.attemptForumDay == data.forumDay;
-      final preserveUnknown =
+      final keepPreviousUnknown =
+          policy == DailySignInAutomaticPolicy.pausedPreviousDay &&
           previous.commandResult
               is DataCommandOutcomeUnknown<ForumDailySignInReceipt>;
-      final preserveNotSent =
-          previous.commandResult is DataCommandNotSent<ForumDailySignInReceipt>;
-      state = DailySignInViewState(
-        owner: owner,
+      final keepDayChangedNotSent =
+          previous.commandResult
+              is DataCommandNotSent<ForumDailySignInReceipt> &&
+          previous.commandResult?.failureOrNull?.code ==
+              'daily_sign_in_forum_day_changed';
+      final keepResult =
+          sameAttemptDay || keepPreviousUnknown || keepDayChangedNotSent;
+      state = state.copyWith(
         snapshot: data,
-        commandResult: sameAttemptDay || preserveUnknown || preserveNotSent
-            ? previous.commandResult
-            : null,
-        attemptForumDay: sameAttemptDay || preserveUnknown || preserveNotSent
-            ? previous.attemptForumDay
-            : null,
-        requiresExplicitRetry: _uncertainUids.contains(owner.uid),
-        isSubmitting: previous.isSubmitting,
+        readFailure: null,
+        commandResult: keepResult ? previous.commandResult : null,
+        attemptForumDay: keepResult ? previous.attemptForumDay : null,
+        automaticPolicy: policy,
+        checkpointState: checkpointState,
+        // A successful read does not prove that a failed checkpoint write has
+        // become durable. Keep this owner fail-closed until rebuilt.
+        checkpointUnavailable:
+            state.checkpointUnavailable || checkpointUnavailable,
+        requiresExplicitRetry:
+            policy != null && policy != DailySignInAutomaticPolicy.eligible,
+        isLoading: false,
       );
       return;
     }
-    state = DailySignInViewState(
-      owner: owner,
+    state = state.copyWith(
+      snapshot: null,
       readFailure:
           result.failureOrNull ??
           const DataReadFailure(
             kind: DataReadFailureKind.parse,
             diagnosticMessage: 'daily_sign_in_provenance_unverified',
           ),
-      commandResult: previous.commandResult,
-      attemptForumDay: previous.attemptForumDay,
-      requiresExplicitRetry: _uncertainUids.contains(owner.uid),
-      isSubmitting: previous.isSubmitting,
+      automaticPolicy: null,
+      checkpointState: null,
+      isLoading: false,
     );
   }
 
-  /// Explicit retry must be acknowledged by the caller after an unknown send.
+  /// Repeated foreground events coalesce; a different owner gets a new run
+  /// once the old run finishes, without inheriting its command result.
+  Future<void> triggerAutomatic() {
+    final owner = state.owner;
+    if (owner == null) return Future<void>.value();
+    if (_automaticFlight case final flight?) {
+      if (_automaticFlightOwner == owner) return flight;
+      return flight.then((_) {
+        if (state.owner == owner) return triggerAutomatic();
+      });
+    }
+    final future = _runAutomatic(owner, _generation, _automaticEpoch);
+    _automaticFlight = future;
+    _automaticFlightOwner = owner;
+    return future.whenComplete(() {
+      if (identical(_automaticFlight, future)) {
+        _automaticFlight = null;
+        _automaticFlightOwner = null;
+      }
+    });
+  }
+
+  /// Backgrounding or disabling the switch cancels a not-yet-sent automatic
+  /// request. A sent request remains uncertain and its checkpoint is kept.
+  void cancelAutomaticPending() {
+    _automaticEpoch++;
+    if (_submittingAutomatically) _submitCancellation?.cancel();
+  }
+
+  Future<void> _runAutomatic(
+    VerifiedProfileOwner owner,
+    int generation,
+    int epoch,
+  ) async {
+    if (!_automaticIsCurrent(owner, generation, epoch)) return;
+    if (_submitFlight case final flight?) await flight;
+    if (!_automaticIsCurrent(owner, generation, epoch)) return;
+    await refresh();
+    if (!_automaticIsCurrent(owner, generation, epoch)) return;
+    final snapshot = state.snapshot;
+    if (snapshot == null ||
+        snapshot.userId != owner.uid ||
+        snapshot.status != ForumDailySignInStatus.unsigned ||
+        state.isLoading ||
+        state.readFailure != null ||
+        state.checkpointUnavailable) {
+      return;
+    }
+    bool enabled;
+    try {
+      enabled = await ref
+          .read(dailyAutoSignInSettingsProvider)
+          .isEnabled(owner.uid);
+    } on Object {
+      if (_isCurrent(owner, generation)) {
+        state = state.copyWith(settingsUnavailable: true, autoEnabled: null);
+      }
+      return;
+    }
+    if (!_automaticIsCurrent(owner, generation, epoch)) return;
+    state = state.copyWith(autoEnabled: enabled, settingsUnavailable: false);
+    if (!enabled ||
+        state.automaticPolicy != DailySignInAutomaticPolicy.eligible ||
+        _submitFlight != null) {
+      return;
+    }
+    await _startSubmit(
+      owner,
+      snapshot.forumDay,
+      generation,
+      automatic: true,
+      automaticEpoch: epoch,
+    );
+  }
+
+  /// Explicit retry is only accepted after the UI confirmation dialog.
   Future<void> submit({bool explicitlyRetryUnknown = false}) {
     if (_submitFlight != null) return _submitFlight!;
     final owner = state.owner;
@@ -194,10 +419,37 @@ class DailySignInController extends Notifier<DailySignInViewState> {
         snapshot.status != ForumDailySignInStatus.unsigned ||
         state.isLoading ||
         state.isSubmitting ||
+        state.storageUnavailable ||
+        state.automaticPolicy == null ||
         (state.needsExplicitRetry && !explicitlyRetryUnknown)) {
       return Future<void>.value();
     }
-    final future = _submit(owner, snapshot.forumDay, _generation);
+    return _startSubmit(
+      owner,
+      snapshot.forumDay,
+      _generation,
+      automatic: false,
+      manualOverride: explicitlyRetryUnknown,
+    );
+  }
+
+  Future<void> _startSubmit(
+    VerifiedProfileOwner owner,
+    String forumDay,
+    int generation, {
+    required bool automatic,
+    bool manualOverride = false,
+    int? automaticEpoch,
+  }) {
+    if (_submitFlight != null) return _submitFlight!;
+    final future = _executeSubmit(
+      owner,
+      forumDay,
+      generation,
+      automatic: automatic,
+      manualOverride: manualOverride,
+      automaticEpoch: automaticEpoch,
+    );
     _submitFlight = future;
     _submitFlightUid = owner.uid;
     return future.whenComplete(() {
@@ -208,34 +460,29 @@ class DailySignInController extends Notifier<DailySignInViewState> {
           state.owner?.uid == owner.uid &&
           state.owner != owner &&
           state.isSubmitting) {
-        state = DailySignInViewState(
-          owner: state.owner,
-          requiresExplicitRetry: _uncertainUids.contains(owner.uid),
-        );
+        state = state.copyWith(isSubmitting: false);
         unawaited(refresh());
       }
     });
   }
 
-  Future<void> _submit(
+  Future<void> _executeSubmit(
     VerifiedProfileOwner owner,
     String forumDay,
-    int generation,
-  ) async {
-    final priorResult = state.commandResult;
-    final priorAttemptDay = state.attemptForumDay;
-    final hadUncertainAttempt = _uncertainUids.contains(owner.uid);
-    _uncertainUids.add(owner.uid);
+    int generation, {
+    required bool automatic,
+    required bool manualOverride,
+    int? automaticEpoch,
+  }) async {
+    final previousResult = state.commandResult;
+    final previousAttemptDay = state.attemptForumDay;
+    final previousRetryGuard = state.requiresExplicitRetry;
     final cancellation = ForumRequestCancellation();
     _submitCancellation = cancellation;
-    state = DailySignInViewState(
-      owner: owner,
-      snapshot: state.snapshot,
-      commandResult: state.commandResult,
-      attemptForumDay: state.attemptForumDay,
-      requiresExplicitRetry: true,
-      isSubmitting: true,
-    );
+    _submittingAutomatically = automatic;
+    state = state.copyWith(isSubmitting: true, requiresExplicitRetry: true);
+    DailySignInAttemptReservation? reservation;
+    var gateStorageFailure = false;
     late final DataCommandResult<ForumDailySignInReceipt> result;
     try {
       result = await ref
@@ -245,11 +492,46 @@ class DailySignInController extends Notifier<DailySignInViewState> {
               userId: owner.uid,
               expectedForumDay: forumDay,
               cancellation: cancellation,
+              beforeSend: (attempt) async {
+                if (attempt.userId != owner.uid ||
+                    attempt.forumDay != forumDay ||
+                    cancellation.isCancelled ||
+                    !_isCurrent(owner, generation) ||
+                    (automatic && automaticEpoch != _automaticEpoch)) {
+                  return ForumDailySignInSendAuthorization.suppress;
+                }
+                if (automatic) {
+                  try {
+                    if (!await ref
+                        .read(dailyAutoSignInSettingsProvider)
+                        .isEnabled(owner.uid)) {
+                      return ForumDailySignInSendAuthorization.suppress;
+                    }
+                  } on Object {
+                    gateStorageFailure = true;
+                    return ForumDailySignInSendAuthorization.unavailable;
+                  }
+                }
+                try {
+                  reservation = await ref
+                      .read(dailySignInAttemptLedgerProvider)
+                      .reserve(
+                        userId: owner.uid,
+                        forumDay: forumDay,
+                        manualOverride: manualOverride,
+                      );
+                } on Object {
+                  gateStorageFailure = true;
+                  return ForumDailySignInSendAuthorization.unavailable;
+                }
+                return reservation == null
+                    ? ForumDailySignInSendAuthorization.suppress
+                    : ForumDailySignInSendAuthorization.allow;
+              },
             ),
           );
     } on Object {
-      // A transport exception cannot prove that the command did not reach the
-      // server. Preserve the unknown result and require explicit user action.
+      // An exception after the gate may mean that the GET reached the server.
       result = const DataCommandOutcomeUnknown(
         DataCommandFailure(
           kind: DataCommandFailureKind.unknown,
@@ -258,26 +540,53 @@ class DailySignInController extends Notifier<DailySignInViewState> {
           diagnosticMessage: 'daily_sign_in_command_unconfirmed',
         ),
       );
+    } finally {
+      _submittingAutomatically = false;
     }
-    if (result is DataCommandNotSent<ForumDailySignInReceipt> &&
-        !hadUncertainAttempt) {
-      _uncertainUids.remove(owner.uid);
+
+    var checkpointUnavailable = gateStorageFailure;
+    if (reservation case final reserved?) {
+      try {
+        final ledger = ref.read(dailySignInAttemptLedgerProvider);
+        if (result is DataCommandNotSent<ForumDailySignInReceipt>) {
+          await ledger.settleNotSent(reserved);
+        } else if (result is DataCommandApplied<ForumDailySignInReceipt>) {
+          await ledger.markConfirmedSigned(
+            userId: owner.uid,
+            forumDay: forumDay,
+          );
+        } else {
+          await ledger.markUnknown(reserved);
+        }
+      } on Object {
+        // A failed settlement leaves the durable pending entry as a safe block.
+        checkpointUnavailable = true;
+      }
     }
     if (!_isCurrent(owner, generation)) return;
-    final preserveUnknown =
+    final keepPreviousUnknown =
         result is DataCommandNotSent<ForumDailySignInReceipt> &&
-        priorResult is DataCommandOutcomeUnknown<ForumDailySignInReceipt>;
-    state = DailySignInViewState(
-      owner: owner,
-      snapshot: state.snapshot,
-      commandResult: preserveUnknown ? priorResult : result,
-      attemptForumDay: preserveUnknown ? priorAttemptDay : forumDay,
-      requiresExplicitRetry: _uncertainUids.contains(owner.uid),
+        previousResult is DataCommandOutcomeUnknown<ForumDailySignInReceipt>;
+    state = state.copyWith(
+      commandResult: keepPreviousUnknown ? previousResult : result,
+      attemptForumDay: keepPreviousUnknown ? previousAttemptDay : forumDay,
+      requiresExplicitRetry:
+          checkpointUnavailable ||
+          result is! DataCommandNotSent<ForumDailySignInReceipt> ||
+          previousRetryGuard,
+      checkpointUnavailable: checkpointUnavailable,
+      isSubmitting: false,
     );
-    // This is display reconciliation only. The package command result remains
-    // unknown if its own response lacked calibrated proof of application.
+    // A positive read updates today's display only; it never upgrades an
+    // uncalibrated command response to applied.
     await refresh();
   }
+
+  bool _automaticIsCurrent(
+    VerifiedProfileOwner owner,
+    int generation,
+    int epoch,
+  ) => epoch == _automaticEpoch && _isCurrent(owner, generation);
 
   bool _isCurrent(VerifiedProfileOwner owner, int generation) =>
       ref.mounted &&

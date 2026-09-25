@@ -1496,5 +1496,12 @@
   "dailySignInDayChanged": "論壇日期已變更，本次未提交。請核對最新狀態後再試。",
   "dailySignInRetryUnknown": "再次嘗試簽到",
   "dailySignInRetryTitle": "確認再次提交？",
-  "dailySignInRetryBody": "上次請求可能已經生效，即使目前頁面仍顯示未簽到。繼續將重新讀取頁面並傳送一次新的簽到請求。"
+  "dailySignInRetryBody": "上次請求可能已經生效，即使目前頁面仍顯示未簽到。繼續將重新讀取頁面並傳送一次新的簽到請求。",
+  "dailyAutoSignInToggle": "每天自動簽到",
+  "dailyAutoSignInDescription": "開啟應用或回到前景時，核對論壇狀態並在尚未簽到時自動嘗試一次。",
+  "dailyAutoSignInSaving": "正在儲存自動簽到設定…",
+  "dailyAutoSignInStorageUnavailable": "無法安全讀取或儲存簽到記錄，目前無法提交簽到。請稍後重試。",
+  "dailyAutoSignInPausedPreviousDay": "前一論壇日的簽到結果仍未確認，今天暫停自動提交。你可以核對狀態，或確認後手動重試。",
+  "dailyAutoSignInPendingToday": "今日已有結果未明的簽到嘗試，自動提交已暫停。請核對狀態；手動重試需要確認。",
+  "dailyAutoSignInBlockedToday": "今日簽到記錄與論壇目前狀態不一致，自動提交已暫停。請先核對狀態。"
 }

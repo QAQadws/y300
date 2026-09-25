@@ -170,6 +170,8 @@ void main() {
     expect(find.text('论坛收藏'), findsNothing);
     expect(find.text('每日签到'), findsOneWidget);
 
+    await tester.scrollUntilVisible(find.text('我的日志'), 200);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('我的日志'));
     await tester.pumpAndSettle();
 
@@ -204,7 +206,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('消息提醒'));
+    await tester.scrollUntilVisible(find.text('消息提醒'), 200);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('消息提醒'));
     await tester.pumpAndSettle();
 
@@ -523,8 +526,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
+    await tester.scrollUntilVisible(
       find.byKey(const Key('user-profile-action-creditHistory')),
+      200,
     );
     await tester.pumpAndSettle();
 

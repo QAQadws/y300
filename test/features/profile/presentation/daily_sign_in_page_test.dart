@@ -2,16 +2,21 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/core/preferences/preference_key.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
+import 'package:y300/features/profile/data/daily_sign_in_storage.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
+import 'package:y300/features/profile/data/providers/daily_sign_in_storage_providers.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -51,6 +56,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...forumAuthOverrides(const _AuthRepository()),
+        ..._storageOverrides(_MemoryPreferencesStore()),
         dailySignInRepositoryProvider.overrideWithValue(repository),
         dailySignInCommandProvider.overrideWithValue(
           _SignCommand((_, _) async => _unknown),
@@ -413,7 +419,153 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('daily-sign-in-submit')), findsOneWidget);
+    expect(find.byKey(const Key('daily-auto-sign-in-toggle')), findsOneWidget);
   });
+
+  testWidgets('automatic sign-in toggle defaults on and persists per account', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferencesStore();
+    final session = YamiboSessionStore()..saveExtracted(_session('654321'));
+    final repository = _SignRepository(
+      (query, _) async =>
+          _success(query.userId, ForumDailySignInStatus.unsigned),
+    );
+    await _pump(
+      tester,
+      repository: repository,
+      command: _SignCommand((_, _) async => _unknown),
+      preferences: preferences,
+      store: session,
+    );
+
+    final toggle = find.byKey(const Key('daily-auto-sign-in-toggle'));
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    expect(
+      await SharedPreferencesDailyAutoSignInSettings(
+        preferences,
+      ).isEnabled('654321'),
+      isFalse,
+    );
+    expect(
+      await SharedPreferencesDailyAutoSignInSettings(
+        preferences,
+      ).isEnabled('777777'),
+      isTrue,
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(DailySignInPage)),
+    );
+    session.saveExtracted(_session('777777'));
+    container
+        .read(authSessionControllerProvider.notifier)
+        .acceptSession(
+          const ForumSessionIdentity(
+            userId: '777777',
+            username: 'second-member',
+          ),
+        );
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+  });
+
+  testWidgets('pending checkpoint after restart explains same-day pause', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferencesStore();
+    await SharedPreferencesDailySignInAttemptLedger(
+      preferences,
+    ).reserve(userId: '654321', forumDay: '20260925');
+    final repository = _SignRepository(
+      (query, _) async =>
+          _success(query.userId, ForumDailySignInStatus.unsigned),
+    );
+    final command = _SignCommand((_, _) async => _unknown);
+    await _pump(
+      tester,
+      repository: repository,
+      command: command,
+      preferences: preferences,
+    );
+
+    expect(
+      find.text(_l10n(tester).dailyAutoSignInPendingToday),
+      findsOneWidget,
+    );
+    expect(find.text(_l10n(tester).dailySignInRetryUnknown), findsOneWidget);
+    expect(command.requests, isEmpty);
+  });
+
+  testWidgets('previous-day unknown shows automatic pause and manual retry', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferencesStore();
+    final ledger = SharedPreferencesDailySignInAttemptLedger(preferences);
+    final reservation = await ledger.reserve(
+      userId: '654321',
+      forumDay: '20260925',
+    );
+    await ledger.markUnknown(reservation!);
+    final repository = _SignRepository(
+      (query, _) async => _success(
+        query.userId,
+        ForumDailySignInStatus.unsigned,
+        forumDay: '20260926',
+      ),
+    );
+    await _pump(
+      tester,
+      repository: repository,
+      command: _SignCommand((_, _) async => _unknown),
+      preferences: preferences,
+    );
+
+    expect(
+      find.text(_l10n(tester).dailyAutoSignInPausedPreviousDay),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('daily-sign-in-submit')), findsOneWidget);
+    expect(find.text(_l10n(tester).dailySignInRetryUnknown), findsOneWidget);
+  });
+
+  testWidgets(
+    'storage failure disables submission but preserves read-only refresh',
+    (tester) async {
+      final preferences = _MemoryPreferencesStore()..failReads = true;
+      final repository = _SignRepository(
+        (query, _) async =>
+            _success(query.userId, ForumDailySignInStatus.unsigned),
+      );
+      final command = _SignCommand((_, _) async => _unknown);
+      await _pump(
+        tester,
+        repository: repository,
+        command: command,
+        preferences: preferences,
+      );
+
+      expect(
+        find.text(_l10n(tester).dailyAutoSignInStorageUnavailable),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('daily-sign-in-submit')), findsNothing);
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(const Key('daily-auto-sign-in-toggle')),
+            )
+            .onChanged,
+        isNull,
+      );
+      await tester.tap(find.byKey(const Key('daily-sign-in-refresh')));
+      await tester.pumpAndSettle();
+      expect(repository.queries, hasLength(2));
+      expect(command.requests, isEmpty);
+    },
+  );
 }
 
 typedef _ReadResult =
@@ -491,9 +643,29 @@ class _SignCommand implements ForumDailySignInCommand {
   @override
   Future<DataCommandResult<ForumDailySignInReceipt>> execute(
     ForumDailySignInRequest request,
-  ) {
+  ) async {
     final call = requests.length;
     requests.add(request);
+    final authorize = request.beforeSend;
+    if (authorize == null) {
+      throw StateError('A production sign-in request must have a send gate');
+    }
+    final authorization = await authorize(
+      ForumDailySignInPreparedAttempt(
+        userId: request.userId,
+        forumDay: request.expectedForumDay ?? '20260925',
+      ),
+    );
+    if (authorization != ForumDailySignInSendAuthorization.allow) {
+      return const DataCommandNotSent(
+        DataCommandFailure(
+          kind: DataCommandFailureKind.validation,
+          retryPolicy: DataCommandRetryPolicy.explicitOnly,
+          code: 'daily_sign_in_send_suppressed',
+          diagnosticMessage: 'daily_sign_in_send_suppressed',
+        ),
+      );
+    }
     return onExecute(request, call);
   }
 }
@@ -505,12 +677,15 @@ Future<void> _pump(
   YamiboSessionStore? store,
   ForumWebViewRouteFactory? routeFactory,
   TextScaler textScaler = TextScaler.noScaling,
+  _MemoryPreferencesStore? preferences,
   bool settle = true,
 }) async {
+  final storage = preferences ?? _MemoryPreferencesStore();
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         ...forumAuthOverrides(const _AuthRepository()),
+        ..._storageOverrides(storage),
         dailySignInRepositoryProvider.overrideWithValue(repository),
         dailySignInCommandProvider.overrideWithValue(command),
         if (store != null) yamiboSessionStoreProvider.overrideWithValue(store),
@@ -567,4 +742,41 @@ class _AuthRepository implements AuthRepository {
 
   @override
   Future<void> logout() async {}
+}
+
+List<Override> _storageOverrides(_MemoryPreferencesStore store) => [
+  dailySignInAttemptLedgerProvider.overrideWithValue(
+    SharedPreferencesDailySignInAttemptLedger(store),
+  ),
+  dailyAutoSignInSettingsProvider.overrideWithValue(
+    SharedPreferencesDailyAutoSignInSettings(store),
+  ),
+];
+
+final class _MemoryPreferencesStore implements PreferencesStore {
+  final Map<String, Object> values = {};
+  bool failReads = false;
+
+  @override
+  Future<T?> read<T extends Object>(PreferenceKey<T> key) async {
+    if (failReads) throw StateError('synthetic read failure');
+    final value = values[key.name];
+    return value is T ? value : null;
+  }
+
+  @override
+  Future<bool> contains<T extends Object>(PreferenceKey<T> key) async {
+    if (failReads) throw StateError('synthetic read failure');
+    return values.containsKey(key.name);
+  }
+
+  @override
+  Future<void> write<T extends Object>(PreferenceKey<T> key, T value) async {
+    values[key.name] = value;
+  }
+
+  @override
+  Future<void> remove<T extends Object>(PreferenceKey<T> key) async {
+    values.remove(key.name);
+  }
 }

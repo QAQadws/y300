@@ -94,6 +94,10 @@ void main() {
       );
       await tester.tap(find.text(l10n.appNavigationMore).last);
       await _pumpShellTab(tester);
+      await tester.ensureVisible(
+        find.byKey(const Key('more-navigation-management-entry')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(const Key('more-navigation-management-entry')),
       );

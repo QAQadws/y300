@@ -118,6 +118,40 @@ abstract interface class ForumDailySignInRepository {
   load(ForumDailySignInQuery query);
 }
 
+/// Validated identity and forum day available immediately before submission.
+/// The one-use sign-in link is deliberately excluded from this public value.
+final class ForumDailySignInPreparedAttempt {
+  /// Creates a prepared attempt from a fresh, verified sign-in page.
+  const ForumDailySignInPreparedAttempt({
+    required this.userId,
+    required this.forumDay,
+  });
+
+  /// Verified forum user ID.
+  final String userId;
+
+  /// Server-rendered forum day in `YYYYMMDD` form.
+  final String forumDay;
+}
+
+/// Whether the caller permits a freshly prepared attempt to be sent.
+enum ForumDailySignInSendAuthorization {
+  /// The caller has durably recorded any required attempt checkpoint.
+  allow,
+
+  /// A known policy or existing attempt prevents submission.
+  suppress,
+
+  /// The caller could not safely establish whether submission is permitted.
+  unavailable,
+}
+
+/// Optional caller gate invoked after preparation and before the command GET.
+typedef ForumDailySignInBeforeSend =
+    Future<ForumDailySignInSendAuthorization> Function(
+      ForumDailySignInPreparedAttempt attempt,
+    );
+
 /// Request to sign in the authenticated user for the current forum day.
 final class ForumDailySignInRequest {
   /// Creates a daily sign-in request.
@@ -125,6 +159,7 @@ final class ForumDailySignInRequest {
     required this.userId,
     this.expectedForumDay,
     this.cancellation,
+    this.beforeSend,
   });
 
   /// Expected forum user ID, checked against the current session.
@@ -136,6 +171,11 @@ final class ForumDailySignInRequest {
 
   /// Optional caller-owned cancellation signal.
   final ForumRequestCancellation? cancellation;
+
+  /// Optional gate for persisting a send checkpoint before any command GET.
+  /// Returning [ForumDailySignInSendAuthorization.allow] must mean that the
+  /// caller's checkpoint is durable. The callback receives no sign-in link.
+  final ForumDailySignInBeforeSend? beforeSend;
 }
 
 /// Proof returned only after the server effect and state are confirmed.

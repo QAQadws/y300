@@ -105,6 +105,120 @@ void main() {
   });
 
   test(
+    'send gate receives only verified identity and day before GET',
+    () async {
+      final network = _QueueNetwork([
+        _page(pageUri, unsigned),
+        _page(pageUri, '<html>synthetic response, not calibrated</html>'),
+        _page(pageUri, signed),
+      ]);
+      ForumDailySignInPreparedAttempt? prepared;
+
+      final result = await client(network).signInToday(
+        ForumDailySignInRequest(
+          userId: '42',
+          expectedForumDay: '20300412',
+          beforeSend: (attempt) async {
+            expect(network.requests, hasLength(1));
+            expect(network.requests.single.uri, pageUri);
+            prepared = attempt;
+            return ForumDailySignInSendAuthorization.allow;
+          },
+        ),
+      );
+
+      expect(prepared?.userId, '42');
+      expect(prepared?.forumDay, '20300412');
+      expect(result, isA<DataCommandOutcomeUnknown<ForumDailySignInReceipt>>());
+      expect(network.requests, hasLength(3));
+      expect(
+        network.requests.where(
+          (request) => request.uri.queryParameters.containsKey('sign'),
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('send gate suppression and failure prevent command GET', () async {
+    for (final (gate, code) in <(ForumDailySignInBeforeSend, String)>[
+      (
+        (_) async => ForumDailySignInSendAuthorization.suppress,
+        'daily_sign_in_send_suppressed',
+      ),
+      (
+        (_) async => ForumDailySignInSendAuthorization.unavailable,
+        'daily_sign_in_send_gate_failed',
+      ),
+      (
+        (_) async => throw StateError('secret detail'),
+        'daily_sign_in_send_gate_failed',
+      ),
+    ]) {
+      final network = _QueueNetwork([_page(pageUri, unsigned)]);
+      final result = await client(
+        network,
+      ).signInToday(ForumDailySignInRequest(userId: '42', beforeSend: gate));
+
+      expect(result, isA<DataCommandNotSent<ForumDailySignInReceipt>>());
+      expect(result.failureOrNull?.code, code);
+      expect(
+        result.failureOrNull?.diagnosticMessage,
+        isNot(contains('secret')),
+      );
+      expect(network.requests, hasLength(1));
+      expect(network.requests.single.uri, pageUri);
+    }
+  });
+
+  test('gate is not invoked for signed or changed-day preparation', () async {
+    var calls = 0;
+    Future<ForumDailySignInSendAuthorization> gate(
+      ForumDailySignInPreparedAttempt _,
+    ) async {
+      calls++;
+      return ForumDailySignInSendAuthorization.allow;
+    }
+
+    for (final request in [
+      ForumDailySignInRequest(userId: '42', beforeSend: gate),
+      ForumDailySignInRequest(
+        userId: '42',
+        expectedForumDay: '20300411',
+        beforeSend: gate,
+      ),
+    ]) {
+      final network = _QueueNetwork([
+        _page(pageUri, request.expectedForumDay == null ? signed : unsigned),
+      ]);
+      final result = await client(network).signInToday(request);
+      expect(result, isA<DataCommandNotSent<ForumDailySignInReceipt>>());
+      expect(network.requests, hasLength(1));
+    }
+    expect(calls, 0);
+  });
+
+  test('cancellation while gate awaits prevents command GET', () async {
+    final cancellation = ForumRequestCancellation();
+    final network = _QueueNetwork([_page(pageUri, unsigned)]);
+
+    final result = await client(network).signInToday(
+      ForumDailySignInRequest(
+        userId: '42',
+        cancellation: cancellation,
+        beforeSend: (_) async {
+          cancellation.cancel();
+          return ForumDailySignInSendAuthorization.allow;
+        },
+      ),
+    );
+
+    expect(result, isA<DataCommandNotSent<ForumDailySignInReceipt>>());
+    expect(result.failureOrNull?.code, 'daily_sign_in_cancelled_before_send');
+    expect(network.requests, hasLength(1));
+  });
+
+  test(
     'changed forum day after fresh preparation prevents submission',
     () async {
       final network = _QueueNetwork([_page(pageUri, unsigned)]);
