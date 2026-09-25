@@ -4094,6 +4094,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get profileOpenForumPage => '打开论坛资料页';
+
+  @override
   String get profileBlogTitle => '日志';
 
   @override
@@ -8738,6 +8741,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String profileLoadFailed(String error) {
     return '資料載入失敗：$error';
   }
+
+  @override
+  String get profileOpenForumPage => '開啟論壇資料頁';
 
   @override
   String get profileBlogTitle => '日誌';

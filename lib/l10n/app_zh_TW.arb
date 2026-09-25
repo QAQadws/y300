@@ -1273,6 +1273,7 @@
   "profileDetails": "個人資料",
   "profileLoadFailed": "資料載入失敗：{error}",
   "@profileLoadFailed": {"placeholders": {"error": {"type": "String"}}},
+  "profileOpenForumPage": "開啟論壇資料頁",
   "profileBlogTitle": "日誌",
   "profileBlogWrite": "寫日誌",
   "profileBlogWriteUnavailable": "目前尚未支援發表新日誌",

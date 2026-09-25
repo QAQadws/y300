@@ -6741,6 +6741,12 @@ abstract class AppLocalizations {
   /// **'资料加载失败：{error}'**
   String profileLoadFailed(String error);
 
+  /// No description provided for @profileOpenForumPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开论坛资料页'**
+  String get profileOpenForumPage;
+
   /// No description provided for @profileBlogTitle.
   ///
   /// In zh, this message translates to:

@@ -48,6 +48,30 @@ void openMyProfileAction({
   }
 }
 
+/// Opens the fixed forum profile page only after the caller verifies the
+/// current session owner. No URL from a failed response is reused here.
+void openMyProfileForumPage({
+  required BuildContext context,
+  required WidgetRef ref,
+  required String userId,
+}) {
+  final uri = Uri.parse(AppConfig.siteBaseUrl).replace(
+    path: '/home.php',
+    queryParameters: <String, String>{
+      'mod': 'space',
+      'uid': userId,
+      'do': 'profile',
+      'mycenter': '1',
+      'mobile': '2',
+    },
+  );
+  Navigator.of(context).push(
+    ref.read(forumWebViewRouteFactoryProvider)(
+      ForumWebViewLaunchConfig(initialUri: uri, popOnRootBack: true),
+    ),
+  );
+}
+
 Uri _myProfileWebUri(ForumUserProfileActionKind action, String uid) {
   final parameters = switch (action) {
     ForumUserProfileActionKind.threads => <String, String>{

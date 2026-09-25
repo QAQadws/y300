@@ -380,6 +380,27 @@ class MyProfilePage extends ConsumerWidget {
                         ? l10n.profileLoginRequired
                         : null,
                     palette: palette,
+                    onOpenForumPage:
+                        pageState?.ownerUid == owner.uid &&
+                            pageState?.ownerRevision == owner.revision &&
+                            (pageState?.failure?.kind ==
+                                    DataReadFailureKind.parse ||
+                                pageState?.failure?.kind ==
+                                    DataReadFailureKind.unsupported)
+                        ? () {
+                            final currentOwner = ref.read(
+                              verifiedProfileOwnerProvider,
+                            );
+                            if (currentOwner == null || currentOwner != owner) {
+                              return;
+                            }
+                            openMyProfileForumPage(
+                              context: context,
+                              ref: ref,
+                              userId: currentOwner.uid,
+                            );
+                          }
+                        : null,
                     onRetry: () {
                       if (pageState?.failure?.kind ==
                           DataReadFailureKind.unauthorized) {
@@ -936,12 +957,14 @@ class _UserProfileError extends StatelessWidget {
     required this.palette,
     required this.onRetry,
     this.message,
+    this.onOpenForumPage,
   });
 
   final Object? error;
   final String? message;
   final _UserProfilePalette palette;
   final VoidCallback onRetry;
+  final VoidCallback? onOpenForumPage;
 
   @override
   Widget build(BuildContext context) {
@@ -959,9 +982,24 @@ class _UserProfileError extends StatelessWidget {
               style: TextStyle(color: palette.body),
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: Text(AppLocalizations.of(context).commonRetry),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton(
+                  onPressed: onRetry,
+                  child: Text(AppLocalizations.of(context).commonRetry),
+                ),
+                if (onOpenForumPage != null)
+                  OutlinedButton(
+                    key: const Key('my-profile-open-forum-page'),
+                    onPressed: onOpenForumPage,
+                    child: Text(
+                      AppLocalizations.of(context).profileOpenForumPage,
+                    ),
+                  ),
+              ],
             ),
           ],
         ),

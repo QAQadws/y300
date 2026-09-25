@@ -230,6 +230,7 @@ void main() {
 
     expect(find.text('sample-member'), findsNothing);
     expect(find.byKey(const Key('daily-sign-in-panel')), findsNothing);
+    expect(find.byKey(const Key('my-profile-open-forum-page')), findsNothing);
     expect(
       find.text(_profileL10n(tester).profileLoginRequired),
       findsOneWidget,
@@ -294,6 +295,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('second-member'), findsOneWidget);
     expect(find.text('sample-member'), findsNothing);
+    expect(find.byKey(const Key('my-profile-open-forum-page')), findsNothing);
     expect(repository.queries.last.userId, '777777');
   });
 
@@ -365,6 +367,170 @@ void main() {
       find.text(_profileL10n(tester).profileLoginRequired),
       findsOneWidget,
     );
+    expect(find.byKey(const Key('my-profile-open-forum-page')), findsNothing);
+  });
+
+  for (final failureKind in <DataReadFailureKind>[
+    DataReadFailureKind.parse,
+    DataReadFailureKind.unsupported,
+  ]) {
+    testWidgets('MyProfilePage offers explicit fallback for $failureKind', (
+      tester,
+    ) async {
+      final opened = <ForumWebViewLaunchConfig>[];
+      final repository = _ScriptedProfileRepository(
+        (query, call) async => DataReadFailure(
+          kind: failureKind,
+          diagnosticMessage: 'synthetic_profile_failure',
+        ),
+      );
+      await _pumpMyProfile(
+        tester,
+        repository: repository,
+        routeFactory: (config) {
+          opened.add(config);
+          return MaterialPageRoute<Object?>(
+            builder: (_) => const Scaffold(body: Text('managed destination')),
+          );
+        },
+      );
+
+      final fallback = find.byKey(const Key('my-profile-open-forum-page'));
+      expect(fallback, findsOneWidget);
+      expect(
+        find.text(_profileL10n(tester).profileOpenForumPage),
+        findsOneWidget,
+      );
+      expect(opened, isEmpty);
+
+      await tester.tap(fallback);
+      await tester.pumpAndSettle();
+      expect(opened, hasLength(1));
+      expect(opened.single.popOnRootBack, isTrue);
+      expect(
+        opened.single.initialUri.toString(),
+        'https://bbs.yamibo.com/home.php?mod=space&uid=654321&do=profile&mycenter=1&mobile=2',
+      );
+    });
+  }
+
+  for (final failureKind in <DataReadFailureKind>[
+    DataReadFailureKind.unauthorized,
+    DataReadFailureKind.network,
+    DataReadFailureKind.timeout,
+  ]) {
+    testWidgets('MyProfilePage omits forum fallback for $failureKind', (
+      tester,
+    ) async {
+      await _pumpMyProfile(
+        tester,
+        repository: _ScriptedProfileRepository(
+          (query, call) async => DataReadFailure(
+            kind: failureKind,
+            diagnosticMessage: 'synthetic_profile_failure',
+          ),
+        ),
+      );
+
+      expect(find.byKey(const Key('my-profile-open-forum-page')), findsNothing);
+    });
+  }
+
+  testWidgets('MyProfilePage fallback follows only the new verified owner', (
+    tester,
+  ) async {
+    final store = YamiboSessionStore()..saveExtracted(_sessionFor('654321'));
+    final oldRefresh = Completer<_ProfileReadResult>();
+    final opened = <ForumWebViewLaunchConfig>[];
+    final repository = _ScriptedProfileRepository((query, call) {
+      if (call == 1) return oldRefresh.future;
+      return Future.value(
+        const DataReadFailure(
+          kind: DataReadFailureKind.parse,
+          diagnosticMessage: 'synthetic_profile_failure',
+        ),
+      );
+    });
+    await _pumpMyProfile(
+      tester,
+      repository: repository,
+      store: store,
+      routeFactory: (config) {
+        opened.add(config);
+        return MaterialPageRoute<Object?>(
+          builder: (_) => const Scaffold(body: Text('managed destination')),
+        );
+      },
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MyProfilePage)),
+    );
+    unawaited(container.read(myUserProfileProvider.notifier).refresh());
+    await tester.pump();
+
+    store.saveExtracted(_sessionFor('777777'));
+    container
+        .read(authSessionControllerProvider.notifier)
+        .acceptSession(
+          const ForumSessionIdentity(
+            userId: '777777',
+            username: 'second-member',
+          ),
+        );
+    await tester.pumpAndSettle();
+    expect(repository.queries.last.userId, '777777');
+
+    oldRefresh.complete(
+      const DataReadFailure(
+        kind: DataReadFailureKind.parse,
+        diagnosticMessage: 'old_owner_failure',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('my-profile-open-forum-page')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('my-profile-open-forum-page')));
+    await tester.pumpAndSettle();
+
+    expect(opened.single.initialUri.queryParameters['uid'], '777777');
+  });
+
+  testWidgets('MyProfilePage fallback fits 300dp with enlarged text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(300, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...forumAuthOverrides(const _FakeAuthRepository()),
+          dailySignInRepositoryProvider.overrideWithValue(
+            _FakeSignRepository(),
+          ),
+          forumUserProfileRepositoryProvider.overrideWithValue(
+            _ScriptedProfileRepository(
+              (query, call) async => const DataReadFailure(
+                kind: DataReadFailureKind.parse,
+                diagnosticMessage: 'synthetic_profile_failure',
+              ),
+            ),
+          ),
+          forumImageRefererProvider.overrideWithValue(
+            'https://bbs.yamibo.com/',
+          ),
+        ],
+        child: const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          child: LocalizedTestApp(home: MyProfilePage()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('my-profile-open-forum-page')), findsOneWidget);
   });
 
   testWidgets('MyProfilePage can retry an unexpected initial read failure', (

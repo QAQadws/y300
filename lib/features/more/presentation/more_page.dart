@@ -3,13 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
-import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
@@ -24,6 +20,7 @@ import 'package:y300/features/more/presentation/more_debug_tools.dart';
 import 'package:y300/features/more/presentation/more_text_resolver.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
+import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 
@@ -36,6 +33,7 @@ class MorePage extends ConsumerStatefulWidget {
 
 class _MorePageState extends ConsumerState<MorePage> {
   final MoreDebugTools _debugTools = const MoreDebugTools();
+  bool _openingMyProfile = false;
 
   @override
   Widget build(BuildContext context) {
@@ -76,9 +74,7 @@ class _MorePageState extends ConsumerState<MorePage> {
                   ? _myProfileSubtitle(l10n, authSession)
                   : l10n.moreMyProfileSignedOutSubtitle,
             ),
-            onTap: authSession.isLoggedIn
-                ? () => _openMyProfileWebViewPage(context, authSession)
-                : () => _openLoginPage(context),
+            onTap: _openingMyProfile ? null : () => _openMyProfilePage(context),
           ),
           ListTile(
             key: const Key('more-daily-sign-in-entry'),
@@ -334,43 +330,26 @@ class _MorePageState extends ConsumerState<MorePage> {
     );
   }
 
-  void _openMyProfileWebViewPage(
-    BuildContext context,
-    AuthSessionViewState session,
-  ) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ProviderScope(
-          overrides: [
-            forumWebViewInitialUriProvider.overrideWithValue(
-              _buildMyProfileUri(session),
-            ),
-            forumWebViewPopOnRootBackProvider.overrideWithValue(true),
-            forumWebViewDriverProvider.overrideWith((ref) {
-              final factory = ref.watch(forumWebViewDriverFactoryProvider);
-              return factory();
-            }),
-            forumWebViewControllerProvider.overrideWith(
-              ForumWebViewController.new,
-            ),
-          ],
-          child: const ForumWebViewPage(),
-        ),
-      ),
-    );
-  }
-
-  Uri _buildMyProfileUri(AuthSessionViewState session) {
-    return Uri.parse(AppConfig.siteBaseUrl).replace(
-      path: '/home.php',
-      queryParameters: <String, String>{
-        'mod': 'space',
-        'uid': session.uid,
-        'do': 'profile',
-        'mycenter': '1',
-        'mobile': '2',
-      },
-    );
+  Future<void> _openMyProfilePage(BuildContext context) async {
+    if (_openingMyProfile) return;
+    setState(() => _openingMyProfile = true);
+    try {
+      var session = ref.read(authSessionControllerProvider).asData?.value;
+      if (session?.isLoggedIn != true) {
+        final loggedIn = await _openLoginPage(context);
+        if (!loggedIn || !context.mounted) return;
+        // The login route returns true only after accepting its verified
+        // session. Recheck state so a concurrent logout cannot continue here.
+        session = ref.read(authSessionControllerProvider).asData?.value;
+        if (session?.isLoggedIn != true) return;
+      }
+      if (!context.mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const MyProfilePage()),
+      );
+    } finally {
+      if (mounted) setState(() => _openingMyProfile = false);
+    }
   }
 
   String _myProfileSubtitle(

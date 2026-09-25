@@ -1638,6 +1638,7 @@
   "profileDetails": "个人资料",
   "profileLoadFailed": "资料加载失败：{error}",
   "@profileLoadFailed": {"placeholders": {"error": {"type": "String"}}},
+  "profileOpenForumPage": "打开论坛资料页",
   "profileBlogTitle": "日志",
   "profileBlogWrite": "写日志",
   "profileBlogWriteUnavailable": "发表新日志暂未接入",

@@ -11,8 +11,7 @@ import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
-/// The temporary stage-2 entry. The profile entry remains a managed WebView
-/// until the later cutover; both native surfaces use the same coordinator.
+/// The standalone sign-in entry shared with the native profile panel.
 class DailySignInPage extends StatelessWidget {
   const DailySignInPage({super.key});
 

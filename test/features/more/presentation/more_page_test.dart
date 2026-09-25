@@ -14,22 +14,20 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import '../../../support/forum_auth_test_support.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_unused_image_management_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
-import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
+import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
+import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
-
-import '../../../support/favorite_command_test_support.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
@@ -216,7 +214,7 @@ void main() {
 
   testWidgets('MorePage renders logout entry when signed in', (tester) async {
     final repository = _FakeAuthRepository(isLoggedIn: true);
-    final webViewDriver = _FakeForumWebViewDriver();
+    final profileRepository = _SignedProfileRepository();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -224,22 +222,17 @@ void main() {
           dailySignInRepositoryProvider.overrideWithValue(
             _SignedDailySignInRepository(),
           ),
+          forumUserProfileRepositoryProvider.overrideWithValue(
+            profileRepository,
+          ),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
-          forumWebViewDriverFactoryProvider.overrideWith(
-            (ref) =>
-                () => webViewDriver,
-          ),
-          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
           webViewCookieSyncServiceProvider.overrideWithValue(
             _FakeWebViewCookieSyncService(),
-          ),
-          favoriteForumCommandProvider.overrideWithValue(
-            FakeFavoriteForumCommand(),
           ),
         ],
         child: const LocalizedTestApp(home: MorePage()),
@@ -263,20 +256,13 @@ void main() {
     await tester.tap(find.byKey(const Key('more-my-profile-entry')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(ForumWebViewPage), findsOneWidget);
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+    expect(find.byType(MyProfilePage), findsOneWidget);
     expect(find.text('我的资料'), findsWidgets);
-    expect(
-      webViewDriver.bootstrapConfig?.initialUri.toString(),
-      'https://bbs.yamibo.com/home.php?mod=space&uid=100&do=profile&mycenter=1&mobile=2',
-    );
-    expect(webViewDriver.loadedUris, <Uri>[
-      Uri.parse(
-        'https://bbs.yamibo.com/home.php?mod=space&uid=100&do=profile&mycenter=1&mobile=2',
-      ),
-    ]);
+    expect(profileRepository.queries.single.userId, '100');
+    expect(profileRepository.queries.single.view, ForumUserProfileView.self);
+    expect(profileRepository.policies.single, CacheLoadPolicy.networkFirst);
 
-    await tester.tap(find.byKey(const Key('forum-webview-back-button')));
+    Navigator.of(tester.element(find.byType(MyProfilePage))).pop();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('more-logout-entry')));
@@ -360,6 +346,136 @@ void main() {
     // 登录检测/校验逻辑已由 resolver 单测覆盖。
 
     expect(routeObserver.pushedNames, contains(LoginWebViewPage.routeName));
+  });
+
+  testWidgets('profile entry continues to the current account after login', (
+    tester,
+  ) async {
+    final routeObserver = _RouteNameObserver();
+    final profileRepository = _SignedProfileRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+          forumUserProfileRepositoryProvider.overrideWithValue(
+            profileRepository,
+          ),
+          dailySignInRepositoryProvider.overrideWithValue(
+            _SignedDailySignInRepository(),
+          ),
+        ],
+        child: LocalizedTestApp(
+          home: const MorePage(),
+          navigatorObservers: [routeObserver],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MorePage)),
+    );
+
+    await tester.tap(find.byKey(const Key('more-my-profile-entry')));
+    expect(routeObserver.pushedNames.last, LoginWebViewPage.routeName);
+
+    // LoginWebViewPage verifies the session before returning true. Simulate
+    // that handoff without constructing a platform WebView in this widget test.
+    container
+        .read(authSessionControllerProvider.notifier)
+        .acceptSession(
+          const ForumSessionIdentity(userId: '200', username: 'next-account'),
+        );
+    tester.state<NavigatorState>(find.byType(Navigator).first).pop(true);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MyProfilePage), findsOneWidget);
+    expect(profileRepository.queries.single.userId, '200');
+    expect(profileRepository.queries.single.view, ForumUserProfileView.self);
+  });
+
+  testWidgets('profile entry stays on More when login is cancelled', (
+    tester,
+  ) async {
+    final routeObserver = _RouteNameObserver();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+        ],
+        child: LocalizedTestApp(
+          home: const MorePage(),
+          navigatorObservers: [routeObserver],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('more-my-profile-entry')));
+    expect(routeObserver.pushedNames.last, LoginWebViewPage.routeName);
+    tester.state<NavigatorState>(find.byType(Navigator).first).pop(false);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MorePage), findsOneWidget);
+    expect(find.byType(MyProfilePage), findsNothing);
+    expect(routeObserver.pushedNames.length, 2);
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const Key('more-my-profile-entry')))
+          .onTap,
+      isNotNull,
+    );
+  });
+
+  testWidgets('profile entry ignores duplicate taps while navigating', (
+    tester,
+  ) async {
+    final routeObserver = _RouteNameObserver();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: true)),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+          forumUserProfileRepositoryProvider.overrideWithValue(
+            _SignedProfileRepository(),
+          ),
+          dailySignInRepositoryProvider.overrideWithValue(
+            _SignedDailySignInRepository(),
+          ),
+        ],
+        child: LocalizedTestApp(
+          home: const MorePage(),
+          navigatorObservers: [routeObserver],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final tap = tester
+        .widget<ListTile>(find.byKey(const Key('more-my-profile-entry')))
+        .onTap!;
+    tap();
+    tap();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MyProfilePage), findsOneWidget);
+    expect(routeObserver.pushedNames.length, 2);
   });
 
   testWidgets(
@@ -1045,80 +1161,41 @@ class _FakeWebViewCookieSyncService extends WebViewCookieSyncService {
   }
 }
 
-class _FakeForumWebViewDriver implements ForumWebViewDriver {
-  final List<Uri> loadedUris = <Uri>[];
-  ForumWebViewBootstrapConfig? bootstrapConfig;
-  ForumWebViewCallbacks? _callbacks;
+class _SignedProfileRepository implements ForumUserProfileRepository {
+  final queries = <ForumUserProfileQuery>[];
+  final policies = <CacheLoadPolicy>[];
 
   @override
-  Widget buildWidget({Key? key}) {
-    return SizedBox.expand(key: key);
-  }
+  ForumUserProfileSourceCapabilities get capabilities =>
+      ForumUserProfileSourceCapabilities(
+        values: DataCapabilitySet.supported(ForumUserProfileCapability.values),
+      );
 
   @override
-  Future<bool> canGoBack() async {
-    return false;
-  }
-
-  @override
-  Future<bool> clearCookies() async {
-    return true;
-  }
-
-  @override
-  Future<String?> getTitle() async {
-    return '我的资料';
-  }
-
-  @override
-  Future<void> goBack() async {}
-
-  @override
-  Future<void> initialize({
-    required ForumWebViewCallbacks callbacks,
-    required ForumWebViewBootstrapConfig bootstrapConfig,
+  Future<DataReadResult<ForumUserProfileData, ForumUserProfileReadCapabilities>>
+  load(
+    ForumUserProfileQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    _callbacks = callbacks;
-    this.bootstrapConfig = bootstrapConfig;
-  }
-
-  @override
-  Future<void> load(Uri uri, {Map<String, String> headers = const {}}) async {
-    loadedUris.add(uri);
-    _callbacks?.onPageStarted(uri.toString());
-    _callbacks?.onProgress(100);
-    await _callbacks?.onPageFinished(uri.toString());
-  }
-
-  @override
-  Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
-    return const ForumWebViewCapabilityProfile(
-      documentStartMode: ForumWebViewDocumentStartMode.reliable,
-      supportsContentBlockers: false,
-      supportsTransparentBackground: true,
-      supportsPlatformScrollTuning: true,
-      supportsCookieHooks: true,
-      supportsPageCommitVisible: true,
+    queries.add(query);
+    policies.add(cachePolicy);
+    return DataReadSuccess(
+      data: ForumUserProfileData(
+        identity: ProfileUserIdentity(
+          userId: query.userId,
+          displayName: 'sample-member',
+        ),
+        metrics: const <ForumUserProfileMetric>[],
+        details: <ForumUserProfileDetail>[
+          ForumUserProfileDetail(label: 'UID', value: query.userId),
+        ],
+      ),
+      capabilities: ForumUserProfileReadCapabilities(
+        values: DataCapabilitySet.supported(ForumUserProfileCapability.values),
+      ),
+      metadata: const DataReadMetadata.network(),
     );
   }
-
-  @override
-  Future<void> reload() async {}
-
-  @override
-  Future<void> runJavaScript(String script) async {}
-
-  @override
-  Future<Object?> runJavaScriptReturningResult(String script) async {
-    return null;
-  }
-
-  @override
-  Future<void> seedCookies({
-    required String domain,
-    required Map<String, String> cookies,
-    String path = '/',
-  }) async {}
 }
 
 class _SignedDailySignInRepository implements ForumDailySignInRepository {
