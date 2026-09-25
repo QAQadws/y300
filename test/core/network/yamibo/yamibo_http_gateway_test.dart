@@ -6,8 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
-import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
-    as adapters;
 import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/waf/waf.dart';
@@ -134,16 +132,16 @@ void main() {
         siteOrigin: siteOrigin,
         resourceUserAgent: BrowserUserAgents.mobile,
       );
-      final locator = adapters.ForumClientAdapterFactory(
+      final client = forum.YamiboForumClientBuilder(
         config: forum.ForumClientConfig(
           siteOrigin: siteOrigin,
           apiOrigin: siteOrigin.resolve('/api/mobile/index.php'),
           userAgent: BrowserUserAgents.mobile,
         ),
         network: network,
-      ).createThreadPostLocator();
+      ).buildStandardClient();
 
-      final result = await locator.locate(
+      final result = await client.locatePost(
         const forum.ThreadPostLocationQuery(tid: '100', pid: '200'),
       );
 
